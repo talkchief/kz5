@@ -169,7 +169,7 @@ jobs:
           command : |
             if [ ! -d ${KAZOO_ROOT} ]; then
               echo ":: Cloning core repository to $KAZOO_ROOT"
-              git clone https://github.com/2600hz/kazoo $KAZOO_ROOT
+              git clone https://github.com/2600hz/kazoo5 $KAZOO_ROOT
             else
               echo ":: Core repository is already cloned"
             fi
@@ -433,7 +433,7 @@ jobs:
           command: |
             if [ ! -d ${KAZOO_ROOT} ]; then
               echo ":: Cloning core repository to $KAZOO_ROOT"
-              git clone https://github.com/2600hz/kazoo $KAZOO_ROOT
+              git clone https://github.com/2600hz/kazoo5 $KAZOO_ROOT
             else
               echo ":: Core repository is already cloned"
             fi
