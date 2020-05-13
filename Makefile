@@ -1,4 +1,4 @@
-ROOT = $(shell cd "$(dirname '.')" && pwd -P)
+ROOT ?= $(shell cd "$(dirname '.')" && pwd -P)
 
 DEPS_DIR = $(ROOT)/deps
 CORE_DIR = $(ROOT)/core
@@ -453,14 +453,16 @@ diff: dialyze-it
 bump-copyright:
 	@$(ROOT)/scripts/bump-copyright-year.py $(shell find $(APPS_DIR) $(CORE_DIR) -name '*.erl')
 
+.PHONY: bump-license
+bump-license:
+	@$(ROOT)/scripts/bump-license.py $(shell find $(APPS_DIR) $(CORE_DIR) -name '*.erl')
+
 .PHONY: app_applications
 app_applications:
 	ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/apps_of_app.escript -a $(shell find $(APPS_DIR) -name *.app.src)
 
 .PHONY: code_checks
-code_checks:
-	@printf ":: Check for copyright year\n\n"
-	@$(ROOT)/scripts/bump-copyright-year.py $(CHANGED_ERL)
+code_checks: bump-changed-copyright bump-changed-license
 	@printf "\n:: Check code\n\n"
 	@$(ROOT)/scripts/code_checks.bash $(CHANGED_ERL)
 	@printf "\n:: Check for raw JSON usage\n\n"
@@ -477,6 +479,16 @@ code_checks:
 	@$(ROOT)/scripts/check-loglines.bash
 	@printf "\n:: Check for Erlang 21 new stacktrace syntax\n\n"
 	@$(ROOT)/scripts/check-stacktrace.py $(CHANGED_ERL)
+
+.PHONY: bump-changed-copyright
+bump-changed-copyright:
+	@printf ":: Check for copyright year\n\n"
+	@$(ROOT)/scripts/bump-copyright-year.py $(CHANGED_ERL)
+
+.PHONY: bump-changed-license
+bump-changed-license:
+	@printf ":: Check for license\n\n"
+	@$(ROOT)/scripts/bump-license.py $(CHANGED_ERL)
 
 .PHONY: raw_json_check
 raw_json_check:
@@ -508,7 +520,7 @@ schemas: $(KAST)
 $(KAST):
 	@DEPS=kazoo_ast $(MAKE) -f $(ROOT)/make/Makefile.apps -C $(APPS_DIR)
 
-DOCS_ROOT=$(ROOT)/doc/mkdocs
+DOCS_ROOT ?= $(ROOT)/doc/mkdocs
 .PHONY: docs
 docs: docs-validate docs-report docs-setup docs-build
 
@@ -525,7 +537,7 @@ docs-validate:
 
 .PHONY: docs-report
 docs-report:
-	@$(ROOT)/scripts/reconcile_docs_to_index.bash
+	@$(ROOT)/scripts/reconcile_docs_to_index.bash $(DOCS_ROOT)
 
 .PHONY: docs-setup
 docs-setup:
