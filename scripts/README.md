@@ -813,3 +813,7 @@ returns next release based on branch & tags.
 ## `increment_version.bash`
 
 routine to increment a version
+
+## `bump-license.py`
+
+Bumps license

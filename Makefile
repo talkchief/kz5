@@ -83,18 +83,12 @@ compile: ACTION = all
 compile: deps kazoo
 
 .PHONY: sparkly-clean
-sparkly-clean: stop-if-changed clean-apps clean-kazoo clean-release clean-deps clean-tags
+sparkly-clean: stop-if-changed clean-kazoo clean-release clean-deps clean-tags
 	 @(rm -rf $(APPS_DIR) $(CORE_DIR))
 
 .PHONY: stop-if-changed
 stop-if-changed:
 	@[ -z $(CHANGED) ] || $(error you have unstaged changes: $(CHANGED))
-
-.PHONY: clean
-clean: clean-core clean-apps
-	$(if $(wildcard *crash.dump), rm *crash.dump)
-	$(if $(wildcard scripts/log/*), rm -rf scripts/log/*)
-	$(if $(wildcard rel/dev-vm.args), rm rel/dev-vm.args)
 
 .PHONY: clean-kazoo
 clean-kazoo: stop-if-changed
@@ -103,10 +97,19 @@ clean-kazoo: stop-if-changed
 	@$(if $(wildcard $(CORE_HASH_FILE)), rm -rf $(CORE_HASH_FILE))
 	@$(if $(wildcard $(APPS_HASH_FILE)), rm -rf $(APPS_HASH_FILE))
 
+.PHONY: clean
+clean: clean-core clean-apps
+	$(if $(wildcard *crash.dump), rm *crash.dump)
+	$(if $(wildcard scripts/log/*), rm -rf scripts/log/*)
+	$(if $(wildcard rel/dev-vm.args), rm rel/dev-vm.args)
+
 .PHONY: clean-core
-clean-core: stop-if-changed
+clean-core:
 	@$(if $(wildcard $(CORE_DIR)),$(MAKE) -j$(JOBS) -C $(CORE_DIR) clean)
-	@$(if $(wildcard $(CORE_HASH_FILE)),rm $(CORE_HASH_FILE))
+
+.PHONY: clean-apps
+clean-apps:
+	@$(if $(wildcard $(APPS_DIR)/Makefile),$(MAKE) -j$(JOBS) -C $(APPS_DIR) clean)
 
 .PHONY: clean-test
 clean-test: clean-test-core clean-test-apps
@@ -263,11 +266,6 @@ make/more_apps.mk:
 $(APPS_DIR)/Makefile:
 	@$(shell mkdir -p $(APPS_DIR))
 	@cp $(ROOT)/make/Makefile.applications $(APPS_DIR)/Makefile
-
-.PHONY: clean-apps
-clean-apps:
-	@$(if $(wildcard $(APPS_DIR)/Makefile),$(MAKE) -j$(JOBS) -C $(APPS_DIR) clean)
-	@$(if $(wildcard $(APPS_HASH_FILE)),rm $(APPS_HASH_FILE))
 
 .PHONY: kazoo
 kazoo: deps apps $(TAGS)

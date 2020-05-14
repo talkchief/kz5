@@ -232,18 +232,18 @@ $(PLT):
 
 .PHONY: dialyze dialyze-hard
 dialyze: TO_DIALYZE ?= $(abspath ebin)
-dialyze: $(PLT) compile
+dialyze: $(PLT)
 	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(ROOT)/applications $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt $(TO_DIALYZE)
 
 dialyze-hard: TO_DIALYZE ?= $(abspath ebin)
-dialyze-hard: $(PLT) compile
+dialyze-hard: $(PLT)
 	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(ROOT)/applications $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt --hard $(TO_DIALYZE)
 
 REBAR=$(ROOT)/deps/.erlang.mk/rebar/rebar
 
 .PHONY: xref fmt perf fixture_shell
 xref: TO_XREF = ebin/  #FIXME: set TO_XREF to an app's dependencies' ebin/ directories
-xref: compile
+xref:
 	@ERL_LIBS=$(ELIBS) $(REBAR) xref skip_deps=true -C $(ROOT)/make/xref.local.config
 
 fmt: TO_FMT ?= $(shell find src include test -iname '*.erl' -or -iname '*.hrl' -or -iname '*.escript')
