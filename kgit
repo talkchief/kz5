@@ -97,20 +97,22 @@ Example:
 
 Options:
 
-    -kapps app_name[,app_name...]    add a comma separated list of Kazoo apps to working directories list
-    -kcore                           add "core" directory to working directories list
-    -kroot                           add kazoo source root directory to working directories list
-    -a, --all-apps                   add all Kazoo apps to working directories list
-    -A, -All                         add "core", all kazoo apps and kazoo source root directory to
-                                         list of working directories. This option is default
-    -exit-on-error                   exit if command returns exit other than 0
-    -kchanged                        loop over working directories and prints the name of files which are
-                                         different than "$BASE_BRANCH". "master" is the default BASE_BRANCH
-                                     this does not run git/hub/gh commands
-    -get-root                        print path to Kazoo source directory and exit
-    -q                               be quiet, but still print error messages
-    -qq                              be more quiet, also do not print errors
-    -help                            shows help
+    -kapps app_name[,app_name...]        add a comma separated list of Kazoo apps to working directories list
+    -exclude-apps app_name[,app_name...] exclude a comma separated list of Kazoo apps from working directories list
+                                             This takes precedence over -kapps, -a and -A.
+    -kcore                               add "core" directory to working directories list
+    -kroot                               add kazoo source root directory to working directories list
+    -a, --all-apps                       add all Kazoo apps to working directories list
+    -A, -All                             add "core", all kazoo apps and kazoo source root directory to
+                                             list of working directories. This option is default
+    -exit-on-error                       exit if command returns exit other than 0
+    -kchanged                            loop over working directories and prints the name of files which are
+                                             different than "$BASE_BRANCH". "master" is the default BASE_BRANCH
+                                         this does not run git/hub/gh commands
+    -get-root                            print path to Kazoo source directory and exit
+    -q                                   be quiet, but still print error messages
+    -qq                                  be more quiet, also do not print errors
+    -help                                shows help
 END
 }
 
@@ -122,12 +124,27 @@ add_kazoo_apps() {
     fi
 }
 
+exclude_kazoo_apps() {
+    echo add
+    if [ -z "$_exclude_apps" ]; then
+        _exclude_apps="$1"
+    else
+        _exclude_apps="$_exclude_apps $1"
+    fi
+}
+
 while [ $# -gt 0 ]; do
     arg="$1"
     case $arg in
         -kapps)
             if [ -n "$2" ]; then
                 add_kazoo_apps "$(echo "$2" | tr ',' ' ')"
+                shift
+            fi
+            ;;
+        -exclude-apps)
+            if [ -n "$2" ]; then
+                exclude_kazoo_apps "$(echo "$2" | tr ',' ' ')"
                 shift
             fi
             ;;
@@ -226,9 +243,20 @@ add_work_dir() {
     done
 }
 
+add_app_to_work_dir() {
+    local path
+    while [ $# -gt 0 ]; do
+        path="$1"
+        if [[ ! " $_exclude_apps " =~  " ${path#applications/} " ]]; then
+            add_work_dir "$path"
+        fi
+        shift
+    done
+}
+
 parse_paths() {
     if [ -n "$include_all" ]; then
-        add_work_dir applications/*
+        add_app_to_work_dir applications/*
         add_work_dir "core"
         add_work_dir "."
         return
@@ -236,15 +264,15 @@ parse_paths() {
 
     [ -n "$include_core" ] && add_work_dir "core"
     [ -n "$include_root" ] && add_work_dir "."
-    [ -n "$include_all_apps" ] && add_work_dir applications/*
+    [ -n "$include_all_apps" ] && add_app_to_work_dir applications/*
 
     for app in $_kazoo_apps; do
-        add_work_dir "applications/$app"
+        add_app_to_work_dir "applications/$app"
     done
     unset app
 
     if [ -z "$_work_dirs" ]; then
-        add_work_dir applications/*
+        add_app_to_work_dir applications/*
         add_work_dir "core"
         add_work_dir "."
     fi

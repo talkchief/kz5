@@ -30,6 +30,7 @@ _kgit()
 
         opts="
         -kapps
+        -exclude-apps
         -a -all-apps
         -A -all
         -kcore

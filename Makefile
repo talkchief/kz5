@@ -131,7 +131,7 @@ compile-test: ERLC_OPTS += +nowarn_missing_spec
 compile-test: compile-test-core compile-test-apps
 
 .PHONY: compile-test-core
-compile-test-core: deps $(CORE_HASH_FILE)
+compile-test-core: deps fetch-core
 	@$(MAKE) -j$(JOBS) -C $(CORE_DIR) compile-test-direct
 
 .PHONY: compile-test-apps
@@ -221,12 +221,12 @@ $(DEPS_DIR)/Makefile: $(DOT_ERLANG_MK) clean-plt
 # 2. make sure the core repo has been fetched (using the hash of the make/Makefile.core as a check)
 # Once satisfied, compile all the dirs under core/
 .PHONY: core
-core: deps $(CORE_HASH_FILE)
+core: deps fetch-core
 	@$(MAKE) -j$(JOBS) -C $(CORE_DIR) all
 
 # Target: fetch-core
 # Alias for $(CORE_DIR)Makefile to fetch the core apps
-fetch-core: $(CORE_DIR)/Makefile
+fetch-core: $(CORE_HASH_FILE) $(CORE_DIR)/Makefile
 
 # Target: core hash file
 # 1. Make sure erlang.mk is setup
