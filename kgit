@@ -172,7 +172,7 @@ while [ $# -gt 0 ]; do
             _silence=1
             ;;
         -exit-on-error)
-            $_exit_on_error=1
+            _exit_on_error=1
             ;;
         gh)
             _action="gh"
