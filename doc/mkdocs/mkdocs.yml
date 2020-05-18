@@ -553,9 +553,9 @@ nav:
     - 'Getting used to multi-repo': 'doc/getting_used_to_multi_repo.md'
     - 'Kazoo Globals Registry': 'doc/engineering/kz_globals.md'
     - 'Kazoo PropEr':
-      - 'applications/kazoo_proper/doc/README.md'
-      - 'applications/kazoo_proper/doc/rates.md'
-      - 'applications/kazoo_proper/doc/maintenance.md'
+      - 'applications/properly/doc/README.md'
+      - 'applications/properly/doc/rates.md'
+      - 'applications/properly/doc/maintenance.md'
     - 'Kazoo Scripts': 'scripts/README.md'
     - 'Loopback Channels': 'doc/engineering/loopback.md'
     - 'Makefile': 'doc/engineering/make.md'
