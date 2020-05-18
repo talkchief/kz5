@@ -259,7 +259,7 @@ fetch-apps: $(APPS_HASH_FILE) $(APPS_DIR)/Makefile
 $(APPS_HASH_FILE): $(DOT_ERLANG_MK) make/more_apps.mk
 	@touch $(APPS_HASH_FILE)
 
-# Bootstrap more_apps.mk with kazoo_proper and kazoo_ast
+# Bootstrap more_apps.mk with kazoo_properly and kazoo_ast
 make/more_apps.mk:
 	@cp make/more_apps.mk.default make/more_apps.mk
 

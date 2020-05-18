@@ -1,12 +1,16 @@
-.PHONY: ci ci-config ci-steps ci-pre ci-fmt ci-build ci-codechecks ci-docs ci-schemas ci-dialyze ci-release ci-unstaged
-
 PIP := $(shell { command -v pip; } 2>/dev/null)
 CI_DIR := $(CURDIR)/make
 CI_VALIDATOR := $(CI_DIR)/circleci
 CI_CONFIG := $(CURDIR)/.circleci/config.yml
 
+.PHONY: ci
 ci: ci-config ci-steps
 
+.PHONY: ci-update
+ci-update: $(CI_VALIDATOR)
+	$(CI_VALIDATOR) update
+
+.PHONY: ci-config
 ci-config: $(CI_VALIDATOR)
 	@$(CI_VALIDATOR) config validate -c $(CI_CONFIG) || (echo "$(CI_CONFIG):1:"; exit 1)
 
@@ -19,9 +23,11 @@ $(CI_VALIDATOR): | $(CI_DIR)
 $(CI_DIR):
 	@mkdir $(CI_DIR)
 
+.PHONY: ci-steps
 ci-steps: ci-pre ci-fmt ci-build ci-codechecks ci-docs ci-schemas ci-dialyze ci-release
 	@$(ROOT)/scripts/check-unstaged.bash
 
+.PHONY: ci-pre
 ci-pre:
 ifneq ($(PIP),)
 ## needs root access
@@ -32,38 +38,47 @@ else
 	$(error "pip is not available, please install python3-pip package")
 endif
 
+.PHONY: ci-docs
 ci-docs:
 	@./scripts/state-of-docs.py || true
 	@$(ROOT)/scripts/state-of-edoc.escript
 	@$(MAKE) apis
 	@$(MAKE) docs
 
+.PHONY: ci-codechecks
 ci-codechecks:
 	@./scripts/code_checks.bash $(CHANGED)
 	@$(MAKE) code_checks
 	@$(MAKE) app_applications
 	@$(MAKE) validate-js
 
+.PHONY: ci-fmt
 ci-fmt:
 	@$(MAKE) fmt
 	@$(MAKE) elvis
 
+.PHONY: ci-build
 ci-build:
 	@$(MAKE) clean clean-deps deps kazoo xref sup_completion
 
+.PHONY: ci-schemas
 ci-schemas:
 	@$(MAKE) validate-schemas
 	@$(if $(CHANGED_SWAGGER), $(MAKE) ci-swagger)
 
+.PHONY: ci-swagger
 ci-swagger:
 	@-$(MAKE) validate-swagger
 
+.PHONY: ci-unstaged
 ci-unstaged:
 	@$(ROOT)/scripts/check-unstaged.bash
 
+.PHONY: ci-dialyze
 ci-dialyze: build-plt
 ci-dialyze:
 	@TO_DIALYZE="$(CHANGED)" $(MAKE) dialyze-it
 
+.PHONY: ci-release
 ci-release:
 	@$(MAKE) build-ci-release
