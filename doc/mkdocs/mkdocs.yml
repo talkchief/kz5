@@ -191,6 +191,7 @@ nav:
         - 'Match CID': 'applications/callflow/doc/cidlistmatch.md'
         - 'Set CID': 'applications/callflow/doc/set_cid.md'
         - 'Check CID': 'applications/callflow/doc/check_cid.md'
+      - 'Detect Speech': 'applications/callflow/doc/detect_speech.md'
       - 'Playing Media':
         - 'Media/URL': 'applications/callflow/doc/play.md'
         - 'Audio Macros': 'applications/callflow/doc/audio_macro.md'
