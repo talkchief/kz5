@@ -63,7 +63,7 @@ ifneq (,$(wildcard $(DEPS_MK)))
 DEPS_HASH := $(shell md5sum $(DEPS_MK) | cut -d' ' -f1)
 DEPS_HASH_FILE := .deps.mk.$(DEPS_HASH)
 
-deps: $(DOT_ERLANG_MK) $(DEPS_MK) $(DEPS_HASH_FILE)
+deps: $(DOT_ERLANG_MK) $(DEPS_MK) $(DEPS_HASH_FILE) apps
 
 $(DEPS_HASH_FILE):
 	@[ -s $(DEPS_MK) ] && DEPS_MK="$(DEPS_MK)" $(MAKE) -C $(ROOT)/deps/ all || true
