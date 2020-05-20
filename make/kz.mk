@@ -60,10 +60,10 @@ DOT_ERLANG_MK = $(ROOT)/.erlang.mk
 .PHONY: deps
 ifneq (,$(wildcard $(DEPS_MK)))
 # Track app's dependencies, if any
-DEPS_HASH := $(shell md5sum $(DEPS_MK) | cut -d' ' -f1)
+DEPS_HASH := $(shell [ -f $(DEPS_MK) ] && md5sum $(DEPS_MK) | cut -d' ' -f1)
 DEPS_HASH_FILE := .deps.mk.$(DEPS_HASH)
 
-deps: $(DOT_ERLANG_MK) $(DEPS_MK) $(DEPS_HASH_FILE) apps
+deps: $(DOT_ERLANG_MK) $(DEPS_MK) $(DEPS_HASH_FILE)
 
 $(DEPS_HASH_FILE):
 	@[ -s $(DEPS_MK) ] && DEPS_MK="$(DEPS_MK)" $(MAKE) -C $(ROOT)/deps/ all || true
@@ -79,20 +79,23 @@ endif
 .PHONY: apps
 ifneq (,$(wildcard $(APPS_MK)))
 # Track app's kazoo apps, if any
-APPS_HASH := $(shell md5sum $(APPS_MK) | cut -d' ' -f1)
+APPS_HASH := $(shell [ -f $(APPS_MK) ] && md5sum $(APPS_MK) | cut -d' ' -f1)
 APPS_HASH_FILE := .apps.mk.$(APPS_HASH)
 
+include $(APPS_MK)
+
 apps: $(DOT_ERLANG_MK) $(APPS_MK) $(APPS_HASH_FILE)
+	@[ ! -z "$(DEPS)" ] && MAKEDIRS="$(DEPS)" $(MAKE) -C $(ROOT)/applications all || true
 
 $(APPS_HASH_FILE):
-	@[ -s $(APPS_MK) ] && ROOT="$(ROOT)" APPS_MK="$(APPS_MK)" MORE_APPS_MK="" $(MAKE) -f $(ROOT)/make/Makefile.apps -C $(APPS_DIR) fetch-deps && $(MAKE) -C $(ROOT)/applications all
+	@[ -s $(APPS_MK) ] && ROOT="$(ROOT)" APPS_MK="$(APPS_MK)" MORE_APPS_MK="" $(MAKE) -f $(ROOT)/make/Makefile.apps -C $(APPS_DIR) fetch-deps || true
 
 else
 apps: $(APPS_MK)
 
 $(APPS_MK):
-	touch $(APPS_MK)
-	touch .apps.mk.$(shell md5sum $(APPS_MK) | cut -d' ' -f1)
+	@touch $(APPS_MK)
+	@touch .apps.mk.$(shell md5sum $(APPS_MK) | cut -d' ' -f1)
 endif
 
 $(DOT_ERLANG_MK):
@@ -149,7 +152,7 @@ depend: $(DEPS_RULES) $(TEST_DEPS)
 
 $(DEPS_RULES):
 	@rm -f $(DEPS_RULES)
-	ERL_LIBS=$(ELIBS) erlc -v +makedep +'{makedep_output, standard_io}' $(PA) -o ebin/ $(SOURCES) > $(DEPS_RULES)
+	@ERL_LIBS=$(ELIBS) erlc -v +makedep +'{makedep_output, standard_io}' $(PA) -o ebin/ $(SOURCES) > $(DEPS_RULES)
 
 .PHONY: app_src
 app_src:
@@ -165,8 +168,8 @@ compile-test: deps $(TEST_DEPS) compile-test-kz-deps compile-test-direct json
 
 compile-test-direct: deps $(COMPILE_MOAR) test/$(PROJECT).app
 
-$(TEST_DEPS):
-	 ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(ROOT)/applications $(ROOT)/scripts/calculate-dep-targets.escript $(ROOT) $(PROJECT) > $(TEST_DEPS)
+$(TEST_DEPS): apps
+	 @ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(ROOT)/applications $(ROOT)/scripts/calculate-dep-targets.escript $(ROOT) $(PROJECT) > $(TEST_DEPS)
 
 ifeq (,$(wildcard $(TEST_DEPS)))
 KZ_DEPS_TARGETS =
