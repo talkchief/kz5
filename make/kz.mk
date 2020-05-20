@@ -53,6 +53,8 @@ TEST_PA = -pa ebin/ $(foreach EBIN,$(TEST_EBINS),-pa $(EBIN))
 DEPS_RULES = .deps.rules
 TEST_DEPS = .test.deps
 DEPS_MK = $(CURDIR)/deps.mk
+APPS_MK = $(CURDIR)/apps.mk
+APPS_DIR = $(ROOT)/applications
 DOT_ERLANG_MK = $(ROOT)/.erlang.mk
 
 .PHONY: deps
@@ -72,7 +74,25 @@ deps: $(DEPS_MK)
 $(DEPS_MK):
 	@touch $(DEPS_MK)
 	@touch .deps.mk.$(shell md5sum $(DEPS_MK) | cut -d' ' -f1)
+endif
 
+.PHONY: apps
+ifneq (,$(wildcard $(APPS_MK)))
+# Track app's kazoo apps, if any
+APPS_HASH := $(shell md5sum $(APPS_MK) | cut -d' ' -f1)
+APPS_HASH_FILE := .apps.mk.$(APPS_HASH)
+
+apps: $(DOT_ERLANG_MK) $(APPS_MK) $(APPS_HASH_FILE)
+
+$(APPS_HASH_FILE):
+	@[ -s $(APPS_MK) ] && ROOT="$(ROOT)" APPS_MK="$(APPS_MK)" MORE_APPS_MK="" $(MAKE) -f $(ROOT)/make/Makefile.apps -C $(APPS_DIR) fetch-deps && $(MAKE) -C $(ROOT)/applications all
+
+else
+apps: $(APPS_MK)
+
+$(APPS_MK):
+	touch $(APPS_MK)
+	touch .apps.mk.$(shell md5sum $(APPS_MK) | cut -d' ' -f1)
 endif
 
 $(DOT_ERLANG_MK):
