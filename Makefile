@@ -263,6 +263,9 @@ $(APPS_HASH_FILE): $(DOT_ERLANG_MK) make/more_apps.mk
 make/more_apps.mk:
 	@cp make/more_apps.mk.default make/more_apps.mk
 
+.PHONY: apps-makefile
+apps-makefile: $(APPS_DIR)/Makefile
+
 $(APPS_DIR)/Makefile:
 	@$(shell mkdir -p $(APPS_DIR))
 	@cp $(ROOT)/make/Makefile.applications $(APPS_DIR)/Makefile

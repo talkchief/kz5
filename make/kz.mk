@@ -85,6 +85,8 @@ APPS_HASH_FILE := .apps.mk.$(APPS_HASH)
 include $(APPS_MK)
 
 apps: $(DOT_ERLANG_MK) $(APPS_MK) $(APPS_HASH_FILE)
+# Make sure the applications/Makefile exists
+	@$(MAKE) -C $(ROOT) apps-makefile
 	@[ ! -z "$(DEPS)" ] && MAKEDIRS="$(DEPS)" $(MAKE) -C $(ROOT)/applications all || true
 
 $(APPS_HASH_FILE):
