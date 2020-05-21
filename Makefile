@@ -43,6 +43,7 @@ CHANGED_SWAGGER ?= $(shell git -C $(APPS_DIR)/crossbar --no-pager diff --name-on
 CHANGED_ERL=$(filter %.hrl %.erl %.escript,$(CHANGED))
 CHANGED_JSON=$(filter %.json,$(CHANGED))
 CHANGED_YML=$(filter %.yml,$(CHANGED))
+CHANGED_DOCS=$(filter %.md,$(CHANGED))
 
 # exporting these so they are used in targets
 export CHANGED
@@ -50,6 +51,7 @@ export CHANGED_SWAGGER
 export CHANGED_ERL
 export CHANGED_JSON
 export CHANGED_YML
+export CHANGED_DOCS
 
 # You can override this when calling make, e.g. make JOBS=1
 # to prevent parallel builds, or make JOBS="8".
@@ -64,6 +66,7 @@ changed:
 	@echo "changed ERL: $(CHANGED_ERL)"
 	@echo "changed JSON: $(CHANGED_JSON)"
 	@echo "changed YML: $(CHANGED_YML)"
+	@echo "changed docs: $(CHANGED_DOCS)"
 
 unstaged:
 	$(ROOT)/scripts/check-unstaged.bash
@@ -545,7 +548,7 @@ docs-validate:
 
 .PHONY: docs-report
 docs-report:
-	@$(ROOT)/scripts/reconcile_docs_to_index.bash $(DOCS_ROOT)
+	@$(ROOT)/scripts/reconcile_docs_to_index.bash $(ROOT)
 
 .PHONY: docs-setup
 docs-setup:

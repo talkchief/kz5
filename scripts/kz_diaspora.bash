@@ -570,6 +570,7 @@ kz_util_format_ids() {
     replace 'kz_util' 'format_account_modb' 'kzs_util' 'format_account_modb'
     replace 'kz_util' 'format_resource_selectors_id' 'kzs_util' 'format_resource_selectors_id'
     replace 'kz_util' 'format_resource_selectors_db' 'kzs_util' 'format_resource_selectors_db'
+    replace 'kz_util' 'account_format' 'kzs_util' 'account_format'
 
     for FILE in $(grep -rPl "kzs_util:format_account_id(.*, \'encoded\')" $SEARCH_PATHS); do
         sed -ri "s#kzs_util:format_account_id[(](.+), 'encoded'[)]#kzs_util:format_account_db(\1)#g" "$FILE"

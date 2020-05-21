@@ -2,13 +2,17 @@
 
 pushd $(dirname $0) > /dev/null
 
+ROOT="$1/"
+DOCS_ROOT=$ROOT/doc/mkdocs
+
 cd $(pwd -P)/..
 
 doc_count=0
 missing_count=0
 
 function check_index {
-    line=$(grep "$1" ./doc/mkdocs/mkdocs.yml)
+    doc=${1/$ROOT/}
+    line=$(grep "$doc" $DOCS_ROOT/mkdocs.yml)
 
     if [ -f "$1" ] && [ -z "$line" ]; then
         [[ 0 -eq $missing_count ]] && echo "Docs missing from the mkdocs.yml index:"
@@ -18,8 +22,8 @@ function check_index {
 }
 
 docs=""
-if [ -n "$CHANGED" ]; then
-    for file in $CHANGED ; do
+if [ -n "$CHANGED_DOCS" ]; then
+    for file in $CHANGED_DOCS ; do
         case $file in
             doc/mkdocs|doc/mkdocs/*)
                 ;;
@@ -31,7 +35,7 @@ if [ -n "$CHANGED" ]; then
                 if [ -n "$doc" ]; then
                     docs="$doc $file"
                 else
-                    docs="$file"
+                    docs="$(realpath $file)"
                 fi
                 ;;
             *)
