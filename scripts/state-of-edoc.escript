@@ -37,7 +37,8 @@ get_erls([], []) ->
             lists:sort(
               [F || F <- string:tokens(Changed, " "),
                     filename:extension(F) =:= ".erl"
-              )
+              ]
+             )
     end;
 get_erls([], Acc) ->
     Acc;
