@@ -10,6 +10,20 @@
 
 -define(SEP(I, C, L), <<(binary:copy(<<$%>>, I))/binary, (binary:copy(C, L))/binary>>).
 
+get_change_erls() ->
+    case os:getenv("CHANGED_ERL") of
+        'false' -> 'undefined';
+        "" ->
+            io:format("No Erlang changed files.~n"),
+            halt(0);
+        Changed -> Changed
+    end.
+
+search_paths('undefined', Default) -> Default;
+search_paths(Changed, _) ->
+    %% hack around `ag', when there is only one file to search it won't output the filename
+    Changed ++ "  scripts/edocify.escript scripts/state-of-edoc.escript".
+
 main(_) ->
     _ = io:setopts(user, [{encoding, unicode}]),
     check_ag_available(),
@@ -19,13 +33,16 @@ main(_) ->
     {Year, _, _} = erlang:date(),
 
     io:format("Edocify Kazoo...~n~n"),
-    FindCmd = regex_find("applications/ core/", "'.*/src/.*.(erl|erl.src)$'", os:type()),
-    io:format("find cmd is ~p ~n", [FindCmd]),
+
+    ChangedErls = get_change_erls(),
+
+    %% FindCmd = regex_find("applications/ core/", search_paths(ChangedErls, "'.*/src/.*.(erl|erl.src)$'"), os:type()),
+    %% io:format("find cmd is ~p ~n", [FindCmd]),
 
     Run = [
            %% regex for evil spec+specs
-           {"ag -G '(erl|erl.src|hrl|hrl.src|escript)$' --nogroup '^\\-spec[^.]+\\.$(\\n+\\-spec[^.]+\\.$)+' core/ applications/"
-           ,"separate evil sepc+specs"
+           {"ag --filename -G '(erl|erl.src|hrl|hrl.src|escript)$' --nogroup '^\\-spec[^.]+\\.$(\\n+\\-spec[^.]+\\.$)+' " ++ search_paths(ChangedErls, "core/ applications/")
+           ,"separating consecutive sepc tags"
            ,fun evil_specs/1
            }
 
@@ -35,13 +52,13 @@ main(_) ->
            %%  }
 
            %% regex to find contributors tag.
-          ,{"ag -G '(erl|erl.src|hrl|hrl.src|escript)$' -l '%%+ *@?([Cc]ontributors|[Cc]ontributions)' core/ applications/"
+          ,{"ag -G '(erl|erl.src|hrl|hrl.src|escript)$' -l '^%%+ *@?([Cc]ontributors|[Cc]ontributions)' " ++ search_paths(ChangedErls, "core/ applications/")
            ,"rename contributors tag to author"
            ,fun edocify_headers/1
            }
 
            %% regex to find `@public' tag.
-          ,{"ag -G '(erl|erl.src|hrl|hrl.src|escript)$' '%%* *@(public)' core/ applications/"
+          ,{"ag -G '(erl|erl.src|hrl|hrl.src|escript)$' '^%%* *@(public)' " ++ search_paths(ChangedErls, "core/ applications/")
            ,"remove public tag"
            ,fun remove_public_tag/1
            }
@@ -49,7 +66,7 @@ main(_) ->
            %% regex for spec tag in comments: any comments which starts with `@spec' follow by anything (optional one time new line)
            %% until it ends (for single line @spec) any ending with `)' or `}' or any string at the end of the line (should be last regex otherwise
            %% multi line regex won't work). For multi line the first line should end with `|' followed by same regex until exhausted.
-          ,{"ag '^%%+\\s*@spec((.*$\\n)?(.*\\)$|.*}$|.*\\|(\\n%%+(.*\\)$|.*}$|.*\\||[^@=-]+$))+)|.*$)' core/ applications/"
+          ,{"ag '^%%+\\s*@spec((.*$\\n)?(.*\\)$|.*}$|.*\\|(\\n%%+(.*\\)$|.*}$|.*\\||[^@=-]+$))+)|.*$)' " ++ search_paths(ChangedErls, "core/ applications/")
            ,"removing spec from comment"
            ,fun remove_comment_specs/1
            }
@@ -58,42 +75,42 @@ main(_) ->
            %% to avoid EDoc to use the separator as the functions comment.
            %% Regex explanation: search for any line starts with at least two `%%' followed by any whitespace, followed by any new line until
            %% a `-spec' attribute or a function head is found.
-          ,{"ag -G '(erl)$' '%%%*\\s*==+$(\\n+(^-spec+|[a-z]+))' applications/ core/"
+          ,{"ag -G '(erl)$' '^%%%*\\s*==+$(\\n+(^-spec+|[a-z]+))' " ++ search_paths(ChangedErls, "core/ applications/")
            ,"add missing comments block after separator"
            ,fun missing_comment_blocks_after_sep/1
            }
 
            %% regex for escaping codes in comment for `resource_exists' function crossbar modules.
-          ,{"ag '%%%*\\s*Does the path point to a valid resource$(\\n%%*\\s*.*)*\\n%%%*\\s*@end' applications/"
+          ,{"ag '^%%%*\\s*Does the path point to a valid resource$(\\n%%*\\s*.*)*\\n%%%*\\s*@end' " ++ search_paths(ChangedErls, "applications/")
            ,"escape code block in 'resource_exists' function crossbar modules"
            ,fun cb_resource_exists_comments/1
            }
 
            %% regex for finding comment block with no @end
-          ,{"ag '^%%*[ ]*@doc[^\\n]*$(\\n^(?!(%%* *@end|%%* ?--+$|%%* ?==+$))^%%[^\\n]*$)*(\\n%%* ?(--+|==+)$)' core/ applications/"
+          ,{"ag '^%%*[ ]*@doc[^\\n]*$(\\n^(?!(%%* *@end|%%* ?--+$|%%* ?==+$))^%%[^\\n]*$)*(\\n%%* ?(--+|==+)$)' " ++ search_paths(ChangedErls, "core/ applications/")
            ,"fix comment blocks with no end"
            ,fun comment_blocks_with_no_end/1
            }
 
            %% regex for separator lines with length lower than 78 (for %%) or 77 (for %%%).
-          ,{"ag -G '(applications|core)/.*/src/.*.(erl|erl.src|hrl|hrl.src)$' '^%% *-{50,77}$'"
+          ,{"ag -G '(applications|core)/.*/src/.*.(erl|erl.src|hrl|hrl.src)$' '^%% *-{50,77}$' " ++ search_paths(ChangedErls, "core/ applications/")
            ,"increase separator line (starts with %%) length"
            ,fun(R) -> increase_sep_length(R, <<"-">>) end
            }
-          ,{"ag -G '(applications|core)/.*/src/.*.(erl|erl.src|hrl|hrl.src)$' '^%%%+ *={50,76}$'"
+          ,{"ag -G '(applications|core)/.*/src/.*.(erl|erl.src|hrl|hrl.src)$' '^%%%+ *={50,76}$' " ++ search_paths(ChangedErls, "core/ applications/")
            ,"increase separator line (starts with %%%) length"
            ,fun(R) -> increase_sep_length(R, <<"=">>) end
            }
 
            %% regex for finding first comment line after `@doc'
-           %% ,{"ag '%%*\\s*@doc$(\\n%%*$)*\\n%%*\\s*[^@\\n]+$' core/ applications/"
+           %% ,{"ag '%%*\\s*@doc$(\\n%%*$)*\\n%%*\\s*[^@\\n]+$' " ++ search_paths(ChangedErls, "core/ applications/"
            %%  ,"move first comment line to the same line as doc tag"
            %%  ,fun move_to_doc_line/1
            %%  }
 
            %% regex for empty comment line after @doc to avoid empty paragraph or dot in summary
            %% must be last thing to run
-          ,{"ag -G '(erl|erl.src|hrl|hrl.src)$' '%%* *@doc *$(\\n%%* *$)+' core/ applications/"
+          ,{"ag -G '(erl|erl.src|hrl|hrl.src)$' '%%* *@doc *$(\\n%%* *$)+' " ++ search_paths(ChangedErls, "core/ applications/")
            ,"remove empty comment line after doc tag"
            ,fun remove_doc_tag_empty_comment/1
            }
@@ -126,14 +143,14 @@ run_ag(Cmd) ->
     try os:cmd(Cmd)
     catch
         _E:_T ->
-            io:format("ag command failed: ~p:~p~n", [_E, _T]),
+            io:format("~nag command failed: ~p:~p~n", [_E, _T]),
             halt(1)
     end.
 
 edocify([], 0) ->
-    io:format("~nAlready EDocified! 🎉~n");
+    io:format("~nNo EDoc issues were found! 🎉~n");
 edocify([], Ret) ->
-    io:format("~nWe had some EDocification! 🤔~n"),
+    io:format("~nSome EDoc issues were found! 🤔~n"),
     halt(Ret);
 edocify([{Cmd, Desc, Fun}|Rest], Ret) ->
     io:format("* running command: ~s~n", [Desc]),
@@ -176,15 +193,15 @@ check_result(Result) ->
 %% Then we read AST again to find the function/arity position in the file
 %% then adding spec to line before appropriate function header.
 %%
-%% Ag sample output:
-%% ```
-%% core/kazoo_apps/src/kapps_util.erl:313:-spec get_account_mods(kz_term:ne_binary()) -> kz_term:ne_binaries().
-%% core/kazoo_apps/src/kapps_util.erl:314:-spec get_account_mods(kz_term:ne_binary(), kz_util:account_format()) -> kz_term:ne_binaries().
-%% core/kazoo_apps/src/kapps_util.erl:608:-spec amqp_pool_request(kz_term:api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun()) ->
-%% core/kazoo_apps/src/kapps_util.erl:609:                               kz_amqp_worker:request_return().
-%% core/kazoo_apps/src/kapps_util.erl:610:-spec amqp_pool_request(kz_term:api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun(), timeout()) ->
-%% core/kazoo_apps/src/kapps_util.erl:611:                               kz_amqp_worker:request_return().
-%% '''
+%% %% Ag sample output:
+%% %% ```
+%% %% core/kazoo_apps/src/kapps_util.erl:313:-spec get_account_mods(kz_term:ne_binary()) -> kz_term:ne_binaries().
+%% %% core/kazoo_apps/src/kapps_util.erl:314:-spec get_account_mods(kz_term:ne_binary(), kz_util:account_format()) -> kz_term:ne_binaries().
+%% %% core/kazoo_apps/src/kapps_util.erl:608:-spec amqp_pool_request(kz_term:api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun()) ->
+%% %% core/kazoo_apps/src/kapps_util.erl:609:                               kz_amqp_worker:request_return().
+%% %% core/kazoo_apps/src/kapps_util.erl:610:-spec amqp_pool_request(kz_term:api_terms(), kz_amqp_worker:publish_fun(), kz_amqp_worker:validate_fun(), timeout()) ->
+%% %% core/kazoo_apps/src/kapps_util.erl:611:                               kz_amqp_worker:request_return().
+%% %% '''
 %%
 %% Expected outcome:
 %% move spec to appropriate function header.
@@ -301,11 +318,11 @@ move_file_specs(Lines, LinesAdded, [#{fun_pos := Pos, spec := Spec, spec_length 
 %% @doc Bump copyright year. Also add module header if it is missing (obviously only
 %% for files returned by `ag' not all other files).
 %%
-%% Ag sample output:
-%% ```
-%% core/kazoo_apps/src/kapps_util.erl
-%% core/kazoo_voicemail/src/kvm_message.erl
-%% '''
+%%  %% Ag sample output:
+%%  %% ```
+%%  %% core/kazoo_apps/src/kapps_util.erl
+%%  %% core/kazoo_voicemail/src/kvm_message.erl
+%%  %% '''
 %%
 %% Expected outcome:
 %% * Bump the year to current year
@@ -415,11 +432,11 @@ generate_copyright_line(StartY, EndY) ->
 %% header comment.
 %% * `-module' line should be immediately after header comment
 %%
-%% Ag sample output:
-%% ```
-%% core/kazoo_apps/src/kapps_util.erl
-%% core/kazoo_voicemail/src/kvm_message.erl
-%% '''
+%%  %% Ag sample output:
+%%  %% ```
+%%  %% core/kazoo_apps/src/kapps_util.erl
+%%  %% core/kazoo_voicemail/src/kvm_message.erl
+%%  %% '''
 %%
 %% Expected outcome:
 %% * create an `@author' tag for all names after `@contributors'
@@ -500,13 +517,13 @@ get_module_header_comments(Lines, Module, Header) ->
 %% Ad regex will match line with `@public'.
 %% So we can simply get file and positions for each file and remove the lines.
 %%
-%% Ag sample output:
-%% ```
-%% applications/skel/src/skel_listener.erl:111:%% @public
-%% '''
-%%
-%% Expected outcome:
-%% * all found lines should be removed.
+%%  %% Ag sample output:
+%%  %% ```
+%%  %%  applications/skel/src/skel_listener.erl:111:%% @public
+%%  %% '''
+%%  %%
+%%  %% Expected outcome:
+%%  %% * all found lines should be removed.
 %% @end
 %%------------------------------------------------------------------------------
 remove_public_tag(Result) ->
@@ -525,17 +542,17 @@ do_remove_public_tag(File, Positions) ->
 %% Ad regex will match line starts with `@spec' and the line it ends. So
 %% we can simply get file and positions for each file and remove the lines.
 %%
-%% Ag sample output:
-%% ```
-%% applications/skel/src/skel_listener.erl:111:%% @spec handle_info(Info, State) -> {noreply, State} |
-%% applications/skel/src/skel_listener.erl:112:%%                                   {noreply, State, Timeout} |
-%% applications/skel/src/skel_listener.erl:113:%%                                   {stop, Reason, State}
-%% applications/skel/src/skel_listener.erl:122:%% @spec handle_event(JObj, State) -> {reply, Options}
-%% applications/skel/src/skel_listener.erl:136:%% @spec terminate(Reason, State) -> void()
-%% '''
-%%
-%% Expected outcome:
-%% * all found lines should be removed.
+%%  %% Ag sample output:
+%%  %% ```
+%%  %% applications/skel/src/skel_listener.erl:111:%% @spec handle_info(Info, State) -> {noreply, State} |
+%%  %% applications/skel/src/skel_listener.erl:112:%%                                   {noreply, State, Timeout} |
+%%  %% applications/skel/src/skel_listener.erl:113:%%                                   {stop, Reason, State}
+%%  %% applications/skel/src/skel_listener.erl:122:%% @spec handle_event(JObj, State) -> {reply, Options}
+%%  %% applications/skel/src/skel_listener.erl:136:%% @spec terminate(Reason, State) -> void()
+%%  %% '''
+%%  %%
+%%  %% Expected outcome:
+%%  %% * all found lines should be removed.
 %% @end
 %%------------------------------------------------------------------------------
 remove_comment_specs(Result) ->
@@ -555,19 +572,19 @@ do_remove_comment_specs(File, Positions) ->
 %% the line which has a `-spec' attribute or function head. We then go to those
 %% positions and format those lines.
 %%
-%% Ag sample output:
-%% ```
-%% core/kazoo_media/src/kz_media_file_cache.erl:243:%%%=============================================================================
-%% core/kazoo_media/src/kz_media_file_cache.erl:244:-spec start_timer() -> reference().
-%% core/kazoo_media/src/kz_media_map.erl:311:%%%=============================================================================
-%% core/kazoo_media/src/kz_media_map.erl:312:
-%% core/kazoo_media/src/kz_media_map.erl:313:-spec init_map() -> 'ok'.
-%% '''
-%%
-%% Expected outcome:
-%% * an empty comment block before the spec line or function header (func without spec line).
-%% * maybe an empty comment line after the separator line if it's not exists.
-%% * any extra line between separator and `spec' line will be removed.
+%%  %% Ag sample output:
+%%  %% ```
+%%  %% core/kazoo_media/src/kz_media_file_cache.erl:243:%%%=============================================================================
+%%  %% core/kazoo_media/src/kz_media_file_cache.erl:244:-spec start_timer() -> reference().
+%%  %% core/kazoo_media/src/kz_media_map.erl:311:%%%=============================================================================
+%%  %% core/kazoo_media/src/kz_media_map.erl:312:
+%%  %% core/kazoo_media/src/kz_media_map.erl:313:-spec init_map() -> 'ok'.
+%%  %% '''
+%%  %%
+%%  %% Expected outcome:
+%%  %% * an empty comment block before the spec line or function header (func without spec line).
+%%  %% * maybe an empty comment line after the separator line if it's not exists.
+%%  %% * any extra line between separator and `spec' line will be removed.
 %% @end
 %%------------------------------------------------------------------------------
 missing_comment_blocks_after_sep(Result) ->
@@ -615,26 +632,26 @@ do_add_missing_comment_blocks([{LN, Line}|Lines], Positions, Formatted) ->
 %% Ag regex will match the comments before resource_exists function and last line
 %% is `%% @end'. We then formats those lines accordingly.
 %%
-%% Ag sample output:
-%% ```
-%% applications/acdc/src/cb_queues.erl:143:%% Does the path point to a valid resource
-%% applications/acdc/src/cb_queues.erl:144:%% So /queues => []
-%% applications/acdc/src/cb_queues.erl:145:%%    /queues/foo => [<<"foo">>]
-%% applications/acdc/src/cb_queues.erl:146:%%    /queues/foo/bar => [<<"foo">>, <<"bar">>]
-%% applications/acdc/src/cb_queues.erl:147:%% @end
-%% '''
-%%
-%% Expected outcome:
-%% %% Does the path point to a valid resource.
-%% %%
-%% %% For example:
-%% %%
-%% %% ```
-%% %%    /queues => []
-%% %%    /queues/foo => [<<"foo">>]
-%% %%    /queues/foo/bar => [<<"foo">>, <<"bar">>]
-%% %% '''
-%% %% @end
+%%  %% Ag sample output:
+%%  %% ```
+%%  %% applications/acdc/src/cb_queues.erl:143:%% Does the path point to a valid resource
+%%  %% applications/acdc/src/cb_queues.erl:144:%% So /queues => []
+%%  %% applications/acdc/src/cb_queues.erl:145:%%    /queues/foo => [<<"foo">>]
+%%  %% applications/acdc/src/cb_queues.erl:146:%%    /queues/foo/bar => [<<"foo">>, <<"bar">>]
+%%  %% applications/acdc/src/cb_queues.erl:147:%% @end
+%%  %% '''
+%%  %%
+%%  %% Expected outcome:
+%%  %% %% Does the path point to a valid resource.
+%%  %% %%
+%%  %% %% For example:
+%%  %% %%
+%%  %% %% ```
+%%  %% %%    /queues => []
+%%  %% %%    /queues/foo => [<<"foo">>]
+%%  %% %%    /queues/foo/bar => [<<"foo">>, <<"bar">>]
+%%  %% %% '''
+%%  %% %% @end
 %% @end
 %%------------------------------------------------------------------------------
 cb_resource_exists_comments(Result) ->
@@ -678,17 +695,17 @@ do_cb_resource_exists_comment([{LN, Line}|Lines], Positions, Formatted) ->
 %% @doc
 %% Fix comment block which doesn't end properly with `@end' tag.
 %%
-%% Ag sample output:
-%% ```
-%% applications/ecallmgr/src/ecallmgr_originate.erl:67:%% @doc Starts the server
-%% applications/ecallmgr/src/ecallmgr_originate.erl:68:%%--------------------------------------------------------------------
-%% applications/ecallmgr/src/ecallmgr_originate.erl:128:%% @doc
-%% applications/ecallmgr/src/ecallmgr_originate.erl:129:%% Initializes the server
-%% applications/ecallmgr/src/ecallmgr_originate.erl:130:%%--------------------------------------------------------------------
-%% '''
-%%
-%% Expected outcome:
-%% * an `@end' tag should be added before the separator line.
+%%  %% Ag sample output:
+%%  %% ```
+%%  %% applications/ecallmgr/src/ecallmgr_originate.erl:67:%% @doc Starts the server
+%%  %% applications/ecallmgr/src/ecallmgr_originate.erl:68:%%--------------------------------------------------------------------
+%%  %% applications/ecallmgr/src/ecallmgr_originate.erl:128:%% @doc
+%%  %% applications/ecallmgr/src/ecallmgr_originate.erl:129:%% Initializes the server
+%%  %% applications/ecallmgr/src/ecallmgr_originate.erl:130:%%--------------------------------------------------------------------
+%%  %% '''
+%%  %%
+%%  %% Expected outcome:
+%%  %% * an `@end' tag should be added before the separator line.
 %% @end
 %%------------------------------------------------------------------------------
 comment_blocks_with_no_end(Result) ->
@@ -717,16 +734,16 @@ do_comment_blocks_with_no_end([{LN, Line}|Lines], Positions, Formatted) ->
 %%------------------------------------------------------------------------------
 %% @doc Increase separator line length.
 %%
-%% Ag sample output:
-%% ``
-%% applications/konami/src/konami_listener.erl:3:%%-------_more_---
-%% applications/konami/src/konami_listener.erl:5:%%-------_more_---
-%% '''
-%%
-%% Expected outcome:
-%% * For `%%' separator, there should be 78 `-'
-%% * For `%%%' separator, there should be 77 `='
-%% * for both cases any spaces between comment character and separator should be remove.
+%%  %% Ag sample output:
+%%  %% ``
+%%  %% applications/konami/src/konami_listener.erl:3:%%-------_more_---
+%%  %% applications/konami/src/konami_listener.erl:5:%%-------_more_---
+%%  %% '''
+%%  %%
+%%  %% Expected outcome:
+%%  %% * For `%%' separator, there should be 78 `-'
+%%  %% * For `%%%' separator, there should be 77 `='
+%%  %% * for both cases any spaces between comment character and separator should be remove.
 %% @end
 %%------------------------------------------------------------------------------
 increase_sep_length(Result, SepChar) ->
@@ -766,20 +783,20 @@ do_increase_sep_length([{LN, Line}|Lines], Positions, Separator, Formatted) ->
 %% between `@doc' line and separator to avoid inclusion of separator line
 %% in the documentation.
 %%
-%% Ag sample output:
-%% ``
-%% applications/konami/src/konami_listener.erl:3:%%% @doc
-%% applications/konami/src/konami_listener.erl:4:%%%
-%% applications/konami/src/konami_listener.erl:149:%% @doc
-%% applications/konami/src/konami_listener.erl:150:%% Initializes the server
-%% applications/konami/src/konami_listener.erl:164:%% @doc
-%% applications/konami/src/konami_listener.erl:165:%% Handling call messages
-%% '''
-%%
-%% Expected outcome:
-%% * for example,
-%% %% @doc Initializes the server.
-%% * also removes empty comment lines after `@doc' and before first non empty comment line
+%%  %% Ag sample output:
+%%  %% ``
+%%  %% applications/konami/src/konami_listener.erl:3:%%% @doc
+%%  %% applications/konami/src/konami_listener.erl:4:%%%
+%%  %% applications/konami/src/konami_listener.erl:149:%% @doc
+%%  %% applications/konami/src/konami_listener.erl:150:%% Initializes the server
+%%  %% applications/konami/src/konami_listener.erl:164:%% @doc
+%%  %% applications/konami/src/konami_listener.erl:165:%% Handling call messages
+%%  %% '''
+%%  %%
+%%  %% Expected outcome:
+%%  %% * for example,
+%%  %% %% @doc Initializes the server.
+%%  %% * also removes empty comment lines after `@doc' and before first non empty comment line
 %% @end
 %%------------------------------------------------------------------------------
 move_to_doc_line(Result) ->
@@ -824,13 +841,13 @@ do_move_to_doc_line([{LN, Line}|Lines], Positions, Formatted) ->
 %% or dot in summary. Regex only returns the line with `@doc' and
 %% empty comment line.
 %%
-%% Ag sample output:
-%% ```
-%% applications/stepswitch/src/stepswitch_util.erl:3:%%% @doc
-%% applications/stepswitch/src/stepswitch_util.erl:4:%%%
-%% applications/stepswitch/src/stepswitch_util.erl:25:%% @doc
-%% applications/stepswitch/src/stepswitch_util.erl:26:%%
-%% '''
+%%  %% Ag sample output:
+%%  %% ```
+%%  %% applications/stepswitch/src/stepswitch_util.erl:3:%%% @doc
+%%  %% applications/stepswitch/src/stepswitch_util.erl:4:%%%
+%%  %% applications/stepswitch/src/stepswitch_util.erl:25:%% @doc
+%%  %% applications/stepswitch/src/stepswitch_util.erl:26:%%
+%%  %% '''
 %%
 %% Expected outcome:
 %% * removes all those empty comment line after `@doc'.
@@ -865,6 +882,10 @@ do_remove_doc_tag_empty_comment([{LN, Line}|Lines], Positions, Formatted) ->
 %%% Utilities
 %%%=============================================================================
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
 maybe_add_empty_line(<<>>) -> [];
 maybe_add_empty_line(_) -> [<<>>].
 
