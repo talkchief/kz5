@@ -44,6 +44,13 @@ CHANGED_ERL=$(filter %.hrl %.erl %.escript,$(CHANGED))
 CHANGED_JSON=$(filter %.json,$(CHANGED))
 CHANGED_YML=$(filter %.yml,$(CHANGED))
 
+# exporting these so they are used in targets
+export CHANGED
+export CHANGED_SWAGGER
+export CHANGED_ERL
+export CHANGED_JSON
+export CHANGED_YML
+
 # You can override this when calling make, e.g. make JOBS=1
 # to prevent parallel builds, or make JOBS="8".
 JOBS ?= 1
