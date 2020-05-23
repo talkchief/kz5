@@ -27,7 +27,19 @@ main(Args) ->
     state_of_edoc(Erls, length(Erls), Includes, {[], []}).
 
 get_erls([], []) ->
-    lists:sort(filelib:wildcard("{core,applications}/*/src/**/*.erl"));
+    case os:getenv("CHANGED_ERL") of
+        'false' ->
+            lists:sort(filelib:wildcard("{core,applications}/*/src/**/*.erl"));
+        "" ->
+            io:format("No Erlang changed files.~n"),
+            halt(0);
+        Changed ->
+            lists:sort(
+              [F || F <- string:tokens(Changed, " "),
+                    filename:extension(F) =:= ".erl"
+              ]
+             )
+    end;
 get_erls([], Acc) ->
     Acc;
 get_erls([File|Files], Acc) ->
