@@ -27,7 +27,7 @@ main(Args) ->
     state_of_edoc(Erls, length(Erls), Includes, {[], []}).
 
 get_erls([], []) ->
-    case os:getenv("CHANGED_ERL") of
+    case os:getenv("CHANGED") of
         'false' ->
             lists:sort(filelib:wildcard("{core,applications}/*/src/**/*.erl"));
         "" ->
