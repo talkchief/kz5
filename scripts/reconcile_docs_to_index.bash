@@ -17,7 +17,31 @@ function check_index {
     fi
 }
 
-docs=$(find {scripts,doc,core,applications} \( -path 'doc/mkdocs' -o -path 'applications/*/doc/ref' -o -path 'core/*/doc/ref' \) -prune -o -type f -regex ".+\.md$")
+docs=""
+if [ -n "$CHANGED" ]; then
+    for file in $CHANGED ; do
+        case $file in
+            doc/mkdocs|doc/mkdocs/*)
+                ;;
+            applications/*/doc/ref|applications/*/doc/ref/*)
+                ;;
+            core/*/doc/ref|core/*/doc/ref/*)
+                ;;
+            *.md)
+                if [ -n "$doc" ]; then
+                    docs="$doc $file"
+                else
+                    docs="$file"
+                fi
+                ;;
+            *)
+                ;;
+        esac
+    done
+else
+    docs=$(find {scripts,doc,core,applications} \( -path 'doc/mkdocs' -o -path 'applications/*/doc/ref' -o -path 'core/*/doc/ref' \) -prune -o -type f -regex ".+\.md$")
+fi
+
 for doc in $docs; do
     ((doc_count+=1))
     check_index $doc
