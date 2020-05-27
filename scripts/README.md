@@ -817,3 +817,24 @@ routine to increment a version
 ## `bump-license.py`
 
 Bumps license
+
+## `view_util.py`
+
+Extract or replace JavaScript inside view to/from file. Helpful when you're developing the view
+and you want to work with the JavaScript comfortably in your editor.
+
+This would extract each view inside design file into a Javascript named after design document name, view name and the view function.
+For example:
+
+```shell
+## extract map functions
+$ scripts/view_util.py extract core/kazoo_modb/priv/couchdb/views/interactions.json --view-name interaction_listing_by_owner
+using /opt/kazoo/interactions+interaction_listing_by_owner+map.js as js-file
+:: extracting interactions/interaction_listing_by_owner:map
+## extract reduce functions
+$ scripts/view_util.py extract core/kazoo_modb/priv/couchdb/views/interactions.json --view-name interaction_listing_by_owner --view-function reduce
+using /opt/kazoo/interactions+interaction_listing_by_owner+reduce.js as js-file
+:: extracting interactions/interaction_listing_by_owner:reduce
+$ ls interactions+interaction_listing_by_owner+*
+interactions+interaction_listing_by_owner+map.js    interactions+interaction_listing_by_owner+reduce.js
+```
