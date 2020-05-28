@@ -16,7 +16,12 @@ get_change_erls() ->
         "" ->
             io:format("No Erlang changed files.~n"),
             halt(0);
-        Changed -> Changed
+        Changed ->
+            lists:sort(
+              [F || F <- string:tokens(Changed, " "),
+                    filelib:is_regular(F)
+              ]
+             )
     end.
 
 search_paths('undefined', Default) -> Default;
