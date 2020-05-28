@@ -26,11 +26,11 @@ doclist="${CHANGED_DOCS-${default_docs}}"
 docs=""
 for file in $doclist ; do
     case $file in
-        doc/mkdocs|doc/mkdocs/*)
+        doc/mkdocs/*|*/doc/mkdocs/*)
             ;;
-        applications/*/doc/ref|applications/*/doc/ref/*)
+        applications/*/doc/ref/*|*/applications/*/doc/ref/*)
             ;;
-        core/*/doc/ref|core/*/doc/ref/*)
+        core/*/doc/ref/*|*/core/*/doc/ref/*)
             ;;
         *.md)
             if [ -n "$doc" ]; then

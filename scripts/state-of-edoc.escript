@@ -24,19 +24,17 @@ main(Args) ->
                  ++ ["applications"]
                  ++ [filename:dirname(Path) || Path <- filelib:wildcard("applications/*/{src,include}/**/*.hrl")]
                  ++ ["deps"]),
-    state_of_edoc(Erls, length(Erls), Includes, {[], []}).
+    state_of_edoc(Erls, Includes).
 
 get_erls([], []) ->
     case os:getenv("CHANGED") of
         'false' ->
             lists:sort(filelib:wildcard("{core,applications}/*/src/**/*.erl"));
-        "" ->
-            io:format("No Erlang changed files.~n"),
-            halt(0);
         Changed ->
             lists:sort(
               [F || F <- string:tokens(Changed, " "),
-                    filename:extension(F) =:= ".erl"
+                    filelib:is_regular(F)
+                    andalso filename:extension(F) =:= ".erl"
               ]
              )
     end;
@@ -44,6 +42,12 @@ get_erls([], Acc) ->
     Acc;
 get_erls([File|Files], Acc) ->
     get_erls(Files, [File | Acc]).
+
+state_of_edoc([], _) ->
+    io:put_chars([$\n, $\n, "no files processed", $\n]),
+    halt(0);
+state_of_edoc(Erls, Includes) ->
+    state_of_edoc(Erls, length(Erls), Includes, {[], []}).
 
 state_of_edoc([], 0, _, _) ->
     io:put_chars([$\n, $\n, "no files processed", $\n]);
