@@ -27,7 +27,7 @@ get_change_erls() ->
 search_paths('undefined', Default) -> Default;
 search_paths(Changed, _) ->
     %% hack around `ag', when there is only one file to search it won't output the filename
-    Changed ++ "  scripts/edocify.escript scripts/state-of-edoc.escript".
+    lists:join(" ", Changed ++ ["scripts/edocify.escript", "scripts/state-of-edoc.escript"]).
 
 main(_) ->
     _ = io:setopts(user, [{encoding, unicode}]),

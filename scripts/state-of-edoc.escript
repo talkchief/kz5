@@ -30,9 +30,6 @@ get_erls([], []) ->
     case os:getenv("CHANGED") of
         'false' ->
             lists:sort(filelib:wildcard("{core,applications}/*/src/**/*.erl"));
-        "" ->
-            io:put_chars([$\n, $\n, "no files processed", $\n]);
-            halt(0);
         Changed ->
             lists:sort(
               [F || F <- string:tokens(Changed, " "),
@@ -47,7 +44,7 @@ get_erls([File|Files], Acc) ->
     get_erls(Files, [File | Acc]).
 
 state_of_edoc([], _) ->
-    io:put_chars([$\n, $\n, "no files processed", $\n]);
+    io:put_chars([$\n, $\n, "no files processed", $\n]),
     halt(0);
 state_of_edoc(Erls, Includes) ->
     state_of_edoc(Erls, length(Erls), Includes, {[], []}).
