@@ -13,7 +13,12 @@ if [ -n "${CHANGED+z}" ]; then
         exit 0
     fi
 
-    SEARCH_PATHS="$CHANGED"
+    SEARCH_PATHS=""
+    for file in $CHANGED; do
+        ext=${file##*.}
+        [[ $ext == "erl" || $ext == "hrl" || $ext == "escript" ]] && SEARCH_PATHS+=" $file"
+    done
+
 else
     SEARCH_PATHS="core applications scripts"
 fi
@@ -24,7 +29,7 @@ replace() {
     local F0=$2
     local M1=$3
     local F1=$4
-    for FILE in $(grep -Irl $M0:$F0 $SEARCH_PATHS); do
+    for FILE in $(grep -s -Irl $M0:$F0 $SEARCH_PATHS); do
         sed -i "s%$M0:$F0%$M1:$F1%g" "$FILE"
     done
 }
@@ -48,7 +53,7 @@ search_and_replace() {
     SUFFIX="$4"
 
     for FUN in "${FUNS[@]}"; do
-        for FILE in $(grep -Irl $FROM:$FUN $SEARCH_PATHS); do
+        for FILE in $(grep -s -Irl $FROM:$FUN $SEARCH_PATHS); do
             replace_call $FROM $TO "$FUN" "$SUFFIX" "$FILE"
         done
     done
@@ -61,7 +66,7 @@ search_and_replace_exact() {
     TOFUN=$4
 
     for FUN in "${FUNS[@]}"; do
-        for FILE in `grep -rl "$FROM:$FUN" $SEARCH_PATHS`; do
+        for FILE in $(grep -s -rl "$FROM:$FUN" $SEARCH_PATHS); do
             replace_call $FROM $TO "$FUN" "$TOFUN" $FILE
         done
     done
@@ -85,7 +90,7 @@ search_and_replace_prefix() {
     PREFIX="$4"
 
     for FUN in "${FUNS[@]}"; do
-        for FILE in $(grep -Irl $FROM:$FUN $SEARCH_PATHS); do
+        for FILE in $(grep -s -Irl $FROM:$FUN $SEARCH_PATHS); do
             replace_call_prefix $FROM $TO "$FUN" "$PREFIX" "$FILE"
         done
     done
@@ -109,7 +114,7 @@ search_and_replace_with_prefix() {
     PREFIX="$4"
 
     for FUN in "${FUNS[@]}"; do
-        for FILE in $(grep -Irl $FROM:$FUN $SEARCH_PATHS); do
+        for FILE in $(grep -s -Irl $FROM:$FUN $SEARCH_PATHS); do
             replace_call_with_prefix $FROM $TO "$FUN" "$PREFIX" "$FILE"
         done
     done
@@ -282,7 +287,7 @@ kapps_speech_to_kazoo_speech() {
 kz_media_recording_to_kzc_recording() {
     FROM=kz_media_recording
     TO=kzc_recording
-    for FILE in $(grep -Irl $FROM: $SEARCH_PATHS); do
+    for FILE in $(grep -s -Irl $FROM: $SEARCH_PATHS); do
             replace_call $FROM $TO '' '' "$FILE"
     done
 }
@@ -301,7 +306,7 @@ kzd_accessors() {
 kz_device_to_kzd_devices() {
     FROM=kz_device
     TO=kzd_devices
-    for FILE in $(grep -Irl $FROM: $SEARCH_PATHS); do
+    for FILE in $(grep -s -Irl $FROM: $SEARCH_PATHS); do
         replace_call $FROM $TO '' '' "$FILE"
     done
 }
@@ -309,7 +314,7 @@ kz_device_to_kzd_devices() {
 kz_account_to_kzd_accounts() {
     FROM=kz_account
     TO=kzd_accounts
-    for FILE in $(grep -Irl $FROM: $SEARCH_PATHS); do
+    for FILE in $(grep -s -Irl $FROM: $SEARCH_PATHS); do
         replace_call $FROM $TO '' '' "$FILE"
     done
 }
@@ -330,7 +335,7 @@ kz_util_to_kzd_accounts() {
 kzd_webhook_to_webhooks() {
     FROM='kzd_webhook:'
     TO='kzd_webhooks:'
-    for FILE in $(grep -Irl $FROM: $SEARCH_PATHS); do
+    for FILE in $(grep -s -Irl $FROM: $SEARCH_PATHS); do
         replace_call $FROM $TO '' '' "$FILE"
     done
 }
@@ -338,7 +343,7 @@ kzd_webhook_to_webhooks() {
 amqp_util_to_kz_amqp_util() {
     FROM="amqp_util"
     TO="kz_amqp_util"
-    for FILE in $(grep -Irl $FROM: $SEARCH_PATHS); do
+    for FILE in $(grep -s -Irl $FROM: $SEARCH_PATHS); do
         sed -i -e "s%\b$FROM%$TO%g" "$FILE"
     done
 }
@@ -351,7 +356,7 @@ kz_includes() {
     FROM=kazoo/include
     TO=kazoo_stdlib/include
 
-    for FILE in $(grep -Irl $FROM/ $SEARCH_PATHS); do
+    for FILE in $(grep -s -Irl $FROM/ $SEARCH_PATHS); do
         for INCLUDE in "${INCLUDES[@]}"; do
             sed -i "s%$FROM/$INCLUDE%$TO/$INCLUDE%g" "$FILE"
         done
@@ -375,7 +380,7 @@ replace_types() {
     local GREP_PATTERN="$2"
     local SED_PATTERN="$3"
     local REPLACE_TO="$4"
-    for FILE in `grep -Elr --include=*.erl --include=*.hrl --include=*.escript --exclude="$MODULE.erl" "$GREP_PATTERN" $SEARCH_PATHS`; do
+    for FILE in $(grep -s -Elr --include=*.erl --include=*.hrl --include=*.escript --exclude="$MODULE.erl" "$GREP_PATTERN" $SEARCH_PATHS); do
         sed -ri "s/$SED_PATTERN/$REPLACE_TO/g" "$FILE"
     done
 }
@@ -572,23 +577,23 @@ kz_util_format_ids() {
     replace 'kz_util' 'format_resource_selectors_db' 'kzs_util' 'format_resource_selectors_db'
     replace 'kz_util' 'account_format' 'kzs_util' 'account_format'
 
-    for FILE in $(grep -rPl "kzs_util:format_account_id(.*, \'encoded\')" $SEARCH_PATHS); do
+    for FILE in $(grep -s -rPl "kzs_util:format_account_id(.*, \'encoded\')" $SEARCH_PATHS); do
         sed -ri "s#kzs_util:format_account_id[(](.+), 'encoded'[)]#kzs_util:format_account_db(\1)#g" "$FILE"
     done
 
-    for FILE in $(grep -rPl "kzs_util:format_account_id(.*, \'raw\')" $SEARCH_PATHS); do
+    for FILE in $(grep -s -rPl "kzs_util:format_account_id(.*, \'raw\')" $SEARCH_PATHS); do
         sed -ri "s#kzs_util:format_account_id[(](.+), 'raw'[)]#kzs_util:format_account_id(\1)#g" "$FILE"
     done
 }
 
 rename_knm_to_knums() {
-    for FILE in $(grep -Irl --exclude-dir='.git' kazoo_number_manager $SEARCH_PATHS); do
+    for FILE in $(grep -s -Irl --exclude-dir='.git' kazoo_number_manager $SEARCH_PATHS); do
         sed -i "s/kazoo_number_manager/kazoo_numbers/g" "$FILE"
     done
 }
 
 cb_context_rename() {
-    for FILE in $(grep -Irl --exclude-dir='.git' "cb_context:account_db" $SEARCH_PATHS); do
+    for FILE in $(grep -s -Irl --exclude-dir='.git' "cb_context:account_db" $SEARCH_PATHS); do
         sed -i 's/cb_context:account_db(/cb_context:db_name(/g' "$FILE"
     done
 }
