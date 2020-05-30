@@ -196,6 +196,8 @@ def main():
             continue
         if 'fixtures' in exploded:
             continue
+        if 'schemas' in exploded:
+            continue
         if 'swagger.json' in exploded:
             continue
         with open(fn) as rd:
