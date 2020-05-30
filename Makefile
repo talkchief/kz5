@@ -28,7 +28,7 @@ CORE_HASH_FILE := $(ROOT)/make/.core.mk.$(CORE_HASH)
 APPS := $(dir $(wildcard $(APPS_DIR)/*/.git))
 CORE := $(wildcard $(CORE_DIR))
 
-KAST = $(APPS_DIR)/kazoo_ast
+KAST = $(APPS_DIR)/ast
 
 ## list files changed for more focused checks
 ifeq ($(strip $(CHANGED)),)
@@ -529,7 +529,7 @@ schemas: $(KAST)
 	@$(ROOT)/scripts/format-json.py $(shell find $(APPS_DIR) $(CORE_DIR) -wholename '*/schemas/*.json')
 
 $(KAST):
-	@DEPS=kazoo_ast $(MAKE) -f $(ROOT)/make/Makefile.apps -C $(APPS_DIR)
+	@DEPS=ast $(MAKE) -f $(ROOT)/make/Makefile.apps -C $(APPS_DIR)
 
 DOCS_ROOT ?= $(ROOT)/doc/mkdocs
 .PHONY: docs
