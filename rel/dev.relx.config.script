@@ -26,7 +26,18 @@ ToFilterOut = [rabbitmq_codegen
               ,'amqp_leader'
               ,elvis_mk
               ],
-Preparer = fun (List) -> [{E,load} || E <- List, not lists:member(E, ToFilterOut)] end,
+
+GetAppFileFun = fun(App) ->
+                        AppFile = list_to_binary(["applications/", atom_to_list(App), "/ebin/", atom_to_list(App), ".app"]),
+                        file:consult(AppFile)
+                end,
+
+Preparer = fun (List) ->
+                   [{App, 'load'} || E <- List,
+                                     not lists:member(E, ToFilterOut),
+                                     {'ok', [{application, App, _Settings}]} <- [GetAppFileFun(E)]
+                   ]
+           end,
 Base = [runtime_tools
        ,tools
        ,wx
@@ -42,13 +53,24 @@ BASE = [{default_release, {kazoo, VSN}}
         ,Base ++ Preparer(Apps ++ Core ++ Deps)
         }],
 
-APPS = [begin
-            {ok, [{application, App, Settings}]} = file:consult(list_to_binary(["applications/", atom_to_list(App), "/ebin/", atom_to_list(App), ".app"])),
-            AppDeps = proplists:get_value(applications, Settings, []),
-            {release, {App, VSN}, Base ++ Preparer(AppDeps)}
-        end
-        || App <- Apps,
-           not lists:member(App, ToFilterOut)
-       ],
+ReleaseFun3 = fun(_App, Acc, 'true') -> Acc;
+                 (App, Acc, 'false') ->
+                      case GetAppFileFun(App) of
+                          {ok, [{application, App, Settings}]} ->
+                              AppDeps = proplists:get_value(applications, Settings, []),
+                              [{release, {App, VSN}, Base ++ Preparer(AppDeps)} | Acc];
+                          {'error', 'enoent'} ->
+                              io:format('user', "app ~s not compiled, ignoring~n", [App]),
+                              Acc;
+                          E ->
+                              io:format('user', "Error consulting ~s: ~p~n", [App, E]),
+                              throw(E)
+                      end
+              end,
+
+ReleaseFun2 = fun(App, Acc) ->
+                      ReleaseFun3(App, Acc, lists:member(App, ToFilterOut))
+              end,
+APPS = lists:foldl(ReleaseFun2, [], Apps),
 
 CONFIG ++ BASE ++ APPS.
