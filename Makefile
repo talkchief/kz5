@@ -98,7 +98,7 @@ sparkly-clean: stop-if-changed clean-kazoo clean-release clean-deps clean-tags
 
 .PHONY: stop-if-changed
 stop-if-changed:
-	@[ -z $(CHANGED) ] || $(error you have unstaged changes: $(CHANGED))
+	@[ -z "$(CHANGED)" ] && exit 0 || `echo Unstaged changes make this unsage && exit 1`
 
 .PHONY: clean-kazoo
 clean-kazoo: stop-if-changed

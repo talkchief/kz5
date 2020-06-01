@@ -22,7 +22,9 @@ changed=""
 for directory in $@; do
     if [ -d $directory ]; then
         dir_change=$(get_changed "$directory")
-        changed+=" $dir_change"
+        if [ -n $dir_change ]; then
+            changed+=" $dir_change"
+        fi
     fi
 done
 
