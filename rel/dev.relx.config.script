@@ -27,15 +27,14 @@ ToFilterOut = [rabbitmq_codegen
               ,elvis_mk
               ],
 
-GetAppFileFun = fun(App) ->
-                        AppFile = list_to_binary(["applications/", atom_to_list(App), "/ebin/", atom_to_list(App), ".app"]),
+GetAppFileFun = fun(Prefix, App) ->
+                        AppFile = filename:join([Prefix, atom_to_list(App), "ebin", atom_to_list(App) ++ ".app"]),
                         file:consult(AppFile)
                 end,
 
-Preparer = fun (List) ->
-                   [{App, 'load'} || E <- List,
-                                     not lists:member(E, ToFilterOut),
-                                     {'ok', [{application, App, _Settings}]} <- [GetAppFileFun(E)]
+Preparer = fun(List) ->
+                   [{App, 'load'} || App <- List,
+                                     not lists:member(App, ToFilterOut)
                    ]
            end,
 Base = [runtime_tools
@@ -49,13 +48,15 @@ Base = [runtime_tools
        ],
 
 BASE = [{default_release, {kazoo, VSN}}
-       ,{release, {kazoo, VSN}
+       ,{release
+        ,{kazoo, VSN}
         ,Base ++ Preparer(Apps ++ Core ++ Deps)
-        }],
+        }
+       ],
 
 ReleaseFun3 = fun(_App, Acc, 'true') -> Acc;
                  (App, Acc, 'false') ->
-                      case GetAppFileFun(App) of
+                      case GetAppFileFun("applications", App) of
                           {ok, [{application, App, Settings}]} ->
                               AppDeps = proplists:get_value(applications, Settings, []),
                               [{release, {App, VSN}, Base ++ Preparer(AppDeps)} | Acc];
@@ -71,6 +72,7 @@ ReleaseFun3 = fun(_App, Acc, 'true') -> Acc;
 ReleaseFun2 = fun(App, Acc) ->
                       ReleaseFun3(App, Acc, lists:member(App, ToFilterOut))
               end,
+
 APPS = lists:foldl(ReleaseFun2, [], Apps),
 
 CONFIG ++ BASE ++ APPS.

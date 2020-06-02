@@ -134,6 +134,9 @@ endif
 .PHONY: compile compile-lean
 compile: deps $(TEST_DEPS) $(COMPILE_MOAR) ebin/$(PROJECT).app json depend $(BEAMS)
 
+.PHONY: recompile
+recompile: clean compile
+
 compile-lean: ERLC_OPTS := $(filter-out +debug_info,$(ERLC_OPTS)) +deterministic
 compile-lean: compile
 
