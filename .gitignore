@@ -8,7 +8,8 @@
 *.sasl
 *.plt
 *.app
-.deps.mk
+.deps.mk*
+.apps.mk*
 .deps.rules
 .test.deps
 *.beam
@@ -70,6 +71,7 @@ compile_commands.json
 /make/.deps.mk.*
 /make/.core.mk.*
 /make/.apps.mk.*
+/make/.app_urls.mk.*
 /make/circleci
 
 /out/
