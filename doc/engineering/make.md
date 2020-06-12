@@ -195,3 +195,70 @@ This checker just looks at Erlang comments (prefixed by %) and atom/string/binar
 ## Changing the base branch
 
 Several targets calculate the difference between a base branch (`origin/master` by default) and the current branch. Should you need to change the base branch you can prefix the command with `BASE_BRANCH="upstream/branch" make {TARGET}`
+
+## Building Applications
+
+For each Erlang application in `applications` and `core`, the file `make/kz.mk` governs how the application is built.
+
+### `make compile`
+
+This target will:
+
+1. Fetch and compile any 3rd party dependencies defined in the `{APP}/deps.mk`
+2. Fetch and compile any KAZOO app dependencies (mostly for apps that have integrations with other apps) in `{APP}/apps.mk`
+3. If `{APP}/Makefile` defines a var `COMPILE_MOAR`, it can contain Makefile-specific target such as which modules to compile first (like behaviours)
+4. If missing, build the `ebin/{APP}.app` file
+  1. Make the `ebin` directory
+  2. Compile all source files
+  3. Populate the `src/{APP}.app.src` file and put it into `ebin/{APP}.app`
+5. Find and format any JSON files in the app
+6. Builds dependency file `.deps.rules` which defines the makefile targets for source files in the app (like if `src/foo.erl` includes `bar/include/bar.hrl`, when `src.foo.erl` is recompiled, `bar.hrl` will be checked for changes).
+7. Builds test deps file `.test.deps` which calculates the apps `{APP}` relies on to make sure they are test-compiled when `{APP}` is test-compiled too.
+8. If the `ebin/{APP}.app` was built already, any changed source files will be individually recompiled (subject to the `.deps.rules` targets as well)
+9. If missing, build the `doc/dev.yml` to build an mkdocs partial index.
+
+### `make clean`
+
+Removes ebin files, cover files, crash dumps, and `.deps.rules`. Also removes anything defined in `CLEAN_MOAR` in the `{APP}/Makefile`.
+
+### `make recompile`
+
+Effectively runs `make clean compile`
+
+### `make compile-lean`
+
+Runs `make compile` but strips out debug info and adds the `+deterministic` flag to remove non-deterministic data (like local file paths).
+
+Helpful for reproducible builds.
+
+### `make app_src`
+
+Checks what applications `{APP}` depends on and updates `src/{APP}.app.src`'s `applications` listing.
+
+Caution using this in `core` libs as some have circular dependencies that cause relx to complain when building releases. Manually remove entries that cause cycles if necessary.
+
+### `make compile-test`
+
+Compiles the application, the applications it depends on, and gets ready for EUnit testing.
+
+`compile-test-direct` just compiles the application for EUnit testing.
+
+`compile-proper` compiles to run EUnit and PropEr testing.
+
+### `make test`, `make eunit`, `make cover`, `make proper`
+
+Run EUnit tests and PropEr tests with optional coverage reports.
+
+### `make dialyze`, `make dialyze-hard`
+
+`dialyze` runs a Dialyzer pass on the application's BEAM files.
+
+`dialyze-hard` runs a Dialzyzer pass on the applications' BEAM files and any other modules called from the application are included.
+
+### `make xref`, `make fmt`, `make perf`
+
+Run XRef checks, code formatting, and performance testing (if using HORSE).
+
+### `make code_checks`
+
+Does code checks against the application

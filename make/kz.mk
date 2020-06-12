@@ -132,7 +132,7 @@ endif
 
 ## COMPILE_MOAR can contain Makefile-specific targets (see CLEAN_MOAR, compile-test)
 .PHONY: compile compile-lean
-compile: deps $(TEST_DEPS) $(COMPILE_MOAR) ebin/$(PROJECT).app json depend $(BEAMS)
+compile: deps $(TEST_DEPS) $(COMPILE_MOAR) ebin/$(PROJECT).app json depend $(BEAMS) $(DOCS_INDEX)
 
 .PHONY: recompile
 recompile: clean compile
@@ -161,7 +161,8 @@ $(DEPS_RULES):
 
 .PHONY: app_src
 app_src:
-	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(ROOT)/applications $(ROOT)/scripts/apps_of_app.escript -a $(shell find $(ROOT) -name $(PROJECT).app.src)
+	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(ROOT)/applications $(ROOT)/scripts/apps_of_app.escript -a $(ROOT)/applications/$(PROJECT)/src/$(PROJECT).app.src
+
 
 .PHONY: json
 json: JSON = $(shell find . -name '*.json')
@@ -299,8 +300,12 @@ code_checks:
 	@printf "\n:: Check for Erlang 21 new stacktrace syntax\n\n"
 	@$(ROOT)/scripts/check-stacktrace.py $(SOURCES)
 
-apps_of_app:
-	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(ROOT)/applications $(ROOT)/scripts/apps_of_app.escript -a $(ROOT)/applications/$(PROJECT)/src/$(PROJECT).app.src
+DOCS_INDEX ?= doc/dev.yml
+docs_index:
+	@ERL_LIBS="$(ROOT)/deps:$(ROOT)/core" $(ROOT)/scripts/build-application-doc-index.escript $(ROOT) $(CURDIR)
+
+$(DOCS_INDEX):
+	@ERL_LIBS="$(ROOT)/deps:$(ROOT)/core" $(ROOT)/scripts/build-application-doc-index.escript $(ROOT) $(CURDIR)
 
 include $(ROOT)/make/splchk.mk
 include $(ROOT)/make/fmt.mk

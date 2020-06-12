@@ -59,7 +59,8 @@ compile_commands.json
 
 /doc/mkdocs/docs
 /doc/mkdocs/site/
-/doc/mkdocs/mkdocs.local.yml
+/doc/mkdocs/*.local
+/doc/mkdocs/mkdocs.yml
 /doc/mkdocs/theme
 /doc/blog/.org/*.csv
 /doc/blog/.org/*.shell

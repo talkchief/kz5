@@ -531,42 +531,6 @@ schemas: $(KAST)
 $(KAST):
 	@DEPS=ast $(MAKE) -f $(ROOT)/make/Makefile.apps -C $(APPS_DIR)
 
-DOCS_ROOT ?= $(ROOT)/doc/mkdocs
-.PHONY: docs
-docs: docs-validate docs-report docs-setup docs-build
-
-.PHONY: admonitions
-admonitions:
-	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/check-admonitions.escript $(shell grep -rlE '^!!! ' scripts $(APPS_DIR) $(CORE_DIR) doc)
-
-.PHONY: docs-validate
-docs-validate:
-	@$(ROOT)/scripts/check-scripts-readme.bash
-	@$(ROOT)/scripts/empty_schema_descriptions.bash
-	@$(ROOT)/scripts/check-ref-docs.bash
-	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/check-admonitions.escript $(CHANGED)
-
-.PHONY: docs-report
-docs-report:
-	@$(ROOT)/scripts/reconcile_docs_to_index.bash $(ROOT)
-
-.PHONY: docs-setup
-docs-setup:
-	@$(ROOT)/scripts/validate_mkdocs.py
-	@$(ROOT)/scripts/setup_docs.bash
-
-.PHONY: docs-build
-docs-build:
-	@$(MAKE) -C $(DOCS_ROOT) DOCS_ROOT=$(DOCS_ROOT) docs-build
-
-.PHONY: docs-clean
-docs-clean:
-	@$(MAKE) -C $(DOCS_ROOT) DOCS_ROOT=$(DOCS_ROOT) clean
-
-.PHONY: docs-serve
-docs-serve: docs-setup docs-build
-	@$(MAKE) -C $(DOCS_ROOT) YML=$(YML) DOCS_ROOT=$(DOCS_ROOT) docs-serve
-
 .PHONY: fs-headers
 fs-headers:
 	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/generate-fs-headers-hrl.escript
@@ -591,5 +555,6 @@ include $(ROOT)/make/splchk.mk
 include $(ROOT)/make/ci.mk
 include $(ROOT)/make/fmt.mk
 include $(ROOT)/make/pest.mk
+include $(ROOT)/make/docs.mk
 
 circle: ci

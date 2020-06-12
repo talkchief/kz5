@@ -103,6 +103,14 @@ cycle through kazoo_xml: [kazoo_xml,kazoo_stdlib,kazoo_documents,kazoo_apps,
 cycle through tasks: [tasks,kazoo_apps,kazoo_proper,tasks]
 ```
 
+## build-application-doc-index.escript
+
+Traverse an application's doc/ for markdown and build a doc/dev.yml file to be included in the base repo's mkdocs.yml
+
+```shell
+ERL_LIBS="deps:core" ./scripts/build-application-doc-index.escript $(pwd) applications/media_mgr
+```
+
 ## bump-copyright-year.py
 
 Python script to walk the supplied files and bumps the copyright year if appropriate.
@@ -243,11 +251,13 @@ Check for TAB characters
 Check for trailing whitespaces
 ```
 
-
 ## `code_checks.bash`
 
 Checks source code for various style requirements of the project
 
+## collect-dev-yml.bash
+
+Collects all found `dev.yml` files and concats them to the `doc/mkdocs/mkdocs.yml` index
 
 ## conn-to-apps.sh
 
@@ -257,21 +267,17 @@ Opens a remote shell to the kazoo\_apps@hostname VM.
 ./scripts/conn-to-apps.sh [{VM@HOSTNAME}, {LOCAL_SHELL@HOSTNAME}]
 ```
 
-
 ## conn-to-ecallmgr.sh
 
 A convenience wrapper for connecting to ecallmgr@HOSTNAME via conn-to-apps.sh
-
 
 ## `convert_org_files.bash`
 
 Script that is helpful when converting org files from 8.x to 9.x
 
-
 ## cover.escript
 
 creates and sends coverage report for testing of codebase
-
 
 ## crash-apps.sh
 
