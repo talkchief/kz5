@@ -87,7 +87,7 @@ apps: $(DOT_ERLANG_MK) $(APPS_HASH_FILE)
 	fi
 
 $(APPS_HASH_FILE):
-	if [ -s $(APPS_MK) ]; then \
+	@if [ -s $(APPS_MK) ]; then \
 		ROOT="$(ROOT)" APPS_MK="$(APPS_MK)" MORE_APPS_MK="" DEPS_DIR="$(APPS_DIR)" $(MAKE) -f $(ROOT)/make/Makefile.apps fetch-deps ;\
 	fi
 	@touch .apps.mk.$(shell md5sum $(APPS_MK) | cut -d' ' -f1)
