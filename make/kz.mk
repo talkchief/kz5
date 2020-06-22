@@ -200,6 +200,7 @@ clean: clean-test
 	@$(if $(wildcard ebin/*), rm ebin/*)
 	@$(if $(wildcard *crash.dump), rm *crash.dump)
 	@$(if $(wildcard $(DEPS_RULES)), rm $(DEPS_RULES))
+	@rm -rf .apps.mk* .deps.mk*
 
 clean-test: $(CLEAN_MOAR)
 	@$(if $(wildcard $(TEST_DEPS)), rm $(TEST_DEPS))
