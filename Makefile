@@ -284,8 +284,8 @@ make/more_apps.mk:
 apps-makefile: $(APPS_DIR)/Makefile
 
 $(APPS_DIR)/Makefile:
-	$(shell mkdir -p $(APPS_DIR))
-	cp $(ROOT)/make/Makefile.applications $(APPS_DIR)/Makefile
+	@$(shell mkdir -p $(APPS_DIR))
+	@cp $(ROOT)/make/Makefile.applications $(APPS_DIR)/Makefile
 
 .PHONY: kazoo
 kazoo: deps apps $(TAGS)
