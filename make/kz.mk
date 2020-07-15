@@ -83,7 +83,7 @@ $(DEPS_HASH_FILE):
 apps: $(DOT_ERLANG_MK) $(APPS_HASH_FILE)
 	@$(MAKE) -C $(ROOT) apps-makefile
 	@if [ -s $(APPS_MK) ]; then \
-		APPS_MK="$(APPS_MK)" $(MAKE) -C $(APPS_DIR) all ;\
+		ROOT=$(ROOT) APPS_MK="$(APPS_MK)" $(MAKE) -C $(APPS_DIR) all ;\
 	fi
 
 $(APPS_HASH_FILE):
