@@ -169,7 +169,8 @@ ignore_xref_filter({CallerModule, _, _}, Callee) ->
         'undefined' -> 'true';
         IgnoreXref ->
             Ignored = lists:any(fun(Ignore) -> Ignore =:= Callee end, IgnoreXref),
-            Ignored andalso add_to_ignored_undefined_function_calls(Callee),
+            Ignored
+                andalso add_to_ignored_undefined_function_calls(Callee),
             not Ignored
     end.
 
