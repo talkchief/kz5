@@ -150,6 +150,7 @@ filter(undefined_functions, Results) ->
         ({hipe_rtl_symbolic, _, _}) -> false;
         ({hipe_sparc_main, _, _}) -> false;
         ({hipe_tagscheme, _, _}) -> false;
+        ({hipe_rtl_verify_gcsafe, _, _}) -> false;
 
                  %% Missing deps of an old-deprecated app: pusher
         ({qdate, to_unixtime, 1}) -> false;
