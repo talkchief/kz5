@@ -19,7 +19,7 @@ def multiline_view(js):
     opts = jsbeautifier.default_options()
     opts.indent_size = 2
 
-    if isinstance(value, str):
+    if isinstance(js, str):
         js = ''.join(js)
     else:
         js = '\n'.join(js)
