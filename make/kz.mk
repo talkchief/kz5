@@ -271,6 +271,7 @@ dialyze-types: $(PLT)
 REBAR=$(ROOT)/deps/.erlang.mk/rebar/rebar
 
 .PHONY: xref fmt perf fixture_shell
+xref: compile
 xref: TO_XREF = ebin/  #FIXME: set TO_XREF to an app's dependencies' ebin/ directories
 xref:
 	@ERL_LIBS=$(ELIBS) $(REBAR) xref skip_deps=true -C $(ROOT)/make/xref.local.config
