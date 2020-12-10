@@ -818,12 +818,6 @@ Here no errors were generated.
 
 Parses the mkdocs.yml and looks for nonexistent docs
 
-
-## `wh_to_kz.sh`
-
-Part of the great rename, converts Whistle-related names to Kazoo-specific names
-
-
 ## `make-swag.sh`
 
 Generate API clients in multiple languages from the Swagger file.
