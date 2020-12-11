@@ -48,6 +48,12 @@ CHANGED_JSON=$(filter %.json,$(CHANGED))
 CHANGED_YML=$(filter %.yml,$(CHANGED))
 CHANGED_DOCS=$(filter %.md,$(CHANGED))
 
+PRINTABLE_CHANGED=$(subst $(ROOT),,$(CHANGED))
+PRINTABLE_ERL=$(subst $(ROOT),,$(CHANGED_ERL))
+PRINTABLE_JSON=$(subst $(ROOT),,$(CHANGED_JSON))
+PRINTABLE_YML=$(subst $(ROOT),,$(CHANGED_YML))
+PRINTABLE_DOCS=$(subst $(ROOT),,$(CHANGED_DOCS))
+
 # exporting these so they are used in targets
 export CHANGED
 export CHANGED_SWAGGER
@@ -65,11 +71,11 @@ all: prerequisites compile
 
 .PHONY: changed
 changed:
-	@echo "changed: $(CHANGED)"
-	@echo "changed ERL: $(CHANGED_ERL)"
-	@echo "changed JSON: $(CHANGED_JSON)"
-	@echo "changed YML: $(CHANGED_YML)"
-	@echo "changed docs: $(CHANGED_DOCS)"
+	@$(ROOT)/scripts/pretty-print-files.bash "changed:" $(PRINTABLE_CHANGED)
+	@$(ROOT)/scripts/pretty-print-files.bash "changed ERL:" $(PRINTABLE_ERL)
+	@$(ROOT)/scripts/pretty-print-files.bash "changed JSON:" $(PRINTABLE_JSON)
+	@$(ROOT)/scripts/pretty-print-files.bash "changed YML:" $(PRINTABLE_YML)
+	@$(ROOT)/scripts/pretty-print-files.bash "changed docs:" $(PRINTABLE_DOCS)
 
 unstaged:
 	$(ROOT)/scripts/check-unstaged.bash
