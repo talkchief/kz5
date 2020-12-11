@@ -584,6 +584,9 @@ xmerl
 
 Erlang has a handful of internal representations of JSON used by the various parses. The kz\_json module handles these details and Kazoo programmers should treat the data structure used as opaque. This script parses the codebase looking for instances where the opaqueness of the data structure is violated.
 
+## pretty-print-files.bash
+
+Pretty printer for filenames in `make changed`
 
 ## rabbitmq-generic.sh
 
