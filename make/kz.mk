@@ -124,7 +124,7 @@ include $(DEPS_RULES)
 endif
 
 ## COMPILE_MOAR can contain Makefile-specific targets (see CLEAN_MOAR, compile-test)
-.PHONY: compile compile-lean
+.PHONY: compile compile-lean compile-timed
 compile: deps $(TEST_DEPS) $(COMPILE_MOAR) ebin/$(PROJECT).app json depend $(BEAMS) $(DOCS_INDEX)
 
 .PHONY: recompile
@@ -132,6 +132,9 @@ recompile: clean compile
 
 compile-lean: ERLC_OPTS := $(filter-out +debug_info,$(ERLC_OPTS)) +deterministic
 compile-lean: compile
+
+compile-timed: ERLC_OPTS := +time $(ERLC_OPTS)
+compile-timed: compile
 
 ebin/$(PROJECT).app:
 	@mkdir -p ebin/
