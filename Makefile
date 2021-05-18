@@ -69,6 +69,7 @@ export CHANGED_DOCS
 # You can override this when calling make, e.g. make JOBS=1
 # to prevent parallel builds, or make JOBS="8".
 JOBS ?= 1
+CLEAN_JOBS ?=
 
 .PHONY: all
 all: prerequisites compile
@@ -129,11 +130,11 @@ clean: clean-core clean-apps
 
 .PHONY: clean-core
 clean-core:
-	@$(if $(wildcard $(CORE_DIR)),ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(CORE_DIR) clean)
+	@$(if $(wildcard $(CORE_DIR)),ROOT=$(ROOT) $(MAKE) -j$(CLEAN_JOBS) -C $(CORE_DIR) clean)
 
 .PHONY: clean-apps
 clean-apps:
-	@$(if $(wildcard $(APPS_DIR)/Makefile),ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(APPS_DIR) clean)
+	@$(if $(wildcard $(APPS_DIR)/Makefile),ROOT=$(ROOT) $(MAKE) -j$(CLEAN_JOBS) -C $(APPS_DIR) clean)
 
 .PHONY: clean-test
 clean-test: clean-test-core clean-test-apps
