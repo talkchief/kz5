@@ -427,13 +427,19 @@ dialyze-changed: dialyze-it-changed
 dialyze-hard: export CHECK_DIALYZER_OPTS = --hard
 dialyze-hard: dialyze-it-changed
 
+.PHONY: dialyze-types-kazoo
+dialyze-types-kazoo: TO_DIALYZE  = $(shell find $(APPS_DIR) $(CORE_DIR) -name ebin)
+dialyze-types-kazoo: dialyze-types-it
+
 .PHONY: dialyze-types
-dialyze-types: export TO_DIALYZE = $(CHANGED)
-dialyze-types: $(PLT)
+dialyze-types: TO_DIALYZE = $(CHANGED)
+dialyze-types: $(PLT) dialyze-types-it
+
+dialyze-types-it:
 	@echo ":: dialyzing types"
 	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer-types.escript $(ROOT)/.kazoo.plt $(CHECK_DIALYZER_OPTS) $(strip $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))) && echo "dialyzer is happy!"
 
-.PHONY: dialyze-id
+.PHONY: dialyze-it
 dialyze-it: $(PLT)
 	@echo ":: dialyzing"
 	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt $(CHECK_DIALYZER_OPTS) $(strip $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))) && echo "dialyzer is happy!"
