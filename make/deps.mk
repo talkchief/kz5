@@ -49,7 +49,7 @@ ifeq ($(CIRCLECI),true)
     DEPS += proper
 endif
 
-dep_amqp_client = git https://github.com/2600hz/erlang-amqp_client.git v3.7.14
+dep_amqp_client = hex 3.8.14
 
 dep_amqp_dist = git https://github.com/2600hz/erlang-amqp_dist.git bd97a806a10bd16d97bf0be0d4676cf9fec047e6
 

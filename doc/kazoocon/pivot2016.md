@@ -10,7 +10,7 @@
         -   `Eye-Moe-Net-Tea`
         -   Commit to memory Patrick!
     -   Kazoo Architect and Community at 2600Hz
-    -   mc\_ on freenode
+    -   mc\_ on libera.chat #2600hz
 
 2.  Presenter
 

@@ -57,6 +57,13 @@ APPS_MK = $(CURDIR)/apps.mk
 APPS_DIR = $(ROOT)/applications
 DOT_ERLANG_MK = $(ROOT)/.erlang.mk
 
+CHANGED ?= $(strip $(shell $(ROOT)/scripts/check-changed.bash $(APPS_DIR)/$(PROJECT)))
+PRINTABLE_CHANGED=$(subst $(ROOT),,$(CHANGED))
+
+.PHONY: changed
+changed:
+	@$(ROOT)/scripts/pretty-print-files.bash "changed:" $(PRINTABLE_CHANGED)
+
 ifeq ($(wildcard $(DEPS_MK)),)
     $(shell touch $(DEPS_MK))
 endif
@@ -114,6 +121,7 @@ MODULE_NAMES := $(sort $(foreach module,$(SOURCES),$(shell basename $(module) .e
 MODULES := $(shell echo $(MODULE_NAMES) | sed 's/ /,/g')
 BEAMS := $(sort $(foreach module,$(SOURCES),ebin/$(shell basename $(module) .erl).beam))
 JSON := $(find . -name "*.json")
+
 
 TEST_SOURCES := $(SOURCES) $(wildcard test/*.erl)
 TEST_MODULE_NAMES := $(sort $(foreach module,$(TEST_SOURCES),$(shell basename $(module) .erl)))
@@ -316,6 +324,9 @@ docs_index:
 
 $(DOCS_INDEX):
 	@ERL_LIBS="$(ROOT)/deps:$(ROOT)/core" $(ROOT)/scripts/build-application-doc-index.escript $(ROOT) $(CURDIR)
+
+hank:
+	ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/hank.escript $(wildcard src/*.[h|e]rl) $(wildcard src/*/*.[h|e]rl) $(wildcard include/*.hrl)
 
 include $(ROOT)/make/splchk.mk
 include $(ROOT)/make/fmt.mk

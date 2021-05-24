@@ -498,7 +498,6 @@ Python script to format JSON files (like CouchDB views, JSON schemas) and write 
 ./scripts/format-json.py path/to/file.json [path/to/other/file.json,...]
 ```
 
-
 ## format-couchdb-views.py
 
 Python script to make JavaScript codes in CouchDB view files beautify and multi-line so they are more readable to developers and also makes keep tracking changes in PR reviews easy.
@@ -508,22 +507,15 @@ Python script to make JavaScript codes in CouchDB view files beautify and multi-
 ./scripts/format-couchdb-views.py path/to/file.json [path/to/other/file.json,...]
 ```
 
-
 ## generate-api-endpoints.escript
 
 Builds the Crossbar reference docs in 'applications/crossbar/doc/ref'. Helps detect when Crossbar endpoints have changes to their functionality that is client-facing.
 
 Also builds the [Swagger](http://swagger.io/) JSON file in applications/crossbar/priv/api/swagger.json
 
-
 ## generate-doc-schemas.py
 
 Updates crossbar docs with the schema table from the ref (auto-gen) version
-
-
-## generate-fs-headers-hrl.escript
-
-Parses the ecallmgr code looking for keys used to access values in the FreeSWITCH proplist and builds a header file at applications/ecallmgr/src/fs\_event\_filters.hrl for use when initializing mod\_kazoo.
 
 ## generate-kzd-builders.escript
 
@@ -545,7 +537,6 @@ Script for updating Erlang code to account for functions that have moved modules
 
 -   kz\_util to alternative modules
 -   kz\_json to kz\_doc for public/private fields
-
 
 ## `list-ext-deps.escript`
 
@@ -583,6 +574,29 @@ xmerl
 ## `no_raw_json.escript`
 
 Erlang has a handful of internal representations of JSON used by the various parses. The kz\_json module handles these details and Kazoo programmers should treat the data structure used as opaque. This script parses the codebase looking for instances where the opaqueness of the data structure is violated.
+
+## hank.escript
+
+Integration point for [https://github.com/AdRoll/rebar3_hank](Hank - The Erlang Dead Code Cleaner). It currently only works as a rebar3 plugin, so this script accesses the underlying hank lib to analyze KAZOO code.
+
+```
+# Analyze all of KAZOO
+make hank
+
+# Analyze changed files only (for CI):
+make hank-changed
+```
+
+Initial run of `make hank`:
+```
+analysis took 5086ms parsing, 32405ms analyzing, 37942ms total, ignored 0 files
+results(3396):
+...
+rule violations: #{single_use_hrl_attrs => 578,single_use_hrls => 25,
+                   unnecessary_function_arguments => 1735,
+                   unused_callbacks => 103,unused_hrls => 4,
+                   unused_macros => 818,unused_record_fields => 133}
+```
 
 ## pretty-print-files.bash
 

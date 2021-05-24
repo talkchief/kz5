@@ -180,6 +180,10 @@ Runs an equivalent pass of CircleCI locally.
 
 Runs the security checks against changed (or all project) files and reports potential security threats. Not included in CI as most of the reports are speculative and probably not actionable (yet anyway)
 
+## `make hank` and `make hank-changed`
+
+Does a [https://github.com/AdRoll/rebar3_hank/](`hank`) check for dead code, unused function arguments, records and record fields, and more! `make hank` runs against all of KAZOO while `hank-changed` uses `$(CHANGED)` files only. Always check for false positives!
+
 ## Spell checking
 
 With Kazoo's international audience, it is helpful to have a spellchecker available to help all contributors find and fix spelling mistakes.
@@ -266,3 +270,9 @@ Run XRef checks, code formatting, and performance testing (if using HORSE).
 ### `make code_checks`
 
 Does code checks against the application
+
+### `make hank`
+
+Does a [https://github.com/AdRoll/rebar3_hank/](`hank`) check for dead code, unused function arguments, records and record fields, and more!
+
+Always check for false positives!
