@@ -288,8 +288,12 @@ print(_Beams, _Err) ->
 scan(PLT, Things) ->
     try do_scan(PLT, Things) of
         Ret -> Ret
-    catch 'throw':{'dialyzer_error',Error} ->
-            io:format("~s\n", [Error]),
+    catch
+        _E:{'dialyzer_error', Error} ->
+            io:format('standard_error', "crash dialyzer_error: ~s\n", [Error]),
+            [];
+        _E:_T:_ST ->
+            io:format('standard_error', "dialyzer crash: ~p:~p~n~p~n", [_E, _T, _ST]),
             []
     end.
 
