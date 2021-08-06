@@ -8,6 +8,8 @@ RELX = $(DEPS_DIR)/relx
 ELVIS = $(DEPS_DIR)/elvis
 TAGS = $(ROOT)/TAGS
 ERLANG_LS = $(ROOT)/erlang_ls.config
+KZ_VSCODE = $(ROOT)/kazoo.code-workspace
+KZ_VSCODE_DEBUGGER = $(ROOT)/.vscode/launch.json
 PLT = $(ROOT)/.kazoo.plt
 
 ERLANG_MK = $(ROOT)/erlang.mk
@@ -317,14 +319,46 @@ $(ERLANG_LS):
 	@touch $(ERLANG_LS)
 	@echo "plt_path: $(PLT)" >> $(ERLANG_LS)
 	@echo "apps_dirs: " >> $(ERLANG_LS)
-	@echo " - $(ROOT)/core/*" >> $(ERLANG_LS)
-	@echo " - $(ROOT)/applications/*" >> $(ERLANG_LS)
+	@echo "    - core/*" >> $(ERLANG_LS)
+	@echo "    - applications/*" >> $(ERLANG_LS)
 	@echo "deps_dirs: " >> $(ERLANG_LS)
-	@echo " - $(ROOT)/deps/*" >> $(ERLANG_LS)
+	@echo "    - deps/*" >> $(ERLANG_LS)
+	@echo "include_dirs: " >> $(ERLANG_LS)
+	@echo "    - deps" >> $(ERLANG_LS)
+	@echo "    - core" >> $(ERLANG_LS)
+	@echo "    - applications" >> $(ERLANG_LS)
+	@echo "    - deps/*/include" >> $(ERLANG_LS)
+	@echo "    - deps/*/src" >> $(ERLANG_LS)
+	@echo "    - core/*/include" >> $(ERLANG_LS)
+	@echo "    - core/*/src" >> $(ERLANG_LS)
+	@echo "    - applications/*/include" >> $(ERLANG_LS)
+	@echo "    - applications/*/src" >> $(ERLANG_LS)
+	@echo "runtime: " >> $(ERLANG_LS)
+	@echo "    use_long_names: true" >> $(ERLANG_LS
 	@echo "generated $(ERLANG_LS)"
+	@echo "It is highly recommended to copy $(ERLANG_LS) file to your global Erlang-LS configuration place"
+	@echo "This could be your home directory or ~/.config/erlang_ls directory"
 
 clean-erlang-ls:
 	@rm $(ERLANG_LS)
+
+kazoo-code-workspace: $(KZ_VSCODE) $(KZ_VSCODE_DEBUGGER)
+
+$(KZ_VSCODE):
+	@touch $(KZ_VSCODE)
+	@echo '{"folders": [' > $(KZ_VSCODE)
+	@for app in $(APPS) ; do echo "{ \"name\": \"kapp/$$(basename $${app})\", \"path\": \"applications/$$(basename $${app})\" }," >> $(KZ_VSCODE); done
+	@echo '{"name": "core", "path": "core" },' >> $(KZ_VSCODE)
+	@echo '{"name": "kazoo (root)", "path": "." }],' >> $(KZ_VSCODE)
+	@echo '"settings": {"files.exclude": {"/applications/": true,"/core/": true}' >> $(KZ_VSCODE)
+	@echo '}}' >> $(KZ_VSCODE)
+	@$(ROOT)/scripts/format-json.py $(KZ_VSCODE)
+	@echo "generated $(KZ_VSCODE)"
+
+$(KZ_VSCODE_DEBUGGER):
+	@mkdir $(ROOT)/.vscode
+	@cp $(ROOT)/.vscode_launch.json $(ROOT)/.vscode/launch.json
+	@echo "generated $(KZ_VSCODE_DEBUGGER)"
 
 $(RELX):
 	wget 'https://erlang.mk/res/relx-v3.27.0' -O $@
@@ -377,7 +411,7 @@ fixture_shell: ERL_LIBS = "$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR):$(shell echo $(DE
 fixture_shell: NODE_NAME ?= fixturedb
 fixture_shell:
 	@ERL_CRASH_DUMP="$(ERL_CRASH_DUMP)" ERL_LIBS="$(ERL_LIBS)" KAZOO_CONFIG=$(ROOT)/rel/config-test.ini \
-		erl -name '$(NODE_NAME)' -s reloader "$$@"
+		erl -setcookie change_me -name '$(NODE_NAME)' -s reloader "$$@"
 
 DIALYZER ?= dialyzer
 DIALYZER += --statistics --no_native
