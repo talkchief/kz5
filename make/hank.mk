@@ -1,4 +1,5 @@
-DEPS = rebar3_hank \
+# https://arxiv.org/pdf/2107.08699.pdf
+DEPS =  rebar3_hank \
 	katana_code
 
 dep_rebar3_hank = hex 1.1.1
