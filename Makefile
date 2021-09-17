@@ -319,23 +319,27 @@ $(ERLANG_LS):
 	@touch $(ERLANG_LS)
 	@echo "plt_path: $(PLT)" >> $(ERLANG_LS)
 	@echo "apps_dirs: " >> $(ERLANG_LS)
-	@echo "    - core/*" >> $(ERLANG_LS)
-	@echo "    - applications/*" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/core/*" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/applications/*" >> $(ERLANG_LS)
 	@echo "deps_dirs: " >> $(ERLANG_LS)
-	@echo "    - deps/*" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/deps/*" >> $(ERLANG_LS)
 	@echo "include_dirs: " >> $(ERLANG_LS)
-	@echo "    - deps" >> $(ERLANG_LS)
-	@echo "    - core" >> $(ERLANG_LS)
-	@echo "    - applications" >> $(ERLANG_LS)
-	@echo "    - deps/*/include" >> $(ERLANG_LS)
-	@echo "    - deps/*/src" >> $(ERLANG_LS)
-	@echo "    - core/*/include" >> $(ERLANG_LS)
-	@echo "    - core/*/src" >> $(ERLANG_LS)
-	@echo "    - applications/*/include" >> $(ERLANG_LS)
-	@echo "    - applications/*/src" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/deps" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/core" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/applications" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/deps/*/include" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/deps/*/src" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/core/*/include" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/core/*/src" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/applications/*/include" >> $(ERLANG_LS)
+	@echo "    - $(ROOT)/applications/*/src" >> $(ERLANG_LS)
 	@echo "runtime: " >> $(ERLANG_LS)
-	@echo "    use_long_names: true" >> $(ERLANG_LS
+	@echo "    use_long_names: true" >> $(ERLANG_LS)
 	@echo "generated $(ERLANG_LS)"
+	@for app in $(APPS) ; do cp $(ERLANG_LS) "applications/$$(basename $${app})/"; done
+	@cp $(ERLANG_LS) "core/"
+	@echo "copied $(ERLANG_LS) to core and all apps"
+	@echo
 	@echo "It is highly recommended to copy $(ERLANG_LS) file to your global Erlang-LS configuration place"
 	@echo "This could be your home directory or ~/.config/erlang_ls directory"
 
