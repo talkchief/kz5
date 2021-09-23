@@ -4,13 +4,12 @@ DEPS_DIR = $(ROOT)/deps
 CORE_DIR = $(ROOT)/core
 APPS_DIR = $(ROOT)/applications
 
-RELX = $(DEPS_DIR)/relx
 ELVIS = $(DEPS_DIR)/elvis
 TAGS = $(ROOT)/TAGS
 ERLANG_LS = $(ROOT)/erlang_ls.config
 KZ_VSCODE = $(ROOT)/kazoo.code-workspace
 KZ_VSCODE_DEBUGGER = $(ROOT)/.vscode/launch.json
-PLT = $(ROOT)/.kazoo.plt
+
 
 ERLANG_MK = $(ROOT)/erlang.mk
 ERLANG_MK_COMMIT = 89f2eca925b3f19b2409f9d0e71cf8108e5bd5eb
@@ -91,8 +90,10 @@ unstaged:
 changed_swagger:
 	@echo "$(CHANGED_SWAGGER)"
 
+.PHONY: prerequisites
 prerequisites: make-dependency-check
 
+.PHONY: make-dependency-check
 make-dependency-check:
 	$(ROOT)/scripts/make-prerequisite.sh
 
@@ -137,77 +138,6 @@ clean-core:
 .PHONY: clean-apps
 clean-apps:
 	@$(if $(wildcard $(APPS_DIR)/Makefile),ROOT=$(ROOT) $(MAKE) -j$(CLEAN_JOBS) -C $(APPS_DIR) clean)
-
-.PHONY: clean-test
-clean-test: clean-test-core clean-test-apps
-
-.PHONY: clean-test-core
-clean-test-core:
-	@ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(CORE_DIR) clean-test
-
-.PHONY: clean-test-apps
-clean-test-apps:
-	@ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(APPS_DIR) clean-test
-
-.PHONY: compile-proper
-compile-proper: ERLC_OPTS += -DPROPER
-compile-proper: compile-test
-
-.PHONY: compile-test
-compile-test: ERLC_OPTS += +nowarn_missing_spec
-compile-test: compile-test-core compile-test-apps
-
-.PHONY: compile-test-core
-compile-test-core: deps fetch-core
-	@ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(CORE_DIR) compile-test-direct
-
-.PHONY: compile-test-apps
-compile-test-apps: deps fetch-apps
-	@ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(APPS_DIR) compile-test-direct
-
-.PHONY: eunit
-eunit: eunit-core eunit-apps
-
-.PHONY: eunit-core
-eunit-core: deps $(CORE_HASH_FILE)
-	@ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(CORE_DIR) eunit
-
-.PHONY: eunit-apps
-eunit-apps: deps fetch-apps
-	@ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(APPS_DIR) eunit
-
-.PHONY: proper
-proper: ERLC_OPTS += -DPROPER
-proper: proper-core proper-apps
-
-.PHONY: proper-core
-proper-core: deps $(CORE_HASH_FILE)
-	@ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(CORE_DIR) proper
-
-.PHONY: proper-apps
-proper-apps: deps fetch-apps
-	@ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(APPS_DIR) proper
-
-.PHONY: test
-test: ERLC_OPTS += -DPROPER
-test: ERLC_OPTS += +nowarn_missing_spec
-test: test-core test-apps
-
-.PHONY: test-core
-test-core: deps $(CORE_HASH_FILE)
-	@ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(CORE_DIR) test
-
-.PHONY: test-apps
-test-apps: deps fetch-apps
-	@ROOT=$(ROOT) $(MAKE) -j$(JOBS) -C $(APPS_DIR) test
-
-.PHONY: coverage-report
-coverage-report:
-	$(ROOT)/scripts/cover.escript
-
-.PHONY: check
-check: ERLC_OPTS += -DPROPER
-check: compile-test eunit clean-kazoo kazoo
 
 .PHONY: clean-deps
 clean-deps: clean-deps-hash
@@ -313,102 +243,6 @@ $(TAGS): tags
 clean-tags:
 	$(if $(wildcard $(TAGS)), rm $(TAGS))
 
-erlang-ls: $(ERLANG_LS)
-
-$(ERLANG_LS):
-	@touch $(ERLANG_LS)
-	@echo "plt_path: $(PLT)" >> $(ERLANG_LS)
-	@echo "apps_dirs: " >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/core/*" >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/applications/*" >> $(ERLANG_LS)
-	@echo "deps_dirs: " >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/deps/*" >> $(ERLANG_LS)
-	@echo "include_dirs: " >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/deps" >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/core" >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/applications" >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/deps/*/include" >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/deps/*/src" >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/core/*/include" >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/core/*/src" >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/applications/*/include" >> $(ERLANG_LS)
-	@echo "    - $(ROOT)/applications/*/src" >> $(ERLANG_LS)
-	@echo "runtime: " >> $(ERLANG_LS)
-	@echo "    use_long_names: true" >> $(ERLANG_LS)
-	@echo "generated $(ERLANG_LS)"
-	@for app in $(APPS) ; do cp $(ERLANG_LS) "applications/$$(basename $${app})/"; done
-	@cp $(ERLANG_LS) "core/"
-	@echo "copied $(ERLANG_LS) to core and all apps"
-	@echo
-	@echo "It is highly recommended to copy $(ERLANG_LS) file to your global Erlang-LS configuration place"
-	@echo "This could be your home directory or ~/.config/erlang_ls directory"
-
-clean-erlang-ls:
-	@rm $(ERLANG_LS)
-
-kazoo-code-workspace: $(KZ_VSCODE) $(KZ_VSCODE_DEBUGGER)
-
-$(KZ_VSCODE):
-	@touch $(KZ_VSCODE)
-	@echo '{"folders": [' > $(KZ_VSCODE)
-	@for app in $(APPS) ; do echo "{ \"name\": \"kapp/$$(basename $${app})\", \"path\": \"applications/$$(basename $${app})\" }," >> $(KZ_VSCODE); done
-	@echo '{"name": "core", "path": "core" },' >> $(KZ_VSCODE)
-	@echo '{"name": "kazoo (root)", "path": "." }],' >> $(KZ_VSCODE)
-	@echo '"settings": {"files.exclude": {"/applications/": true,"/core/": true}' >> $(KZ_VSCODE)
-	@echo '}}' >> $(KZ_VSCODE)
-	@$(ROOT)/scripts/format-json.py $(KZ_VSCODE)
-	@echo "generated $(KZ_VSCODE)"
-
-$(KZ_VSCODE_DEBUGGER):
-	@mkdir $(ROOT)/.vscode
-	@cp $(ROOT)/.vscode_launch.json $(ROOT)/.vscode/launch.json
-	@echo "generated $(KZ_VSCODE_DEBUGGER)"
-
-$(RELX):
-	wget 'https://erlang.mk/res/relx-v3.27.0' -O $@
-	chmod +x $@
-
-.PHONY: clean-release
-clean-release:
-	$(if $(wildcard _rel/), rm -r _rel/)
-
-.PHONY: build-release
-build-release: $(RELX) clean-release rel/relx.config rel/relx.config.script rel/sys.config rel/vm.args
-	$(RELX) --config rel/relx.config -V 2 release --relname 'kazoo'
-
-.PHONY: build-dev-release
-build-dev-release: $(RELX) clean-release rel/dev.relx.config rel/dev.relx.config.script rel/dev.vm.args rel/dev.sys.config
-	$(RELX) --dev-mode true --config rel/dev.relx.config -V 2 release --relname 'kazoo'
-
-.PHONY: build-ci-release
-build-ci-release: $(RELX) clean-release rel/ci.relx.config rel/ci.relx.config.script rel/ci.sys.config rel/ci.vm.args
-	$(RELX) --config rel/ci.relx.config -V 2 release --relname 'kazoo'
-
-.PHONY: build-dist-release
-build-dist-release: $(RELX) clean-release rel/dist.relx.config rel/dist.relx.config.script rel/dist.vm.args rel/dist.sys.config
-	$(RELX) --config rel/dist.relx.config -V 2 release --relname 'kazoo'
-
-.PHONY: tar-release
-tar-release: $(RELX) rel/relx.config rel/relx.config.script rel/sys.config rel/vm.args
-	$(RELX) --config rel/relx.config -V 2 release tar --relname 'kazoo'
-
-## More ACTs at //github.com/erlware/relx/priv/templates/extended_bin
-.PHONY: release
-release: ACT ?= console # start | attach | stop | console | foreground
-release: REL ?= kazoo_apps # kazoo_apps | ecallmgr | …
-release: COOKIE ?= change_me
-release:
-	NODE_NAME="$(REL)" COOKIE="$(COOKIE)" $(ROOT)/scripts/dev/kazoo.sh $(ACT) "$$@"
-
-.PHONY: install
-install: compile build-release
-	cp -a _rel/kazoo /opt
-
-.PHONY: read-release-cookie
-read-release-cookie: REL ?= kazoo_apps
-read-release-cookie:
-	@NODE_NAME='$(REL)' _rel/kazoo/bin/kazoo escript lib/kazoo_config-*/priv/read-cookie.escript "$$@"
-
 .PHONY: fixture_shell
 fixture_shell: ERL_CRASH_DUMP = "$(ROOT)/$(shell date +%s)_ecallmgr_erl_crash.dump"
 fixture_shell: ERL_LIBS = "$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR):$(shell echo $(DEPS_DIR)/rabbitmq_erlang_client-*/deps)"
@@ -416,81 +250,6 @@ fixture_shell: NODE_NAME ?= fixturedb
 fixture_shell:
 	@ERL_CRASH_DUMP="$(ERL_CRASH_DUMP)" ERL_LIBS="$(ERL_LIBS)" KAZOO_CONFIG=$(ROOT)/rel/config-test.ini \
 		erl -setcookie change_me -name '$(NODE_NAME)' -s reloader "$$@"
-
-DIALYZER ?= dialyzer
-DIALYZER += --statistics --no_native
-
-OTP_APPS ?= erts kernel stdlib crypto public_key ssl asn1 inets xmerl
-
-
-EXCLUDE_DEPS = $(DEPS_DIR)/erlang_localtime/ebin
-$(PLT): DEPS_EBIN ?= $(filter-out $(EXCLUDE_DEPS),$(wildcard $(DEPS_DIR)/*/ebin))
-# $(PLT): CORE_EBINS ?= $(shell find $(CORE_DIR) -name ebin)
-$(PLT):
-	@-$(DIALYZER) --build_plt --output_plt $(PLT) \
-	     --apps $(OTP_APPS) \
-	     -r $(DEPS_EBIN)
-	@for ebin in $(CORE_EBINS); do \
-	     $(DIALYZER) --add_to_plt --plt $(PLT) --output_plt $(PLT) -r $$ebin; \
-	 done
-
-.PHONY: build-plt
-build-plt: $(PLT)
-
-.PHONY: clean-plt
-clean-plt:
-	@rm -f $(PLT)
-
-.PHONY: dialyze-kazoo
-dialyze-kazoo: TO_DIALYZE  = $(shell find $(APPS_DIR) $(CORE_DIR) -name ebin)
-dialyze-kazoo: dialyze
-
-.PHONY: dialzye-apps
-dialyze-apps:  TO_DIALYZE  = $(shell find $(APPS_DIR) -name ebin)
-dialyze-apps: dialyze
-
-.PHONY: dialyze-core
-dialyze-core:  TO_DIALYZE  = $(shell find $(CORE_DIR)         -name ebin)
-dialyze-core: dialyze-it
-
-.PHONY: dialyze
-dialyze:       TO_DIALYZE ?= $(shell find $(APPS_DIR) -name ebin)
-dialyze: dialyze-it
-
-.PHONY: dialyze-changed
-dialyze-changed: export CHECK_DIALYZER_OPTS = --bulk
-dialyze-changed: dialyze-it-changed
-
-.PHONY: dialyze-hard
-dialyze-hard: export CHECK_DIALYZER_OPTS = --hard
-dialyze-hard: dialyze-it-changed
-
-.PHONY: dialyze-types-kazoo
-dialyze-types-kazoo: TO_DIALYZE  = $(shell find $(APPS_DIR) $(CORE_DIR) -name ebin)
-dialyze-types-kazoo: dialyze-types-it
-
-.PHONY: dialyze-types
-dialyze-types: TO_DIALYZE = $(CHANGED)
-dialyze-types: $(PLT) dialyze-types-it
-
-dialyze-types-it:
-	@echo ":: dialyzing types"
-	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer-types.escript $(ROOT)/.kazoo.plt $(CHECK_DIALYZER_OPTS) $(strip $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))) && echo "dialyzer is happy!"
-
-.PHONY: dialyze-it
-dialyze-it: $(PLT)
-	@echo ":: dialyzing"
-	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(if $(DEBUG),time -v) $(ROOT)/scripts/check-dialyzer.escript $(ROOT)/.kazoo.plt $(CHECK_DIALYZER_OPTS) $(strip $(filter %.beam %.erl %/ebin,$(TO_DIALYZE))) && echo "dialyzer is happy!"
-
-.PHONY: dialyze-it-changed
-dialyze-it-changed: export TO_DIALYZE = $(CHANGED)
-dialyze-it-changed: $(PLT)
-	@if [ -n "$(TO_DIALYZE)" ]; then \
-		echo "dialyzing changes against $(BASE_BRANCH)" ; \
-		$(MAKE) dialyze-it; \
-	else \
-		echo "no erlang changes to dialyze"; \
-	fi
 
 .PHONY: xref
 xref: TO_XREF ?= $(shell find $(APPS_DIR) $(CORE_DIR) $(DEPS_DIR) -name ebin)
@@ -519,10 +278,6 @@ elvis: $(ELVIS)
 
 .PHONY: ci
 ci: clean compile xref build-plt diff sup_completion build-ci-release compile-test eunit elvis
-
-.PHONY: diff
-diff: export TO_DIALYZE = $(CHANGED)
-diff: dialyze-it
 
 .PHONY: bump-copyright
 bump-copyright:
@@ -597,10 +352,6 @@ schemas: $(KAST)
 $(KAST):
 	@DEPS=ast ROOT=$(ROOT) $(MAKE) -f $(ROOT)/make/Makefile.apps -C $(APPS_DIR)
 
-.PHONY: fs-headers
-fs-headers:
-	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/generate-fs-headers-hrl.escript
-
 .PHONY: validate-swagger
 validate-swagger:
 	@$(ROOT)/scripts/validate-swagger.py
@@ -620,11 +371,15 @@ validate-schemas:
 whitespace:
 	@$(ROOT)/scripts/check-whitespace.sh $(CHANGED)
 
-include $(ROOT)/make/splchk.mk
 include $(ROOT)/make/ci.mk
-include $(ROOT)/make/fmt.mk
-include $(ROOT)/make/pest.mk
+include $(ROOT)/make/dialyzer.mk
 include $(ROOT)/make/docs.mk
+include $(ROOT)/make/editor.mk
+include $(ROOT)/make/fmt.mk
 include $(ROOT)/make/hank.mk
+include $(ROOT)/make/pest.mk
+include $(ROOT)/make/releases.mk
+include $(ROOT)/make/splchk.mk
+include $(ROOT)/make/tests.mk
 
 circle: ci
