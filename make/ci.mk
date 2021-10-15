@@ -24,7 +24,7 @@ $(CI_DIR):
 	@mkdir $(CI_DIR)
 
 .PHONY: ci-steps
-ci-steps: ci-pre ci-fmt ci-build ci-codechecks ci-docs ci-schemas ci-dialyze ci-release
+ci-steps: ci-pre ci-fmt ci-build ci-codechecks ci-docs ci-schemas ci-dialyze ci-git ci-release
 	@$(ROOT)/scripts/check-unstaged.bash
 
 .PHONY: ci-pre
@@ -83,3 +83,9 @@ ci-dialyze:
 .PHONY: ci-release
 ci-release:
 	@$(MAKE) build-ci-release
+
+.PHONY: ci-git
+ci-git:
+	@$(ROOT)/scripts/check-unstaged.bash
+	@$(ROOT)/kgit git --no-pager diff --staged
+	@$(ROOT)/scripts/check-git-diff-untracked.bash "$(ROOT)" "$(ROOT)/core" "$(ROOT)/applications/*"

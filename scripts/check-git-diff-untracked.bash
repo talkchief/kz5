@@ -8,6 +8,8 @@ pushd "$(dirname "$0")" > /dev/null
 
 ROOT=$(readlink -f "$(pwd -P)"/..)
 
+untracked=0
+
 diff_untracked_files() {
     files="$(git -C $1 status --porcelain --untracked-files | grep '^\?' | sed -e 's/^\?//g' -e 's/^\? *//g' -e 's/^ *//g' -e 's/ *$//g')"
     if [ -z "$files" ]; then
@@ -19,6 +21,7 @@ diff_untracked_files() {
     echo
 
     for file in $files; do
+        untracked=$((untracked+1))
         git -C $1 --no-pager diff --no-index /dev/null $file || true
     done
 }
@@ -28,3 +31,5 @@ for directory in $@; do
         diff_untracked_files "$directory"
     fi
 done
+
+exit $untracked
