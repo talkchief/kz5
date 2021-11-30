@@ -70,6 +70,8 @@ pushd "$ROOT" > /dev/null
 # global variables
 _kazoo_apps=
 _work_dirs=
+MAX_GIT_RETRIES=3
+_git_retries=0
 
 usage() {
     cat <<'END' >&2
@@ -379,6 +381,17 @@ run_git() {
     git -C "$dir" "$@"
     ret=$?
 
+    if [ $ret -ne 0 ]; then
+        if [ $_git_retries -lt $MAX_GIT_RETRIES ]; then
+            _say "Failed, retrying... ${_git_retries}/${MAX_GIT_RETRIES}"
+            let "_git_retries++"
+            run_git "$dir" "$@"
+        else
+            echo "${MAX_GIT_RETRIES} retries performed and still failing, giving up on this one"
+        fi
+    fi
+
+    _git_retries=0
     return $ret
 }
 
