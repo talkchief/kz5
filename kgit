@@ -363,6 +363,11 @@ run_git() {
     local dir="$1"
     shift
 
+    local command="$1"
+    declare -A netops
+    netops["fetch"]=1
+    netops["push"]=1
+
     if [ -n "$on_changed" ]; then
         if [ -n "$(git -C "$dir" status --short --untracked-files=no 2>&1)" ]; then
             _error "Not running git, there are some changes: " >&2
@@ -382,12 +387,14 @@ run_git() {
     ret=$?
 
     if [ $ret -ne 0 ]; then
-        if [ $_git_retries -lt $MAX_GIT_RETRIES ]; then
-            _say "Failed, retrying... ${_git_retries}/${MAX_GIT_RETRIES}"
-            let "_git_retries++"
-            run_git "$dir" "$@"
-        else
-            echo "${MAX_GIT_RETRIES} retries performed and still failing, giving up on this one"
+        if [[ 1 = ${netops[$command]} ]]; then
+            if [ $_git_retries -lt $MAX_GIT_RETRIES ]; then
+                _say "Failed, retrying... ${_git_retries}/${MAX_GIT_RETRIES}"
+                let "_git_retries++"
+                run_git "$dir" "$@"
+            else
+                echo "${MAX_GIT_RETRIES} retries performed and still failing, giving up on this one"
+            fi
         fi
     fi
 
