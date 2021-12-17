@@ -10,7 +10,6 @@ DEPS ?= amqp_client \
 	erlang_localtime \
 	erlazure \
 	erlcloud \
-	erlsom \
 	erlydtl \
 	ersip \
 	esaml \

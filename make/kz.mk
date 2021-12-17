@@ -51,7 +51,7 @@ PA      = -pa ebin/ $(foreach EBIN,$(EBINS),-pa $(EBIN))
 TEST_PA = -pa ebin/ $(foreach EBIN,$(TEST_EBINS),-pa $(EBIN))
 
 DEPS_RULES = .deps.rules
-TEST_DEPS = .test.deps
+TEST_DEPS = $(CURDIR)/.test.deps
 DEPS_MK = $(CURDIR)/deps.mk
 APPS_MK = $(CURDIR)/apps.mk
 APPS_DIR = $(ROOT)/applications
