@@ -168,6 +168,8 @@ maybe_add_unknown_module(Module, BeamPaths) when is_atom(Module) ->
 
 maybe_add_unknown_module(_Module, BeamPaths, 'non_existing') ->
     BeamPaths;
+maybe_add_unknown_module(_Module, BeamPaths, 'preloaded') ->
+    BeamPaths;
 maybe_add_unknown_module(_Module, BeamPaths, MPath) ->
     [fix_path(MPath) | BeamPaths].
 
@@ -200,6 +202,7 @@ fix_path(Path) ->
     fix_path(Path, CWD).
 
 fix_path('non_existing', _CWD) -> 'undefined';
+fix_path('preloaded', _CWD) -> 'undefined';
 fix_path(Path, CWD) ->
     case re:run(Path, CWD) of
         'nomatch' -> filename:join([CWD, Path]);
