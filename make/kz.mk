@@ -57,6 +57,10 @@ APPS_MK = $(CURDIR)/apps.mk
 APPS_DIR = $(ROOT)/applications
 DOT_ERLANG_MK = $(ROOT)/.erlang.mk
 
+APPS_LIST = $(file < $(APPS_MK))
+APP_DIRS = $(foreach APP,$(APPS_LIST),$(wildcard $(ROOT)/applications/$(APP)))
+APPS_PA = $(foreach APP,$(APP_DIRS), -pa $(APP)/ebin)
+
 CHANGED ?= $(strip $(shell $(ROOT)/scripts/check-changed.bash $(APPS_DIR)/$(PROJECT)))
 PRINTABLE_CHANGED=$(subst $(ROOT),,$(CHANGED))
 
@@ -91,6 +95,13 @@ apps: $(DOT_ERLANG_MK) $(APPS_HASH_FILE)
 	@$(MAKE) -C $(ROOT) apps-makefile
 	@if [ -s $(APPS_MK) ]; then \
 		ROOT=$(ROOT) APPS_MK="$(APPS_MK)" $(MAKE) -C $(APPS_DIR) all ;\
+	fi
+
+.PHONY:
+apps-test: $(DOT_ERLANG_MK) $(APPS_HASH_FILE)
+	@$(MAKE) -C $(ROOT) apps-makefile
+	@if [ -s $(APPS_MK) ]; then \
+		ROOT=$(ROOT) APPS_MK="$(APPS_MK)" $(MAKE) -C $(APPS_DIR) compile-test-direct ;\
 	fi
 
 $(APPS_HASH_FILE):
@@ -133,7 +144,7 @@ endif
 
 ## COMPILE_MOAR can contain Makefile-specific targets (see CLEAN_MOAR, compile-test)
 .PHONY: compile compile-direct compile-lean compile-timed
-compile: deps $(TEST_DEPS) $(COMPILE_MOAR) ebin/$(PROJECT).app json depend $(BEAMS) $(DOCS_INDEX)
+compile: deps apps $(TEST_DEPS) $(COMPILE_MOAR) ebin/$(PROJECT).app json depend $(BEAMS) $(DOCS_INDEX)
 compile-direct: $(COMPILE_MOAR) ebin/$(PROJECT).app json $(BEAMS) $(DOCS_INDEX)
 
 .PHONY: recompile
@@ -147,22 +158,22 @@ compile-timed: compile
 
 ebin/$(PROJECT).app:
 	@mkdir -p ebin/
-	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) -o ebin/ $(SOURCES)
+	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) $(APPS_PA) -o ebin/ $(SOURCES)
 	@sed "s/{modules,[[:space:]]*\[\]}/{modules, \[$(MODULES)\]}/" src/$(PROJECT).app.src \
 	| sed -e "s!{vsn,\([^}]*\)}!\{vsn,\"$(KZ_VERSION)\"}!" > $@
 
 ebin/%.beam: src/%.erl
-	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) -o ebin/ $<
+	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) $(APPS_PA) -o ebin/ $<
 
 ebin/%.beam: src/*/%.erl
-	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) -o ebin/ $<
+	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) $(APPS_PA) -o ebin/ $<
 
 .PHONY: depend
 depend: $(DEPS_RULES) $(TEST_DEPS)
 
 $(DEPS_RULES):
 	@rm -f $(DEPS_RULES)
-	@ERL_LIBS=$(ELIBS) erlc -v +makedep +'{makedep_output, standard_io}' $(PA) -o ebin/ $(SOURCES) > $(DEPS_RULES)
+	@ERL_LIBS=$(ELIBS) erlc -v +makedep +'{makedep_output, standard_io}' $(PA) $(APPS_PA) -o ebin/ $(SOURCES) > $(DEPS_RULES)
 
 .PHONY: app_src
 app_src:
@@ -176,9 +187,9 @@ json:
 .PHONY: compile-test compile-test-direct
 compile-test: deps $(TEST_DEPS) compile-test-kz-deps compile-test-direct json
 
-compile-test-direct: deps $(COMPILE_MOAR) test/$(PROJECT).app
+compile-test-direct: deps apps-test $(COMPILE_MOAR) test/$(PROJECT).app
 
-$(TEST_DEPS): apps
+$(TEST_DEPS):
 	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/calculate-dep-targets.escript $(ROOT) $(PROJECT) > $(TEST_DEPS)
 
 ifeq (,$(wildcard $(TEST_DEPS)))
@@ -199,13 +210,13 @@ compile-test-core-%:
 endif
 
 test/$(PROJECT).app: ERLC_OPTS += -DTEST
-test/$(PROJECT).app: $(TEST_SOURCES)
+test/$(PROJECT).app:
 	@mkdir -p test/
 	@mkdir -p ebin/
-	ERL_LIBS=$(ELIBS) erlc -v +nowarn_missing_spec $(ERLC_OPTS) $(TEST_PA) -o ebin/ $?
+	ERL_LIBS=$(ELIBS) erlc -v +nowarn_missing_spec $(ERLC_OPTS) $(TEST_PA) $(APPS_PA) -o ebin/ $(TEST_SOURCES)
 
-	@sed "s/{modules,\s*\[\]}/{modules, \[$(TEST_MODULES)\]}/" src/$(PROJECT).app.src > $@
-	@sed "s/{modules,\s*\[\]}/{modules, \[$(TEST_MODULES)\]}/" src/$(PROJECT).app.src > ebin/$(PROJECT).app
+	@sed "s/{modules,[[:space:]]*\[\]}/{modules,\[$(TEST_MODULES)\]}/" src/$(PROJECT).app.src > $@
+	@sed "s/{modules,[[:space:]]*\[\]}/{modules,\[$(TEST_MODULES)\]}/" src/$(PROJECT).app.src > ebin/$(PROJECT).app
 
 .PHONY: clean clean-test
 clean: clean-test
