@@ -133,10 +133,10 @@ MODULES := $(shell echo $(MODULE_NAMES) | sed 's/ /,/g')
 BEAMS := $(sort $(foreach module,$(SOURCES),ebin/$(shell basename $(module) .erl).beam))
 JSON := $(find . -name "*.json")
 
-
 TEST_SOURCES := $(SOURCES) $(wildcard test/*.erl)
 TEST_MODULE_NAMES := $(sort $(foreach module,$(TEST_SOURCES),$(shell basename $(module) .erl)))
 TEST_MODULES := $(shell echo $(TEST_MODULE_NAMES) | sed 's/ /,/g')
+TEST_BEAMS := $(sort $(foreach module,$(TEST_SOURCES),ebin/$(shell basename $(module) .erl).beam))
 
 ifneq ($(wildcard $(DEPS_RULES)),)
 include $(DEPS_RULES)
@@ -168,6 +168,9 @@ ebin/%.beam: src/%.erl
 ebin/%.beam: src/*/%.erl
 	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) $(APPS_PA) -o ebin/ $<
 
+ebin/%.beam: test/%.erl
+	ERL_LIBS=$(ELIBS) erlc -v $(filter-out +warn_missing_spec,$(ERLC_OPTS)) $(PA) $(APPS_PA) -o ebin/ $<
+
 .PHONY: depend
 depend: $(DEPS_RULES) $(TEST_DEPS)
 
@@ -185,9 +188,9 @@ json:
 	@$(ROOT)/scripts/format-json.py $(JSON)
 
 .PHONY: compile-test compile-test-direct
-compile-test: deps $(TEST_DEPS) compile-test-kz-deps compile-test-direct json
+compile-test: deps $(TEST_DEPS) compile-test-kz-deps compile-test-direct json $(TEST_BEAMS)
 
-compile-test-direct: deps apps-test $(COMPILE_MOAR) test/$(PROJECT).app
+compile-test-direct: deps apps-test $(COMPILE_MOAR) test/$(PROJECT).app  $(TEST_BEAMS)
 
 $(TEST_DEPS):
 	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/calculate-dep-targets.escript $(ROOT) $(PROJECT) > $(TEST_DEPS)
@@ -236,7 +239,7 @@ TEST_CONFIG=$(ROOT)/rel/config-test.ini
 .PHONY: compile-test check-compile-test
 test: compile-test
 	KAZOO_CONFIG=$(TEST_CONFIG) ERL_LIBS=$(ELIBS) $(ROOT)/scripts/eunit_run.escript $(TEST_MODULE_NAMES)
-test.%: check-compile-test
+test.%: compile-test-direct
 	KAZOO_CONFIG=$(TEST_CONFIG) ERL_LIBS=$(ELIBS) $(ROOT)/scripts/eunit_run.escript $*
 
 check-compile-test: $(COMPILE_MOAR) test/$(PROJECT).app
@@ -338,7 +341,10 @@ $(DOCS_INDEX):
 	@ERL_LIBS="$(ROOT)/deps:$(ROOT)/core" $(ROOT)/scripts/build-application-doc-index.escript $(ROOT) $(CURDIR)
 
 hank:
-	ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/hank.escript $(wildcard src/*.[h|e]rl) $(wildcard src/*/*.[h|e]rl) $(wildcard include/*.hrl)
+	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/hank.escript $(wildcard src/*.[h|e]rl) $(wildcard src/*/*.[h|e]rl) $(wildcard include/*.hrl)
+
+elvis:
+	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core $(ROOT)/elvis --config $(ROOT)/make/elvis.config -k --parallel auto rock $(subst $(ROOT)/,,$(TEST_SOURCES))
 
 include $(ROOT)/make/splchk.mk
 include $(ROOT)/make/fmt.mk

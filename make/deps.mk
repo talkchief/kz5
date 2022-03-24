@@ -40,7 +40,7 @@ DEPS ?= amqp_client \
 	apns \
 	fcm \
 	hep
-# BUILD_DEPS = parse_trans
+
 IGNORE_DEPS = hamcrest
 
 ifeq ($(CIRCLECI),true)

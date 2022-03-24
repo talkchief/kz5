@@ -46,7 +46,7 @@ ci-docs:
 	@$(MAKE) docs
 
 .PHONY: ci-codechecks
-ci-codechecks:
+ci-codechecks: elvis
 	@./scripts/code_checks.bash $(CHANGED)
 	@$(MAKE) code_checks
 	@$(MAKE) app_applications

@@ -38,6 +38,7 @@ _rel/
 *.md.new
 
 .rebar/
+/elvis
 
 make/erlang-formatter/
 .kerl

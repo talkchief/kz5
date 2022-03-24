@@ -4,7 +4,6 @@ DEPS_DIR = $(ROOT)/deps
 CORE_DIR = $(ROOT)/core
 APPS_DIR = $(ROOT)/applications
 
-ELVIS = $(DEPS_DIR)/elvis
 TAGS = $(ROOT)/TAGS
 ERLANG_LS = $(ROOT)/erlang_ls.config
 KZ_VSCODE = $(ROOT)/kazoo.code-workspace
@@ -268,17 +267,6 @@ sup_completion:
 	@$(CORE_DIR)/sup/priv/build-autocomplete.escript $(sup_completion_file) $(APPS_DIR) $(CORE_DIR)
 	@echo SUP Bash completion file written at $(sup_completion_file)
 
-$(ELVIS):
-	wget 'https://github.com/inaka/elvis/releases/download/0.2.12/elvis' -O $@
-	chmod +x $@
-
-.PHONY: elvis
-elvis: $(ELVIS)
-	$(ELVIS) --config $(ROOT)/make/elvis.config rock
-
-.PHONY: ci
-ci: clean compile xref build-plt diff sup_completion build-ci-release compile-test eunit elvis
-
 .PHONY: bump-copyright
 bump-copyright:
 	@$(ROOT)/scripts/bump-copyright-year.py $(shell find $(APPS_DIR) $(CORE_DIR) -name '*.erl')
@@ -375,6 +363,7 @@ include $(ROOT)/make/ci.mk
 include $(ROOT)/make/dialyzer.mk
 include $(ROOT)/make/docs.mk
 include $(ROOT)/make/editor.mk
+include $(ROOT)/make/elvis.mk
 include $(ROOT)/make/fmt.mk
 include $(ROOT)/make/hank.mk
 include $(ROOT)/make/pest.mk
