@@ -130,7 +130,6 @@ add_kazoo_apps() {
 }
 
 exclude_kazoo_apps() {
-    echo add
     if [ -z "$_exclude_apps" ]; then
         _exclude_apps="$1"
     else
@@ -402,8 +401,26 @@ run_git() {
     return $ret
 }
 
+loop_wait_gh() {
+    local counter=1
+    if [[ "$@" =~ "pr create" ]] || [[ "$@" =~ "issue create" ]]; then
+        echo -n "Waiting 60s on stupid GitHub to avoid GraphQL limit on creation"
+        while [ $counter -le 60 ]; do
+            if [ $((counter % 5)) -eq 0 ]; then
+                echo -n "$counter"
+            else
+                echo -n '.'
+            fi
+            sleep 1
+            ((counter++))
+        done
+        echo
+    fi
+}
+
 run_action() {
     local ret
+    local loop_count=1
     check_action "$@"
     for dir in $_work_dirs; do
         _info "$dir"
@@ -418,6 +435,9 @@ run_action() {
                 $_action "$@"
                 ret=$?
                 popd >/dev/null
+
+                [ $((loop_count % 8)) -eq 0 ] && loop_wait_gh "$@"
+                ((loop_count++))
         esac
 
         if [ $ret -ne 0 ] && [ -n "$_exit_on_error" ]; then
