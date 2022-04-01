@@ -6,7 +6,6 @@ FETCH_AS ?= https://github.com/
 BASE_BRANCH ?= origin/master
 BRANCH = $(subst origin/,,$(BASE_BRANCH))
 
-
 dep_blackhole = git $(FETCH_AS)2600hz/kazoo-blackhole.git $(BRANCH)
 dep_braintree = git $(FETCH_AS)2600hz/kazoo-braintree.git $(BRANCH)
 dep_call_inspector = git $(FETCH_AS)2600hz/kazoo-call-inspector.git $(BRANCH)

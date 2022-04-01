@@ -9,10 +9,13 @@ ERLANG_LS = $(ROOT)/erlang_ls.config
 KZ_VSCODE = $(ROOT)/kazoo.code-workspace
 KZ_VSCODE_DEBUGGER = $(ROOT)/.vscode/launch.json
 
-
 ERLANG_MK = $(ROOT)/erlang.mk
 ERLANG_MK_COMMIT = 89f2eca925b3f19b2409f9d0e71cf8108e5bd5eb
 DOT_ERLANG_MK = $(ROOT)/.erlang.mk
+
+## If you use SSH keys instead
+## FETCH_AS = git@github.com:
+FETCH_AS ?= https://github.com/
 
 BASE_BRANCH := $(shell cat $(ROOT)/.base_branch)
 
