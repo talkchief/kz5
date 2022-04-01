@@ -6,7 +6,10 @@ dep_elvis = git $(FETCH_AS)2600hz/erlang-elvis 2600Hz
 ELVIS_DEP_DIR = $(DEPS_DIR)/elvis
 ELVIS = $(ROOT)/elvis
 
-$(ELVIS_DEP_DIR):
+FETCH_AS ?= https://github.com/
+
+$(ELVIS_DEP_DIR): $(DEPS_DIR)/Makefile
+	@mkdir -p $(ELVIS_DEP_DIR)
 	ROOT=$(ROOT) DEPS_MK="$(ROOT)/make/elvis.mk" $(MAKE) -C $(DEPS_DIR)/ all
 
 .PHONY: elvis-escript
