@@ -31,6 +31,8 @@ endif
 ## pipefail enforces that the command fails even when run through a pipe
 SHELL := /bin/bash -o pipefail
 
+FETCH_AS ?= https://github.com/
+
 BASE_BRANCH := $(shell cat $(ROOT)/.base_branch)
 
 ifndef ERLC_OPTS_SUPERSECRET
@@ -86,7 +88,7 @@ deps: $(DOT_ERLANG_MK) $(DEPS_HASH_FILE)
 
 $(DEPS_HASH_FILE):
 	@if [ -s $(DEPS_MK) ]; then \
-	    DEPS_MK="$(DEPS_MK)" $(MAKE) -C $(ROOT)/deps all; \
+	    FETCH_AS=$(FETCH_AS) DEPS_MK="$(DEPS_MK)" $(MAKE) -C $(ROOT)/deps all; \
 	 fi
 	@touch .deps.mk.$(shell md5sum $(DEPS_MK) | cut -d' ' -f1)
 
