@@ -192,6 +192,7 @@ json:
 .PHONY: compile-test compile-test-direct
 compile-test: deps $(TEST_DEPS) compile-test-kz-deps compile-test-direct json $(TEST_BEAMS)
 
+compile-test-direct: ERLC_OPTS += -DTEST
 compile-test-direct: deps apps-test $(COMPILE_MOAR) test/$(PROJECT).app  $(TEST_BEAMS)
 
 $(TEST_DEPS):
@@ -214,7 +215,6 @@ compile-test-core-%:
 	@ROOT=$(ROOT) $(MAKE) compile-test-direct -C $(ROOT)/core/$*
 endif
 
-test/$(PROJECT).app: ERLC_OPTS += -DTEST
 test/$(PROJECT).app:
 	@mkdir -p test/
 	@mkdir -p ebin/
