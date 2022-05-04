@@ -98,7 +98,7 @@ This is a set of regexps to group numbers by type and are not used for routing. 
             "friendly_name":"US Toll"
         },
         "emergency":{
-            "regex":"^(911)$",
+            "regex":"^(911|933)$",
             "friendly_name":"Emergency Dispatcher"
         },
         "caribbean":{
