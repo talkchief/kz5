@@ -57,6 +57,8 @@ DEPS_RULES = .deps.rules
 TEST_DEPS = $(CURDIR)/.test.deps
 DEPS_MK = $(CURDIR)/deps.mk
 APPS_MK = $(CURDIR)/apps.mk
+DEPS_DIR = $(ROOT)/deps
+CORE_DIR = $(ROOT)/core
 APPS_DIR = $(ROOT)/applications
 DOT_ERLANG_MK = $(ROOT)/.erlang.mk
 
@@ -329,6 +331,8 @@ code_checks: edoc
 	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/no_raw_json.escript $(SOURCES)
 	@printf "\n:: Check for Erlang 21 new stacktrace syntax\n\n"
 	@$(ROOT)/scripts/check-stacktrace.py $(SOURCES)
+	@printf "\n:: Generating schemas\n\n"
+	ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/generate-schemas.escript $(SOURCES)
 
 .PHONY: edoc
 edoc:
