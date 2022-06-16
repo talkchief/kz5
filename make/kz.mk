@@ -91,7 +91,7 @@ deps: $(DOT_ERLANG_MK) $(DEPS_HASH_FILE)
 
 $(DEPS_HASH_FILE):
 	@if [ -s $(DEPS_MK) ]; then \
-	    FETCH_AS=$(FETCH_AS) DEPS_MK="$(DEPS_MK)" $(MAKE) -C $(ROOT)/deps all; \
+	    FETCH_AS=$(FETCH_AS) DEPS_MK="$(DEPS_MK)" $(MAKE) -C $(DEPS_DIR) all; \
 	 fi
 	@touch .deps.mk.$(shell md5sum $(DEPS_MK) | cut -d' ' -f1)
 
@@ -185,7 +185,7 @@ $(DEPS_RULES):
 
 .PHONY: app_src
 app_src:
-	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/apps_of_app.escript -a $(APPS_DIR)/$(PROJECT)/src/$(PROJECT).app.src
+	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/apps_of_app.escript -a $(APPS_DIR)/$(PROJECT)/src/$(PROJECT).app.src
 
 .PHONY: json
 json: JSON = $(shell find $(CWD) -name '*.json')
@@ -199,7 +199,7 @@ compile-test-direct: ERLC_OPTS += -DTEST
 compile-test-direct: deps apps-test $(COMPILE_MOAR) test/$(PROJECT).app $(TEST_BEAMS)
 
 $(TEST_DEPS):
-	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/calculate-dep-targets.escript $(ROOT) $(PROJECT) > $(TEST_DEPS)
+	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/calculate-dep-targets.escript $(ROOT) $(PROJECT) > $(TEST_DEPS)
 
 ifeq ($(wildcard $(TEST_DEPS)),)
 KZ_DEPS_TARGETS =
@@ -215,7 +215,7 @@ else
 compile-test-kz-deps: $(KZ_DEPS_TARGETS)
 
 compile-test-core-%:
-	@ROOT=$(ROOT) $(MAKE) compile-test-direct -C $(ROOT)/core/$*
+	@ROOT=$(ROOT) $(MAKE) compile-test-direct -C $(CORE_DIR)/$*
 endif
 
 test/$(PROJECT).app:
@@ -287,19 +287,19 @@ $(PLT):
 dialyze: TO_DIALYZE ?= $(abspath ebin)
 dialyze: $(PLT)
 	@echo ":: dialyzing"
-	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/check-dialyzer.escript $(PLT) $(TO_DIALYZE)
+	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/check-dialyzer.escript $(PLT) $(TO_DIALYZE)
 
 dialyze-hard: TO_DIALYZE ?= $(abspath ebin)
 dialyze-hard: $(PLT)
 	@echo ":: dialyzing"
-	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/check-dialyzer.escript $(PLT) --hard $(TO_DIALYZE)
+	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/check-dialyzer.escript $(PLT) --hard $(TO_DIALYZE)
 
 dialyze-types: TO_DIALYZE ?= $(abspath ebin)
 dialyze-types: $(PLT)
 	@echo ":: dialyzing types"
-	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/check-dialyzer-types.escript $(PLT) $(TO_DIALYZE)
+	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/check-dialyzer-types.escript $(PLT) $(TO_DIALYZE)
 
-REBAR=$(ROOT)/deps/.erlang.mk/rebar/rebar
+REBAR=$(DEPS_DIR)/.erlang.mk/rebar/rebar
 
 .PHONY: xref fmt perf fixture_shell
 xref: compile
@@ -309,13 +309,13 @@ xref:
 
 fmt: TO_FMT ?= $(shell find src include test -iname '*.erl' -or -iname '*.hrl' -or -iname '*.escript')
 
-perf: ERLC_OPTS += -pa $(ROOT)/deps/horse/ebin -DPERF +'{parse_transform, horse_autoexport}'
+perf: ERLC_OPTS += -pa $(DEPS_DIR)/horse/ebin -DPERF +'{parse_transform, horse_autoexport}'
 perf: compile-test
-	$(gen_verbose) @ERL_LIBS=$(ELIBS) erl -noshell  -pa $(ROOT)/deps/horse/ebin -pa $(TEST_PA) \
+	$(gen_verbose) @ERL_LIBS=$(ELIBS) erl -noshell  -pa $(DEPS_DIR)/horse/ebin -pa $(TEST_PA) \
 		-eval 'horse:app_perf($(PROJECT)), init:stop().'
 
 fixture_shell: ERL_CRASH_DUMP = "$(ROOT)/$(shell date +%s)_ecallmgr_erl_crash.dump"
-fixture_shell: ERL_LIBS = "$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR):$(shell echo $(ROOT)/deps/rabbitmq_erlang_client-*/deps)"
+fixture_shell: ERL_LIBS = "$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR):$(shell echo $(DEPS_DIR)/rabbitmq_erlang_client-*/deps)"
 fixture_shell: NODE_NAME ?= fixturedb
 fixture_shell:
 	@ERL_CRASH_DUMP="$(ERL_CRASH_DUMP)" ERL_LIBS="$(ERL_LIBS)" KAZOO_CONFIG=$(ROOT)/rel/config-test.ini \
@@ -328,7 +328,7 @@ code_checks: edoc
 	@printf "\n:: Check code\n\n"
 	@$(ROOT)/scripts/code_checks.bash $(SOURCES)
 	@printf "\n:: Check for raw JSON usage\n\n"
-	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/no_raw_json.escript $(SOURCES)
+	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/no_raw_json.escript $(SOURCES)
 	@printf "\n:: Check for Erlang 21 new stacktrace syntax\n\n"
 	@$(ROOT)/scripts/check-stacktrace.py $(SOURCES)
 	@printf "\n:: Generating schemas\n\n"
@@ -342,16 +342,16 @@ edoc:
 
 DOCS_INDEX ?= doc/dev.yml
 docs_index:
-	@ERL_LIBS="$(ROOT)/deps:$(ROOT)/core" $(ROOT)/scripts/build-application-doc-index.escript $(ROOT) $(CURDIR)
+	@ERL_LIBS="$(DEPS_DIR):$(CORE_DIR)" $(ROOT)/scripts/build-application-doc-index.escript $(ROOT) $(CURDIR)
 
 $(DOCS_INDEX):
-	@ERL_LIBS="$(ROOT)/deps:$(ROOT)/core" $(ROOT)/scripts/build-application-doc-index.escript $(ROOT) $(CURDIR)
+	@ERL_LIBS="$(DEPS_DIR):$(CORE_DIR)" $(ROOT)/scripts/build-application-doc-index.escript $(ROOT) $(CURDIR)
 
 hank:
-	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core:$(APPS_DIR) $(ROOT)/scripts/hank.escript $(wildcard src/*.[h|e]rl) $(wildcard src/*/*.[h|e]rl) $(wildcard include/*.hrl)
+	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/hank.escript $(wildcard src/*.[h|e]rl) $(wildcard src/*/*.[h|e]rl) $(wildcard include/*.hrl)
 
 elvis:
-	@ERL_LIBS=$(ROOT)/deps:$(ROOT)/core $(ROOT)/elvis --config $(ROOT)/make/elvis.config -k --parallel auto rock $(subst $(ROOT)/,,$(TEST_SOURCES))
+	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/elvis --config $(ROOT)/make/elvis.config -k --parallel auto rock $(subst $(ROOT)/,,$(filter %.erl,$(TEST_SOURCES)))
 
 include $(ROOT)/make/splchk.mk
 include $(ROOT)/make/fmt.mk
