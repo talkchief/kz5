@@ -350,8 +350,11 @@ $(DOCS_INDEX):
 hank:
 	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/hank.escript $(wildcard src/*.[h|e]rl) $(wildcard src/*/*.[h|e]rl) $(wildcard include/*.hrl)
 
-elvis:
-	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/elvis --config $(ROOT)/make/elvis.config -k --parallel auto rock $(subst $(ROOT)/,,$(filter %.erl,$(TEST_SOURCES)))
+$(CORE_DIR)/kazoo_stdlib/ebin/kz_style.beam: $(CORE_DIR)/kazoo_stdlib/src/kz_style.erl
+	@ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) $(APPS_PA) -o $(CORE_DIR)/kazoo_stdlib/ebin $(CORE_DIR)/kazoo_stdlib/src/kz_style.erl
+
+elvis: $(CORE_DIR)/kazoo_stdlib/ebin/kz_style.beam
+	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/elvis --config $(ROOT)/make/elvis.config -k --parallel auto rock $(subst $(ROOT)/,,$(filter %.erl,$(wildcard $(TEST_SOURCES))))
 
 include $(ROOT)/make/splchk.mk
 include $(ROOT)/make/fmt.mk
