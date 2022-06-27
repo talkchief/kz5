@@ -61,7 +61,9 @@ coolly|cooly
 daiquiri|dacquiri daquiri
 deceive|decieve
 definite|definate,
-definitely|definitly,
+definitely|definitly
+descendant|descendent
+descendants|descendents
 desperate|desparate
 difference|diffrence
 dilemma|dilema

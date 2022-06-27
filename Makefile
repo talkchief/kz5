@@ -285,13 +285,11 @@ app_applications:
 	ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/apps_of_app.escript -a $(shell find $(APPS_DIR) -name *.app.src)
 
 .PHONY: code_checks
-code_checks: bump-changed-copyright bump-changed-license edoc
+code_checks: bump-changed-copyright bump-changed-license edoc splchk-common
 	@printf "\n:: Check code\n\n"
 	@$(ROOT)/scripts/code_checks.bash $(CHANGED_ERL)
 	@printf "\n:: Check for raw JSON usage\n\n"
 	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/no_raw_json.escript $(CHANGED_ERL)
-	@printf "\n:: Check for spelling\n\n"
-	@$(ROOT)/scripts/check-spelling.bash
 	@printf "\n:: Check for Kazoo diaspora\n\n"
 	@$(ROOT)/scripts/kz_diaspora.bash
 	@printf "\n:: Check for Kazoo document accessors\n\n"

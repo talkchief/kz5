@@ -51,7 +51,32 @@ else
 splchk-code: splchk-init $(addsuffix .chk,$(basename $(CODE)))
 endif
 
+.PHONY: splchk-changed
 splchk-changed: splchk-init $(addsuffix .chk,$(basename $(CHANGED)))
+
+.PHONY: splchk-common
+splchk-common: $(addsuffix .common,$(basename $(CHANGED_ERL)) $(basename $(CHANGED_JSON)) $(basename $(CHANGED_YML)) $(basename $(CHANGED_DOCS)))
+
+%.common: %.mk
+	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.md
+	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.json
+	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.text
+	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.tmpl
+	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.erl
+	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.escript
+	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.hrl
+	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.html
+	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.py
+	@$(ROOT)/scripts/check-spelling.bash $<
 
 %.chk: %.md
 	@aspell --home-dir=$(ROOT) --personal=$(KAZOO_DICT) --repl=$(KAZOO_REPL) --lang=en -x check $<
