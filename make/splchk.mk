@@ -77,6 +77,8 @@ splchk-common: $(addsuffix .common,$(basename $(CHANGED_ERL)) $(basename $(CHANG
 	@$(ROOT)/scripts/check-spelling.bash $<
 %.common: %.py
 	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.yml
+	@$(ROOT)/scripts/check-spelling.bash $<
 
 %.chk: %.md
 	@aspell --home-dir=$(ROOT) --personal=$(KAZOO_DICT) --repl=$(KAZOO_REPL) --lang=en -x check $<
