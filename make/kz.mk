@@ -35,6 +35,27 @@ FETCH_AS ?= https://github.com/
 
 BASE_BRANCH := $(shell cat $(ROOT)/.base_branch)
 
+
+comma := ,
+empty :=
+space := $(empty) $(empty)
+
+KZ_VERSION ?= $(shell $(ROOT)/scripts/next_version)
+
+## SOURCES provides a way to specify compilation order (left to right)
+SOURCES     ?= $(wildcard src/*.erl) $(wildcard src/*/*.erl)
+SOURCES_FULL_PATH = $(realpath $(SOURCES))
+MODULE_NAMES := $(sort $(foreach module,$(SOURCES),$(shell basename $(module) .erl)))
+MODULES := $(shell echo $(MODULE_NAMES) | sed 's/ /,/g')
+BEAMS := $(sort $(foreach module,$(SOURCES),ebin/$(shell basename $(module) .erl).beam))
+JSON := $(shell find $(PROJECT_ROOT) -name "*.json")
+DOCS ?= $(wildcard doc/*.md)
+
+TEST_SOURCES := $(SOURCES) $(wildcard test/*.erl)
+TEST_MODULE_NAMES := $(sort $(foreach module,$(TEST_SOURCES),$(shell basename $(module) .erl)))
+TEST_MODULES := $(shell echo $(TEST_MODULE_NAMES) | sed 's/ /,/g')
+TEST_BEAMS := $(sort $(foreach module,$(TEST_SOURCES),ebin/$(shell basename $(module) .erl).beam))
+
 ERLC_OPTS += -Iinclude -Isrc -I../ +'{parse_transform, lager_transform}'
 ## Use pedantic flags when compiling apps from applications/ & core/
 ERLC_OPTS += +warn_export_all +warn_unused_import +warn_unused_vars +warn_missing_spec -Werror
@@ -67,7 +88,24 @@ APP_DIRS = $(foreach APP,$(APPS_LIST),$(wildcard $(ROOT)/applications/$(APP)))
 APPS_PA = $(foreach APP,$(APP_DIRS), -pa $(APP)/ebin)
 
 CHANGED ?= $(strip $(shell $(ROOT)/scripts/check-changed.bash $(APPS_DIR)/$(PROJECT)))
+
+CHANGED_ERL=$(filter %.hrl %.erl %.escript,$(CHANGED))
+CHANGED_JSON=$(filter %.json,$(CHANGED))
+CHANGED_YML=$(filter %.yml,$(CHANGED))
+CHANGED_DOCS=$(filter %.md,$(CHANGED))
+
 PRINTABLE_CHANGED=$(subst $(ROOT),,$(CHANGED))
+PRINTABLE_ERL=$(subst $(ROOT),,$(CHANGED_ERL))
+PRINTABLE_JSON=$(subst $(ROOT),,$(CHANGED_JSON))
+PRINTABLE_YML=$(subst $(ROOT),,$(CHANGED_YML))
+PRINTABLE_DOCS=$(subst $(ROOT),,$(CHANGED_DOCS))
+
+export CHANGED
+export CHANGED_SWAGGER
+export CHANGED_ERL
+export CHANGED_JSON
+export CHANGED_YML
+export CHANGED_DOCS
 
 .PHONY: changed
 changed:
@@ -123,25 +161,6 @@ clean-deps: clean-deps-hash
 
 clean-deps-hash:
 	@$(if $(wildcard .deps.mk.*), rm .deps.mk.*)
-
-comma := ,
-empty :=
-space := $(empty) $(empty)
-
-KZ_VERSION ?= $(shell $(ROOT)/scripts/next_version)
-
-## SOURCES provides a way to specify compilation order (left to right)
-SOURCES     ?= $(wildcard src/*.erl) $(wildcard src/*/*.erl)
-SOURCES_FULL_PATH = $(realpath $(SOURCES))
-MODULE_NAMES := $(sort $(foreach module,$(SOURCES),$(shell basename $(module) .erl)))
-MODULES := $(shell echo $(MODULE_NAMES) | sed 's/ /,/g')
-BEAMS := $(sort $(foreach module,$(SOURCES),ebin/$(shell basename $(module) .erl).beam))
-JSON := $(find . -name "*.json")
-
-TEST_SOURCES := $(SOURCES) $(wildcard test/*.erl)
-TEST_MODULE_NAMES := $(sort $(foreach module,$(TEST_SOURCES),$(shell basename $(module) .erl)))
-TEST_MODULES := $(shell echo $(TEST_MODULE_NAMES) | sed 's/ /,/g')
-TEST_BEAMS := $(sort $(foreach module,$(TEST_SOURCES),ebin/$(shell basename $(module) .erl).beam))
 
 ifneq ($(wildcard $(DEPS_RULES)),)
 include $(DEPS_RULES)
@@ -355,6 +374,8 @@ $(CORE_DIR)/kazoo_stdlib/ebin/kz_style.beam: $(CORE_DIR)/kazoo_stdlib/src/kz_sty
 
 elvis: $(CORE_DIR)/kazoo_stdlib/ebin/kz_style.beam
 	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/elvis --config $(ROOT)/make/elvis.config -k --parallel auto rock $(subst $(ROOT)/,,$(filter %.erl,$(wildcard $(TEST_SOURCES))))
+
+splchk-all: $(addsuffix .common,$(basename $(SOURCES)) $(basename $(JSON)) $(basename $(DOCS_INDEX)) $(basename $(DOCS)) )
 
 include $(ROOT)/make/splchk.mk
 include $(ROOT)/make/fmt.mk
