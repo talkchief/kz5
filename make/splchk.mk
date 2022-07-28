@@ -65,6 +65,10 @@ splchk-common: $(addsuffix .common,$(basename $(CHANGED_ERL)) $(basename $(CHANG
 	@$(ROOT)/scripts/check-spelling.bash $<
 %.common: %.text
 	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.txt
+	@$(ROOT)/scripts/check-spelling.bash $<
+%.common: %.org
+	@$(ROOT)/scripts/check-spelling.bash $<
 %.common: %.tmpl
 	@$(ROOT)/scripts/check-spelling.bash $<
 %.common: %.erl
@@ -87,6 +91,12 @@ splchk-common: $(addsuffix .common,$(basename $(CHANGED_ERL)) $(basename $(CHANG
 	@aspell --home-dir=$(ROOT) --personal=$(KAZOO_DICT) --repl=$(KAZOO_REPL) --lang=en -x check $<
 
 %.chk: %.text
+	@aspell --home-dir=$(ROOT) --personal=$(KAZOO_DICT) --repl=$(KAZOO_REPL) --lang=en -x check $<
+
+%.chk: %.txt
+	@aspell --home-dir=$(ROOT) --personal=$(KAZOO_DICT) --repl=$(KAZOO_REPL) --lang=en -x check $<
+
+%.chk: %.org
 	@aspell --home-dir=$(ROOT) --personal=$(KAZOO_DICT) --repl=$(KAZOO_REPL) --lang=en -x check $<
 
 %.chk: %.tmpl
