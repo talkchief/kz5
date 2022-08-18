@@ -27,7 +27,7 @@ clean-plt:
 dialyze-kazoo: TO_DIALYZE  = $(shell find $(APPS_DIR) $(CORE_DIR) -name ebin)
 dialyze-kazoo: dialyze
 
-.PHONY: dialzye-apps
+.PHONY: dialyze-apps
 dialyze-apps:  TO_DIALYZE  = $(shell find $(APPS_DIR) -name ebin)
 dialyze-apps: dialyze
 
