@@ -298,6 +298,9 @@ proper: compile-proper eunit-run
 compile-proper: ERLC_OPTS += -DPROPER
 compile-proper: clean-test compile-test
 
+compile-perf: ERLC_OPTS += -pa $(DEPS_DIR)/horse/ebin -DPERF +'{parse_transform, horse_autoexport}'
+compile-perf: clean-test compile-test-direct
+
 PLT ?= $(ROOT)/.kazoo.plt
 $(PLT):
 	@$(MAKE) -C $(ROOT) build-plt
@@ -328,10 +331,13 @@ xref:
 
 fmt: TO_FMT ?= $(shell find src include test -iname '*.erl' -or -iname '*.hrl' -or -iname '*.escript')
 
-perf: ERLC_OPTS += -pa $(DEPS_DIR)/horse/ebin -DPERF +'{parse_transform, horse_autoexport}'
-perf: compile-test
+perf: compile-perf
 	$(gen_verbose) @ERL_LIBS=$(ELIBS) erl -noshell  -pa $(DEPS_DIR)/horse/ebin -pa $(TEST_PA) \
 		-eval 'horse:app_perf($(PROJECT)), init:stop().'
+
+perf.%: compile-perf
+	$(gen_verbose) @ERL_LIBS=$(ELIBS) erl -noshell  -pa $(DEPS_DIR)/horse/ebin -pa $(TEST_PA) \
+		-eval "horse:mod_perf($*), init:stop()."
 
 fixture_shell: ERL_CRASH_DUMP = "$(ROOT)/$(shell date +%s)_ecallmgr_erl_crash.dump"
 fixture_shell: ERL_LIBS = "$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR):$(shell echo $(DEPS_DIR)/rabbitmq_erlang_client-*/deps)"
