@@ -295,7 +295,7 @@ code_checks: bump-changed-copyright bump-changed-license edoc splchk-common
 	@printf "\n:: Check for Kazoo document accessors\n\n"
 	@$(ROOT)/scripts/kzd_module_check.bash
 	@printf "\n:: Check for proper log message usage\n\n"
-	@$(ROOT)/scripts/check-loglines.bash
+	@$(ROOT)/scripts/check-loglines.bash $(CHANGED_ERL)
 	@printf "\n:: Check for Erlang 21 new stacktrace syntax\n\n"
 	@$(ROOT)/scripts/check-stacktrace.py $(CHANGED_ERL)
 
