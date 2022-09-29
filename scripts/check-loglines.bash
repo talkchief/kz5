@@ -18,7 +18,8 @@ else
     lager_files=$1
 fi
 
-for ERL in $(egrep -rl "lager:\w+\(\"[A-Z]{1}[a-z]" $lager_files); do
+#for ERL in $(egrep -rl "lager:\w+\(\"[A-Z]{1}[a-z]" $lager_files); do
+for ERL in $(egrep -rl "lager:\w+\(\"[A-Z]{1}[a-z]" $ROOT/core $ROOT/applications); do
     # sed captures lager:[word](" as \1
     # captures A-Z as \2
     # captures the rest of the line as \3
