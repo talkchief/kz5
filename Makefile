@@ -341,13 +341,16 @@ check_stacktrace:
 ## Adding this format couchdb view target to circleci steps for every app is painful
 ## also this formatting is better to be done before validate-js ci step to make sure
 ## the view is still in correct shape
-apis: schemas api_endpoints
+apis: schemas api_endpoints kzd_builder
 	@$(ROOT)/scripts/generate-doc-schemas.py `egrep -rl '(#+) Schema' core/ applications/ | grep -v '.[h|e]rl'`
 	@$(ROOT)/scripts/format-json.py $(APPS_DIR)/crossbar/priv/api/swagger.json
 	@$(ROOT)/scripts/format-json.py $(shell find $(APPS_DIR) $(CORE_DIR) -wholename '*/api/*.json')
-	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/generate-kzd-builders.escript
 	@$(ROOT)/scripts/format-couchdb-views.py $(shell find $(CORE_DIR)/kazoo_apps/priv/couchdb/account -name '*.json')
 	@$(ROOT)/scripts/format-couchdb-views.py $(shell find $(APPS_DIR) $(CORE_DIR) -wholename '*/couchdb/views/*.json')
+
+.PHONY: kzd_builder
+kzd_builder:
+	@ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/generate-kzd-builders.escript
 
 .PHONY: schemas
 schemas: $(KAST)
