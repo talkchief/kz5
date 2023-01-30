@@ -1,4 +1,4 @@
-ROOT ?= $(shell cd "$(dirname '.')" && pwd -P)
+ROOT := $(shell cd "$(dirname '.')" && pwd -P)
 
 DEPS_DIR = $(ROOT)/deps
 CORE_DIR = $(ROOT)/core
