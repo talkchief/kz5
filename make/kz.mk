@@ -214,6 +214,7 @@ json:
 .PHONY: compile-test compile-test-direct
 compile-test: deps $(TEST_DEPS) compile-test-kz-deps compile-test-direct json
 
+compile-test-direct: ERLC_OPTS += -DTEST
 compile-test-direct: deps apps-test $(COMPILE_MOAR) test/$(PROJECT).app $(TEST_BEAMS)
 
 $(TEST_DEPS):
