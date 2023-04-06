@@ -240,7 +240,7 @@ endif
 test/$(PROJECT).app:
 	@mkdir -p test/
 	@mkdir -p ebin/
-	ERL_LIBS=$(ELIBS) erlc -v +nowarn_missing_spec -DTEST $(filter-out +warn_missing_specs,$(ERLC_OPTS)) $(TEST_PA) $(APPS_PA) -o ebin/ $(TEST_SOURCES)
+	ERL_LIBS=$(ELIBS) erlc -v +nowarn_missing_spec $(filter-out +warn_missing_specs,$(ERLC_OPTS)) $(TEST_PA) $(APPS_PA) -o ebin/ $(TEST_SOURCES)
 
 	@sed "s/{modules,[[:space:]]*\[\]}/{modules,\[$(TEST_MODULES)\]}/" src/$(PROJECT).app.src > $@
 	@sed "s/{modules,[[:space:]]*\[\]}/{modules,\[$(TEST_MODULES)\]}/" src/$(PROJECT).app.src > ebin/$(PROJECT).app
