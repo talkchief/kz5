@@ -10,7 +10,6 @@ KZ_VSCODE = $(ROOT)/kazoo.code-workspace
 KZ_VSCODE_DEBUGGER = $(ROOT)/.vscode/launch.json
 
 ERLANG_MK = $(ROOT)/erlang.mk
-ERLANG_MK_COMMIT = 89f2eca925b3f19b2409f9d0e71cf8108e5bd5eb
 DOT_ERLANG_MK = $(ROOT)/.erlang.mk
 
 ## If you use SSH keys instead
@@ -165,10 +164,10 @@ clean-deps-hash:
 dot_erlang_mk: $(DOT_ERLANG_MK)
 
 $(DOT_ERLANG_MK): $(ERLANG_MK)
-	@ERLANG_MK_COMMIT=$(ERLANG_MK_COMMIT) $(MAKE) -f $(ERLANG_MK) erlang.mk
+	@$(MAKE) -f $(ERLANG_MK) erlang.mk
 
 $(ERLANG_MK):
-	@wget 'https://raw.githubusercontent.com/ninenines/erlang.mk/2018.03.01/erlang.mk' -O $(ERLANG_MK)
+	@wget 'https://raw.githubusercontent.com/2600hz/erlang.mk/master/erlang.mk' -O $(ERLANG_MK)
 
 .PHONY: deps
 deps: $(DEPS_HASH_FILE)
@@ -177,11 +176,11 @@ $(DEPS_HASH_FILE):
 	@$(MAKE) clean-deps
 	@$(MAKE) $(DEPS_DIR)/Makefile
 	@ROOT=$(ROOT) $(MAKE) -C $(DEPS_DIR)/ all
-	touch $(DEPS_HASH_FILE)
+	@touch $(DEPS_HASH_FILE)
 
 $(DEPS_DIR)/Makefile: $(DOT_ERLANG_MK) $(DEPS_DIR) clean-plt
+	@cp $(ROOT)/make/Makefile.deps $(DEPS_DIR)/Makefile
 	@$(MAKE) -f $(ERLANG_MK) deps
-	cp $(ROOT)/make/Makefile.deps $(DEPS_DIR)/Makefile
 
 $(DEPS_DIR):
 	@mkdir -p $(DEPS_DIR)
