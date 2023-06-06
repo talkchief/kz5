@@ -50,12 +50,14 @@ STATUS = $($(ROOT)/scripts/check-git-status.bash $(ROOT) $(CORE_DIR) $(APPS))
 
 CHANGED_SWAGGER ?= $(shell $(ROOT)/kgit -kapps crossbar git --no-pager diff --name-only HEAD $(BASE_BRANCH) -- priv/api/swagger.json)
 CHANGED_ERL=$(filter %.hrl %.erl %.escript,$(CHANGED))
+CHANGED_APPS=$(filter $(APPS_DIR)%,$(CHANGED_ERL))
 CHANGED_JSON=$(filter %.json,$(CHANGED))
 CHANGED_YML=$(filter %.yml,$(CHANGED))
 CHANGED_DOCS=$(filter %.md,$(CHANGED))
 
 PRINTABLE_CHANGED=$(subst $(ROOT),,$(CHANGED))
 PRINTABLE_ERL=$(subst $(ROOT),,$(CHANGED_ERL))
+PRINTABLE_APPS=$(foreach app,$(CHANGED_APPS),$(firstword $(subst /, ,$(subst $(APPS_DIR)/,,$(app)))))
 PRINTABLE_JSON=$(subst $(ROOT),,$(CHANGED_JSON))
 PRINTABLE_YML=$(subst $(ROOT),,$(CHANGED_YML))
 PRINTABLE_DOCS=$(subst $(ROOT),,$(CHANGED_DOCS))
@@ -64,6 +66,7 @@ PRINTABLE_DOCS=$(subst $(ROOT),,$(CHANGED_DOCS))
 export CHANGED
 export CHANGED_SWAGGER
 export CHANGED_ERL
+export CHANGED_APPS
 export CHANGED_JSON
 export CHANGED_YML
 export CHANGED_DOCS
@@ -78,12 +81,15 @@ all: prerequisites compile
 
 .PHONY: changed
 changed:
+	@echo "chapps: $(CHANGED_APPS)"
 	@$(ROOT)/scripts/pretty-print-files.bash "changed:" $(PRINTABLE_CHANGED)
 	@$(ROOT)/scripts/pretty-print-files.bash "changed ERL:" $(PRINTABLE_ERL)
+	@$(ROOT)/scripts/pretty-print-files.bash "changed APPS:" $(PRINTABLE_APPS)
 	@$(ROOT)/scripts/pretty-print-files.bash "changed JSON:" $(PRINTABLE_JSON)
 	@$(ROOT)/scripts/pretty-print-files.bash "changed YML:" $(PRINTABLE_YML)
 	@$(ROOT)/scripts/pretty-print-files.bash "changed docs:" $(PRINTABLE_DOCS)
 
+.PHONY: unstaged
 unstaged:
 	$(ROOT)/scripts/check-unstaged.bash
 
@@ -290,7 +296,8 @@ bump-license:
 
 .PHONY: app_applications
 app_applications:
-	ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/apps_of_app.escript -a $(shell find $(APPS_DIR) -name *.app.src)
+app_applications:
+	ERL_LIBS=$(DEPS_DIR):$(CORE_DIR):$(APPS_DIR) $(ROOT)/scripts/apps_of_app.escript -a $(PRINTABLE_APPS)
 
 .PHONY: code_checks
 code_checks: bump-changed-copyright bump-changed-license edoc splchk-common
