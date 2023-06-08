@@ -57,7 +57,7 @@ CHANGED_DOCS=$(filter %.md,$(CHANGED))
 
 PRINTABLE_CHANGED=$(subst $(ROOT),,$(CHANGED))
 PRINTABLE_ERL=$(subst $(ROOT),,$(CHANGED_ERL))
-PRINTABLE_APPS=$(foreach app,$(CHANGED_APPS),$(firstword $(subst /, ,$(subst $(APPS_DIR)/,,$(app)))))
+PRINTABLE_APPS=$(sort $(foreach app,$(CHANGED_APPS),$(firstword $(subst /, ,$(subst $(APPS_DIR)/,,$(app))))))
 PRINTABLE_JSON=$(subst $(ROOT),,$(CHANGED_JSON))
 PRINTABLE_YML=$(subst $(ROOT),,$(CHANGED_YML))
 PRINTABLE_DOCS=$(subst $(ROOT),,$(CHANGED_DOCS))
