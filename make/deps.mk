@@ -43,6 +43,7 @@ DEPS ?=  amqp_client \
 	reloader \
 	relx \
 	soap \
+	relx \
 	syslog \
 	trie \
 	yamerl \
