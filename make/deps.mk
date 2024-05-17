@@ -10,6 +10,7 @@ DEPS ?= amqp_client \
 	erlang_localtime \
 	erlazure \
 	erlcloud \
+	erlsom \
 	erlydtl \
 	ersip \
 	esaml \
@@ -31,6 +32,7 @@ DEPS ?= amqp_client \
 	ranch \
 	recon \
 	reloader \
+	soap \
 	syslog \
 	yamerl \
 	zucchini \
@@ -183,3 +185,9 @@ dep_hep = git https://github.com/2600hz/hep-erlang 5f18e91e45d49d3d7013fc93897d5
 
 # runtime code generation
 dep_meta = git https://github.com/2600hz/erlang-meta 0.1.3
+
+# used for WSDL->record and WSDL RPC calls
+dep_soap = git https://github.com/2600hz/erlang-soap 2600Hz
+
+# XML lib
+dep_erlsom = git https://github.com/2600hz/erlang-erlsom 2600Hz
