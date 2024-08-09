@@ -124,8 +124,9 @@ dep_gproc = git https://github.com/2600hz/erlang-gproc 9f71a37fce4d58480a742b444
 dep_inet_cidr = git https://github.com/2600hz/erlang-inet_cidr.git 1.0.2
 # used by kz_network_utils
 
-dep_jesse = git https://github.com/2600hz/erlang-jesse 86174cc16f18002ad640e62b2b3a8d9bcb33b05d
 # used by kazoo_schemas primarily
+# branch: otp-26 + external format validator
+dep_jesse = git https://github.com/2600hz/erlang-jesse 35eabb483c3541ca0ad631b7bc5e333655303205
 
 dep_jiffy = git https://github.com/2600hz/erlang-jiffy c3b68f0dba2851bc7b2c79abe802ed9bab57c887
 # add an option to return error on duplicate key when decoding
