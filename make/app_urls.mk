@@ -3,7 +3,7 @@
 
 FETCH_AS ?= https://github.com/
 
-BASE_BRANCH ?= origin/master
+BASE_BRANCH ?= origin/5.4
 BRANCH = $(subst origin/,,$(BASE_BRANCH))
 
 dep_blackhole = git $(FETCH_AS)2600hz/kazoo-blackhole.git $(BRANCH)
