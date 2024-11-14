@@ -106,9 +106,9 @@ dep_ersip = git https://github.com/2600hz/erlang-ersip 5125e187807eff8dd507baa7f
 # dep_fs_event = git https://github.com/jamhed/fs_event 783400da08c2b55c295dbec81df0d926960c0346
 # dep_fs_sync = git https://github.com/jamhed/fs_sync 2cf85cf5861221128f020c453604d509fd37cd53
 
-dep_gen_smtp = git https://github.com/2600hz/erlang-gen_smtp aa45101978aabb38af9156e18ba37b9dc2fa3d83
 # used by teletype, notify, and fax
-# branch 2600Hz-otp-26-fixed
+# branch: 2600Hz-otp-26-fixed
+dep_gen_smtp = git https://github.com/2600hz/erlang-gen_smtp 04c8bcbaafff47f8c15f30d6255c726402e836c6
 
 dep_getopt = git https://github.com/2600hz/erlang-getopt v1.0.1
 # used in some scripts/ and sup
