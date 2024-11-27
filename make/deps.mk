@@ -151,6 +151,8 @@ dep_plists = git https://github.com/2600hz/erlang-plists 909aec1ffc2dfd651b880af
 # used by a handful of core apps
 # 2600Hz-otp-26 branch
 
+dep_poolboy = git https://github.com/2600hz/erlang-poolboy 9212a8770edb149ee7ca0bca353855e215f7cba5
+
 dep_proper = git https://github.com/2600hz/erlang-proper a5ae5669f01143b0828fc21667d4f5e344aa760b
 # used by kazoo_proper, knm, kazoo_caches, kazoo_bindings, kz_util_tests, kazoo_token_buckets, kazoo_stdlib
 # used by apps hotornot and callflow
