@@ -90,9 +90,10 @@ dep_erlang_localtime = git https://github.com/2600hz/erlang-localtime a0e19d15cd
 # used by kazoo_documents, teletype, notify, crossbar, callflow
 # branch 2600hz
 
-dep_erlazure = git https://github.com/2600hz/erlang-erlazure.git 06e9834509dfb882d9a34e5f4d9e009d9ed54d6d
+dep_erlazure = git https://github.com/2600hz/erlang-erlazure.git 0e156146a6f5009ab9fa157f731ca83d05016576
 # used by kazoo_attachments, merged in lazedo/erlazure add-start-link changes
 # added on top of latest master commit 0b5a53e2d5e18f3dbe05a891596b607e7ca3989b
+# add timeout to httpc
 
 dep_erlcloud = git https://github.com/2600hz/erlang-erlcloud 9fd232d08063a691ed4294ce3b8e4b99bf84fdda
 # 2600Hz-otp-26 branch
