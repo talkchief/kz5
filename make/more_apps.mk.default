@@ -1,4 +1,4 @@
-DEPS += properly ast oomamessaging ooma_services
+DEPS += properly ast oomamessaging 
 
 BASE_BRANCH ?= origin/5.4
 BRANCH = $(subst origin/,,$(BASE_BRANCH))
@@ -7,4 +7,3 @@ dep_properly = git $(GT_FETCH_AS)2600hz/kazoo-properly.git $(BRANCH)
 dep_ast = git $(GT_FETCH_AS)2600hz/kazoo-ast.git $(BRANCH)
 
 dep_oomamessaging = git $(GT_FETCH_AS)2600hz/kazoo-telco-messaging.git $(BRANCH)
-dep_ooma_services = git $(GT_FETCH_AS)2600hz/kazoo-telco-services.git $(BRANCH)
