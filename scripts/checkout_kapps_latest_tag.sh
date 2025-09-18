@@ -25,8 +25,8 @@ if [ -z "${_release_major}" ] || [ -z "${_release_minor}" ]; then
 fi
 
 # warnings
-[ -z "${CIRCLE_PROJECT_REPONAME}" ] && echo "CIRCLE_PROJECT_REPONAME is not set, this script is designed to run in CI"
-_target_repo="$(echo $CIRCLE_PROJECT_REPONAME | sed 's/kazoo-//g' | sed 's/-/_/g')"
+[ -z "${KAZOO_APP}" ] && echo "required KAZOO_APP variable is not set"
+_target_repo="${KAZOO_APP}"
 
 for app in `ls ${ROOT}/applications` ; do
     _path="${ROOT}/applications/${app}"

@@ -222,7 +222,7 @@ A quick script to check that all scripts in `$(ROOT)/scripts` are documented in 
 
 Takes the misspellings.txt and checks for common mistakes.
 
-Each line on the text file has the format `{correct}|{mispelt} [{misspelt} ...]`
+Each line on the text file has the format `{correct}|{misspelt} [{misspelt} ...]
 
 ## check-stacktrace.py
 
@@ -286,7 +286,7 @@ A Release branch is like `{MAJOR}.{MINOR}` for example: `5.0`.
 $ # this variable is required
 $ export BASE_BRANCH=origin/5.0
 $ # next line is to simulate situation when the CI release build is running for `kazoo-call-inspector` repo.
-$ export CIRCLE_PROJECT_REPONAME=kazoo-call-inspector
+$ export KAZOO_APP=call_inspector
 $ # if you need to checkout all repos to their release branch
 $ # ./kgit git checkout 5.0
 $ ./scripts/checkout_kapps_latest_tag.sh
