@@ -1,6 +1,6 @@
 DEPS = elvis
 
-dep_elvis = git $(FETCH_AS)2600hz/erlang-elvis 2600Hz
+dep_elvis = git $(FETCH_AS)2600hz/erlang-elvis 26ef5f2
 # used by all to check formatting
 
 ELVIS_DEP_DIR = $(DEPS_DIR)/elvis
