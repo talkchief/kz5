@@ -225,4 +225,4 @@ dep_qrcode = git https://github.com/2600hz/erlang-qrcode 7faa72913a4f8267c10d8f4
 dep_qdate = git https://github.com/2600hz/erlang-qdate 2072b49220dc0cfad59f1163119e1e76e55240a1
 dep_qdate_localtime = git https://github.com/2600hz/erlang-qdate_localtime cee705be45df8bcdcc7f77d371d4b34ef52d369b
 
-dep_elvis = git https://github.com/2600hz/erlang-elvis 2600Hz
+dep_elvis = git https://github.com/2600hz/erlang-elvis 26ef5f2
