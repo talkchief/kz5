@@ -1,5 +1,4 @@
 DEPS ?= blackhole \
-	braintree \
 	call_inspector \
 	callflow \
 	cdr \
