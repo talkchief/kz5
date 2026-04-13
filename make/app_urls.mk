@@ -19,7 +19,6 @@ BASE_BRANCH ?= origin/master
 BRANCH = $(subst origin/,,$(BASE_BRANCH))
 
 dep_blackhole = git $(FETCH_AS)2600hz/kazoo-blackhole.git $(BRANCH)
-dep_braintree = git $(FETCH_AS)2600hz/kazoo-braintree.git $(BRANCH)
 dep_call_inspector = git $(FETCH_AS)2600hz/kazoo-call-inspector.git $(BRANCH)
 dep_callflow = git $(FETCH_AS)2600hz/kazoo-callflow.git $(BRANCH)
 dep_cdr = git $(FETCH_AS)2600hz/kazoo-cdr.git $(BRANCH)
