@@ -11,7 +11,7 @@ MORE_APPS_MK ?= $(ROOT)/make/more_apps.mk
 include $(ROOT)/make/app_urls.mk
 include $(APPS_MK)
 
-BASE_BRANCH ?= origin/5.4
+BASE_BRANCH ?= origin/master
 BRANCH = $(subst origin/,,$(BASE_BRANCH))
 
 -include $(MORE_APPS_MK)
