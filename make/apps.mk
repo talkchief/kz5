@@ -6,6 +6,7 @@ DEPS ?= blackhole \
 	crossbar \
 	doodle \
 	ecallmgr \
+	ecallmgr_extension \
 	fax \
 	hangups \
 	hotornot \
