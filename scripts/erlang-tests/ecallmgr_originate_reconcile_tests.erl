@@ -60,6 +60,18 @@ originate_command_carries_original_ids_before_dial_test() ->
     ?assertEqual(<<?UUID/binary, " ", Dial/binary>>,
                  ecallmgr_originate:originate_api_command(?UUID, undefined, ?CALLER, Dial)).
 
+acdc_intercept_is_atomic_and_never_unsafe_fallback_test() ->
+    J=kz_json:from_list([{<<"Custom-Channel-Vars">>,kz_json:from_list([
+        {<<"Account-ID">>,<<"account">>},{<<"Agent-ID">>,<<"agent">>},{<<"Member-Call-ID">>,<<"caller@local">>}])}]),
+    ?assertEqual(<<" 'kz_intercept:caller@local' inline ">>,ecallmgr_originate:intercept_unbridged_only(<<"caller@local">>,J)),
+    ?assertEqual(<<" 'kz_intercept:caller@local' inline ">>,ecallmgr_originate:intercept_unbridged_only(<<"caller@local">>,kz_json:set_value(<<"Intercept-Unbridged-Only">>,false,J))),
+    ?assertError(invalid_acdc_intercept_target,ecallmgr_originate:intercept_unbridged_only(<<"other">>,J)),
+    [begin
+        Unsafe=kz_json:set_value([<<"Custom-Channel-Vars">>,<<"Member-Call-ID">>],ID,J),
+        ?assertError(invalid_acdc_intercept_target,ecallmgr_originate:intercept_unbridged_only(ID,Unsafe))
+     end || ID <- [<<"caller,hangup:all">>,<<"caller' inline">>,<<"caller\n">>,binary:copy(<<"x">>,193)]],
+    ?assertEqual(<<" 'set:intercept_unbridged_only=true,intercept:caller' inline ">>,ecallmgr_originate:intercept_unbridged_only(<<"caller">>,kz_json:new())).
+
 reconcile_request() ->
     [{<<"Originate-UUID">>, ?UUID}
     ,{<<"Originate-Request-ID">>, ?REQUEST}

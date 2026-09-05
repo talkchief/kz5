@@ -54,9 +54,10 @@ async function verifyBorrowed(){const a=(await request('GET',`accounts/${state.A
         assert(f.id===e.flow&&JSON.stringify(f.numbers)===JSON.stringify([e.extension])&&f.flow?.module==='user'&&f.flow.data.id===e.user&&Object.keys(f.flow.children||{}).length===0,'Borrowed internal route changed');
     }}
 async function status(e){const d=(await request('GET',route('agents',e.user)+'/status')).data;return typeof d==='string'?d:d?.status;}
-async function until(fn,seconds=15){const end=Date.now()+seconds*1000;while(Date.now()<end){for(const p of phones)if(p.failure)throw p.failure;
-    for(const child of children)assert(!child.fixtureError,'Synthetic caller process failed');
-    if(eventReader)assert(!eventReader.failure&&eventReader.child.exitCode===null,'Scoped bridge-event observation failed');
+async function until(fn,seconds=15,checkObservers=true){const end=Date.now()+seconds*1000;while(Date.now()<end){
+    if(checkObservers){for(const p of phones)if(p.failure)throw p.failure;
+        for(const child of children)assert(!child.fixtureError,'Synthetic caller process failed');
+        if(eventReader)assert(!eventReader.failure&&eventReader.child.exitCode===null,'Scoped bridge-event observation failed: '+(eventReader.failure||'reader exited'));}
     const v=await fn();if(v)return v;await sleep(200);}throw Error('Bounded live observation timed out');}
 async function setStatus(e,action){await request('POST',route('agents',e.user)+'/status',{status:action});
     await until(async()=>['login','ready'].includes(action)?['login','ready'].includes(await status(e)):['logout','logged_out'].includes(await status(e)),30);}
@@ -98,7 +99,9 @@ function ownedChannel(c,e,caller,account,proxy,callerDevice){return !!(c&&c.acco
     (!c.auth_ip||c.auth_ip===IP)&&(e.index===0?c.id===caller&&c.device===e.device:c.agent===e.user&&c.member===caller&&
         ([e.device,callerDevice].includes(c.device)||(c.device===e.user&&c.authorizing_type==='user'&&c.to_user===e.device))));}
 function ownedNow(c,e){return ownedChannel(c,e,current.caller_id,state.ACCEPTANCE_ACCOUNT_ID,state.ACCEPTANCE_SIP_PROXY_HOST,es()[0].device);}
-function rows(){const d=JSON.parse(command(FSCLI,['-x','show channels as json']));assert(Array.isArray(d.rows),'Unusable channel inventory');return d.rows;}
+function channelRows(d){if(d?.row_count===0&&(d.rows===undefined||Array.isArray(d.rows)&&d.rows.length===0))return [];
+    assert(Array.isArray(d?.rows)&&d.rows.length===d.row_count,'Unusable channel inventory');return d.rows;}
+function rows(){return channelRows(JSON.parse(command(FSCLI,['-x','show channels as json'])));}
 function fixtureChannels(){const all=rows().map(r=>channel(r.uuid)).filter(c=>c?.account===state.ACCEPTANCE_ACCOUNT_ID);
     for(const c of all)assert(es().some(e=>ownedNow(c,e)),'Isolated tenant contains an unowned or uncorrelated call');return all;}
 async function noTenantCalls(){const d=(await request('GET',route('channels'))).data;assert(d&&Object.keys(d).length===0,'Acceptance tenant already has active calls');}
@@ -107,15 +110,15 @@ async function startEventReader(){const child=cp.spawn('stdbuf',['-oL',FSCLI,'-b
     child.stdout.on('data',chunk=>{try{const text=chunk.toString();
         reader.buffer+=text;assert(reader.buffer.length<2*1024*1024,'Oversized event observation');
         reader.filtered ||= reader.buffer.includes('+OK filter added. [variable_ecallmgr_Account-ID]=['+state.ACCEPTANCE_ACCOUNT_ID+']');
-        reader.subscribed ||= reader.buffer.includes('+OK event listener enabled plain');
+        reader.subscribed ||= reader.buffer.includes('+OK event listener enabled json');
         const result=fsEvents.extract(reader.buffer);reader.buffer=result.rest;
         for(const e of result.events){assert(e['variable_ecallmgr_Account-ID']===state.ACCEPTANCE_ACCOUNT_ID,'Unscoped event received');
             if(current){const other=fsEvents.partner(e,current.caller_id,state.ACCEPTANCE_ACCOUNT_ID);if(other)bridgeEvents.push({
                 type:e['Event-Name'],partner:other,time:Number(e['Event-Date-Timestamp'])});}}
-    }catch(_){reader.failure=true;}});
+    }catch(error){reader.failure=error.message;}});
     child.stdin.write('/filter variable_ecallmgr_Account-ID '+state.ACCEPTANCE_ACCOUNT_ID+'\n');
     await until(()=>reader.filtered,10);
-    child.stdin.write('/event plain CHANNEL_BRIDGE CHANNEL_UNBRIDGE\n');await until(()=>reader.subscribed,10);}
+    child.stdin.write('/event json CHANNEL_BRIDGE CHANNEL_UNBRIDGE\n');await until(()=>reader.subscribed,10);}
 function startCaller(){const e=es()[0],csv=write('caller-'+hex()+'.csv',`SEQUENTIAL\n${e.username};[authentication username=${e.username} password=${e.password}];${state.ACCEPTANCE_REALM};2700;60000;0;${path.join(runDir,'tone-440.ulaw')}\n`);
     const child=cp.spawn('sipp',[state.ACCEPTANCE_SIP_PROXY_HOST+':5060','-sf',path.join(__dirname,'sip-tests/monitor-customer.xml'),'-inf',csv,
         '-i',IP,'-p',String(e.port),'-mi',IP,'-mp',String(e.rtp),'-min_rtp_port',String(e.rtp),'-max_rtp_port',String(e.rtp+1),
@@ -126,7 +129,7 @@ async function closeCall(){if(!current)return;
     if(caller){assert(ownedNow(caller,es()[0]),'Unowned caller cleanup refused');command(FSCLI,['-x',`uuid_kill ${caller.id} NORMAL_CLEARING`]);}
     await sleep(500);
     for(const c of fixtureChannels()){assert(agents().some(e=>ownedNow(c,e)),'Unowned residual leg cleanup refused');command(FSCLI,['-x',`uuid_kill ${c.id} NORMAL_CLEARING`]);}
-    await until(()=>fixtureChannels().length===0,10);
+    await until(()=>fixtureChannels().length===0,10,false);
     for(const child of children)if(child.exitCode===null)child.kill('SIGINT');await sleep(300);
     for(const child of children)if(child.exitCode===null)child.kill('SIGKILL');
     delete saved.current;save();current=null;}
@@ -148,6 +151,7 @@ async function runCall(label,policy,expected){await noTenantCalls();await verify
         assert.equal(mediaWinners.size,1,'Missing or multiple winning bridge events');assert(mediaWinners.has(target.a.id),'Event and live bridge winner disagree');
         proof.bridge_events=bridgeEvents.slice();proof.events=events.slice();expected(proof);
         proof.passed=true;return proof;
+    } catch(error){proof.failure=error.message;log(label+' did not pass: '+error.message);throw error;
     } finally {proof.events=events.slice();proof.bridge_events=bridgeEvents.slice();write(label+'-evidence.json',JSON.stringify(proof,null,2)+'\n');await closeCall();}}
 const offers=p=>p.events.filter(e=>e.type==='invite');
 function assertLosers(p){for(const e of offers(p).filter(e=>e.agent!==p.winner))assert(p.events.some(x=>x.call_id===e.call_id&&['cancel','bye'].includes(x.type)),'Losing INVITE lacked CANCEL/BYE');}
@@ -213,5 +217,5 @@ async function main(args){assert(args.length===1&&['--prepare-only','--live','--
             phones=agents().map(e=>new Phone(e,IP,peers.concat(['127.0.0.1',IP]),evt=>events.push(evt)));for(const p of phones)await p.start();await startEventReader();await stages();
         }finally{assert(await cleanup(),'Scoped cleanup incomplete; protected recovery state retained');}
     }finally{lock.stdin.end();if(lock.exitCode===null)lock.kill('SIGTERM');}}
-module.exports={parseState,endpoints,validateSaved,owned,ownedChannel,OWNER,IP};
+module.exports={parseState,endpoints,validateSaved,owned,ownedChannel,channelRows,OWNER,IP};
 if(require.main===module)main(process.argv.slice(2)).catch(e=>{console.error('[strategy-acceptance] FAIL: '+e.message);process.exitCode=1;});

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC1091,SC2034
+# shellcheck disable=SC1091,SC2034,SC2016
 set -Eeuo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 export KAZOO_DEPLOYMENT_CONFIG=/tmp/kazoo5-prompt-test-no-deployment
@@ -23,4 +23,16 @@ grep -Fq 'dnf_install espeak-ng sox' "$SCRIPT_DIR/install-kazoo5.sh" || fail 'ca
 grep -Fq 'generate-acdc-callback-prompts.sh" "$callback_dir"' "$SCRIPT_DIR/install-kazoo5.sh" || fail 'callback audio generation omitted'
 output=$(install_freeswitch_sounds)
 grep -Fq 'rsync -a --ignore-existing' <<<"$output" || fail 'FreeSWITCH sound installation would overwrite existing files'
+output=$(KAZOO_COUCHDB_HOST=database.example.invalid KAZOO_COUCHDB_PORT=15984 install_acdc_language_packs)
+grep -Fq 'EN/AR/HE/ES/FR packs into configured CouchDB database.example.invalid:15984' <<<"$output" || \
+    fail 'language pack installation lost its standalone CouchDB endpoint'
+grep -Fq 'does not require local FreeSWITCH or publish runtime readiness' <<<"$output" || \
+    fail 'media installation incorrectly implies local FS or runtime readiness'
+declare -f install_kazoo_apps | grep -Fq install_acdc_language_packs || fail 'Kazoo apps installer omits language media'
+if declare -f install_nodejs_toolchain | grep -Eq 'nginx|freeswitch'; then
+    fail 'standalone media tooling unexpectedly installs a web/media server'
+fi
+if validate_acdc_language_receipt <<<'{"schema_version":1,"owner":"kazoo5-acdc-media-importer","runtime_ready":false,"languages":{}}'; then
+    fail 'empty language import receipt accepted'
+fi
 printf 'PASS: complete prompt attachment gates, non-mutating dry run, preserved existing sounds\n'

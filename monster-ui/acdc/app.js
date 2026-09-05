@@ -356,7 +356,7 @@ define(function(require) {
 				.concat(_.map(['your-current-position-is', 'you_are_at_position', 'in_the_queue', 'increase_in_call_volume',
 					'the_estimated_wait_time_is', 'less_than_1_minute', 'about_5_minutes', 'about_10_minutes',
 					'about_15_minutes', 'about_30_minutes', 'about_45_minutes', 'about_1_hour', 'at_least_1_hour'],
-					function(name) { return 'acdc-queue-' + name; }));
+				function(name) { return 'acdc-queue-' + name; }));
 		},
 
 		validLanguageCapabilities: function(manifest) {
@@ -388,7 +388,10 @@ define(function(require) {
 		loadLanguageCapabilities: function(callback) {
 			var self = this;
 
-			$.ajax({url: self.appPath + '/language-capabilities.json', dataType: 'json', cache: false, timeout: 10000,
+			$.ajax({ url: self.appPath + '/language-capabilities.json',
+				dataType: 'json',
+				cache: false,
+				timeout: 10000,
 				success: function(manifest) {
 					callback(self.validLanguageCapabilities(manifest) ? null : self.i18n.active().acdc.dropdowns.capabilitiesUnavailable, manifest);
 				},
@@ -417,9 +420,11 @@ define(function(require) {
 					})),
 					reviewPending = ready && locale !== 'en-us' && entry.native_speaker_review === false;
 
-				return {value: locale, disabled: !ready, ready: Boolean(ready),
+				return { value: locale,
+					disabled: !ready,
+					ready: Boolean(ready),
 					label: labels.languages[locale] + ' — ' + (ready ? labels.languageReady : labels.languageNotInstalled)
-						+ (reviewPending ? ' — ' + labels.nativeReviewPending : '')};
+						+ (reviewPending ? ' — ' + labels.nativeReviewPending : '') };
 			});
 		},
 
@@ -433,8 +438,8 @@ define(function(require) {
 			return _.map(options, function(item) {
 				var selected = item.value === value;
 
-				return _.assign({}, item, {selected: selected}, selected && item.disabled
-					? {disabled: false, preserved: true, label: item.label + ' — ' + currentLabel} : {});
+				return _.assign({}, item, { selected: selected }, selected && item.disabled
+					? { disabled: false, preserved: true, label: item.label + ' — ' + currentLabel } : {});
 			});
 		},
 
@@ -448,8 +453,9 @@ define(function(require) {
 				}).concat(_.chain(systemMedia)
 					.groupBy(function(item) { return item.id.split('/').slice(1).join('/'); })
 					.map(function(entries, id) {
-						return {value: id, label: labels.systemPrompt + ': ' + (entries[0].name || id)
-							+ ' (' + _.uniq(_.map(entries, 'language')).sort().join(', ') + ')'};
+						return { value: id,
+							label: labels.systemPrompt + ': ' + (entries[0].name || id)
+							+ ' (' + _.uniq(_.map(entries, 'language')).sort().join(', ') + ')' };
 					}).value()),
 				languages = self.languageCapabilityOptions(results.languageCapabilities === undefined ? null : results.languageCapabilities,
 					systemMedia, errors.languageCapabilities || errors.systemMedia),
@@ -526,8 +532,8 @@ define(function(require) {
 					name = roster.find('option').filter(function() { return $(this).val() === id; }).text();
 
 				$('<span>').addClass('acdc-agent-order-name').text((index + 1) + '. ' + name).appendTo(item);
-				_.each([{direction: -1, label: labels.moveEarlier}, {direction: 1, label: labels.moveLater}], function(action) {
-					$('<button>').attr({type: 'button', 'data-direction': action.direction, 'aria-label': action.label + ': ' + name})
+				_.each([{ direction: -1, label: labels.moveEarlier }, { direction: 1, label: labels.moveLater }], function(action) {
+					$('<button>').attr({ type: 'button', 'data-direction': action.direction, 'aria-label': action.label + ': ' + name })
 						.addClass('monster-button-secondary acdc-agent-order-move')
 						.toggleClass('acdc-catalog-readonly', readOnly).prop('disabled', readOnly).text(action.label).appendTo(item);
 				});
@@ -935,13 +941,13 @@ define(function(require) {
 				underlyingStatusLabel = labels[status] || status;
 
 			return _.merge({}, item, {
-				status_label: reconciliationRequired ?
-					(labels.reconciliation_required || 'Recovery pending') : underlyingStatusLabel,
+				status_label: reconciliationRequired
+					? (labels.reconciliation_required || 'Recovery pending') : underlyingStatusLabel,
 				status_class: reconciliationRequired ? 'reconciling' : 'neutral',
 				reconciliation_required: reconciliationRequired,
-				reconciliation_detail: reconciliationRequired ?
-					(reasonLabels[item.reconciliation_reason] || callbackI18n.reconciliationGeneric ||
-						'Call state is being verified; no new attempt will be placed.') : '',
+				reconciliation_detail: reconciliationRequired
+					? (reasonLabels[item.reconciliation_reason] || callbackI18n.reconciliationGeneric
+						|| 'Call state is being verified; no new attempt will be placed.') : '',
 				underlying_status_label: underlyingStatusLabel,
 				enqueued_label: this.formatKazooTimestamp(item.enqueued_at),
 				expires_label: this.formatKazooTimestamp(item.expires_at),

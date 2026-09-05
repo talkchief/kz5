@@ -1,0 +1,356 @@
+diff --git a/src/acdc_agent_fsm.erl b/src/acdc_agent_fsm.erl
+index ece2a08..655d8fc 100644
+--- a/src/acdc_agent_fsm.erl
++++ b/src/acdc_agent_fsm.erl
+@@ -192,7 +192,7 @@ shared_call_id(ServerRef, JObj) ->
+ %%------------------------------------------------------------------------------
+ -spec call_event(pid(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
+ call_event(ServerRef, <<"call_event">>, <<"CHANNEL_BRIDGE">>, JObj) ->
+-    gen_statem:cast(ServerRef, {'channel_bridged', call_id(JObj)});
++    gen_statem:cast(ServerRef, {'channel_bridge_event', JObj});
+ call_event(ServerRef, <<"call_event">>, <<"CHANNEL_UNBRIDGE">>, JObj) ->
+     gen_statem:cast(ServerRef, {'channel_unbridged', call_id(JObj)});
+ call_event(ServerRef, <<"call_event">>, <<"usurp_control">>, JObj) ->
+@@ -846,28 +846,11 @@ ringing('cast', {'agent_timeout', _JObj}, #state{agent_listener=AgentListener
+     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
+ 
+     {'next_state', 'ringing', State};
+-ringing('cast', {'channel_bridged', MemberCallId}, #state{member_call_id=MemberCallId
+-                                                         ,agent_call_id=AgentCallId
+-                                                         ,member_call=MemberCall
+-                                                         ,agent_listener=AgentListener
+-                                                         ,account_id=AccountId
+-                                                         ,agent_id=AgentId
+-                                                         ,queue_notifications=Ns
+-                                                         ,member_call_queue_id=QueueId
+-                                                         }=State) ->
+-    lager:debug("agent phone has been connected to caller"),
+-    case AgentCallId of
+-        'undefined' -> acdc_agent_listener:member_connect_accepted(AgentListener);
+-        _ -> acdc_agent_listener:member_connect_accepted(AgentListener, AgentCallId)
+-    end,
+-
+-    maybe_notify(Ns, ?NOTIFY_PICKUP, State),
+-
+-    {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
+-
+-    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber, QueueId),
+-
+-    {'next_state', 'answered', State#state{connect_failures=0}};
++ringing('cast', {'channel_bridge_event', Event}, State) ->
++    case agent_bridge_leg(Event, State) of
++        'undefined' -> {'next_state', 'ringing', State};
++        AgentCallId -> agent_bridge_connected(State#state{agent_call_id=AgentCallId})
++    end;
+ ringing('cast', {'channel_bridged', _CallId}, State) ->
+     {'next_state', 'ringing', State};
+ ringing('cast', {'channel_answered', JObj}, #state{member_call_id=MemberCallId
+@@ -917,7 +900,7 @@ ringing('cast', {'originate_resp', ACallId}, #state{agent_listener=AgentListener
+     acdc_agent_listener:member_connect_accepted(AgentListener, ACallId),
+     acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber, QueueId),
+ 
+-    {'next_state', 'ringing', State};
++    {'next_state', 'ringing', State#state{agent_call_id=ACallId}};
+ ringing('cast', {'shared_failure', _JObj}, #state{connect_failures=Fails
+                                                  ,max_connect_failures=MaxFails
+                                                  }=State) ->
+@@ -977,6 +960,9 @@ ringing('info', ?NEW_CHANNEL_TO(CallId, MemberCallId), #state{member_call_id=Mem
+     {'next_state', 'ringing', State};
+ ringing('info', ?NEW_CHANNEL_TO(CallId, MemberCallId), State) ->
+     cancel_if_failed_originate(CallId, MemberCallId, 'ringing', State);
++ringing('info', ?DESTROYED_CHANNEL(AgentCallId, <<"LOSE_RACE">>), #state{agent_call_id=AgentCallId}=State)
++  when is_binary(AgentCallId) ->
++    agent_lost_race(State);
+ ringing('info', ?DESTROYED_CHANNEL(AgentCallId, Cause), #state{agent_listener=AgentListener
+                                                               ,agent_call_id=AgentCallId
+                                                               ,account_id=AccountId
+@@ -1028,6 +1014,45 @@ ringing('info', Evt, State) ->
+ %% @doc
+ %% @end
+ %%------------------------------------------------------------------------------
++agent_bridge_leg(Event, #state{account_id=AccountId, agent_id=AgentId
++                               ,member_call_id=Member, agent_call_id=KnownLeg}) ->
++    CallId = kz_call_event:call_id(Event), Other = kz_call_event:other_leg_call_id(Event),
++    CCVs = kz_json:get_json_value(<<"Custom-Channel-Vars">>, Event, kz_json:new()),
++    case kz_json:get_value(<<"Account-ID">>, CCVs) =:= AccountId andalso is_binary(Member) of
++        'false' -> 'undefined';
++        'true' when is_binary(KnownLeg), CallId =:= Member, Other =:= KnownLeg -> KnownLeg;
++        'true' when is_binary(KnownLeg), CallId =:= KnownLeg, Other =:= Member -> KnownLeg;
++        'true' when Other =:= Member, is_binary(CallId), CallId =/= Member ->
++            %% The own agent-leg event can beat originate/shared-call-id.
++            %% A caller-side event for somebody else's leg cannot establish
++            %% this agent's identity merely because both heard the same caller.
++            case kz_json:get_value(<<"Agent-ID">>, CCVs) =:= AgentId
++                andalso kz_json:get_value(<<"Member-Call-ID">>, CCVs) =:= Member of
++                'true' -> CallId;
++                'false' -> 'undefined'
++            end;
++        _ -> 'undefined'
++    end.
++
++agent_bridge_connected(#state{member_call_id=MemberCallId, agent_call_id=AgentCallId
++                               ,member_call=MemberCall, agent_listener=AgentListener
++                               ,account_id=AccountId, agent_id=AgentId, queue_notifications=Ns
++                               ,member_call_queue_id=QueueId}=State) ->
++    acdc_agent_listener:member_connect_accepted(AgentListener, AgentCallId),
++    maybe_notify(Ns, ?NOTIFY_PICKUP, State),
++    {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),
++    acdc_agent_stats:agent_connected(AccountId, AgentId, MemberCallId, CIDName, CIDNumber, QueueId),
++    {'next_state', 'answered', State#state{connect_failures=0}}.
++
++agent_lost_race(#state{agent_listener=Listener, account_id=AccountId
++                      ,member_call_id=Member, member_call_queue_id=QueueId, agent_id=AgentId}=State) ->
++    %% A losing claim is not a no-answer or completed customer call.
++    acdc_agent_listener:member_connect_retry(Listener, Member),
++    acdc_agent_listener:channel_hungup(Listener, Member),
++    acdc_stats:call_missed(AccountId, QueueId, AgentId, Member, <<"LOSE_RACE">>),
++    acdc_agent_listener:presence_update(Listener, ?PRESENCE_GREEN),
++    apply_state_updates(clear_call(State, 'ready')).
++
+ -spec answered(gen_statem:event_type(), any(), state()) -> kz_types:handle_fsm_ret(state()).
+ answered('cast', {'member_connect_req', _}, State) ->
+     {'next_state', 'answered', State};
+@@ -1167,6 +1192,9 @@ answered('info', ?DESTROYED_CHANNEL(CallId, _Cause), #state{account_id=AccountId
+     acdc_agent_listener:channel_hungup(AgentListener, CallId),
+     maybe_notify(Ns, ?NOTIFY_HANGUP, State),
+     {'next_state', 'outbound', start_outbound_call_handling(OutboundCallId, clear_call(State, 'ready')), 'hibernate'};
++answered('info', ?DESTROYED_CHANNEL(CallId, <<"LOSE_RACE">>), #state{agent_call_id=CallId}=State)
++  when is_binary(CallId) ->
++    agent_lost_race(State);
+ answered('info', ?DESTROYED_CHANNEL(CallId, Cause), #state{agent_call_id=CallId
+                                                           ,outbound_call_ids=[]
+                                                           }=State) ->
+diff --git a/src/acdc_queue_fsm.erl b/src/acdc_queue_fsm.erl
+index 41ce902..861ee06 100644
+--- a/src/acdc_queue_fsm.erl
++++ b/src/acdc_queue_fsm.erl
+@@ -120,6 +120,7 @@
+                ,callback_menu_timeout = 30000 :: pos_integer()
+                ,callback_success_timeout = 10000 :: pos_integer()
+                ,attempted_agents = [] :: kz_term:ne_binaries()
++               ,bridge_ctx = #{} :: map()
+                }).
+ -type state() :: #state{}.
+ 
+@@ -518,36 +519,10 @@ connecting('cast', {'accepted', AcceptJObj}, #state{callback_ctx=#{'mode' := 'na
+ connecting('cast', {'channel_bridged', Event}, #state{callback_ctx=#{'mode' := 'native'}}=State) ->
+     callback_bridge(Event, State);
+ 
+-connecting('cast', {'accepted', AcceptJObj}, #state{listener_proc=ListenerSrv
+-                                                   ,member_call=Call
+-                                                   ,account_id=AccountId
+-                                                   ,queue_id=QueueId
+-                                                   ,connect_wins=Wins
+-                                                   ,member_call_winners=Winners
+-                                                   }=State) ->
+-    case accept_is_for_call(AcceptJObj, Call)
+-        andalso lists:any(fun(W) -> acdc_queue_strategy:process_matches(AcceptJObj, W) end, Winners)
+-        andalso is_reference(State#state.agent_ring_timer_ref)
+-    of
+-        'true' ->
+-            lager:debug("recv acceptance from agent"),
+-            CallId = kapps_call:call_id(Call),
+-            webseq:evt(?WSD_ID, self(), CallId, <<"member call - agent acceptance">>),
+-
+-            %% The winning agent (including its monitoring processes) must
+-            %% never receive a loser cancellation for its own winning call.
+-            Losers = [W || W <- Wins, kz_json:get_value(<<"Agent-ID">>, W) =/= kz_json:get_value(<<"Agent-ID">>, AcceptJObj)],
+-            lists:foreach(fun(Win) -> acdc_queue_listener:member_connect_satisfied(ListenerSrv, Win, []) end, Losers),
+-            acdc_queue_listener:finish_member_call(ListenerSrv),
+-            acdc_stats:call_handled(AccountId, QueueId, CallId
+-                                   ,kz_json:get_value(<<"Agent-ID">>, AcceptJObj)
+-                                   ),
+-            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
+-        'false' ->
+-            lager:debug("ignoring accepted message"),
+-            {'next_state', 'connecting', State}
+-    end;
++connecting('cast', {'accepted', AcceptJObj}, State) -> ordinary_accept(AcceptJObj, State);
++connecting('cast', {'channel_bridged', Event}, State) -> ordinary_bridge(Event, State);
+ 
++connecting('cast', {'retry', _}, #state{bridge_ctx=#{'leg' := _}}=State) -> {'keep_state', State};
+ connecting('cast', {'retry', _RetryJObj}, #state{callback_ctx=#{'mode' := 'native', 'bridge_agent_leg' := _}}=State) ->
+     %% A real bridge has crossed the ringing boundary. Late retry messages
+     %% cannot start another agent while completion proofs are converging.
+@@ -644,6 +619,8 @@ connecting({'call', From}, 'current_call', #state{member_call=Call
+ connecting({'call', From}, Event, State) ->
+     handle_sync_event(Event, From, 'connecting', State);
+ 
++connecting('info', {'timeout', _AgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}
++            ,#state{bridge_ctx=#{'leg' := _}}=State) -> {'keep_state', State};
+ connecting('info', {'timeout', _AgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}
+             ,#state{callback_ctx=#{'mode' := 'native', 'bridge_agent_leg' := _}}=State) -> {'keep_state', State};
+ connecting('info', {'timeout', AgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}
+@@ -667,6 +644,7 @@ connecting('info', {'timeout', AgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}, #state{ag
+     {'next_state', 'connect_req', State#state{agent_ring_timer_ref='undefined'
+                                              ,member_call_winners=[]
+                                              ,connect_wins=[]
++                                             ,bridge_ctx=#{}
+                                              ,collect_ref='undefined'
+                                              }};
+ connecting('info', {'timeout', _OtherAgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}, #state{agent_ring_timer_ref=_AgentRef}=State) ->
+@@ -682,7 +660,15 @@ connecting('info', {'timeout', _Ref, ?ANNOUNCE_TIMEOUT_MESSAGE}, State) ->
+     %% cancel_timer/1 cannot retract an already-delivered timeout message.
+     {'next_state', 'connecting', State};
+ connecting('info', {'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, State) ->
+-    handle_connection_timeout(ConnRef, State);
++    case State#state.bridge_ctx of
++        #{'leg' := _} -> {'keep_state', State};
++        _ -> handle_connection_timeout(ConnRef, State)
++    end;
++connecting('info', {'timeout', Ref, 'ordinary_bridge_proof_timeout'}, #state{bridge_ctx=#{'timer_ref' := Ref}=Ctx}=State) ->
++    %% Preserve an actually bridged caller; do not claim handling, cancel its
++    %% partner, or start a second originate because an AMQP proof was lost.
++    lager:error("ACDC bridge observed without correlated selected-agent acceptance"),
++    {'keep_state', State#state{bridge_ctx=maps:remove('timer_ref', Ctx)}};
+ connecting('info', {'timeout', Ref, 'callback_commit_retry'}
+             ,#state{callback_ctx=#{'timer_ref' := Ref, 'mode' := 'native'}}=State) -> callback_complete(State);
+ connecting('info', Event, State) -> callback_native_info(Event, 'connecting', State).
+@@ -889,6 +875,7 @@ clear_member_call(#state{connection_timer_ref=ConnRef
+     maybe_stop_timer(CollectRef),
+     maybe_stop_timer(maps:get('timer_ref', Callback, 'undefined')),
+     maybe_stop_timer(maps:get('lease_timer_ref', Callback, 'undefined')),
++    maybe_stop_timer(maps:get('timer_ref', State#state.bridge_ctx, 'undefined')),
+     State#state{connect_resps=[]
+                ,connect_wins=[]
+                ,collect_ref='undefined'
+@@ -903,6 +890,7 @@ clear_member_call(#state{connection_timer_ref=ConnRef
+                ,pending_queue_opts=[]
+                ,callback_ctx=#{}
+                ,attempted_agents=[]
++               ,bridge_ctx=#{}
+                }.
+ 
+ update_properties(QueueJObj, State) ->
+@@ -1113,11 +1101,11 @@ callback_prepare_winners(State) -> maybe_announce_before_connect(State).
+ 
+ callback_clear_proofs(Context) ->
+     maybe_stop_timer(maps:get('timer_ref', Context, 'undefined')),
+-    maps:without(['accepted', 'bridge_agent_leg', 'accept_probe_ref', 'timer_ref'], Context).
++    maps:without(['accepted', 'accepted_candidates', 'bridge_agent_leg', 'accept_probe_ref', 'timer_ref'], Context).
+ 
+ callback_reset_selection(#state{callback_ctx=#{'mode' := 'native'}=Context}=State) ->
+     State#state{callback_ctx=callback_clear_proofs(Context), connect_wins=[]};
+-callback_reset_selection(State) -> State#state{connect_wins=[]}.
++callback_reset_selection(State) -> State#state{connect_wins=[], bridge_ctx=#{}}.
+ 
+ callback_remove_winner(AgentId, ProcessId, #state{callback_ctx=#{'mode' := 'native'}=Context, connect_wins=Wins}=State) ->
+     Matches = fun(Win) -> kz_json:get_value(<<"Agent-ID">>, Win) =:= AgentId
+@@ -2066,6 +2054,61 @@ callback_recovered_accept_valid(Accepted, #state{callback_ctx=Context, manager_p
+         _ -> callback_reconcile_later(State)
+     end.
+ 
++%% Originate success precedes media success. Join the selected process's
++%% Agent-Call-ID with an actual same-account bridge, in either arrival order.
++ordinary_accept(Accept, #state{member_call=Call, account_id=AccountId
++                               ,connect_wins=Wins, bridge_ctx=Context}=State) ->
++    Leg = kz_json:get_ne_binary_value(<<"Agent-Call-ID">>, Accept),
++    case accept_is_for_call(Accept, Call)
++        andalso kz_json:get_value(<<"Account-ID">>, Accept) =:= AccountId
++        andalso is_binary(Leg) andalso Leg =/= kapps_call:call_id(Call)
++        andalso (is_reference(State#state.agent_ring_timer_ref) orelse maps:is_key('leg', Context))
++        andalso lists:any(fun(W) -> acdc_queue_strategy:process_matches(Accept, W) end, Wins) of
++        'true' ->
++            Key = {kz_json:get_value(<<"Agent-ID">>, Accept), kz_json:get_value(<<"Process-ID">>, Accept)},
++            Accepts = maps:get('accepts', Context, #{}),
++            ordinary_complete(State#state{bridge_ctx=Context#{'accepts' => Accepts#{Key => Accept}}});
++        'false' -> {'next_state', 'connecting', State}
++    end.
++
++ordinary_bridge(Event, #state{member_call=Call, account_id=AccountId
++                               ,bridge_ctx=Context, connect_wins=Wins}=State) ->
++    Leg = kz_call_event:other_leg_call_id(Event),
++    case Call =/= 'undefined' andalso Wins =/= []
++        andalso kz_call_event:call_id(Event) =:= kapps_call:call_id(Call)
++        andalso kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], Event) =:= AccountId
++        andalso is_binary(Leg) andalso byte_size(Leg) > 0 andalso Leg =/= kapps_call:call_id(Call)
++        andalso maps:get('leg', Context, Leg) =:= Leg
++        andalso (is_reference(State#state.agent_ring_timer_ref) orelse maps:is_key('leg', Context)) of
++        'true' ->
++            maybe_stop_timer(State#state.connection_timer_ref),
++            maybe_stop_timer(State#state.agent_ring_timer_ref),
++            Ref = case maps:find('leg', Context) of
++                'error' -> erlang:start_timer(15000, self(), 'ordinary_bridge_proof_timeout');
++                _ -> maps:get('timer_ref', Context, 'undefined')
++            end,
++            ordinary_complete(State#state{bridge_ctx=Context#{'leg' => Leg, 'timer_ref' => Ref}
++                                            ,connection_timer_ref='undefined', agent_ring_timer_ref='undefined'});
++        'false' -> {'next_state', 'connecting', State}
++    end.
++
++ordinary_complete(#state{bridge_ctx=Context, member_call=Call, listener_proc=Listener
++                         ,connect_wins=Wins, account_id=AccountId, queue_id=QueueId}=State) ->
++    Leg = maps:get('leg', Context, 'undefined'),
++    Accepts = maps:values(maps:get('accepts', Context, #{})),
++    Matching = [A || A <- Accepts, kz_json:get_value(<<"Agent-Call-ID">>, A) =:= Leg,
++                     lists:any(fun(W) -> acdc_queue_strategy:process_matches(A, W) end, Wins)],
++    case {Matching, lists:usort([kz_json:get_value(<<"Agent-ID">>, A) || A <- Matching])} of
++        {[Accepted|_], [_]} when is_binary(Leg) ->
++            Agent = kz_json:get_value(<<"Agent-ID">>, Accepted),
++            Losers = [W || W <- Wins, kz_json:get_value(<<"Agent-ID">>, W) =/= Agent],
++            lists:foreach(fun(W) -> acdc_queue_listener:member_connect_satisfied(Listener, W, []) end, Losers),
++            acdc_queue_listener:finish_member_call(Listener),
++            acdc_stats:call_handled(AccountId, QueueId, kapps_call:call_id(Call), Agent),
++            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
++        _ -> {'next_state', 'connecting', State}
++    end.
++
+ callback_accept(Accept, #state{member_call=Call, callback_ctx=Context
+                               ,account_id=AccountId, connect_wins=Wins}=State) ->
+     Agent = kz_json:get_ne_binary_value(<<"Agent-ID">>, Accept),
+@@ -2075,23 +2118,20 @@ callback_accept(Accept, #state{member_call=Call, callback_ctx=Context
+         andalso kz_json:get_value(<<"Account-ID">>, Accept) =:= AccountId
+         andalso is_binary(Agent) andalso is_binary(Process)
+         andalso is_binary(AgentLeg) andalso AgentLeg =/= kapps_call:call_id(Call)
+-        andalso callback_same_acceptance(maps:get('accepted', Context, 'undefined'), Accept)
+         andalso lists:any(fun(Win) -> kz_json:get_value(<<"Agent-ID">>, Win) =:= Agent
+                                       andalso kz_json:get_value(<<"Process-ID">>, Win) =:= Process end, Wins) of
+-        'true' -> callback_complete(State#state{callback_ctx=Context#{'accepted' => Accept}});
++        'true' ->
++            Candidates = maps:get('accepted_candidates', Context, #{}),
++            callback_complete(State#state{callback_ctx=Context#{'accepted_candidates' => Candidates#{{Agent, Process} => Accept}}});
+         'false' -> {'next_state', 'connecting', State}
+     end.
+ 
+-callback_same_acceptance('undefined', _) -> 'true';
+-callback_same_acceptance(Previous, Current) ->
+-    lists:all(fun(Key) -> kz_json:get_value(Key, Previous) =:= kz_json:get_value(Key, Current) end,
+-              [<<"Agent-ID">>, <<"Process-ID">>, <<"Agent-Call-ID">>]).
+-
+ callback_bridge(Event, #state{member_call=Call, callback_ctx=Context
+                               ,account_id=AccountId, queue_id=QueueId
+                               ,connection_timer_ref=ConnRef, agent_ring_timer_ref=AgentRef}=State) ->
+     AgentLeg = kz_call_event:other_leg_call_id(Event),
+     case kz_call_event:call_id(Event) =:= kapps_call:call_id(Call)
++        andalso kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], Event) =:= AccountId
+         andalso is_binary(AgentLeg) andalso byte_size(AgentLeg) > 0
+         andalso maps:get('bridge_agent_leg', Context, AgentLeg) =:= AgentLeg
+         andalso AgentLeg =/= kapps_call:call_id(Call) of
+@@ -2109,15 +2149,18 @@ callback_bridge(Event, #state{member_call=Call, callback_ctx=Context
+         'false' -> {'next_state', 'connecting', State}
+     end.
+ 
+-callback_complete(#state{callback_ctx=Context}=State) ->
+-    case {maps:get('accepted', Context, 'undefined'), maps:get('bridge_agent_leg', Context, 'undefined')} of
+-        {'undefined', _} -> callback_proof_deadline(State);
+-        {_, 'undefined'} -> callback_proof_deadline(State);
+-        {Accepted, AgentLeg} ->
+-            case kz_json:get_value(<<"Agent-Call-ID">>, Accepted) =:= AgentLeg of
+-                'true' -> callback_commit(AgentLeg, Accepted, State);
+-                'false' -> callback_native_end('agent_unavailable', State)
+-            end
++callback_complete(#state{callback_ctx=Context, connect_wins=Wins}=State) ->
++    AgentLeg = maps:get('bridge_agent_leg', Context, 'undefined'),
++    Candidates = case maps:get('accepted', Context, 'undefined') of
++        'undefined' -> maps:values(maps:get('accepted_candidates', Context, #{}));
++        Accepted -> [Accepted]
++    end,
++    Matching = [A || A <- Candidates, kz_json:get_value(<<"Agent-Call-ID">>, A) =:= AgentLeg,
++                     lists:any(fun(W) -> acdc_queue_strategy:process_matches(A, W) end, Wins)],
++    case {Matching, lists:usort([kz_json:get_value(<<"Agent-ID">>, A) || A <- Matching])} of
++        {[Winner|_], [_]} when is_binary(AgentLeg) ->
++            callback_commit(AgentLeg, Winner, State#state{callback_ctx=Context#{'accepted' => Winner}});
++        _ -> callback_proof_deadline(State)
+     end.
+ 
+ callback_proof_deadline(#state{callback_ctx=Context}=State) ->

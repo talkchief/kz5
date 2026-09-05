@@ -1,7 +1,50 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-05 10:15 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-05 11:42 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
+
+## Latest checkpoint (11:42 UTC)
+
+This checkpoint preserves deployed fixes and separately staged work. It does not
+activate pending backend changes or certify the entire installation. Earlier
+checkpoints `c496824` and `17e3ad6` were pushed to `origin/master`; the historical
+uncommitted/pending statements below describe their original review times.
+
+- All four call-supervision modes passed live synthetic audio acceptance at
+  11:29–11:31 UTC: listen-only, whisper, barge and join, before and after keypad
+  `3`. Authorization denials, SIP 180 before 200, supervisor-only stop and
+  survival of the original bridge passed. Cleanup left zero fixture calls and
+  registrations. Fresh apps/eCallMgr/FreeSWITCH logs contained no errors in that
+  test window. This is single-server evidence, not distributed failover proof.
+  See [monitoring acceptance](channel_monitor_acceptance.md).
+- The successful run includes deployed fixes for normalized monitor-stop
+  replies, ACDC events missing optional SIP addresses, and FreeSWITCH routing
+  XML. Their focused tests pass 24, 13 and 8 cases respectively.
+- Three ordinary ring-all calls passed with one winner and available losing
+  agents. The true simultaneous-answer test then failed: all three agents were
+  disconnected without a stable caller bridge. The atomic-intercept fix is
+  compiled and regression-tested but **not deployed**. It needs coordinated
+  module/node deployment and a fresh live test; ordered, round-robin and
+  most-idle live gates remain incomplete. See
+  [atomic answer selection](acdc_atomic_answer_race.md).
+- All 6,143 EN/AR/HE/ES/FR draft prompt files have been generated and validated.
+  EN/ES/FR media import passed, preserving existing recordings; AR/HE import is
+  not yet complete. The new importer uses revision-conditional writes and a
+  coherent final database inventory. Backend language mappings and node-local
+  cache maintenance remain staged separately; no runtime-ready artifact or
+  native-speaker approval is published. See [language packs](acdc_language_packs.md).
+- The language-aware ACDC UI passed its live browser gate at 11:42 UTC: all five
+  choices are visible, only verified English is enabled, all 30 roster members
+  and ordered selection are preserved, callback dropdowns work, and Callflows
+  exposes the queue action. There were zero non-authentication API writes or
+  JavaScript errors; 1,924 unrelated web files remained unchanged. The installer
+  now preserves verified language capability files and returns a real HTTP 404
+  when one is absent, rather than serving the HTML application fallback.
+- Full callback return/recovery, the complete 30-call drain gate, clean-host
+  distributed deployment, backup restoration and production hardening remain
+  pending. HTTPS still lacks the matching certificate private key.
+
+## Earlier checkpoint (10:15 UTC)
 
 ## Repository checkpoint: implemented, deployed and pending
 

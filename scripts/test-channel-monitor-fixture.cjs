@@ -43,4 +43,12 @@ assert(!source.includes("action:'hangup'")&&!source.includes('--agent-status'));
 assert(source.includes('uuid_kill ${c.id} NORMAL_CLEARING')&&source.includes('ownedChannel(c,endpoints(state)[0])'));
 assert(source.includes("'403'")===false); // Numeric response codes, not truthy string checks.
 assert(source.includes("d['Caller-Channel-Answered-Time']||d.variable_answer_epoch||0"));
+assert(source.includes("'Connection':'close'")&&source.includes('stopSupervisor(true)'));
+const callId='1-1234@127.0.0.50';
+const sip=(direction,id,seq,status)=>`2026-09-05\t11:00:00.123456\t1788606000.123456\t${direction}\t${id}\tCSeq:${seq} INVITE\tSIP/2.0 ${status}\n`;
+const ring=sip('R',callId,1,'180 Ringing'),answer=sip('R',callId,1,'200 OK');
+assert.equal(h.ringingEvidence(ring+answer,callId).caller_received_180_before_200,true);
+for(const invalid of [answer,answer+ring,sip('S',callId,1,'180 Ringing')+answer,
+    sip('R','1-9999@127.0.0.50',1,'180 Ringing')+answer,ring+sip('R',callId,2,'200 OK')])
+    assert.throws(()=>h.ringingEvidence(invalid,callId),/SIP180|transaction mismatch/);
 console.log('PASS monitor fixture: master/PSTN/injection/duplicate rejection, exact saved identity, account/device/IP cleanup guards, web-user markers, opt-in and no queue-status mutations');

@@ -1,18 +1,19 @@
 diff --git a/src/cdr_report.erl b/src/cdr_report.erl
-index 736e3fb..8230308 100644
+index 736e3fb..a353ba9 100644
 --- a/src/cdr_report.erl
 +++ b/src/cdr_report.erl
-@@ -11,6 +11,8 @@
+@@ -9,7 +9,9 @@
+ %%%-----------------------------------------------------------------------------
+ -module(cdr_report).
  
--export([handle_req/2]).
+--export([handle_req/2]).
 +-export([handle_req/2
 +        ,report_timestamp/1
 +        ]).
  
  -include("cdr.hrl").
  
- -define(IGNORED_APP, kapps_config:get(?CONFIG_CAT, <<"ignore_apps">>, [<<"milliwatt">>])).
-@@ -79,9 +83,24 @@ maybe_ignore_reorder(JObj) ->
+@@ -79,9 +81,24 @@ maybe_ignore_reorder(JObj) ->
  -spec handle_req(kz_call_event:payload()) -> 'ok'.
  handle_req(JObj) ->
      AccountId = kapi_cdr:account_id(JObj),
@@ -40,7 +41,7 @@ index 736e3fb..8230308 100644
      Routines = [fun cdr_util:update_ccvs/3
 diff --git a/test/cdr_report_tests.erl b/test/cdr_report_tests.erl
 new file mode 100644
-index 0000000..e35ed94
+index 0000000..fa09534
 --- /dev/null
 +++ b/test/cdr_report_tests.erl
 @@ -0,0 +1,37 @@

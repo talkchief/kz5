@@ -55,11 +55,18 @@ attempt to stop the original agent leg to return 403. A 202 start response alone
 is not success: the correlated, answered supervisor channel and audio must be
 observed. After stopping supervision, both exact original legs must remain
 answered and mutually bridged before the test deliberately ends its own call.
+The supervisor must still be present before the stop request, return HTTP202,
+and then disappear. Short SIPp metadata also proves the exact original caller
+received SIP180 before SIP200 in the same INVITE transaction.
 
 Only RTP involving these synthetic endpoints is captured. Captures and numeric
 evidence stay in a root-only `/var/log/kazoo-monitor-acceptance-*` directory;
-there is no SIP packet capture or production recording. Temporary credential
-injection files are removed during cleanup.
+there is no SIP packet capture or production recording. The private SIPp short
+message logs contain only timestamp, direction, Call-ID, CSeq and the first SIP
+line, never authorization headers or message bodies. Temporary credential
+injection files are removed during cleanup. Crossbar requests use fresh HTTP
+connections because blocking fixture subprocesses can outlast an idle pooled
+connection; mutating requests are never automatically retried.
 
 On a failed or interrupted run, use:
 
@@ -75,9 +82,24 @@ their durable ownership markers match. Incomplete cleanup retains protected
 recovery state; no unverified resource is deleted. Registrations expire within
 600 seconds even if the registrar is unavailable.
 
-Offline tests have passed. The first live attempt on 2026-09-05 found a
-direct-call `kz_bridge` dialstring parsing failure before an agent connected;
-the isolated caller, registrations, and temporary users were cleaned up.
-All four live audio proofs remain a separate deployment gate.
+Offline tests and all four live modes passed on 2026-09-05, 11:29–11:31 UTC.
+The private evidence directory is
+`/var/log/kazoo-monitor-acceptance-9VEPc6`; each mode has its exact call/request
+IDs, two acoustic windows, authorization results, SIP ringing timestamps and
+supervisor-stop HTTP202 proof. Eavesdrop delivered no supervisor tone to either
+original party. Whisper delivered it to the agent but not the customer; barge
+and join delivered it to both. All checks passed before and after keypad `3`.
+Both original legs survived each supervisor stop, including a further
+2.5-second observation. After cleanup, FreeSWITCH had zero channels, all three
+fixture contacts were absent, and the temporary web users and protected
+fixture state were removed. Fresh apps/ecallmgr/FreeSWITCH logs in the test
+window contained no errors; each original caller executed `ring_ready()` and
+received SIP180 before SIP200.
+
+Earlier attempts exposed a direct-call `kz_bridge` parsing problem and a
+monitor-stop reply-normalization bug, both fixed before this successful run.
+An inter-stage HTTP transport failure and the initial short-message timestamp
+parser mismatch also failed closed and cleaned up; the harness now uses fresh
+HTTP connections and understands the pinned SIPp timestamp columns.
 Passing on one server proves media routing on that topology; it does not by
 itself prove multi-node failover or geographically distributed cluster behavior.

@@ -17,6 +17,7 @@ erlc "${common[@]}" -I core/kazoo_amqp/src core/kazoo_amqp/src/api/kapi_resource
 erlc "${common[@]}" -DTEST -I applications/crossbar/src -I applications/crossbar/include applications/crossbar/src/cb_channel_monitor.erl
 erlc "${common[@]}" -I applications/crossbar/src -I applications/crossbar/include applications/crossbar/src/modules/cb_channels.erl
 erlc "${common[@]}" -DTEST -I applications/ecallmgr/src applications/ecallmgr/src/ecallmgr_call_monitor.erl
+erlc "${common[@]}" -I applications/ecallmgr/src applications/ecallmgr/src/freeswitch.erl applications/ecallmgr/src/mod_kazoo.erl
 erlc "${common[@]}" -DTEST -I applications/ecallmgr/src applications/ecallmgr/src/ecallmgr_originate.erl
 erlc "${common[@]}" -I applications/ecallmgr/src applications/ecallmgr/src/ecallmgr_fs_resource.erl
 erlc "${common[@]}" -I applications/acdc/src -I applications/acdc/include -I applications/crossbar/include applications/acdc/src/cb_queues.erl

@@ -91,6 +91,108 @@ index f168454..ece2a08 100644
      {'next_state', 'answered', State};
  answered('cast', {'sync_resp', _}, State) ->
      {'next_state', 'answered', State};
+diff --git a/src/acdc_agent_handler.erl b/src/acdc_agent_handler.erl
+index 8eadead..1da3112 100644
+--- a/src/acdc_agent_handler.erl
++++ b/src/acdc_agent_handler.erl
+@@ -251,24 +251,23 @@ handle_new_channel(JObj, AccountId) ->
+     handle_new_channel_acct(JObj, AccountId).
+ 
+ -spec handle_new_channel_acct(kz_json:object(), kz_term:api_binary()) -> 'ok'.
+-handle_new_channel_acct(_, 'undefined') -> 'ok';
++handle_new_channel_acct(_, AccountId) when not is_binary(AccountId); AccountId =:= <<>> -> 'ok';
+ handle_new_channel_acct(JObj, AccountId) ->
+-    FromUser = hd(binary:split(kz_json:get_value(<<"From">>, JObj), <<"@">>)),
+-    ToUser = hd(binary:split(kz_json:get_value(<<"To">>, JObj), <<"@">>)),
+-    ReqUser = hd(binary:split(kz_json:get_value(<<"Request">>, JObj), <<"@">>)),
+-
+     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
+-    MemberCallId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Member-Call-ID">>], JObj),
++    handle_new_channel_acct(JObj, AccountId, CallId).
+ 
+-    lager:debug("new channel in acct ~s: from ~s to ~s(~s)", [AccountId, FromUser, ToUser, ReqUser]),
+-
+-    case kz_call_event:call_direction(JObj) of
+-        <<"inbound">> -> gproc:send(?NEW_CHANNEL_REG(AccountId, FromUser), ?NEW_CHANNEL_FROM(CallId));
++-spec handle_new_channel_acct(kz_json:object(), kz_term:ne_binary(), any()) -> 'ok'.
++handle_new_channel_acct(_, _, CallId) when not is_binary(CallId); CallId =:= <<>> -> 'ok';
++handle_new_channel_acct(JObj, AccountId, CallId) ->
++    MemberCallId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Member-Call-ID">>], JObj),
++    {Keys, Message} = case kz_call_event:call_direction(JObj) of
++        <<"inbound">> -> {[<<"From">>], ?NEW_CHANNEL_FROM(CallId)};
+         <<"outbound">> ->
+-            gproc:send(?NEW_CHANNEL_REG(AccountId, ToUser), ?NEW_CHANNEL_TO(CallId, MemberCallId)),
+-            gproc:send(?NEW_CHANNEL_REG(AccountId, ReqUser), ?NEW_CHANNEL_TO(CallId, MemberCallId));
+-        _ -> lager:debug("invalid call direction for call ~s", [CallId])
+-    end.
++            {[<<"To">>, <<"Request">>], ?NEW_CHANNEL_TO(CallId, MemberCallId)};
++        _ -> {[], 'undefined'}
++    end,
++    lists:foreach(fun(User) -> gproc:send(?NEW_CHANNEL_REG(AccountId, User), Message) end,
++                  channel_usernames(Keys, JObj)).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Send event to agent FSM when channels are destroyed. This occurs in
+@@ -280,25 +279,43 @@ handle_new_channel_acct(JObj, AccountId) ->
+ %% @end
+ %%------------------------------------------------------------------------------
+ -spec handle_destroyed_channel(kz_json:object(), kz_term:api_binary()) -> 'ok'.
++handle_destroyed_channel(_, AccountId) when not is_binary(AccountId); AccountId =:= <<>> -> 'ok';
+ handle_destroyed_channel(JObj, AccountId) ->
+-    FromUser = hd(binary:split(kz_json:get_value(<<"From">>, JObj), <<"@">>)),
+-    ToUser = hd(binary:split(kz_json:get_value(<<"To">>, JObj), <<"@">>)),
+-
+     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
+-    HangupCause = acdc_util:hangup_cause(JObj),
++    handle_destroyed_channel(JObj, AccountId, CallId).
+ 
+-    lager:debug("destroyed channel in acct ~s: from ~s to ~s", [AccountId, FromUser, ToUser]),
+-
+-    case kz_call_event:call_direction(JObj) of
+-        <<"inbound">> -> gproc:send(?DESTROYED_CHANNEL_REG(AccountId, FromUser)
+-                                   ,?DESTROYED_CHANNEL(CallId, HangupCause));
+-        <<"outbound">> ->
+-            gproc:send(?DESTROYED_CHANNEL_REG(AccountId, FromUser)
+-                      ,?DESTROYED_CHANNEL(CallId, HangupCause)),
+-            gproc:send(?DESTROYED_CHANNEL_REG(AccountId, ToUser)
+-                      ,?DESTROYED_CHANNEL(CallId, HangupCause));
+-        _ -> 'ok'
+-    end.
++-spec handle_destroyed_channel(kz_json:object(), kz_term:ne_binary(), any()) -> 'ok'.
++handle_destroyed_channel(_, _, CallId) when not is_binary(CallId); CallId =:= <<>> -> 'ok';
++handle_destroyed_channel(JObj, AccountId, CallId) ->
++    HangupCause = acdc_util:hangup_cause(JObj),
++    Keys = case kz_call_event:call_direction(JObj) of
++        <<"inbound">> -> [<<"From">>];
++        <<"outbound">> -> [<<"From">>, <<"To">>];
++        _ -> []
++    end,
++    lists:foreach(fun(User) ->
++                      gproc:send(?DESTROYED_CHANNEL_REG(AccountId, User),
++                                 ?DESTROYED_CHANNEL(CallId, HangupCause))
++                  end, channel_usernames(Keys, JObj)).
++
++%% SIP addresses are optional in channel events (e.g. a local monitor leg).
++%% Only notify users actually identified by the direction-relevant fields;
++%% never invent an identity from a caller ID or suppress another valid field.
++%% Preserve normalized bare usernames accepted by the previous implementation.
++-spec channel_usernames(kz_term:ne_binaries(), kz_json:object()) -> kz_term:ne_binaries().
++channel_usernames(Keys, JObj) ->
++    lists:usort([User || Key <- Keys,
++                        User <- [channel_username(kz_json:get_value(Key, JObj))],
++                        User =/= 'undefined']).
++
++-spec channel_username(any()) -> kz_term:api_binary().
++channel_username(Value) when is_binary(Value), byte_size(Value) > 0 ->
++    case binary:split(Value, <<"@">>, ['global']) of
++        [User, Realm] when byte_size(User) > 0, byte_size(Realm) > 0 -> User;
++        [User] -> User;
++        _ -> 'undefined'
++    end;
++channel_username(_) -> 'undefined'.
+ 
+ -spec handle_originate_resp(kz_json:object(), kz_term:proplist()) -> 'ok'.
+ handle_originate_resp(JObj, Props) ->
 diff --git a/src/acdc_agent_listener.erl b/src/acdc_agent_listener.erl
 index cb204e9..155b206 100644
 --- a/src/acdc_agent_listener.erl

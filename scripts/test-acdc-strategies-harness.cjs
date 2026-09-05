@@ -34,12 +34,18 @@ const source=fs.readFileSync(path.join(__dirname,'test-acdc-strategies-live.cjs'
 assert(source.indexOf("if(args[0]==='--prepare-only')return;")<source.indexOf('await authenticate();'));
 assert(source.includes("'/etc/kazoo/monitor-acceptance.lock'")&&source.includes("contacts(e).length===0"));
 assert(!/systemctl|uuid_kill all|originate |--agent-status/.test(source));
-const fixtureEvent=`RECV EVENT\nEvent-Name: CHANNEL_BRIDGE\nUnique-ID: ${encodeURIComponent(caller)}\nOther-Leg-Unique-ID: agent-leg\nvariable_ecallmgr_Account-ID: ${s.ACCEPTANCE_ACCOUNT_ID}\n\n`;
+assert.deepEqual(h.channelRows({row_count:0}),[]);assert.deepEqual(h.channelRows({row_count:0,rows:[]}),[]);
+assert.deepEqual(h.channelRows({row_count:1,rows:[{uuid:'one'}]}),[{uuid:'one'}]);
+assert.throws(()=>h.channelRows({error:'unavailable'}));assert.throws(()=>h.channelRows({row_count:1,rows:[]}));
+const fixtureEvent='INCOMING DATA [text/event-json]\n'+JSON.stringify({'Event-Name':'CHANNEL_BRIDGE','Unique-ID':caller,'Other-Leg-Unique-ID':'agent-leg',
+    variable_sdp:'v=0\r\n\r\nx={100%}',nested:{quoted:'"}\\'},'variable_ecallmgr_Account-ID':s.ACCEPTANCE_ACCOUNT_ID})+'\n';
 const split=fixtureEvent.length-3,part=fsEvents.extract('banner\n'+fixtureEvent.slice(0,split));assert.equal(part.events.length,0);
 const parsed=fsEvents.extract(part.rest+fixtureEvent.slice(split));assert.equal(parsed.events.length,1);
 assert.equal(fsEvents.partner(parsed.events[0],caller,s.ACCEPTANCE_ACCOUNT_ID),'agent-leg');
 assert.throws(()=>fsEvents.partner(parsed.events[0],caller,id(999)),/scope/);
 const reverse={...parsed.events[0],'Unique-ID':'agent-leg','Other-Leg-Unique-ID':caller};assert.equal(fsEvents.partner(reverse,caller,s.ACCEPTANCE_ACCOUNT_ID),'agent-leg');
+const explicit={'Event-Name':'CHANNEL_BRIDGE','Bridge-A-Unique-ID':'agent-leg','Bridge-B-Unique-ID':caller,'variable_ecallmgr_Account-ID':s.ACCEPTANCE_ACCOUNT_ID};
+assert.equal(fsEvents.partner(explicit,caller,s.ACCEPTANCE_ACCOUNT_ID),'agent-leg');
 
 function invite(id='fixture-call',method='INVITE'){return Buffer.from(`${method} sip:${e.username}@${h.IP}:${e.port} SIP/2.0\r\n`+
     'Via: SIP/2.0/UDP 127.0.0.1:5060;branch=z9hG4bKtest\r\nVia: SIP/2.0/UDP 127.0.0.1:5070;branch=z9hG4bKinner\r\n'+

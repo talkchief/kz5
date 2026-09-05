@@ -1944,6 +1944,7 @@ install_kazoo_apps() {
         configure_kazoo_api_modules
     fi
     install_kazoo_prompts
+    install_acdc_language_packs
     verify_kazoo_apps
 }
 
@@ -2022,6 +2023,49 @@ verify_kazoo_prompts() {
 validate_prompt_documents() {
     jq -e --argjson expected "$1" '.rows | length == $expected and all(.[]; .error == null and .value.deleted != true and ((.doc._attachments // {}) | length > 0) and all(.doc._attachments[]; .length > 0))' >/dev/null
 }
+
+install_acdc_language_packs() (
+    local pack_dir="$KAZOO_BUILD_ROOT/acdc-language-prompts"
+    local speech_dir="$KAZOO_BUILD_ROOT/espeak-ng-1.52.0" receipt
+    if [[ $DRY_RUN == true ]]; then
+        log "Would prepare pinned speech dependencies and import complete EN/AR/HE/ES/FR packs into configured CouchDB ${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}; preserve existing recordings"
+        log 'Language media import does not require local FreeSWITCH or publish runtime readiness'
+        return 0
+    fi
+    install_nodejs_toolchain
+    dnf_install cmake gcc gcc-c++ make git sox
+    bash "$SCRIPT_DIR/prepare-acdc-speech-engine.sh" "$KAZOO_BUILD_ROOT"
+    if ! node "$SCRIPT_DIR/generate-acdc-language-prompts.cjs" --output-dir "$pack_dir" --verify-only >/dev/null 2>&1; then
+        node "$SCRIPT_DIR/generate-acdc-language-prompts.cjs" --output-dir "$pack_dir" \
+            --espeak "$speech_dir/build/src/espeak-ng" --espeak-data "$speech_dir/build"
+    fi
+    receipt=$(mktemp /tmp/kazoo-acdc-language-media.XXXXXX)
+    trap 'rm -f -- "$receipt"' EXIT
+    # Credentials are inherited only by this child, never placed in argv, URLs,
+    # receipts, or public capability artifacts. CouchDB may be a separate host.
+    export KAZOO_COUCHDB_HOST KAZOO_COUCHDB_PORT KAZOO_COUCHDB_USER KAZOO_COUCHDB_PASSWORD
+    node "$SCRIPT_DIR/import-acdc-language-packs.cjs" --import --pack-dir "$pack_dir" >"$receipt"
+    validate_acdc_language_receipt <"$receipt" || die 'Incomplete localized media import receipt'
+    write_file 0644 /usr/local/share/kazoo5-installer/acdc-language-media.json <"$receipt"
+    log 'PASS complete five-language media import; existing audio preserved; runtime capability is a separate gate'
+)
+
+validate_acdc_language_receipt() {
+    jq -e '.schema_version == 1 and .owner == "kazoo5-acdc-media-importer" and .runtime_ready == false
+        and (.languages | keys == ["ar-sa", "en-us", "es-es", "fr-fr", "he-il"])
+        and all(.languages[]; .media_verified == true and .ready == false and .native_speaker_review == false
+            and (.source_catalog_sha256 | test("^[a-f0-9]{64}$"))
+            and (.installed_media_sha256 | test("^[a-f0-9]{64}$")))' >/dev/null
+}
+
+verify_acdc_language_packs() (
+    [[ $DRY_RUN != true ]] || return 0
+    export KAZOO_COUCHDB_HOST KAZOO_COUCHDB_PORT KAZOO_COUCHDB_USER KAZOO_COUCHDB_PASSWORD
+    node "$SCRIPT_DIR/import-acdc-language-packs.cjs" --verify-only \
+        --pack-dir "$KAZOO_BUILD_ROOT/acdc-language-prompts" | validate_acdc_language_receipt || \
+        die 'Complete localized media could not be verified; install kazoo-apps'
+    log 'PASS EN/AR/HE/ES/FR source packs and current installed audio attachments'
+)
 
 configure_kazoo_api_modules() {
     local module output
@@ -2185,6 +2229,7 @@ verify_kazoo_apps() {
     verify_sup_cli
     verify_acdc_interfaces
     verify_kazoo_prompts
+    verify_acdc_language_packs
 }
 
 verify_sup_cli() {
@@ -3527,7 +3572,7 @@ monster_ui_build_fingerprint() {
     fi
 }
 
-install_monster_nodejs() {
+install_nodejs_toolchain() {
     local enabled_stream=
     enabled_stream=$(dnf -q module list nodejs --enabled 2>/dev/null | \
         awk '$1 == "nodejs" {gsub(/[^0-9].*/, "", $2); print $2; exit}')
@@ -3538,11 +3583,16 @@ install_monster_nodejs() {
             run dnf module enable -y "nodejs:${MONSTER_UI_NODE_MAJOR}"
         fi
     fi
-    dnf_install nginx nodejs npm
+    dnf_install nodejs npm
     if [[ $DRY_RUN != true ]]; then
         [[ $(node -p 'process.versions.node.split(".")[0]') == "$MONSTER_UI_NODE_MAJOR" ]] || \
-            die "Monster UI requires Node.js ${MONSTER_UI_NODE_MAJOR}; installed version is $(node --version)"
+            die "Kazoo build tools require Node.js ${MONSTER_UI_NODE_MAJOR}; installed version is $(node --version)"
     fi
+}
+
+install_monster_nodejs() {
+    install_nodejs_toolchain
+    dnf_install nginx
 }
 
 sync_monster_ui_sources() {
@@ -3766,6 +3816,12 @@ server {
         proxy_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;
     }
 
+    location = /apps/acdc/language-capabilities.json {
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        try_files \$uri =404;
+    }
+
     location / {
         try_files \$uri \$uri/ /index.html;
     }
@@ -3787,6 +3843,12 @@ server {
     root ${MONSTER_UI_WEB_ROOT};
     index index.html;
 
+    location = /apps/acdc/language-capabilities.json {
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        try_files \$uri =404;
+    }
+
     location / {
         try_files \$uri \$uri/ /index.html;
     }
@@ -3796,8 +3858,11 @@ EOF
 }
 
 verify_monster_ui_transport() {
-    local redirect
+    local redirect capability_url capability_status expected_capability_status=404
+    local -a capability_resolve=()
     if [[ -n $KAZOO_PUBLIC_HOSTNAME ]]; then
+        capability_url="https://${KAZOO_PUBLIC_HOSTNAME}/apps/acdc/language-capabilities.json"
+        capability_resolve=(--resolve "${KAZOO_PUBLIC_HOSTNAME}:443:127.0.0.1")
         curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
             --resolve "${KAZOO_PUBLIC_HOSTNAME}:443:127.0.0.1" \
             "https://${KAZOO_PUBLIC_HOSTNAME}/" | grep -i '<html' >/dev/null || \
@@ -3811,15 +3876,40 @@ verify_monster_ui_transport() {
             die 'nginx TLS private key must be root-owned with mode 0600'
         log "PASS HTTPS certificate, hostname, content, and HTTP redirect: ${KAZOO_PUBLIC_HOSTNAME}"
     else
+        capability_url=http://127.0.0.1/apps/acdc/language-capabilities.json
         curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
             http://127.0.0.1/ | grep -i '<html' >/dev/null || die 'Monster UI HTTP content check failed'
     fi
+    if [[ -e $MONSTER_UI_WEB_ROOT/apps/acdc/language-capabilities.json ]]; then
+        monster_language_capability_hash >/dev/null || die 'Invalid installed language capability file'
+        expected_capability_status=200
+    fi
+    capability_status=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+        "${capability_resolve[@]}" --output /dev/null --write-out '%{http_code}' "$capability_url") || \
+        die 'Monster UI language capability route is unreachable'
+    [[ $capability_status == "$expected_capability_status" ]] || \
+        die 'Language capability route must return its actual file or HTTP 404, never the HTML application fallback'
+}
+
+monster_language_capability_hash() {
+    node - "$SCRIPT_DIR/validate-acdc-language-capabilities.cjs" \
+        "$MONSTER_UI_WEB_ROOT/apps/acdc/language-capabilities.json" <<'JS'
+const fs = require('node:fs'), crypto = require('node:crypto'), assert = require('node:assert/strict');
+const [validator, file] = process.argv.slice(2);
+if (!fs.existsSync(file)) { console.log('absent'); process.exit(0); }
+const stat = fs.lstatSync(file);
+assert(stat.isFile() && !stat.isSymbolicLink() && stat.uid === 0 && (stat.mode & 0o022) === 0 && stat.size <= 131072,
+    'Runtime language readiness must be a protected root-owned regular file');
+const bytes = fs.readFileSync(file);
+require(validator).assertLanguageCapabilities(JSON.parse(bytes.toString('utf8')));
+console.log(crypto.createHash('sha256').update(bytes).digest('hex'));
+JS
 }
 
 install_monster_ui() {
     local source_dir="$KAZOO_BUILD_ROOT/monster-ui"
     local marker=/usr/local/share/kazoo5-installer/monster-ui-build
-    local expected_build installed_build=
+    local expected_build installed_build='' runtime_capability_hash
     log 'Installing and building Monster UI source tag 5.5.13 with the pinned Kazoo app bundle'
     install_monster_nodejs
     expected_build=$(monster_ui_build_fingerprint)
@@ -3840,8 +3930,16 @@ install_monster_ui() {
                 [[ -s $source_dir/dist/apps/$app/metadata/app.json ]] || \
                     die "Monster UI production build omitted ${app} metadata"
             done
+            [[ ! -e $source_dir/dist/apps/acdc/language-capabilities.json && \
+               ! -L $source_dir/dist/apps/acdc/language-capabilities.json ]] || \
+                die 'A Monster UI build must not manufacture runtime language readiness'
+            runtime_capability_hash=$(monster_language_capability_hash) || \
+                die 'Existing runtime language capability is invalid; refusing web replacement'
             mkdir -p "$MONSTER_UI_WEB_ROOT"
-            rsync -a --delete "$source_dir/dist/" "$MONSTER_UI_WEB_ROOT/"
+            rsync -a --delete --exclude='/apps/acdc/language-capabilities.json' \
+                "$source_dir/dist/" "$MONSTER_UI_WEB_ROOT/"
+            [[ $(monster_language_capability_hash) == "$runtime_capability_hash" ]] || \
+                die 'Runtime language capability changed during the web deployment; reverify before activation'
             if command -v restorecon >/dev/null; then
                 restorecon -RF "$MONSTER_UI_WEB_ROOT" || true
             fi

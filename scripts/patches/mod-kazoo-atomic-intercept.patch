@@ -1,0 +1,190 @@
+diff --git a/kazoo_intercept.h b/kazoo_intercept.h
+new file mode 100644
+--- /dev/null
++++ b/kazoo_intercept.h
+@@ -0,0 +1,142 @@
++/* MPL-1.1. ACDC's first answered agent owns the target until its session ends.
++ * Included once by kazoo_dptools.c; no global UUID registry or per-call hooks.
++ */
++#define KZ_INTERCEPT_KEY "kazoo_intercept_claim_v1"
++#define KZ_INTERCEPT_TOKEN_VAR "kz_intercept_claim_token"
++#define KZ_INTERCEPT_ID_MAX 192
++
++typedef struct {
++	char owner[KZ_INTERCEPT_ID_MAX + 1];
++	char token[SWITCH_UUID_FORMATTED_LENGTH + 1];
++} kz_intercept_claim_t;
++
++static switch_mutex_t *kz_intercept_mutex;
++static switch_event_node_t *kz_intercept_destroy_binding;
++static int kz_intercept_running;
++
++static int kz_intercept_id_valid(const char *id)
++{
++	size_t n;
++	if (!id || !(n = strlen(id)) || n > KZ_INTERCEPT_ID_MAX) return 0;
++	for (; *id; id++) {
++		if (!((*id >= 'a' && *id <= 'z') || (*id >= 'A' && *id <= 'Z') ||
++			  (*id >= '0' && *id <= '9') || strchr("_.:@-", *id))) return 0;
++	}
++	return 1;
++}
++
++/* All access to target-owned claim memory is under this mutex AND a target
++ * session read lock. It is one fixed allocation per target, freed by its pool.
++ * Never infer death from session_locate(NULL): locate uses a fallible trylock.
++ */
++static void kz_intercept_release(switch_channel_t *target, const char *owner, const char *token)
++{
++	kz_intercept_claim_t *claim;
++	switch_mutex_lock(kz_intercept_mutex);
++	claim = switch_channel_get_private(target, KZ_INTERCEPT_KEY);
++	if (claim && !strcmp(claim->owner, owner) && !strcmp(claim->token, token)) {
++		claim->owner[0] = claim->token[0] = '\0';
++	}
++	switch_mutex_unlock(kz_intercept_mutex);
++}
++
++static void kz_intercept_destroy(switch_event_t *event)
++{
++	const char *owner = switch_event_get_header(event, "Unique-ID");
++	const char *member = switch_event_get_header(event, "variable_ecallmgr_Member-Call-ID");
++	const char *account = switch_event_get_header(event, "variable_ecallmgr_Account-ID");
++	const char *token = switch_event_get_header(event, "variable_" KZ_INTERCEPT_TOKEN_VAR);
++	switch_core_session_t *target_session;
++	switch_channel_t *target;
++	if (!kz_intercept_id_valid(owner) || !kz_intercept_id_valid(member) ||
++		zstr(account) || zstr(token)) return;
++	/* No module mutex is held while entering FreeSWITCH's session hash/locks. */
++	if (!(target_session = switch_core_session_locate(member))) return;
++	target = switch_core_session_get_channel(target_session);
++	if (!strcmp(account, switch_str_nil(switch_channel_get_variable(target, "ecallmgr_Account-ID")))) {
++		kz_intercept_release(target, owner, token);
++	}
++	switch_core_session_rwunlock(target_session);
++}
++
++SWITCH_STANDARD_APP(kz_intercept_function)
++{
++	switch_channel_t *channel = switch_core_session_get_channel(session), *target;
++	switch_core_session_t *target_session;
++	kz_intercept_claim_t *claim;
++	const char *owner = switch_core_session_get_uuid(session);
++	const char *account = switch_channel_get_variable(channel, "ecallmgr_Account-ID");
++	const char *agent = switch_channel_get_variable(channel, "ecallmgr_Agent-ID");
++	const char *member = switch_channel_get_variable(channel, "ecallmgr_Member-Call-ID");
++	const char *previous_token = switch_channel_get_variable(channel, KZ_INTERCEPT_TOKEN_VAR);
++	char token[SWITCH_UUID_FORMATTED_LENGTH + 1];
++	int acquired = 0;
++	if (!kz_intercept_id_valid(data) || !kz_intercept_id_valid(owner) ||
++		!strcmp(data, owner) || zstr(account) || zstr(agent) || zstr(member) || strcmp(data, member)) {
++		switch_channel_hangup(channel, SWITCH_CAUSE_CALL_REJECTED);
++		return;
++	}
++	if (!(target_session = switch_core_session_locate(data))) {
++		switch_channel_hangup(channel, SWITCH_CAUSE_NO_ROUTE_DESTINATION);
++		return;
++	}
++	target = switch_core_session_get_channel(target_session);
++	if (strcmp(account, switch_str_nil(switch_channel_get_variable(target, "ecallmgr_Account-ID")))) {
++		switch_core_session_rwunlock(target_session);
++		switch_channel_hangup(channel, SWITCH_CAUSE_CALL_REJECTED);
++		return;
++	}
++	switch_uuid_str(token, sizeof(token));
++	/* The nonce protects a reused UUID from an old delayed destroy event. */
++	switch_mutex_lock(kz_intercept_mutex);
++	if (kz_intercept_running && switch_channel_up(channel) && switch_channel_up(target)) {
++		claim = switch_channel_get_private(target, KZ_INTERCEPT_KEY);
++		if (!claim && !switch_channel_test_flag(target, CF_BRIDGED)) {
++			claim = switch_core_session_alloc(target_session, sizeof(*claim));
++			if (claim) switch_channel_set_private(target, KZ_INTERCEPT_KEY, claim);
++		}
++		if (claim && !claim->owner[0] && !switch_channel_test_flag(target, CF_BRIDGED)) {
++			switch_copy_string(claim->owner, owner, sizeof(claim->owner));
++			switch_copy_string(claim->token, token, sizeof(claim->token));
++			switch_channel_set_variable(channel, KZ_INTERCEPT_TOKEN_VAR, token);
++			acquired = 1;
++		} else if (claim && !strcmp(claim->owner, owner) && !zstr(previous_token) && !strcmp(claim->token, previous_token)) {
++			/* Duplicate execution by the same live session is a no-op, not a
++			 * second core intercept or a self-inflicted losing-race hangup. */
++			acquired = 2;
++		}
++	}
++	switch_mutex_unlock(kz_intercept_mutex);
++	if (acquired == 1) {
++		switch_channel_set_variable(channel, "intercept_unbridged_only", "true");
++		if (switch_ivr_intercept_session(session, data, SWITCH_FALSE) != SWITCH_STATUS_SUCCESS) {
++			kz_intercept_release(target, owner, token);
++			switch_channel_hangup(channel, SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
++		}
++	} else if (!acquired) {
++		/* Only this answered losing agent is terminated; never touch its target. */
++		switch_channel_hangup(channel, SWITCH_CAUSE_LOSE_RACE);
++	}
++	switch_core_session_rwunlock(target_session);
++}
++
++static void kz_intercept_start(void)
++{
++	switch_mutex_init(&kz_intercept_mutex, SWITCH_MUTEX_NESTED, kazoo_globals.pool);
++	if (switch_event_bind_removable("kazoo_intercept", SWITCH_EVENT_CHANNEL_DESTROY,
++		SWITCH_EVENT_SUBCLASS_ANY, kz_intercept_destroy, NULL, &kz_intercept_destroy_binding) == SWITCH_STATUS_SUCCESS) {
++		kz_intercept_running = 1;
++	}
++}
++
++void remove_kz_dptools(void)
++{
++	/* Unbinding synchronizes with in-flight event callbacks. No callback or
++ * per-session function pointer remains after module shutdown. Existing plain
++ * claim data has target-pool lifetime; deployments require a zero-call gate.
++ */
++	switch_mutex_lock(kz_intercept_mutex);
++	kz_intercept_running = 0;
++	switch_mutex_unlock(kz_intercept_mutex);
++	if (kz_intercept_destroy_binding) switch_event_unbind(&kz_intercept_destroy_binding);
++}
+diff --git a/kazoo_dptools.c b/kazoo_dptools.c
+--- a/kazoo_dptools.c
++++ b/kazoo_dptools.c
+@@ -31,6 +31,7 @@
+  *
+  */
+ #include "mod_kazoo.h"
++#include "kazoo_intercept.h"
+ 
+ #define SET_SHORT_DESC "Set a channel variable"
+ #define SET_LONG_DESC "Set a channel variable for the channel calling the application."
+@@ -980,6 +981,8 @@
+ 
+ void add_kz_dptools(switch_loadable_module_interface_t **module_interface) {
+ 	switch_application_interface_t *app_interface = NULL;
++	kz_intercept_start();
++	SWITCH_ADD_APP(app_interface, "kz_intercept", "Atomic ACDC pickup", "Claim and bridge one same-account ACDC member", kz_intercept_function, "<member-uuid>", SAF_SUPPORT_NOMEDIA);
+ 	SWITCH_ADD_APP(app_interface, "kz_set", SET_SHORT_DESC, SET_LONG_DESC, set_function, SET_SYNTAX, SAF_SUPPORT_NOMEDIA | SAF_ROUTING_EXEC | SAF_ZOMBIE_EXEC);
+ 	SWITCH_ADD_APP(app_interface, "kz_set_encoded", SET_SHORT_DESC, SET_LONG_DESC, set_encoded_function, SET_SYNTAX, SAF_SUPPORT_NOMEDIA | SAF_ROUTING_EXEC | SAF_ZOMBIE_EXEC);
+ 	SWITCH_ADD_APP(app_interface, "kz_multiset", MULTISET_SHORT_DESC, MULTISET_LONG_DESC, multiset_function, MULTISET_SYNTAX, SAF_SUPPORT_NOMEDIA | SAF_ROUTING_EXEC | SAF_ZOMBIE_EXEC);
+diff --git a/mod_kazoo.h b/mod_kazoo.h
+--- a/mod_kazoo.h
++++ b/mod_kazoo.h
+@@ -34,6 +34,7 @@
+ 
+ /* kazoo_dptools.c */
+ void add_kz_dptools(switch_loadable_module_interface_t **module_interface);
++void remove_kz_dptools(void);
+ 
+ /* kazoo_api.c */
+ void add_cli_api(switch_loadable_module_interface_t **module_interface);
+diff --git a/mod_kazoo.c b/mod_kazoo.c
+--- a/mod_kazoo.c
++++ b/mod_kazoo.c
+@@ -90,7 +90,8 @@
+ 
+ 	remove_cli_api();
+ 	remove_kz_commands();
++	remove_kz_dptools();
+ 
+ 	kz_cdr_stop();
+ 
+ 	kz_tweaks_stop();

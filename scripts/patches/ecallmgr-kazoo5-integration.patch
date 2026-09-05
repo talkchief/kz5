@@ -189,6 +189,35 @@ index 61563d7..cd4c119 100644
      _ = kz_log:put_callid(JObj),
      Arg = #{node => props:get_value('node', Props)
             ,queue => props:get_value('self', Props)
+diff --git a/src/ecallmgr_fs_xml.erl b/src/ecallmgr_fs_xml.erl
+index db15c93..06e1501 100644
+--- a/src/ecallmgr_fs_xml.erl
++++ b/src/ecallmgr_fs_xml.erl
+@@ -312,7 +312,11 @@ route_resp_xml(<<"bridge">>, Routes, JObj, DialplanContext) ->
+     FailExtEl = extension_el(<<"failed_bridge">>, <<"false">>, [FailConditionEl]),
+ 
+     Context = context(JObj, DialplanContext),
+-    ContextContent = Actions ++ maybe_unset_custom_sip_headers() ++ Extensions ++ [FailExtEl],
++    %% FreeSWITCH hunts extensions, not actions directly under a context.
++    %% Queue progress and setup before the route attempts, then keep hunting.
++    Setup = condition_el(Actions ++ maybe_unset_custom_sip_headers()),
++    SetupExtEl = extension_el(<<"bridge_setup">>, <<"true">>, [Setup]),
++    ContextContent = [SetupExtEl] ++ Extensions ++ [FailExtEl],
+     ContextEl = context_el(Context, ContextContent),
+     SectionEl = section_el(<<"dialplan">>, <<"Route Bridge Response">>, ContextEl),
+     {'ok', xmerl:export([SectionEl], 'fs_xml')};
+@@ -545,7 +549,10 @@ route_resp_pre_park_action(JObj) ->
+ route_resp_progress(JObj) ->
+     case kz_json:is_true(<<"Ignore-Progress">>, JObj, 'false') of
+         'true' -> 'undefined';
+-        'false' -> action_el(<<"ring_ready">>, 'undefined', 'true')
++        %% ring_ready is not SAF_ROUTING_EXEC in supported FreeSWITCH builds.
++        %% As the first normal action it still sends progress before park or
++        %% bridge without trying to execute it during XML dialplan hunting.
++        'false' -> action_el(<<"ring_ready">>)
+     end.
+ 
+ -spec maybe_start_dtmf_action(dialplan_context()) -> 'undefined' | kz_types:xml_el().
 diff --git a/src/ecallmgr_originate.erl b/src/ecallmgr_originate.erl
 index 259991e..8d1bb04 100644
 --- a/src/ecallmgr_originate.erl
@@ -600,18 +629,24 @@ index 00aab62..c71d788 100644
              timer:sleep(?MILLISECONDS_IN_SECOND),
 diff --git a/src/ecallmgr_call_monitor.erl b/src/ecallmgr_call_monitor.erl
 new file mode 100644
-index 0000000..790be6a
+index 0000000..c9745e0
 --- /dev/null
 +++ b/src/ecallmgr_call_monitor.erl
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,252 @@
 +%%% Narrow account/correlation guard for Crossbar supervisor calls.
 +%%% This Source Code Form is subject to the Mozilla Public License, v. 2.0.
 +-module(ecallmgr_call_monitor).
 +-export([guard/2, operation/1, stop/2, action/1, ready_headers/1, execute_matches/2]).
 +-ifdef(TEST).
-+-export([matches_channel/3, valid_request/2]).
++-export([matches_channel/3, valid_request/2, stop_result/3]).
 +-endif.
 +-include("ecallmgr.hrl").
++
++%% Crossbar's correlated AMQP wait is 5000 ms. Keep the entire FS stop proof
++%% below that deadline, including the initial authorization and every poll.
++-define(STOP_BUDGET_MS, 3000).
++-define(STOP_API_TIMEOUT_MS, 750).
++-define(STOP_POLL_MS, 50).
 +
 +-spec operation(kz_json:object()) -> any().
 +operation(J) -> kz_json:get_value(<<"Monitor-Operation">>, J).
@@ -692,14 +727,22 @@ index 0000000..790be6a
 +
 +-spec matches_channel(kz_json:object(), atom(), kz_term:proplist()) -> boolean().
 +matches_channel(J, Kind, Props) ->
++    matches_identity(J, Kind, Props)
++        andalso active_state(props:get_value(<<"Channel-State">>, Props)).
++
++-spec active_state(any()) -> boolean().
++active_state(State) ->
++    lists:member(State, [<<"CS_NEW">>, <<"CS_INIT">>, <<"CS_ROUTING">>, <<"CS_SOFT_EXECUTE">>
++                        ,<<"CS_EXECUTE">>, <<"CS_EXCHANGE_MEDIA">>, <<"CS_PARK">>
++                        ,<<"CS_CONSUME_MEDIA">>, <<"CS_HIBERNATE">>, <<"CS_RESET">>]).
++
++-spec matches_identity(kz_json:object(), atom(), kz_term:proplist()) -> boolean().
++matches_identity(J, Kind, Props) ->
 +    Account = kz_json:get_value(<<"Monitor-Account-ID">>, J),
 +    Id = kz_json:get_value(<<"Eavesdrop-Call-ID">>, J),
-+    Base = props:get_value(<<"Unique-ID">>, Props) =:= Id
-+        andalso props:get_value(?GET_CCV(<<"Account-ID">>), Props) =:= Account
-+        andalso lists:member(props:get_value(<<"Channel-State">>, Props)
-+                             ,[<<"CS_NEW">>, <<"CS_INIT">>, <<"CS_ROUTING">>, <<"CS_SOFT_EXECUTE">>
-+                              ,<<"CS_EXECUTE">>, <<"CS_EXCHANGE_MEDIA">>, <<"CS_PARK">>
-+                              ,<<"CS_CONSUME_MEDIA">>, <<"CS_HIBERNATE">>, <<"CS_RESET">>]),
++    Base = length(Props) =:= length(lists:ukeysort(1, Props))
++        andalso props:get_value(<<"Unique-ID">>, Props) =:= Id
++        andalso props:get_value(?GET_CCV(<<"Account-ID">>), Props) =:= Account,
 +    Base andalso case Kind of
 +        'target' -> 'true';
 +        'supervisor' ->
@@ -712,18 +755,97 @@ index 0000000..790be6a
 +-spec stop(atom(), kz_json:object()) -> 'ok'.
 +stop(Node, J) ->
 +    Id = kz_json:get_value(<<"Outbound-Call-ID">>, J),
-+    Result = case valid_request(Node, J) andalso live_matches(Node, J, 'supervisor') of
-+        'true' ->
-+            case freeswitch:api(Node, 'uuid_kill', <<Id/binary, " NORMAL_CLEARING">>) of
-+                {'ok', <<"+OK", _/binary>>} -> <<"MONITOR_STOPPED">>;
-+                _ -> <<"MONITOR_STOP_FAILED">>
-+            end;
-+        'false' -> <<"MONITOR_STOP_DENIED">>
-+    end,
++    Result = stop_result(Node, J, ?STOP_BUDGET_MS),
 +    Resp = [{<<"Call-ID">>, Id}, {<<"Msg-ID">>, kz_api:msg_id(J)}
 +            ,{<<"Monitor-Request-ID">>, kz_json:get_value(<<"Monitor-Request-ID">>, J)}
 +            ,{<<"Application-Response">>, Result} | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
 +    kapi_resource:publish_originate_resp(kz_api:server_id(J), Resp).
++
++-spec stop_result(atom(), kz_json:object(), pos_integer()) -> binary().
++stop_result(Node, J, Budget) ->
++    Deadline = erlang:monotonic_time('millisecond') + Budget,
++    case valid_request(Node, J) andalso operation(J) =:= <<"stop">> of
++        'false' -> <<"MONITOR_STOP_DENIED">>;
++        'true' ->
++            Id = kz_json:get_value(<<"Outbound-Call-ID">>, J),
++            case stop_snapshot(Node, Id, Deadline) of
++                {'ok', Props} ->
++                    case matches_channel(J, 'supervisor', Props) of
++                        'true' -> stop_verified_supervisor(Node, J, Id, Props, Deadline);
++                        'false' -> <<"MONITOR_STOP_DENIED">>
++                    end;
++                _ -> <<"MONITOR_STOP_DENIED">>
++            end
++    end.
++
++-spec stop_verified_supervisor(atom(), kz_json:object(), binary(), kz_term:proplist(), integer()) -> binary().
++stop_verified_supervisor(Node, J, Id, Props, Deadline) ->
++    %% mod_kazoo strips '+OK\n' to atom 'ok'; do not prefix-match arbitrary
++    %% text as success. Even an acknowledged kill is not disappearance proof.
++    Kill = stop_api(Node, 'uuid_kill', <<Id/binary, " NORMAL_CLEARING">>, Deadline),
++    case (Kill =:= 'ok' orelse Kill =:= {'ok', <<>>})
++        andalso wait_supervisor_absent(Node, J, Id, Props, Deadline)
++    of
++        'true' -> <<"MONITOR_STOPPED">>;
++        'false' -> <<"MONITOR_STOP_FAILED">>
++    end.
++
++-spec wait_supervisor_absent(atom(), kz_json:object(), binary(), kz_term:proplist(), integer()) -> boolean().
++wait_supervisor_absent(Node, J, Id, Original, Deadline) ->
++    case stop_api(Node, 'uuid_exists', Id, Deadline) of
++        {'ok', 'false'} -> 'true';
++        {'ok', 'true'} ->
++            case stop_snapshot(Node, Id, Deadline) of
++                {'ok', Props} ->
++                    State = props:get_value(<<"Channel-State">>, Props),
++                    %% A still-present UUID must retain the original identity.
++                    %% Never kill again: a reused/mutated UUID fails closed.
++                    Same = matches_identity(J, 'supervisor', Props)
++                        andalso lists:keydelete(<<"Channel-State">>, 1, lists:sort(Props))
++                            =:= lists:keydelete(<<"Channel-State">>, 1, lists:sort(Original)),
++                    Same andalso (active_state(State) orelse lists:member(State, [<<"CS_HANGUP">>, <<"CS_REPORTING">>, <<"CS_DESTROY">>]))
++                        andalso poll_supervisor_absent(Node, J, Id, Original, Deadline);
++                {'error', <<"No such channel!">>} ->
++                    %% The session can vanish between exists and dump. This
++                    %% error alone is not proof; require a new exact exists=false.
++                    poll_supervisor_absent(Node, J, Id, Original, Deadline);
++                _ -> 'false'
++            end;
++        _ -> 'false'
++    end.
++
++-spec poll_supervisor_absent(atom(), kz_json:object(), binary(), kz_term:proplist(), integer()) -> boolean().
++poll_supervisor_absent(Node, J, Id, Original, Deadline) ->
++    case Deadline - erlang:monotonic_time('millisecond') of
++        Remaining when Remaining > 0 ->
++            receive after min(?STOP_POLL_MS, Remaining) -> 'ok' end,
++            wait_supervisor_absent(Node, J, Id, Original, Deadline);
++        _ -> 'false'
++    end.
++
++-spec stop_snapshot(atom(), binary(), integer()) -> {'ok', kz_term:proplist()} | {'error', any()}.
++stop_snapshot(Node, Id, Deadline) ->
++    case stop_api(Node, 'uuid_dump', Id, Deadline) of
++        {'ok', Dump} when is_binary(Dump) ->
++            try {'ok', dump_props(Dump)} catch _:_ -> {'error', 'invalid_dump'} end;
++        {'error', _} = Error -> Error;
++        _ -> {'error', 'invalid_dump'}
++    end.
++
++-spec stop_api(atom(), atom(), binary(), integer()) -> any().
++stop_api(Node, Command, Args, Deadline) ->
++    case Deadline - erlang:monotonic_time('millisecond') of
++        Remaining when Remaining > 0 ->
++            try freeswitch:api(Node, Command, Args, min(?STOP_API_TIMEOUT_MS, Remaining)) of
++                Result ->
++                    case erlang:monotonic_time('millisecond') < Deadline of
++                        'true' -> Result;
++                        'false' -> {'error', 'timeout'}
++                    end
++            catch _:_ -> {'error', 'exception'}
++            end;
++        _ -> {'error', 'timeout'}
++    end.
 +
 +%% WRITE mixes into audio sent toward the exact selected target leg (agent).
 +%% READ would leak supervisor speech toward that leg's bridged customer.

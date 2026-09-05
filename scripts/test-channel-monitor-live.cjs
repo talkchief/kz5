@@ -89,10 +89,16 @@ function command(file,args,timeout=15000) {
 async function request(method,route,body,token,expected=200) {
     let r,j;
     try {
-        r=await fetch(API+'/'+route,{method,headers:{'Content-Type':'application/json',...(token?{'X-Auth-Token':token}:{})},
+        // Synchronous SIPp/FS commands can keep this event loop blocked beyond
+        // Cowboy's idle keep-alive deadline. Do not reuse such sockets or
+        // automatically retry mutating requests after an ambiguous response.
+        r=await fetch(API+'/'+route,{method,headers:{'Content-Type':'application/json','Connection':'close',...(token?{'X-Auth-Token':token}:{})},
             body:body===undefined?undefined:JSON.stringify({data:body}),signal:AbortSignal.timeout(15000)});
         j=await r.json();
-    } catch(_) {throw Error('Local Crossbar response unavailable');}
+    } catch(error) {
+        const kind=[error.name,error.cause?.code].filter(v=>typeof v==='string'&&/^[A-Za-z0-9_]+$/.test(v)).join('/');
+        throw Error(`Local Crossbar response unavailable: ${method} ${route.split('?')[0]} (${kind||'unknown'})`);
+    }
     const accepted=Array.isArray(expected)?expected:[expected];
     if(!accepted.includes(r.status)) {
         const error=Error(`Expected HTTP${expected}, received${r.status} for ${method}`);
@@ -192,7 +198,8 @@ function registration(e,expiry) {
 function spawnPhone(e,scenario,csv) {
     const args=[...(e.role==='customer'?[state.ACCEPTANCE_SIP_PROXY_HOST+':5060']:[]),'-sf',path.join(SCENARIOS,scenario),'-inf',csv,
         '-i',audio.IP,'-p',String(e.port),'-mi',audio.IP,'-mp',String(e.rtp),'-min_rtp_port',String(e.rtp),'-max_rtp_port',String(e.rtp+1),
-        '-m','1','-l','1','-nostdin','-aa','-timeout','150s','-timeout_error'];
+        '-m','1','-l','1','-nostdin','-aa','-timeout','150s','-timeout_error',
+        '-trace_shortmsg','-shortmessage_file',csv.replace(/\.csv$/,'-sip.tsv')];
     const child=cp.spawn('sipp',args,{stdio:'ignore'});children.add(child);child.once('exit',()=>children.delete(child));return child;
 }
 function channel(id) {
@@ -233,12 +240,25 @@ function originalAlive() {
     assert(ownedChannel(a,es[0])&&ownedChannel(b,es[1])&&a.bridge===b.id&&b.bridge===a.id&&a.answered&&b.answered,
         'Original two-leg bridge did not survive monitoring');return true;
 }
-async function stopSupervisor() {
-    if(!current?.supervisor_id)return;
-    const c=channel(current.supervisor_id);if(!c)return;
+async function stopSupervisor(requireLive=false) {
+    if(!current?.supervisor_id){assert(!requireLive,'Missing supervisor stop identity');return;}
+    const c=channel(current.supervisor_id);if(!c){assert(!requireLive,'Supervisor vanished before stop API proof');return;}
     assert(monitorMatches(c),'Cannot stop unowned supervisor');
     await request('POST',route('channels',c.id),{action:'stop_monitoring',request_id:current.request_id},adminToken,202);
     await until(()=>!channel(c.id),8);
+    return 202;
+}
+function ringingEvidence(text,callId) {
+    assert(CALL.test(callId),'Invalid ringing evidence call ID');
+    const rows=text.split('\n').map(line=>line.split('\t')).map(row=>
+        row.length===7&&/^\d{4}-\d{2}-\d{2}$/.test(row[0])&&/^\d{2}:\d{2}:\d{2}\.\d+$/.test(row[1])&&Number(row[2])>0?
+            [row[0]+'T'+row[1]+'Z',...row.slice(3)]:row).filter(row=>row.length===5&&row[1]==='R'&&
+        row[2]===callId&&/^CSeq:[1-9][0-9]* INVITE$/.test(row[3]));
+    const ringing=rows.findIndex(row=>/^SIP\/2\.0 180(?: |$)/.test(row[4]));
+    const answered=rows.findIndex(row=>/^SIP\/2\.0 200(?: |$)/.test(row[4]));
+    assert(ringing>=0&&answered>ringing,'Exact caller must receive SIP180 before SIP200');
+    assert(rows[ringing][3]===rows[answered][3],'Ringing and answer transaction mismatch');
+    return {caller_received_180_before_200:true,ringing_at:rows[ringing][0],answered_at:rows[answered][0]};
 }
 function terminate(child) {if(child&&child.exitCode===null&&!child.killed)child.kill('SIGINT');}
 async function clearStage() {
@@ -293,13 +313,16 @@ async function stage(mode) {
     await until(()=>{const c=channel(current.supervisor_id);return c&&monitorMatches(c)&&c.answered;});
     await request('POST',route('channels',target.id),{action:'stop_monitoring',request_id:current.request_id},adminToken,403);
     await sleep(12500);originalAlive();
-    await stopSupervisor();originalAlive();await sleep(2500);originalAlive();
+    const stopped=await stopSupervisor(true);originalAlive();await sleep(2500);originalAlive();
     terminate(tcpdump);await until(()=>tcpdump.exitCode!==null,5);fs.chmodSync(capture,384);
     const buffer=fs.readFileSync(capture), ps=audio.packets(buffer);
     const digit=ps.find(p=>p.source===audio.IP&&p.sp===49004&&p.pt===96&&p.payload[0]===3);
     assert(digit,'No explicit keypad escalation packet observed');
     const proof=audio.inspect(buffer,mode,[{start:digit.time-3,end:digit.time-1},{start:digit.time+2,end:digit.time+5}]);
     proof.authorization_negatives=['cross_account403','non_admin403','stale404','extra_route400','stop_original403'];
+    proof.call_ids={account_id:state.ACCEPTANCE_ACCOUNT_ID,...current};
+    proof.supervisor_stop_http_status=stopped;
+    proof.sip_ringing=ringingEvidence(fs.readFileSync(input.customer.replace(/\.csv$/,'-sip.tsv'),'utf8'),current.caller_id);
     proof.original_bridge_survived_monitor_stop=true;
     writePrivate(mode+'-evidence.json',JSON.stringify(proof,null,2)+'\n');
     await clearStage();
@@ -392,5 +415,5 @@ async function main(args) {
         log('All four modes passed. Private synthetic evidence: '+runDir);
     } finally {lock.stdin.end();terminate(lock);}
 }
-module.exports={baseState,endpoints,validFixture,ownedChannel,ownedUser,MASTER,OWNER};
+module.exports={baseState,endpoints,validFixture,ownedChannel,ownedUser,ringingEvidence,MASTER,OWNER};
 if(require.main===module)main(process.argv.slice(2)).catch(e=>{console.error('[monitor-acceptance] FAIL: '+e.message);process.exitCode=1;});

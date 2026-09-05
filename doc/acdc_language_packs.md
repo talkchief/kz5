@@ -4,9 +4,10 @@ Canonical locales are `en-us`, `ar-sa`, `he-il`, `es-es`, and `fr-fr`.
 The language dropdown must use the installer-verified capability artifact;
 source files or a single media attachment do not establish runtime support.
 
-This is staged implementation, not an enabled installer feature. The current
-installer does **not** automatically import these new packs, publish their
-capabilities, or activate the new backend mappings. The supplemental
+The applications installer now prepares the pinned speech dependencies and
+imports the complete media packs, including when CouchDB is on a separate host.
+It does **not** yet publish runtime capabilities or activate the new backend
+mappings. The supplemental
 `scripts/patches/acdc-language-runtime.patch` is deliberately separate from the
 installer's main ACDC integration patch until full media verification is done.
 Do not apply that supplemental patch to a running release before importing the
@@ -37,12 +38,29 @@ node scripts/generate-acdc-language-prompts.cjs \
 bash scripts/test-acdc-languages.sh
 node scripts/test-acdc-language-catalog.cjs
 node scripts/test-acdc-language-generator.cjs
+node scripts/test-acdc-language-import.cjs
 ```
 
 `--only-fixed` produces a small preview and deliberately leaves Arabic/Hebrew
 packs incomplete. Generation never imports media or publishes runtime readiness.
 Every WAV is verified as non-silent, unclipped, mono 8-kHz PCM16, with a bounded
 duration and SHA-256 digest. Existing unowned output recordings are not replaced.
+
+`scripts/import-acdc-language-packs.cjs --import --pack-dir ABSOLUTE` imports
+only missing recordings into `system_media`; `--verify-only` makes no writes.
+It inherits `KAZOO_COUCHDB_HOST`, `KAZOO_COUCHDB_PORT`, `KAZOO_COUCHDB_USER`, and
+`KAZOO_COUCHDB_PASSWORD` from the installer's protected configuration. Do not put
+credentials in command-line arguments. Standalone CouchDB needs no local
+FreeSWITCH or web server for this media step.
+
+Metadata and audio are written in one revision-conditional request, using
+[CouchDB's document revision and attachment semantics](https://docs.couchdb.org/en/stable/api/document/common.html).
+If another writer installs a recording first, it is preserved. Existing deleted,
+conflicted, foreign-type, or malformed media fails verification rather than
+being replaced. Installed-media proof hashes use the actual attachment digests,
+not the generator's WAV hashes, so preserved custom audio is represented.
+The media-only receipt is `acdc-language-media.json` in the installer state
+directory. It always says `runtime_ready:false`; it is not the UI capability file.
 
 Speech uses the formant synthesizer from [eSpeak NG 1.52.0](https://github.com/espeak-ng/espeak-ng/releases/tag/1.52.0),
 pinned to `4870adfa25b1a32b4361592f1be8a40337c58d6c`, licensed GPL-3.0-or-later.
@@ -84,3 +102,41 @@ The 29 user-facing IDs come from `catalog(locale).prompts` entries with
 lists before applying pagination/size limits, then use the verified capability
 artifact for numeric-pack completeness. Missing or invalid artifacts must not
 advertise new languages as supported.
+
+## Node-local media cache prerequisite (staged)
+
+Direct CouchDB imports do not send Kazoo document-change events. After importing
+media, the staged `acdc_language_maintenance` module provides SUP-callable
+`refresh/0`, `refresh/1`, `verify/0` and `verify/1`. With no locale argument it
+checks exactly 6,143 catalog documents; with an argument it accepts only an
+exact canonical locale (29 documents for EN/ES/FR, 3,028 for AR/HE).
+
+```sh
+sup acdc_language_maintenance refresh es-es
+sup acdc_language_maintenance verify es-es
+# The no-argument forms check all five installed packs.
+sup acdc_language_maintenance refresh
+sup acdc_language_maintenance verify
+bash scripts/test-acdc-language-cache.sh
+```
+
+These commands act only on the node addressed by SUP. The deployer must run and
+verify them on **every advertised apps/ecallmgr node** before publishing a
+cluster capability. The module is still in the supplemental runtime patch;
+these commands are not automatically enabled by media import alone.
+
+Refresh validates a complete direct keyed CouchDB inventory, exact media
+identity/revision/type/language/prompt, deletion/conflict state, system-only
+account fields and nonempty audio attachment metadata/digests. It invalidates
+only those exact local document-cache keys and synchronously merges each locale
+into the existing system prompt map. It never flushes the whole cache, removes
+other locales, changes account mappings, broadcasts asynchronous readiness, or
+writes a customer/system document. `verify` makes no cache updates.
+
+The resolved path must equal the requested locale's exact encoded media ID;
+English fallback, a missing map or any changed database sequence fails the
+operation. A success receipt includes the actual node name, local-only scope,
+document count and stable CouchDB update sequence. It deliberately retains
+`runtime_ready:false`: attachment metadata and map resolution do not establish
+audio intelligibility, native-speaker review, native say-module readiness,
+backend activation or cluster-wide verification.

@@ -39,3 +39,17 @@ table, logs out MASTER agents, or restarts a service. If ownership or cleanup
 cannot be verified it retains `/etc/kazoo/ring-strategy-acceptance.json` (0600)
 for a later explicit `--cleanup`, rather than broadening deletion scope.
 Private evidence is retained under `/var/log/kazoo-strategy-acceptance-*`.
+
+## Latest live result (2026-09-05)
+
+The three ordinary ring-all calls passed: concurrent offers, exactly one stable
+winner, losing-leg cleanup and continued agent availability. The subsequent
+shared-answer-barrier case failed: three simultaneous answers produced no
+stable caller bridge. The test stopped before ordered, round-robin or most-idle
+acceptance. Exact fixture calls, contacts, queue and callflow were cleaned up;
+the borrowed agents' original memberships and statuses were restored.
+
+Evidence is retained privately in
+`/var/log/kazoo-strategy-acceptance-v14xNm/ring-all-answer-race-evidence.json`.
+The [atomic answer-selection fix](acdc_atomic_answer_race.md) has source tests
+and privately compiled artifacts, but is not yet deployed or live-call proven.

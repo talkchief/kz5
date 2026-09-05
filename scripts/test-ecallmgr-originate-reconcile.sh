@@ -12,7 +12,7 @@ cleanup() {
 trap cleanup EXIT
 cd "$project_root"
 export ERL_LIBS="$project_root/deps:$project_root/core:$project_root/applications"
-export ERL_FLAGS='+S 2:2 +A 1'
+export ERL_FLAGS='+S 1:1 +SDcpu 1 +SDio 1 +A 1'
 export ERL_CRASH_DUMP=/dev/null
 erlc -Werror +warn_missing_spec -I core/kazoo_amqp/src -o "$test_dir" \
     core/kazoo_amqp/src/api/kapi_call.erl

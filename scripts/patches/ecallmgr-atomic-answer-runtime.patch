@@ -1,0 +1,39 @@
+diff --git a/src/ecallmgr_originate.erl b/src/ecallmgr_originate.erl
+index 8d1bb04..ab14250 100644
+--- a/src/ecallmgr_originate.erl
++++ b/src/ecallmgr_originate.erl
+@@ -16,7 +16,7 @@
+ -export([start_link/1]).
+ 
+ -ifdef(TEST).
+--export([originate_api_command/4, build_originate/3]).
++-export([originate_api_command/4, build_originate/3, intercept_unbridged_only/2]).
+ -endif.
+ 
+ -export([init/1
+@@ -405,10 +405,22 @@ get_extension_action(JObj) ->
+ intercept_unbridged_only('undefined', JObj) ->
+     get_bridge_action(JObj);
+ intercept_unbridged_only(ExistingCallId, JObj) ->
+-    case kz_json:is_true(<<"Intercept-Unbridged-Only">>, JObj, 'true') of
+-        'true' ->
++    CCVs = kz_json:get_json_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new()),
++    IsAgent = is_binary(kz_json:get_ne_binary_value(<<"Agent-ID">>, CCVs)),
++    case {IsAgent, kz_json:is_true(<<"Intercept-Unbridged-Only">>, JObj, 'true')} of
++        {'true', _} ->
++            %% The module checks account/member ownership again on live channels.
++            %% Never fall back to the non-atomic core intercept for an ACDC leg.
++            case kz_json:get_value(<<"Member-Call-ID">>, CCVs) =:= ExistingCallId
++                andalso is_binary(kz_json:get_ne_binary_value(<<"Account-ID">>, CCVs))
++                andalso byte_size(ExistingCallId) =< 192
++                andalso re:run(ExistingCallId, <<"\\A[A-Za-z0-9_.:@-]+\\z">>, [{'capture', 'none'}]) =:= 'match' of
++                'true' -> <<" 'kz_intercept:", ExistingCallId/binary, "' inline ">>;
++                'false' -> erlang:error('invalid_acdc_intercept_target')
++            end;
++        {'false', 'true'} ->
+             <<" 'set:intercept_unbridged_only=true,intercept:", ExistingCallId/binary, "' inline ">>;
+-        'false' ->
++        {'false', 'false'} ->
+             <<" 'set:intercept_unbridged_only=false,intercept:", ExistingCallId/binary, "' inline ">>
+     end.
+ 

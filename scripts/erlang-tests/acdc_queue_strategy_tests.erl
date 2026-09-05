@@ -88,10 +88,13 @@ with_mocks(Fun) ->
         meck:expect(acdc_stats,call_handled,fun(_,_,_,_) -> ok end),
         meck:expect(acdc_stats,call_missed,fun(_,_,_,_,_) -> ok end),
         meck:expect(acdc_agent_listener,channel_hungup,fun(_,_) -> ok end),
+        meck:expect(acdc_agent_listener,member_connect_retry,fun(_,_) -> ok end),
+        meck:expect(acdc_agent_listener,member_connect_accepted,fun(_,_) -> ok end),
         meck:expect(acdc_agent_listener,presence_update,fun(_,_) -> ok end),
         meck:expect(acdc_agent_listener,send_availability_update,fun(_,_) -> ok end),
         meck:expect(acdc_agent_stats,agent_ready,fun(_,_) -> ok end),
         meck:expect(acdc_agent_stats,agent_logged_out,fun(_,_) -> ok end),
+        meck:expect(acdc_agent_stats,agent_connected,fun(_,_,_,_,_,_) -> ok end),
         meck:expect(webseq,evt,fun(_,_,_,_) -> ok end),
         kz_log:put_callid(<<"strategy-test">>), Fun()
     after [meck:unload(M) || M <- Mods], drain() end.
@@ -114,13 +117,86 @@ end).
 
 accept_requires_selected_process_and_cancels_losers_only_test() -> with_mocks(fun() ->
     Call=kapps_call:set_call_id(<<"caller">>,kapps_call:new()), A=r(<<"a">>), B=r(<<"b">>),
-    S=qstate([{member_call,Call},{queue_id,<<"queue">>},{agent_ring_timer_ref,make_ref()},{member_call_winners,[A,B]},{connect_wins,[A,B]}]),
+    S=qstate([{member_call,Call},{account_id,<<"account">>},{queue_id,<<"queue">>},{agent_ring_timer_ref,make_ref()},{member_call_winners,[A,B]},{connect_wins,[A,B]}]),
     Wrong=kz_json:set_value(<<"Call-ID">>,<<"caller">>,r(<<"outsider">>)),
     ?assertEqual({next_state,connecting,S},acdc_queue_fsm:connecting(cast,{accepted,Wrong},S)),
-    Accept=kz_json:set_value(<<"Call-ID">>,<<"caller">>,A),
-    {next_state,ready,_,hibernate}=acdc_queue_fsm:connecting(cast,{accepted,Accept},S),
+    Accept=accepted(A,<<"a-leg">>),
+    {next_state,connecting,Pending}=acdc_queue_fsm:connecting(cast,{accepted,Accept},S),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,finish_member_call,'_')),
+    {next_state,ready,_,hibernate}=acdc_queue_fsm:connecting(cast,{channel_bridged,bridge(<<"a-leg">>)},Pending),
     ?assertEqual(1,meck:num_calls(acdc_queue_listener,member_connect_satisfied,'_')),
     ?assert(meck:called(acdc_queue_listener,member_connect_satisfied,['_',B,[]]))
+end).
+
+accepted(A, Leg) -> kz_json:set_values([{<<"Call-ID">>,<<"caller">>},{<<"Account-ID">>,<<"account">>},{<<"Agent-Call-ID">>,Leg}], A).
+bridge(Leg) -> j([{<<"Call-ID">>,<<"caller">>},{<<"Other-Leg-Call-ID">>,Leg},{<<"Custom-Channel-Vars">>,j([{<<"Account-ID">>,<<"account">>}])}]).
+bridge_state() -> qstate([{member_call,kapps_call:set_call_id(<<"caller">>,kapps_call:new())},{account_id,<<"account">>},{queue_id,<<"queue">>},
+                         {agent_ring_timer_ref,make_ref()},{member_call_winners,[r(<<"a">>),r(<<"b">>)]},{connect_wins,[r(<<"a">>),r(<<"b">>)]}]).
+
+bridge_before_accept_and_losing_accept_first_test() -> with_mocks(fun() ->
+    S=bridge_state(),
+    {next_state,connecting,S1}=acdc_queue_fsm:connecting(cast,{accepted,accepted(r(<<"a">>),<<"losing-leg">>)},S),
+    {next_state,connecting,S2}=acdc_queue_fsm:connecting(cast,{channel_bridged,bridge(<<"winning-leg">>)},S1),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,finish_member_call,'_')),
+    ?assertEqual({keep_state,S2},acdc_queue_fsm:connecting(cast,{retry,r(<<"b">>)},S2)),
+    ?assertEqual({keep_state,S2},acdc_queue_fsm:connecting(info,{timeout,make_ref(),agent_timer_expired},S2)),
+    ?assertEqual({keep_state,S2},acdc_queue_fsm:connecting(info,{timeout,make_ref(),connection_timer_expired},S2)),
+    {next_state,ready,_,hibernate}=acdc_queue_fsm:connecting(cast,{accepted,accepted(r(<<"b">>),<<"winning-leg">>)},S2),
+    ?assertEqual(1,meck:num_calls(acdc_queue_listener,finish_member_call,'_')),
+    ?assert(meck:called(acdc_queue_listener,member_connect_satisfied,['_',r(<<"a">>),[]]))
+end).
+
+bridge_wrong_account_call_empty_leg_and_duplicate_accept_test() -> with_mocks(fun() ->
+    S=bridge_state(), A=accepted(r(<<"a">>),<<"a-leg">>),
+    Bad=[kz_json:set_value(<<"Call-ID">>,<<"other">>,bridge(<<"a-leg">>)),
+         kz_json:set_value([<<"Custom-Channel-Vars">>,<<"Account-ID">>],<<"other">>,bridge(<<"a-leg">>)),bridge(<<>>)],
+    [?assertEqual({next_state,connecting,S},acdc_queue_fsm:connecting(cast,{channel_bridged,E},S)) || E <- Bad],
+    {next_state,connecting,S1}=acdc_queue_fsm:connecting(cast,{accepted,A},S),
+    ?assertEqual({next_state,connecting,S1},acdc_queue_fsm:connecting(cast,{accepted,A},S1)),
+    ?assertEqual(1,maps:size(maps:get(accepts,qfield(bridge_ctx,S1)))),
+    {next_state,ready,_,hibernate}=acdc_queue_fsm:connecting(cast,{channel_bridged,bridge(<<"a-leg">>)},S1)
+end).
+
+lost_acceptance_deadline_never_cancels_actual_bridge_test() -> with_mocks(fun() ->
+    {next_state,connecting,S}=acdc_queue_fsm:connecting(cast,{channel_bridged,bridge(<<"a-leg">>)},bridge_state()),
+    Ref=maps:get(timer_ref,qfield(bridge_ctx,S)),
+    {keep_state,N}=acdc_queue_fsm:connecting(info,{timeout,Ref,ordinary_bridge_proof_timeout},S),
+    erlang:cancel_timer(Ref),
+    ?assertEqual(<<"a-leg">>,maps:get(leg,qfield(bridge_ctx,N))),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,finish_member_call,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,timeout_agent,'_'))
+end).
+
+media_loser_ringing_and_answered_never_logout_or_wrapup_test() -> with_mocks(fun() ->
+    S=acdc_agent_fsm:strategy_test_state([{member_call_id,<<"caller">>},{agent_call_id,<<"a-leg">>},{statem_call_id,<<"test">>},{connect_failures,2},{max_connect_failures,3}]),
+    lists:foreach(fun(F) ->
+        {next_state,ready,N}=F(info,{call_down,<<"a-leg">>,<<"LOSE_RACE">>},S),
+        ?assertEqual(2,acdc_agent_fsm:strategy_test_field(connect_failures,N))
+    end,[fun acdc_agent_fsm:ringing/3,fun acdc_agent_fsm:answered/3]),
+    ?assertEqual(0,meck:num_calls(acdc_agent_stats,agent_logged_out,'_'))
+end).
+
+agent_bridge_requires_own_actual_leg_not_shared_caller_test() -> with_mocks(fun() ->
+    meck:new(acdc_util,[non_strict,no_link]),
+    try
+    meck:expect(acdc_util,caller_id,fun(_) -> {<<"1001">>,<<"Fixture">>} end),
+    Call=kapps_call:set_call_id(<<"caller">>,kapps_call:new()),
+    Props=[{member_call_id,<<"caller">>},{member_call,Call},{account_id,<<"account">>},{agent_id,<<"a">>}],
+    S=acdc_agent_fsm:strategy_test_state(Props),
+    Known=acdc_agent_fsm:strategy_test_state([{agent_call_id,<<"a-leg">>}|Props]),
+    ?assertEqual({next_state,ringing,S},acdc_agent_fsm:ringing(cast,{channel_bridge_event,bridge(<<"b-leg">>)},S)),
+    ?assertEqual({next_state,ringing,Known},acdc_agent_fsm:ringing(cast,{channel_bridge_event,bridge(<<"b-leg">>)},Known)),
+    ?assertEqual({next_state,ringing,S},acdc_agent_fsm:ringing(cast,{channel_bridged,<<"caller">>},S)),
+    Own=j([{<<"Call-ID">>,<<"a-leg">>},{<<"Other-Leg-Call-ID">>,<<"caller">>},
+           {<<"Custom-Channel-Vars">>,j([{<<"Account-ID">>,<<"account">>},{<<"Agent-ID">>,<<"a">>},{<<"Member-Call-ID">>,<<"caller">>}])}]),
+    Other=kz_json:set_value([<<"Custom-Channel-Vars">>,<<"Account-ID">>],<<"other">>,Own),
+    ?assertEqual({next_state,ringing,S},acdc_agent_fsm:ringing(cast,{channel_bridge_event,Other},S)),
+    {next_state,answered,Answered}=acdc_agent_fsm:ringing(cast,{channel_bridge_event,Own},S),
+    ?assertEqual(<<"a-leg">>,acdc_agent_fsm:strategy_test_field(agent_call_id,Answered)),
+    ?assertEqual(1,meck:num_calls(acdc_agent_stats,agent_connected,'_')),
+    acdc_agent_fsm:call_event(self(),<<"call_event">>,<<"CHANNEL_BRIDGE">>,Own),
+    receive {'$gen_cast',{channel_bridge_event,Own}} -> ok after 100 -> ?assert(false) end
+    after meck:unload(acdc_util) end
 end).
 
 late_accept_before_new_selection_is_ignored_test() ->
@@ -152,6 +228,27 @@ ring_all_loser_is_not_failure_or_unsolicited_logout_test() -> with_mocks(fun() -
     ?assertEqual(0,meck:num_calls(acdc_agent_stats,agent_logged_out,'_')),
     ?assertEqual(undefined,acdc_agent_fsm:strategy_test_field(member_call_id,N))
 end).
+
+native_callback_losing_acceptance_does_not_preempt_media_winner_test_() -> {timeout,30,fun() -> with_mocks(fun() ->
+    meck:new(acdc_callback_store,[non_strict,no_link]),
+    try
+        A=r(<<"a">>), B=r(<<"b">>),
+        Saved=j([{<<"_id">>,<<"callback">>},{<<"status">>,<<"completed">>},
+                 {<<"pvt_caller_call_id">>,<<"caller">>},{<<"pvt_agent_call_id">>,<<"b-leg">>}]),
+        meck:expect(acdc_callback_store,bind_leg,fun(_,_,_,_,agent,<<"b-leg">>) -> {ok,Saved} end),
+        meck:expect(acdc_callback_store,advance,fun(_,_,_,_,bridged,_) -> {ok,Saved} end),
+        meck:expect(acdc_queue_listener,retire_callback_member,fun(_,<<"callback">>) -> ok end),
+        Call=kapps_call:set_call_id(<<"caller">>,kapps_call:new()),
+        S=qstate([{member_call,Call},{account_id,<<"account">>},{queue_id,<<"queue">>},{connect_wins,[A,B]},
+                  {callback_ctx,#{mode=>native,reservation=>Saved,token=><<"token">>}}]),
+        {next_state,connecting,S1}=acdc_queue_fsm:connecting(cast,{accepted,accepted(A,<<"a-leg">>)},S),
+        {next_state,connecting,S2}=acdc_queue_fsm:connecting(cast,{channel_bridged,bridge(<<"b-leg">>)},S1),
+        ?assertEqual(0,meck:num_calls(acdc_queue_listener,retire_callback_member,'_')),
+        {next_state,ready,_}=acdc_queue_fsm:connecting(cast,{accepted,accepted(B,<<"b-leg">>)},S2),
+        ?assertEqual(1,meck:num_calls(acdc_queue_listener,retire_callback_member,'_')),
+        ?assert(meck:called(acdc_queue_listener,member_connect_satisfied,['_',A,[]]))
+    after meck:unload(acdc_callback_store) end
+end) end}.
 
 ring_all_loser_preserves_explicit_logout_request_test() -> with_mocks(fun() ->
     S=acdc_agent_fsm:strategy_test_state([{member_call_id,<<"caller">>},{statem_call_id,<<"test">>},{agent_state_updates,[{agent_logout}]}]),

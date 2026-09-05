@@ -174,7 +174,7 @@ native_cancellation_retains_delivery_until_channels_settle_case() -> with_mocks(
 end).
 
 bridge_without_acceptance_has_bounded_proof_deadline_case() -> with_mocks(fun() ->
-    Event = kz_json:from_list([{<<"Call-ID">>, <<"returned-caller">>}, {<<"Other-Leg-Call-ID">>, <<"agent-leg">>}]),
+    Event = bridge(<<"agent-leg">>),
     {next_state, connecting, Connecting} = acdc_queue_fsm:connecting(cast, {channel_bridged, Event}, native_state()),
     Context = field(callback_ctx, Connecting),
     ?assert(is_reference(maps:get(timer_ref, Context))),
@@ -219,8 +219,8 @@ native_acceptance_requires_exact_agent_leg_case() -> with_mocks(fun() ->
     Missing = kz_json:delete_key(<<"Agent-Call-ID">>, acceptance(Winner, <<"leg-a">>)),
     ?assertEqual({next_state, connecting, Initial}, acdc_queue_fsm:connecting(cast, {accepted, Missing}, Initial)),
     {next_state, connecting, Accepted} = acdc_queue_fsm:connecting(cast, {accepted, acceptance(Winner, <<"leg-a">>)}, Initial),
-    {next_state, callback_waiting, Waiting} = acdc_queue_fsm:connecting(cast, {channel_bridged, bridge(<<"unrelated-leg">>)}, Accepted),
-    ?assertEqual(native_ending, maps:get(mode, field(callback_ctx, Waiting))),
+    {next_state, connecting, Waiting} = acdc_queue_fsm:connecting(cast, {channel_bridged, bridge(<<"unrelated-leg">>)}, Accepted),
+    ?assertEqual(native, maps:get(mode, field(callback_ctx, Waiting))),
     ?assertEqual(0, meck:num_calls(acdc_callback_store, advance, '_')),
     ?assertEqual(0, meck:num_calls(acdc_queue_listener, retire_callback_member, '_')),
     cancel_timer(Waiting)
@@ -230,8 +230,10 @@ native_conflicting_proofs_do_not_overwrite_first_identity_case() -> with_mocks(f
     A = winner(<<"agent-a">>, <<"process-a">>), B = winner(<<"agent-b">>, <<"process-b">>),
     Initial = native_state([{connect_wins, [A, B]}]),
     {next_state, connecting, Accepted} = acdc_queue_fsm:connecting(cast, {accepted, acceptance(A, <<"leg-a">>)}, Initial),
-    ?assertEqual({next_state, connecting, Accepted}, acdc_queue_fsm:connecting(cast, {accepted, acceptance(B, <<"leg-b">>)}, Accepted)),
-    cancel_timer(Accepted),
+    {next_state, connecting, Candidates} = acdc_queue_fsm:connecting(cast, {accepted, acceptance(B, <<"leg-b">>)}, Accepted),
+    ?assertEqual(2, maps:size(maps:get(accepted_candidates, field(callback_ctx, Candidates)))),
+    ?assertEqual(undefined, maps:get(accepted, field(callback_ctx, Candidates), undefined)),
+    cancel_timer(Candidates),
     {next_state, connecting, Bridged} = acdc_queue_fsm:connecting(cast, {channel_bridged, bridge(<<"leg-a">>)}, Initial),
     ?assertEqual({next_state, connecting, Bridged}, acdc_queue_fsm:connecting(cast, {channel_bridged, bridge(<<"leg-b">>)}, Bridged)),
     cancel_timer(Bridged)
@@ -251,7 +253,8 @@ end).
 winner(Agent, Process) -> kz_json:from_list([{<<"Agent-ID">>, Agent}, {<<"Process-ID">>, Process}]).
 acceptance(Winner, AgentLeg) -> kz_json:set_values([{<<"Call-ID">>, <<"returned-caller">>}, {<<"Account-ID">>, ?ACCOUNT}
                                                    ,{<<"Agent-Call-ID">>, AgentLeg}], Winner).
-bridge(AgentLeg) -> kz_json:from_list([{<<"Call-ID">>, <<"returned-caller">>}, {<<"Other-Leg-Call-ID">>, AgentLeg}]).
+bridge(AgentLeg) -> kz_json:from_list([{<<"Call-ID">>, <<"returned-caller">>}, {<<"Other-Leg-Call-ID">>, AgentLeg},
+                                    {<<"Custom-Channel-Vars">>, kz_json:from_list([{<<"Account-ID">>, ?ACCOUNT}])}]).
 
 lookup_outage_cannot_open_a_second_callback_menu_case() -> with_mocks(fun() ->
     Initial = state([{callback_ctx, #{mode => recover_lookup}}]),

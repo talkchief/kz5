@@ -32,9 +32,9 @@ The app provides:
   current member is missing from the complete user inventory.
 
 The staged language selector lists English, Arabic, Hebrew, Spanish, and French,
-but only enables verified installed packs. Automatic multilingual import,
-backend activation, and publication of `apps/acdc/language-capabilities.json`
-are not yet wired into the installer. That artifact must only be published
+but only enables verified installed packs. The installer imports multilingual
+media; backend activation and publication of `apps/acdc/language-capabilities.json`
+are not yet wired in. That artifact must only be published
 after runtime verification; builds must never manufacture it. The UI checks the version 1 capability proof
 and all 29 fixed prompt attachments. Internal `acdc-number-*` audio chunks are
 excluded from editable media choices and per-prompt browser requests. Missing
