@@ -1,0 +1,279 @@
+diff --git a/src/acdc_callback_recovery.erl b/src/acdc_callback_recovery.erl
+new file mode 100644
+index 0000000..6568541
+--- /dev/null
++++ b/src/acdc_callback_recovery.erl
+@@ -0,0 +1,273 @@
++%%%-----------------------------------------------------------------------------
++%%% SPDX-License-Identifier: MPL-2.0
++%%% @copyright (C) 2026 Talkchief
++%%% @doc Pure, fail-closed planning for recovery of durable ACDC callbacks.
++%%%
++%%% This module performs no AMQP, channel, CouchDB, or queue-manager actions.
++%%% Callers must obtain fresh per-ecallmgr observations, execute a returned plan,
++%%% and use the callback store's revision/lease checks before changing state.
++%%% @end
++%%%-----------------------------------------------------------------------------
++-module(acdc_callback_recovery).
++
++-export([plan/4
++        ,observe_channels/2
++        ]).
++
++-include("acdc.hrl").
++
++-type owner_observation() :: 'self' | 'alive' | 'dead' | 'remote' | 'unknown'.
++-type snapshot() :: map().
++-type action() :: map().
++-type observations() :: map().
++
++%% Only a demonstrably dead owner or the verified current lease holder itself
++%% can reconcile an unexpired lease. "alive", "remote", and "unknown"
++%% deliberately carry no authority/failure inference.
++-spec plan(kz_json:object(), non_neg_integer(), owner_observation(), snapshot()) ->
++          {'ok', action(), observations()} | {'error', 'invalid_input'}.
++plan(Doc, Now, OwnerObservation, Snapshot)
++  when is_integer(Now), Now >= 0,
++       (OwnerObservation =:= 'self' orelse OwnerObservation =:= 'alive'
++        orelse OwnerObservation =:= 'dead'
++        orelse OwnerObservation =:= 'remote' orelse OwnerObservation =:= 'unknown'),
++       is_map(Snapshot) ->
++    case document_fields(Doc) of
++        {'error', _} -> {'error', 'invalid_input'};
++        Fields -> plan_status(Fields, Now, OwnerObservation, Snapshot)
++    end;
++plan(_, _, _, _) -> {'error', 'invalid_input'}.
++
++plan_status(#{'status' := <<"completed">>}, _Now, _Owner, _Snapshot) ->
++    result('retire', 'durable_completed', #{});
++plan_status(#{'status' := <<"registering">>}, _Now, _Owner, _Snapshot) ->
++    result('cancel_registration', 'activation_not_committed', #{});
++plan_status(#{'status' := Status}=Fields, _Now, _Owner, Snapshot)
++  when Status =:= <<"cancelled">>; Status =:= <<"failed">>; Status =:= <<"expired">> ->
++    with_observations(Fields, Snapshot,
++                      fun(Observations) -> terminal_plan(Observations) end);
++plan_status(#{'status' := <<"queued">>}=Fields, _Now, _Owner, Snapshot) ->
++    with_observations(Fields, Snapshot,
++                      fun(Observations) -> queued_plan(Fields, Observations) end);
++plan_status(#{'status' := <<"retry_wait">>}=Fields, _Now, _Owner, Snapshot) ->
++    with_observations(Fields, Snapshot,
++                      fun(Observations) -> retry_plan(Observations) end);
++plan_status(#{'status' := Status}=Fields, Now, Owner, Snapshot)
++  when Status =:= <<"dialing">>; Status =:= <<"confirming">>;
++       Status =:= <<"connecting">>; Status =:= <<"cancelling">> ->
++    ReconcileOwner = Owner =:= 'dead' orelse Owner =:= 'self',
++    case maps:get('lease_until', Fields, 0) > Now andalso not ReconcileOwner of
++        'true' -> result('wait', 'live_owner_lease', #{'owner' => Owner});
++        'false' ->
++            with_observations(Fields, Snapshot,
++                              fun(Observations) -> active_plan(Fields, Snapshot, Observations) end)
++    end;
++plan_status(_, _, _, _) -> {'error', 'invalid_input'}.
++
++terminal_plan(#{'original' := 'active'}=Observations) ->
++    result('resume_original', 'terminal_callback_live_original', Observations);
++terminal_plan(#{'original' := 'terminated'}=Observations) ->
++    result('retire', 'terminal_callback_dead_original', Observations);
++terminal_plan(Observations) -> result('wait', 'unknown_original_state', Observations).
++
++queued_plan(Fields, #{'original' := 'active'}=Observations) ->
++    result(#{'action' => 'await_original_detach'
++            ,'callback_id' => maps:get('id', Fields)},
++           'durable_queued_live_original', Observations);
++queued_plan(_Fields, #{'original' := 'terminated'}=Observations) ->
++    result('virtual_wait', 'durable_queued_dead_original', Observations);
++queued_plan(_Fields, Observations) -> result('wait', 'unknown_original_state', Observations).
++
++retry_plan(#{'original' := 'terminated'}=Observations) ->
++    result('virtual_wait', 'retry_wait_dead_original', Observations);
++retry_plan(#{'original' := 'active'}=Observations) ->
++    result('wait', 'retry_wait_live_original_conflict', Observations);
++retry_plan(Observations) -> result('wait', 'unknown_original_state', Observations).
++
++active_plan(Fields, Snapshot, Observations) ->
++    case valid_bridge_plan(Fields, Snapshot, Observations) of
++        {'ok', Action} -> result(Action, 'matching_owned_bridge', Observations);
++        'conflict' -> result('wait', 'conflicting_bridge_proof', Observations);
++        'none' -> active_without_bridge(Fields, Snapshot, Observations)
++    end.
++
++active_without_bridge(#{'status' := <<"connecting">>}=Fields, Snapshot,
++                      #{'caller' := 'active'}=Observations) ->
++    case maps:get('caller_control_queue', Fields, 'undefined') of
++        Queue when is_binary(Queue), byte_size(Queue) > 0 ->
++            Action = #{'action' => 'rebind_confirmed'
++                      ,'callback_id' => maps:get('id', Fields)
++                      ,'attempt' => maps:get('attempt', Fields)
++                      ,'caller_call_id' => maps:get('caller_call_id', Fields)
++                      ,'caller_control_queue' => Queue},
++            result(Action, 'confirmed_caller_is_active', Observations);
++        _ -> active_cleanup_plan(Fields, Snapshot, Observations, 'missing_caller_control')
++    end;
++active_without_bridge(Fields, Snapshot, Observations) ->
++    active_cleanup_plan(Fields, Snapshot, Observations, 'active_attempt_reconciliation').
++
++active_cleanup_plan(Fields, Snapshot, Observations, FallbackReason) ->
++    Originate = maps:get('originate', Snapshot, 'unknown'),
++    Caller = maps:get('caller', Observations, 'unknown'),
++    Agent = maps:get('agent', Observations, 'terminated'),
++    case {Originate, originate_handles(Fields), Caller, Agent} of
++        {'pending', {'ok', UUID, Queue}, _, _} ->
++            Action = #{'action' => 'cancel_originate'
++                      ,'originate_uuid' => UUID, 'originate_queue' => Queue},
++            result(Action, 'persisted_originate_pending', Observations#{'originate' => 'pending'});
++        {'settled', _, 'terminated', 'terminated'} ->
++            Action = #{'action' => 'settle_attempt'
++                      ,'callback_id' => maps:get('id', Fields)
++                      ,'caller_call_id' => maps:get('caller_call_id', Fields)
++                      ,'agent_call_id' => maps:get('agent_call_id', Fields, 'undefined')},
++            result(Action, 'all_attempt_channels_down', Observations#{'originate' => 'settled'});
++        {_, _, 'active', _} ->
++            Action = #{'action' => 'cancel_channels'
++                      ,'caller_call_id' => maps:get('caller_call_id', Fields)
++                      ,'agent_call_id' => maps:get('agent_call_id', Fields, 'undefined')},
++            result(Action, FallbackReason, Observations#{'originate' => Originate});
++        {_, _, _, 'active'} ->
++            Action = #{'action' => 'cancel_channels'
++                      ,'caller_call_id' => maps:get('caller_call_id', Fields)
++                      ,'agent_call_id' => maps:get('agent_call_id', Fields)},
++            result(Action, FallbackReason, Observations#{'originate' => Originate});
++        _ -> result('wait', 'incomplete_attempt_evidence', Observations#{'originate' => Originate})
++    end.
++
++valid_bridge_plan(Fields, Snapshot, Observations) ->
++    case maps:get('bridge', Snapshot, 'none') of
++        'none' -> 'none';
++        #{'caller_call_id' := Caller, 'agent_call_id' := Agent} ->
++            PersistedCaller = maps:get('caller_call_id', Fields, 'undefined'),
++            PersistedAgent = maps:get('agent_call_id', Fields, 'undefined'),
++            case Caller =:= PersistedCaller andalso Agent =:= PersistedAgent
++                andalso is_binary(PersistedAgent) andalso byte_size(PersistedAgent) > 0
++                andalso maps:get('caller', Observations, 'unknown') =:= 'active'
++                andalso maps:get('agent', Observations, 'unknown') =:= 'active' of
++                'true' ->
++                    {'ok', #{'action' => 'complete_bridge'
++                            ,'callback_id' => maps:get('id', Fields)
++                            ,'caller_call_id' => Caller, 'agent_call_id' => Agent}};
++                'false' -> 'conflict'
++            end;
++        _ -> 'conflict'
++    end.
++
++%% A snapshot is complete only when every expected ecallmgr node supplied one
++%% fresh, explicitly complete response and every relevant call ID has an
++%% explicit active/terminated value on every node. Missing channels are not
++%% treated as terminated. `fresh' may only be set by the coordinator for the
++%% current recovery cycle; cached results must be passed as false/omitted.
++-spec observe_channels([kz_term:ne_binary()], snapshot()) ->
++          {'ok', observations()} | {'error', 'unknown'}.
++observe_channels(CallIds0, Snapshot) when is_list(CallIds0), is_map(Snapshot) ->
++    CallIds = lists:usort([Id || Id <- CallIds0, is_binary(Id), byte_size(Id) > 0]),
++    Expected = maps:get('expected_nodes', Snapshot, []),
++    Responses = maps:get('responses', Snapshot, []),
++    case maps:get('fresh', Snapshot, 'false') =:= 'true'
++        andalso valid_complete_responses(Expected, Responses, CallIds) of
++        'true' ->
++            States = maps:from_list([{Id, aggregate_channel(Id, Responses)} || Id <- CallIds]),
++            {'ok', States};
++        'false' -> {'error', 'unknown'}
++    end;
++observe_channels(_, _) -> {'error', 'unknown'}.
++
++valid_complete_responses(Expected, Responses, CallIds) ->
++    is_list(Expected) andalso Expected =/= []
++        andalso lists:all(fun is_ne_binary/1, Expected)
++        andalso length(lists:usort(Expected)) =:= length(Expected)
++        andalso is_list(Responses) andalso Responses =/= []
++        andalso length(Responses) =:= length(Expected)
++        andalso lists:sort(Expected) =:= lists:sort([maps:get('node', R, 'undefined') || R <- Responses, is_map(R)])
++        andalso lists:all(fun(R) -> complete_response(R, CallIds) end, Responses).
++
++complete_response(Response, CallIds) when is_map(Response) ->
++    maps:get('complete', Response, 'false') =:= 'true'
++        andalso is_map(maps:get('channels', Response, 'undefined'))
++        andalso lists:all(
++                  fun(Id) ->
++                      State = maps:get(Id, maps:get('channels', Response), 'unknown'),
++                      State =:= 'active' orelse State =:= 'terminated'
++                  end, CallIds);
++complete_response(_, _) -> 'false'.
++
++aggregate_channel(Id, Responses) ->
++    States = [maps:get(Id, maps:get('channels', Response)) || Response <- Responses],
++    case lists:member('active', States) of
++        'true' -> 'active';
++        'false' -> 'terminated'
++    end.
++
++with_observations(Fields, Snapshot, Fun) ->
++    IdPairs = [{'original', maps:get('original_call_id', Fields)}
++              ,{'caller', maps:get('caller_call_id', Fields, 'undefined')}
++              ,{'agent', maps:get('agent_call_id', Fields, 'undefined')}],
++    Ids = [Id || {_, Id} <- IdPairs, is_binary(Id), byte_size(Id) > 0],
++    case observe_channels(Ids, Snapshot) of
++        {'error', 'unknown'} -> result('wait', 'incomplete_channel_snapshot', #{'snapshot' => 'unknown'});
++        {'ok', ById} ->
++            Observations = maps:from_list(
++                             [{Name, case Id of
++                                          B when is_binary(B), byte_size(B) > 0 -> maps:get(B, ById);
++                                          _ -> 'terminated'
++                                      end} || {Name, Id} <- IdPairs]),
++            Fun(Observations#{'snapshot' => 'complete'})
++    end.
++
++document_fields(Doc) ->
++    case kz_json:is_json_object(Doc) of
++        'true' -> document_fields_valid_json(Doc);
++        'false' -> {'error', 'invalid_document'}
++    end.
++
++document_fields_valid_json(Doc) ->
++    Status = kz_json:get_ne_binary_value(<<"status">>, Doc),
++    Id = kz_doc:id(Doc),
++    Original = kz_json:get_ne_binary_value(<<"original_call_id">>, Doc),
++    Attempt = kz_json:get_integer_value(<<"attempts">>, Doc, 0),
++    case is_ne_binary(Status) andalso is_ne_binary(Id) andalso is_ne_binary(Original)
++        andalso is_integer(Attempt) andalso Attempt >= 0 of
++        'false' -> {'error', 'invalid_document'};
++        'true' ->
++            Fields = #{'status' => Status, 'id' => Id, 'original_call_id' => Original
++                      ,'attempt' => Attempt
++                      ,'caller_call_id' => kz_json:get_ne_binary_value(<<"pvt_caller_call_id">>, Doc)
++                      ,'agent_call_id' => kz_json:get_ne_binary_value(<<"pvt_agent_call_id">>, Doc)
++                      ,'caller_control_queue' => kz_json:get_ne_binary_value(<<"pvt_caller_control_queue">>, Doc)
++                      ,'originate_uuid' => kz_json:get_ne_binary_value(<<"pvt_originate_uuid">>, Doc)
++                      ,'originate_queue' => kz_json:get_ne_binary_value(<<"pvt_originate_queue">>, Doc)
++                      ,'lease_owner' => kz_json:get_ne_binary_value([<<"pvt_lease">>, <<"owner">>], Doc)
++                      ,'lease_token' => kz_json:get_ne_binary_value([<<"pvt_lease">>, <<"token">>], Doc)
++                      ,'lease_until' => kz_json:get_integer_value([<<"pvt_lease">>, <<"until">>], Doc, 0)},
++            case valid_state_fields(Fields) of
++                'true' -> Fields;
++                'false' -> {'error', 'invalid_document'}
++            end
++    end.
++
++valid_state_fields(#{'status' := Status, 'attempt' := Attempt}=Fields)
++  when Status =:= <<"dialing">>; Status =:= <<"confirming">>;
++       Status =:= <<"connecting">>; Status =:= <<"cancelling">> ->
++    Attempt > 0
++        andalso is_ne_binary(maps:get('caller_call_id', Fields, 'undefined'))
++        andalso is_ne_binary(maps:get('lease_owner', Fields, 'undefined'))
++        andalso is_ne_binary(maps:get('lease_token', Fields, 'undefined'))
++        andalso is_integer(maps:get('lease_until', Fields, 0));
++valid_state_fields(#{'status' := Status}) ->
++    lists:member(Status, [<<"registering">>, <<"queued">>, <<"retry_wait">>
++                        ,<<"completed">>, <<"cancelled">>, <<"failed">>, <<"expired">>]).
++
++originate_handles(Fields) ->
++    case {maps:get('originate_uuid', Fields, 'undefined'), maps:get('originate_queue', Fields, 'undefined')} of
++        {UUID, Queue} when is_binary(UUID), byte_size(UUID) > 0,
++                           is_binary(Queue), byte_size(Queue) > 0 -> {'ok', UUID, Queue};
++        _ -> 'error'
++    end.
++
++result(Action, Reason, Observations) when is_atom(Action) ->
++    result(#{'action' => Action}, Reason, Observations);
++result(Action, Reason, Observations) ->
++    {'ok', Action#{'reason' => Reason}, Observations}.
++
++is_ne_binary(Value) -> is_binary(Value) andalso byte_size(Value) > 0.

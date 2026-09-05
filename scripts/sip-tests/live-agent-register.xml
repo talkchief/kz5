@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<scenario name="Kazoo live test agent periodic authenticated registration">
+  <send retrans="500" start_txn="register1">
+    <![CDATA[
+      REGISTER sip:[field2] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      Max-Forwards: 70
+      From: <sip:[field0]@[field2]>;tag=[pid]reg[call_number]
+      To: <sip:[field0]@[field2]>
+      Call-ID: [call_id]
+      CSeq: 1 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[field3]>;transport=[transport];expires=[field4]
+      Expires: [field4]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="100" optional="true" response_txn="register1"/>
+  <!-- A refresh or de-registration from an already trusted source tuple may
+       succeed immediately without a new digest challenge. -->
+  <recv response="200" optional="true" response_txn="register1" next="success"/>
+  <recv response="401" auth="true" optional="true" response_txn="register1" next="authenticated"/>
+  <recv response="407" auth="true" response_txn="register1" next="authenticated"/>
+
+  <label id="authenticated"/>
+  <send retrans="500" start_txn="register2">
+    <![CDATA[
+      REGISTER sip:[field2] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      Max-Forwards: 70
+      From: <sip:[field0]@[field2]>;tag=[pid]reg[call_number]
+      To: <sip:[field0]@[field2]>
+      Call-ID: [call_id]
+      CSeq: 2 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[field3]>;transport=[transport];expires=[field4]
+      [field1]
+      Expires: [field4]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="100" optional="true" response_txn="register2"/>
+  <recv response="200" response_txn="register2"/>
+
+  <label id="success"/>
+  <!-- Mixed-mode secondary scenario receives calls while this same socket waits. -->
+  <pause milliseconds="240000"/>
+
+  <ResponseTimeRepartition value="10,20,50,100,200,500,1000,2000"/>
+</scenario>

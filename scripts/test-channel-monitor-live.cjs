@@ -1,0 +1,387 @@
+#!/usr/bin/env node
+'use strict';
+// Opt-in synthetic audio acceptance. No MASTER resources, queue status, PSTN
+// routes, production recordings, or uncorrelated channel cleanup are allowed.
+const fs=require('node:fs'), path=require('node:path'), crypto=require('node:crypto');
+const cp=require('node:child_process'), assert=require('node:assert/strict');
+const audio=require('./test-fixtures/monitor-audio.cjs');
+const ROOT=path.resolve(__dirname,'..'), API='http://127.0.0.1:8000/v2';
+const BASE='/etc/kazoo/acceptance-secrets.env', FILE='/etc/kazoo/monitor-acceptance.json';
+const AUTH='/etc/kazoo/installer-secrets.env', OWNER='kazoo5-isolated-monitor-acceptance';
+const MASTER='302ae5a70c403124f764cbc54229cfcd', ID=/^[a-f0-9]{32}$/, CALL=/^[A-Za-z0-9_.:@-]{1,128}$/;
+const SCENARIOS=path.join(__dirname,'sip-tests'), FSCLI='/usr/local/freeswitch/bin/fs_cli';
+let state, fixture, masterToken, adminToken, userToken, runDir, current, cleaning=false;
+const children=new Set(), registered=new Set();
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const hex=()=>crypto.randomBytes(16).toString('hex');
+const log=message=>console.log('[monitor-acceptance] '+message);
+
+function privateRead(file) {
+    const s=fs.lstatSync(file);
+    assert(s.isFile()&&!s.isSymbolicLink()&&s.uid===0&&(s.mode&511)===384,'Protected file must be root-owned0600');
+    return fs.readFileSync(file,'utf8');
+}
+function baseState(text) {
+    const s={};
+    for(const line of text.split('\n')) {
+        if(!line||line.startsWith('#')) continue;
+        const at=line.indexOf('='), key=line.slice(0,at), encoded=line.slice(at+1);
+        assert(at>0&&/^ACCEPTANCE_[A-Z0-9_]+$/.test(key)&&!Object.hasOwn(s,key),'Malformed acceptance key');
+        assert(/^[A-Za-z0-9+/]*={0,2}$/.test(encoded),'Malformed acceptance encoding');
+        const value=Buffer.from(encoded,'base64').toString();
+        assert(!/[\r\n\0]/.test(value),'Multiline acceptance value'); s[key]=value;
+    }
+    assert(ID.test(s.ACCEPTANCE_ACCOUNT_ID)&&s.ACCEPTANCE_ACCOUNT_ID!==MASTER,'Refusing MASTER or invalid tenant');
+    assert(/^Kazoo5 Acceptance [a-f0-9]{12}$/.test(s.ACCEPTANCE_ACCOUNT_NAME)&&
+        /^acceptance-[a-f0-9]{12}\.invalid$/.test(s.ACCEPTANCE_REALM),'Not an isolated acceptance tenant');
+    assert(s.ACCEPTANCE_ACCOUNT_NAME.slice(-12)===s.ACCEPTANCE_REALM.slice(11,23),'Acceptance identity mismatch');
+    assert(s.ACCEPTANCE_CALLER_EXTENSION==='1001'&&s.ACCEPTANCE_AGENT_1_EXTENSION==='1002'&&
+        s.ACCEPTANCE_AGENT_2_EXTENSION==='1003','Only internal1001–1003 permitted');
+    assert(s.ACCEPTANCE_SIP_PROXY_PORT==='5060'&&s.ACCEPTANCE_SIP_TRANSPORT==='udp'&&
+        /^(?:\d{1,3}\.){3}\d{1,3}$/.test(s.ACCEPTANCE_SIP_PROXY_HOST),'Only pinned local IPv4 SIP proxy allowed');
+    for(const prefix of ['ACCEPTANCE_CALLER','ACCEPTANCE_AGENT_1','ACCEPTANCE_AGENT_2']) {
+        for(const key of ['USER_ID','DEVICE_ID','CALLFLOW_ID']) assert(ID.test(s[prefix+'_'+key]),'Missing fixture resource ID');
+        assert(/^acceptance100[123]$/.test(s[prefix+'_SIP_USERNAME'])&&/^[a-f0-9]{32}$/.test(s[prefix+'_SIP_PASSWORD']),
+            'Unsafe or non-fixture SIP credential');
+    }
+    for(const kind of ['USER_ID','DEVICE_ID','CALLFLOW_ID'])
+        assert(new Set(['ACCEPTANCE_CALLER','ACCEPTANCE_AGENT_1','ACCEPTANCE_AGENT_2'].map(p=>s[p+'_'+kind])).size===3,
+            'Duplicate borrowed fixture identity');
+    return s;
+}
+function endpoints(s) {
+    return ['ACCEPTANCE_CALLER','ACCEPTANCE_AGENT_1','ACCEPTANCE_AGENT_2'].map((prefix,i)=>({
+        role:['customer','agent','supervisor'][i], port:18100+i, rtp:49000+2*i,
+        device:s[prefix+'_DEVICE_ID'], user:s[prefix+'_USER_ID'], flow:s[prefix+'_CALLFLOW_ID'],
+        extension:s[prefix+'_EXTENSION'], username:s[prefix+'_SIP_USERNAME'], password:s[prefix+'_SIP_PASSWORD']}));
+}
+function validFixture(f,s) {
+    assert(f.schema_version===1&&f.owner===OWNER&&ID.test(f.deployment_id)&&f.account_id===s.ACCEPTANCE_ACCOUNT_ID,
+        'Saved monitor fixture ownership mismatch');
+    assert(f.realm===s.ACCEPTANCE_REALM&&JSON.stringify(f.device_ids)===JSON.stringify(endpoints(s).map(e=>e.device)),
+        'Saved fixture identity drift');
+    for(const role of ['admin','user']) {
+        const u=f.users[role];
+        assert(u&&u.username===`monitor-${role}-${f.deployment_id.slice(0,12)}`&&ID.test(u.password)&&(!u.id||ID.test(u.id)),
+            'Saved fixture web-user mismatch');
+    }
+    if(f.current) {
+        assert(/^1-[1-9][0-9]*@127\.0\.0\.50$/.test(f.current.caller_id)&&
+            ['eavesdrop','whisper','barge','join'].includes(f.current.mode),'Invalid saved fixture call');
+        if(f.current.agent_id) assert(CALL.test(f.current.agent_id),'Invalid saved agent ID');
+        if(f.current.supervisor_id) assert(ID.test(f.current.supervisor_id)&&ID.test(f.current.request_id),'Invalid monitor correlation');
+    }
+    return f;
+}
+function saveFixture() {
+    const parent=fs.lstatSync('/etc/kazoo');
+    assert(parent.isDirectory()&&!parent.isSymbolicLink()&&parent.uid===0&&(parent.mode&18)===0,'Unsafe state directory');
+    if(fs.existsSync(FILE)) privateRead(FILE);
+    const tmp=FILE+'.'+process.pid+'.'+hex()+'.tmp';
+    const fd=fs.openSync(tmp,fs.constants.O_CREAT|fs.constants.O_EXCL|fs.constants.O_WRONLY|fs.constants.O_NOFOLLOW,384);
+    try {fs.writeFileSync(fd,JSON.stringify(fixture)+'\n');fs.fsyncSync(fd);} finally {fs.closeSync(fd);}
+    fs.renameSync(tmp,FILE);
+}
+function command(file,args,timeout=15000) {
+    try {return cp.execFileSync(file,args,{encoding:'utf8',timeout,maxBuffer:4*1024*1024,stdio:['ignore','pipe','pipe']});}
+    catch(_) {throw Error('Local dependency/diagnostic command failed: '+path.basename(file));}
+}
+async function request(method,route,body,token,expected=200) {
+    let r,j;
+    try {
+        r=await fetch(API+'/'+route,{method,headers:{'Content-Type':'application/json',...(token?{'X-Auth-Token':token}:{})},
+            body:body===undefined?undefined:JSON.stringify({data:body}),signal:AbortSignal.timeout(15000)});
+        j=await r.json();
+    } catch(_) {throw Error('Local Crossbar response unavailable');}
+    const accepted=Array.isArray(expected)?expected:[expected];
+    if(!accepted.includes(r.status)) {
+        const error=Error(`Expected HTTP${expected}, received${r.status} for ${method}`);
+        error.http_status=r.status;throw error;
+    }
+    if(r.status<300) assert(j.status==='success','Crossbar did not succeed');
+    return j;
+}
+const route=(collection,id='')=>`accounts/${state.ACCEPTANCE_ACCOUNT_ID}/${collection}${id?'/'+id:''}`;
+async function login(username,password,realm,account) {
+    const j=await request('PUT','user_auth',{credentials:crypto.createHash('md5').update(username+':'+password).digest('hex'),method:'md5',realm},undefined,[200,201]);
+    assert(j.data.account_id===account&&typeof j.auth_token==='string','Authentication account mismatch'); return j.auth_token;
+}
+async function authenticateMaster() {
+    const values={};
+    for(const line of privateRead(AUTH).split('\n')) {
+        if(!line||line.startsWith('#')) continue;
+        const at=line.indexOf('='); assert(at>0,'Malformed master credential file'); values[line.slice(0,at)]=line.slice(at+1);
+    }
+    masterToken=await login(values.KAZOO_MASTER_ADMIN_USER,values.KAZOO_MASTER_ADMIN_PASSWORD,values.KAZOO_MASTER_ACCOUNT_REALM,MASTER);
+}
+async function verifyBorrowed() {
+    const a=(await request('GET',`accounts/${state.ACCEPTANCE_ACCOUNT_ID}`,undefined,masterToken)).data;
+    assert(a.id===state.ACCEPTANCE_ACCOUNT_ID&&a.realm===state.ACCEPTANCE_REALM&&a.name===state.ACCEPTANCE_ACCOUNT_NAME,
+        'Live acceptance tenant identity drift');
+    assert(!a.call_forward?.enabled,'Acceptance account forwarding must be disabled');
+    for(const e of endpoints(state)) {
+        const u=(await request('GET',route('users',e.user),undefined,masterToken)).data;
+        assert(u.id===e.user&&u.enabled===true&&u.priv_level==='user'&&!u.call_forward?.enabled,
+            'Borrowed fixture user identity/forwarding changed');
+        const d=(await request('GET',route('devices',e.device),undefined,masterToken)).data;
+        assert(d.id===e.device&&d.owner_id===e.user&&d.enabled===true&&['softphone','sip_device'].includes(d.device_type)&&
+            d.sip.method==='password'&&d.sip.username===e.username&&d.sip.password===e.password&&d.sip.transport==='udp'&&
+            (!d.sip.realm||d.sip.realm===state.ACCEPTANCE_REALM)&&!d.call_forward?.enabled&&
+            (!d.sip.invite_format||['username','contact'].includes(d.sip.invite_format))&&!d.sip.route&&!d.sip.ip&&!d.route&&!d.failover,
+            'Borrowed fixture device identity/authentication changed');
+        const f=(await request('GET',route('callflows',e.flow),undefined,masterToken)).data;
+        assert(f.id===e.flow&&JSON.stringify(f.numbers)===JSON.stringify([e.extension])&&f.flow.module==='user'&&
+            f.flow.data.id===e.user&&Object.keys(f.flow.children||{}).length===0,'Fixture direct route changed');
+    }
+}
+function mark(role) {return {owner:OWNER,deployment_id:fixture.deployment_id,account_id:fixture.account_id,kind:role};}
+function ownedUser(doc,role,saved=fixture) {
+    const m=doc.kz5_monitor_test;
+    const expected={owner:OWNER,deployment_id:saved.deployment_id,account_id:saved.account_id,kind:role};
+    return doc.id===saved.users[role].id&&m&&Object.entries(expected).every(([k,v])=>m[k]===v)&&
+        doc.username===saved.users[role].username&&doc.priv_level===(role==='admin'?'admin':'user')&&doc.enabled===true;
+}
+async function recoverUser(role) {
+    const u=fixture.users[role];
+    const list=await request('GET',route('users')+'?paginate=false',undefined,masterToken);
+    assert(Array.isArray(list.data)&&!list.next_start_key&&list.data.length<500,'Incomplete users inventory');
+    const matches=list.data.filter(d=>d.username===u.username);assert(matches.length<=1,'Ambiguous fixture user');
+    if(!matches.length)return false;
+    assert(ID.test(matches[0].id),'Invalid discovered user ID');u.id=matches[0].id;
+    const doc=(await request('GET',route('users',u.id),undefined,masterToken)).data;
+    assert(ownedUser(doc,role),'Cannot adopt unmarked fixture username');saveFixture();return true;
+}
+async function ensureUsers() {
+    for(const role of ['admin','user']) {
+        const u=fixture.users[role];
+        if(!u.id) {
+            // Recover only an exact persisted marker after a lost create response.
+            if(!await recoverUser(role)) {
+                const doc=(await request('PUT',route('users'),{first_name:'Monitor Acceptance',last_name:role,username:u.username,
+                    password:u.password,enabled:true,priv_level:role==='admin'?'admin':'user',kz5_monitor_test:mark(role)},masterToken,[200,201])).data;
+                assert(ID.test(doc.id),'Invalid created user ID');u.id=doc.id;saveFixture();
+            }
+        }
+        assert(ownedUser((await request('GET',route('users',u.id),undefined,masterToken)).data,role),'Live monitor user ownership drift');
+    }
+    adminToken=await login(fixture.users.admin.username,fixture.users.admin.password,fixture.realm,fixture.account_id);
+    userToken=await login(fixture.users.user.username,fixture.users.user.password,fixture.realm,fixture.account_id);
+}
+function writePrivate(name,content) {
+    const file=path.join(runDir,name);assert(path.dirname(file)===runDir,'Unsafe private filename');
+    fs.writeFileSync(file,content,{mode:384,flag:'wx'});return file;
+}
+function contacts(e) {
+    const r=cp.spawnSync('kamcmd',['ul.lookup','location',e.username+'@'+state.ACCEPTANCE_REALM],{encoding:'utf8',timeout:5000});
+    if(r.status!==0) {assert((r.stdout+r.stderr).includes('404'),'Registrar observation unavailable');return [];}
+    return [...r.stdout.matchAll(/^\s*Address:\s*(sip:\S+)/gm)].map(m=>m[1].split(';')[0]);
+}
+function registration(e,expiry) {
+    const csv=writePrivate(`registration-${e.role}-${expiry}-${hex()}.csv`,
+        `SEQUENTIAL\n${e.username};[authentication username=${e.username} password=${e.password}];${state.ACCEPTANCE_REALM};${e.port};${expiry}\n`);
+    if(expiry)registered.add(e.role); // A lost REGISTER response still requires exact cleanup.
+    try {command('sipp',[state.ACCEPTANCE_SIP_PROXY_HOST+':5060','-sf',path.join(SCENARIOS,'register.xml'),'-inf',csv,
+        '-i',audio.IP,'-p',String(e.port),'-m','1','-l','1','-r','1','-nostdin','-timeout','15s','-timeout_error'],20000);}
+    finally {fs.unlinkSync(csv);}
+    if(expiry) {
+        const expected=`sip:${e.username}@${audio.IP}:${e.port}`;
+        assert(JSON.stringify(contacts(e))===JSON.stringify([expected]),'Registration must resolve only exact fixture contact');
+        registered.add(e.role);
+    } else registered.delete(e.role);
+}
+function spawnPhone(e,scenario,csv) {
+    const args=[...(e.role==='customer'?[state.ACCEPTANCE_SIP_PROXY_HOST+':5060']:[]),'-sf',path.join(SCENARIOS,scenario),'-inf',csv,
+        '-i',audio.IP,'-p',String(e.port),'-mi',audio.IP,'-mp',String(e.rtp),'-min_rtp_port',String(e.rtp),'-max_rtp_port',String(e.rtp+1),
+        '-m','1','-l','1','-nostdin','-aa','-timeout','150s','-timeout_error'];
+    const child=cp.spawn('sipp',args,{stdio:'ignore'});children.add(child);child.once('exit',()=>children.delete(child));return child;
+}
+function channel(id) {
+    assert(CALL.test(id),'Unsafe channel ID');
+    const text=command(FSCLI,['-x',`uuid_dump ${id} json`],6000);
+    if(text.trim().startsWith('-ERR')) return null;
+    let d;try{d=JSON.parse(text);}catch(_){throw Error('Malformed channel observation');}
+    assert(d['Unique-ID']===id,'Channel observation ID mismatch');
+    if(d.variable_bridge_to&&d['Other-Leg-Unique-ID'])
+        assert(d.variable_bridge_to===d['Other-Leg-Unique-ID'],'Ambiguous original bridge linkage');
+    return {id,account:d['variable_ecallmgr_Account-ID'],device:d['variable_ecallmgr_Authorizing-ID'],
+        ip:d.variable_sip_contact_host,port:Number(d.variable_sip_contact_port),peer:d.variable_sip_network_ip,
+        auth_ip:d['variable_sip_h_X-AUTH-IP'],bridge:d.variable_bridge_to||d['Other-Leg-Unique-ID'],request:d['variable_ecallmgr_Monitor-Request-ID'],
+        target:d['variable_ecallmgr_Monitor-Target-ID'],mode:d['variable_ecallmgr_Monitor-Mode'],
+        active:['CS_NEW','CS_INIT','CS_ROUTING','CS_SOFT_EXECUTE','CS_EXECUTE','CS_EXCHANGE_MEDIA','CS_PARK','CS_CONSUME_MEDIA','CS_HIBERNATE','CS_RESET'].includes(d['Channel-State']),
+        answered:Number(d.variable_answer_epoch||0)>0};
+}
+function ownedChannel(c,e,account=state.ACCEPTANCE_ACCOUNT_ID,proxy=state.ACCEPTANCE_SIP_PROXY_HOST) {
+    return c&&c.active===true&&c.account===account&&c.device===e.device&&c.ip===audio.IP&&c.port===e.port&&
+        [audio.IP,proxy].includes(c.peer)&&(!c.auth_ip||c.auth_ip===audio.IP);
+}
+function monitorMatches(c) {
+    const mode=current.mode==='eavesdrop'?'listen':current.mode==='whisper'?'whisper':'full';
+    return ownedChannel(c,endpoints(state)[2])&&c.request===current.request_id&&c.target===current.agent_id&&c.mode===mode;
+}
+async function until(fn,seconds=15) {
+    const end=Date.now()+seconds*1000;while(Date.now()<end){const value=await fn();if(value)return value;await sleep(250);}throw Error('Bounded live observation timed out');
+}
+function originalAlive() {
+    const es=endpoints(state), a=channel(current.caller_id), b=channel(current.agent_id);
+    assert(ownedChannel(a,es[0])&&ownedChannel(b,es[1])&&a.bridge===b.id&&b.bridge===a.id&&a.answered&&b.answered,
+        'Original two-leg bridge did not survive monitoring');return true;
+}
+async function stopSupervisor() {
+    if(!current?.supervisor_id)return;
+    const c=channel(current.supervisor_id);if(!c)return;
+    assert(monitorMatches(c),'Cannot stop unowned supervisor');
+    await request('POST',route('channels',c.id),{action:'stop_monitoring',request_id:current.request_id},adminToken,202);
+    await until(()=>!channel(c.id),8);
+}
+function terminate(child) {if(child&&child.exitCode===null&&!child.killed)child.kill('SIGINT');}
+async function clearStage() {
+    if(current?.supervisor_id)await stopSupervisor();
+    if(current?.caller_id) {
+        const c=channel(current.caller_id);
+        if(c) {
+            assert(ownedChannel(c,endpoints(state)[0]),'Refusing cleanup of unowned original leg');
+            const result=command(FSCLI,['-x',`uuid_kill ${c.id} NORMAL_CLEARING`],6000);assert(result.startsWith('+OK'),'Fixture hangup failed');
+            await until(()=>!channel(c.id),8);
+        }
+    }
+    if(current?.agent_id) assert(!channel(current.agent_id),'Fixture agent leg remains; refusing broad cleanup');
+    for(const child of children)terminate(child);
+    await sleep(600);
+    for(const child of children)if(child.exitCode===null)child.kill('SIGKILL');
+    if(fixture){delete fixture.current;saveFixture();}current=null;
+}
+async function stage(mode) {
+    await verifyBorrowed();const es=endpoints(state);
+    es.forEach(e=>assert(contacts(e).length===0,'Fixture SIP identity is already in use; wait for other acceptance runs'));
+    for(const e of es)registration(e,600);
+    const input={};
+    es.forEach((e,i)=>{input[e.role]=writePrivate(`${mode}-${e.role}.csv`,e.role==='customer'?
+        `SEQUENTIAL\n${e.username};[authentication username=${e.username} password=${e.password}];${state.ACCEPTANCE_REALM};1002;120000;0;${path.join(runDir,'tone-440.ulaw')}\n`:
+        `SEQUENTIAL\n${path.join(runDir,'tone-'+[440,660,880][i]+'.ulaw')}\n`);});
+    const capture=path.join(runDir,mode+'.pcap');
+    const tcpdump=cp.spawn('tcpdump',['-i','lo','-Z','root','-n','-U','-s','512','-w',capture,'udp','and','host',audio.IP,'and','portrange','49000-49005'],{stdio:'ignore'});
+    children.add(tcpdump);tcpdump.once('exit',()=>children.delete(tcpdump));
+    const agent=spawnPhone(es[1],'monitor-agent.xml',input.agent), supervisor=spawnPhone(es[2],'monitor-supervisor.xml',input.supervisor);
+    await sleep(500);assert(agent.exitCode===null&&supervisor.exitCode===null&&tcpdump.exitCode===null,'Fixture listener failed');
+    const caller=spawnPhone(es[0],'monitor-customer.xml',input.customer);
+    current={mode,caller_id:`1-${caller.pid}@${audio.IP}`};fixture.current=current;saveFixture();
+    const target=await until(()=>{
+        const c=channel(current.caller_id);if(!c?.bridge||!c.answered)return false;
+        assert(ownedChannel(c,es[0]),'Caller scope mismatch');const a=channel(c.bridge);
+        return ownedChannel(a,es[1])&&a.answered?a:false;
+    });
+    current.agent_id=target.id;saveFixture();
+    const body={action:mode,device_id:es[2].device,timeout:10};
+    await request('POST',route('channels',target.id),body,masterToken,403);
+    await request('POST',route('channels',target.id),body,userToken,403);
+    await request('POST',route('channels',hex()),body,adminToken,404);
+    await request('POST',route('channels',target.id),{...body,route:'forbidden'},adminToken,400);
+    originalAlive();
+    const accepted=(await request('POST',route('channels',target.id),body,adminToken,202)).data;
+    assert(accepted.status==='accepted'&&accepted.action===mode&&accepted.target_call_id===target.id&&
+        ID.test(accepted.request_id)&&ID.test(accepted.supervisor_call_id),'Invalid monitor correlation response');
+    current.supervisor_id=accepted.supervisor_call_id;current.request_id=accepted.request_id;saveFixture();
+    await until(()=>{const c=channel(current.supervisor_id);return c&&monitorMatches(c)&&c.answered;});
+    await request('POST',route('channels',target.id),{action:'stop_monitoring',request_id:current.request_id},adminToken,403);
+    await sleep(12500);originalAlive();
+    await stopSupervisor();originalAlive();await sleep(2500);originalAlive();
+    terminate(tcpdump);await until(()=>tcpdump.exitCode!==null,5);fs.chmodSync(capture,384);
+    const buffer=fs.readFileSync(capture), ps=audio.packets(buffer);
+    const digit=ps.find(p=>p.source===audio.IP&&p.sp===49004&&p.pt===96&&p.payload[0]===3);
+    assert(digit,'No explicit keypad escalation packet observed');
+    const proof=audio.inspect(buffer,mode,[{start:digit.time-3,end:digit.time-1},{start:digit.time+2,end:digit.time+5}]);
+    proof.authorization_negatives=['cross_account403','non_admin403','stale404','extra_route400','stop_original403'];
+    proof.original_bridge_survived_monitor_stop=true;
+    writePrivate(mode+'-evidence.json',JSON.stringify(proof,null,2)+'\n');
+    await clearStage();
+    for(const e of es)registration(e,0);
+    for(const file of Object.values(input))fs.unlinkSync(file);
+    log(mode+' PASS: tone routing before/after keypad3, authorization, supervisor-only stop');
+}
+async function cleanup() {
+    if(cleaning)return;cleaning=true;let complete=true;
+    try {await clearStage();}catch(error){complete=false;log('Scoped call cleanup incomplete: '+error.message+'; protected recovery state retained');}
+    for(const child of children)terminate(child);
+    if(state&&runDir)for(const e of endpoints(state))if(registered.has(e.role)) {
+        try {await verifyBorrowed();registration(e,0);}catch(_){complete=false;log('Exact registration cleanup incomplete; expires within600s');}
+    }
+    if(fixture&&masterToken&&complete)for(const role of ['admin','user']) {
+        const u=fixture.users[role];
+        try {
+            if(!u.id&&!await recoverUser(role))continue;
+            const d=(await request('GET',route('users',u.id),undefined,masterToken)).data;
+            assert(ownedUser(d,role),'Cleanup marker mismatch');
+            await request('DELETE',route('users',u.id),undefined,masterToken);delete u.id;saveFixture();
+        } catch(error){
+            if(error.http_status===404){delete u.id;saveFixture();}
+            else {complete=false;log('Owned web-user cleanup incomplete; protected state retained');}
+        }
+    }
+    if(runDir)for(const name of fs.readdirSync(runDir))if(name.endsWith('.csv'))fs.unlinkSync(path.join(runDir,name));
+    if(complete&&fixture){fs.unlinkSync(FILE);log('Owned temporary web users and exact registrations removed; evidence retained privately');}
+    return complete;
+}
+function prepare() {
+    state=baseState(privateRead(BASE));
+    const local=JSON.parse(command('ip',['-j','-4','address','show'])).flatMap(x=>x.addr_info||[]).map(x=>x.local);
+    assert(local.includes(state.ACCEPTANCE_SIP_PROXY_HOST),'SIP proxy must be this local server');
+    const version=cp.spawnSync('sipp',['-v'],{encoding:'utf8',timeout:5000});
+    assert(!version.error&&(version.stdout+version.stderr).includes('SIPp v3.7.7-TLS-PCAP-SHA256'),'Pinned SIPp feature version required');
+    command('tcpdump',['--version']);assert(fs.existsSync(FSCLI),'Local FS diagnostic client missing');
+    for(const scenario of ['monitor-customer.xml','monitor-agent.xml','monitor-supervisor.xml']) {
+        const text=fs.readFileSync(path.join(SCENARIOS,scenario),'utf8');
+        assert(!text.includes('rtp_echo')&&!text.includes('system '),'Non-synthetic scenario action');
+    }
+    log('Prepared: isolated tenant only; three synthetic endpoints; no API writes, SIP traffic, or service changes');
+}
+async function main(args) {
+    assert(args.length===1&&['--prepare-only','--live','--cleanup'].includes(args[0]),'Use --prepare-only, --live, or --cleanup');
+    assert(process.getuid()===0,'Root required for protected fixture and local RTP evidence');prepare();
+    if(args[0]==='--prepare-only')return;
+    // Serializes this harness; other acceptance runs must also be idle. Every
+    // stage refuses pre-existing contacts rather than stealing registrations.
+    const lockPath='/etc/kazoo/monitor-acceptance.lock';
+    if(fs.existsSync(lockPath)) {
+        const st=fs.lstatSync(lockPath);assert(st.isFile()&&!st.isSymbolicLink()&&st.uid===0,'Unsafe fixture lock');
+    }
+    // Holding stdin open keeps the lock alive; parent exit closes it promptly.
+    const lock=cp.spawn('flock',['-n',lockPath,process.execPath,'-e','process.stdin.resume();'],{stdio:['pipe','ignore','ignore']});
+    await sleep(100);assert(lock.exitCode===null,'Monitor acceptance is already running');
+    try {
+        runDir=fs.mkdtempSync('/var/log/kazoo-monitor-acceptance-');fs.chmodSync(runDir,448);process.umask(63);
+        await authenticateMaster();await verifyBorrowed();
+        if(fs.existsSync(FILE))fixture=validFixture(JSON.parse(privateRead(FILE)),state);
+        else {
+            assert(args[0]==='--live','No saved fixture exists');
+            const deployment=hex();fixture={schema_version:1,owner:OWNER,deployment_id:deployment,account_id:state.ACCEPTANCE_ACCOUNT_ID,
+                realm:state.ACCEPTANCE_REALM,device_ids:endpoints(state).map(e=>e.device),users:Object.fromEntries(['admin','user'].map(role=>
+                    [role,{username:`monitor-${role}-${deployment.slice(0,12)}`,password:hex()}]))};saveFixture();
+        }
+        current=fixture.current||null;
+        if(args[0]==='--cleanup') {
+            if(current?.supervisor_id) {
+                assert(fixture.users.admin.id&&ownedUser((await request('GET',route('users',fixture.users.admin.id),undefined,masterToken)).data,'admin'),
+                    'Cannot authorize saved supervisor cleanup');
+                adminToken=await login(fixture.users.admin.username,fixture.users.admin.password,fixture.realm,fixture.account_id);
+            }
+            // Recovery deletes only exact saved registrations, never creates users.
+            endpoints(state).forEach(e=>{if(contacts(e).includes(`sip:${e.username}@${audio.IP}:${e.port}`))registered.add(e.role);});
+            assert(await cleanup(),'Cleanup did not complete');return;
+        }
+        assert(!current,'Previous unfinished monitor run requires --cleanup first');
+        process.once('SIGTERM',()=>{cleanup().finally(()=>process.exit(143));});
+        process.once('SIGINT',()=>{cleanup().finally(()=>process.exit(130));});
+        try {
+            await ensureUsers();
+            const channels=(await request('GET',route('channels'),undefined,adminToken)).data;
+            assert(channels&&Object.keys(channels).length===0,'Acceptance tenant has active calls; wait for them to finish');
+            for(const f of audio.FREQUENCIES)writePrivate('tone-'+f+'.ulaw',audio.tone([f]));
+            for(const mode of ['eavesdrop','whisper','barge','join'])await stage(mode);
+        }
+        catch(error){log('Stage failed: '+error.message);throw error;}
+        finally {assert(await cleanup(),'Scoped fixture cleanup incomplete');}
+        log('All four modes passed. Private synthetic evidence: '+runDir);
+    } finally {lock.stdin.end();terminate(lock);}
+}
+module.exports={baseState,endpoints,validFixture,ownedChannel,ownedUser,MASTER,OWNER};
+if(require.main===module)main(process.argv.slice(2)).catch(e=>{console.error('[monitor-acceptance] FAIL: '+e.message);process.exitCode=1;});

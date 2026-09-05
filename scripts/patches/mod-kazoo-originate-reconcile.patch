@@ -1,0 +1,341 @@
+diff --git a/kazoo_commands.c b/kazoo_commands.c
+--- a/kazoo_commands.c
++++ b/kazoo_commands.c
+@@ -54,9 +54,51 @@
+ #define KZ_ORIGINATE_SYNTAX "<request_uuid> <call url> <exten>|&<application_name>(<app_args>) [<dialplan>] [<context>] [<cid_name>] [<cid_num>] [<timeout_sec>]"
+ #define KZ_ORIGINATE_CANCEL_DESC "Cancel an in-progress Kazoo originate"
+ #define KZ_ORIGINATE_CANCEL_SYNTAX "<request_uuid>"
++#define KZ_ORIGINATE_RECONCILE_DESC "Query or cancel an exactly correlated Kazoo originate"
++#define KZ_ORIGINATE_RECONCILE_SYNTAX "<status|cancel> <request_uuid> <request_id> <caller_uuid>"
++#define KZ_ORIGINATE_REGISTRY_MAX 4096
++#define KZ_ORIGINATE_TOKEN_MAX 512
++#define KZ_ORIGINATE_TOMBSTONE_TTL_US (15LL * 60LL * 1000000LL)
++
++typedef enum {
++	KZ_ORIGINATE_PENDING = 0,
++	KZ_ORIGINATE_SETTLED_SUCCESS,
++	KZ_ORIGINATE_SETTLED_FAILURE
++} kz_originate_state_t;
++
++typedef struct kz_originate_entry_s {
++	char *request_uuid;
++	char *request_id;
++	char *caller_uuid;
++	char result_uuid[SWITCH_UUID_FORMATTED_LENGTH + 1];
++	switch_call_cause_t cancel_cause;
++	switch_call_cause_t result_cause;
++	kz_originate_state_t state;
++	switch_time_t completed_at;
++	struct kz_originate_entry_s *previous;
++	struct kz_originate_entry_s *next;
++} kz_originate_entry_t;
+ 
+ static switch_hash_t *kz_originate_hash = NULL;
+ static switch_mutex_t *kz_originate_mutex = NULL;
++static kz_originate_entry_t *kz_originate_entries = NULL;
++static size_t kz_originate_entry_count = 0;
++static char kz_originate_epoch[SWITCH_UUID_FORMATTED_LENGTH + 1] = { 0 };
++
++static switch_bool_t kz_originate_token_valid(const char *value)
++{
++	const unsigned char *cursor = (const unsigned char *)value;
++	size_t length = 0;
++
++	if (zstr(value)) return SWITCH_FALSE;
++	while (*cursor) {
++		if (*cursor <= 32 || *cursor == 127 || ++length > KZ_ORIGINATE_TOKEN_MAX) {
++			return SWITCH_FALSE;
++		}
++		cursor++;
++	}
++	return SWITCH_TRUE;
++}
+ 
+ /* Preserve the quotes which protect spaces in Kazoo channel variables. */
+ static char *kz_originate_action(char *dialstring)
+@@ -104,30 +146,93 @@
+ 	return NULL;
+ }
+ 
+-static switch_bool_t kz_originate_register(const char *request_uuid, switch_call_cause_t *cancel_cause)
++static void kz_originate_entry_free(kz_originate_entry_t *entry)
+ {
+-	switch_bool_t registered = SWITCH_FALSE;
++	if (!entry) return;
++	switch_safe_free(entry->request_uuid);
++	switch_safe_free(entry->request_id);
++	switch_safe_free(entry->caller_uuid);
++	free(entry);
++}
++
++static void kz_originate_entry_delete(kz_originate_entry_t *entry)
++{
++	if (!entry) return;
++	switch_core_hash_delete(kz_originate_hash, entry->request_uuid);
++	if (entry->previous) entry->previous->next = entry->next;
++	else kz_originate_entries = entry->next;
++	if (entry->next) entry->next->previous = entry->previous;
++	if (kz_originate_entry_count) kz_originate_entry_count--;
++	kz_originate_entry_free(entry);
++}
++
++/* Called only with kz_originate_mutex held. Pending entries never expire. */
++static void kz_originate_expire_tombstones(void)
++{
++	kz_originate_entry_t *entry = kz_originate_entries;
++	switch_time_t now = switch_micro_time_now();
++
++	while (entry) {
++		kz_originate_entry_t *next = entry->next;
++		if (entry->state != KZ_ORIGINATE_PENDING && entry->completed_at > 0
++			&& now - entry->completed_at >= KZ_ORIGINATE_TOMBSTONE_TTL_US) {
++			kz_originate_entry_delete(entry);
++		}
++		entry = next;
++	}
++}
++
++static kz_originate_entry_t *kz_originate_register(const char *request_uuid,
++													 const char *request_id, const char *caller_uuid)
++{
++	kz_originate_entry_t *entry = NULL;
+ 
+ 	switch_mutex_lock(kz_originate_mutex);
+-	if (!switch_core_hash_find(kz_originate_hash, request_uuid)) {
+-		switch_core_hash_insert(kz_originate_hash, request_uuid, cancel_cause);
+-		registered = SWITCH_TRUE;
++	kz_originate_expire_tombstones();
++	if (!switch_core_hash_find(kz_originate_hash, request_uuid)
++		&& kz_originate_entry_count < KZ_ORIGINATE_REGISTRY_MAX
++		&& (entry = calloc(1, sizeof(*entry))) != NULL) {
++		entry->request_uuid = strdup(request_uuid);
++		entry->request_id = request_id ? strdup(request_id) : NULL;
++		entry->caller_uuid = caller_uuid ? strdup(caller_uuid) : NULL;
++		if (!entry->request_uuid || (request_id && !entry->request_id)
++			|| (caller_uuid && !entry->caller_uuid)) {
++			kz_originate_entry_free(entry);
++			entry = NULL;
++		} else {
++			entry->state = KZ_ORIGINATE_PENDING;
++			entry->next = kz_originate_entries;
++			if (kz_originate_entries) kz_originate_entries->previous = entry;
++			kz_originate_entries = entry;
++			switch_core_hash_insert(kz_originate_hash, entry->request_uuid, entry);
++			kz_originate_entry_count++;
++		}
+ 	}
+ 	switch_mutex_unlock(kz_originate_mutex);
+ 
+-	return registered;
++	return entry;
+ }
+ 
+-static void kz_originate_unregister(const char *request_uuid)
++static void kz_originate_settle(const char *request_uuid, kz_originate_state_t state,
++								const char *result_uuid, switch_call_cause_t result_cause)
+ {
++	kz_originate_entry_t *entry;
++
+ 	switch_mutex_lock(kz_originate_mutex);
+-	switch_core_hash_delete(kz_originate_hash, request_uuid);
++	entry = switch_core_hash_find(kz_originate_hash, request_uuid);
++	if (entry && entry->state == KZ_ORIGINATE_PENDING) {
++		entry->state = state;
++		entry->result_cause = result_cause;
++		entry->completed_at = switch_micro_time_now();
++		if (result_uuid) switch_copy_string(entry->result_uuid, result_uuid, sizeof(entry->result_uuid));
++	}
+ 	switch_mutex_unlock(kz_originate_mutex);
+ }
+ 
+ SWITCH_STANDARD_API(kz_originate_cancel)
+ {
+-	switch_call_cause_t *cancel_cause = NULL;
++	kz_originate_entry_t *entry = NULL;
++	switch_bool_t cancel_requested = SWITCH_FALSE;
+ 
+ 	if (zstr(cmd)) {
+ 		stream->write_function(stream, "-USAGE: %s\n", KZ_ORIGINATE_CANCEL_SYNTAX);
+@@ -135,27 +240,75 @@
+ 	}
+ 
+ 	switch_mutex_lock(kz_originate_mutex);
+-	cancel_cause = switch_core_hash_find(kz_originate_hash, cmd);
+-	if (cancel_cause) *cancel_cause = SWITCH_CAUSE_ORIGINATOR_CANCEL;
++	entry = switch_core_hash_find(kz_originate_hash, cmd);
++	if (entry && entry->state == KZ_ORIGINATE_PENDING) {
++		entry->cancel_cause = SWITCH_CAUSE_ORIGINATOR_CANCEL;
++		cancel_requested = SWITCH_TRUE;
++	}
+ 	switch_mutex_unlock(kz_originate_mutex);
+ 
+-	if (cancel_cause) {
++	if (cancel_requested) {
+ 		stream->write_function(stream, "+OK\n");
+ 	} else {
+-		stream->write_function(stream, "-ERR No such originate request\n");
++		stream->write_function(stream, "-ERR No pending originate request\n");
+ 	}
+ 
+ 	return SWITCH_STATUS_SUCCESS;
+ }
+ 
++SWITCH_STANDARD_API(kz_originate_reconcile)
++{
++	char *copy = NULL;
++	char *argv[5] = { 0 };
++	int argc;
++	kz_originate_entry_t *entry;
++	const char *operation;
++
++	if (zstr(cmd) || !(copy = strdup(cmd))) goto usage;
++	argc = switch_separate_string(copy, ' ', argv, 5);
++	if (argc != 4 || zstr(argv[0])
++		|| !kz_originate_token_valid(argv[1])
++		|| !kz_originate_token_valid(argv[2])
++		|| !kz_originate_token_valid(argv[3])) goto usage;
++	operation = argv[0];
++	if (strcasecmp(operation, "status") && strcasecmp(operation, "cancel")) goto usage;
++
++	switch_mutex_lock(kz_originate_mutex);
++	kz_originate_expire_tombstones();
++	entry = switch_core_hash_find(kz_originate_hash, argv[1]);
++	if (!entry) {
++		stream->write_function(stream, "-ERR UNKNOWN %s\n", kz_originate_epoch);
++	} else if (zstr(entry->request_id) || zstr(entry->caller_uuid)
++			   || strcmp(entry->request_id, argv[2]) || strcmp(entry->caller_uuid, argv[3])) {
++		stream->write_function(stream, "-ERR CORRELATION_MISMATCH %s\n", kz_originate_epoch);
++	} else if (entry->state == KZ_ORIGINATE_PENDING) {
++		if (!strcasecmp(operation, "cancel")) entry->cancel_cause = SWITCH_CAUSE_ORIGINATOR_CANCEL;
++		stream->write_function(stream, "+OK PENDING %s\n", kz_originate_epoch);
++	} else if (entry->state == KZ_ORIGINATE_SETTLED_SUCCESS && !zstr(entry->result_uuid)) {
++		stream->write_function(stream, "+OK SETTLED success %s %s\n",
++						   kz_originate_epoch, entry->result_uuid);
++	} else {
++		stream->write_function(stream, "+OK SETTLED failure %s %s\n",
++						   kz_originate_epoch, switch_channel_cause2str(entry->result_cause));
++	}
++	switch_mutex_unlock(kz_originate_mutex);
++	switch_safe_free(copy);
++	return SWITCH_STATUS_SUCCESS;
++
++usage:
++	stream->write_function(stream, "-USAGE: %s\n", KZ_ORIGINATE_RECONCILE_SYNTAX);
++	switch_safe_free(copy);
++	return SWITCH_STATUS_SUCCESS;
++}
++
+ SWITCH_STANDARD_API(kz_originate)
+ {
+ 	switch_core_session_t *caller_session = NULL;
+ 	switch_channel_t *caller_channel;
+ 	switch_call_cause_t cause = SWITCH_CAUSE_NORMAL_CLEARING;
+-	switch_call_cause_t cancel_cause = 0;
++	kz_originate_entry_t *originate_entry = NULL;
+ 	switch_status_t status = SWITCH_STATUS_SUCCESS;
+-	char *mycmd = NULL, *request_uuid, *dialstring, *action;
++	char *mycmd = NULL, *request_uuid, *request_id = NULL, *caller_uuid = NULL, *dialstring, *action;
+ 	char *argv[8] = { 0 };
+ 	char *exten, *dp, *context, *cid_name, *cid_num;
+ 	uint32_t timeout = 60;
+@@ -173,7 +326,26 @@
+ 	if (!dialstring) goto usage;
+ 	*dialstring++ = '\0';
+ 	while (*dialstring && isspace((unsigned char)*dialstring)) dialstring++;
++	if (!strcmp(request_uuid, "v2")) {
++		request_uuid = dialstring;
++		dialstring = strchr(dialstring, ' ');
++		if (!dialstring) goto usage;
++		*dialstring++ = '\0';
++		while (*dialstring && isspace((unsigned char)*dialstring)) dialstring++;
++		request_id = dialstring;
++		dialstring = strchr(dialstring, ' ');
++		if (!dialstring) goto usage;
++		*dialstring++ = '\0';
++		while (*dialstring && isspace((unsigned char)*dialstring)) dialstring++;
++		caller_uuid = dialstring;
++		dialstring = strchr(dialstring, ' ');
++		if (!dialstring) goto usage;
++		*dialstring++ = '\0';
++		while (*dialstring && isspace((unsigned char)*dialstring)) dialstring++;
++	}
+-	if (zstr(request_uuid) || zstr(dialstring)) goto usage;
++	if (!kz_originate_token_valid(request_uuid) || zstr(dialstring)) goto usage;
++	if ((request_id && !kz_originate_token_valid(request_id))
++		|| (caller_uuid && !kz_originate_token_valid(caller_uuid))) goto usage;
+ 
+ 	action = kz_originate_action(dialstring);
+ 	if (zstr(dialstring) || zstr(action)) goto usage;
+@@ -196,20 +368,19 @@
+ 		timeout = (uint32_t) parsed_timeout;
+ 	}
+ 
+-	if (!kz_originate_register(request_uuid, &cancel_cause)) {
++	if (!(originate_entry = kz_originate_register(request_uuid, request_id, caller_uuid))) {
+-		stream->write_function(stream, "-ERR Originate request already exists\n");
++		stream->write_function(stream, "-ERR Originate registry unavailable or request already exists\n");
+ 		goto done;
+ 	}
+ 
+ 	if (switch_ivr_originate(NULL, &caller_session, &cause, dialstring, timeout,
+ 						 NULL, cid_name, cid_num, NULL, NULL, SOF_NONE,
+-						 &cancel_cause, NULL) != SWITCH_STATUS_SUCCESS || !caller_session) {
++						 &originate_entry->cancel_cause, NULL) != SWITCH_STATUS_SUCCESS || !caller_session) {
+ 		stream->write_function(stream, "-ERR %s\n", switch_channel_cause2str(cause));
+-		kz_originate_unregister(request_uuid);
++		kz_originate_settle(request_uuid, KZ_ORIGINATE_SETTLED_FAILURE, NULL, cause);
+ 		goto done;
+ 	}
+ 
+-	kz_originate_unregister(request_uuid);
+ 	caller_channel = switch_core_session_get_channel(caller_session);
+ 	if (*exten == '&' && *(exten + 1)) {
+ 		switch_caller_extension_t *extension = NULL;
+@@ -222,6 +393,8 @@
+ 		if (!extension) {
+ 			switch_channel_hangup(caller_channel, SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
+ 			switch_core_session_rwunlock(caller_session);
++			kz_originate_settle(request_uuid, KZ_ORIGINATE_SETTLED_FAILURE, NULL,
++								SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
+ 			stream->write_function(stream, "-ERR Could not create caller extension\n");
+ 			goto done;
+ 		}
+@@ -234,11 +407,15 @@
+ 				switch_channel_hangup(caller_channel, SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
+ 			}
+ 			switch_core_session_rwunlock(caller_session);
++			kz_originate_settle(request_uuid, KZ_ORIGINATE_SETTLED_FAILURE, NULL,
++								SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
+ 			stream->write_function(stream, "-ERR DESTINATION_OUT_OF_ORDER\n");
+ 			goto done;
+ 		}
+ 	}
+ 
++	kz_originate_settle(request_uuid, KZ_ORIGINATE_SETTLED_SUCCESS,
++						 switch_core_session_get_uuid(caller_session), SWITCH_CAUSE_SUCCESS);
+ 	stream->write_function(stream, "+OK %s\n", switch_core_session_get_uuid(caller_session));
+ 	switch_core_session_rwunlock(caller_session);
+ 	goto done;
+@@ -779,8 +956,11 @@
+ 	switch_api_interface_t *api_interface = NULL;
+ 	switch_core_hash_init(&kz_originate_hash);
+ 	switch_mutex_init(&kz_originate_mutex, SWITCH_MUTEX_NESTED, kazoo_globals.pool);
++	switch_uuid_str(kz_originate_epoch, sizeof(kz_originate_epoch));
+ 	SWITCH_ADD_API(api_interface, "kz_originate", KZ_ORIGINATE_DESC, kz_originate, KZ_ORIGINATE_SYNTAX);
+ 	SWITCH_ADD_API(api_interface, "kz_originate_cancel", KZ_ORIGINATE_CANCEL_DESC, kz_originate_cancel, KZ_ORIGINATE_CANCEL_SYNTAX);
++	SWITCH_ADD_API(api_interface, "kz_originate_reconcile", KZ_ORIGINATE_RECONCILE_DESC,
++				   kz_originate_reconcile, KZ_ORIGINATE_RECONCILE_SYNTAX);
+ 	SWITCH_ADD_API(api_interface, "kz_uuid_setvar_multi", UUID_SET_DESC, uuid_setvar_multi_function, UUID_MULTISET_SYNTAX);
+ 	SWITCH_ADD_API(api_interface, "kz_uuid_setvar_multi_encoded", UUID_SET_DESC, uuid_setvar_multi_encoded_function, UUID_MULTISET_SYNTAX);
+ 	switch_console_set_complete("add kz_uuid_setvar_multi ::console::list_uuid");
+@@ -798,6 +978,10 @@
+ 
+ void remove_kz_commands(void) {
+ 	if (kz_originate_hash) {
++		kz_originate_entry_t *entry;
++		switch_mutex_lock(kz_originate_mutex);
++		while ((entry = kz_originate_entries) != NULL) kz_originate_entry_delete(entry);
+ 		switch_core_hash_destroy(&kz_originate_hash);
++		switch_mutex_unlock(kz_originate_mutex);
+ 	}
+ }

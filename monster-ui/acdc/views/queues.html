@@ -1,0 +1,25 @@
+<section class="acdc-section">
+	<div class="acdc-section-header">
+		<div><h2>{{i18n.acdc.queues.title}}</h2><p>{{i18n.acdc.queues.description}}</p></div>
+		<div class="acdc-header-actions">
+			<button type="button" class="monster-button-secondary acdc-refresh"><i class="fa fa-refresh"></i> {{i18n.acdc.actions.refresh}}</button>
+			<button type="button" class="monster-button-primary acdc-add-queue"><i class="fa fa-plus"></i> {{i18n.acdc.queues.add}}</button>
+		</div>
+	</div>
+	{{#if statsWarning}}<div class="acdc-warning">{{i18n.acdc.queues.statsUnavailable}}</div>{{/if}}
+	<div class="acdc-panel acdc-table-scroll">
+		<table class="acdc-table">
+			<thead><tr><th>{{i18n.acdc.fields.name}}</th><th>{{i18n.acdc.fields.waiting}}</th><th>{{i18n.acdc.fields.handling}}</th><th>{{i18n.acdc.fields.processed}}</th><th>{{i18n.acdc.fields.abandoned}}</th><th class="acdc-actions-column">{{i18n.acdc.fields.actions}}</th></tr></thead>
+			<tbody>
+				{{#each queues}}
+					<tr>
+						<td><strong>{{name}}</strong></td><td>{{waiting}}</td><td>{{handling}}</td><td>{{processed}}</td><td>{{abandoned}}</td>
+						<td class="acdc-row-actions"><button type="button" class="monster-button-secondary acdc-view-callbacks" data-id="{{id}}" data-name="{{name}}"><i class="fa fa-phone"></i> {{@root.i18n.acdc.actions.callbacks}}</button><button type="button" class="monster-button-secondary acdc-edit-queue" data-id="{{id}}"><i class="fa fa-pencil"></i> {{@root.i18n.acdc.actions.edit}}</button><button type="button" class="monster-button-danger acdc-delete-queue" data-id="{{id}}" data-name="{{name}}"><i class="fa fa-trash"></i> {{@root.i18n.acdc.actions.delete}}</button></td>
+					</tr>
+				{{else}}
+					<tr><td colspan="6" class="acdc-empty-cell"><i class="fa fa-list"></i><strong>{{@root.i18n.acdc.queues.emptyTitle}}</strong><span>{{@root.i18n.acdc.queues.emptyDescription}}</span></td></tr>
+				{{/each}}
+			</tbody>
+		</table>
+	</div>
+</section>

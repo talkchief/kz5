@@ -1,0 +1,12 @@
+diff --git a/src/acdc_agent_listener.erl b/src/acdc_agent_listener.erl
+--- a/src/acdc_agent_listener.erl
++++ b/src/acdc_agent_listener.erl
+@@ -815,7 +815,7 @@ handle_cast('logout_agent', #state{acct_id=AcctId
+     lager:debug("published agent logout message"),
+     {'noreply', State};
+ 
+-handle_cast({'presence_id', _Id}, #state{agent_presence_id=_Id}=State) ->
++handle_cast({'presence_id', Id}, #state{agent_presence_id=Id}=State) ->
+     {'noreply', State};
+ handle_cast({'presence_id', PresenceId}, #state{agent_presence_id=_Id}=State) ->
+     lager:debug("updating presence id from ~s to ~s", [_Id, PresenceId]),

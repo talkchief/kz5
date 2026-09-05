@@ -1,0 +1,1189 @@
+diff --git a/src/acdc_queue_manager.erl b/src/acdc_queue_manager.erl
+index 42be958..731cb9f 100644
+--- a/src/acdc_queue_manager.erl
++++ b/src/acdc_queue_manager.erl
+@@ -25,12 +25,23 @@
+         ,handle_member_call_cancel/2
+         ,handle_agent_change/2
+         ,handle_queue_member_add/2
++        ,handle_queue_member_replace/2
+         ,handle_queue_member_remove/2
+         ,has_agents/1
+         ,handle_config_change/2
+         ,queue_size/1
+         ,should_ignore_member_call/3, should_ignore_member_call/4
+         ,up_next/2
++        ,ensure_member/2
++        ,ensure_callback_member/3
++        ,replace_member_call/6
++        ,retire_callback_member/3
++        ,ready_agent_count/1
++        ,logical_member_id/1
++        ,member_order_key/1
++        ,member_registration_metadata/1
++        ,stop_announcements/2
++        ,resume_announcements/2
+         ,config/1
+         ,status/1
+         ,agents/1
+@@ -57,6 +68,11 @@
+ 
+         ,assignable_agent_count/1
+         ,agent_count/1
++        ,take_position_announcement/2
++        ,ensure_legacy_member/2
++        ,callback_recovery_call/4
++        ,valid_recovered_existing/5
++        ,retire_member_matches/3
+         ]).
+ -endif.
+ 
+@@ -103,6 +119,9 @@
+                     ,{{?MODULE, 'handle_queue_member_add'}
+                      ,[{<<"queue">>, <<"member_add">>}]
+                      }
++                    ,{{?MODULE, 'handle_queue_member_replace'}
++                     ,[{<<"queue">>, <<"member_replace">>}]
++                     }
+                     ,{{?MODULE, 'handle_queue_member_remove'}
+                      ,[{<<"queue">>, <<"member_remove">>}]
+                      }
+@@ -239,6 +258,11 @@ handle_agent_change(JObj, Prop) ->
+ handle_queue_member_add(JObj, Prop) ->
+     gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_add', JObj}).
+ 
++-spec handle_queue_member_replace(kz_json:object(), kz_term:proplist()) -> 'ok'.
++handle_queue_member_replace(JObj, Prop) ->
++    'true' = kapi_acdc_queue:queue_member_replace_v(JObj),
++    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_replace', JObj}).
++
+ -spec handle_queue_member_remove(kz_json:object(), kz_term:proplist()) -> 'ok'.
+ handle_queue_member_remove(JObj, Prop) ->
+     gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', kz_json:get_value(<<"Call-ID">>, JObj)}).
+@@ -268,6 +292,63 @@ should_ignore_member_call(Srv, Call, AccountId, QueueId) ->
+ up_next(Srv, CallId) ->
+     gen_listener:call(Srv, {'up_next', CallId}).
+ 
++%% Recover a stamped logical member without producing duplicate waiting stats.
++-spec ensure_member(kz_types:server_ref(), kapps_call:call()) ->
++          {'ok', pos_integer()} | {'error', any()}.
++ensure_member(Srv, Call) ->
++    gen_listener:call(Srv, {'ensure_member', Call}).
++
++%% Recreate or locate a logical member only from the fresh, account-scoped
++%% durable callback document supplied by the coordinator.
++-spec ensure_callback_member(kz_types:server_ref(), kapps_call:call(), kz_json:object()) ->
++          {'ok', pos_integer(), kapps_call:call()} | {'error', atom()}.
++ensure_callback_member(Srv, Call, Doc) ->
++    gen_listener:call(Srv, {'ensure_callback_member', Call, Doc}).
++
++%% Replace only the physical channel. AttemptId is the public caller-leg UUID,
++%% not the callback store lease token.
++-spec replace_member_call(kz_types:server_ref(), kz_term:ne_binary(),
++                          kz_term:ne_binary(), pos_integer(), kz_term:ne_binary(),
++                          kapps_call:call()) ->
++          {'ok', pos_integer(), kapps_call:call()} | {'error', any()}.
++replace_member_call(Srv, LogicalId, CallbackId, Attempt, AttemptId, NewCall) ->
++    gen_listener:call(Srv, {'replace_member_call', LogicalId, CallbackId,
++                            Attempt, AttemptId, NewCall}).
++
++%% Terminal retirement is synchronous so a listener never ACKs the shared
++%% delivery before the manager has removed the logical slot.
++-spec retire_callback_member(kz_types:server_ref(), kz_term:ne_binary(), kz_term:ne_binary()) ->
++          'ok' | {'error', atom()}.
++retire_callback_member(Srv, LogicalId, CallbackId) ->
++    gen_listener:call(Srv, {'retire_callback_member', LogicalId, CallbackId}).
++
++-spec ready_agent_count(kz_types:server_ref()) -> non_neg_integer().
++ready_agent_count(Srv) -> gen_listener:call(Srv, 'ready_agent_count').
++
++-spec logical_member_id(kapps_call:call()) -> kz_term:ne_binary().
++logical_member_id(Call) -> acdc_queue_member:logical_id(Call).
++
++-spec member_order_key(kapps_call:call()) -> tuple().
++member_order_key(Call) -> acdc_queue_member:member_order_key(Call).
++
++-spec member_registration_metadata(kapps_call:call()) ->
++          {'ok', kz_json:object()} | {'error', 'missing_metadata'}.
++member_registration_metadata(Call) -> acdc_queue_member:registration_metadata(Call).
++
++%% Stop only the periodic position/wait announcement producer. The member
++%% remains in current_member_calls, so queue position and waiting stats are
++%% unchanged while its one-time pre-connect announcement is played.
++-spec stop_announcements(pid(), kz_term:ne_binary()) -> 'ok'.
++stop_announcements(Srv, CallId) ->
++    gen_listener:call(Srv, {'stop_announcements', CallId}).
++
++%% Resume periodic position/wait announcements after a callback menu is
++%% cancelled. This is idempotent and only applies while the original live
++%% channel still represents the member.
++-spec resume_announcements(pid(), kz_term:ne_binary()) -> 'ok'.
++resume_announcements(Srv, LogicalId) ->
++    gen_listener:call(Srv, {'resume_announcements', LogicalId}).
++
+ -spec config(pid()) -> {kz_term:ne_binary(), kz_term:ne_binary()}.
+ config(Srv) -> gen_listener:call(Srv, 'config').
+ 
+@@ -346,6 +427,94 @@ init([Super, AccountId, QueueId]) ->
+ -spec handle_call(any(), kz_term:pid_ref(), mgr_state()) -> kz_types:handle_call_ret_state(mgr_state()).
+ handle_call('queue_size', _, #state{current_member_calls=Calls}=State) ->
+     {'reply', length(Calls), State};
++handle_call('ready_agent_count', _, State) ->
++    {'reply', ready_agent_count_state(State), State};
++handle_call({'ensure_member', Call}, _, #state{account_id=AccountId
++                                              ,queue_id=QueueId
++                                              ,current_member_calls=Calls
++                                              }=State) ->
++    case acdc_queue_member:ensure(Call, Calls) of
++        {'ok', Calls0, Position, 'inserted'} ->
++            Call1 = kapps_call:set_custom_channel_var(<<"Queue-Position">>, Position, Call),
++            Calls1 = replace_logical_call(Call1, Calls0),
++            publish_queue_member_add(AccountId, QueueId, Call1),
++            {'reply', {'ok', Position}, State#state{current_member_calls=Calls1}};
++        {'ok', _Calls0, Position, 'existing'} ->
++            {'reply', {'ok', Position}, State};
++        {'error', 'missing_metadata'} ->
++            case ensure_legacy_member(Call, Calls) of
++                {'ok', Calls1, Position, Canonical} ->
++                    publish_queue_member_add(AccountId, QueueId, Canonical),
++                    {'reply', {'ok', Position}, State#state{current_member_calls=Calls1}};
++                {'error', _}=Error -> {'reply', Error, State}
++            end;
++        {'error', _}=Error -> {'reply', Error, State}
++    end;
++handle_call({'ensure_callback_member', Call, Doc}, _,
++            #state{account_id=AccountId, queue_id=QueueId,
++                   current_member_calls=Calls}=State) ->
++    case callback_recovery_call(AccountId, QueueId, Call, Doc) of
++        {'error', _}=Error -> {'reply', Error, State};
++        {'ok', LogicalId, CallbackId, Attempt, CallerId, Restored} ->
++            case acdc_queue_member:lookup(LogicalId, Calls) of
++                {Existing, Position} ->
++                    case valid_recovered_existing(Existing, Doc, CallbackId, Attempt, CallerId) of
++                        'true' -> {'reply', {'ok', Position, Existing}, State};
++                        'false' -> {'reply', {'error', 'identity_conflict'}, State}
++                    end;
++                'undefined' ->
++                    case acdc_queue_member:ensure(Restored, Calls) of
++                        {'ok', Calls0, Position, 'inserted'} ->
++                            Canonical = kapps_call:set_custom_channel_var(<<"Queue-Position">>, Position, Restored),
++                            Calls1 = replace_logical_call(Canonical, Calls0),
++                            publish_queue_member_add(AccountId, QueueId, Canonical),
++                            {'reply', {'ok', Position, Canonical},
++                             State#state{current_member_calls=Calls1}};
++                        {'ok', _Calls0, Position, 'existing'} ->
++                            {Canonical, Position} = acdc_queue_member:lookup(LogicalId, Calls),
++                            {'reply', {'ok', Position, Canonical}, State};
++                        {'error', _}=Error -> {'reply', Error, State}
++                    end
++            end
++    end;
++handle_call({'retire_callback_member', LogicalId, CallbackId}, _,
++            #state{account_id=AccountId, queue_id=QueueId,
++                   current_member_calls=Calls}=State) ->
++    case terminal_callback_proof(AccountId, QueueId, LogicalId, CallbackId) of
++        {'error', _}=Error -> {'reply', Error, State};
++        'ok' ->
++            case retire_member_matches(LogicalId, CallbackId, Calls) of
++                'false' -> {'reply', {'error', 'identity_conflict'}, State};
++                'true' ->
++                    case safe_publish_queue_member_remove(AccountId, QueueId, LogicalId) of
++                        'ok' -> {'reply', 'ok', remove_queue_member(LogicalId, State)};
++                        {'error', _}=Error -> {'reply', Error, State}
++                    end
++            end
++    end;
++handle_call({'replace_member_call', LogicalId, CallbackId, Attempt, AttemptId, NewCall0}, _,
++            #state{account_id=AccountId
++                  ,queue_id=QueueId
++                  ,current_member_calls=Calls
++                  }=State) ->
++    NewCall = case acdc_queue_member:position(LogicalId, Calls) of
++                  ExistingPosition when is_integer(ExistingPosition) ->
++                      kapps_call:set_custom_channel_var(<<"Queue-Position">>, ExistingPosition, NewCall0);
++                  _ -> NewCall0
++              end,
++    case acdc_queue_member:replace(LogicalId, CallbackId, Attempt, AttemptId, NewCall, Calls) of
++        {'ok', Calls1, Position, 'duplicate'} ->
++            {CanonicalCall, Position} = acdc_queue_member:lookup(LogicalId, Calls1),
++            {'reply', {'ok', Position, CanonicalCall},
++             State#state{current_member_calls=Calls1}};
++        {'ok', Calls1, Position, 'replaced'} ->
++            {Replacement, Position} = acdc_queue_member:lookup(LogicalId, Calls1),
++            publish_queue_member_replace(AccountId, QueueId, LogicalId, CallbackId,
++                                         Attempt, AttemptId, Replacement),
++            {'reply', {'ok', Position, Replacement},
++             State#state{current_member_calls=Calls1}};
++        {'error', _}=Error -> {'reply', Error, State}
++    end;
+ handle_call({'should_ignore_member_call', {AccountId, QueueId, CallId}=K}, _, #state{ignored_member_calls=Dict
+                                                                                     ,account_id=AccountId
+                                                                                     ,queue_id=QueueId
+@@ -358,8 +527,8 @@ handle_call({'should_ignore_member_call', {AccountId, QueueId, CallId}=K}, _, #s
+     end;
+ 
+ handle_call({'up_next', CallId}, _, #state{current_member_calls=Calls}=State) ->
+-    Position = queue_member_position(CallId, lists:reverse(Calls)),
+-    {'reply', assignable_agent_count(State) >= Position, State};
++    Position = queue_member_position(CallId, Calls),
++    {'reply', is_integer(Position) andalso assignable_agent_count(State) >= Position, State};
+ 
+ handle_call('config', _, #state{account_id=AccountId
+                                ,queue_id=QueueId
+@@ -394,9 +563,26 @@ handle_call('get_has_agents', _, State) ->
+     {'reply', agent_count(State) > 0, State};
+ 
+ handle_call({'queue_position', CallId}, _, #state{current_member_calls=Calls}=State) ->
+-    Position = queue_member_position(CallId, lists:reverse(Calls)),
++    Position = queue_member_position(CallId, Calls),
+     {'reply', Position, State};
+ 
++handle_call({'stop_announcements', CallId}, _, #state{announcements_pids=Pids}=State) ->
++    Pids1 = stop_position_announcements(CallId, Pids),
++    {'reply', 'ok', State#state{announcements_pids=Pids1}};
++handle_call({'resume_announcements', LogicalId}, _,
++            #state{current_member_calls=Calls
++                  ,announcements_config=Config
++                  ,announcements_pids=Pids
++                  }=State) ->
++    case maps:is_key(LogicalId, Pids) of
++        'true' -> {'reply', 'ok', State};
++        'false' ->
++            case queue_member(LogicalId, Calls) of
++                'undefined' -> {'reply', 'ok', State};
++                Call -> resume_position_announcements(LogicalId, Call, Config, Pids, State)
++            end
++    end;
++
+ handle_call({'add_diagnostics_receiver', Receiver}, _, State) ->
+     DiagnosticsPids = get(?KEY_DIAGNOSTICS_PIDS),
+     put(?KEY_DIAGNOSTICS_PIDS, [Receiver | DiagnosticsPids]),
+@@ -547,59 +733,134 @@ handle_cast({'refresh', QueueJObj}, State) ->
+ handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
+     {'noreply', State};
+ 
+-handle_cast({'add_queue_member', JObj}, #state{account_id=AccountId
+-                                              ,queue_id=QueueId
+-                                              ,current_member_calls=Calls
+-                                              ,announcements_config=AnnouncementsConfig
+-                                              ,announcements_pids=AnnouncementsPids
++handle_cast({'add_queue_member', JObj}, #state{current_member_calls=Calls
+                                               }=State) ->
+-    Position = length(Calls)+1,
+-    Call = kapps_call:set_custom_channel_var(<<"Queue-Position">>
+-                                            ,Position
+-                                            ,kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj))),
++    Priority0 = kz_json:get_integer_value(<<"Member-Priority">>, JObj),
++    Priority = callback_priority(Priority0),
++    RawCall = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
++    case acdc_queue_member:physical_id(RawCall) of
++        CallId when is_binary(CallId), byte_size(CallId) > 0 ->
++            add_queue_member_once(JObj, Priority0, Priority, RawCall, CallId,
++                                  Calls, State);
++        _ ->
++            lager:warning("refusing queue entry without a call id"),
++            {'noreply', State}
++    end;
++
++handle_cast({'handle_queue_member_add', JObj}, #state{current_member_calls=CurrentCalls}=State) ->
++    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
++    CallId = acdc_queue_member:logical_member_id(Call),
++    lager:debug("received notification of new queue member ~s", [CallId]),
++
++    case acdc_queue_member:ensure(Call, CurrentCalls) of
++        {'ok', Calls, _Position, _Status} ->
++            {'noreply', State#state{current_member_calls=Calls}};
++        {'error', Reason} ->
++            lager:warning("refusing conflicting queue member ~s: ~p", [CallId, Reason]),
++            {'noreply', State}
++    end;
++
++handle_cast({'handle_queue_member_replace', JObj}, #state{current_member_calls=Calls}=State) ->
++    LogicalId = kz_json:get_ne_binary_value(<<"Logical-Call-ID">>, JObj),
++    CallbackId = kz_json:get_ne_binary_value(<<"Callback-ID">>, JObj),
++    Attempt = kz_json:get_integer_value(<<"Attempt">>, JObj),
++    AttemptId = kz_json:get_ne_binary_value(<<"Attempt-ID">>, JObj),
++    Call = kapps_call:from_json(kz_json:get_json_value(<<"Call">>, JObj)),
++    case acdc_queue_member:replace(LogicalId, CallbackId, Attempt, AttemptId, Call, Calls) of
++        {'ok', Calls1, _Position, _Status} ->
++            {'noreply', State#state{current_member_calls=Calls1}};
++        {'error', Reason} ->
++            lager:warning("refusing queue member replacement ~s attempt ~p: ~p",
++                          [LogicalId, Attempt, Reason]),
++            {'noreply', State}
++    end;
++
++handle_cast({'handle_queue_member_remove', CallId}, State) ->
++    State1 = remove_queue_member(CallId, State),
++    {'noreply', State1};
++
++handle_cast(_Msg, State) ->
++    lager:debug("unhandled cast: ~p", [_Msg]),
++    {'noreply', State}.
++
++-spec add_queue_member_once(kz_json:object(), kz_term:api_integer(), 0..255,
++                            kapps_call:call(), kz_term:ne_binary(),
++                            [kapps_call:call()], mgr_state()) ->
++          kz_types:handle_cast_ret_state(mgr_state()).
++add_queue_member_once(JObj, Priority0, Priority, RawCall, CallId, Calls, State) ->
++    %% A direct member-call delivery can be retried after the trusted manager
++    %% has stamped it, or even after the logical member has moved to a callback
++    %% channel. Never overwrite the immutable ordering metadata in either case.
++    case acdc_queue_member:lookup(CallId, Calls) of
++        {_Existing, _Position} ->
++            lager:warning("ignoring duplicate queue entry for ~s", [CallId]),
++            {'noreply', State};
++        'undefined' ->
++            add_trusted_queue_member(JObj, Priority0, Priority, RawCall, Calls, State)
++    end.
++
++-spec add_trusted_queue_member(kz_json:object(), kz_term:api_integer(), 0..255,
++                               kapps_call:call(), [kapps_call:call()], mgr_state()) ->
++          kz_types:handle_cast_ret_state(mgr_state()).
++add_trusted_queue_member(JObj, Priority0, Priority, RawCall, Calls, State) ->
++    StampedCall = acdc_queue_member:stamp(RawCall, kz_time:now_s(),
++                                          next_enqueue_sequence(), Priority),
++    case acdc_queue_member:ensure(StampedCall, Calls) of
++        {'ok', StampedCalls, Position, 'inserted'} ->
++            add_new_queue_member(JObj, Priority0, StampedCall,
++                                 StampedCalls, Position, State);
++        {'ok', _Calls1, _Position, 'existing'} ->
++            lager:warning("ignoring duplicate queue entry for ~s",
++                          [acdc_queue_member:logical_id(StampedCall)]),
++            {'noreply', State};
++        {'error', Reason} ->
++            lager:warning("refusing queue entry for ~s: ~p",
++                          [kapps_call:call_id(RawCall), Reason]),
++            {'noreply', State}
++    end.
++
++-spec add_new_queue_member(kz_json:object(), kz_term:api_integer(), kapps_call:call(),
++                           [kapps_call:call()], pos_integer(), mgr_state()) ->
++          kz_types:handle_cast_ret_state(mgr_state()).
++add_new_queue_member(JObj, Priority, StampedCall, StampedCalls, Position,
++                     #state{account_id=AccountId
++                           ,queue_id=QueueId
++                           ,announcements_config=AnnouncementsConfig
++                           ,announcements_pids=AnnouncementsPids
++                           }=State) ->
++    Call = kapps_call:set_custom_channel_var(<<"Queue-Position">>, Position, StampedCall),
++    Calls = replace_logical_call(Call, StampedCalls),
++    JObj1 = kz_json:set_value(<<"Call">>, kapps_call:to_json(Call), JObj),
+ 
+     {CIDNumber, CIDName} = acdc_util:caller_id(Call),
+     'ok' = acdc_stats:call_waiting(AccountId, QueueId
+-                                  ,kapps_call:call_id(Call)
++                                  ,acdc_queue_member:logical_id(Call)
+                                   ,CIDName
+                                   ,CIDNumber
+-                                  ,kz_json:get_integer_value(<<"Member-Priority">>, JObj)
++                                  ,Priority
+                                   ),
+ 
+     publish_queue_member_add(AccountId, QueueId, Call),
+ 
+-    %% Add call to shared queue
+-    kapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj),
++    %% The stamped Call must be in the durable shared payload. A recovering
++    %% worker can then reconstruct identity and order without trusting caller
++    %% supplied KVS data or RabbitMQ redelivery order.
++    kapi_acdc_queue:publish_shared_member_call(AccountId, QueueId, JObj1),
+     lager:debug("put call into shared messaging queue"),
+ 
+     acdc_util:presence_update(AccountId, QueueId, ?PRESENCE_RED_FLASH),
+ 
+-    %% Schedule position/wait time announcements
+-    AnnouncementsPids1 = case acdc_announcements_sup:maybe_start_announcements(self(), Call, AnnouncementsConfig) of
+-                             'false' -> AnnouncementsPids;
+-                             {'ok', Pid} ->
+-                                 CallId = kapps_call:call_id(Call),
+-                                 AnnouncementsPids#{CallId => Pid}
+-                         end,
++    AnnouncementsPids1 =
++        case acdc_announcements_sup:maybe_start_announcements(self(), Call,
++                                                              AnnouncementsConfig) of
++            'false' -> AnnouncementsPids;
++            {'ok', Pid} ->
++                AnnouncementsPids#{acdc_queue_member:logical_id(Call) => Pid}
++        end,
+ 
+-    {'noreply', State#state{current_member_calls=[Call | Calls]
++    {'noreply', State#state{current_member_calls=Calls
+                            ,announcements_pids=AnnouncementsPids1
+-                           }};
+-
+-handle_cast({'handle_queue_member_add', JObj}, #state{current_member_calls=CurrentCalls}=State) ->
+-    Call = kapps_call:from_json(kz_json:get_value(<<"Call">>, JObj)),
+-    CallId = kapps_call:call_id(Call),
+-    lager:debug("received notification of new queue member ~s", [CallId]),
+-
+-    {'noreply', State#state{current_member_calls = [Call | lists:keydelete(CallId, 2, CurrentCalls)]}};
+-
+-handle_cast({'handle_queue_member_remove', CallId}, State) ->
+-    State1 = remove_queue_member(CallId, State),
+-    {'noreply', State1};
+-
+-handle_cast(_Msg, State) ->
+-    lager:debug("unhandled cast: ~p", [_Msg]),
+-    {'noreply', State}.
++                           }}.
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Handling all non call/cast messages.
+@@ -662,32 +923,23 @@ make_ignore_key(AccountId, QueueId, CallId) ->
+     {AccountId, QueueId, CallId}.
+ 
+ -spec queue_member(kz_term:ne_binary(), [kapps_call:call()]) -> kapps_call:call() | 'undefined'.
+-queue_member(CallId, Calls) ->
+-    case queue_member_lookup(CallId, Calls) of
++queue_member(LogicalId, Calls) ->
++    case queue_member_lookup(LogicalId, Calls) of
+         'undefined' -> 'undefined';
+         {Call, _} -> Call
+     end.
+ 
+ -spec queue_member_position(kz_term:ne_binary(), [kapps_call:call()]) -> kz_term:api_pos_integer().
+-queue_member_position(CallId, Calls) ->
+-    case queue_member_lookup(CallId, Calls) of
++queue_member_position(LogicalId, Calls) ->
++    case queue_member_lookup(LogicalId, Calls) of
+         'undefined' -> 'undefined';
+         {_, Position} -> Position
+     end.
+ 
+ -spec queue_member_lookup(kz_term:ne_binary(), [kapps_call:call()]) ->
+           {kapps_call:call(), pos_integer()} | 'undefined'.
+-queue_member_lookup(CallId, Calls) ->
+-    queue_member_lookup(CallId, Calls, 1).
+-
+--spec queue_member_lookup(kz_term:ne_binary(), [kapps_call:call()], pos_integer()) ->
+-          {kapps_call:call(), pos_integer()} | 'undefined'.
+-queue_member_lookup(_, [], _) -> 'undefined';
+-queue_member_lookup(CallId, [Call|Calls], Position) ->
+-    case kapps_call:call_id(Call) of
+-        CallId -> {Call, Position};
+-        _ -> queue_member_lookup(CallId, Calls, Position + 1)
+-    end.
++queue_member_lookup(LogicalId, Calls) ->
++    acdc_queue_member:lookup(LogicalId, Calls).
+ 
+ -spec publish_queue_member_add(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) -> 'ok'.
+ publish_queue_member_add(AccountId, QueueId, Call) ->
+@@ -698,6 +950,23 @@ publish_queue_member_add(AccountId, QueueId, Call) ->
+            ],
+     kapi_acdc_queue:publish_queue_member_add(Prop).
+ 
++-spec publish_queue_member_replace(kz_term:ne_binary(), kz_term:ne_binary(),
++                                   kz_term:ne_binary(), kz_term:ne_binary(),
++                                   pos_integer(), kz_term:ne_binary(),
++                                   kapps_call:call()) -> 'ok'.
++publish_queue_member_replace(AccountId, QueueId, LogicalId, CallbackId,
++                             Attempt, AttemptId, Call) ->
++    Prop = [{<<"Account-ID">>, AccountId}
++           ,{<<"Queue-ID">>, QueueId}
++           ,{<<"Logical-Call-ID">>, LogicalId}
++           ,{<<"Callback-ID">>, CallbackId}
++           ,{<<"Attempt">>, Attempt}
++           ,{<<"Attempt-ID">>, AttemptId}
++           ,{<<"Call">>, kapps_call:to_json(Call)}
++            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
++           ],
++    kapi_acdc_queue:publish_queue_member_replace(Prop).
++
+ -spec publish_queue_member_remove(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
+ publish_queue_member_remove(AccountId, QueueId, CallId) ->
+     Prop = [{<<"Account-ID">>, AccountId}
+@@ -766,21 +1035,21 @@ ready_agents('all', AgentQueue) -> queue:to_list(AgentQueue).
+ %% @doc Return the count of agents that are ready to take calls.
+ %% @end
+ %%------------------------------------------------------------------------------
+--spec ready_agent_count(mgr_state()) -> non_neg_integer().
+-ready_agent_count(#state{strategy=Strategy
+-                        ,strategy_state=#strategy_state{agents=Agents}
+-                        }) ->
+-    ready_agent_count(Strategy, Agents).
++-spec ready_agent_count_state(mgr_state()) -> non_neg_integer().
++ready_agent_count_state(#state{strategy=Strategy
++                              ,strategy_state=#strategy_state{agents=Agents}
++                              }) ->
++    ready_agent_count_strategy(Strategy, Agents).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Return the count of agents that are ready to take calls, based on the
+ %% queue strategy.
+ %% @end
+ %%------------------------------------------------------------------------------
+--spec ready_agent_count(queue_strategy(), queue_strategy_state()) -> non_neg_integer().
+-ready_agent_count('rr', AgentQueue) -> queue:len(AgentQueue);
+-ready_agent_count('mi', AgentL) -> length(AgentL);
+-ready_agent_count('all', AgentQueue) -> queue:len(AgentQueue).
++-spec ready_agent_count_strategy(queue_strategy(), queue_strategy_state()) -> non_neg_integer().
++ready_agent_count_strategy('rr', AgentQueue) -> queue:len(AgentQueue);
++ready_agent_count_strategy('mi', AgentL) -> length(AgentL);
++ready_agent_count_strategy('all', AgentQueue) -> queue:len(AgentQueue).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Return the count of agents that are eligible to be assigned to a waiting
+@@ -805,11 +1074,11 @@ assignable_agent_count(#state{strategy=Strategy
+ -spec assignable_agent_count(queue_strategy(), queue_strategy_state(), kz_term:ne_binaries()) ->
+           non_neg_integer().
+ assignable_agent_count('rr', AgentQueue, RingingAgents) ->
+-    ready_agent_count('rr', AgentQueue) + length(RingingAgents);
++    ready_agent_count_strategy('rr', AgentQueue) + length(RingingAgents);
+ assignable_agent_count('mi', AgentL, RingingAgents) ->
+-    ready_agent_count('mi', AgentL) + length(RingingAgents);
++    ready_agent_count_strategy('mi', AgentL) + length(RingingAgents);
+ assignable_agent_count('all', AgentQueue, RingingAgents) ->
+-    ready_agent_count('all', AgentQueue) + length(RingingAgents).
++    ready_agent_count_strategy('all', AgentQueue) + length(RingingAgents).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Return the IDs of all agents.
+@@ -831,7 +1100,7 @@ agent_count(#state{strategy_state=#strategy_state{ringing_agents=RingingAgents
+                                                  ,busy_agents=BusyAgents
+                                                  }
+                   }=State) ->
+-    ready_agent_count(State) + length(RingingAgents) + length(BusyAgents).
++    ready_agent_count_state(State) + length(RingingAgents) + length(BusyAgents).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Update the strategy state with the change of availability for `AgentId'.
+@@ -1029,18 +1298,18 @@ announcements_config(Config) ->
+     kz_json:recursive_to_proplist(
+       kz_json:get_json_value(<<"announcements">>, Config, kz_json:new())).
+ 
+--spec cancel_position_announcements(kapps_call:call() | 'false', map()) ->
++-spec cancel_position_announcements(kapps_call:call() | 'false' | 'undefined', map()) ->
+           map().
+ cancel_position_announcements('false', Pids) -> Pids;
++cancel_position_announcements('undefined', Pids) -> Pids;
+ cancel_position_announcements(Call, Pids) ->
+-    CallId = kapps_call:call_id(Call),
+-    case catch maps:get(CallId, Pids) of
+-        {'badkey', _} ->
++    CallId = acdc_queue_member:logical_id(Call),
++    case take_position_announcement(CallId, Pids) of
++        {'undefined', _} ->
+             lager:debug("did not have the announcements for call ~s", [CallId]),
+             Pids;
+-        Pid ->
++        {Pid, Pids1} ->
+             lager:debug("cancelling announcements for ~s", [CallId]),
+-            Pids1 = maps:remove(CallId, Pids),
+             _ = acdc_announcements_sup:stop_announcements(Pid),
+ 
+             %% Attempt to skip remaining announcement media, but don't flush hangups
+@@ -1054,18 +1323,258 @@ cancel_position_announcements(Call, Pids) ->
+             Pids1
+     end.
+ 
++-spec stop_position_announcements(kz_term:ne_binary(), map()) -> map().
++stop_position_announcements(CallId, Pids) ->
++    case take_position_announcement(CallId, Pids) of
++        {'undefined', Pids} -> Pids;
++        {Pid, Pids1} ->
++            lager:debug("stopping periodic announcements before connecting call ~s", [CallId]),
++            _ = acdc_announcements_sup:stop_announcements(Pid),
++            Pids1
++    end.
++
++-spec resume_position_announcements(kz_term:ne_binary(), kapps_call:call(),
++                                    kz_term:proplist(), map(), mgr_state()) ->
++          {'reply', 'ok', mgr_state()}.
++resume_position_announcements(LogicalId, Call, Config, Pids, State) ->
++    %% A replacement callback leg has a different physical ID. Never restart
++    %% periodic queue audio on that channel; callback retry/recovery is owned by
++    %% the callback coordinator.
++    case acdc_queue_member:physical_id(Call) =:= LogicalId
++        andalso is_call_alive(Call) of
++        'false' -> {'reply', 'ok', State};
++        'true' ->
++            case acdc_announcements_sup:maybe_start_announcements(self(), Call, Config) of
++                'false' -> {'reply', 'ok', State};
++                {'ok', Pid} ->
++                    {'reply', 'ok', State#state{announcements_pids=Pids#{LogicalId => Pid}}}
++            end
++    end.
++
++-spec is_call_alive(kapps_call:call()) -> boolean().
++is_call_alive(Call) ->
++    case kapps_call_command:b_channel_status(Call) of
++        {'ok', _} -> 'true';
++        {'error', _} -> 'false'
++    end.
++
++-spec take_position_announcement(kz_term:ne_binary(), map()) ->
++          {'undefined', map()} | {pid(), map()}.
++take_position_announcement(CallId, Pids) ->
++    case maps:take(CallId, Pids) of
++        'error' -> {'undefined', Pids};
++        {Pid, Pids1} -> {Pid, Pids1}
++    end.
++
+ -spec remove_queue_member(kz_term:api_binary(), mgr_state()) -> mgr_state().
+-remove_queue_member(CallId, #state{current_member_calls=CurrentCalls
+-                                  ,announcements_pids=AnnouncementsPids
+-                                  }=State) ->
+-    lager:debug("removing call id ~s", [CallId]),
++remove_queue_member(LogicalId, #state{current_member_calls=CurrentCalls
++                                     ,announcements_pids=AnnouncementsPids
++                                     }=State) ->
++    lager:debug("removing logical call id ~s", [LogicalId]),
+ 
+-    AnnouncementsPids1 = cancel_position_announcements(lists:keyfind(CallId, 2, CurrentCalls), AnnouncementsPids),
++    Member = queue_member(LogicalId, CurrentCalls),
++    AnnouncementsPids1 = cancel_position_announcements(Member, AnnouncementsPids),
+ 
+-    State#state{current_member_calls=lists:keydelete(CallId, 2, CurrentCalls)
++    State#state{current_member_calls=acdc_queue_member:remove(LogicalId, CurrentCalls)
+                ,announcements_pids=AnnouncementsPids1
+                }.
+ 
++%% A pre-upgrade shared delivery may have no logical/order KVS. Migrate a
++%% wholly legacy in-memory list by assigning ranks in its existing service
++%% order. Mixed metadata cannot be reconstructed without changing order and is
++%% rejected. If every existing member is modern, append an otherwise-lost
++%% legacy delivery behind it rather than assigning a misleading current time.
++ensure_legacy_member(Call, Calls) ->
++    case legacy_metadata_shape(Calls) of
++        'mixed' -> {'error', 'legacy_mixed_metadata'};
++        'legacy' -> ensure_in_migrated_legacy(Call, migrate_legacy_calls(Calls));
++        'modern' -> ensure_after_modern_calls(Call, Calls)
++    end.
++
++legacy_metadata_shape(Calls) ->
++    Shapes = lists:usort([case acdc_queue_member:registration_metadata(Call) of
++                              {'ok', _} -> 'modern';
++                              {'error', _} -> 'legacy'
++                          end || Call <- Calls]),
++    case Shapes of
++        [] -> 'modern';
++        ['legacy'] -> 'legacy';
++        ['modern'] -> 'modern';
++        _ -> 'mixed'
++    end.
++
++migrate_legacy_calls(Calls) ->
++    Service = lists:reverse(Calls),
++    Ranked = [begin
++                  {'ok', Restored} = acdc_queue_member:restore(
++                                       Call, acdc_queue_member:logical_id(Call), 1, Rank, 0),
++                  Restored
++              end || {Call, Rank} <- lists:zip(Service, lists:seq(0, length(Service) - 1))],
++    lists:reverse(Ranked).
++
++ensure_in_migrated_legacy(Call, Calls) ->
++    LogicalId = acdc_queue_member:logical_id(Call),
++    case acdc_queue_member:lookup(LogicalId, Calls) of
++        {Existing, Position} ->
++            case acdc_queue_member:physical_id(Existing) =:= acdc_queue_member:physical_id(Call) of
++                'true' -> {'ok', Calls, Position, Existing};
++                'false' -> {'error', 'identity_conflict'}
++            end;
++        'undefined' ->
++            Sequence = length(Calls),
++            {'ok', Restored} = acdc_queue_member:restore(Call, LogicalId, 1, Sequence, 0),
++            %% current_member_calls is reverse service order, so a conservative
++            %% tail-of-service insertion is the list head.
++            Calls1 = [Restored | Calls],
++            {'ok', Calls1, length(Calls1), Restored}
++    end.
++
++ensure_after_modern_calls(Call, Calls) ->
++    LogicalId = acdc_queue_member:logical_id(Call),
++    case acdc_queue_member:lookup(LogicalId, Calls) of
++        {Existing, Position} ->
++            case acdc_queue_member:physical_id(Existing) =:= acdc_queue_member:physical_id(Call) of
++                'true' -> {'ok', Calls, Position, Existing};
++                'false' -> {'error', 'identity_conflict'}
++            end;
++        'undefined' ->
++            Latest = lists:max([metadata_enqueued_at(Existing) || Existing <- Calls] ++ [1]),
++            {'ok', Restored} = acdc_queue_member:restore(Call, LogicalId, Latest + 1, 0, 0),
++            {'ok', [Restored | Calls], length(Calls) + 1, Restored}
++    end.
++
++metadata_enqueued_at(Call) ->
++    {'ok', Metadata} = acdc_queue_member:registration_metadata(Call),
++    kz_json:get_integer_value(<<"enqueued_at">>, Metadata).
++
++callback_recovery_call(AccountId, QueueId, Call, Doc) ->
++    LogicalId = kz_json:get_ne_binary_value(<<"original_call_id">>, Doc),
++    CallbackId = kz_doc:id(Doc),
++    EnqueuedAt = kz_json:get_integer_value(<<"enqueued_at">>, Doc, 0),
++    Sequence = kz_json:get_integer_value(<<"enqueue_sequence">>, Doc, -1),
++    Priority = kz_json:get_integer_value(<<"priority">>, Doc, -1),
++    Attempt = kz_json:get_integer_value(<<"attempts">>, Doc, 0),
++    CallerId = kz_json:get_ne_binary_value(<<"pvt_caller_call_id">>, Doc),
++    PhysicalId = acdc_queue_member:physical_id(Call),
++    CallMatches = PhysicalId =:= LogicalId
++        orelse (is_binary(CallerId) andalso byte_size(CallerId) > 0
++                andalso Attempt > 0 andalso PhysicalId =:= CallerId),
++    Valid = kz_doc:account_id(Doc) =:= AccountId
++        andalso kz_json:get_value(<<"queue_id">>, Doc) =:= QueueId
++        andalso kz_json:get_value(<<"pvt_type">>, Doc) =:= <<"acdc_callback">>
++        andalso valid_callback_id(CallbackId)
++        andalso CallMatches
++        andalso kapps_call:account_id(Call) =:= AccountId,
++    case Valid of
++        'false' -> {'error', 'invalid_callback_proof'};
++        'true' ->
++            Restore = case PhysicalId of
++                          LogicalId ->
++                              acdc_queue_member:restore(
++                                Call, LogicalId, EnqueuedAt, Sequence, Priority);
++                          CallerId ->
++                              acdc_queue_member:restore_callback(
++                                Call, LogicalId, EnqueuedAt, Sequence, Priority,
++                                CallbackId, Attempt, CallerId)
++                      end,
++            case Restore of
++                {'ok', Restored} -> {'ok', LogicalId, CallbackId, Attempt, CallerId, Restored};
++                {'error', _} -> {'error', 'invalid_callback_metadata'}
++            end
++    end.
++
++valid_recovered_existing(Existing, Doc, CallbackId, Attempt, CallerId) ->
++    MetadataMatches = case acdc_queue_member:registration_metadata(Existing) of
++                          {'ok', Metadata} ->
++                              kz_json:get_integer_value(<<"enqueued_at">>, Metadata) =:=
++                                  kz_json:get_integer_value(<<"enqueued_at">>, Doc)
++                                  andalso kz_json:get_integer_value(<<"enqueue_sequence">>, Metadata) =:=
++                                      kz_json:get_integer_value(<<"enqueue_sequence">>, Doc)
++                                  andalso kz_json:get_integer_value(<<"priority">>, Metadata) =:=
++                                      kz_json:get_integer_value(<<"priority">>, Doc);
++                          _ -> 'false'
++                      end,
++    LogicalId = kz_json:get_ne_binary_value(<<"original_call_id">>, Doc),
++    ExistingCallback = kapps_call:kvs_fetch(<<"acdc_callback_id">>, Existing),
++    ExistingAttempt = kapps_call:kvs_fetch(<<"acdc_callback_attempt">>, 0, Existing),
++    ExistingAttemptId = kapps_call:kvs_fetch(<<"acdc_callback_attempt_id">>, Existing),
++    IdentityMatches = case acdc_queue_member:physical_id(Existing) of
++                          LogicalId -> ExistingCallback =:= 'undefined';
++                          CallerId when is_binary(CallerId), byte_size(CallerId) > 0 ->
++                              ExistingCallback =:= CallbackId
++                                  andalso ExistingAttempt =:= Attempt
++                                  andalso ExistingAttemptId =:= CallerId;
++                          _ -> 'false'
++                      end,
++    MetadataMatches andalso IdentityMatches.
++
++terminal_callback_proof(AccountId, QueueId, LogicalId, CallbackId) ->
++    case acdc_callback_store:get(AccountId, QueueId, CallbackId) of
++        {'ok', Doc} ->
++            Status = kz_json:get_value(<<"status">>, Doc),
++            case kz_doc:account_id(Doc) =:= AccountId
++                andalso kz_json:get_value(<<"queue_id">>, Doc) =:= QueueId
++                andalso kz_doc:id(Doc) =:= CallbackId
++                andalso kz_json:get_value(<<"original_call_id">>, Doc) =:= LogicalId
++                andalso lists:member(Status, [<<"completed">>, <<"cancelled">>,
++                                                 <<"failed">>, <<"expired">>]) of
++                'true' -> 'ok';
++                'false' -> {'error', 'not_terminal'}
++            end;
++        _ -> {'error', 'callback_proof_unavailable'}
++    end.
++
++retire_member_matches(LogicalId, CallbackId, Calls) ->
++    case acdc_queue_member:lookup(LogicalId, Calls) of
++        'undefined' -> 'true';
++        {Call, _} ->
++            case kapps_call:kvs_fetch(<<"acdc_callback_id">>, Call) of
++                CallbackId -> 'true';
++                'undefined' -> acdc_queue_member:physical_id(Call) =:= LogicalId;
++                _ -> 'false'
++            end
++    end.
++
++safe_publish_queue_member_remove(AccountId, QueueId, LogicalId) ->
++    Prop = [{<<"Account-ID">>, AccountId}
++           ,{<<"Queue-ID">>, QueueId}
++           ,{<<"Call-ID">>, LogicalId}
++            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
++           ],
++    %% The shared AMQP worker call is synchronous. When the deployment enables
++    %% pool_server_confirms it returns only after RabbitMQ confirms the publish;
++    %% otherwise it still propagates immediate serialization/channel failures.
++    try kz_amqp_worker:cast(Prop, fun kapi_acdc_queue:publish_queue_member_remove/1) of
++        'ok' -> 'ok';
++        _ -> {'error', 'publish_failed'}
++    catch
++        _:_ -> {'error', 'publish_failed'}
++    end.
++
++valid_callback_id(<<"acdc-callback-", Digest:64/binary>>) ->
++    re:run(Digest, <<"^[0-9a-f]{64}$">>, [{'capture', 'none'}]) =:= 'match';
++valid_callback_id(_) -> 'false'.
++
++-spec replace_logical_call(kapps_call:call(), [kapps_call:call()]) -> [kapps_call:call()].
++replace_logical_call(NewCall, Calls) ->
++    LogicalId = acdc_queue_member:logical_id(NewCall),
++    [case acdc_queue_member:logical_id(Call) of
++         LogicalId -> NewCall;
++         _ -> Call
++     end || Call <- Calls].
++
++-spec callback_priority(kz_term:api_integer()) -> 0..255.
++callback_priority(Priority) when is_integer(Priority), Priority < 0 -> 0;
++callback_priority(Priority) when is_integer(Priority), Priority > 255 -> 255;
++callback_priority(Priority) when is_integer(Priority) -> Priority;
++callback_priority(_) -> 0.
++
++-spec next_enqueue_sequence() -> non_neg_integer().
++next_enqueue_sequence() ->
++    %% Unix microseconds fit in JSON's exact 53-bit integer range through the
++    %% lifetime of this release and remain sortable across Erlang node restarts.
++    erlang:system_time('microsecond').
++
+ %%------------------------------------------------------------------------------
+ %% @doc If there is at least one diagnostics receiver attached to the queue
+ %% manager, send the diagnostics message returned by `GetDiagnosticsMessage' to
+diff --git a/src/kapi_acdc_queue.erl b/src/kapi_acdc_queue.erl
+index 6dce974..76469d4 100644
+--- a/src/kapi_acdc_queue.erl
++++ b/src/kapi_acdc_queue.erl
+@@ -28,6 +28,7 @@
+         ,agent_change/1, agent_change_v/1
+         ,started_notif/1, started_notif_v/1
+         ,queue_member_add/1, queue_member_add_v/1
++        ,queue_member_replace/1, queue_member_replace_v/1
+         ,queue_member_remove/1, queue_member_remove_v/1
+         ]).
+ 
+@@ -57,6 +58,7 @@
+         ,publish_agent_change/1, publish_agent_change/2
+         ,publish_started_notif/1, publish_started_notif/2
+         ,publish_queue_member_add/1, publish_queue_member_add/2
++        ,publish_queue_member_replace/1, publish_queue_member_replace/2
+         ,publish_queue_member_remove/1, publish_queue_member_remove/2
+         ]).
+ 
+@@ -559,6 +561,49 @@ queue_member_add_v(Prop) when is_list(Prop) ->
+     kz_api:validate(Prop, ?QUEUE_MEMBER_ADD_HEADERS, ?QUEUE_MEMBER_ADD_VALUES, ?QUEUE_MEMBER_ADD_TYPES);
+ queue_member_add_v(JObj) -> queue_member_add_v(kz_json:to_proplist(JObj)).
+ 
++%% A callback attempt can replace the physical channel representing a logical
++%% member without removing and re-adding that member. Attempt-ID is the
++%% persisted caller-leg UUID; private coordinator lease tokens are deliberately
++%% excluded from this event.
++-define(QUEUE_MEMBER_REPLACE_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>
++                                      ,<<"Logical-Call-ID">>, <<"Callback-ID">>
++                                      ,<<"Attempt">>, <<"Attempt-ID">>, <<"Call">>]).
++-define(OPTIONAL_QUEUE_MEMBER_REPLACE_HEADERS, []).
++-define(QUEUE_MEMBER_REPLACE_VALUES, [{<<"Event-Category">>, <<"queue">>}
++                                     ,{<<"Event-Name">>, <<"member_replace">>}]).
++-define(QUEUE_MEMBER_REPLACE_TYPES, [{<<"Account-ID">>, fun kz_term:is_ne_binary/1}
++                                    ,{<<"Queue-ID">>, fun kz_term:is_ne_binary/1}
++                                    ,{<<"Logical-Call-ID">>, fun kz_term:is_ne_binary/1}
++                                    ,{<<"Callback-ID">>, fun is_callback_id/1}
++                                    ,{<<"Attempt">>, fun kz_term:is_pos_integer/1}
++                                    ,{<<"Attempt-ID">>, fun kz_term:is_ne_binary/1}
++                                    ,{<<"Call">>, fun kz_json:is_json_object/1}
++                                    ]).
++
++-spec queue_member_replace(kz_term:api_terms()) ->
++          {'ok', iolist()} | {'error', string()}.
++queue_member_replace(Props) when is_list(Props) ->
++    case queue_member_replace_v(Props) of
++        'true' -> kz_api:build_message(Props, ?QUEUE_MEMBER_REPLACE_HEADERS,
++                                      ?OPTIONAL_QUEUE_MEMBER_REPLACE_HEADERS);
++        'false' -> {'error', "proplist failed validation for queue_member_replace"}
++    end;
++queue_member_replace(JObj) -> queue_member_replace(kz_json:to_proplist(JObj)).
++
++-spec queue_member_replace_v(kz_term:api_terms()) -> boolean().
++queue_member_replace_v(Prop) when is_list(Prop) ->
++    kz_api:validate(Prop, ?QUEUE_MEMBER_REPLACE_HEADERS,
++                    ?QUEUE_MEMBER_REPLACE_VALUES, ?QUEUE_MEMBER_REPLACE_TYPES)
++        andalso props:get_value(<<"Attempt-ID">>, Prop)
++            =:= kz_json:get_ne_binary_value(<<"Call-ID">>,
++                                            props:get_value(<<"Call">>, Prop));
++queue_member_replace_v(JObj) ->
++    queue_member_replace_v(kz_json:to_proplist(JObj)).
++
++is_callback_id(<<"acdc-callback-", Digest:64/binary>>) ->
++    re:run(Digest, <<"^[0-9a-f]{64}$">>, [{'capture', 'none'}]) =:= 'match';
++is_callback_id(_) -> 'false'.
++
+ -define(QUEUE_MEMBER_REMOVE_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"Call-ID">>]).
+ -define(OPTIONAL_QUEUE_MEMBER_REMOVE_HEADERS, []).
+ -define(QUEUE_MEMBER_REMOVE_VALUES, [{<<"Event-Category">>, <<"queue">>}
+@@ -854,6 +899,16 @@ publish_queue_member_add(API, ContentType) ->
+     {'ok', Payload} = kz_api:prepare_api_payload(API, ?QUEUE_MEMBER_ADD_VALUES, fun queue_member_add/1),
+     kz_amqp_util:kapps_publish(queue_member_routing_key(API), Payload, ContentType).
+ 
++-spec publish_queue_member_replace(kz_term:api_terms()) -> 'ok'.
++publish_queue_member_replace(JObj) ->
++    publish_queue_member_replace(JObj, ?DEFAULT_CONTENT_TYPE).
++
++-spec publish_queue_member_replace(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
++publish_queue_member_replace(API, ContentType) ->
++    {'ok', Payload} = kz_api:prepare_api_payload(API, ?QUEUE_MEMBER_REPLACE_VALUES,
++                                                fun queue_member_replace/1),
++    kz_amqp_util:kapps_publish(queue_member_routing_key(API), Payload, ContentType).
++
+ -spec publish_queue_member_remove(kz_term:api_terms()) -> 'ok'.
+ publish_queue_member_remove(JObj) ->
+     publish_queue_member_remove(JObj, ?DEFAULT_CONTENT_TYPE).
+diff --git a/test/acdc_queue_manager_tests.erl b/test/acdc_queue_manager_tests.erl
+index 7a974ea..cea0024 100644
+--- a/test/acdc_queue_manager_tests.erl
++++ b/test/acdc_queue_manager_tests.erl
+@@ -49,3 +49,257 @@ agent_count_1_busy_agent_test_() ->
+     State2 = State1#state{strategy_state=SS2},
+     [?_assertEqual(0, acdc_queue_manager:assignable_agent_count(State2))
+     ,?_assertEqual(1, acdc_queue_manager:agent_count(State2))].
++
++take_position_announcement_test() ->
++    CallId = <<"member-call">>,
++    OtherCallId = <<"other-call">>,
++    AnnouncementPid = self(),
++    Pids = #{CallId => AnnouncementPid, OtherCallId => AnnouncementPid},
++    ?assertEqual({AnnouncementPid, #{OtherCallId => AnnouncementPid}},
++                 acdc_queue_manager:take_position_announcement(CallId, Pids)),
++    ?assertEqual({'undefined', Pids},
++                 acdc_queue_manager:take_position_announcement(<<"missing">>, Pids)).
++
++logical_member_redelivery_does_not_restamp_test() ->
++    with_config_defaults(fun() ->
++        Original = acdc_queue_member:stamp(call(<<"original-call">>), 100, 7, 0),
++        CallbackId = <<"acdc-callback-0000000000000000000000000000000000000000000000000000000000000000">>,
++        {'ok', [Returned], 1, 'replaced'} =
++            acdc_queue_member:replace(<<"original-call">>, CallbackId, 1,
++                                      <<"returned-call">>, call(<<"returned-call">>), [Original]),
++        State = #state{current_member_calls=[Returned]},
++        Redelivery = kz_json:from_list([{<<"Call">>, kapps_call:to_json(call(<<"original-call">>))}]),
++        ?assertEqual({'noreply', State},
++                     acdc_queue_manager:handle_cast({'add_queue_member', Redelivery}, State))
++    end).
++
++resume_announcements_is_idempotent_or_skips_callback_leg_test() ->
++    LogicalId = <<"original-call">>,
++    Original = acdc_queue_member:stamp(call(LogicalId), 100, 7, 0),
++    Existing = #state{current_member_calls=[Original]
++                     ,announcements_pids=#{LogicalId => self()}},
++    ?assertEqual({'reply', 'ok', Existing},
++                 acdc_queue_manager:handle_call({'resume_announcements', LogicalId}, self(), Existing)),
++    CallbackId = <<"acdc-callback-0000000000000000000000000000000000000000000000000000000000000000">>,
++    {'ok', [Returned], 1, 'replaced'} =
++        acdc_queue_member:replace(LogicalId, CallbackId, 1,
++                                  <<"returned-call">>, call(<<"returned-call">>), [Original]),
++    CallbackState = #state{current_member_calls=[Returned]},
++    ?assertEqual({'reply', 'ok', CallbackState},
++                 acdc_queue_manager:handle_call({'resume_announcements', LogicalId}, self(), CallbackState)),
++    Missing = #state{},
++    ?assertEqual({'reply', 'ok', Missing},
++                 acdc_queue_manager:handle_call({'resume_announcements', LogicalId}, self(), Missing)).
++
++legacy_recovery_preserves_existing_service_order_test() ->
++    %% current_member_calls is reverse service order: first -> second -> third.
++    Legacy = [account_call(<<"third">>), account_call(<<"second">>),
++              account_call(<<"first">>)],
++    {'ok', Migrated, 2, Existing} =
++        acdc_queue_manager:ensure_legacy_member(account_call(<<"second">>), Legacy),
++    ?assertEqual([<<"first">>, <<"second">>, <<"third">>],
++                 [acdc_queue_member:logical_id(Call)
++                  || Call <- lists:reverse(Migrated)]),
++    ?assertEqual({0, 1, 1, <<"second">>},
++                 acdc_queue_member:member_order_key(Existing)).
++
++lost_legacy_recovery_appends_without_current_time_restamp_test() ->
++    Legacy = [account_call(<<"second">>), account_call(<<"first">>)],
++    {'ok', Migrated, 3, Canonical} =
++        acdc_queue_manager:ensure_legacy_member(account_call(<<"lost">>), Legacy),
++    ?assertEqual([<<"first">>, <<"second">>, <<"lost">>],
++                 [acdc_queue_member:logical_id(Call)
++                  || Call <- lists:reverse(Migrated)]),
++    ?assertEqual({0, 1, 2, <<"lost">>},
++                 acdc_queue_member:member_order_key(Canonical)).
++
++mixed_legacy_and_modern_metadata_fails_closed_test() ->
++    Modern = acdc_queue_member:stamp(account_call(<<"modern">>), 100, 1, 0),
++    ?assertEqual({'error', 'legacy_mixed_metadata'},
++                 acdc_queue_manager:ensure_legacy_member(
++                   account_call(<<"lost">>), [Modern, account_call(<<"legacy">>)])).
++
++callback_recovery_validates_scope_identity_and_immutable_metadata_test() ->
++    Doc = callback_doc(<<"queued">>),
++    Original = account_call(<<"original-call">>),
++    {'ok', <<"original-call">>, CallbackId, 0, 'undefined', Restored} =
++        acdc_queue_manager:callback_recovery_call(
++          account_id(), queue_id(), Original, Doc),
++    ?assertEqual(callback_id(), CallbackId),
++    ?assertEqual({-3, 100, 7, <<"original-call">>},
++                 acdc_queue_member:member_order_key(Restored)),
++    InvalidDocs = [kz_json:set_value(<<"pvt_account_id">>, <<"wrong-account">>, Doc)
++                  ,kz_json:set_value(<<"queue_id">>, <<"wrong-queue">>, Doc)
++                  ,kz_json:set_value(<<"original_call_id">>, <<"wrong-call">>, Doc)
++                  ,kz_json:set_value(<<"pvt_type">>, <<"wrong-type">>, Doc)
++                  ,kz_json:set_value(<<"_id">>, <<"bad-id">>, Doc)],
++    lists:foreach(
++      fun(InvalidDoc) ->
++          ?assertEqual({'error', 'invalid_callback_proof'},
++                       acdc_queue_manager:callback_recovery_call(
++                         account_id(), queue_id(), Original, InvalidDoc))
++      end, InvalidDocs),
++    MissingMetadata = [kz_json:delete_key(Key, Doc)
++                       || Key <- [<<"enqueued_at">>, <<"enqueue_sequence">>, <<"priority">>]],
++    lists:foreach(
++      fun(InvalidDoc) ->
++          ?assertEqual({'error', 'invalid_callback_metadata'},
++                       acdc_queue_manager:callback_recovery_call(
++                         account_id(), queue_id(), Original, InvalidDoc))
++      end, MissingMetadata).
++
++callback_recovery_restores_returned_leg_identity_test() ->
++    Doc = kz_json:set_values([{<<"status">>, <<"connecting">>}
++                             ,{<<"attempts">>, 2}
++                             ,{<<"pvt_caller_call_id">>, <<"returned-leg">>}],
++                            callback_doc(<<"queued">>)),
++    {'ok', <<"original-call">>, CallbackId, 2, <<"returned-leg">>, Restored} =
++        acdc_queue_manager:callback_recovery_call(
++          account_id(), queue_id(), account_call(<<"returned-leg">>), Doc),
++    ?assertEqual(callback_id(), CallbackId),
++    ?assertEqual(<<"original-call">>, acdc_queue_member:logical_id(Restored)),
++    ?assertEqual(<<"returned-leg">>, acdc_queue_member:physical_id(Restored)),
++    ?assert(acdc_queue_manager:valid_recovered_existing(
++              Restored, Doc, CallbackId, 2, <<"returned-leg">>)),
++    ?assertNot(acdc_queue_manager:valid_recovered_existing(
++                 Restored, kz_json:set_value(<<"enqueue_sequence">>, 8, Doc),
++                 CallbackId, 2, <<"returned-leg">>)).
++
++ensure_callback_member_inserts_canonical_returned_leg_test() ->
++    with_queue_api(fun() ->
++        meck:expect(kapi_acdc_queue, publish_queue_member_add, fun(_) -> 'ok' end),
++        Doc = kz_json:set_values([{<<"status">>, <<"connecting">>}
++                                ,{<<"attempts">>, 2}
++                                ,{<<"pvt_caller_call_id">>, <<"returned-leg">>}],
++                               callback_doc(<<"queued">>)),
++        State = #state{account_id=account_id(), queue_id=queue_id()},
++        {'reply', {'ok', 1, Canonical}, State1} =
++            acdc_queue_manager:handle_call(
++              {'ensure_callback_member', account_call(<<"returned-leg">>), Doc}, self(), State),
++        ?assertEqual([Canonical], State1#state.current_member_calls),
++        ?assertEqual(<<"original-call">>, acdc_queue_member:logical_id(Canonical)),
++        ?assertEqual(callback_id(),
++                     kapps_call:kvs_fetch(<<"acdc_callback_id">>, Canonical)),
++        ?assertEqual(1, meck:num_calls(kapi_acdc_queue, publish_queue_member_add, '_'))
++    end).
++
++terminal_retirement_publication_failure_preserves_member_test() ->
++    with_retirement_mocks(
++      fun() ->
++          meck:expect(kz_amqp_worker, cast, fun(_, _) -> {'error', 'unavailable'} end),
++          State = terminal_state(),
++          ?assertEqual({'reply', {'error', 'publish_failed'}, State},
++                       acdc_queue_manager:handle_call(
++                         {'retire_callback_member', <<"original-call">>, callback_id()},
++                         self(), State))
++      end).
++
++terminal_retirement_rejects_wrong_document_scope_test() ->
++    with_retirement_mocks(
++      fun() ->
++          meck:expect(acdc_callback_store, get,
++                      fun(_, _, _) ->
++                          {'ok', kz_json:set_value(<<"queue_id">>, <<"wrong-queue">>,
++                                                   callback_doc(<<"completed">>))}
++                      end),
++          meck:expect(kz_amqp_worker, cast, fun(_, _) -> error(unexpected_publish) end),
++          State = terminal_state(),
++          ?assertEqual({'reply', {'error', 'not_terminal'}, State},
++                       acdc_queue_manager:handle_call(
++                         {'retire_callback_member', <<"original-call">>, callback_id()},
++                         self(), State)),
++          ?assertEqual(0, meck:num_calls(kz_amqp_worker, cast, '_'))
++      end).
++
++repeated_completed_member_retirement_is_idempotent_test() ->
++    with_retirement_mocks(
++      fun() ->
++          meck:expect(kz_amqp_worker, cast, fun(_, _) -> 'ok' end),
++          State0 = terminal_state(),
++          {'reply', 'ok', State1} = acdc_queue_manager:handle_call(
++                                      {'retire_callback_member', <<"original-call">>, callback_id()},
++                                      self(), State0),
++          ?assertEqual([], State1#state.current_member_calls),
++          {'reply', 'ok', State2} = acdc_queue_manager:handle_call(
++                                      {'retire_callback_member', <<"original-call">>, callback_id()},
++                                      self(), State1),
++          ?assertEqual([], State2#state.current_member_calls),
++          ?assertEqual(2, meck:num_calls(kz_amqp_worker, cast, '_'))
++      end).
++
++terminal_state() ->
++    Member = acdc_queue_member:stamp(account_call(<<"original-call">>), 100, 7, 3),
++    #state{account_id=account_id(), queue_id=queue_id(), current_member_calls=[Member]}.
++
++with_queue_api(Fun) ->
++    meck:new(kapi_acdc_queue, [non_strict, no_link]),
++    meck:new(kapps_call, [passthrough, no_link]),
++    meck:expect(kapps_call, set_custom_channel_var,
++                fun(Key, Value, Call) ->
++                    kapps_call:insert_custom_channel_var(Key, Value, Call)
++                end),
++    try Fun()
++    after
++        meck:unload(kapps_call),
++        meck:unload(kapi_acdc_queue)
++    end.
++
++with_retirement_mocks(Fun) ->
++    meck:new(acdc_callback_store, [non_strict, no_link]),
++    meck:new(kz_amqp_worker, [non_strict, no_link]),
++    meck:expect(acdc_callback_store, get,
++                fun(_, _, _) -> {'ok', callback_doc(<<"completed">>)} end),
++    try Fun()
++    after
++        meck:unload(kz_amqp_worker),
++        meck:unload(acdc_callback_store)
++    end.
++
++callback_doc(Status) ->
++    kz_json:from_list([{<<"_id">>, callback_id()}
++                      ,{<<"pvt_type">>, <<"acdc_callback">>}
++                      ,{<<"pvt_account_id">>, account_id()}
++                      ,{<<"queue_id">>, queue_id()}
++                      ,{<<"original_call_id">>, <<"original-call">>}
++                      ,{<<"enqueued_at">>, 100}
++                      ,{<<"enqueue_sequence">>, 7}
++                      ,{<<"priority">>, 3}
++                      ,{<<"attempts">>, 0}
++                      ,{<<"status">>, Status}]).
++
++callback_id() ->
++    <<"acdc-callback-0000000000000000000000000000000000000000000000000000000000000000">>.
++
++account_id() -> <<"11111111111111111111111111111111">>.
++queue_id() -> <<"queue-one">>.
++
++account_call(Id) ->
++    %% from_json/1 is command-free. Its production caller-ID defaults consult
++    %% kapps_config eagerly, so keep those reads local to this isolated fixture.
++    with_config_defaults(
++      fun() ->
++          kapps_call:from_json(
++            kz_json:from_list([{<<"Call-ID">>, Id}
++                              ,{<<"Account-ID">>, account_id()}
++                              ,{<<"Caller-ID-Name">>, <<"caller">>}
++                              ,{<<"Caller-ID-Number">>, <<"1000">>}
++                              ,{<<"Language">>, <<"en-us">>}
++                              ,{<<"Controller-Queue">>, <<"controller">>}
++                              ,{<<"Control-Queue">>, <<"control">>}]))
++      end).
++
++call(Id) ->
++    kapps_call:set_language(
++      <<"en-us">>,
++      kapps_call:set_controller_queue(
++        <<"controller">>,
++        kapps_call:set_control_queue(
++          <<"control">>, kapps_call:set_call_id(Id, kapps_call:new())))).
++
++with_config_defaults(Fun) ->
++    meck:new(kapps_config, [passthrough, no_link]),
++    meck:expect(kapps_config, get_ne_binary, fun(_, _, Default) -> Default end),
++    meck:expect(kapps_config, get_ne_binary, fun(_, _, Default, _) -> Default end),
++    meck:expect(kapps_config, get_binary, fun(_, _, Default) -> Default end),
++    meck:expect(kapps_config, get_binary, fun(_, _, Default, _) -> Default end),
++    try Fun() after meck:unload(kapps_config) end.

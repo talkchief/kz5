@@ -1,0 +1,236 @@
+diff --git a/src/event_stream/ecallmgr_fs_event_stream.erl b/src/event_stream/ecallmgr_fs_event_stream.erl
+index ddba5a9..ddf7f85 100644
+--- a/src/event_stream/ecallmgr_fs_event_stream.erl
++++ b/src/event_stream/ecallmgr_fs_event_stream.erl
+@@ -260,7 +260,7 @@ maybe_bind(Node, Bindings) ->
+           {'error', any()} |
+           {'EXIT', any()}.
+ maybe_bind(Node, Bindings, 2) ->
+-    case catch gen_server:call({'mod_kazoo', Node}, {'event', Bindings}, 2 * ?MILLISECONDS_IN_SECOND) of
++    case catch mod_kazoo:call({'mod_kazoo', Node}, {'event', Bindings}, 2 * ?MILLISECONDS_IN_SECOND) of
+         {'ok', {_IP, _Port}}=OK -> OK;
+         {'EXIT', {'timeout',_}} -> {'error', 'timeout'};
+         {'EXIT', {{'nodedown',_}, _}} -> {'error', 'nodedown'};
+@@ -268,7 +268,7 @@ maybe_bind(Node, Bindings, 2) ->
+         {'error', _Reason}=E -> E
+     end;
+ maybe_bind(Node, Bindings, Attempts) ->
+-    case catch gen_server:call({'mod_kazoo', Node}, {'event', Bindings}, 2 * ?MILLISECONDS_IN_SECOND) of
++    case catch mod_kazoo:call({'mod_kazoo', Node}, {'event', Bindings}, 2 * ?MILLISECONDS_IN_SECOND) of
+         {'ok', {_IP, _Port}}=OK -> OK;
+         {'EXIT', {'timeout',_}} ->
+             lager:debug("timeout on attempt ~b to bind: ~p", [Attempts, Bindings]),
+diff --git a/src/mod_kazoo.erl b/src/mod_kazoo.erl
+index a2ec0ab..f1064c9 100644
+--- a/src/mod_kazoo.erl
++++ b/src/mod_kazoo.erl
+@@ -54,6 +54,8 @@
+ 
+ -export([sync_channel/2]).
+ -export([no_legacy/1]).
++-export([ping/1]).
++-export([call/2, call/3]).
+ 
+ -export([async_api/3]).
+ 
+@@ -63,13 +65,38 @@
+ 
+ -define(TIMEOUT, 5 * ?MILLISECONDS_IN_SECOND).
+ 
++%% OTP 24 introduced process-alias reply tags for calls to remote processes.
++%% FreeSWITCH's mod_kazoo C-node can reply to the historical reference tag,
++%% but the EI API it uses cannot address an Erlang process alias. Keep the
++%% wire protocol compatible while retaining a bounded timeout.
++-spec call({atom(), atom()}, term()) -> term().
++call(Server, Request) ->
++    call(Server, Request, ?TIMEOUT).
++
++-spec call({atom(), atom()}, term(), timeout()) -> term().
++call(Server, Request, Timeout) ->
++    Tag = make_ref(),
++    Server ! {'$gen_call', {self(), Tag}, Request},
++    receive
++        {Tag, Reply} -> Reply
++    after Timeout ->
++            exit({'timeout', {'gen_server', 'call', [Server, Request, Timeout]}})
++    end.
++
++-spec ping(atom()) -> 'pong' | 'pang'.
++ping(Node) ->
++    case version(Node, ?TIMEOUT) of
++        {'ok', _Version} -> 'pong';
++        _ -> 'pang'
++    end.
++
+ -spec version(atom()) -> freeswitch:fs_api_return().
+ version(Node) ->
+     version(Node, ?TIMEOUT).
+ 
+ -spec version(atom(), pos_integer()) -> freeswitch:fs_api_return().
+ version(Node, Timeout) ->
+-    try gen_server:call({'mod_kazoo', Node}, 'version', Timeout) of
++    try call({'mod_kazoo', Node}, 'version', Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         Result -> Result
+     catch
+@@ -103,7 +130,7 @@ getpid(Node) ->
+ 
+ -spec getpid(atom(), pos_integer()) -> freeswitch:fs_api_return().
+ getpid(Node, Timeout) ->
+-    try gen_server:call({'mod_kazoo', Node}, 'getpid', Timeout) of
++    try call({'mod_kazoo', Node}, 'getpid', Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         Result -> Result
+     catch
+@@ -120,7 +147,7 @@ bind(Node, Type) ->
+ 
+ -spec bind(atom(), atom(), pos_integer()) -> freeswitch:fs_api_return().
+ bind(Node, Type, Timeout) ->
+-    try gen_server:call({'mod_kazoo', Node}, {'bind', Type}, Timeout) of
++    try call({'mod_kazoo', Node}, {'bind', Type}, Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         {'ok', <<"-ERR ", Reason/binary>>} -> internal_fs_error(Reason);
+         Result -> Result
+@@ -165,7 +192,7 @@ api(Node, Cmd, Args) ->
+ 
+ -spec api(atom(), kz_term:text(), kz_term:text(), timeout()) -> freeswitch:fs_api_return().
+ api(Node, Cmd, Args, Timeout) when is_atom(Node) ->
+-    try gen_server:call({'mod_kazoo', Node}, {'api', Cmd, Args}, Timeout) of
++    try call({'mod_kazoo', Node}, {'api', Cmd, Args}, Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         {'ok', <<"-ERR", Reason/binary>>} -> api_result('error', Reason);
+         {'ok', <<"+OK", Result/binary>>} -> api_result('ok', Result);
+@@ -207,7 +234,7 @@ json_api(Node, UUID, Cmd, Data, Timeout) when is_atom(Node) ->
+              ,{<<"data">>, Data}
+              ],
+     JObj = kz_json:from_list(Params),
+-    try gen_server:call({'mod_kazoo', Node}, {'json_api', kz_json:encode(JObj)}, Timeout) of
++    try call({'mod_kazoo', Node}, {'json_api', kz_json:encode(JObj)}, Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         {'error', {'parse_error', _Where}} = Err -> Err;
+         {'ok', Result} -> json_api_result('ok', Result);
+@@ -241,7 +268,7 @@ bgapi(Node, Cmd, Args) ->
+     Self = self(),
+     _ = kz_process:spawn(
+           fun() ->
+-                  try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
++                  try call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
+                       {'ok', <<"-ERR ", Reason/binary>>} ->
+                           Self ! {'api', internal_fs_error(Reason)};
+                       {'ok', JobId}=JobOk ->
+@@ -274,7 +301,7 @@ bgapi(Node, Cmd, Args, Fun) when is_function(Fun, 2) ->
+     Self = self(),
+     _ = kz_process:spawn(
+           fun() ->
+-                  try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
++                  try call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
+                       {'ok', <<"-ERR ", Reason/binary>>} ->
+                           Self ! {'api', internal_fs_error(Reason)};
+                       {'ok', JobId}=JobOk ->
+@@ -307,7 +334,7 @@ bgapi(Node, Cmd, Args, Fun, CallBackParams) when is_function(Fun, 3) ->
+     Self = self(),
+     _ = kz_process:spawn(
+           fun() ->
+-                  try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
++                  try call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
+                       {'ok', <<"-ERR ", Reason/binary>>} ->
+                           Self ! {'api', internal_fs_error(Reason)};
+                       {'ok', JobId}=JobOk ->
+@@ -340,7 +367,7 @@ bgapi(Node, UUID, CallBackParams, Cmd, Args, Fun) when is_function(Fun, 6) ->
+     Self = self(),
+     _ = kz_process:spawn(
+           fun() ->
+-                  try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
++                  try call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
+                       {'ok', <<"-ERR ", Reason/binary>>} ->
+                           Self ! {'api', internal_fs_error(Reason)};
+                       {'ok', JobId}=JobOk ->
+@@ -378,7 +405,7 @@ event(Node, Events) ->
+ event(Node, [_|_]=Events, Timeout) ->
+     PortOpen = get('port_open'),
+     PackeSize = freeswitch:event_stream_framing(Node),
+-    try gen_server:call({'mod_kazoo', Node}, {'event', Events}, Timeout) of
++    try call({'mod_kazoo', Node}, {'event', Events}, Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         {'ok', <<"-ERR ", Reason/binary>>} -> internal_fs_error(Reason);
+         {'ok', {IP, Port}} when PortOpen =:= 'undefined' ->
+@@ -414,7 +441,7 @@ sendevent_custom(Node, SubClassName, Headers) ->
+ 
+ -spec sendmsg(atom(), kz_term:ne_binary(), list()) -> freeswitch:fs_api_return().
+ sendmsg(Node, UUID, Headers) ->
+-    gen_server:call({'mod_kazoo', Node}, {'sendmsg', UUID, Headers}).
++    call({'mod_kazoo', Node}, {'sendmsg', UUID, Headers}).
+ 
+ -spec config(atom()) -> 'ok'.
+ config(Node) ->
+@@ -435,7 +462,7 @@ bgapi4(Node, Cmd, Args, Fun, CallBackParams) ->
+     end.
+ 
+ bgapi4(Node, Cmd, Args, Fun, CallBackParams, Self) ->
+-    try gen_server:call({'mod_kazoo', Node}, {'bgapi4', Cmd, Args}, ?TIMEOUT) of
++    try call({'mod_kazoo', Node}, {'bgapi4', Cmd, Args}, ?TIMEOUT) of
+         {'ok', <<"-ERR ", Reason/binary>>} ->
+             Self ! {'api', internal_fs_error(Reason)};
+         {'ok', <<"+OK ", JobId/binary>>} ->
+@@ -480,7 +507,7 @@ cmd(Node, UUID, Command) ->
+ 
+ -spec cmd(atom(), kz_term:ne_binary(), boolean(), list()) -> freeswitch:fs_api_return().
+ cmd(Node, UUID, Sync, Command) ->
+-    gen_server:call({'mod_kazoo', Node}, {'command', UUID, Sync, Command}).
++    call({'mod_kazoo', Node}, {'command', UUID, Sync, Command}).
+ 
+ -spec cmds(atom(), kz_term:ne_binary(), list()) -> freeswitch:fs_api_return().
+ cmds(Node, UUID, Commands) ->
+@@ -488,7 +515,7 @@ cmds(Node, UUID, Commands) ->
+ 
+ -spec cmds(atom(), kz_term:ne_binary(), boolean(), list()) -> freeswitch:fs_api_return().
+ cmds(Node, UUID, Sync, Commands) ->
+-    gen_server:call({'mod_kazoo', Node}, {'commands', UUID, Sync, Commands}).
++    call({'mod_kazoo', Node}, {'commands', UUID, Sync, Commands}).
+ 
+ -spec cast_cmd(atom(), kz_term:ne_binary(), list()) -> freeswitch:fs_api_return().
+ cast_cmd(Node, UUID, Command) ->
+@@ -516,7 +543,7 @@ sync_channel(Node, UUID) ->
+ 
+ -spec no_legacy(atom()) -> 'ok' | {'error', 'timeout' | 'exception'}.
+ no_legacy(Node) ->
+-    try gen_server:call({'mod_kazoo', Node}, 'no_legacy') of
++    try call({'mod_kazoo', Node}, 'no_legacy') of
+         'timeout' -> {'error', 'timeout'};
+         Result -> Result
+     catch
+diff --git a/src/node/ecallmgr_fs_nodes.erl b/src/node/ecallmgr_fs_nodes.erl
+index 9e8c59f..8d6e801 100644
+--- a/src/node/ecallmgr_fs_nodes.erl
++++ b/src/node/ecallmgr_fs_nodes.erl
+@@ -693,7 +693,7 @@ maybe_ping_node(#node{node=NodeName
+                      ,cookie=Cookie
+                      }=Node) ->
+     erlang:set_cookie(NodeName, Cookie),
+-    case net_adm:ping(NodeName) of
++    case mod_kazoo:ping(NodeName) of
+         'pong' ->
+             _ = ecallmgr_fs_pinger_sup:remove_node(NodeName),
+             maybe_start_node_handlers(Node);
+@@ -876,7 +876,7 @@ try_connect_to_default_fs() ->
+ 
+ -spec try_connect_to_default_fs(atom()) -> 'skip' | 'ok' | {'error', 'no_connection'}.
+ try_connect_to_default_fs(Node) ->
+-    case net_adm:ping(Node) of
++    case mod_kazoo:ping(Node) of
+         'pong' ->
+             lager:info("connected to default freeswitch node ~p", [Node]),
+             add(Node);
+diff --git a/src/node/ecallmgr_fs_pinger.erl b/src/node/ecallmgr_fs_pinger.erl
+index 00aab62..c71d788 100644
+--- a/src/node/ecallmgr_fs_pinger.erl
++++ b/src/node/ecallmgr_fs_pinger.erl
+@@ -106,7 +106,7 @@ handle_info('check_node_status', #state{timeout=Timeout}=State)
+   when Timeout > ?MILLISECONDS_IN_MINUTE * 15 ->
+     handle_info('check_node_status', State#state{timeout=?MILLISECONDS_IN_MINUTE});
+ handle_info('check_node_status', #state{node=Node, timeout=Timeout}=State) ->
+-    case net_adm:ping(Node) of
++    case mod_kazoo:ping(Node) of
+         'pong' ->
+             %% give the node a moment to init
+             timer:sleep(?MILLISECONDS_IN_SECOND),

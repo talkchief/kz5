@@ -1,0 +1,21 @@
+diff --git a/kazoo_fetch_agent.c b/kazoo_fetch_agent.c
+index 5023e39..e91b2e4 100644
+--- a/kazoo_fetch_agent.c
++++ b/kazoo_fetch_agent.c
+@@ -34,6 +34,7 @@
+ 
+ static const char *fetch_uuid_sources[] = {
+ 		"Fetch-Call-UUID",
++		"Unique-ID",
+ 		"refer-from-channel-id",
+ 		"sip_call_id",
+ 		NULL
+@@ -170,7 +171,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
+ 	reply.next = NULL;
+ 	reply.xml_str = NULL;
+ 
+-	if(switch_event_get_header(event, "Unique-ID") == NULL) {
++	{
+ 		int i;
+ 		for(i = 0; fetch_uuid_sources[i] != NULL; i++) {
+ 			if((fetch_call_id = switch_event_get_header(event, fetch_uuid_sources[i])) != NULL) {

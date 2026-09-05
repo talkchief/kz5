@@ -1,0 +1,5 @@
+#!/bin/sh
+# A launcher-only test double: no Erlang node or network connection is started.
+printf 'dump=%s\nseconds=%s\nbytes=%s\n' \
+    "$ERL_CRASH_DUMP" "$ERL_CRASH_DUMP_SECONDS" "$ERL_CRASH_DUMP_BYTES"
+printf 'arg=%s\n' "$@"

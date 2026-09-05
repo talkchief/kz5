@@ -1,0 +1,60 @@
+diff --git a/src/stepswitch_originate.erl b/src/stepswitch_originate.erl
+index db1647a..b6d5ea5 100644
+--- a/src/stepswitch_originate.erl
++++ b/src/stepswitch_originate.erl
+@@ -20,6 +20,10 @@
+         ,code_change/3
+         ]).
+ 
++-ifdef(TEST).
++-export([originate_b_leg_events/1, originate_result_action/1]).
++-endif.
++
+ -include("stepswitch.hrl").
+ 
+ -define(SERVER, ?MODULE).
+@@ -104,7 +108,10 @@ handle_cast({'originate_result', _Props}, #state{response_queue='undefined'}=Sta
+     {'stop', 'normal', State};
+ handle_cast({'originate_result', Props}, #state{response_queue=ResponseQ}=State) ->
+     kapi_offnet_resource:publish_resp(ResponseQ, Props),
+-    {'stop', 'normal', State};
++    case originate_result_action(Props) of
++        'retain' -> {'noreply', State};
++        'stop' -> {'stop', 'normal', State}
++    end;
+ handle_cast({'bridged', CallId}, #state{timeout='undefined'}=State) ->
+     lager:debug("channel bridged to ~s", [CallId]),
+     {'noreply', State};
+@@ -247,6 +254,7 @@ build_originate(#state{endpoints=Endpoints
+     props:filter_undefined(
+       [{<<"Application-Data">>, kz_json:get_value(<<"Application-Data">>, OffnetReq)}
+       ,{<<"Application-Name">>, Application}
++      ,{<<"B-Leg-Events">>, originate_b_leg_events(OffnetReq)}
+       ,{<<"Call-ID">>, kz_json:get_value(<<"Outbound-Call-ID">>, OffnetReq)}
+       ,{<<"Caller-ID-Name">>, CIDName}
+       ,{<<"Caller-ID-Number">>, CIDNum}
+@@ -283,6 +291,23 @@ build_originate(#state{endpoints=Endpoints
+       | kz_api:default_headers(Q, <<"resource">>, <<"originate_req">>, ?APP_NAME, ?APP_VERSION)
+       ]).
+ 
++%% Keep requested event delivery consistent with the bridge and local-extension
++%% offnet paths. Callback workers depend on these events for the returned leg;
++%% this does not authorize or select a route.
++-spec originate_b_leg_events(kapi_offnet_resource:req()) -> kz_term:binaries().
++originate_b_leg_events(OffnetReq) ->
++    kapi_offnet_resource:b_leg_events(OffnetReq, []).
++
++%% READY is a non-terminal barrier when Originate-Immediate is false.  The
++%% listener must remain alive so ecallmgr can deliver the final originate_resp
++%% to the same ephemeral queue after the requestor sends originate_execute.
++-spec originate_result_action(kz_term:proplist()) -> 'retain' | 'stop'.
++originate_result_action(Props) ->
++    case props:get_value(<<"Response-Message">>, Props) of
++        <<"READY">> -> 'retain';
++        _ -> 'stop'
++    end.
++
+ -spec maybe_add_authorizing_id(kz_json:object(), kz_term:ne_binary()) -> kz_json:object().
+ maybe_add_authorizing_id(JObj, AccountId) ->
+     AuthorizingId = kz_json:get_ne_binary_value(<<"Authorizing-ID">>, JObj),
+

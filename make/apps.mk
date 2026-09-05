@@ -1,4 +1,5 @@
-DEPS ?= blackhole \
+DEPS ?= acdc \
+	blackhole \
 	call_inspector \
 	callflow \
 	cdr \

@@ -1,0 +1,29 @@
+diff --git a/src/apps/myaccount/app.js b/src/apps/myaccount/app.js
+index 6ae131e..34ebf06 100644
+--- a/src/apps/myaccount/app.js
++++ b/src/apps/myaccount/app.js
+@@ -440,9 +440,13 @@ define(function(require) {
+ 								myaccount.addClass('myaccount-open');
+ 								$('#main_topbar_myaccount').addClass('open');
+ 
+-								myaccount.one('transitionend', function() {
+-									$('#monster_content').hide();
+-									callback && callback();
++								myaccount.off('transitionend.myaccountOpen').one('transitionend.myaccountOpen', function() {
++									// A navigation/close can finish before the opening CSS
++									// transition. It must not hide the newly selected app.
++									if (myaccount.hasClass('myaccount-open')) {
++										$('#monster_content').hide();
++										callback && callback();
++									}
+ 								});
+ 							}
+ 						};
+@@ -503,6 +507,7 @@ define(function(require) {
+ 			var self = this,
+ 				myaccount = myaccount || $(self.mainContainer);
+ 
++			myaccount.off('transitionend.myaccountOpen');
+ 			monster.pub('core.showAppName');
+ 			myaccount.find('.myaccount-right .myaccount-content').empty();
+ 			myaccount.find('.myaccount-dialog-container').empty();

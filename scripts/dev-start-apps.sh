@@ -1,16 +1,62 @@
 #!/bin/sh
 
-cd $(dirname $0)
+cd "$(dirname "$0")" || exit 1
 
 ROOT=$PWD/..
 
-export ERL_CRASH_DUMP=$ROOT/$(date +%s)_ecallmgr_erl_crash.dump
-export ERL_LIBS="$ERL_LIBS":$ROOT/deps:$ROOT/core:$ROOT/applications:$(echo $ROOT/deps/rabbitmq_erlang_client-*/deps)
+ERL_LIBS="${ERL_LIBS:-}:$ROOT/deps:$ROOT/core:$ROOT/applications"
+for rabbitmq_deps in "$ROOT"/deps/rabbitmq_erlang_client-*/deps; do
+    [ -d "$rabbitmq_deps" ] && ERL_LIBS="$ERL_LIBS:$rabbitmq_deps"
+done
+export ERL_LIBS
 
 NODE_NAME=${1:-kazoo_apps}
+NAME_TYPE=${KAZOO_NODE_NAME_TYPE:--name}
+case "$NAME_TYPE" in
+    -name|-sname) ;;
+    *) echo "Invalid KAZOO_NODE_NAME_TYPE: $NAME_TYPE" >&2; exit 2 ;;
+esac
+DIST_IP=${KAZOO_ERLANG_DIST_IP:-127.0.0.1}
+case "$DIST_IP" in
+    ''|*[!0-9.]*) echo "Invalid KAZOO_ERLANG_DIST_IP: $DIST_IP" >&2; exit 2 ;;
+esac
+DIST_TUPLE=$(awk -F. '
+    NF == 4 && $1 <= 255 && $2 <= 255 && $3 <= 255 && $4 <= 255 {
+        printf "{%d,%d,%d,%d}", $1, $2, $3, $4
+    }
+' <<EOF
+$DIST_IP
+EOF
+)
+[ -n "$DIST_TUPLE" ] || { echo "Invalid KAZOO_ERLANG_DIST_IP: $DIST_IP" >&2; exit 2; }
+
+# Independent nodes must never rotate the same Lager files. Restrict this
+# Erlang command-line string to a literal path, and protect call diagnostics.
+LOG_ROOT=${KAZOO_LOG_ROOT:-$(cd "$ROOT" && pwd -P)/log/kazoo_apps}
+case "$LOG_ROOT" in
+    /|*[!a-zA-Z0-9_./-]*) echo 'Invalid KAZOO_LOG_ROOT' >&2; exit 2 ;;
+    /*) ;;
+    *) echo 'KAZOO_LOG_ROOT must be absolute' >&2; exit 2 ;;
+esac
+umask 0077
+mkdir -p "$LOG_ROOT/log" || exit 1
+ERL_CRASH_DUMP="$LOG_ROOT/erl_crash.dump"
+ERL_CRASH_DUMP_SECONDS=10
+ERL_CRASH_DUMP_BYTES=104857600
+export ERL_CRASH_DUMP ERL_CRASH_DUMP_SECONDS ERL_CRASH_DUMP_BYTES
+
+# Installed services must keep one coherent code version until a controlled
+# restart. Auto-reloading record-layout changes is unsafe for live FSMs.
+case "${KAZOO_ENABLE_RELOADER:-false}" in
+    true) set -- -s reloader ;;
+    false) set -- ;;
+    *) echo 'Invalid KAZOO_ENABLE_RELOADER' >&2; exit 2 ;;
+esac
 
 exec erl \
-     -name $NODE_NAME \
-     -args_file $ROOT/rel/dev.vm.args \
-     -config $ROOT/rel/sys.config \
-     -s reloader
+     "$NAME_TYPE" "$NODE_NAME" \
+     -args_file "$ROOT/rel/dev.vm.args" \
+     -config "$ROOT/rel/sys.config" \
+     -lager log_root "\"$LOG_ROOT\"" \
+     -kernel inet_dist_use_interface "$DIST_TUPLE" \
+     "$@"

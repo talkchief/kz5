@@ -1,0 +1,16 @@
+diff --git a/kazoo_node.c b/kazoo_node.c
+index f75c327..1a6f56f 100644
+--- a/kazoo_node.c
++++ b/kazoo_node.c
+@@ -1148,8 +1148,9 @@ static switch_status_t handle_request_fetch_reply(ei_node_t *ei_node, erlang_pid
+ 	}
+ 
+ 	if (result == SWITCH_STATUS_SUCCESS) {
+-		switch_safe_free(xml_str);
+-
++		/* fetch_reply transfers ownership to the waiting fetch handler. It
++		 * either attaches the buffer to the parsed XML tree or frees it when
++		 * parsing fails. Freeing it here is a use-after-free/double-free. */
+ 		return erlang_response_ok(rbuf);
+ 	} else {
+ 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Received fetch reply %s is unknown or has expired : %s\n", uuid_str, xml_str);

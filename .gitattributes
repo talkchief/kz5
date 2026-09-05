@@ -1,0 +1,4 @@
+# Unified patches contain mandatory context-prefix spaces, including blank
+# context lines and tab-indented upstream code. Preserve their exact bytes;
+# validate the represented source and patch application separately.
+scripts/patches/*.patch -whitespace

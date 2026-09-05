@@ -1,0 +1,156 @@
+diff --git a/kazoo_amqp/src/api/kapi_registration.erl b/kazoo_amqp/src/api/kapi_registration.erl
+index f0ceebc7a..6621e8717 100644
+--- a/kazoo_amqp/src/api/kapi_registration.erl
++++ b/kazoo_amqp/src/api/kapi_registration.erl
+@@ -70,6 +70,8 @@
+ -export([get_success_routing/2
+         ,get_query_routing/2
+         ,get_flush_routing/1
++        ,collect_results/2
++        ,finish_search/2
+         ]).
+ -endif.
+ 
+@@ -304,6 +306,8 @@ search_partial_resp_definition() ->
+               ,{fun kapi_definition:set_publish_fun/2, fun publish_search_partial_resp/2}
+               ,{fun kapi_definition:set_required_headers/2, []}
+               ,{fun kapi_definition:set_optional_headers/2, [<<"Registrations">>
++                                                            ,<<"Registrar-Node">>
++                                                            ,<<"Registrar-Sequence">>
+                                                             ]}
+               ,{fun kapi_definition:set_values/2
+                ,kapi_definition:event_type_headers(Category, EventName)
+@@ -360,6 +364,8 @@ search_resp_definition() ->
+               ,{fun kapi_definition:set_publish_fun/2, fun publish_search_resp/2}
+               ,{fun kapi_definition:set_required_headers/2, []}
+               ,{fun kapi_definition:set_optional_headers/2, [<<"Registrations">>
++                                                            ,<<"Registrar-Node">>
++                                                            ,<<"Registrar-Parts">>
+                                                             ]}
+               ,{fun kapi_definition:set_values/2
+                ,kapi_definition:event_type_headers(Category, EventName)
+@@ -775,49 +781,104 @@ get_flush_routing(JObj) ->
+ %% @end
+ %%------------------------------------------------------------------------------
+ -spec search_realm_regs(Realm::kz_term:ne_binary()) ->
+-          kz_term:ne_binaries() | kz_json:objects().
++          kz_term:ne_binaries() | kz_json:objects() | {'error', any()}.
+ search_realm_regs(AccountRealm) ->
+     search_realm_regs(AccountRealm, <<"summary">>).
+ 
+ -spec search_realm_regs(Realm::kz_term:ne_binary(), SearchType::kz_term:ne_binary()) ->
+-          kz_term:ne_binaries() | kz_json:objects().
++          kz_term:ne_binaries() | kz_json:objects() | {'error', any()}.
+ search_realm_regs(AccountRealm, SearchType) ->
+     search_realm_regs(AccountRealm, SearchType, 'undefined').
+ 
+ -spec search_realm_regs(Realm::kz_term:ne_binary(), SearchType::kz_term:ne_binary(), Username::kz_term:api_ne_binary()) ->
+-          kz_term:ne_binaries() | kz_json:objects().
++          kz_term:ne_binaries() | kz_json:objects() | {'error', any()}.
+ search_realm_regs(AccountRealm, SearchType, Username) ->
+     Req = props:filter_undefined(
+             [{<<"Realm">>, AccountRealm}
+             ,{<<"Search-Type">>, SearchType}
++            ,{<<"Msg-ID">>, kz_binary:rand_hex(16)}
+             ,{<<"Username">>, Username}
+             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+             ]),
+     NodeCounts = kz_nodes:node_role_count(<<"Registrar">>, 'true'),
+     lager:debug("requesting registration ~s from ~B servers", [SearchType, NodeCounts]),
+-    case kz_amqp_worker:call_collect(Req
+-                                    ,fun publish_search_req/1
+-                                    ,{fun collect_results/2, {0, NodeCounts}}
+-                                    )
+-    of
+-        {'error', _R}=Err -> Err;
+-        {'ok', Registrations} -> process_responses(Registrations);
+-        {'timeout', Registrations} -> process_responses(Registrations)
+-    end.
++    Result = kz_amqp_worker:call_collect(Req
++                                        ,fun publish_search_req/1
++                                        ,{fun collect_results/2, {0, NodeCounts}}
++                                        ),
++    finish_search(Result, NodeCounts).
++
++%% A legacy empty final is not evidence of an empty registry: the partial
++%% messages can follow it on another AMQP channel. Legacy or incomplete peers
++%% use the existing bounded collection timeout and return unavailable, never
++%% an invented empty/partial authoritative registration snapshot.
++-spec finish_search(kz_amqp_worker:request_return(), non_neg_integer()) ->
++          kz_term:ne_binaries() | kz_json:objects() | {'error', any()}.
++finish_search({'error', _}=Error, _) -> Error;
++finish_search({Status, Registrations}, NodeCounts)
++  when Status =:= 'ok'; Status =:= 'timeout' ->
++    case collect_results(Registrations, {0, NodeCounts}) of
++        'true' -> process_responses(Registrations);
++        'false' -> {'error', 'incomplete_registration_response'}
++    end;
++finish_search(_, _) -> {'error', 'registration_query_failed'}.
+ 
+ -type collect_params() :: {integer(), integer()}.
+--type collect_result() :: 'true' | {'false', collect_params()}.
++-type collect_result() :: boolean().
+ 
+ -spec collect_results(kz_json:objects(), collect_params()) -> collect_result().
+-collect_results([Response | _], {Count, Max}) ->
+-    case Count + search_resp_value(kz_api:event_name(Response)) of
+-        Max -> 'true';
+-        V -> {'false', {V, Max}}
++collect_results(Responses, {_, Max}) when is_integer(Max), Max > 0 ->
++    MsgIds = lists:usort([kz_api:msg_id(Response) || Response <- Responses]),
++    case {MsgIds, lists:foldl(fun collect_registrar_part/2, #{}, Responses)} of
++        {[MsgId], Nodes} when is_binary(MsgId), byte_size(MsgId) > 0
++                             ,is_map(Nodes), map_size(Nodes) >= Max ->
++            lists:all(fun complete_registrar/1, maps:values(Nodes));
++        _ -> 'false'
++    end;
++collect_results(_, _) -> 'false'.
++
++-spec collect_registrar_part(kz_json:object(), map() | 'error') -> map() | 'error'.
++collect_registrar_part(_, 'error') -> 'error';
++collect_registrar_part(Response, Nodes) ->
++    Node = kz_json:get_ne_binary_value(<<"Registrar-Node">>, Response),
++    Regs = kz_json:get_value(<<"Registrations">>, Response),
++    case is_binary(Node) andalso byte_size(Node) =< 255 andalso is_list(Regs) of
++        'false' -> 'error';
++        'true' ->
++            Current = maps:get(Node, Nodes, #{parts => #{}, total => 'undefined'}),
++            case add_registrar_part(kz_api:event_name(Response), Response, Regs, Current) of
++                'error' -> 'error';
++                Updated -> maps:put(Node, Updated, Nodes)
++            end
+     end.
+ 
+--spec search_resp_value(kz_term:ne_binary()) -> 0..1.
+-search_resp_value(<<"search_resp">>) -> 1;
+-search_resp_value(_) -> 0.
++-spec add_registrar_part(kz_term:api_binary(), kz_json:object(), list(), map()) -> map() | 'error'.
++add_registrar_part(<<"search_partial_resp">>, Response, Regs, #{parts := Parts}=Current) ->
++    Sequence = kz_json:get_value(<<"Registrar-Sequence">>, Response),
++    case is_integer(Sequence) andalso Sequence > 0 andalso Sequence =< 1000000 of
++        'false' -> 'error';
++        'true' ->
++            case maps:find(Sequence, Parts) of
++                'error' -> Current#{parts := maps:put(Sequence, Regs, Parts)};
++                {'ok', Regs} -> Current;
++                {'ok', _} -> 'error'
++            end
++    end;
++add_registrar_part(<<"search_resp">>, Response, [], #{total := Existing}=Current) ->
++    Total = kz_json:get_value(<<"Registrar-Parts">>, Response),
++    case is_integer(Total) andalso Total >= 0 andalso Total =< 1000000
++        andalso (Existing =:= 'undefined' orelse Existing =:= Total)
++    of
++        'true' -> Current#{total := Total};
++        'false' -> 'error'
++    end;
++add_registrar_part(_, _, _, _) -> 'error'.
++
++-spec complete_registrar(map()) -> boolean().
++complete_registrar(#{parts := Parts, total := Total}) when is_integer(Total) ->
++    map_size(Parts) =:= Total
++        andalso lists:all(fun(Sequence) -> Sequence =< Total end, maps:keys(Parts));
++complete_registrar(_) -> 'false'.
+ 
+ -spec process_responses(kz_json:objects()) ->
+           kz_term:ne_binaries() | kz_json:objects().

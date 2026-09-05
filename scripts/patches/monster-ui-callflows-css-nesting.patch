@@ -1,0 +1,37 @@
+diff --git a/submodules/device/device.css b/submodules/device/device.css
+--- a/submodules/device/device.css
++++ b/submodules/device/device.css
+@@ -105,10 +105,10 @@
+ 	margin-bottom: 10px;
+ }
+ 
+-.callflows-port #device-form {
+-	.chosen-container, .chosen-drop, #owner_id {
+-		width: 224px !important;
+-	}
++.callflows-port #device-form .chosen-container,
++.callflows-port #device-form .chosen-drop,
++.callflows-port #device-form #owner_id {
++	width: 224px !important;
+ }
+ 
+ .callflows-port .pill-content{
+diff --git a/submodules/user/user.css b/submodules/user/user.css
+--- a/submodules/user/user.css
++++ b/submodules/user/user.css
+@@ -151,10 +151,11 @@
+ 	margin-bottom: 10px;
+ }
+ 
+-.callflows-port #user-form {
+-	.chosen-container, .chosen-drop, #priv_level, #bundle_type {
+-		width: 224px !important;
+-	}
++.callflows-port #user-form .chosen-container,
++.callflows-port #user-form .chosen-drop,
++.callflows-port #user-form #priv_level,
++.callflows-port #user-form #bundle_type {
++	width: 224px !important;
+ }
+ 
+ /* Hotdesk devices */

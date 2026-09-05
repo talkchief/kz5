@@ -1,0 +1,225 @@
+diff --git a/kazoo_node.c b/kazoo_node.c
+--- a/kazoo_node.c
++++ b/kazoo_node.c
+@@ -478,8 +478,8 @@ static void log_sendmsg_request(char *uuid, switch_event_t *event)
+ }
+ 
+ static switch_status_t build_event(switch_event_t *event, ei_x_buff * buf) {
+-	int propslist_length, arity;
+-	int n=0;
++	int propslist_length, tail_length, arity;
++	int n;
+ 
+ 	if(!event) {
+ 		return SWITCH_STATUS_FALSE;
+@@ -489,11 +489,11 @@ static switch_status_t build_event(switch_event_t *event, ei_x_buff * buf) {
+ 		return SWITCH_STATUS_FALSE;
+ 	}
+ 
+-	while (!ei_decode_tuple_header(buf->buff, &buf->index, &arity) && n < propslist_length) {
++	for (n = 0; n < propslist_length; n++) {
+ 		char key[1024];
+ 		char *value;
+ 
+-		if (arity != 2) {
++		if (ei_decode_tuple_header(buf->buff, &buf->index, &arity) || arity != 2) {
+ 			return SWITCH_STATUS_FALSE;
+ 		}
+ 
+@@ -521,9 +521,12 @@ static switch_status_t build_event(switch_event_t *event, ei_x_buff * buf) {
+ 			}
+ 			switch_event_add_header_string_nodup(event, SWITCH_STACK_BOTTOM, key, value);
+ 		}
+-		n++;
+ 	}
+-	ei_skip_term(buf->buff, &buf->index);
++
++	if (propslist_length > 0 &&
++		(ei_decode_list_header(buf->buff, &buf->index, &tail_length) || tail_length != 0)) {
++		return SWITCH_STATUS_FALSE;
++	}
+ 
+ 	return SWITCH_STATUS_SUCCESS;
+ }
+@@ -688,9 +691,41 @@ static switch_status_t handle_request_sendevent(ei_node_t *ei_node, erlang_pid
+ 	return erlang_response_badarg(rbuf);
+ }
+ 
+-static switch_status_t handle_request_command(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++static switch_status_t decode_command_sync(ei_x_buff *buf, int arity, switch_bool_t *sync) {
++	int sync_value = 0;
++
++	*sync = SWITCH_FALSE;
++	if (arity == 3) {
++		return SWITCH_STATUS_SUCCESS;
++	}
++	if (arity != 4 || ei_decode_boolean(buf->buff, &buf->index, &sync_value)) {
++		return SWITCH_STATUS_FALSE;
++	}
++
++	*sync = sync_value ? SWITCH_TRUE : SWITCH_FALSE;
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t execute_or_queue_command(switch_core_session_t *session, switch_event_t **event, switch_bool_t sync) {
++	switch_status_t status;
++
++	if (!sync) {
++		status = switch_core_session_queue_private_event(session, event, SWITCH_FALSE);
++		if (status != SWITCH_STATUS_SUCCESS) {
++			switch_event_destroy(event);
++		}
++		return status;
++	}
++
++	status = switch_ivr_parse_event(session, *event);
++	switch_event_destroy(event);
++	return status == SWITCH_STATUS_BREAK ? SWITCH_STATUS_SUCCESS : status;
++}
++
++static switch_status_t handle_request_command(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf, int arity) {
+ 	switch_core_session_t *session;
+ 	switch_event_t *event = NULL;
++	switch_bool_t sync;
+ 	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+ 	switch_uuid_t cmd_uuid;
+ 	char cmd_uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+@@ -703,11 +738,17 @@ static switch_status_t handle_request_command(ei_node_t *ei_node, erlang_pid *p
+ 		return erlang_response_baduuid(rbuf);
+ 	}
+ 
++	if (decode_command_sync(buf, arity, &sync) != SWITCH_STATUS_SUCCESS) {
++		switch_core_session_rwunlock(session);
++		return erlang_response_badarg(rbuf);
++	}
++
+ 	switch_uuid_get(&cmd_uuid);
+ 	switch_uuid_format(cmd_uuid_str, &cmd_uuid);
+ 
+ 	switch_event_create(&event, SWITCH_EVENT_COMMAND);
+ 	if (build_event(event, buf) != SWITCH_STATUS_SUCCESS) {
++		switch_event_destroy(&event);
+ 		switch_core_session_rwunlock(session);
+ 		return erlang_response_badarg(rbuf);
+ 	}
+@@ -715,16 +756,21 @@ static switch_status_t handle_request_command(ei_node_t *ei_node, erlang_pid *p
+ 	log_sendmsg_request(uuid_str, event);
+ 	switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "event-uuid", cmd_uuid_str);
+ 
+-	switch_core_session_queue_private_event(session, &event, SWITCH_FALSE);
++	if (execute_or_queue_command(session, &event, sync) != SWITCH_STATUS_SUCCESS) {
++		switch_core_session_rwunlock(session);
++		return erlang_response_badarg(rbuf);
++	}
+ 	switch_core_session_rwunlock(session);
+ 
+ 	return erlang_response_ok_uuid(rbuf, cmd_uuid_str);
+ }
+ 
+-static switch_status_t handle_request_commands(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++static switch_status_t handle_request_commands(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf, int arity) {
+ 	switch_core_session_t *session;
++	switch_event_t **events = NULL;
+ 	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+-	int propslist_length, n;
++	int propslist_length, tail_length, n;
++	switch_bool_t sync;
+ 	switch_uuid_t cmd_uuid;
+ 	char cmd_uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+ 
+@@ -736,31 +782,66 @@ static switch_status_t handle_request_commands(ei_node_t *ei_node, erlang_pid *
+ 		return erlang_response_baduuid(rbuf);
+ 	}
+ 
++	if (decode_command_sync(buf, arity, &sync) != SWITCH_STATUS_SUCCESS) {
++		switch_core_session_rwunlock(session);
++		return erlang_response_badarg(rbuf);
++	}
++
+ 	switch_uuid_get(&cmd_uuid);
+ 	switch_uuid_format(cmd_uuid_str, &cmd_uuid);
+ 
+-	if (ei_decode_list_header(buf->buff, &buf->index, &propslist_length)) {
++	if (ei_decode_list_header(buf->buff, &buf->index, &propslist_length) ||
++		propslist_length < 0 || propslist_length > 1024) {
+ 		switch_core_session_rwunlock(session);
+-		return SWITCH_STATUS_FALSE;
++		return erlang_response_badarg(rbuf);
++	}
++
++	if (propslist_length > 0 && !(events = calloc((size_t)propslist_length, sizeof(*events)))) {
++		switch_core_session_rwunlock(session);
++		return erlang_response_badarg(rbuf);
+ 	}
+ 
+ 	for(n = 0; n < propslist_length; n++) {
+-		switch_event_t *event = NULL;
+-		switch_event_create(&event, SWITCH_EVENT_COMMAND);
+-		if (build_event(event, buf) != SWITCH_STATUS_SUCCESS) {
++		switch_event_create(&events[n], SWITCH_EVENT_COMMAND);
++		if (build_event(events[n], buf) != SWITCH_STATUS_SUCCESS) {
++			for (; n >= 0; n--) {
++				switch_event_destroy(&events[n]);
++			}
++			free(events);
+ 			switch_core_session_rwunlock(session);
+ 			return erlang_response_badarg(rbuf);
+ 		}
+-		log_sendmsg_request(uuid_str, event);
++	}
++
++	if (propslist_length > 0 &&
++		(ei_decode_list_header(buf->buff, &buf->index, &tail_length) || tail_length != 0)) {
++		for (n = 0; n < propslist_length; n++) {
++			switch_event_destroy(&events[n]);
++		}
++		free(events);
++		switch_core_session_rwunlock(session);
++		return erlang_response_badarg(rbuf);
++	}
++
++	for(n = 0; n < propslist_length; n++) {
++		log_sendmsg_request(uuid_str, events[n]);
+ 		if(n == (propslist_length - 1)) {
+-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "event-uuid", cmd_uuid_str);
++			switch_event_add_header_string(events[n], SWITCH_STACK_BOTTOM, "event-uuid", cmd_uuid_str);
+ 		} else {
+-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "event-uuid", "null");
++			switch_event_add_header_string(events[n], SWITCH_STACK_BOTTOM, "event-uuid", "null");
+ //			switch_event_del_header_val(event, "event-uuid-name", NULL);
+ 		}
+-		switch_core_session_queue_private_event(session, &event, SWITCH_FALSE);
++		if (execute_or_queue_command(session, &events[n], sync) != SWITCH_STATUS_SUCCESS) {
++			for (n++; n < propslist_length; n++) {
++				switch_event_destroy(&events[n]);
++			}
++			free(events);
++			switch_core_session_rwunlock(session);
++			return erlang_response_badarg(rbuf);
++		}
+ 	}
+ 
++	free(events);
+ 	switch_core_session_rwunlock(session);
+ 
+ 	return erlang_response_ok_uuid(rbuf, cmd_uuid_str);
+@@ -782,6 +863,7 @@ static switch_status_t handle_request_sendmsg(ei_node_t *ei_node, erlang_pid *p
+ 
+ 	switch_event_create(&event, SWITCH_EVENT_SEND_MESSAGE);
+ 	if (build_event(event, buf) != SWITCH_STATUS_SUCCESS) {
++		switch_event_destroy(&event);
+ 		switch_core_session_rwunlock(session);
+ 		return erlang_response_badarg(rbuf);
+ 	}
+@@ -1224,9 +1306,9 @@ static switch_status_t handle_kazoo_request(ei_node_t *ei_node, erlang_pid *pid
+ 	case REQUEST_SENDMSG:
+ 		return handle_request_sendmsg(ei_node, pid, buf, rbuf);
+ 	case REQUEST_COMMAND:
+-		return handle_request_command(ei_node, pid, buf, rbuf);
++		return handle_request_command(ei_node, pid, buf, rbuf, arity);
+ 	case REQUEST_COMMANDS:
+-		return handle_request_commands(ei_node, pid, buf, rbuf);
++		return handle_request_commands(ei_node, pid, buf, rbuf, arity);
+ 	case REQUEST_BIND:
+ 		return handle_request_bind(ei_node, pid, buf, rbuf);
+ 	case REQUEST_GETPID:

@@ -1,0 +1,48 @@
+diff --git a/kazoo_api.c b/kazoo_api.c
+index 06039c3..ed99782 100644
+--- a/kazoo_api.c
++++ b/kazoo_api.c
+@@ -137,7 +137,7 @@ static switch_status_t api_erlang_status(switch_stream_handle_t *stream) {
+ 	ip_addr = switch_get_addr(ipbuf, sizeof (ipbuf), sa);
+ 
+ 	stream->write_function(stream, "Running %s\n", VERSION);
+-	stream->write_function(stream, "Listening for new Erlang connections on %s:%u with cookie %s\n", ip_addr, port, kazoo_globals.ei_cookie);
++	stream->write_function(stream, "Listening for new Erlang connections on %s:%u\n", ip_addr, port);
+ 	stream->write_function(stream, "Registered as Erlang node %s, visible as %s\n", kazoo_globals.ei_cnode.thisnodename, kazoo_globals.ei_cnode.thisalivename);
+ 
+ 	if (kazoo_globals.ei_compat_rel) {
+diff --git a/kazoo_ei_config.c b/kazoo_ei_config.c
+index c39452d..0feb4fc 100644
+--- a/kazoo_ei_config.c
++++ b/kazoo_ei_config.c
+@@ -84,7 +84,7 @@ static int read_cookie_from_file(char *filename) {
+ 			*end = '\0';
+ 		}
+ 
+-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set cookie from file %s: %s\n", filename, cookie);
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set cookie from file %s\n", filename);
+ 
+ 		set_pref_ei_cookie(cookie);
+ 		return 0;
+@@ -162,7 +162,7 @@ switch_status_t kazoo_ei_config(switch_bool_t reload, switch_bool_t shutdown)
+ 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set bind port: %s\n", val);
+ 				kazoo_globals.port = atoi(val);
+ 			} else if (!strcmp(var, "cookie")) {
+-				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set cookie: %s\n", val);
++				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set cookie from configuration\n");
+ 				set_pref_ei_cookie(val);
+ 			} else if (!strcmp(var, "cookie-file")) {
+ 				if (read_cookie_from_file(val) == 1) {
+diff --git a/kazoo_ei_utils.c b/kazoo_ei_utils.c
+index 9ac347c..b000bbf 100644
+--- a/kazoo_ei_utils.c
++++ b/kazoo_ei_utils.c
+@@ -1049,7 +1049,7 @@ void *SWITCH_THREAD_FUNC kz_acceptor_thread(switch_thread_t *thread, void *obj)
+ 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Erlang connection acceptor socket error %d %d\n", erl_errno, errno);
+ 			} else {
+ 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING,
+-				                  "Erlang node connection failed - ensure your cookie matches '%s' and you are using a good nodename\n", kazoo_globals.ei_cookie);
++				                  "Erlang node connection failed - ensure the configured cookie matches and you are using a good nodename\n");
+ 			}
+ 			continue;
+ 		}

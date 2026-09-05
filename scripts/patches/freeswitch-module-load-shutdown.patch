@@ -1,0 +1,95 @@
+diff --git a/src/switch_loadable_module.c b/src/switch_loadable_module.c
+index ff95f9bf3..129cda208 100644
+--- a/src/switch_loadable_module.c
++++ b/src/switch_loadable_module.c
+@@ -103,6 +103,8 @@ struct switch_loadable_module_container {
+ 	switch_mutex_t *mutex;
+ 	switch_thread_rwlock_t *chat_rwlock;
+ 	switch_memory_pool_t *pool;
++	int active_loads;
++	switch_bool_t shutting_down;
+ };
+ 
+ static struct switch_loadable_module_container loadable_modules;
+@@ -1858,9 +1860,23 @@ static switch_status_t switch_loadable_module_load_module_ex(const char *dir, co
+ 
+ 	*err = "";
+ 
++	/* A module's load callback can run for several seconds and can create
++	 * threads before the module is inserted into module_hash.  Serialize that
++	 * entire interval with core shutdown so a late insertion cannot miss the
++	 * shutdown pass and then be dlclosed with live threads. */
++	switch_mutex_lock(loadable_modules.mutex);
++	if (loadable_modules.shutting_down || (switch_core_flags() & SCF_SHUTTING_DOWN)) {
++		switch_mutex_unlock(loadable_modules.mutex);
++		*err = "System is shutting down";
++		return SWITCH_STATUS_FALSE;
++	}
++	loadable_modules.active_loads++;
++	switch_mutex_unlock(loadable_modules.mutex);
++
+ 	if ((file = switch_core_strdup(loadable_modules.pool, fname)) == 0) {
+ 		*err = "allocation error";
+-		return SWITCH_STATUS_FALSE;
++		status = SWITCH_STATUS_FALSE;
++		goto done;
+ 	}
+ 
+ 	if (switch_is_file_path(file)) {
+@@ -1900,6 +1916,11 @@ static switch_status_t switch_loadable_module_load_module_ex(const char *dir, co
+ 	}
+ 
+ 
++	done:
++	switch_mutex_lock(loadable_modules.mutex);
++	loadable_modules.active_loads--;
++	switch_mutex_unlock(loadable_modules.mutex);
++
+ 	return status;
+ 
+ }
+@@ -2575,11 +2596,35 @@ SWITCH_DECLARE(void) switch_loadable_module_shutdown(void)
+ 	const void *key;
+ 	switch_loadable_module_t *module;
+ 	int i;
++	int active_loads;
++	int sanity = 0;
+ 
+ 	if (!loadable_modules.module_hash) {
+ 		return;
+ 	}
+ 
++	/* Close the load gate, then wait until every load callback has completed
++	 * and its module has been inserted.  No module may appear between the
++	 * shutdown and unload traversals after this point. */
++	switch_mutex_lock(loadable_modules.mutex);
++	loadable_modules.shutting_down = SWITCH_TRUE;
++	switch_mutex_unlock(loadable_modules.mutex);
++
++	for (;;) {
++		switch_mutex_lock(loadable_modules.mutex);
++		active_loads = loadable_modules.active_loads;
++		switch_mutex_unlock(loadable_modules.mutex);
++		if (!active_loads) {
++			break;
++		}
++		switch_cond_next();
++		if (++sanity >= 60000) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT,
++						  "Still waiting for %d module load(s) before safe shutdown.\n", active_loads);
++			sanity = 0;
++		}
++	}
++
+ 	chat_globals.running = 0;
+ 
+ 	for (i = 0; i < chat_globals.msg_queue_len; i++) {
+@@ -2609,7 +2654,7 @@ SWITCH_DECLARE(void) switch_loadable_module_shutdown(void)
+ 		hi = switch_core_hash_next(&hi);
+ 
+ 		if (module->type != SWITCH_LOADABLE_MODULE_TYPE_PRELOAD && !module->perm) {
+-			if (do_shutdown(module, SWITCH_FALSE, SWITCH_TRUE, SWITCH_FALSE, NULL) == SWITCH_STATUS_SUCCESS)
++			if (do_shutdown(module, module->shutting_down ? SWITCH_FALSE : SWITCH_TRUE, SWITCH_TRUE, SWITCH_FALSE, NULL) == SWITCH_STATUS_SUCCESS)
+ 			{
+ 				switch_core_hash_delete(loadable_modules.module_hash, key);
+ 			}

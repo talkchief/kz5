@@ -1,0 +1,205 @@
+diff --git a/app.js b/app.js
+index 578d24f..b5d5cbb 100644
+--- a/app.js
++++ b/app.js
+@@ -20,6 +20,7 @@ define(function(require) {
+ 		subscribe: {},
+ 
+ 		subModules: [
++			'acdc',
+ 			'blacklist',
+ 			'branchvariable',
+ 			'conference',
+diff --git a/i18n/en-US.json b/i18n/en-US.json
+index fc51e6a..5ea5979 100644
+--- a/i18n/en-US.json
++++ b/i18n/en-US.json
+@@ -25,6 +25,14 @@
+ 		"buyLocal": "Local",
+ 		"buyTollfree": "Toll-Free",
+ 		"buyVanity": "Vanity",
++		"acdc": {
++			"name": "ACDC Queue",
++			"tip": "Send the caller to an ACDC call center queue",
++			"whichQueue": "Which ACDC queue?",
++			"selectQueue": "Select an ACDC queue",
++			"noQueues": "No ACDC queues exist in this account. Create a queue in the ACDC Call Center app first.",
++			"loadError": "The account's ACDC queues could not be loaded. Please try again."
++		},
+ 		"qubicle": {
+ 			"qubicle": "Qubicle",
+ 			"qubicle_tip": "Route to a queue",
+diff --git a/i18n/de-DE.json b/i18n/de-DE.json
+index 2cda084..822825d 100644
+--- a/i18n/de-DE.json
++++ b/i18n/de-DE.json
+@@ -242,7 +242,7 @@
+ 			"when_you_check_this_box": "Wenn Sie dieses Kästchen aktivieren",
+ 			"are_you_sure_you_want_to_delete": "Möchten Sie diesen Benutzer wirklich löschen?",
+ 			"username_placeholder": "Benutzername",
+-			"failover_callforward_content": "Wenn dieses Kontrollkästchen aktiviert ist, während nicht alle Geräte dieses Benutzers registriert sind, wird der Anruf automatisch weitergeleitet (auch wenn die Einstellung "Anrufweiterleitung aktivieren" nicht aktiviert ist).",
++			"failover_callforward_content": "Wenn dieses Kontrollkästchen aktiviert ist, während nicht alle Geräte dieses Benutzers registriert sind, wird der Anruf automatisch weitergeleitet (auch wenn die Einstellung \"Anrufweiterleitung aktivieren\" nicht aktiviert ist).",
+ 			"last_name_data_content": "Nachname",
+ 			"direct_calls_only_data_content": "Wenn diese Option aktiviert ist, wird die Anrufumleitung nur verwendet, wenn der Benutzer/das Gerät direkt angerufen wird, nicht aber, wenn es als Mitglied einer Gruppe (Rufgruppe, etc.) angerufen wird.",
+ 			"users_label": "Benutzer",
+@@ -1220,6 +1220,14 @@
+ 			"default": "Standard",
+ 			"tip": "Erlaubt Ihnen das Mithören bei Anrufen an einen bestimmten Benutzer oder Gerät."
+ 		},
++		"acdc": {
++			"name": "ACDC-Warteschlange",
++			"tip": "Anrufer mit einer ACDC-Callcenter-Warteschlange verbinden",
++			"whichQueue": "Welche ACDC-Warteschlange?",
++			"selectQueue": "ACDC-Warteschlange auswählen",
++			"noQueues": "Dieses Konto hat keine ACDC-Warteschlangen. Erstellen Sie zuerst eine in der ACDC-Callcenter-App.",
++			"loadError": "Die ACDC-Warteschlangen konnten nicht geladen werden. Bitte erneut versuchen."
++		},
+ 		"qubicle": {
+ 			"qubicle_tip": "An eine Warteschlange weiterleiten",
+ 			"qubicle": "Qubicle",
+diff --git a/submodules/acdc/acdc.js b/submodules/acdc/acdc.js
+new file mode 100644
+index 0000000..aa69fcb
+--- /dev/null
++++ b/submodules/acdc/acdc.js
+@@ -0,0 +1,109 @@
++define(function(require) {
++	var $ = require('jquery'),
++		_ = require('lodash'),
++		monster = require('monster');
++
++	var app = {
++		requests: {
++			'callflows.acdc.queues.list': {
++				url: 'accounts/{accountId}/queues?paginate=false',
++				verb: 'GET',
++				generateError: false
++			}
++		},
++
++		subscribe: {
++			'callflows.fetchActions': 'acdcDefineActions'
++		},
++
++		acdcDefineActions: function(args) {
++			var self = this,
++				labels = self.i18n.active().callflows.acdc;
++
++			$.extend(args.actions, {
++				'acdc_member[id=*]': {
++					name: labels.name,
++					icon: 'support',
++					category: self.i18n.active().oldCallflows.advanced_cat,
++					module: 'acdc_member',
++					tip: labels.tip,
++					data: {},
++					rules: [{ type: 'quantity', maxSize: '1' }],
++					isUsable: 'true',
++					isListed: true,
++					weight: 31,
++					caption: function(node, captions) {
++						var id = node.getMetadata('id');
++						return captions && captions[id] && captions[id].name || id || labels.selectQueue;
++					},
++					edit: function(node, callback) {
++						self.acdcEditQueue(node, callback);
++					}
++				}
++			});
++		},
++
++		acdcListQueues: function(callback, error) {
++			var self = this;
++			monster.request({
++				resource: 'callflows.acdc.queues.list',
++				data: { accountId: self.accountId },
++				success: function(response) {
++					if (!response || !_.isArray(response.data) || response.next_start_key) {
++						error();
++						return;
++					}
++					callback(_.sortBy(_.filter(response.data, function(queue) {
++						return queue && typeof queue.id === 'string' && /^[a-f0-9]{32}$/.test(queue.id)
++							&& typeof queue.name === 'string';
++					}), 'name'));
++				},
++				error: error
++			});
++		},
++
++		acdcSelectQueue: function(node, queueId, queues) {
++			var selected = _.find(queues, function(queue) { return queue.id === queueId; });
++			if (!selected || !/^[a-f0-9]{32}$/.test(queueId)) {
++				return false;
++			}
++			node.setMetadata('id', queueId);
++			node.caption = selected.name;
++			return true;
++		},
++
++		acdcEditQueue: function(node, callback) {
++			var self = this,
++				labels = self.i18n.active().callflows.acdc,
++				done = _.once(function() { if (typeof callback === 'function') { callback(); } });
++
++			self.acdcListQueues(function(queues) {
++				var content = $(self.getTemplate({
++						name: 'callflowEdit',
++						data: { items: queues, selected: node.getMetadata('id') || '', empty: queues.length === 0 },
++						submodule: 'acdc'
++					})),
++					dialog;
++
++				content.find('[data-action="save-acdc-queue"]').on('click', function(event) {
++					event.preventDefault();
++					if (!self.acdcSelectQueue(node, content.find('[name="acdc_queue_id"]').val(), queues)) {
++						content.find('[data-role="selection-error"]').show();
++						return;
++					}
++					dialog.dialog('close');
++				});
++				dialog = monster.ui.dialog(content, {
++					title: labels.name,
++					minHeight: '0',
++					beforeClose: done
++				});
++			}, function() {
++				monster.ui.toast({ type: 'error', message: labels.loadError });
++				done();
++			});
++		}
++	};
++
++	return app;
++});
+diff --git a/submodules/acdc/views/callflowEdit.html b/submodules/acdc/views/callflowEdit.html
+new file mode 100644
+index 0000000..3b710af
+--- /dev/null
++++ b/submodules/acdc/views/callflowEdit.html
+@@ -0,0 +1,25 @@
++<div class="dialog_popup callflows-port">
++	<h1>{{ i18n.callflows.acdc.tip }}</h1>
++	<form name="form" method="post" action="#">
++		<div class="form_content">
++			<div class="popup_field">
++				<label for="acdc_queue_selector">{{ i18n.callflows.acdc.whichQueue }}</label>
++				<div class="select_wrapper">
++					<select id="acdc_queue_selector" name="acdc_queue_id" {{#if empty}}disabled{{/if}}>
++					{{#select selected}}
++						<option value="">{{ i18n.callflows.acdc.selectQueue }}</option>
++						{{#each items}}
++							<option value="{{id}}">{{name}}</option>
++						{{/each}}
++					{{/select}}
++					</select>
++				</div>
++			</div>
++			{{#if empty}}<p role="status">{{ i18n.callflows.acdc.noQueues }}</p>{{/if}}
++			<p data-role="selection-error" role="alert" style="display:none">{{ i18n.callflows.acdc.selectQueue }}</p>
++		</div>
++	</form>
++	<div class="buttons-center">
++		<button type="button" data-action="save-acdc-queue" class="monster-button monster-button-primary" {{#if empty}}disabled{{/if}}>{{ i18n.save }}</button>
++	</div>
++</div>

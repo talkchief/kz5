@@ -1,0 +1,6 @@
+# name sip_proxy_uri sip_route_uri sip_invite_route_uri expected_proxy expected_initial_route
+no_proxy - sip:legacy.example.invalid - sip:legacy.example.invalid -
+only_proxy sip:proxy.example.invalid - - sip:proxy.example.invalid -
+proxy_and_route sip:proxy.example.invalid sip:route.example.invalid - sip:proxy.example.invalid sip:route.example.invalid
+explicit_invite_wins sip:proxy.example.invalid sip:route.example.invalid sip:explicit.example.invalid sip:proxy.example.invalid sip:explicit.example.invalid
+empty_values - - - - -

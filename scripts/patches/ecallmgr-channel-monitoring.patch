@@ -1,0 +1,293 @@
+diff --git a/src/ecallmgr_originate.erl b/src/ecallmgr_originate.erl
+index d3602c1..8d1bb04 100644
+--- a/src/ecallmgr_originate.erl
++++ b/src/ecallmgr_originate.erl
+@@ -16,7 +16,7 @@
+ -export([start_link/1]).
+ 
+ -ifdef(TEST).
+--export([originate_api_command/4]).
++-export([originate_api_command/4, build_originate/3]).
+ -endif.
+ 
+ -export([init/1
+@@ -88,7 +88,7 @@ init([#{payload := JObj
+     kz_amqp_channel:consumer_channel(Channel),
+     ServerId = kz_api:server_id(JObj),
+     OriginateUUID = kz_json:get_ne_binary_value(<<"Originate-UUID">>, JObj, kz_binary:rand_hex(16)),
+-    case kapi_resource:originate_req_v(JObj) of
++    case kapi_resource:originate_req_v(JObj) andalso ecallmgr_call_monitor:guard(Node, JObj) of
+         'false' ->
+             Error = <<"originate failed to execute as JObj did not validate">>,
+             publish_error(Error, 'undefined', JObj, ServerId),
+@@ -209,12 +209,22 @@ handle_cast('originate_execute', #state{tref=TRef}=State) when is_reference(TRef
+     _ = erlang:cancel_timer(TRef),
+     handle_cast('originate_execute', State#state{tref='undefined'});
+ 
++handle_cast('originate_execute', #state{originate_pid_ref={Pid, Ref}}=State)
++  when is_pid(Pid), is_reference(Ref) ->
++    %% Duplicate execute deliveries must never ring another supervisor leg.
++    {'noreply', State};
++
+ handle_cast('originate_execute', #state{dialstrings=Dialstrings
+                                        ,node=Node
+                                        ,originate_uuid=OriginateUUID
+                                        ,originate_req=JObj
+                                        }=State) ->
+-    {'noreply', State#state{originate_pid_ref = originate_execute(Node, OriginateUUID, Dialstrings, JObj)}};
++    case ecallmgr_call_monitor:guard(Node, JObj) of
++        'true' -> {'noreply', State#state{originate_pid_ref = originate_execute(Node, OriginateUUID, Dialstrings, JObj)}};
++        'false' ->
++            publish_error(<<"monitor target is no longer authorized and active">>, OriginateUUID, JObj, State#state.server_id),
++            {'stop', 'normal', State}
++    end;
+ 
+ handle_cast('originate_cancel', #state{node=Node
+                                       ,originate_uuid=OriginateUUID
+@@ -233,12 +243,14 @@ handle_cast(_Msg, State) ->
+ -spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
+ handle_info({'kapi', {{_Ex, _RK, {_Basic, _Deliver}}
+                      ,{'dialplan', 'originate_execute'}
+-                     ,_Payload
++                     ,Payload
+                      }}
+-           ,State
++           ,#state{originate_req=JObj}=State
+            ) ->
+-    lager:info("received originate execute"),
+-    gen_server:cast(self(), 'originate_execute'),
++    case ecallmgr_call_monitor:execute_matches(JObj, Payload) of
++        'true' -> gen_server:cast(self(), 'originate_execute');
++        'false' -> lager:warning("discarding uncorrelated monitor execute")
++    end,
+     {'noreply', State};
+ 
+ handle_info({'kapi', {{_Ex, _RK, {_Basic, _Deliver}}
+@@ -413,6 +425,13 @@ get_bridge_action(JObj) ->
+ 
+ -spec get_eavesdrop_action(kz_json:object()) -> kz_term:ne_binary().
+ get_eavesdrop_action(JObj) ->
++    case ecallmgr_call_monitor:operation(JObj) of
++        <<"start">> -> ecallmgr_call_monitor:action(JObj);
++        _ -> get_legacy_eavesdrop_action(JObj)
++    end.
++
++-spec get_legacy_eavesdrop_action(kz_json:object()) -> kz_term:ne_binary().
++get_legacy_eavesdrop_action(JObj) ->
+     {CallId, Group} = case kz_json:get_value(<<"Eavesdrop-Group-ID">>, JObj) of
+                           'undefined' -> {kz_json:get_binary_value(<<"Eavesdrop-Call-ID">>, JObj), <<>>};
+                           ID -> {<<"all">>, <<"eavesdrop_require_group=", ID/binary, ",">>}
+@@ -435,16 +454,17 @@ build_originate(Action, JObj) ->
+     end.
+ 
+ -spec build_originate(kz_term:ne_binary(), kz_json:objects(), kz_json:object()) ->
+-          kz_term:ne_binary().
++          kz_term:api_binary().
+ build_originate(Action, Endpoints, JObj) ->
+     lager:debug("building originate command arguments"),
+     DialSeparator = ecallmgr_util:get_dial_separator(JObj, Endpoints),
+ 
+     DialStrings = ecallmgr_util:build_bridge_string(Endpoints, DialSeparator),
+ 
+-    ChannelVars = get_channel_vars(JObj),
+-
+-    list_to_binary([ChannelVars, DialStrings, " ", Action]).
++    case iolist_size(DialStrings) of
++        0 -> 'undefined';
++        _ -> list_to_binary([get_channel_vars(JObj), DialStrings, " ", Action])
++    end.
+ 
+ -spec get_channel_vars(kz_json:object()) -> iolist().
+ get_channel_vars(JObj) ->
+@@ -607,7 +627,7 @@ publish_originate_ready(UUID, Request, Q, ServerId) ->
+     Props = [{<<"Msg-ID">>, kz_api:msg_id(Request, UUID)}
+             ,{<<"Originate-UUID">>, UUID}
+             ,{<<"Originate-Queue">>, Q}
+-            | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
++            | ecallmgr_call_monitor:ready_headers(Request) ++ kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
+             ],
+     kapi_dialplan:publish_originate_ready(ServerId, Props).
+ 
+diff --git a/src/ecallmgr_fs_resource.erl b/src/ecallmgr_fs_resource.erl
+index 61563d7..cd4c119 100644
+--- a/src/ecallmgr_fs_resource.erl
++++ b/src/ecallmgr_fs_resource.erl
+@@ -83,6 +83,13 @@ start_link(Node, Options) ->
+ 
+ -spec handle_originate_req(kz_json:object(), kz_term:proplist()) -> kz_types:sup_startchild_ret().
+ handle_originate_req(JObj, Props) ->
++    case ecallmgr_call_monitor:operation(JObj) of
++        <<"stop">> -> ecallmgr_call_monitor:stop(props:get_value('node', Props), JObj);
++        _ -> start_originate(JObj, Props)
++    end.
++
++-spec start_originate(kz_json:object(), kz_term:proplist()) -> kz_types:sup_startchild_ret().
++start_originate(JObj, Props) ->
+     _ = kz_log:put_callid(JObj),
+     Arg = #{node => props:get_value('node', Props)
+            ,queue => props:get_value('self', Props)
+diff --git a/src/ecallmgr_call_monitor.erl b/src/ecallmgr_call_monitor.erl
+new file mode 100644
+index 0000000..790be6a
+--- /dev/null
++++ b/src/ecallmgr_call_monitor.erl
+@@ -0,0 +1,159 @@
++%%% Narrow account/correlation guard for Crossbar supervisor calls.
++%%% This Source Code Form is subject to the Mozilla Public License, v. 2.0.
++-module(ecallmgr_call_monitor).
++-export([guard/2, operation/1, stop/2, action/1, ready_headers/1, execute_matches/2]).
++-ifdef(TEST).
++-export([matches_channel/3, valid_request/2]).
++-endif.
++-include("ecallmgr.hrl").
++
++-spec operation(kz_json:object()) -> any().
++operation(J) -> kz_json:get_value(<<"Monitor-Operation">>, J).
++
++-spec guard(atom(), kz_json:object()) -> boolean().
++guard(Node, J) ->
++    case operation(J) of
++        'undefined' -> 'true';
++        <<"start">> -> valid_request(Node, J) andalso live_matches(Node, J, 'target');
++        _ -> 'false'
++    end.
++
++-spec valid_request(atom(), kz_json:object()) -> boolean().
++valid_request(Node, J) ->
++    Account = kz_json:get_value(<<"Monitor-Account-ID">>, J),
++    Request = kz_json:get_value(<<"Monitor-Request-ID">>, J),
++    Supervisor = kz_json:get_value(<<"Outbound-Call-ID">>, J),
++    Target = kz_json:get_value(<<"Eavesdrop-Call-ID">>, J),
++    Op = operation(J),
++    Base = kz_json:get_value(<<"Switch-Nodename">>, J) =:= kz_term:to_binary(Node)
++        andalso kz_json:get_value(<<"Application-Name">>, J) =:= <<"eavesdrop">>
++        andalso hex_id(Account) andalso hex_id(Request) andalso safe_id(Target) andalso hex_id(Supervisor)
++        andalso kz_json:get_value(<<"Originate-UUID">>, J) =:= Supervisor
++        andalso kz_api:msg_id(J) =:= Request
++        andalso kz_json:get_value(<<"Existing-Call-ID">>, J) =:= 'undefined'
++        andalso kz_json:get_value(<<"Eavesdrop-Group-ID">>, J) =:= 'undefined',
++    Base andalso case Op of
++        <<"start">> ->
++            CCVs = kz_json:get_value(<<"Custom-Channel-Vars">>, J, kz_json:new()),
++            Device = kz_json:get_value(<<"Monitor-Device-ID">>, J),
++            Mode = kz_json:get_value(<<"Eavesdrop-Mode">>, J),
++            Timeout = kz_json:get_value(<<"Timeout">>, J),
++            Target =/= Supervisor andalso hex_id(Device)
++                andalso lists:member(Mode, [<<"listen">>, <<"whisper">>, <<"full">>])
++                andalso kz_json:get_value(<<"Originate-Immediate">>, J) =:= 'false'
++                andalso is_integer(Timeout) andalso Timeout >= 5 andalso Timeout =< 60
++                andalso kz_json:get_value(<<"Account-ID">>, CCVs) =:= Account
++                andalso kz_json:get_value(<<"Authorizing-ID">>, CCVs) =:= Device
++                andalso kz_json:get_value(<<"Monitor-Request-ID">>, CCVs) =:= Request
++                andalso kz_json:get_value(<<"Monitor-Target-ID">>, CCVs) =:= Target
++                andalso safe_endpoint(kz_json:get_value(<<"Endpoints">>, J), Supervisor);
++        <<"stop">> -> Supervisor =:= Target;
++        _ -> 'false'
++    end.
++
++-spec safe_endpoint(any(), binary()) -> boolean().
++safe_endpoint([Endpoint], Supervisor) ->
++    Keys = [<<"Invite-Format">>, <<"Endpoint-Type">>, <<"To-User">>, <<"To-Username">>, <<"To-Realm">>
++            ,<<"Ignore-Early-Media">>, <<"Bypass-Media">>, <<"Outbound-Call-ID">>],
++    kz_json:get_keys(Endpoint) -- Keys =:= []
++        andalso kz_json:get_value(<<"Invite-Format">>, Endpoint) =:= <<"username">>
++        andalso kz_json:get_value(<<"Endpoint-Type">>, Endpoint) =:= <<"sip">>
++        andalso kz_json:get_value(<<"Outbound-Call-ID">>, Endpoint) =:= Supervisor
++        andalso matches(kz_json:get_value(<<"To-Username">>, Endpoint), <<"^[A-Za-z0-9_.+-]{1,128}$">>)
++        andalso kz_json:get_value(<<"To-User">>, Endpoint) =:= kz_json:get_value(<<"To-Username">>, Endpoint)
++        andalso matches(kz_json:get_value(<<"To-Realm">>, Endpoint), <<"^[A-Za-z0-9.-]{1,253}$">>);
++safe_endpoint(_, _) -> 'false'.
++
++-spec live_matches(atom(), kz_json:object(), atom()) -> boolean().
++live_matches(Node, J, Kind) ->
++    Id = kz_json:get_value(<<"Eavesdrop-Call-ID">>, J),
++    try freeswitch:api(Node, 'uuid_dump', Id) of
++        {'ok', Dump} -> matches_channel(J, Kind, dump_props(Dump));
++        _ -> 'false'
++    catch _:_ -> 'false'
++    end.
++
++%% uuid_dump contains optional empty headers and values with colons. Parse only
++%% the security fields and split on the first separator, not string:tokens/2.
++-spec dump_props(binary()) -> kz_term:proplist().
++dump_props(Dump) ->
++    Keys = [<<"Unique-ID">>, <<"Channel-State">>, ?GET_CCV(<<"Account-ID">>)
++            ,?GET_CCV(<<"Monitor-Request-ID">>), ?GET_CCV(<<"Monitor-Target-ID">>)
++            ,?GET_CCV(<<"Monitor-Mode">>)],
++    [{K, kz_http_util:urldecode(V)} || Line <- binary:split(Dump, <<"\n">>, ['global'])
++                                   ,[K,V] <- [binary:split(Line, <<": ">>)]
++                                   ,lists:member(K, Keys)].
++
++-spec matches_channel(kz_json:object(), atom(), kz_term:proplist()) -> boolean().
++matches_channel(J, Kind, Props) ->
++    Account = kz_json:get_value(<<"Monitor-Account-ID">>, J),
++    Id = kz_json:get_value(<<"Eavesdrop-Call-ID">>, J),
++    Base = props:get_value(<<"Unique-ID">>, Props) =:= Id
++        andalso props:get_value(?GET_CCV(<<"Account-ID">>), Props) =:= Account
++        andalso lists:member(props:get_value(<<"Channel-State">>, Props)
++                             ,[<<"CS_NEW">>, <<"CS_INIT">>, <<"CS_ROUTING">>, <<"CS_SOFT_EXECUTE">>
++                              ,<<"CS_EXECUTE">>, <<"CS_EXCHANGE_MEDIA">>, <<"CS_PARK">>
++                              ,<<"CS_CONSUME_MEDIA">>, <<"CS_HIBERNATE">>, <<"CS_RESET">>]),
++    Base andalso case Kind of
++        'target' -> 'true';
++        'supervisor' ->
++            props:get_value(?GET_CCV(<<"Monitor-Request-ID">>), Props) =:= kz_json:get_value(<<"Monitor-Request-ID">>, J)
++                andalso props:get_value(?GET_CCV(<<"Monitor-Target-ID">>), Props) =/= Id
++                andalso safe_id(props:get_value(?GET_CCV(<<"Monitor-Target-ID">>), Props))
++                andalso lists:member(props:get_value(?GET_CCV(<<"Monitor-Mode">>), Props), [<<"listen">>, <<"whisper">>, <<"full">>])
++    end.
++
++-spec stop(atom(), kz_json:object()) -> 'ok'.
++stop(Node, J) ->
++    Id = kz_json:get_value(<<"Outbound-Call-ID">>, J),
++    Result = case valid_request(Node, J) andalso live_matches(Node, J, 'supervisor') of
++        'true' ->
++            case freeswitch:api(Node, 'uuid_kill', <<Id/binary, " NORMAL_CLEARING">>) of
++                {'ok', <<"+OK", _/binary>>} -> <<"MONITOR_STOPPED">>;
++                _ -> <<"MONITOR_STOP_FAILED">>
++            end;
++        'false' -> <<"MONITOR_STOP_DENIED">>
++    end,
++    Resp = [{<<"Call-ID">>, Id}, {<<"Msg-ID">>, kz_api:msg_id(J)}
++            ,{<<"Monitor-Request-ID">>, kz_json:get_value(<<"Monitor-Request-ID">>, J)}
++            ,{<<"Application-Response">>, Result} | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
++    kapi_resource:publish_originate_resp(kz_api:server_id(J), Resp).
++
++%% WRITE mixes into audio sent toward the exact selected target leg (agent).
++%% READ would leak supervisor speech toward that leg's bridged customer.
++%% Fixed channel variables replace delayed synthetic DTMF and forbid escalation.
++-spec action(kz_json:object()) -> binary().
++action(J) ->
++    Target = kz_json:get_value(<<"Eavesdrop-Call-ID">>, J),
++    {Read, Write} = case kz_json:get_value(<<"Eavesdrop-Mode">>, J) of
++        <<"listen">> -> {<<"false">>, <<"false">>};
++        <<"whisper">> -> {<<"false">>, <<"true">>};
++        <<"full">> -> {<<"true">>, <<"true">>}
++    end,
++    <<"set:eavesdrop_enable_dtmf=false,set:eavesdrop_bridge_aleg=true,set:eavesdrop_bridge_bleg=true,"
++      "set:eavesdrop_whisper_aleg=", Read/binary, ",set:eavesdrop_whisper_bleg=", Write/binary,
++      ",eavesdrop:", Target/binary, " inline">>.
++
++-spec ready_headers(kz_json:object()) -> kz_term:proplist().
++ready_headers(J) ->
++    case operation(J) of
++        <<"start">> -> [{<<"Monitor-Verified">>, 'true'}, {<<"Monitor-Request-ID">>, kz_json:get_value(<<"Monitor-Request-ID">>, J)}];
++        _ -> []
++    end.
++
++-spec execute_matches(kz_json:object(), kz_json:object()) -> boolean().
++execute_matches(J, Execute) ->
++    case operation(J) of
++        'undefined' -> 'true';
++        <<"start">> -> kz_json:get_value(<<"Originate-UUID">>, Execute) =:= kz_json:get_value(<<"Originate-UUID">>, J)
++            andalso kz_api:msg_id(Execute) =:= kz_json:get_value(<<"Monitor-Request-ID">>, J);
++        _ -> 'false'
++    end.
++
++-spec safe_id(any()) -> boolean().
++safe_id(V) -> matches(V, <<"^[A-Za-z0-9_.:@-]{1,128}$">>).
++-spec hex_id(any()) -> boolean().
++hex_id(V) -> matches(V, <<"^[a-f0-9]{32}$">>).
++-spec matches(any(), binary()) -> boolean().
++matches(V, Regex) when is_binary(V) -> re:run(V, Regex, [{'capture', 'none'}]) =:= 'match';
++matches(_, _) -> 'false'.

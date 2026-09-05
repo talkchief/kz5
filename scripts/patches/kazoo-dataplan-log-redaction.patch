@@ -1,0 +1,98 @@
+diff --git a/kazoo_couch/src/kz_couch_util.erl b/kazoo_couch/src/kz_couch_util.erl
+index 2536f5f8c..9d976e1a2 100644
+--- a/kazoo_couch/src/kz_couch_util.erl
++++ b/kazoo_couch/src/kz_couch_util.erl
+@@ -179,7 +179,7 @@ connect(#kz_couch_connection{host=Host
+                },
+     Opts = [{'connection_map', ConnMap} | check_options(Options)],
+     Conn = couchbeam:server_connection(kz_term:to_list(maybe_add_auth(User, Pass, Host)), Port, <<>>, Opts),
+-    lager:info("new connection to host ~s:~b, testing: ~p", [Host, Port, Conn]),
++    lager:info("testing a new CouchDB connection on port ~b", [Port]),
+     connection_info(Conn).
+ 
+ -spec add_couch_version(kz_term:ne_binary(), kz_term:api_ne_binary(), server()) -> server().
+@@ -381,23 +381,23 @@ do_fetch_rev(#db{}=Db, DocId) ->
+     end.
+ 
+ -spec connection_info(server()) -> {'ok', server()} | {'error', term()}.
+-connection_info(#server{url=Url}=Conn) ->
++connection_info(#server{}=Conn) ->
+     case server_info(Conn) of
+         {'ok', ConnData} ->
+             CouchVersion = kz_json:get_ne_binary_value(<<"version">>, ConnData),
+             BigCouchVersion = kz_json:get_ne_binary_value(<<"bigcouch">>, ConnData),
+-            lager:debug("connected successfully to ~s", [Url]),
++            lager:debug("CouchDB connection established"),
+             lager:debug("responding CouchDB version: ~p", [CouchVersion]),
+             lager:debug("responding BigCouch version: ~p", [BigCouchVersion]),
+             {'ok', add_couch_version(CouchVersion, BigCouchVersion, Conn)};
+         {'error', {'conn_failed', {'error', 'timeout'}}} ->
+-            lager:warning("connection timed out for ~s", [Url]),
++            lager:warning("CouchDB connection timed out"),
+             {'error', 'timeout'};
+         {'error', {'conn_failed', {'error', 'ehostunreach'}}} ->
+-            lager:warning("connection to ~s failed: Host is unreachable", [Url]),
++            lager:warning("CouchDB connection failed: host is unreachable"),
+             {'error', 'ehostunreach'};
+         {'error', _E}=E ->
+-            lager:warning("connection to ~s failed: ~p", [Url, _E]),
++            lager:warning("CouchDB connection failed; credential-bearing request details suppressed"),
+             E
+     end.
+ 
+diff --git a/kazoo_data/src/kz_dataconnection.erl b/kazoo_data/src/kz_dataconnection.erl
+index d19284c80..c7db1921c 100644
+--- a/kazoo_data/src/kz_dataconnection.erl
++++ b/kazoo_data/src/kz_dataconnection.erl
+@@ -172,8 +172,8 @@ try_connection(#data_connection{app=App, props=Props}=Connection) ->
+     end.
+ 
+ -spec handle_error(data_connection(), tuple()) -> {'error', any()}.
+-handle_error(#data_connection{app=App, props=Props}, Error) ->
+-    lager:info("failed to connect with ~s : ~p : ~p", [App, Error, Props]),
++handle_error(#data_connection{app=App, tag=Tag}, Error) ->
++    lager:warning("connection ~s using ~s failed; credential-bearing details suppressed", [Tag, App]),
+     {'error', Error}.
+ 
+ -spec connection_established(data_connection()) -> data_connection().
+@@ -184,7 +184,7 @@ connection_established(Connection) ->
+ connection_ready(Connection) ->
+     C = Connection#data_connection{ready = 'true'},
+     kz_dataconnections:update(C),
+-    lager:info("conn ready: ~p", [C]),
++    lager:info("connection ready for tag ~s", [C#data_connection.tag]),
+     maybe_init(C),
+     C.
+ 
+diff --git a/kazoo_data/src/kzs_plan.erl b/kazoo_data/src/kzs_plan.erl
+index b1a53357d..c96e64277 100644
+--- a/kazoo_data/src/kzs_plan.erl
++++ b/kazoo_data/src/kzs_plan.erl
+@@ -155,7 +155,8 @@ get_dataplan(DBName, DocType, DocOwner) ->
+ -spec system_dataplan() -> dataplan().
+ system_dataplan() ->
+     #{<<"connections_map">> := Connections} = ?CACHED_SYSTEM_DATAPLAN,
+-    lager:info("loaded system dataplan: ~p", [Connections]),
++    %% Connection records contain passwords and credential-bearing URLs.
++    lager:debug("loaded system dataplan connection tags: ~p", [maps:keys(Connections)]),
+     SysTag = ?TAG_LOCAL,
+     #{tag => SysTag
+      ,server => maps:get(SysTag, Connections, #{})
+@@ -178,7 +179,7 @@ system_dataplan(DBName, _Classification) ->
+ account_dataplan(AccountDb) ->
+     AccountId = kzs_util:format_account_id(AccountDb),
+     Plan = ?CACHED_ACCOUNT_DATAPLAN(AccountId),
+-    lager:info("account plan: ~p", [Plan]),
++    lager:debug("loaded account dataplan for ~s", [AccountId]),
+     dataplan_match(<<"account">>, Plan, AccountId).
+ 
+ account_dataplan(AccountDb, 'undefined') ->
+@@ -588,7 +589,7 @@ cache_callback('system', _V, 'flush') ->
+ %%     lager:warning("received flush dataplan cache for system plan"),
+ %%     reload();
+ cache_callback(_Key, _V, _Action) ->
+-    lager:warning("unhandled cache callback : ~p , ~p , ~p", [_Key, _V, _Action]).
++    lager:warning("unhandled cache callback action ~p for key ~p", [_Action, _Key]).
+ 
+ -spec fetch_simple_dataplan(kz_term:ne_binary()) -> fetch_dataplan_ret().
+ fetch_simple_dataplan(?SYSTEM_DATAPLAN_ID) ->

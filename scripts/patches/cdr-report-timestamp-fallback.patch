@@ -1,0 +1,83 @@
+diff --git a/src/cdr_report.erl b/src/cdr_report.erl
+index 736e3fb..8230308 100644
+--- a/src/cdr_report.erl
++++ b/src/cdr_report.erl
+@@ -11,6 +11,8 @@
+ 
+-export([handle_req/2]).
++-export([handle_req/2
++        ,report_timestamp/1
++        ]).
+ 
+ -include("cdr.hrl").
+ 
+ -define(IGNORED_APP, kapps_config:get(?CONFIG_CAT, <<"ignore_apps">>, [<<"milliwatt">>])).
+@@ -79,9 +83,24 @@ maybe_ignore_reorder(JObj) ->
+ -spec handle_req(kz_call_event:payload()) -> 'ok'.
+ handle_req(JObj) ->
+     AccountId = kapi_cdr:account_id(JObj),
+-    Timestamp = kapi_cdr:timestamp(JObj),
++    Timestamp = report_timestamp(JObj),
+     prepare_and_save(AccountId, Timestamp, JObj).
+ 
++%% Timestamp is optional in the cdr.report API. Keep every routine in the
++%% save pipeline on the same valid Gregorian timestamp when an older or
++%% incomplete publisher omits it. The interaction timestamp is preferable to
++%% wall clock time because it preserves the call's original MODB month.
++-spec report_timestamp(kz_call_event:payload()) -> kz_time:gregorian_seconds().
++report_timestamp(JObj) ->
++    case kapi_cdr:timestamp(JObj) of
++        'undefined' ->
++            case kapi_cdr:interaction_timestamp(JObj) of
++                'undefined' -> kz_time:now_s();
++                InteractionTimestamp -> InteractionTimestamp
++            end;
++        Timestamp -> Timestamp
++    end.
++
+ -spec prepare_and_save(account_id(), kz_time:gregorian_seconds(), kz_call_event:payload()) -> 'ok'.
+ prepare_and_save(AccountId, Timestamp, JObj) ->
+     Routines = [fun cdr_util:update_ccvs/3
+diff --git a/test/cdr_report_tests.erl b/test/cdr_report_tests.erl
+new file mode 100644
+index 0000000..e35ed94
+--- /dev/null
++++ b/test/cdr_report_tests.erl
+@@ -0,0 +1,37 @@
++%%%-----------------------------------------------------------------------------
++%%% @copyright (C) 2026 2600Hz
++%%% @doc Regression tests for cdr.report timestamp normalization.
++%%% This Source Code Form is subject to the terms of the Mozilla Public
++%%% License, v. 2.0. If a copy of the MPL was not distributed with this
++%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
++%%%-----------------------------------------------------------------------------
++-module(cdr_report_tests).
++
++-include_lib("eunit/include/eunit.hrl").
++
++-define(TIMESTAMP, 63955782000).
++-define(INTERACTION_TIMESTAMP, 63955781000).
++
++report_timestamp_test_() ->
++    Before = kz_time:now_s(),
++    MissingTimestamp = cdr_report:report_timestamp(kz_json:new()),
++    After = kz_time:now_s(),
++    [{"report Timestamp has precedence"
++     ,?_assertEqual(?TIMESTAMP
++                   ,cdr_report:report_timestamp(
++                      kz_json:from_list([{<<"Timestamp">>, ?TIMESTAMP}
++                                        ,{<<"Call-Interaction">>
++                                         ,kz_json:from_list([{<<"Timestamp">>, ?INTERACTION_TIMESTAMP}])}
++                                        ])))
++     }
++    ,{"interaction Timestamp is used when report Timestamp is absent"
++     ,?_assertEqual(?INTERACTION_TIMESTAMP
++                   ,cdr_report:report_timestamp(
++                      kz_json:from_list([{<<"Call-Interaction">>
++                                         ,kz_json:from_list([{<<"Timestamp">>, ?INTERACTION_TIMESTAMP}])}
++                                        ])))
++     }
++    ,{"current time safely replaces a completely absent Timestamp"
++     ,?_assert(MissingTimestamp >= Before andalso MissingTimestamp =< After)
++     }
++    ].

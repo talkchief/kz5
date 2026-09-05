@@ -1,0 +1,196 @@
+diff --git a/src/ecallmgr_fs_channels.erl b/src/ecallmgr_fs_channels.erl
+index 76622a7..5ec573d 100644
+--- a/src/ecallmgr_fs_channels.erl
++++ b/src/ecallmgr_fs_channels.erl
+@@ -49,8 +49,15 @@
+ -export([handle_query_account_channels/2]).
+ -export([handle_query_channels/2]).
+ -export([handle_channel_status/2]).
++-export([handle_originate_reconcile/2]).
+ -export([api_status/1]).
+ 
++-ifdef(TEST).
++-export([parse_originate_reconcile/2
++        ,aggregate_originate_reconcile/1
++        ]).
++-endif.
++
+ -export([channels/1, channels/2, channels/3, channels/4]).
+ -export([handle_channels/2]).
+ 
+@@ -90,6 +97,9 @@
+                     ,{{?MODULE, 'handle_channel_status'}
+                      ,[{<<"channel">>, <<"channel_status_req">>}]
+                      }
++                    ,{{?MODULE, 'handle_originate_reconcile'}
++                     ,[{<<"channel">>, <<"originate_reconcile_req">>}]
++                     }
+                     ,{{?MODULE, 'handle_query_endpoint_channels'}
+                      ,[{<<"channel">>, <<"query_endpoint_channels_req">>}]
+                      }
+@@ -405,6 +415,93 @@ handle_channel_status(JObj, _Props) ->
+             kapi_call:publish_channel_status_resp(kz_api:server_id(JObj), Resp)
+     end.
+ 
++%% FreeSWITCH, not the ephemeral ecallmgr originate process, is the truth
++%% boundary. Every ecallmgr instance reports only what its currently connected
++%% media nodes can prove from the exact UUID/request/caller tuple.
++-spec handle_originate_reconcile(kz_json:object(), kz_term:proplist()) -> 'ok'.
++handle_originate_reconcile(JObj, _Props) ->
++    'true' = kapi_call:originate_reconcile_req_v(JObj),
++    UUID = kz_json:get_ne_binary_value(<<"Originate-UUID">>, JObj),
++    RequestId = kz_json:get_ne_binary_value(<<"Originate-Request-ID">>, JObj),
++    CallerId = kz_json:get_ne_binary_value(<<"Outbound-Call-ID">>, JObj),
++    Operation = kz_json:get_ne_binary_value(<<"Operation">>, JObj),
++    Result = case safe_reconcile_tokens([UUID, RequestId, CallerId]) of
++                 'true' ->
++                     Command = list_to_binary([Operation, " ", UUID, " ", RequestId, " ", CallerId]),
++                     aggregate_originate_reconcile(
++                       [query_originate_reconcile(Node, Command)
++                        || Node <- ecallmgr_fs_nodes:connected()]);
++                 'false' -> #{'status' => <<"unknown">>, 'detail' => <<"invalid_correlation">>}
++             end,
++    Resp = props:filter_undefined(
++             [{<<"Originate-UUID">>, UUID}
++             ,{<<"Originate-Request-ID">>, RequestId}
++             ,{<<"Outbound-Call-ID">>, CallerId}
++             ,{<<"Operation">>, Operation}
++             ,{<<"Status">>, maps:get('status', Result)}
++             ,{<<"Media-Node">>, maps:get('media_node', Result, 'undefined')}
++             ,{<<"Module-Epoch">>, maps:get('module_epoch', Result, 'undefined')}
++             ,{<<"Outcome">>, maps:get('outcome', Result, 'undefined')}
++             ,{<<"Result-Call-ID">>, maps:get('result_call_id', Result, 'undefined')}
++             ,{<<"Failure-Cause">>, maps:get('failure_cause', Result, 'undefined')}
++             ,{<<"Detail">>, maps:get('detail', Result, 'undefined')}
++             ,{<<"Msg-ID">>, kz_api:msg_id(JObj)}
++              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)]),
++    kapi_call:publish_originate_reconcile_resp(kz_api:server_id(JObj), Resp).
++
++-spec query_originate_reconcile(atom(), kz_term:ne_binary()) -> map().
++query_originate_reconcile(Node, Command) ->
++    Result = try freeswitch:api(Node, 'kz_originate_reconcile', Command)
++             catch _:_ -> {'error', 'query_failed'}
++             end,
++    parse_originate_reconcile(kz_term:to_binary(Node), Result).
++
++-spec parse_originate_reconcile(kz_term:ne_binary(), any()) -> map().
++parse_originate_reconcile(Node, {'ok', Reply}) when is_binary(Reply) ->
++    Tokens = binary:split(Reply, [<<" ">>, <<"\t">>, <<"\r">>, <<"\n">>]
++                         ,['global', 'trim_all']),
++    parse_originate_reconcile_tokens(Node, Tokens);
++parse_originate_reconcile(Node, _) ->
++    #{'status' => <<"unknown">>, 'media_node' => Node, 'detail' => <<"switch_query_failed">>}.
++
++-spec parse_originate_reconcile_tokens(kz_term:ne_binary(), [binary()]) -> map().
++parse_originate_reconcile_tokens(Node, [<<"+OK">>, <<"PENDING">>, Epoch]) ->
++    #{'status' => <<"pending">>, 'media_node' => Node, 'module_epoch' => Epoch};
++parse_originate_reconcile_tokens(Node, [<<"+OK">>, <<"SETTLED">>, <<"success">>, Epoch, CallId]) ->
++    #{'status' => <<"settled">>, 'media_node' => Node, 'module_epoch' => Epoch
++     ,'outcome' => <<"success">>, 'result_call_id' => CallId};
++parse_originate_reconcile_tokens(Node, [<<"+OK">>, <<"SETTLED">>, <<"failure">>, Epoch, Cause]) ->
++    #{'status' => <<"settled">>, 'media_node' => Node, 'module_epoch' => Epoch
++     ,'outcome' => <<"failure">>, 'failure_cause' => Cause};
++parse_originate_reconcile_tokens(Node, [<<"-ERR">>, <<"UNKNOWN">>, Epoch]) ->
++    #{'status' => <<"unknown">>, 'media_node' => Node, 'module_epoch' => Epoch
++     ,'detail' => <<"not_observed_in_module_epoch">>};
++parse_originate_reconcile_tokens(Node, [<<"-ERR">>, <<"CORRELATION_MISMATCH">>, Epoch]) ->
++    #{'status' => <<"unknown">>, 'media_node' => Node, 'module_epoch' => Epoch
++     ,'detail' => <<"correlation_mismatch">>};
++parse_originate_reconcile_tokens(Node, _) ->
++    #{'status' => <<"unknown">>, 'media_node' => Node, 'detail' => <<"invalid_switch_response">>}.
++
++%% At most one connected media node may claim a transaction. A second claim is
++%% conflict evidence, even if the text happens to match.
++-spec aggregate_originate_reconcile([map()]) -> map().
++aggregate_originate_reconcile(Results) ->
++    Authoritative = [Result || Result <- Results,
++                               maps:get('status', Result, <<"unknown">>) =/= <<"unknown">>],
++    case Authoritative of
++        [Result] -> Result;
++        [] -> #{'status' => <<"unknown">>, 'detail' => <<"no_authoritative_transaction">>};
++        _ -> #{'status' => <<"unknown">>, 'detail' => <<"conflicting_media_nodes">>}
++    end.
++
++-spec safe_reconcile_tokens([any()]) -> boolean().
++safe_reconcile_tokens(Tokens) ->
++    lists:all(fun(Token) when is_binary(Token), byte_size(Token) > 0, byte_size(Token) =< 512 ->
++                      lists:all(fun(Character) -> Character > 32 andalso Character =/= 127 end,
++                                binary_to_list(Token));
++                 (_) -> 'false'
++              end, Tokens).
++
+ -type api_status_node_info() :: {kz_term:ne_binary(), kz_term:ne_binary()}.
+ 
+ -spec api_status(kz_term:ne_binary()) ->
+diff --git a/src/ecallmgr_originate.erl b/src/ecallmgr_originate.erl
+index 259991e..d3602c1 100644
+--- a/src/ecallmgr_originate.erl
++++ b/src/ecallmgr_originate.erl
+@@ -15,6 +15,10 @@
+ 
+ -export([start_link/1]).
+ 
++-ifdef(TEST).
++-export([originate_api_command/4]).
++-endif.
++
+ -export([init/1
+         ,handle_call/3
+         ,handle_cast/2
+@@ -208,8 +212,9 @@ handle_cast('originate_execute', #state{tref=TRef}=State) when is_reference(TRef
+ handle_cast('originate_execute', #state{dialstrings=Dialstrings
+                                        ,node=Node
+                                        ,originate_uuid=OriginateUUID
++                                       ,originate_req=JObj
+                                        }=State) ->
+-    {'noreply', State#state{originate_pid_ref = originate_execute(Node, OriginateUUID, Dialstrings)}};
++    {'noreply', State#state{originate_pid_ref = originate_execute(Node, OriginateUUID, Dialstrings, JObj)}};
+ 
+ handle_cast('originate_cancel', #state{node=Node
+                                       ,originate_uuid=OriginateUUID
+@@ -474,19 +479,39 @@ add_loopback('false') ->
+     ,{<<"Loopback-Bowout">>, 'false'}
+     ].
+ 
+--spec originate_execute(atom(), kz_term:ne_binary(), kz_term:ne_binary()) ->
++-spec originate_execute(atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
+           kz_term:pid_ref().
+-originate_execute(Node, UUID, Dialstrings) ->
++originate_execute(Node, UUID, Dialstrings, Request) ->
+     lager:debug("executing originate on ~s / ~s ~s", [Node, UUID, Dialstrings]),
+-    kz_process:spawn_monitor(fun originate_execute_async/4, [self(), Node, UUID, Dialstrings]).
++    kz_process:spawn_monitor(fun originate_execute_async/5, [self(), Node, UUID, Dialstrings, Request]).
+ 
+--spec originate_execute_async(pid(), atom(), kz_term:ne_binary(), kz_term:ne_binary()) ->
++-spec originate_execute_async(pid(), atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
+           {'originate_result', freeswitch:fs_api_return()}.
+-originate_execute_async(Pid, Node, UUID, Dialstrings) ->
+-    Arg = list_to_binary([UUID, " ", Dialstrings]),
++originate_execute_async(Pid, Node, UUID, Dialstrings, Request) ->
++    RequestId = kz_api:msg_id(Request),
++    CallerId = kz_json:get_ne_binary_value(<<"Outbound-Call-ID">>, Request),
++    Arg = originate_api_command(UUID, RequestId, CallerId, Dialstrings),
+     Res = freeswitch:async_api(Node, 'kz_originate', Arg),
+     Pid ! {'originate_result', Res}.
+ 
++%% v2 gives mod_kazoo the immutable correlation tuple before it registers the
++%% pending transaction. Legacy requests remain compatible but cannot later be
++%% proven settled by the recovery protocol.
++-spec originate_api_command(kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_binary(),
++                            kz_term:ne_binary()) -> kz_term:ne_binary().
++originate_api_command(UUID, RequestId, CallerId, Dialstrings) ->
++    case safe_originate_token(UUID) andalso safe_originate_token(RequestId)
++        andalso safe_originate_token(CallerId) of
++        'true' -> list_to_binary(["v2 ", UUID, " ", RequestId, " ", CallerId, " ", Dialstrings]);
++        'false' -> list_to_binary([UUID, " ", Dialstrings])
++    end.
++
++-spec safe_originate_token(any()) -> boolean().
++safe_originate_token(Value) when is_binary(Value), byte_size(Value) > 0, byte_size(Value) =< 512 ->
++    lists:all(fun(Character) -> Character > 32 andalso Character =/= 127 end,
++              binary_to_list(Value));
++safe_originate_token(_) -> 'false'.
++
+ -spec get_unset_vars(kz_json:object()) -> iolist().
+ get_unset_vars(JObj) ->
+     %% Refactor (Karl wishes he had unit tests here for you to use)

@@ -1,0 +1,85 @@
+diff --git a/kazoo_ei_utils.c b/kazoo_ei_utils.c
+index ef45af0..d3fcab2 100644
+--- a/kazoo_ei_utils.c
++++ b/kazoo_ei_utils.c
+@@ -916,10 +916,21 @@ static void *SWITCH_THREAD_FUNC fetch_config_exec(switch_thread_t *thread, void
+ 	switch_memory_pool_t *pool = (switch_memory_pool_t *) obj;
+ 	ei_node_t *node;
+ 	int fetch_filters = 0, fetch_handlers = 0;
++	switch_interval_time_t remaining = kazoo_globals.delay_before_initial_fetch;
++
++	/* Give the node time to initialize, but do not strand this detached worker
++	 * in module text for the entire delay after shutdown has started. */
++	while (remaining > 0 && switch_test_flag(&kazoo_globals, LFLAG_RUNNING)) {
++		switch_interval_time_t interval = remaining > 100000 ? 100000 : remaining;
++		switch_sleep(interval);
++		remaining -= interval;
++	}
+ 
+-	// give some time for node initialization
+-	switch_sleep(kazoo_globals.delay_before_initial_fetch);
++	if (!switch_test_flag(&kazoo_globals, LFLAG_RUNNING)) {
++		goto done;
++	}
+ 
++	switch_thread_rwlock_rdlock(kazoo_globals.ei_nodes_lock);
+ 	for (node = kazoo_globals.ei_nodes; node != NULL; node = node->next) {
+ 		if (node->legacy ) {
+ 			fetch_filters++;
+@@ -927,6 +938,7 @@ static void *SWITCH_THREAD_FUNC fetch_config_exec(switch_thread_t *thread, void
+ 			fetch_handlers++;
+ 		}
+ 	}
++	switch_thread_rwlock_unlock(kazoo_globals.ei_nodes_lock);
+ 
+ 	if (fetch_filters) {
+ 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "fetching filters for kazoo\n");
+@@ -940,6 +952,10 @@ static void *SWITCH_THREAD_FUNC fetch_config_exec(switch_thread_t *thread, void
+ 
+ 	kazoo_globals.config_fetched = 1;
+ 
++	done:
++	switch_core_destroy_memory_pool(&pool);
++	switch_atomic_dec(&kazoo_globals.threads);
++
+ 	return NULL;
+ }
+ 
+@@ -959,7 +975,15 @@ void fetch_config()
+ 	switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
+ 
+ 	switch_uuid_get(&uuid);
+-	switch_thread_create(&thread, thd_attr, fetch_config_exec, pool, pool);
++
++	/* Account for the worker before creating it. Otherwise shutdown can see
++	 * zero workers and unload mod_kazoo before this detached thread starts. */
++	switch_atomic_inc(&kazoo_globals.threads);
++	if (switch_thread_create(&thread, thd_attr, fetch_config_exec, pool, pool) != SWITCH_STATUS_SUCCESS) {
++		switch_atomic_dec(&kazoo_globals.threads);
++		switch_core_destroy_memory_pool(&pool);
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to create kazoo config fetch thread\n");
++	}
+ 
+ }
+ 
+diff --git a/kazoo_node.c b/kazoo_node.c
+index f75c327..fb8ac88 100644
+--- a/kazoo_node.c
++++ b/kazoo_node.c
+@@ -1599,12 +1599,14 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj)
+ 
+ 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutdown erlang node handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
+ 
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutdown Complete for erlang node handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
++
++	/* No code after destroy_node_handler may dereference ei_node: that call
++	 * destroys the memory pool which owns the node and its strings. */
+ 	destroy_node_handler(ei_node);
+ 
+ 	switch_atomic_dec(&kazoo_globals.threads);
+ 
+-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutdown Complete for erlang node handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
+-
+ 	return NULL;
+ }
+ 

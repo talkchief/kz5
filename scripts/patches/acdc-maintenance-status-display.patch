@@ -1,0 +1,73 @@
+diff --git a/src/acdc_maintenance.erl b/src/acdc_maintenance.erl
+index 3d4f481..f3b5153 100644
+--- a/src/acdc_maintenance.erl
++++ b/src/acdc_maintenance.erl
+@@ -42,6 +42,10 @@
+ 
+ -include("acdc.hrl").
+ 
++-ifdef(TEST).
++-export([current_status_rows/1, status_timestamp/1]).
++-endif.
++
+ -spec logout_agents(kz_term:ne_binary()) -> 'ok'.
+ logout_agents(AccountId) ->
+     ?PRINT("Sending notices to logout agents for ~s", [AccountId]),
+@@ -65,7 +69,7 @@ logout_agent(AccountId, AgentId) ->
+ -spec current_statuses(kz_term:text()) -> 'ok'.
+ current_statuses(AccountId) ->
+     {'ok', Agents} = acdc_agent_util:most_recent_statuses(AccountId),
+-    case kz_json:values(Agents) of
++    case current_status_rows(Agents) of
+         [] -> io:format("No agent statuses found for ~s~n", [AccountId]);
+         As ->
+             io:format("Agent Statuses for ~s~n", [AccountId]),
+@@ -74,6 +78,33 @@ current_statuses(AccountId) ->
+             log_current_statuses(As, 1)
+     end.
+ 
++%% The stats API groups each agent's history by timestamp, rather than
++%% returning one flat status document. Display only its newest valid sample.
++%% Keep compatibility with flat legacy responses without inventing a date.
++current_status_rows(Agents) ->
++    [kz_json:set_value(<<"agent_id">>, AgentId, Stat)
++     || {AgentId, History} <- kz_json:to_proplist(Agents),
++        kz_json:is_json_object(History),
++        Stat <- latest_status(History)
++    ].
++
++latest_status(History) ->
++    case kz_json:get_ne_binary_value(<<"status">>, History) of
++        'undefined' ->
++            Samples = [{Timestamp, Stat}
++                       || Stat <- kz_json:values(History),
++                          kz_json:is_json_object(Stat),
++                          Timestamp <- [kz_json:get_integer_value(<<"timestamp">>, Stat)],
++                          is_integer(Timestamp), Timestamp >= 0,
++                          kz_json:get_ne_binary_value(<<"status">>, Stat) =/= 'undefined'
++                      ],
++            case Samples of
++                [] -> [];
++                _ -> {_Timestamp, Latest} = lists:max(Samples), [Latest]
++            end;
++        _ -> [History]
++    end.
++
+ log_current_statuses([], _) -> 'ok';
+ log_current_statuses([A|As], N) ->
+     log_current_status(A, N),
+@@ -83,9 +114,13 @@ log_current_status(A, N) ->
+     TS = kz_json:get_integer_value(<<"timestamp">>, A),
+     io:format("~4b | ~35s | ~12s | ~20s |~n", [N, kz_json:get_value(<<"agent_id">>, A)
+                                               ,kz_json:get_value(<<"status">>, A)
+-                                              ,kz_time:pretty_print_datetime(TS)
++                                              ,status_timestamp(TS)
+                                               ]).
+ 
++status_timestamp(Timestamp) when is_integer(Timestamp), Timestamp >= 0 ->
++    kz_time:pretty_print_datetime(Timestamp);
++status_timestamp(_) -> <<"unknown">>.
++
+ -spec current_queues(kz_term:ne_binary()) -> 'ok'.
+ current_queues(AccountId) ->
+     case acdc_agents_sup:find_acct_supervisors(AccountId) of

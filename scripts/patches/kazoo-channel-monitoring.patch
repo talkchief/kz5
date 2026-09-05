@@ -1,0 +1,37 @@
+diff --git a/kazoo_amqp/src/api/kapi_dialplan.erl b/kazoo_amqp/src/api/kapi_dialplan.erl
+index 92eafd9db..c28c3571b 100644
+--- a/kazoo_amqp/src/api/kapi_dialplan.erl
++++ b/kazoo_amqp/src/api/kapi_dialplan.erl
+@@ -2100,7 +2100,8 @@ originate_ready_definition() ->
+               ,{fun kapi_definition:set_required_headers/2, [<<"Originate-UUID">>
+                                                             ,<<"Originate-Queue">>
+                                                             ]}
+-              ,{fun kapi_definition:set_optional_headers/2, []}
++              ,{fun kapi_definition:set_optional_headers/2, [<<"Monitor-Request-ID">>
++                                                            ,<<"Monitor-Verified">>]}
+               ,{fun kapi_definition:set_values/2
+                ,kapi_definition:event_type_headers(Category, EventName)
+                }
+diff --git a/kazoo_amqp/src/api/kapi_resource.erl b/kazoo_amqp/src/api/kapi_resource.erl
+index dea0843a2..1403e62b5 100644
+--- a/kazoo_amqp/src/api/kapi_resource.erl
++++ b/kazoo_amqp/src/api/kapi_resource.erl
+@@ -139,6 +139,10 @@ originate_req_definition() ->
+                                                             ,<<"Eavesdrop-Call-ID">>
+                                                             ,<<"Eavesdrop-Group-ID">>
+                                                             ,<<"Eavesdrop-Mode">>
++                                                            ,<<"Monitor-Operation">>
++                                                            ,<<"Monitor-Account-ID">>
++                                                            ,<<"Monitor-Request-ID">>
++                                                            ,<<"Monitor-Device-ID">>
+ 
+                                                             ,<<"Existing-Call-ID">> % If set, use this node, otherwise ignore
+                                                             ,<<"Switch-Nodename">>
+@@ -204,6 +208,7 @@ originate_resp_definition() ->
+               ,{fun kapi_definition:set_required_headers/2, [<<"Call-ID">>]}
+               ,{fun kapi_definition:set_optional_headers/2
+                ,[<<"Application-Response">>
++                ,<<"Monitor-Request-ID">>
+                 ,<<"Call-ID">>
+                 ,<<"Control-Queue">>
+                 ,<<"Channel-Call-State">>

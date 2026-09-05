@@ -1,0 +1,50 @@
+diff --git a/kazoo_auth/src/kz_auth_jwt.erl b/kazoo_auth/src/kz_auth_jwt.erl
+index 9274015c1..c229e48eb 100644
+--- a/kazoo_auth/src/kz_auth_jwt.erl
++++ b/kazoo_auth/src/kz_auth_jwt.erl
+@@ -97,8 +97,8 @@ verify_header(#{header := #{<<"alg">> := Alg}}=Token) ->
+             lager:info("request contained invalid jwt algorithm: ~p", [Alg]),
+             Token#{verify_result => 'false', verify_error => 'algorithm_not_supported'}
+     end;
+-verify_header(#{header := #{<<"typ">> := _Typ}}=Token) ->
+-    lager:info("invalid jwt typ header ~p", [_Typ]),
++verify_header(Token) ->
++    lager:info("invalid jwt header"),
+     Token#{verify_result => 'false', verify_error => 'invalid_jwt'}.
+ 
+ -spec verify_signature(map()) -> map().
+@@ -324,17 +324,24 @@ set_provider(Token) -> Token.
+ parse(<<JWTToken/binary>>) ->
+     case binary:split(JWTToken, <<".">>, ['global']) of
+         [Header, Payload, Signature] ->
+-            Map = #{header => kz_json:to_map(kz_json:decode(kz_base64url:decode(Header)))
+-                   ,payload => kz_json:to_map(kz_json:decode(kz_base64url:decode(Payload)))
+-                   ,signature => kz_base64url:decode(Signature)
+-                   ,header64 => Header
+-                   ,payload64 => Payload
+-                   ,signature64 => Signature
+-                   ,original => JWTToken
+-                   },
+-            {'ok', set_provider(Map)};
++            try
++                HeaderMap = kz_json:to_map(kz_json:decode(kz_base64url:decode(Header))),
++                PayloadMap = kz_json:to_map(kz_json:decode(kz_base64url:decode(Payload))),
++                'true' = is_map(HeaderMap) andalso is_map(PayloadMap),
++                Map = #{header => HeaderMap
++                       ,payload => PayloadMap
++                       ,signature => kz_base64url:decode(Signature)
++                       ,header64 => Header
++                       ,payload64 => Payload
++                       ,signature64 => Signature
++                       ,original => JWTToken
++                       },
++                {'ok', set_provider(Map)}
++            catch
++                'error':_ -> {'error', 'invalid_jwt'}
++            end;
+         _ ->
+-            lager:info("unable to parse jwt: ~s", [JWTToken]),
++            lager:info("unable to parse jwt"),
+             {'error', 'invalid_jwt'}
+     end.
+ 

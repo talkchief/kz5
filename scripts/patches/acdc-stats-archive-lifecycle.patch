@@ -1,0 +1,328 @@
+diff --git a/src/acdc_agent_stats.erl b/src/acdc_agent_stats.erl
+index c0de34a..aef6ff1 100644
+--- a/src/acdc_agent_stats.erl
++++ b/src/acdc_agent_stats.erl
+@@ -32,6 +32,8 @@
+         ,status_table_opts/0
+ 
+         ,archive_status_data/2
++        ,archive_status_snapshot/0
++        ,archive_status_snapshot/2
+         ]).
+ 
+ -include("acdc.hrl").
+@@ -483,20 +485,24 @@ archive_status_data(Srv, 'false') ->
+     maybe_archive_status_data(Srv, Match).
+ 
+ maybe_archive_status_data(Srv, Match) ->
+-    case ets:select(status_table_id(), Match) of
++    case acdc_stats_archive:select(status_table_id(), Match) of
+         [] -> 'ok';
+-        Stats ->
+-            kz_datamgr:suppress_change_notice(),
+-            ToSave = lists:foldl(fun archive_status_fold/2, dict:new(), Stats),
+-            _ = [kz_datamgr:save_docs(acdc_stats_util:db_name(Acct), Docs)
+-                 || {Acct, Docs} <- dict:to_list(ToSave)
+-                ],
+-            _ = [gen_listener:cast(Srv, {'update_status', Id, Key, [{#status_stat.is_archived, 'true'}]})
+-                 || #status_stat{id=Id, key=Key} <- Stats
+-                ],
+-            'ok'
++        Stats -> _ = archive_status_snapshot(Srv, Stats), 'ok'
+     end.
+ 
++-spec archive_status_snapshot() -> [status_stat()].
++archive_status_snapshot() ->
++    ets:select(status_table_id(), [{#status_stat{is_archived='false', _='_'}, [], ['$_']}]).
++
++-spec archive_status_snapshot(pid(), [status_stat()]) -> non_neg_integer().
++archive_status_snapshot(Srv, Stats) ->
++    kz_datamgr:suppress_change_notice(),
++    Saved = acdc_stats_archive:save(lists:foldl(fun archive_status_fold/2, dict:new(), Stats)),
++    _ = [gen_listener:cast(Srv, {'archive_status_saved', Stat})
++         || #status_stat{id=Id, key=#status_stat_key{account_id=Account}}=Stat <- Stats
++            ,lists:member({Account, Id}, Saved)],
++    length(Saved).
++
+ -spec archive_status_fold(status_stat(), dict:dict()) -> dict:dict().
+ archive_status_fold(#status_stat{key=#status_stat_key{account_id=AccountId}}=Stat, Acc) ->
+     Doc = status_stat_to_doc(Stat),
+diff --git a/src/acdc_stats.erl b/src/acdc_stats.erl
+index dafa0cd..098d54f 100644
+--- a/src/acdc_stats.erl
++++ b/src/acdc_stats.erl
+@@ -34,6 +34,10 @@
+         ,archive_call_data/2
+         ]).
+ 
++-ifdef(TEST).
++-export([force_archive_data/0, cleanup_data/1]).
++-endif.
++
+ %% AMQP Callbacks
+ -export([handle_call_stat/2
+         ,handle_call_query/2
+@@ -292,7 +296,7 @@ handle_cast({'create_status', #status_stat{id=_Id, status=_Status}=Stat}, State)
+     end;
+ handle_cast({'update_call', Id, Updates}, State) ->
+     lager:debug("updating call stat ~s: ~p", [Id, Updates]),
+-    ets:update_element(call_table_id(), Id, Updates),
++    ets:update_element(call_table_id(), Id, Updates ++ [{#call_stat.is_archived, 'false'}]),
+     {'noreply', State};
+ handle_cast({'flush_call', Id}, State) ->
+     lager:debug("flushing call stat ~s", [Id]),
+@@ -309,6 +313,12 @@ handle_cast({'update_status', Id, Updates}, State) ->
+     lager:debug("updating status stat ~s: ~p", [Id, Updates]),
+     ets:update_element(acdc_agent_stats:status_table_id(), Id, Updates),
+     {'noreply', State};
++handle_cast({'archive_status_saved', Stat}, State) ->
++    mark_status_archived(Stat),
++    {'noreply', State};
++handle_cast({'archive_call_saved', Stat}, State) ->
++    mark_call_archived(Stat),
++    {'noreply', State};
+ handle_cast({'remove_status', [{M, P, _}]}, State) ->
+     Match = [{M, P, ['true']}],
+     N = ets:select_delete(acdc_agent_stats:status_table_id(), Match),
+@@ -344,7 +354,7 @@ handle_event(_JObj, _State) ->
+ 
+ -spec terminate(any(), state()) -> 'ok'.
+ terminate(_Reason, _) ->
+-    force_archive_data(),
++    _ = force_archive_data(),
+     lager:debug("acdc stats terminating: ~p", [_Reason]).
+ 
+ -spec code_change(any(), state(), any()) -> {'ok', state()}.
+@@ -561,12 +571,62 @@ archive_data() ->
+     _ = kz_process:spawn(fun acdc_agent_stats:archive_status_data/2, [Self, 'false']),
+     'ok'.
+ 
++-spec force_archive_data() -> 'ok' | {'error', atom()}.
+ force_archive_data() ->
++    %% Snapshot while the owner/heirs are still alive. The worker receives only
++    %% immutable copies and must finish (or be killed) before terminate returns.
++    Statuses = acdc_agent_stats:archive_status_snapshot(),
++    Calls = ets:select(call_table_id(), archive_call_match()),
+     Self = self(),
+-    _ = kz_process:spawn(fun archive_call_data/2, [Self, 'true']),
+-    _ = kz_process:spawn(fun acdc_agent_stats:archive_status_data/2, [Self, 'true']),
++    Tag = make_ref(),
++    {Pid, Ref} = spawn_monitor(fun() ->
++        StatusSaved = acdc_agent_stats:archive_status_snapshot(Self, Statuses),
++        CallSaved = archive_call_snapshot(Self, Calls),
++        Self ! {Tag, StatusSaved =:= length(Statuses) andalso CallSaved =:= length(Calls)}
++    end),
++    Timeout = max(100, min(12000, kapps_config:get_integer(?CONFIG_CAT, <<"stats_shutdown_flush_ms">>, 10000))),
++    wait_archive(Pid, Ref, Tag, erlang:monotonic_time('millisecond') + Timeout).
++
++-spec wait_archive(pid(), reference(), reference(), integer()) -> 'ok' | {'error', atom()}.
++wait_archive(Pid, Ref, Tag, Deadline) ->
++    Remaining = max(0, Deadline - erlang:monotonic_time('millisecond')),
++    receive
++        {'$gen_cast', {'$client_cast', {'archive_status_saved', Stat}}} ->
++            mark_status_archived(Stat), wait_archive(Pid, Ref, Tag, Deadline);
++        {'$gen_cast', {'$client_cast', {'archive_call_saved', Stat}}} ->
++            mark_call_archived(Stat), wait_archive(Pid, Ref, Tag, Deadline);
++        {Tag, 'true'} -> erlang:demonitor(Ref, ['flush']), 'ok';
++        {Tag, 'false'} ->
++            erlang:demonitor(Ref, ['flush']),
++            lager:error("ACDC shutdown archive incomplete; latest statuses are NOT guaranteed durable"),
++            {'error', 'incomplete'};
++        {'DOWN', Ref, 'process', Pid, _Reason} ->
++            lager:error("ACDC shutdown archive worker failed before persistence completed"),
++            {'error', 'worker_failed'}
++    after Remaining ->
++        exit(Pid, 'kill'),
++        receive {'DOWN', Ref, 'process', Pid, _} -> 'ok' after 1000 -> erlang:demonitor(Ref, ['flush']) end,
++        lager:error("ACDC shutdown archive timed out; latest statuses are NOT guaranteed durable"),
++        {'error', 'timeout'}
++    end.
++
++-spec mark_status_archived(status_stat()) -> 'ok'.
++mark_status_archived(#status_stat{key=Key}=Snapshot) ->
++    case ets:lookup(acdc_agent_stats:status_table_id(), Key) of
++        [Snapshot] -> ets:update_element(acdc_agent_stats:status_table_id(), Key, {#status_stat.is_archived, 'true'});
++        _ -> 'false'
++    end,
++    'ok'.
++
++-spec mark_call_archived(call_stat()) -> 'ok'.
++mark_call_archived(#call_stat{id=Id}=Snapshot) ->
++    case ets:lookup(call_table_id(), Id) of
++        [Snapshot] -> ets:update_element(call_table_id(), Id, {#call_stat.is_archived, 'true'});
++        _ -> 'false'
++    end,
+     'ok'.
+ 
++-spec cleanup_data(pid()) -> 'ok'.
+ cleanup_data(Srv) ->
+     Past = kz_time:now_s() - ?CLEANUP_WINDOW,
+     PastConstraint = {'=<', '$1', Past},
+@@ -575,13 +635,13 @@ cleanup_data(Srv) ->
+                       ,{'=/=', '$2', {'const', <<"handled">>}}
+                       ],
+ 
+-    CallMatch = [{#call_stat{entered_timestamp='$1', status='$2', _='_'}
++    CallMatch = [{#call_stat{entered_timestamp='$1', status='$2', is_archived='true', _='_'}
+                  ,[PastConstraint | TypeConstraints]
+                  ,['$_']
+                  }],
+     gen_listener:cast(Srv, {'remove_call', CallMatch}),
+ 
+-    StatusMatch = [{#status_stat{key=#status_stat_key{timestamp='$1'}, _='_'}
++    StatusMatch = [{#status_stat{key=#status_stat_key{timestamp='$1'}, is_archived='true', _='_'}
+                    ,[{'=<', '$1', Past}]
+                    ,['$_']
+                    }],
+@@ -608,18 +668,7 @@ cleanup_unfinished(Unfinished) ->
+ -spec archive_call_data(pid(), boolean()) -> 'ok'.
+ archive_call_data(Srv, 'true') ->
+     kz_log:put_callid(<<"acdc_stats.force_call_archiver">>),
+-
+-    Match = [{#call_stat{status='$1'
+-                        ,is_archived='$2'
+-                        ,_='_'
+-                        }
+-             ,[{'=/=', '$1', {'const', <<"waiting">>}}
+-              ,{'=/=', '$1', {'const', <<"handled">>}}
+-              ,{'=:=', '$2', 'false'}
+-              ]
+-             ,['$_']
+-             }],
+-    maybe_archive_call_data(Srv, Match);
++    maybe_archive_call_data(Srv, archive_call_match());
+ archive_call_data(Srv, 'false') ->
+     kz_log:put_callid(<<"acdc_stats.call_archiver">>),
+ 
+@@ -638,21 +687,33 @@ archive_call_data(Srv, 'false') ->
+              }],
+     maybe_archive_call_data(Srv, Match).
+ 
++-spec archive_call_match() -> ets:match_spec().
++archive_call_match() ->
++    [{#call_stat{status='$1'
++                        ,is_archived='$2'
++                        ,_='_'
++                        }
++             ,[{'=/=', '$1', {'const', <<"waiting">>}}
++              ,{'=/=', '$1', {'const', <<"handled">>}}
++              ,{'=:=', '$2', 'false'}
++              ]
++             ,['$_']
++             }].
++
+ maybe_archive_call_data(Srv, Match) ->
+-    case ets:select(call_table_id(), Match) of
++    case acdc_stats_archive:select(call_table_id(), Match) of
+         [] -> 'ok';
+-        Stats ->
+-            kz_datamgr:suppress_change_notice(),
+-            ToSave = lists:foldl(fun archive_call_fold/2, dict:new(), Stats),
+-            _ = [kz_datamgr:save_docs(acdc_stats_util:db_name(Account), Docs)
+-                 || {Account, Docs} <- dict:to_list(ToSave)
+-                ],
+-            _ = [gen_listener:cast(Srv, {'update_call', Id, [{#call_stat.is_archived, 'true'}]})
+-                 || #call_stat{id=Id} <- Stats
+-                ],
+-            'ok'
++        Stats -> _ = archive_call_snapshot(Srv, Stats), 'ok'
+     end.
+ 
++-spec archive_call_snapshot(pid(), call_stats()) -> non_neg_integer().
++archive_call_snapshot(Srv, Stats) ->
++    kz_datamgr:suppress_change_notice(),
++    Saved = acdc_stats_archive:save(lists:foldl(fun archive_call_fold/2, dict:new(), Stats)),
++    _ = [gen_listener:cast(Srv, {'archive_call_saved', Stat})
++         || #call_stat{id=Id, account_id=Account}=Stat <- Stats, lists:member({Account, Id}, Saved)],
++    length(Saved).
++
+ -spec query_call_fold(call_stat(), dict:dict()) -> dict:dict().
+ query_call_fold(#call_stat{status=Status}=Stat, Acc) ->
+     Doc = call_stat_to_doc(Stat),
+diff --git a/src/acdc_stats_sup.erl b/src/acdc_stats_sup.erl
+index 6084408..8b6006d 100644
+--- a/src/acdc_stats_sup.erl
++++ b/src/acdc_stats_sup.erl
+@@ -31,7 +31,7 @@
+                                          ]).
+ -define(CHILDREN, [?WORKER_NAME_ARGS('kazoo_etsmgr_srv', 'acdc_stats_call', [?ETSMGR_OPTS(acdc_stats:call_table_id(), acdc_stats:call_table_opts())])
+                   ,?WORKER_NAME_ARGS('kazoo_etsmgr_srv', 'acdc_stats_status', [?ETSMGR_OPTS(acdc_agent_stats:status_table_id(), acdc_agent_stats:status_table_opts())])
+-                  ,?WORKER('acdc_stats')
++                  ,{'acdc_stats', {'acdc_stats', 'start_link', []}, 'permanent', 15000, 'worker', ['acdc_stats']}
+                   ]).
+ 
+ %%%=============================================================================
+diff --git a/src/acdc_stats_archive.erl b/src/acdc_stats_archive.erl
+new file mode 100644
+index 0000000..3ad6f9d
+--- /dev/null
++++ b/src/acdc_stats_archive.erl
+@@ -0,0 +1,68 @@
++%%% Acknowledged, retry-safe persistence for ACDC statistics snapshots.
++%%% This Source Code Form is subject to the Mozilla Public License, v. 2.0.
++-module(acdc_stats_archive).
++-export([save/1, same_document/2, select/2]).
++-include("acdc.hrl").
++
++-spec save(dict:dict()) -> [{binary(), binary()}].
++save(Groups) ->
++    lists:append([save_account(Account, Docs) || {Account, Docs} <- dict:to_list(Groups)]).
++
++-spec save_account(binary(), kz_json:objects()) -> [{binary(), binary()}].
++save_account(Account, Docs) ->
++    Db = acdc_stats_util:db_name(Account),
++    Result = try kz_datamgr:save_docs(Db, Docs)
++             catch _:_ -> {'error', 'save_exception'}
++             end,
++    Saved = case Result of
++        {'ok', Replies} when is_list(Replies) ->
++            [{Account, kz_doc:id(Doc)} || Doc <- Docs, acknowledged(Db, Doc, Replies)];
++        _ -> []
++    end,
++    case length(Saved) =:= length(Docs) of
++        'true' -> 'ok';
++        'false' -> lager:error("ACDC archive account=~s persisted=~B pending=~B; unsaved records remain retryable"
++                               ,[Account, length(Saved), length(Docs)-length(Saved)])
++    end,
++    Saved.
++
++-spec acknowledged(binary(), kz_json:object(), kz_json:objects()) -> boolean().
++acknowledged(Db, Doc, Replies) ->
++    Id = kz_doc:id(Doc),
++    Matching = [R || R <- Replies, kz_json:get_first_defined([<<"id">>, <<"_id">>], R) =:= Id],
++    case Matching of
++        [R] ->
++            case kz_json:get_value(<<"error">>, R) of
++                'undefined' -> kz_json:get_value(<<"ok">>, R, 'true') =/= 'false'
++                    andalso kz_term:is_ne_binary(kz_json:get_first_defined([<<"rev">>, <<"_rev">>], R));
++                <<"conflict">> ->
++                    %% Retrying a write whose ACK was lost is safe only if the
++                    %% current database document is the exact same snapshot.
++                    existing_snapshot(Db, Id, Doc);
++                _ -> 'false'
++            end;
++        _ -> 'false'
++    end.
++
++-spec existing_snapshot(binary(), binary(), kz_json:object()) -> boolean().
++existing_snapshot(Db, Id, Doc) ->
++    try kz_datamgr:open_doc(Db, Id) of
++        {'ok', Existing} -> same_document(Doc, Existing);
++        _ -> 'false'
++    catch _:_ -> 'false'
++    end.
++
++-spec same_document(kz_json:object(), kz_json:object()) -> boolean().
++same_document(A, B) ->
++    Ignore = [<<"_rev">>, <<"pvt_created">>, <<"pvt_modified">>],
++    kz_json:are_equal(kz_json:delete_keys(Ignore, A), kz_json:delete_keys(Ignore, B)).
++
++-spec select(atom(), ets:match_spec()) -> list().
++select(Table, Match) ->
++    try ets:select(Table, Match)
++    catch 'error':'badarg' ->
++        %% A periodic worker can be scheduled after shutdown has started. The
++        %% synchronous shutdown path uses snapshots captured by the owner.
++        lager:debug("archive table ~p is no longer available", [Table]),
++        []
++    end.

@@ -1,0 +1,27 @@
+diff --git a/kazoo_node.c b/kazoo_node.c
+index 163e0ac..f532ca1 100644
+--- a/kazoo_node.c
++++ b/kazoo_node.c
+@@ -1283,6 +1283,7 @@ static switch_status_t handle_mod_kazoo_request(ei_node_t *ei_node, erlang_msg *
+ 		switch_status_t status;
+ 		ei_send_msg_t *send_msg = NULL;
+ 		erlang_ref ref;
++		int reply_prefix_index;
+ 
+ 		switch_malloc(send_msg, sizeof(*send_msg));
+ 		ei_x_new_with_version(&send_msg->buf);
+@@ -1320,8 +1321,14 @@ static switch_status_t handle_mod_kazoo_request(ei_node_t *ei_node, erlang_msg *
+ 		/* send_msg->buf = {ref(), ... */
+ 		ei_x_encode_tuple_header(&send_msg->buf, 2);
+ 		ei_x_encode_ref(&send_msg->buf, &ref);
++		reply_prefix_index = send_msg->buf.index;
+ 
+ 		status = handle_kazoo_request(ei_node, &msg->from, buf, &send_msg->buf);
++		if (send_msg->buf.index == reply_prefix_index) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,
++						  "mod_kazoo request %s did not encode a reply; returning badarg\n", atom);
++			erlang_response_badarg(&send_msg->buf);
++		}
+ 
+ 		if (switch_queue_trypush(ei_node->send_msgs, send_msg) != SWITCH_STATUS_SUCCESS) {
+ 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "error queuing reply\n");

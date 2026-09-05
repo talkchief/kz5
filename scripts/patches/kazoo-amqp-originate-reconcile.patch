@@ -1,0 +1,158 @@
+diff --git a/kazoo_amqp/src/api/kapi_call.erl b/kazoo_amqp/src/api/kapi_call.erl
+index 03ae00839..33561cc36 100644
+--- a/kazoo_amqp/src/api/kapi_call.erl
++++ b/kazoo_amqp/src/api/kapi_call.erl
+@@ -32,6 +32,15 @@
+         ,publish_channel_status_resp/3
+         ,channel_status_extended_headers/0
+         ]).
++-export([originate_reconcile_req/1
++        ,originate_reconcile_req_v/1
++        ,publish_originate_reconcile_req/1
++        ,publish_originate_reconcile_req/2
++        ,originate_reconcile_resp/1
++        ,originate_reconcile_resp_v/1
++        ,publish_originate_reconcile_resp/2
++        ,publish_originate_reconcile_resp/3
++        ]).
+ -export([query_auth_id_req/1
+         ,query_auth_id_req_v/1
+         ,publish_query_auth_id_req/1
+@@ -147,6 +156,8 @@ api_definitions() ->
+     [event_definition()
+     ,channel_status_req_definition()
+     ,channel_status_resp_definition()
++    ,originate_reconcile_req_definition()
++    ,originate_reconcile_resp_definition()
+     ,query_auth_id_req_definition()
+     ,query_auth_id_resp_definition()
+     ,query_user_channels_req_definition()
+@@ -183,6 +194,10 @@ api_definition(<<"channel_status_req">>) ->
+     channel_status_req_definition();
+ api_definition(<<"channel_status_resp">>) ->
+     channel_status_resp_definition();
++api_definition(<<"originate_reconcile_req">>) ->
++    originate_reconcile_req_definition();
++api_definition(<<"originate_reconcile_resp">>) ->
++    originate_reconcile_resp_definition();
+ api_definition(<<"query_auth_id_req">>) ->
+     query_auth_id_req_definition();
+ api_definition(<<"query_auth_id_resp">>) ->
+@@ -400,6 +415,65 @@ channel_status_resp_definition() ->
+               ],
+     kapi_definition:setters(Setters).
+ 
++%% An originate transaction is a FreeSWITCH-owned resource, independent of the
++%% ephemeral ecallmgr process that launched it. Both IDs are immutable original
++%% request values; Msg-ID remains the fresh query correlation ID.
++-spec originate_reconcile_req_definition() -> kapi_definition:api().
++originate_reconcile_req_definition() ->
++    EventName = <<"originate_reconcile_req">>,
++    Category = <<"channel">>,
++    Required = [<<"Originate-UUID">>, <<"Originate-Request-ID">>
++               ,<<"Outbound-Call-ID">>, <<"Operation">>],
++    Setters = [{fun kapi_definition:set_name/2, EventName}
++              ,{fun kapi_definition:set_friendly_name/2, <<"Originate Reconcile Request">>}
++              ,{fun kapi_definition:set_description/2
++               ,<<"Query or cancel an exactly correlated FreeSWITCH originate transaction">>}
++              ,{fun kapi_definition:set_category/2, Category}
++              ,{fun kapi_definition:set_build_fun/2, fun originate_reconcile_req/1}
++              ,{fun kapi_definition:set_validate_fun/2, fun originate_reconcile_req_v/1}
++              ,{fun kapi_definition:set_publish_fun/2, fun publish_originate_reconcile_req/1}
++              ,{fun kapi_definition:set_binding/2, fun query_routing_key/2}
++              ,{fun kapi_definition:set_required_headers/2, Required}
++              ,{fun kapi_definition:set_optional_headers/2, []}
++              ,{fun kapi_definition:set_values/2
++               ,[{<<"Operation">>, [<<"status">>, <<"cancel">>]}
++                | kapi_definition:event_type_headers(Category, EventName)]}
++              ,{fun kapi_definition:set_types/2
++               ,[{Key, fun kz_term:is_ne_binary/1} || Key <- Required]}
++              ],
++    kapi_definition:setters(Setters).
++
++-spec originate_reconcile_resp_definition() -> kapi_definition:api().
++originate_reconcile_resp_definition() ->
++    EventName = <<"originate_reconcile_resp">>,
++    Category = <<"channel">>,
++    Required = [<<"Originate-UUID">>, <<"Originate-Request-ID">>
++               ,<<"Outbound-Call-ID">>, <<"Operation">>, <<"Status">>],
++    Setters = [{fun kapi_definition:set_name/2, EventName}
++              ,{fun kapi_definition:set_friendly_name/2, <<"Originate Reconcile Response">>}
++              ,{fun kapi_definition:set_description/2
++               ,<<"Authoritative per-ecallmgr originate lifecycle observation">>}
++              ,{fun kapi_definition:set_category/2, Category}
++              ,{fun kapi_definition:set_build_fun/2, fun originate_reconcile_resp/1}
++              ,{fun kapi_definition:set_validate_fun/2, fun originate_reconcile_resp_v/1}
++              ,{fun kapi_definition:set_publish_fun/2, fun publish_originate_reconcile_resp/2}
++              ,{fun kapi_definition:set_required_headers/2, Required}
++              ,{fun kapi_definition:set_optional_headers/2
++               ,[<<"Media-Node">>, <<"Module-Epoch">>, <<"Outcome">>
++                ,<<"Result-Call-ID">>, <<"Failure-Cause">>, <<"Detail">>]}
++              ,{fun kapi_definition:set_values/2
++               ,[{<<"Operation">>, [<<"status">>, <<"cancel">>]}
++                ,{<<"Status">>, [<<"pending">>, <<"settled">>, <<"unknown">>]}
++                ,{<<"Outcome">>, [<<"success">>, <<"failure">>]}
++                | kapi_definition:event_type_headers(Category, EventName)]}
++              ,{fun kapi_definition:set_types/2
++               ,[{Key, fun kz_term:is_ne_binary/1} || Key <- Required]
++                ++ [{Key, fun kz_term:is_ne_binary/1}
++                    || Key <- [<<"Media-Node">>, <<"Module-Epoch">>, <<"Outcome">>
++                              ,<<"Result-Call-ID">>, <<"Failure-Cause">>, <<"Detail">>]]}
++              ],
++    kapi_definition:setters(Setters).
++
+ 
+ -spec channel_status_extended_headers() -> kz_term:ne_binaries().
+ channel_status_extended_headers() ->
+@@ -933,6 +1007,51 @@ publish_channel_status_resp(RespQ, Resp, ContentType) ->
+                                                 ),
+     kz_amqp_util:targeted_publish(RespQ, Payload, ContentType).
+ 
++%%------------------------------------------------------------------------------
++%% @doc Query or cancel a correlated FreeSWITCH originate transaction.
++%% @end
++%%------------------------------------------------------------------------------
++-spec originate_reconcile_req(kz_term:api_terms()) -> kz_api:api_formatter_return().
++originate_reconcile_req(Req) ->
++    kapi_definition:build_message(Req, originate_reconcile_req_definition()).
++
++-spec originate_reconcile_req_v(kz_term:api_terms()) -> boolean().
++originate_reconcile_req_v(Req) ->
++    kapi_definition:validate(Req, originate_reconcile_req_definition()).
++
++-spec publish_originate_reconcile_req(kz_term:api_terms()) -> 'ok'.
++publish_originate_reconcile_req(Req) ->
++    publish_originate_reconcile_req(Req, ?DEFAULT_CONTENT_TYPE).
++
++-spec publish_originate_reconcile_req(kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
++publish_originate_reconcile_req(Req, ContentType) ->
++    Definition = originate_reconcile_req_definition(),
++    {'ok', Payload} = kz_api:prepare_api_payload(Req
++                                                ,kapi_definition:values(Definition)
++                                                ,kapi_definition:build_fun(Definition)),
++    kz_amqp_util:channels_publish((kapi_definition:binding(Definition))('status_req', <<"originate">>)
++                                 ,Payload, ContentType).
++
++-spec originate_reconcile_resp(kz_term:api_terms()) -> kz_api:api_formatter_return().
++originate_reconcile_resp(Resp) ->
++    kapi_definition:build_message(Resp, originate_reconcile_resp_definition()).
++
++-spec originate_reconcile_resp_v(kz_term:api_terms()) -> boolean().
++originate_reconcile_resp_v(Resp) ->
++    kapi_definition:validate(Resp, originate_reconcile_resp_definition()).
++
++-spec publish_originate_reconcile_resp(kz_term:ne_binary(), kz_term:api_terms()) -> 'ok'.
++publish_originate_reconcile_resp(RespQ, Resp) ->
++    publish_originate_reconcile_resp(RespQ, Resp, ?DEFAULT_CONTENT_TYPE).
++
++-spec publish_originate_reconcile_resp(kz_term:ne_binary(), kz_term:api_terms(), kz_term:ne_binary()) -> 'ok'.
++publish_originate_reconcile_resp(RespQ, Resp, ContentType) ->
++    Definition = originate_reconcile_resp_definition(),
++    {'ok', Payload} = kz_api:prepare_api_payload(Resp
++                                                ,kapi_definition:values(Definition)
++                                                ,kapi_definition:build_fun(Definition)),
++    kz_amqp_util:targeted_publish(RespQ, Payload, ContentType).
++
+ %%------------------------------------------------------------------------------
+ %% @doc Inquire into the status of a call.
+ %% Takes {@link lz_term:proplist()}, creates JSON string or error.

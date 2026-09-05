@@ -1,0 +1,199 @@
+diff --git a/priv/couchdb/schemas/queues.json b/priv/couchdb/schemas/queues.json
+index 52be2769..3a57baaf 100644
+--- a/priv/couchdb/schemas/queues.json
++++ b/priv/couchdb/schemas/queues.json
+@@ -28,6 +28,13 @@
+                     "minimum": 15,
+                     "type": "integer"
+                 },
++                "language": {
++                    "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used.",
++                    "maxLength": 35,
++                    "minLength": 2,
++                    "pattern": "^[a-z]{2,3}(-[a-z0-9]{2,8})*$",
++                    "type": "string"
++                },
+                 "media": {
+                     "description": "Custom prompts to be played for the announcements",
+                     "properties": {
+@@ -67,6 +74,180 @@
+             },
+             "type": "object"
+         },
++        "callback": {
++            "description": "Authenticated virtual callback configuration. Registrations are created only by a live queue member flow.",
++            "properties": {
++                "allow_alternate_number": {
++                    "default": false,
++                    "description": "Allow a caller to enter and explicitly reconfirm a return number other than the current caller ID",
++                    "type": "boolean"
++                },
++                "use_local_resources": {
++                    "default": false,
++                    "description": "Restrict callback origination to resources owned by the authenticated account",
++                    "type": "boolean"
++                },
++                "enabled": {
++                    "default": false,
++                    "description": "Offer durable virtual callback registration to callers waiting in this queue",
++                    "type": "boolean"
++                },
++                "entry_key": {
++                    "default": "6",
++                    "description": "Single DTMF digit that opens the callback menu while the caller is waiting",
++                    "pattern": "^[0-9]$",
++                    "type": "string"
++                },
++                "handoff_timeout": {
++                    "default": 5,
++                    "description": "Seconds allowed for the queue worker to accept a confirmed returned caller",
++                    "maximum": 10,
++                    "minimum": 1,
++                    "type": "integer"
++                },
++                "max_attempts": {
++                    "default": 3,
++                    "description": "Maximum outbound callback attempts before the registration fails",
++                    "maximum": 10,
++                    "minimum": 1,
++                    "type": "integer"
++                },
++                "media": {
++                    "description": "Optional account media IDs or prompt names overriding generated callback menu audio",
++                    "properties": {
++                        "confirmation": {
++                            "description": "Played after the inbound caller confirms the callback number",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "menu": {
++                            "description": "Callback menu choices played after the initial offer",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "number_readback": {
++                            "description": "Played before speaking the selected callback number",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "offer": {
++                            "description": "Initial callback option offer played while the caller waits",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "returned_confirmation": {
++                            "description": "Played to a returned caller before requiring DTMF 1 confirmation and agent connection",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "success": {
++                            "description": "Played only after durable callback registration is acknowledged",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        }
++                    },
++                    "type": "object"
++                },
++                "menu_timeout_ms": {
++                    "default": 30000,
++                    "description": "Absolute milliseconds allowed for inbound callback menu input and durable registration acknowledgement",
++                    "maximum": 120000,
++                    "minimum": 1000,
++                    "type": "integer"
++                },
++                "originate_timeout": {
++                    "default": 60,
++                    "description": "Seconds allowed for each outbound callback originate request",
++                    "maximum": 300,
++                    "minimum": 5,
++                    "type": "integer"
++                },
++                "outbound_authority": {
++                    "description": "Enabled account-owned endpoint whose restrictions authorize callback origination",
++                    "properties": {
++                        "id": {
++                            "maxLength": 128,
++                            "minLength": 1,
++                            "pattern": "^[A-Za-z0-9_-]+$",
++                            "type": "string"
++                        },
++                        "type": {
++                            "enum": [
++                                "device",
++                                "user"
++                            ],
++                            "type": "string"
++                        }
++                    },
++                    "required": [
++                        "id",
++                        "type"
++                    ],
++                    "type": "object"
++                },
++                "outbound_caller_id": {
++                    "description": "Account-owned caller identity used for returned-caller origination",
++                    "properties": {
++                        "name": {
++                            "maxLength": 128,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "number": {
++                            "pattern": "^\\+?[0-9]{1,15}$",
++                            "type": "string"
++                        }
++                    },
++                    "required": [
++                        "name",
++                        "number"
++                    ],
++                    "type": "object"
++                },
++                "ready_ack_timeout": {
++                    "default": 5,
++                    "description": "Seconds allowed to retain an outbound originate cancellation handle before execution",
++                    "maximum": 10,
++                    "minimum": 1,
++                    "type": "integer"
++                },
++                "retry_delay": {
++                    "default": 60,
++                    "description": "Seconds before an eligible failed callback attempt may be retried",
++                    "maximum": 3600,
++                    "minimum": 15,
++                    "type": "integer"
++                },
++                "confirmation_timeout": {
++                    "default": 10,
++                    "description": "Seconds allowed for the returned caller to press DTMF 1",
++                    "maximum": 30,
++                    "minimum": 3,
++                    "type": "integer"
++                },
++                "success_timeout_ms": {
++                    "default": 10000,
++                    "description": "Milliseconds allowed to finish the inbound success prompt after registration acknowledgement",
++                    "maximum": 30000,
++                    "minimum": 1000,
++                    "type": "integer"
++                },
++                "ttl": {
++                    "default": 3600,
++                    "description": "Maximum lifetime of a callback registration in seconds",
++                    "maximum": 86400,
++                    "minimum": 60,
++                    "type": "integer"
++                }
++            },
++            "type": "object"
++        },
+         "caller_exit_key": {
+             "default": "#",
+             "description": "Key caller can press while on hold to exit the queue and continue in the callflow",

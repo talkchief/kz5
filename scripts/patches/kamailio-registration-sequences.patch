@@ -1,0 +1,51 @@
+diff --git a/kamailio/registrar-query.cfg b/kamailio/registrar-query.cfg
+index 0522e3c..73061eb 100644
+--- a/kamailio/registrar-query.cfg
++++ b/kamailio/registrar-query.cfg
+@@ -7,6 +7,7 @@ kazoo.registrar_query_reply_zones = KZ_REGISTRAR_QUERY_REPLY_ZONES descr "0 - al
+ 
+ route[REGISTRAR_SEARCH_SUMMARY]
+ {
++    $var(RegistrarSequence) = 0;
+     xlog("L_INFO", "processing registrar summary query for $(kzE{kz.json,Realm})\n");
+     $var(Queue) = $(kzE{kz.json,Server-ID});
+     $var(Domain) = $(kzE{kz.json,Realm});
+@@ -29,18 +30,20 @@ route[REGISTRAR_SEARCH_SUMMARY]
+                 pv_unset("$xavp(ra)");
+                 $var(count) = $var(count) + 1;
+             }
+-            $var(amqp_payload_request) = $_s({"Event-Category" : "registration", "Event-Name" : "search_partial_resp", "Msg-ID" : "$(kzE{kz.json,Msg-ID})", "Registrations" : [ $var(Registrations) ] });
++            $var(RegistrarSequence) = $var(RegistrarSequence) + 1;
++            $var(amqp_payload_request) = $_s({"Event-Category" : "registration", "Event-Name" : "search_partial_resp", "Msg-ID" : "$(kzE{kz.json,Msg-ID})", "Registrar-Node" : $def(KAZOO_PROXY_NODE), "Registrar-Sequence" : $var(RegistrarSequence), "Registrations" : [ $var(Registrations) ] });
+             kazoo_publish("targeted", "$var(Queue)", $var(amqp_payload_request));
+         }
+     }
+ 
+-    $var(amqp_payload_request) = '{"Event-Category" : "registration", "Event-Name" : "search_resp", "Msg-ID" : "$(kzE{kz.json,Msg-ID})", "Registrations" : [] }';
++    $var(amqp_payload_request) = $_s({"Event-Category" : "registration", "Event-Name" : "search_resp", "Msg-ID" : "$(kzE{kz.json,Msg-ID})", "Registrar-Node" : $def(KAZOO_PROXY_NODE), "Registrar-Parts" : $var(RegistrarSequence), "Registrations" : [] });
+     kazoo_publish("targeted", "$var(Queue)", $var(amqp_payload_request));
+ 
+ }
+ 
+ route[REGISTRAR_SEARCH_DETAIL]
+ {
++    $var(RegistrarSequence) = 0;
+     xlog("L_INFO", "processing registrar query detail for $(kzE{kz.json,Username}) in realm $(kzE{kz.json,Realm})\n");
+     $var(Queue) = $(kzE{kz.json,Server-ID});
+     $var(Msg-ID) = $(kzE{kz.json,Msg-ID});
+@@ -57,12 +60,13 @@ route[REGISTRAR_SEARCH_DETAIL]
+           $var(Registration) = $_s({"AOR": "$xavp(ra=>username)@$xavp(ra=>domain)", "Contact":"$(xavp(ra=>contact))", "Received":"$(xavp(ra=>received))", "Path":"$(xavp(ra=>path))", "Expires":$(xavp(ra=>expires)), "Call-ID":"$(xavp(ra=>callid))", "CSeq":"$(xavp(ra=>cseq))", "Last-Modified":"$(xavp(ra=>last_modified))", "User-Agent":"$(xavp(ra=>user_agent){s.escape.common}{s.replace,\','}{s.replace,$$,})", "Socket":"$(xavp(ra=>socket))"});
+           pv_unset("$xavp(ra)");
+ 
+-          $var(amqp_payload_request) = '{"Event-Category" : "registration", "Event-Name" : "search_partial_resp", "Msg-ID" : "$var(Msg-ID)", "Registrations" : [ $var(Registration) ] }';
++          $var(RegistrarSequence) = $var(RegistrarSequence) + 1;
++          $var(amqp_payload_request) = $_s({"Event-Category" : "registration", "Event-Name" : "search_partial_resp", "Msg-ID" : "$var(Msg-ID)", "Registrar-Node" : $def(KAZOO_PROXY_NODE), "Registrar-Sequence" : $var(RegistrarSequence), "Registrations" : [ $var(Registration) ] });
+           kazoo_publish("targeted", "$var(Queue)", $var(amqp_payload_request));
+         }
+     }
+ 
+-    $var(amqp_payload_request) = '{"Event-Category" : "registration", "Event-Name" : "search_resp", "Msg-ID" : "$var(Msg-ID)", "Registrations":[] }';
++    $var(amqp_payload_request) = $_s({"Event-Category" : "registration", "Event-Name" : "search_resp", "Msg-ID" : "$var(Msg-ID)", "Registrar-Node" : $def(KAZOO_PROXY_NODE), "Registrar-Parts" : $var(RegistrarSequence), "Registrations":[] });
+     kazoo_publish("targeted", "$var(Queue)", $var(amqp_payload_request));
+ 
+ }

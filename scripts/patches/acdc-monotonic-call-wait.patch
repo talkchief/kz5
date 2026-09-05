@@ -1,0 +1,67 @@
+diff --git a/src/cf_acdc_member.erl b/src/cf_acdc_member.erl
+index 9cec71a..bf7afb3 100644
+--- a/src/cf_acdc_member.erl
++++ b/src/cf_acdc_member.erl
+@@ -18,6 +18,10 @@
+ 
+ -export([handle/2]).
+ 
++-ifdef(TEST).
++-export([remaining_wait_ms/3]).
++-endif.
++
+ -include_lib("callflow/src/callflow.hrl").
+ 
+ -type max_wait() :: pos_integer() | 'infinity'.
+@@ -91,7 +95,7 @@ maybe_enter_queue(#member_call{call=Call
+                               ,max_wait=MaxWait
+                               }=MC
+                  ,'false') ->
+-    lager:info("asking for an agent, waiting up to ~p ms", [MaxWait]),
++    lager:info("asking for an agent, waiting up to ~p seconds", [MaxWait]),
+ 
+     cf_exe:amqp_send(Call, MemberCall, fun kapi_acdc_queue:publish_member_call/1),
+     _ = kapps_call_command:flush_dtmf(Call),
+@@ -107,20 +111,32 @@ wait_for_bridge(MC, Timeout) ->
+ wait_for_bridge(#member_call{call=Call}, Timeout, _Start) when Timeout < 0 ->
+     lager:debug("timeout is less than 0: ~p", [Timeout]),
+     end_member_call(Call);
+-wait_for_bridge(#member_call{call=Call}=MC, Timeout, Start) ->
++wait_for_bridge(#member_call{call=Call, max_wait=MaxWait}=MC, Timeout, Start) ->
+     Wait = kz_time:start_time(),
+-    TimeoutMs = case Timeout of
+-                    'infinity' -> 'infinity';
+-                    _ -> Timeout * ?MILLISECONDS_IN_SECOND
+-                end,
+-    receive
+-        {'amqp_msg', JObj} ->
+-            process_message(MC, Timeout, Start, Wait, JObj, kz_api:event_type(JObj))
+-    after TimeoutMs ->
++    %% A per-message decrement rounds each elapsed interval down to seconds.
++    %% Frequent events can then extend a caller's wait indefinitely. Derive
++    %% every receive timeout from the original monotonic entry time instead.
++    case remaining_wait_ms(MaxWait, Start, Wait) of
++        0 ->
+             lager:info("failed to handle the call in time, proceeding"),
+-            end_member_call(Call)
++            end_member_call(Call);
++        TimeoutMs ->
++            receive
++                {'amqp_msg', JObj} ->
++                    process_message(MC, Timeout, Start, Wait, JObj, kz_api:event_type(JObj))
++            after TimeoutMs ->
++                    wait_for_bridge(MC, Timeout, Start)
++            end
+     end.
+ 
++-spec remaining_wait_ms(max_wait(), kz_time:start_time(), kz_time:start_time()) -> timeout().
++remaining_wait_ms('infinity', _Start, _Now) -> 'infinity';
++remaining_wait_ms(MaxWait, Start, Now) ->
++    Remaining = max(0, MaxWait * ?MILLISECONDS_IN_SECOND - kz_time:elapsed_ms(Start, Now)),
++    %% Bound each receive to OTP's timer range; longer configured waits are
++    %% rechecked against the same deadline when this bounded chunk expires.
++    min(Remaining, 16#ffffffff).
++
+ end_member_call(Call) ->
+     cancel_member_call(Call, ?MEMBER_TIMEOUT),
+     stop_hold_music(Call),

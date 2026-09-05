@@ -1,0 +1,463 @@
+diff --git a/src/acdc_queue_fsm.erl b/src/acdc_queue_fsm.erl
+index e347d75..25ea1fd 100644
+--- a/src/acdc_queue_fsm.erl
++++ b/src/acdc_queue_fsm.erl
+@@ -37,6 +37,13 @@
+         ,connecting/3
+         ]).
+ 
++-ifdef(TEST).
++-export([announcement_media/3
++        ,announcement_event_id/1
++        ,start_announcement/2
++        ]).
++-endif.
++
+ %% gen_statem callbacks
+ -export([init/1
+         ,callback_mode/0
+@@ -60,6 +67,9 @@
+ -define(AGENT_RING_TIMEOUT, 5).
+ -define(AGENT_RING_TIMEOUT_MESSAGE, 'agent_timer_expired').
+ 
++-define(ANNOUNCE_TIMEOUT, 120 * ?MILLISECONDS_IN_SECOND).
++-define(ANNOUNCE_TIMEOUT_MESSAGE, 'announce_timer_expired').
++
+ -record(state, {listener_proc :: kz_term:api_pid()
+                ,manager_proc :: pid()
+                ,connect_resps = [] :: kz_json:objects()
+@@ -77,6 +87,11 @@
+                ,member_call_start :: kz_time:start_time() | 'undefined'
+                ,member_call_winners :: [kz_term:api_object()] %% who won the call
+ 
++               ,announce_played = 'false' :: boolean()
++               ,announce_id :: kz_term:api_ne_binary()
++               ,announce_timer_ref :: kz_term:api_reference()
++               ,pending_queue_opts = [] :: kz_term:proplist()
++
+                                        %% Config options
+                ,name :: kz_term:ne_binary()
+                ,connection_timeout :: pos_integer()
+@@ -168,6 +183,16 @@ call_event(ServerRef, <<"call_event">>, <<"CHANNEL_DESTROY">>, EvtJObj) ->
+     gen_statem:cast(ServerRef, {'member_hungup', EvtJObj});
+ call_event(ServerRef, <<"call_event">>, <<"CHANNEL_BRIDGE">>, EvtJObj) ->
+     gen_statem:cast(ServerRef, {'channel_bridged', EvtJObj});
++call_event(ServerRef, <<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>, EvtJObj) ->
++    case announcement_event_id(EvtJObj) of
++        'undefined' -> 'ok';
++        NoopId -> gen_statem:cast(ServerRef, {'announcement_complete', NoopId})
++    end;
++call_event(ServerRef, <<"error">>, _Name, EvtJObj) ->
++    case announcement_error_id(EvtJObj) of
++        'undefined' -> 'ok';
++        NoopId -> gen_statem:cast(ServerRef, {'announcement_error', NoopId})
++    end;
+ call_event(_, _E, _N, _J) -> 'ok'.
+ 
+ -spec current_call(pid()) -> kz_term:api_object().
+@@ -300,6 +325,8 @@ ready({'call', From}, Event, State) ->
+     handle_sync_event(Event, From, ready, State);
+ 
+ ready('info', {'timeout', _, ?COLLECT_RESP_MESSAGE}, State) ->
++    {'next_state', 'ready', State};
++ready('info', {'timeout', _, ?ANNOUNCE_TIMEOUT_MESSAGE}, State) ->
+     {'next_state', 'ready', State}.
+ 
+ %%------------------------------------------------------------------------------
+@@ -413,6 +440,8 @@ connect_req('info', {'timeout', Ref, ?COLLECT_RESP_MESSAGE}, #state{collect_ref=
+     end;
+ connect_req('info', {'timeout', Ref, ?COLLECT_RESP_MESSAGE}, #state{collect_ref=Ref}=State) ->
+     handle_agent_responses(State);
++connect_req('info', {'timeout', _, ?ANNOUNCE_TIMEOUT_MESSAGE}, State) ->
++    {'next_state', 'connect_req', State};
+ connect_req('info', {'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, State) ->
+     handle_connection_timeout(ConnRef, State).
+ 
+@@ -433,6 +462,17 @@ connecting('cast', {'agent_resp', _Resp}, State) ->
+     lager:debug("agent resp must have just missed cutoff"),
+     {'next_state', 'connecting', State};
+ 
++connecting('cast', {'announcement_complete', NoopId}, #state{announce_id=NoopId}=State) ->
++    lager:debug("queue pre-connect announcement completed"),
++    connect_pending_winners(State);
++connecting('cast', {'announcement_complete', _OtherNoopId}, State) ->
++    {'next_state', 'connecting', State};
++connecting('cast', {'announcement_error', NoopId}, #state{announce_id=NoopId}=State) ->
++    lager:warning("queue pre-connect announcement failed; continuing to the selected agent"),
++    connect_pending_winners(State);
++connecting('cast', {'announcement_error', _OtherNoopId}, State) ->
++    {'next_state', 'connecting', State};
++
+ connecting('cast', {'accepted', AcceptJObj}, #state{listener_proc=ListenerSrv
+                                                    ,member_call=Call
+                                                    ,account_id=AccountId
+@@ -559,6 +599,15 @@ connecting('info', {'timeout', _AgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}, #state{m
+ connecting('info', {'timeout', _OtherAgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}, #state{agent_ring_timer_ref=_AgentRef}=State) ->
+     lager:debug("unknown agent ref: ~p known: ~p", [_OtherAgentRef, _AgentRef]),
+     {'next_state', 'connect_req', State};
++connecting('info', {'timeout', Ref, ?ANNOUNCE_TIMEOUT_MESSAGE}, #state{announce_timer_ref=Ref
++                                                                      ,member_call=Call
++                                                                      }=State) ->
++    lager:warning("queue pre-connect announcement timed out; flushing playback and continuing"),
++    _ = kapps_call_command:flush(Call),
++    connect_pending_winners(State);
++connecting('info', {'timeout', _Ref, ?ANNOUNCE_TIMEOUT_MESSAGE}, State) ->
++    %% cancel_timer/1 cannot retract an already-delivered timeout message.
++    {'next_state', 'connecting', State};
+ connecting('info', {'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, State) ->
+     handle_connection_timeout(ConnRef, State).
+ 
+@@ -707,20 +756,27 @@ maybe_stop_timer(ConnRef) ->
+ -spec clear_member_call(state()) -> state().
+ clear_member_call(#state{connection_timer_ref=ConnRef
+                         ,agent_ring_timer_ref=AgentRef
++                        ,announce_timer_ref=AnnounceRef
+                         ,collect_ref=CollectRef
+                         ,queue_id=QueueId
+                         }=State) ->
+     kz_log:put_callid(QueueId),
+     maybe_stop_timer(ConnRef),
+     maybe_stop_timer(AgentRef),
++    maybe_stop_timer(AnnounceRef),
+     maybe_stop_timer(CollectRef),
+     State#state{connect_resps=[]
++               ,connect_wins=[]
+                ,collect_ref='undefined'
+                ,member_call='undefined'
+                ,connection_timer_ref='undefined'
+                ,agent_ring_timer_ref='undefined'
+                ,member_call_start='undefined'
+                ,member_call_winners=[]
++               ,announce_played='false'
++               ,announce_id='undefined'
++               ,announce_timer_ref='undefined'
++               ,pending_queue_opts=[]
+                }.
+ 
+ update_properties(QueueJObj, State) ->
+@@ -871,7 +927,6 @@ handle_agent_responses(#state{collect_ref=Ref
+ 
+ -spec maybe_pick_winner(state()) -> kz_types:handle_fsm_ret(state()).
+ maybe_pick_winner(#state{connect_resps=CRs
+-                        ,listener_proc=ListenerSrv
+                         ,manager_proc=Mgr
+                         ,agent_ring_timeout=RingTimeout
+                         ,agent_wrapup_time=AgentWrapup
+@@ -891,26 +946,116 @@ maybe_pick_winner(#state{connect_resps=CRs
+                           ,{<<"Notifications">>, Notifications}
+                           ]),
+ 
+-            ConnectWins = lists:foldl(fun(Winner, Wins) ->
+-                                              NewAgent = update_agent(Winner, Winners),
+-                                              lager:debug("sending win to ~s(~s)", [kz_json:get_value(<<"Agent-ID">>, Winner)
+-                                                                                   ,kz_json:get_value(<<"Process-ID">>, Winner)
+-                                                                                   ]),
+-                                              acdc_queue_listener:member_connect_win(ListenerSrv, NewAgent, QueueOpts),
+-                                              [NewAgent|Wins] end,
+-                                      [], Winners),
+-
+-            {'next_state', 'connecting', State#state{connect_resps=[]
+-                                                    ,connect_wins=ConnectWins
+-                                                    ,collect_ref='undefined'
+-                                                    ,agent_ring_timer_ref=start_agent_ring_timer(RingTimeout)
+-                                                    ,member_call_winners=Winners
+-                                                    }};
++            ConnectWins = [update_agent(Winner, Winners) || Winner <- Winners],
++            maybe_announce_before_connect(
++              State#state{connect_resps=[]
++                         ,connect_wins=ConnectWins
++                         ,collect_ref='undefined'
++                         ,member_call_winners=Winners
++                         ,pending_queue_opts=QueueOpts
++                         });
+         'undefined' ->
+             lager:debug("no more responses to choose from"),
+             maybe_abort_connect_req(fun maybe_delay_connect_re_req/1, [], State#state{connect_resps=[]})
+     end.
+ 
++%% Resolve both account media IDs and already-qualified media URIs through the
++%% same path used by callflow playback. Once a call has crossed this barrier it
++%% must not hear the announcement again when another agent is tried.
++-spec announcement_media(boolean(), kz_term:api_binary(), kz_term:ne_binary()) ->
++          'skip' | {'play', kz_term:ne_binary()}.
++announcement_media('true', _Announce, _AccountId) -> 'skip';
++announcement_media('false', Announce, AccountId) ->
++    case kz_media_util:media_path(Announce, AccountId) of
++        'undefined' -> 'skip';
++        Media -> {'play', Media}
++    end.
++
++-spec maybe_announce_before_connect(state()) -> kz_types:handle_fsm_ret(state()).
++maybe_announce_before_connect(#state{announce_played=Played
++                                    ,announce=Announce
++                                    ,account_id=AccountId
++                                    ,manager_proc=Manager
++                                    ,member_call=Call
++                                    }=State) ->
++    case announcement_media(Played, Announce, AccountId) of
++        'skip' -> connect_pending_winners(State#state{announce_played='true'});
++        {'play', Media} ->
++            %% Stop the independent periodic producer before the flush/play
++            %% pair so it cannot enqueue position media inside this barrier.
++            'ok' = acdc_queue_manager:stop_announcements(
++                     Manager, kapps_call:call_id(Call)),
++            NoopId = start_announcement(Media, Call),
++            lager:debug("waiting for queue pre-connect announcement ~s", [NoopId]),
++            {'next_state', 'connecting'
++            ,State#state{announce_played='true'
++                        ,announce_id=NoopId
++                        ,announce_timer_ref=erlang:start_timer(?ANNOUNCE_TIMEOUT
++                                                              ,self()
++                                                              ,?ANNOUNCE_TIMEOUT_MESSAGE)
++                        }
++            }
++    end.
++
++%% The queue manager puts the caller into endless hold playback before the FSM
++%% starts selecting agents. Publish one atomic flush-and-play queue command so
++%% the announcement cannot remain behind MOH or be reordered between separate
++%% AMQP messages. The terminal noop is the asynchronous FSM barrier.
++-spec start_announcement(kz_term:ne_binary(), kapps_call:call()) -> kz_term:ne_binary().
++start_announcement(Media, Call) ->
++    NoopId = kapps_call_command:noop_id(),
++    Commands = [kz_json:from_list([{<<"Application-Name">>, <<"noop">>}
++                                  ,{<<"Call-ID">>, kapps_call:call_id(Call)}
++                                  ,{<<"Msg-ID">>, NoopId}
++                                  ])
++               ,kapps_call_command:play_command(Media, Call)
++               ],
++    Command = [{<<"Application-Name">>, <<"queue">>}
++              ,{<<"Insert-At">>, <<"flush">>}
++              ,{<<"Commands">>, Commands}
++              ],
++    'ok' = kapps_call_command:send_command(Command, Call),
++    NoopId.
++
++-spec connect_pending_winners(state()) -> kz_types:handle_fsm_ret(state()).
++connect_pending_winners(#state{listener_proc=ListenerSrv
++                              ,connect_wins=ConnectWins
++                              ,pending_queue_opts=QueueOpts
++                              ,agent_ring_timeout=RingTimeout
++                              ,announce_timer_ref=AnnounceRef
++                              }=State) ->
++    maybe_stop_timer(AnnounceRef),
++    lists:foreach(
++      fun(Winner) ->
++              lager:debug("sending win to ~s(~s)", [kz_json:get_value(<<"Agent-ID">>, Winner)
++                                                   ,kz_json:get_value(<<"Process-ID">>, Winner)
++                                                   ]),
++              acdc_queue_listener:member_connect_win(ListenerSrv, Winner, QueueOpts)
++      end,
++      ConnectWins),
++    {'next_state', 'connecting'
++    ,State#state{agent_ring_timer_ref=start_agent_ring_timer(RingTimeout)
++                ,announce_id='undefined'
++                ,announce_timer_ref='undefined'
++                ,pending_queue_opts=[]
++                }
++    }.
++
++-spec announcement_event_id(kz_call_event:payload()) -> kz_term:api_ne_binary().
++announcement_event_id(EvtJObj) ->
++    case kz_call_event:application_name(EvtJObj) of
++        <<"noop">> -> kz_call_event:application_response(EvtJObj);
++        _ -> 'undefined'
++    end.
++
++-spec announcement_error_id(kz_call_event:payload()) -> kz_term:api_ne_binary().
++announcement_error_id(EvtJObj) ->
++    Request = kz_call_event:request(EvtJObj),
++    case kz_call_event:application_name(Request) of
++        <<"noop">> -> kz_api:msg_id(Request);
++        _ -> 'undefined'
++    end.
++
+ -spec have_agents_responded(kz_json:objects(), kz_term:ne_binaries()) -> boolean().
+ have_agents_responded(Resps, Agents) ->
+     lists:foldl(fun filter_agents/2, Agents, Resps) =:= [].
+diff --git a/src/acdc_queue_manager.erl b/src/acdc_queue_manager.erl
+index 42be958..b6f0bdb 100644
+--- a/src/acdc_queue_manager.erl
++++ b/src/acdc_queue_manager.erl
+@@ -31,6 +31,7 @@
+         ,queue_size/1
+         ,should_ignore_member_call/3, should_ignore_member_call/4
+         ,up_next/2
++        ,stop_announcements/2
+         ,config/1
+         ,status/1
+         ,agents/1
+@@ -57,6 +58,7 @@
+ 
+         ,assignable_agent_count/1
+         ,agent_count/1
++        ,take_position_announcement/2
+         ]).
+ -endif.
+ 
+@@ -268,6 +270,13 @@ should_ignore_member_call(Srv, Call, AccountId, QueueId) ->
+ up_next(Srv, CallId) ->
+     gen_listener:call(Srv, {'up_next', CallId}).
+ 
++%% Stop only the periodic position/wait announcement producer. The member
++%% remains in current_member_calls, so queue position and waiting stats are
++%% unchanged while its one-time pre-connect announcement is played.
++-spec stop_announcements(pid(), kz_term:ne_binary()) -> 'ok'.
++stop_announcements(Srv, CallId) ->
++    gen_listener:call(Srv, {'stop_announcements', CallId}).
++
+ -spec config(pid()) -> {kz_term:ne_binary(), kz_term:ne_binary()}.
+ config(Srv) -> gen_listener:call(Srv, 'config').
+ 
+@@ -397,6 +406,10 @@ handle_call({'queue_position', CallId}, _, #state{current_member_calls=Calls}=St
+     Position = queue_member_position(CallId, lists:reverse(Calls)),
+     {'reply', Position, State};
+ 
++handle_call({'stop_announcements', CallId}, _, #state{announcements_pids=Pids}=State) ->
++    Pids1 = stop_position_announcements(CallId, Pids),
++    {'reply', 'ok', State#state{announcements_pids=Pids1}};
++
+ handle_call({'add_diagnostics_receiver', Receiver}, _, State) ->
+     DiagnosticsPids = get(?KEY_DIAGNOSTICS_PIDS),
+     put(?KEY_DIAGNOSTICS_PIDS, [Receiver | DiagnosticsPids]),
+@@ -1034,13 +1047,12 @@ announcements_config(Config) ->
+ cancel_position_announcements('false', Pids) -> Pids;
+ cancel_position_announcements(Call, Pids) ->
+     CallId = kapps_call:call_id(Call),
+-    case catch maps:get(CallId, Pids) of
+-        {'badkey', _} ->
++    case take_position_announcement(CallId, Pids) of
++        {'undefined', _} ->
+             lager:debug("did not have the announcements for call ~s", [CallId]),
+             Pids;
+-        Pid ->
++        {Pid, Pids1} ->
+             lager:debug("cancelling announcements for ~s", [CallId]),
+-            Pids1 = maps:remove(CallId, Pids),
+             _ = acdc_announcements_sup:stop_announcements(Pid),
+ 
+             %% Attempt to skip remaining announcement media, but don't flush hangups
+@@ -1054,6 +1066,24 @@ cancel_position_announcements(Call, Pids) ->
+             Pids1
+     end.
+ 
++-spec stop_position_announcements(kz_term:ne_binary(), map()) -> map().
++stop_position_announcements(CallId, Pids) ->
++    case take_position_announcement(CallId, Pids) of
++        {'undefined', Pids} -> Pids;
++        {Pid, Pids1} ->
++            lager:debug("stopping periodic announcements before connecting call ~s", [CallId]),
++            _ = acdc_announcements_sup:stop_announcements(Pid),
++            Pids1
++    end.
++
++-spec take_position_announcement(kz_term:ne_binary(), map()) ->
++          {'undefined', map()} | {pid(), map()}.
++take_position_announcement(CallId, Pids) ->
++    case maps:take(CallId, Pids) of
++        'error' -> {'undefined', Pids};
++        {Pid, Pids1} -> {Pid, Pids1}
++    end.
++
+ -spec remove_queue_member(kz_term:api_binary(), mgr_state()) -> mgr_state().
+ remove_queue_member(CallId, #state{current_member_calls=CurrentCalls
+                                   ,announcements_pids=AnnouncementsPids
+diff --git a/test/acdc_queue_fsm_tests.erl b/test/acdc_queue_fsm_tests.erl
+new file mode 100644
+index 0000000..c828feb
+--- /dev/null
++++ b/test/acdc_queue_fsm_tests.erl
+@@ -0,0 +1,75 @@
++%%%-----------------------------------------------------------------------------
++%%% @copyright (C) 2026 2600Hz
++%%% @doc Queue pre-connect announcement regression tests.
++%%% This Source Code Form is subject to the terms of the Mozilla Public
++%%% License, v. 2.0. If a copy of the MPL was not distributed with this
++%%% file, You can obtain one at https://mozilla.org/MPL/2.0/.
++%%%-----------------------------------------------------------------------------
++-module(acdc_queue_fsm_tests).
++
++-include_lib("eunit/include/eunit.hrl").
++
++-define(ACCOUNT_ID, <<"00000000000000000000000000000001">>).
++
++announcement_media_test_() ->
++    [{"account media IDs resolve in the member account"
++     ,?_assertEqual({'play', <<"/", ?ACCOUNT_ID/binary, "/queue-greeting">>}
++                   ,acdc_queue_fsm:announcement_media('false', <<"queue-greeting">>, ?ACCOUNT_ID))
++     }
++    ,{"system media URIs are preserved"
++     ,?_assertEqual({'play', <<"system_media/queue-greeting">>}
++                   ,acdc_queue_fsm:announcement_media(
++                      'false', <<"system_media/queue-greeting">>, ?ACCOUNT_ID))
++     }
++    ,{"stream URIs are preserved"
++     ,?_assertEqual({'play', <<"local_stream://default">>}
++                   ,acdc_queue_fsm:announcement_media(
++                      'false', <<"local_stream://default">>, ?ACCOUNT_ID))
++     }
++    ,{"an absent announcement is skipped"
++     ,?_assertEqual('skip'
++                   ,acdc_queue_fsm:announcement_media('false', 'undefined', ?ACCOUNT_ID))
++     }
++    ,{"agent retries never repeat an announcement"
++     ,?_assertEqual('skip'
++                   ,acdc_queue_fsm:announcement_media('true', <<"queue-greeting">>, ?ACCOUNT_ID))
++     }
++    ].
++
++announcement_event_id_test_() ->
++    NoopId = <<"announcement-noop">>,
++    [{"the matching noop completion supplies the barrier ID"
++     ,?_assertEqual(NoopId
++                   ,acdc_queue_fsm:announcement_event_id(
++                      kz_json:from_list([{<<"Application-Name">>, <<"noop">>}
++                                        ,{<<"Application-Response">>, NoopId}
++                                        ])))
++     }
++    ,{"unrelated execute-complete events cannot release the barrier"
++     ,?_assertEqual('undefined'
++                   ,acdc_queue_fsm:announcement_event_id(
++                      kz_json:from_list([{<<"Application-Name">>, <<"play">>}
++                                        ,{<<"Application-Response">>, NoopId}
++                                        ])))
++     }
++    ].
++
++announcement_command_order_test() ->
++    TestPid = self(),
++    Publisher = fun(Command, _Call) -> TestPid ! {'command', Command}, 'ok' end,
++    Call0 = kapps_call:set_call_id(<<"announcement-call">>, kapps_call:new()),
++    Call = kapps_call:set_custom_publish_function(Publisher, Call0),
++    NoopId = acdc_queue_fsm:start_announcement(<<"system_media/queue-greeting">>, Call),
++    PlayQueue = receive {'command', PlayCommand} -> PlayCommand after 100 -> timeout end,
++    ?assertEqual(<<"queue">>, props:get_value(<<"Application-Name">>, PlayQueue)),
++    ?assertEqual(<<"flush">>, props:get_value(<<"Insert-At">>, PlayQueue)),
++    Commands = props:get_value(<<"Commands">>, PlayQueue),
++    [TerminalNoop, Play] = Commands,
++    ?assertEqual(NoopId, kz_json:get_value(<<"Msg-ID">>, TerminalNoop)),
++    ?assertEqual(<<"play">>, kz_json:get_value(<<"Application-Name">>, Play)),
++    ?assertEqual(<<"system_media/queue-greeting">>, kz_json:get_value(<<"Media-Name">>, Play)),
++    receive
++        {'command', _UnexpectedSecondPublish} -> ?assert(false)
++    after 20 ->
++        ok
++    end.
+diff --git a/test/acdc_queue_manager_tests.erl b/test/acdc_queue_manager_tests.erl
+index 7a974ea..6e390ba 100644
+--- a/test/acdc_queue_manager_tests.erl
++++ b/test/acdc_queue_manager_tests.erl
+@@ -49,3 +49,13 @@ agent_count_1_busy_agent_test_() ->
+     State2 = State1#state{strategy_state=SS2},
+     [?_assertEqual(0, acdc_queue_manager:assignable_agent_count(State2))
+     ,?_assertEqual(1, acdc_queue_manager:agent_count(State2))].
++
++take_position_announcement_test() ->
++    CallId = <<"member-call">>,
++    OtherCallId = <<"other-call">>,
++    AnnouncementPid = self(),
++    Pids = #{CallId => AnnouncementPid, OtherCallId => AnnouncementPid},
++    ?assertEqual({AnnouncementPid, #{OtherCallId => AnnouncementPid}},
++                 acdc_queue_manager:take_position_announcement(CallId, Pids)),
++    ?assertEqual({'undefined', Pids},
++                 acdc_queue_manager:take_position_announcement(<<"missing">>, Pids)).

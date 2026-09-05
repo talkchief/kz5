@@ -1,0 +1,82 @@
+diff --git a/src/modules/cb_devices.erl b/src/modules/cb_devices.erl
+index 07fb9c62..ce32ef94 100644
+--- a/src/modules/cb_devices.erl
++++ b/src/modules/cb_devices.erl
+@@ -362,15 +362,20 @@ load_device_status(Context, View, Selector, ValueFun) ->
+     AccountRealm = kz_term:to_lower_binary(
+                      kzd_accounts:fetch_realm(cb_context:account_id(Context))
+                     ),
+-    RegUsernames = lookup_regs(AccountRealm, 'sets'),
+-
+-    MapperFun = fun(J, A) ->
+-                        normalize_reg_devices(J, A, RegUsernames, NotRegTypes, ValueFun, AccountRealm)
+-                end,
+-    Options = [{'doc_type', kzd_devices:type()}
+-              ,{'mapper', MapperFun}
+-              ],
+-    crossbar_view:find(Context, View, Selector, Options).
++    case lookup_regs(AccountRealm, 'sets') of
++        {'error', _} ->
++            cb_context:add_system_error(503, <<"registration_unavailable">>
++                                        ,<<"Registration status could not be verified; retry shortly">>
++                                        ,Context);
++        RegUsernames ->
++            MapperFun = fun(J, A) ->
++                                normalize_reg_devices(J, A, RegUsernames, NotRegTypes, ValueFun, AccountRealm)
++                        end,
++            Options = [{'doc_type', kzd_devices:type()}
++                      ,{'mapper', MapperFun}
++                      ],
++            crossbar_view:find(Context, View, Selector, Options)
++    end.
+ 
+ -spec normalize_reg_devices(kz_json:object(), kz_json:objects(), gb_sets:set(kz_term:ne_binaries())
+                            ,kz_term:ne_binaries(), fun((kz_json:object()) -> kz_json:object()), kz_term:ne_binary()
+@@ -396,21 +401,22 @@ normalize_reg_devices(JObj, Acc, RegUsernames, NotRegTypes, ValueFun, AccountRea
+     end.
+ 
+ %%------------------------------------------------------------------------------
+-%% @doc Returns the complete list of registrations in a the first registrar
+-%% to respond for a given account realm.  This is not 100% accurate
+-%% as an endpoint might be stored in another registrar, but it is
+-%% accurate enough for the status icons.
++%% @doc Returns a complete, correlated snapshot from the advertised registrars.
++%% Incomplete or legacy unnumbered replies are unavailable, not proof that a
++%% currently registered endpoint is offline.
+ %% @end
+ %%------------------------------------------------------------------------------
+--spec lookup_regs(kz_term:ne_binary()) -> kz_json:objects().
++-spec lookup_regs(kz_term:ne_binary()) -> kz_json:objects() | {'error', any()}.
+ lookup_regs(AccountRealm) ->
+     lookup_regs(AccountRealm, 'list').
+ 
+ -spec lookup_regs(kz_term:ne_binary(), 'sets' | 'list') ->
+-          kz_json:objects() | gb_sets:set(kz_term:ne_binaries()).
++          kz_json:objects() | gb_sets:set(kz_term:ne_binaries()) | {'error', any()}.
+ lookup_regs(AccountRealm, ReturnType) ->
+-    Regs = search_registrations(AccountRealm),
+-    process_regs(Regs, ReturnType).
++    case search_registrations(AccountRealm) of
++        {'error', _}=Error -> Error;
++        Regs -> process_regs(Regs, ReturnType)
++    end.
+ 
+ -spec process_regs(kz_term:ne_binaries(), 'sets' | 'list') ->
+           kz_json:objects() | gb_sets:set(kz_term:ne_binaries()).
+@@ -424,11 +430,12 @@ process_regs(Registrations, 'list') ->
+      || AuthorizingId <- Registrations
+     ].
+ 
+--spec search_registrations(kz_term:ne_binary()) -> kz_term:ne_binaries().
++-spec search_registrations(kz_term:ne_binary()) -> kz_term:ne_binaries() | {'error', any()}.
+ search_registrations(AccountRealm) ->
+-    [kz_term:to_lower_binary(Username)
+-     || Username <- kapi_registration:search_realm_regs(AccountRealm, <<"summary">>)
+-    ].
++    case kapi_registration:search_realm_regs(AccountRealm, <<"summary">>) of
++        {'error', _}=Error -> Error;
++        Usernames -> [kz_term:to_lower_binary(Username) || Username <- Usernames]
++    end.
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Perform actions on a device.

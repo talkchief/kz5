@@ -1,0 +1,264 @@
+diff --git a/kazoo_commands.c b/kazoo_commands.c
+index 16f00ad..1ec3f2e 100644
+--- a/kazoo_commands.c
++++ b/kazoo_commands.c
+@@ -31,6 +31,8 @@
+  *
+  */
+ #include "mod_kazoo.h"
++#include <ctype.h>
++#include <errno.h>
+ #include <curl/curl.h>
+ #include <switch_curl.h>
+ 
+@@ -48,6 +50,206 @@
+ 
+ #define MAX_FIRST_OF 25
+ 
++#define KZ_ORIGINATE_DESC "Originate a call without reparsing quoted channel variables"
++#define KZ_ORIGINATE_SYNTAX "<request_uuid> <call url> <exten>|&<application_name>(<app_args>) [<dialplan>] [<context>] [<cid_name>] [<cid_num>] [<timeout_sec>]"
++#define KZ_ORIGINATE_CANCEL_DESC "Cancel an in-progress Kazoo originate"
++#define KZ_ORIGINATE_CANCEL_SYNTAX "<request_uuid>"
++
++static switch_hash_t *kz_originate_hash = NULL;
++static switch_mutex_t *kz_originate_mutex = NULL;
++
++/* Preserve the quotes which protect spaces in Kazoo channel variables. */
++static char *kz_originate_action(char *dialstring)
++{
++	char quote = '\0';
++	int escaped = 0;
++	int square = 0, curly = 0, angle = 0;
++	char *p;
++
++	for (p = dialstring; p && *p; p++) {
++		if (escaped) {
++			escaped = 0;
++			continue;
++		}
++		if (*p == '\\') {
++			escaped = 1;
++			continue;
++		}
++		if (quote) {
++			if (*p == quote) quote = '\0';
++			continue;
++		}
++		if (*p == '\'' || *p == '"') {
++			quote = *p;
++			continue;
++		}
++
++		switch (*p) {
++		case '[': square++; break;
++		case ']': if (square) square--; break;
++		case '{': curly++; break;
++		case '}': if (curly) curly--; break;
++		case '<': angle++; break;
++		case '>': if (angle) angle--; break;
++		default: break;
++		}
++
++		if (!square && !curly && !angle && isspace((unsigned char)*p)) {
++			*p++ = '\0';
++			while (*p && isspace((unsigned char)*p)) p++;
++			return p;
++		}
++	}
++
++	return NULL;
++}
++
++static switch_bool_t kz_originate_register(const char *request_uuid, switch_call_cause_t *cancel_cause)
++{
++	switch_bool_t registered = SWITCH_FALSE;
++
++	switch_mutex_lock(kz_originate_mutex);
++	if (!switch_core_hash_find(kz_originate_hash, request_uuid)) {
++		switch_core_hash_insert(kz_originate_hash, request_uuid, cancel_cause);
++		registered = SWITCH_TRUE;
++	}
++	switch_mutex_unlock(kz_originate_mutex);
++
++	return registered;
++}
++
++static void kz_originate_unregister(const char *request_uuid)
++{
++	switch_mutex_lock(kz_originate_mutex);
++	switch_core_hash_delete(kz_originate_hash, request_uuid);
++	switch_mutex_unlock(kz_originate_mutex);
++}
++
++SWITCH_STANDARD_API(kz_originate_cancel)
++{
++	switch_call_cause_t *cancel_cause = NULL;
++
++	if (zstr(cmd)) {
++		stream->write_function(stream, "-USAGE: %s\n", KZ_ORIGINATE_CANCEL_SYNTAX);
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	switch_mutex_lock(kz_originate_mutex);
++	cancel_cause = switch_core_hash_find(kz_originate_hash, cmd);
++	if (cancel_cause) *cancel_cause = SWITCH_CAUSE_ORIGINATOR_CANCEL;
++	switch_mutex_unlock(kz_originate_mutex);
++
++	if (cancel_cause) {
++		stream->write_function(stream, "+OK\n");
++	} else {
++		stream->write_function(stream, "-ERR No such originate request\n");
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++SWITCH_STANDARD_API(kz_originate)
++{
++	switch_core_session_t *caller_session = NULL;
++	switch_channel_t *caller_channel;
++	switch_call_cause_t cause = SWITCH_CAUSE_NORMAL_CLEARING;
++	switch_call_cause_t cancel_cause = 0;
++	switch_status_t status = SWITCH_STATUS_SUCCESS;
++	char *mycmd = NULL, *request_uuid, *dialstring, *action;
++	char *argv[8] = { 0 };
++	char *exten, *dp, *context, *cid_name, *cid_num;
++	uint32_t timeout = 60;
++	unsigned long parsed_timeout;
++	char *timeout_end = NULL;
++	int argc, x;
++
++	if (zstr(cmd) || !(mycmd = strdup(cmd))) {
++		stream->write_function(stream, "-USAGE: %s\n", KZ_ORIGINATE_SYNTAX);
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	request_uuid = mycmd;
++	dialstring = strchr(mycmd, ' ');
++	if (!dialstring) goto usage;
++	*dialstring++ = '\0';
++	while (*dialstring && isspace((unsigned char)*dialstring)) dialstring++;
++	if (zstr(request_uuid) || zstr(dialstring)) goto usage;
++
++	action = kz_originate_action(dialstring);
++	if (zstr(dialstring) || zstr(action)) goto usage;
++	argc = switch_separate_string(action, ' ', argv, (sizeof(argv) / sizeof(argv[0])));
++	if (argc < 1 || argc > 6) goto usage;
++
++	for (x = 0; x < argc && argv[x]; x++) {
++		if (!strcasecmp(argv[x], "undef")) argv[x] = NULL;
++	}
++
++	exten = argv[0];
++	dp = argv[1] ? argv[1] : "XML";
++	context = argv[2] ? argv[2] : "default";
++	cid_name = argv[3];
++	cid_num = argv[4];
++	if (argv[5]) {
++		errno = 0;
++		parsed_timeout = strtoul(argv[5], &timeout_end, 10);
++		if (errno || !timeout_end || *timeout_end || !parsed_timeout || parsed_timeout > UINT32_MAX) goto usage;
++		timeout = (uint32_t) parsed_timeout;
++	}
++
++	if (!kz_originate_register(request_uuid, &cancel_cause)) {
++		stream->write_function(stream, "-ERR Originate request already exists\n");
++		goto done;
++	}
++
++	if (switch_ivr_originate(NULL, &caller_session, &cause, dialstring, timeout,
++						 NULL, cid_name, cid_num, NULL, NULL, SOF_NONE,
++						 &cancel_cause, NULL) != SWITCH_STATUS_SUCCESS || !caller_session) {
++		stream->write_function(stream, "-ERR %s\n", switch_channel_cause2str(cause));
++		kz_originate_unregister(request_uuid);
++		goto done;
++	}
++
++	kz_originate_unregister(request_uuid);
++	caller_channel = switch_core_session_get_channel(caller_session);
++	if (*exten == '&' && *(exten + 1)) {
++		switch_caller_extension_t *extension = NULL;
++		char *app_name = switch_core_session_strdup(caller_session, exten + 1);
++		char *arg = NULL, *end;
++
++		if ((end = strchr(app_name, ')'))) *end = '\0';
++		if ((arg = strchr(app_name, '('))) *arg++ = '\0';
++		extension = switch_caller_extension_new(caller_session, app_name, arg);
++		if (!extension) {
++			switch_channel_hangup(caller_channel, SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
++			switch_core_session_rwunlock(caller_session);
++			stream->write_function(stream, "-ERR Could not create caller extension\n");
++			goto done;
++		}
++		switch_caller_extension_add_application(caller_session, extension, app_name, arg);
++		switch_channel_set_caller_extension(caller_channel, extension);
++		switch_channel_set_state(caller_channel, CS_EXECUTE);
++	} else {
++		if (switch_ivr_session_transfer(caller_session, exten, dp, context) != SWITCH_STATUS_SUCCESS) {
++			if (switch_channel_ready(caller_channel)) {
++				switch_channel_hangup(caller_channel, SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
++			}
++			switch_core_session_rwunlock(caller_session);
++			stream->write_function(stream, "-ERR DESTINATION_OUT_OF_ORDER\n");
++			goto done;
++		}
++	}
++
++	stream->write_function(stream, "+OK %s\n", switch_core_session_get_uuid(caller_session));
++	switch_core_session_rwunlock(caller_session);
++	goto done;
++
++usage:
++	stream->write_function(stream, "-USAGE: %s\n", KZ_ORIGINATE_SYNTAX);
++done:
++	switch_safe_free(mycmd);
++	return status;
++}
++
+ SWITCH_STANDARD_API(kz_first_of)
+ {
+ 	char delim = '|';
+@@ -575,6 +777,10 @@ SWITCH_STANDARD_API(kz_contact_fun)
+ 
+ void add_kz_commands(switch_loadable_module_interface_t **module_interface) {
+ 	switch_api_interface_t *api_interface = NULL;
++	switch_core_hash_init(&kz_originate_hash);
++	switch_mutex_init(&kz_originate_mutex, SWITCH_MUTEX_NESTED, kazoo_globals.pool);
++	SWITCH_ADD_API(api_interface, "kz_originate", KZ_ORIGINATE_DESC, kz_originate, KZ_ORIGINATE_SYNTAX);
++	SWITCH_ADD_API(api_interface, "kz_originate_cancel", KZ_ORIGINATE_CANCEL_DESC, kz_originate_cancel, KZ_ORIGINATE_CANCEL_SYNTAX);
+ 	SWITCH_ADD_API(api_interface, "kz_uuid_setvar_multi", UUID_SET_DESC, uuid_setvar_multi_function, UUID_MULTISET_SYNTAX);
+ 	SWITCH_ADD_API(api_interface, "kz_uuid_setvar_multi_encoded", UUID_SET_DESC, uuid_setvar_multi_encoded_function, UUID_MULTISET_SYNTAX);
+ 	switch_console_set_complete("add kz_uuid_setvar_multi ::console::list_uuid");
+@@ -590,3 +796,8 @@ void add_kz_commands(switch_loadable_module_interface_t **module_interface) {
+ 	SWITCH_ADD_API(api_interface, "kz_contact", KZ_CONTACT_DESC, kz_contact_fun, KZ_CONTACT_SYNTAX);
+ }
+ 
++void remove_kz_commands(void) {
++	if (kz_originate_hash) {
++		switch_core_hash_destroy(&kz_originate_hash);
++	}
++}
+diff --git a/mod_kazoo.h b/mod_kazoo.h
+index 37fdd86..030182a 100644
+--- a/mod_kazoo.h
++++ b/mod_kazoo.h
+@@ -30,6 +30,7 @@ typedef enum {
+ 
+ /* kazoo_commands.c */
+ void add_kz_commands(switch_loadable_module_interface_t **module_interface);
++void remove_kz_commands(void);
+ 
+ /* kazoo_dptools.c */
+ void add_kz_dptools(switch_loadable_module_interface_t **module_interface);
+diff --git a/mod_kazoo.c b/mod_kazoo.c
+index e1b55cf..b728b35 100644
+--- a/mod_kazoo.c
++++ b/mod_kazoo.c
+@@ -91,6 +91,7 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_kazoo_shutdown) {
+ 	int sanity = 0;
+ 
+ 	remove_cli_api();
++	remove_kz_commands();
+ 
+ 	kz_cdr_stop();
+ 

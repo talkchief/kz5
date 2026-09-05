@@ -1,0 +1,38 @@
+diff --git a/src/mod/endpoints/mod_sofia/sofia_glue.c b/src/mod/endpoints/mod_sofia/sofia_glue.c
+index 25c4c3c62e..732c63b6af 100644
+--- a/src/mod/endpoints/mod_sofia/sofia_glue.c
++++ b/src/mod/endpoints/mod_sofia/sofia_glue.c
+@@ -1616,10 +1616,29 @@ switch_status_t sofia_glue_do_invite(switch_core_session_t *session)
+ 		if (dst->route) {
+ 			route = dst->route;
+ 		}
+ 	}
+ 
+-	if ((val = switch_channel_get_variable(channel, "sip_route_uri"))) {
+-		route_uri = switch_core_session_strdup(session, val);
+-		route = NULL;
++	/*
++	 * Kazoo uses sip_proxy_uri for the registrar proxy and reserves
++	 * sip_route_uri for an optional, distinct initial Route.  Upstream
++	 * mod_sofia only understands the legacy sip_route_uri proxy variable,
++	 * which makes current Kazoo location dialstrings try to resolve their
++	 * opaque account id as a DNS name instead of sending the INVITE to the
++	 * registrar.  Preserve legacy behaviour when sip_proxy_uri is absent.
++	 */
++	val = switch_channel_get_variable(channel, "sip_proxy_uri");
++	if (!zstr(val)) {
++		const char *initial_route = switch_channel_get_variable(channel, "sip_route_uri");
++		route_uri = switch_core_session_strdup(session, val);
++		route = NULL;
++		if (zstr(invite_route_uri) && !zstr(initial_route)) {
++			invite_route_uri = initial_route;
++		}
++	} else {
++		val = switch_channel_get_variable(channel, "sip_route_uri");
++		if (!zstr(val)) {
++			route_uri = switch_core_session_strdup(session, val);
++			route = NULL;
++		}
+ 	}
+ 
+ 	if (route_uri) {

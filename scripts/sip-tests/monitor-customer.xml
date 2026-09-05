@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<scenario name="Isolated monitor acceptance customer with synthetic 440Hz tone">
+  <nop>
+    <action>
+      <assignstr assign_to="hold_text" value="[field4]"/>
+      <todouble assign_to="hold_ms" variable="hold_text"/>
+      <assignstr assign_to="start_delay_text" value="[field5]"/>
+      <todouble assign_to="start_delay_ms" variable="start_delay_text"/>
+    </action>
+  </nop>
+  <pause variable="start_delay_ms"/>
+
+  <send retrans="500" start_txn="invite1">
+    <![CDATA[
+      INVITE sip:[field3]@[field2] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      Max-Forwards: 70
+      From: <sip:[field0]@[field2]>;tag=[pid]call[call_number]
+      To: <sip:[field3]@[field2]>
+      Call-ID: [call_id]
+      CSeq: 1 INVITE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>;transport=[transport]
+      Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE
+      Supported: timer, replaces
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=sipp [pid] [call_number] IN IP[local_ip_type] [local_ip]
+      s=Kazoo ACDC acceptance call
+      c=IN IP[media_ip_type] [media_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0
+      a=rtpmap:0 PCMU/8000
+      a=sendrecv
+    ]]>
+  </send>
+
+  <recv response="100" optional="true" response_txn="invite1"/>
+  <recv response="401" auth="true" optional="true" response_txn="invite1" next="challenge_ack"/>
+  <recv response="407" auth="true" optional="true" response_txn="invite1" next="challenge_ack"/>
+
+  <!-- A source socket recognized from REGISTER is trusted by the Kazoo ACL
+       path and can proceed without a second digest challenge. -->
+  <recv response="180" optional="true" response_txn="invite1"/>
+  <recv response="183" optional="true" response_txn="invite1"/>
+  <recv response="200" rrs="true" response_txn="invite1" next="direct_answer" counter="answered"/>
+
+  <label id="challenge_ack"/>
+  <send ack_txn="invite1">
+    <![CDATA[
+      ACK sip:[field3]@[field2] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      Max-Forwards: 70
+      From: <sip:[field0]@[field2]>;tag=[pid]call[call_number]
+      To: <sip:[field3]@[field2]>[peer_tag_param]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <send retrans="500" start_txn="invite2">
+    <![CDATA[
+      INVITE sip:[field3]@[field2] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      Max-Forwards: 70
+      From: <sip:[field0]@[field2]>;tag=[pid]call[call_number]
+      To: <sip:[field3]@[field2]>
+      Call-ID: [call_id]
+      CSeq: 2 INVITE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>;transport=[transport]
+      [field1]
+      Allow: INVITE, ACK, CANCEL, BYE, OPTIONS, INFO, UPDATE
+      Supported: timer, replaces
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=sipp [pid] [call_number] IN IP[local_ip_type] [local_ip]
+      s=Kazoo ACDC acceptance call
+      c=IN IP[media_ip_type] [media_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0
+      a=rtpmap:0 PCMU/8000
+      a=sendrecv
+    ]]>
+  </send>
+
+  <recv response="100" optional="true" response_txn="invite2"/>
+  <recv response="180" optional="true" response_txn="invite2"/>
+  <recv response="183" optional="true" response_txn="invite2"/>
+  <recv response="200" rrs="true" response_txn="invite2" counter="answered"/>
+
+  <send ack_txn="invite2" next="media">
+    <![CDATA[
+      ACK [next_url] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      [routes]
+      Max-Forwards: 70
+      From: <sip:[field0]@[field2]>;tag=[pid]call[call_number]
+      To: <sip:[field3]@[field2]>[peer_tag_param]
+      Call-ID: [call_id]
+      CSeq: 2 ACK
+      Contact: <sip:[field0]@[local_ip]:[local_port]>;transport=[transport]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <label id="direct_answer"/>
+  <send ack_txn="invite1">
+    <![CDATA[
+      ACK [next_url] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      [routes]
+      Max-Forwards: 70
+      From: <sip:[field0]@[field2]>;tag=[pid]call[call_number]
+      To: <sip:[field3]@[field2]>[peer_tag_param]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Contact: <sip:[field0]@[local_ip]:[local_port]>;transport=[transport]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <label id="media"/>
+  <nop>
+    <action>
+      <exec rtp_stream="[field6],-1,0,PCMU/8000"/>
+    </action>
+  </nop>
+  <!-- Per-call duration lets queued excess callers outlive the initially
+       bridged callers and prove a subsequent queue-to-agent drain. -->
+  <pause variable="hold_ms"/>
+  <nop>
+    <action>
+      <exec rtp_stream="pause"/>
+    </action>
+  </nop>
+
+  <send retrans="500" start_txn="bye">
+    <![CDATA[
+      BYE [next_url] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      [routes]
+      Max-Forwards: 70
+      From: <sip:[field0]@[field2]>;tag=[pid]call[call_number]
+      To: <sip:[field3]@[field2]>[peer_tag_param]
+      Call-ID: [call_id]
+      CSeq: 3 BYE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>;transport=[transport]
+      Content-Length: 0
+    ]]>
+  </send>
+  <recv response="200" response_txn="bye"/>
+
+  <ResponseTimeRepartition value="10,20,50,100,200,500,1000,2000,5000,10000"/>
+  <CallLengthRepartition value="1000,5000,10000,15000,20000,30000,60000"/>
+</scenario>

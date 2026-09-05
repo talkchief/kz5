@@ -1,0 +1,32 @@
+{
+	"name": "acdc",
+	"api_url": "http://127.0.0.1:8000/v2",
+	"i18n": {
+		"en-US": {
+			"label": "Call Center",
+			"description": "Operate Kazoo ACDC queues and agents from one responsive dashboard.",
+			"extended_description": "Call Center provides queue configuration, optional internal-extension routing, multi-agent roster management, live agent session controls, current queue and agent statistics, and recent ACDC call outcomes.",
+			"features": [
+				"Create, edit, and delete ACDC queues",
+				"Route an optional internal extension to each queue",
+				"Assign multiple users to each queue",
+				"Login, logout, pause, and resume agents",
+				"Monitor waiting and in-progress calls",
+				"Review agent performance and recent call outcomes"
+			]
+		}
+	},
+	"tags": [
+		"admin"
+	],
+	"allowed_users": "admins",
+	"masqueradable": true,
+	"author": "Talkchief",
+	"version": "1.0.0",
+	"license": "MPL-2.0",
+	"price": 0,
+	"icon": "acdc.svg",
+	"screenshots": [],
+	"phase": "gold",
+	"pvt_type": "app"
+}

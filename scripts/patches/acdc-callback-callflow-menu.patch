@@ -1,0 +1,512 @@
+--- a/src/cf_acdc_member.erl
++++ b/src/cf_acdc_member.erl
+@@ -19,7 +19,11 @@
+ -export([handle/2]).
+ 
+ -ifdef(TEST).
+--export([remaining_wait_ms/3]).
++-export([remaining_wait_ms/3
++        ,callback_test_media/2
++        ,callback_test_request/3
++        ,callback_test_response/2
++        ]).
+ -endif.
+ 
+ -include_lib("callflow/src/callflow.hrl").
+@@ -28,11 +32,18 @@
+ 
+ -define(MEMBER_TIMEOUT, <<"member_timeout">>).
+ -define(MEMBER_HANGUP, <<"member_hangup">>).
++-define(CALLBACK_PAUSE_ACK_TIMEOUT_MS, 5000).
++-define(CALLBACK_RESUME_ACK_TIMEOUT_MS, 10000).
++-define(CALLBACK_DEFAULT_NUMBER_READBACK, <<"acdc-callback-number-readback">>).
++-define(CALLBACK_DEFAULT_CONFIRMATION, <<"acdc-callback-confirmation">>).
++-define(CALLBACK_DEFAULT_SUCCESS, <<"acdc-callback-success">>).
+ 
+ -record(member_call, {call             :: kapps_call:call()
+                      ,queue_id         :: kz_term:api_binary()
+                      ,config_data = [] :: kz_term:proplist()
+                      ,max_wait = 60 :: max_wait()
++                     ,callback = 'undefined' :: 'undefined' | map()
++                     ,callback_pending = 'undefined' :: 'undefined' | map()
+                      }).
+ -type member_call() :: #member_call{}.
+ 
+@@ -71,6 +82,7 @@
+                                   ,config_data=MemberCall
+                                   ,queue_id=QueueId
+                                   ,max_wait=MaxWait
++                                  ,callback=callback_config(QueueJObj, Call1)
+                                   }
+                      ,is_queue_full(MaxQueueSize, CurrQueueSize)
+                      ).
+@@ -99,7 +111,9 @@
+ 
+     cf_exe:amqp_send(Call, MemberCall, fun kapi_acdc_queue:publish_member_call/1),
+     _ = kapps_call_command:flush_dtmf(Call),
+-    wait_for_bridge(MC#member_call{call=kapps_call:kvs_store('queue_id', QueueId, Call)}
++    Ready = MC#member_call{call=kapps_call:kvs_store('queue_id', QueueId, Call)},
++    _ = maybe_play_callback_offer(Ready),
++    wait_for_bridge(Ready
+                    ,MaxWait
+                    ).
+ 
+@@ -168,16 +182,23 @@
+             lager:info("failure json was for a different queue, ignoring"),
+             wait_for_bridge(MC, kz_time:decr_timeout(Timeout, Wait), Start)
+     end;
+-process_message(#member_call{call=Call}=MC, Timeout, Start, Wait, JObj, {<<"call_event">>, <<"DTMF">>}) ->
++process_message(#member_call{callback_pending=Pending}=MC, Timeout, Start, _Wait, JObj
++               ,{<<"acdc_callback">>, <<"response">>}) when is_map(Pending) ->
++    handle_late_pause_response(MC, Timeout, Start, JObj);
++process_message(#member_call{call=Call, callback=Callback}=MC, Timeout, Start, Wait, JObj
++               ,{<<"call_event">>, <<"DTMF">>}) ->
+     DigitPressed = kz_json:get_value(<<"DTMF-Digit">>, JObj),
+-    case DigitPressed =:= kapps_call:kvs_fetch('caller_exit_key', Call) of
+-        'true' ->
++    case {DigitPressed =:= kapps_call:kvs_fetch('caller_exit_key', Call)
++         ,callback_entry(DigitPressed, Callback, MC#member_call.callback_pending)} of
++        {'true', _} ->
+             lager:info("caller pressed the exit key(~s), moving to next callflow action", [DigitPressed]),
+             cancel_member_call(Call, <<"dtmf_exit">>),
+             _ = kapps_call_command:flush_dtmf(Call),
+             timer:sleep(?MILLISECONDS_IN_SECOND),
+             cf_exe:continue(Call);
+-        'false' ->
++        {'false', 'true'} ->
++            begin_callback_menu(MC, Timeout, Start);
++        {'false', 'false'} ->
+             lager:info("caller pressed ~s, ignoring", [DigitPressed]),
+             wait_for_bridge(MC, kz_time:decr_timeout(Timeout, Wait), Start)
+     end;
+@@ -187,6 +208,430 @@
+ process_message(MC, Timeout, Start, Wait, _JObj, _Type) ->
+     wait_for_bridge(MC, kz_time:decr_timeout(Timeout, Wait), Start).
+ 
++callback_config(QueueJObj, Call) ->
++    case kz_json:is_true([<<"callback">>, <<"enabled">>], QueueJObj, 'false') of
++        'false' -> 'undefined';
++        'true' ->
++            Language = normalize_language(kapps_call:language(Call)),
++            Entry = kz_json:get_ne_binary_value([<<"callback">>, <<"entry_key">>]
++                                               ,QueueJObj, <<"6">>),
++            AllowAlternate = kz_json:is_true([<<"callback">>, <<"allow_alternate_number">>]
++                                                ,QueueJObj, 'false'),
++            case valid_callback_entry(Entry)
++                andalso callback_media(callback_media_defaults(Entry, AllowAlternate)
++                                      ,QueueJObj, Language, #{}) of
++                'false' ->
++                    lager:warning("callback menu disabled: invalid entry key"),
++                    'undefined';
++                {'error', _} ->
++                    lager:warning("callback menu disabled: language ~p requires all callback media", [Language]),
++                    'undefined';
++                {'ok', Media} ->
++                    #{entry_key => Entry
++                     ,allow_alternate_number => AllowAlternate
++                     ,timeout_ms => kz_json:get_integer_value([<<"callback">>, <<"menu_timeout_ms">>]
++                                                                  ,QueueJObj, 30000)
++                     ,success_timeout_ms => kz_json:get_integer_value([<<"callback">>, <<"success_timeout_ms">>]
++                                                                          ,QueueJObj, 10000)
++                     ,media => Media}
++            end
++    end.
++
++callback_media_defaults(Entry, AllowAlternate) ->
++    Menu = case AllowAlternate of
++               'true' -> <<"acdc-callback-menu-alternate">>;
++               'false' -> <<"acdc-callback-menu-current">>
++           end,
++    [{offer, <<"offer">>, <<"acdc-callback-offer-", Entry/binary>>}
++    ,{menu, <<"menu">>, Menu}
++    ,{number_readback, <<"number_readback">>, ?CALLBACK_DEFAULT_NUMBER_READBACK}
++    ,{confirmation, <<"confirmation">>, ?CALLBACK_DEFAULT_CONFIRMATION}
++    ,{success, <<"success">>, ?CALLBACK_DEFAULT_SUCCESS}].
++
++valid_callback_entry(<<Digit>>) when Digit >= $0, Digit =< $9 -> 'true';
++valid_callback_entry(_) -> 'false'.
++
++normalize_language('undefined') -> <<"en-us">>;
++normalize_language(Language) ->
++    binary:replace(kz_term:to_lower_binary(Language), <<"_">>, <<"-">>, ['global']).
++
++callback_media([], _QueueJObj, _Language, Media) -> {'ok', Media};
++callback_media([{Name, Key, Default} | Rest], QueueJObj, Language, Media) ->
++    Configured = kz_json:get_ne_binary_value([<<"callback">>, <<"media">>, Key], QueueJObj),
++    case {Configured, Language} of
++        {Value, _} when is_binary(Value) -> callback_media(Rest, QueueJObj, Language, Media#{Name => Value});
++        {'undefined', <<"en-us">>} -> callback_media(Rest, QueueJObj, Language, Media#{Name => Default});
++        {'undefined', _} -> {'error', {'missing_media', Name}}
++    end.
++
++callback_entry(_Digit, 'undefined', _Pending) -> 'false';
++callback_entry(_Digit, _Callback, Pending) when is_map(Pending) -> 'false';
++callback_entry(Digit, Callback, 'undefined') -> Digit =:= maps:get(entry_key, Callback).
++
++maybe_play_callback_offer(#member_call{callback='undefined'}) -> 'ok';
++maybe_play_callback_offer(#member_call{call=Call, callback=Callback}) ->
++    Entry = maps:get(entry_key, Callback),
++    Media = callback_media_path(offer, Callback, Call),
++    _ = kapps_call_command:play(Media, [Entry], Call),
++    'ok'.
++
++callback_media_path(Name, Callback, Call) ->
++    kapps_call:get_prompt(Call, maps:get(Name, maps:get(media, Callback))).
++
++begin_callback_menu(#member_call{callback=Callback}=MC, Timeout, Start) ->
++    RequestId = kz_binary:rand_hex(16),
++    Context = callback_context(MC, RequestId, 'undefined'),
++    send_callback_request(MC, Context, <<"pause">>, []),
++    Deadline = monotonic_ms() + min(?CALLBACK_PAUSE_ACK_TIMEOUT_MS, maps:get(timeout_ms, Callback)),
++    Pending = MC#member_call{callback_pending=Context},
++    wait_for_pause(Pending, Timeout, Start, Deadline).
++
++callback_context(#member_call{call=Call, queue_id=QueueId}, RequestId, PauseId) ->
++    #{account_id => kapps_call:account_id(Call)
++     ,queue_id => QueueId
++     ,call_id => kapps_call:call_id(Call)
++     ,request_id => RequestId
++     ,pause_id => PauseId}.
++
++send_callback_request(#member_call{call=Call}, Context, Operation, Extra) ->
++    Request = callback_request_props(Context, Operation, Extra),
++    cf_exe:amqp_send(Call, Request, fun kapi_acdc_callback:publish_request/1).
++
++callback_request_props(Context, Operation, Extra) ->
++    props:filter_undefined(
++      [{<<"Account-ID">>, maps:get(account_id, Context)}
++      ,{<<"Queue-ID">>, maps:get(queue_id, Context)}
++      ,{<<"Call-ID">>, maps:get(call_id, Context)}
++      ,{<<"Request-ID">>, maps:get(request_id, Context)}
++      ,{<<"Operation">>, Operation}
++       | Extra ++ kz_api:default_headers(?APP_NAME, ?APP_VERSION)]).
++
++wait_for_pause(#member_call{max_wait=MaxWait}=MC, Timeout, Start, Deadline) ->
++    QueueRemaining = remaining_wait_ms(MaxWait, Start, kz_time:start_time()),
++    Wait = min(QueueRemaining, max(0, Deadline - monotonic_ms())),
++    case Wait of
++        0 -> wait_for_bridge(MC, Timeout, Start);
++        _ ->
++            receive
++                {'amqp_msg', JObj} -> handle_pause_message(MC, Timeout, Start, Deadline, JObj)
++            after Wait ->
++                    wait_for_bridge(MC, Timeout, Start)
++            end
++    end.
++
++handle_pause_message(#member_call{callback_pending=Context}=MC, Timeout, Start, Deadline, JObj) ->
++    case callback_response(JObj, Context) of
++        {'ok', <<"pause">>, <<"paused">>, PauseId, _} ->
++            callback_paused(MC#member_call{callback_pending='undefined'}
++                           ,Context#{pause_id => PauseId}, Timeout, Start);
++        {'ok', <<"pause">>, <<"rejected">>, _, _} ->
++            lager:info("callback pause rejected; caller remains in the live queue"),
++            wait_for_bridge(MC#member_call{callback_pending='undefined'}, Timeout, Start);
++        'nomatch' ->
++            case callback_pause_call_event(MC, JObj, kz_api:event_type(JObj), Start) of
++                'continue' -> wait_for_pause(MC, Timeout, Start, Deadline);
++                'finished' -> 'ok'
++            end
++    end.
++
++callback_pause_call_event(#member_call{call=Call}, _JObj
++                         ,{<<"call_event">>, <<"CHANNEL_BRIDGE">>}, Start) ->
++    lager:info("member bridged while callback pause was pending (took ~b s)", [kz_time:elapsed_s(Start)]),
++    cf_exe:control_usurped(Call),
++    'finished';
++callback_pause_call_event(#member_call{call=Call}, _JObj
++                         ,{<<"call_event">>, <<"CHANNEL_DESTROY">>}, _Start) ->
++    cancel_member_call(Call, ?MEMBER_HANGUP),
++    cf_exe:stop(Call),
++    'finished';
++callback_pause_call_event(#member_call{call=Call}, _JObj
++                         ,{<<"member">>, <<"call_success">>}, _Start) ->
++    cf_exe:control_usurped(Call),
++    'finished';
++callback_pause_call_event(_MC, _JObj, _Type, _Start) -> 'continue'.
++
++handle_late_pause_response(#member_call{callback_pending=Context}=MC, Timeout, Start, JObj) ->
++    case callback_response(JObj, Context) of
++        {'ok', <<"pause">>, <<"paused">>, PauseId, _} ->
++            lager:warning("late callback pause acknowledgement; resuming the live queue"),
++            ResumeContext = Context#{pause_id => PauseId},
++            _ = resume_callback_queue(MC, ResumeContext, 'undefined'),
++            wait_for_bridge(MC#member_call{callback_pending='undefined'}, Timeout, Start);
++        {'ok', <<"pause">>, <<"rejected">>, _, _} ->
++            wait_for_bridge(MC#member_call{callback_pending='undefined'}, Timeout, Start);
++        _ -> wait_for_bridge(MC, Timeout, Start)
++    end.
++
++callback_paused(#member_call{callback=Callback, call=Call}=MC, Context, Timeout, Start) ->
++    _ = kapps_call_command:flush_dtmf(Call),
++    Config = #{request_id => maps:get(request_id, Context)
++              ,queue_id => maps:get(queue_id, Context)
++              ,original_call_id => maps:get(call_id, Context)
++              ,confirm_key => <<"1">>
++              ,alternate_key => <<"2">>
++              ,allow_alternate_number => maps:get(allow_alternate_number, Callback)
++              ,max_retries => 3
++              ,timeout_ms => maps:get(timeout_ms, Callback)
++              ,success_timeout_ms => maps:get(success_timeout_ms, Callback)},
++    case acdc_callback_menu:new(Config, kapps_call:caller_id_number(Call), monotonic_ms()) of
++        {'ok', State, Actions} ->
++            case run_callback_actions(MC, Context, State, Actions) of
++                'resume' -> wait_for_bridge(MC, Timeout, Start);
++                'finished' -> 'ok'
++            end;
++        {'error', Reason} ->
++            lager:warning("callback menu unavailable: ~p; resuming live queue", [Reason]),
++            _ = resume_callback_queue(MC, Context, 'undefined'),
++            wait_for_bridge(MC, Timeout, Start)
++    end.
++
++run_callback_actions(MC, Context, State, []) ->
++    case acdc_callback_menu:status(State) of
++        'menu' -> run_callback_actions(MC, Context, State, [{'play_menu', <<>>, 'false'}]);
++        'collecting' -> run_callback_actions(MC, Context, State, ['collect_alternate']);
++        'confirming_alternate' ->
++            run_callback_actions(MC, Context, State
++                                ,[{'read_back_number', maps:get(digits, State)}
++                                 ,{'prompt_confirm_alternate', <<"1">>}]);
++        'complete' -> 'finished';
++        'aborted' -> 'resume';
++        'aborted_dead' -> 'finished';
++        _ ->
++            lager:error("callback menu produced no action in phase ~p", [acdc_callback_menu:status(State)]),
++            _ = resume_callback_queue(MC, Context, 'undefined'),
++            'resume'
++    end;
++run_callback_actions(MC, Context, State
++                    ,[{'resume_live_queue', _}, {'cancel_callback', CallbackId} | Rest]) ->
++    _ = resume_callback_queue(MC, Context, CallbackId),
++    run_callback_actions(MC, Context, State, Rest),
++    'resume';
++run_callback_actions(MC, Context, State, [{'play_menu', _, _} | Rest]) ->
++    case collect_callback_digit(menu, MC, State) of
++        {'ok', Digit} -> reduce_callback_event(MC, Context, State, {'dtmf', Digit}, Rest);
++        'timeout' -> reduce_callback_event(MC, Context, State, 'tick', Rest);
++        'hangup' -> reduce_callback_event(MC, Context, State, 'caller_hangup', Rest)
++    end;
++run_callback_actions(MC, Context, State, ['collect_alternate' | Rest]) ->
++    case collect_callback_digit('undefined', MC, State) of
++        {'ok', Digit} -> reduce_callback_event(MC, Context, State, {'dtmf', Digit}, Rest);
++        'timeout' -> reduce_callback_event(MC, Context, State, 'tick', Rest);
++        'hangup' -> reduce_callback_event(MC, Context, State, 'caller_hangup', Rest)
++    end;
++run_callback_actions(MC, Context, State, [{'read_back_number', _} | Rest]) ->
++    run_callback_actions(MC, Context, State, Rest);
++run_callback_actions(MC, Context, State, [{'prompt_confirm_alternate', _} | Rest]) ->
++    case collect_callback_confirmation(MC, State) of
++        {'ok', Digit} -> reduce_callback_event(MC, Context, State, {'dtmf', Digit}, Rest);
++        'timeout' -> reduce_callback_event(MC, Context, State, 'tick', Rest);
++        'hangup' -> reduce_callback_event(MC, Context, State, 'caller_hangup', Rest)
++    end;
++run_callback_actions(MC, Context, State
++                    ,[{'register_callback', _, _, _, Number} | Rest]) ->
++    send_callback_request(MC, Context, <<"register">>
++                         ,[{<<"Pause-ID">>, maps:get(pause_id, Context)}, {<<"Number">>, Number}]),
++    wait_callback_registration(MC, Context, State, Rest);
++run_callback_actions(MC, Context, _State, [{'resume_live_queue', _} | _Rest]) ->
++    _ = resume_callback_queue(MC, Context, 'undefined'),
++    'resume';
++run_callback_actions(MC, Context, _State, ['abandon_paused_queue' | _Rest]) ->
++    %% CHANNEL_DESTROY may reach the queue listener before this request and
++    %% clear its callback binding. Publish the explicit abandon required by
++    %% the protocol, but never delay teardown waiting for an acknowledgement
++    %% that can no longer be routed to this dead leg.
++    abandon_callback_queue_nowait(MC, Context, 'undefined'),
++    'finished';
++run_callback_actions(MC, Context, State, [{'cancel_callback', CallbackId} | Rest]) ->
++    _ = abandon_callback_queue(MC, Context, CallbackId),
++    run_callback_actions(MC, Context, State, Rest);
++run_callback_actions(MC, Context, State, [{'handoff_to_callback', _} | Rest]) ->
++    run_callback_actions(MC, Context, State, Rest);
++run_callback_actions(MC, Context, State, [{'play_success_announcement', CallbackId} | Rest]) ->
++    Event = case wait_callback_success(MC, State) of
++                'complete' -> {trusted_announcement_complete, maps:get(queue_id, Context)
++                              ,maps:get(call_id, Context), CallbackId};
++                'hangup' -> 'caller_hangup';
++                'failed' -> {trusted_announcement_failed, maps:get(queue_id, Context)
++                            ,maps:get(call_id, Context), CallbackId}
++            end,
++    reduce_callback_event(MC, Context, State, Event, Rest);
++run_callback_actions(#member_call{call=Call}, _Context, _State, ['hangup' | _]) ->
++    _ = kapps_call_command:hangup(Call),
++    cf_exe:stop(Call),
++    'finished';
++run_callback_actions(#member_call{call=Call}, _Context, _State, [{'end_original_leg', _, _} | _]) ->
++    _ = kapps_call_command:hangup(Call),
++    cf_exe:stop(Call),
++    'finished';
++run_callback_actions(MC, Context, State, [{'retry', _} | Rest]) ->
++    _ = kapps_call_command:b_prompt(<<"menu-invalid_entry">>, MC#member_call.call),
++    run_callback_actions(MC, Context, State, Rest).
++
++reduce_callback_event(MC, Context, State, Event, Prefix) ->
++    {Next, Actions} = acdc_callback_menu:event(Event, monotonic_ms(), State),
++    run_callback_actions(MC, Context, Next, Prefix ++ Actions).
++
++collect_callback_digit(MediaName, #member_call{call=Call, callback=Callback}, State) ->
++    Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
++    case Remaining of
++        0 -> 'timeout';
++        _ ->
++            Collect = case MediaName of
++                          'undefined' ->
++                              %% The 6-arity form starts its receive deadline
++                              %% immediately. The 7-arity form intentionally
++                              %% waits for a playback noop, which does not exist
++                              %% while collecting the alternate number.
++                              kapps_call_command:collect_digits(
++                                1, Remaining, kapps_call_command:default_interdigit_timeout()
++                               ,'undefined', [], Call);
++                          _ ->
++                              NoopId = kapps_call_command:play(
++                                         callback_media_path(MediaName, Callback, Call), Call),
++                              kapps_call_command:collect_digits(
++                                1, Remaining, kapps_call_command:default_interdigit_timeout()
++                               ,NoopId, [], 'false', Call)
++                      end,
++            case Collect of
++                {'ok', <<>>} -> 'timeout';
++                {'ok', Digit} -> {'ok', Digit};
++                {'error', 'channel_hungup'} -> 'hangup';
++                {'error', _} -> 'hangup'
++            end
++    end.
++
++collect_callback_confirmation(#member_call{call=Call, callback=Callback}=MC, State) ->
++    Digits = maps:get(digits, State),
++    Readback = callback_media_path(number_readback, Callback, Call),
++    Confirmation = callback_media_path(confirmation, Callback, Call),
++    NoopId = kapps_call_command:audio_macro([{'play', Readback}
++                                            ,{'say', Digits, <<"telephone_number">>}
++                                            ,{'play', Confirmation}], Call),
++    Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
++    case Remaining of
++        0 -> 'timeout';
++        _ ->
++            case kapps_call_command:collect_digits(1, Remaining
++                                                  ,kapps_call_command:default_interdigit_timeout()
++                                                  ,NoopId, [], 'false', MC#member_call.call) of
++                {'ok', <<>>} -> 'timeout';
++                {'ok', Digit} -> {'ok', Digit};
++                {'error', _} -> 'hangup'
++            end
++    end.
++
++wait_callback_registration(MC, Context, State, Rest) ->
++    Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
++    case Remaining of
++        0 -> reduce_callback_event(MC, Context, State, 'tick', Rest);
++        _ ->
++            receive
++                {'amqp_msg', JObj} ->
++                    case callback_response(JObj, Context) of
++                        {'ok', <<"register">>, <<"registered">>, _, CallbackId} ->
++                            Event = {trusted_queue_ack, maps:get(queue_id, Context)
++                                    ,maps:get(call_id, Context), maps:get(request_id, Context)
++                                    ,{'ok', CallbackId}},
++                            reduce_callback_event(MC, Context, State, Event, Rest);
++                        {'ok', <<"register">>, <<"rejected">>, _, _} ->
++                            Event = {trusted_queue_ack, maps:get(queue_id, Context)
++                                    ,maps:get(call_id, Context), maps:get(request_id, Context)
++                                    ,{'error', 'rejected'}},
++                            reduce_callback_event(MC, Context, State, Event, Rest);
++                        'nomatch' ->
++                            case kz_api:event_type(JObj) of
++                                {<<"call_event">>, <<"CHANNEL_DESTROY">>} ->
++                                    reduce_callback_event(MC, Context, State, 'caller_hangup', Rest);
++                                _ -> wait_callback_registration(MC, Context, State, Rest)
++                            end
++                    end
++            after Remaining ->
++                    reduce_callback_event(MC, Context, State, 'tick', Rest)
++            end
++    end.
++
++wait_callback_success(#member_call{call=Call, callback=Callback}, State) ->
++    NoopId = kapps_call_command:play(callback_media_path(success, Callback, Call), Call),
++    wait_callback_success_event(NoopId, acdc_callback_menu:remaining_ms(monotonic_ms(), State)).
++
++wait_callback_success_event(_NoopId, 0) -> 'failed';
++wait_callback_success_event(NoopId, Remaining) ->
++    Start = monotonic_ms(),
++    receive
++        {'amqp_msg', JObj} ->
++            case {kz_api:event_type(JObj), kz_call_event:application_response(JObj)} of
++                {{<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>}, NoopId} -> 'complete';
++                {{<<"call_event">>, <<"CHANNEL_DESTROY">>}, _} -> 'hangup';
++                _ -> wait_callback_success_event(NoopId, max(0, Remaining - (monotonic_ms() - Start)))
++            end
++    after Remaining -> 'failed'
++    end.
++
++resume_callback_queue(MC, Context, CallbackId) ->
++    Extra = [{<<"Pause-ID">>, maps:get(pause_id, Context)}, {<<"Callback-ID">>, CallbackId}],
++    send_callback_request(MC, Context, <<"resume">>, Extra),
++    wait_callback_control_ack(MC, Context, <<"resume">>, ?CALLBACK_RESUME_ACK_TIMEOUT_MS).
++
++abandon_callback_queue(MC, Context, CallbackId) ->
++    Extra = [{<<"Pause-ID">>, maps:get(pause_id, Context)}, {<<"Callback-ID">>, CallbackId}],
++    send_callback_request(MC, Context, <<"abandon">>, Extra),
++    wait_callback_control_ack(MC, Context, <<"abandon">>, ?CALLBACK_RESUME_ACK_TIMEOUT_MS).
++
++abandon_callback_queue_nowait(MC, Context, CallbackId) ->
++    Extra = [{<<"Pause-ID">>, maps:get(pause_id, Context)}, {<<"Callback-ID">>, CallbackId}],
++    send_callback_request(MC, Context, <<"abandon">>, Extra).
++
++wait_callback_control_ack(_MC, _Context, Operation, 0) -> {'error', {Operation, 'timeout'}};
++wait_callback_control_ack(MC, Context, Operation, Remaining) ->
++    Start = monotonic_ms(),
++    receive
++        {'amqp_msg', JObj} ->
++            case callback_response(JObj, Context) of
++                {'ok', Operation, Status, _, _}
++                  when Status =:= <<"resumed">>; Status =:= <<"abandoned">> -> 'ok';
++                {'ok', <<"register">>, <<"registered">>, _, CallbackId}
++                  when Operation =:= <<"resume">> ->
++                    lager:warning("callback registered while resume was pending; abandoning it"),
++                    abandon_callback_queue(MC, Context, CallbackId);
++                {'ok', Operation, <<"rejected">>, _, _} -> {'error', {Operation, 'rejected'}};
++                _ -> wait_callback_control_ack(MC, Context, Operation
++                                              ,max(0, Remaining - (monotonic_ms() - Start)))
++            end
++    after Remaining -> {'error', {Operation, 'timeout'}}
++    end.
++
++callback_response(JObj, Context) ->
++    case kapi_acdc_callback:response_v(JObj)
++        andalso maps:get(account_id, Context) =:= kz_json:get_value(<<"Account-ID">>, JObj)
++        andalso maps:get(queue_id, Context) =:= kz_json:get_value(<<"Queue-ID">>, JObj)
++        andalso maps:get(call_id, Context) =:= kz_json:get_value(<<"Call-ID">>, JObj)
++        andalso maps:get(request_id, Context) =:= kz_json:get_value(<<"Request-ID">>, JObj) of
++        'false' -> 'nomatch';
++        'true' ->
++            {'ok', kz_json:get_value(<<"Operation">>, JObj)
++             ,kz_json:get_value(<<"Status">>, JObj)
++             ,kz_json:get_value(<<"Pause-ID">>, JObj)
++             ,kz_json:get_value(<<"Callback-ID">>, JObj)}
++    end.
++
++-ifdef(TEST).
++-spec callback_test_media(kz_json:object(), kz_term:api_binary()) -> {'ok', map()} | {'error', any()}.
++callback_test_media(QueueJObj, Language) ->
++    Entry = kz_json:get_ne_binary_value([<<"callback">>, <<"entry_key">>], QueueJObj, <<"6">>),
++    AllowAlternate = kz_json:is_true([<<"callback">>, <<"allow_alternate_number">>], QueueJObj, 'false'),
++    callback_media(callback_media_defaults(Entry, AllowAlternate)
++                  ,QueueJObj, normalize_language(Language), #{}).
++
++-spec callback_test_request(map(), kz_term:ne_binary(), kz_term:proplist()) -> kz_term:proplist().
++callback_test_request(Context, Operation, Extra) ->
++    callback_request_props(Context, Operation, Extra).
++
++-spec callback_test_response(kz_json:object(), map()) -> tuple() | 'nomatch'.
++callback_test_response(JObj, Context) -> callback_response(JObj, Context).
++-endif.
++
++monotonic_ms() -> erlang:monotonic_time('millisecond').
++
+ -spec max_wait(integer()) -> max_wait().
+ max_wait(N) when N < 1 -> 'infinity';
+ max_wait(N) -> N.

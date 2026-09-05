@@ -81,6 +81,7 @@ compile_commands.json
 
 /out/
 /node_modules/
+/var/
 
 /doc/mkdocs/*.local
 

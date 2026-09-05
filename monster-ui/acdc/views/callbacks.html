@@ -1,0 +1,20 @@
+<section class="acdc-section acdc-callback-inventory">
+	<div class="acdc-section-header">
+		<div><h2>{{i18n.acdc.callbacks.title}}</h2><p>{{i18n.acdc.callbacks.description}} <strong>{{queueName}}</strong></p></div>
+		<div class="acdc-header-actions"><button type="button" class="monster-button-secondary acdc-callbacks-refresh"><i class="fa fa-refresh"></i> {{i18n.acdc.actions.refresh}}</button><button type="button" class="monster-button-secondary acdc-callbacks-back"><i class="fa fa-arrow-left"></i> {{i18n.acdc.actions.back}}</button></div>
+	</div>
+	<div class="acdc-warning">{{i18n.acdc.callbacks.privacyNotice}}</div>
+	<div class="acdc-panel acdc-table-scroll">
+		<table class="acdc-table">
+			<thead><tr><th>{{i18n.acdc.fields.status}}</th><th>{{i18n.acdc.fields.callbackAttempts}}</th><th>{{i18n.acdc.fields.callbackQueuedAt}}</th><th>{{i18n.acdc.fields.callbackExpiresAt}}</th><th>{{i18n.acdc.fields.callbackLastCause}}</th><th class="acdc-actions-column">{{i18n.acdc.fields.actions}}</th></tr></thead>
+			<tbody>
+				{{#each callbacks}}
+					<tr data-callback-id="{{id}}"><td><span class="acdc-status {{status_class}}">{{status_label}}</span>{{#if reconciliation_required}}<small class="acdc-reconciliation-detail">{{reconciliation_detail}}</small><small class="acdc-reconciliation-state">{{@root.i18n.acdc.callbacks.storedState}} {{underlying_status_label}}</small>{{/if}}</td><td>{{attempts}}</td><td>{{enqueued_label}}</td><td>{{expires_label}}</td><td>{{last_cause}}</td><td class="acdc-row-actions">{{#if cancellable}}<button type="button" class="monster-button-danger acdc-callback-cancel" data-id="{{id}}"><i class="fa fa-ban"></i> {{@root.i18n.acdc.actions.cancelCallback}}</button>{{else}}—{{/if}}</td></tr>
+				{{else}}
+					<tr><td colspan="6" class="acdc-empty-cell"><i class="fa fa-phone"></i><strong>{{@root.i18n.acdc.callbacks.emptyTitle}}</strong><span>{{@root.i18n.acdc.callbacks.emptyDescription}}</span></td></tr>
+				{{/each}}
+			</tbody>
+		</table>
+	</div>
+	<div class="acdc-form-actions acdc-callback-pagination">{{#if hasPrevious}}<button type="button" class="monster-button-secondary acdc-callbacks-previous"><i class="fa fa-chevron-left"></i> {{i18n.acdc.actions.previous}}</button>{{/if}}{{#if hasNext}}<button type="button" class="monster-button-secondary acdc-callbacks-next">{{i18n.acdc.actions.next}} <i class="fa fa-chevron-right"></i></button>{{/if}}</div>
+</section>

@@ -1,0 +1,73 @@
+diff --git a/src/mod/endpoints/mod_sofia/mod_sofia.c b/src/mod/endpoints/mod_sofia/mod_sofia.c
+index 8cdc3f92b..5ef92f718 100644
+--- a/src/mod/endpoints/mod_sofia/mod_sofia.c
++++ b/src/mod/endpoints/mod_sofia/mod_sofia.c
+@@ -6907,6 +6907,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_sofia_load)
+ void mod_sofia_shutdown_cleanup(void) {
+ 	int sanity = 0;
+ 	int i;
++	int active_threads;
+ 	switch_status_t st;
+ 
+ 	switch_event_free_subclass(MY_EVENT_NOTIFY_REFER);
+@@ -6952,7 +6953,13 @@ void mod_sofia_shutdown_cleanup(void) {
+ 		switch_queue_interrupt_all(mod_sofia_globals.presence_queue);
+ 	}
+ 
+-	while (mod_sofia_globals.threads) {
++	for (;;) {
++		switch_mutex_lock(mod_sofia_globals.mutex);
++		active_threads = mod_sofia_globals.threads;
++		switch_mutex_unlock(mod_sofia_globals.mutex);
++		if (!active_threads) {
++			break;
++		}
+ 		switch_cond_next();
+ 		if (++sanity >= 60000) {
+ 			break;
+diff --git a/src/mod/endpoints/mod_sofia/sofia.c b/src/mod/endpoints/mod_sofia/sofia.c
+index f5bc04de2..a844a3a6f 100644
+--- a/src/mod/endpoints/mod_sofia/sofia.c
++++ b/src/mod/endpoints/mod_sofia/sofia.c
+@@ -3143,10 +3143,6 @@ void *SWITCH_THREAD_FUNC sofia_profile_thread_run(switch_thread_t *thread, void
+ 
+ 	switch_bool_t ssl_error = SWITCH_FALSE;
+ 
+-	switch_mutex_lock(mod_sofia_globals.mutex);
+-	mod_sofia_globals.threads++;
+-	switch_mutex_unlock(mod_sofia_globals.mutex);
+-
+ 	profile->s_root = su_root_create(NULL);
+ 	//profile->home = su_home_new(sizeof(*profile->home));
+ 
+@@ -3612,12 +3608,29 @@ void launch_sofia_profile_thread(sofia_profile_t *profile)
+ {
+ 	//switch_thread_t *thread;
+ 	switch_threadattr_t *thd_attr = NULL;
++	switch_status_t status;
+ 
+ 	switch_threadattr_create(&thd_attr, profile->pool);
+ 	switch_threadattr_detach_set(thd_attr, 1);
+ 	switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
+ 	switch_threadattr_priority_set(thd_attr, SWITCH_PRI_REALTIME);
+-	switch_thread_create(&profile->thread, thd_attr, sofia_profile_thread_run, profile, profile->pool);
++
++	/* Register the profile before its detached thread can run. Shutdown uses
++	 * the same mutex to stop launches, so it cannot observe zero profiles and
++	 * unload mod_sofia while a newly-created profile thread is still starting. */
++	switch_mutex_lock(mod_sofia_globals.mutex);
++	if (mod_sofia_globals.running != 1) {
++		switch_mutex_unlock(mod_sofia_globals.mutex);
++		return;
++	}
++	mod_sofia_globals.threads++;
++	status = switch_thread_create(&profile->thread, thd_attr, sofia_profile_thread_run, profile, profile->pool);
++	if (status != SWITCH_STATUS_SUCCESS) {
++		mod_sofia_globals.threads--;
++		profile->thread = NULL;
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Error creating Sofia profile thread for %s\n", profile->name);
++	}
++	switch_mutex_unlock(mod_sofia_globals.mutex);
+ }
+ 
+ static void logger(void *logarg, char const *fmt, va_list ap)

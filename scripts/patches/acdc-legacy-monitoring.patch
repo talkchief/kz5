@@ -1,0 +1,251 @@
+diff --git a/src/cb_queues.erl b/src/cb_queues.erl
+index 32b69ac..4ff9f7e 100644
+--- a/src/cb_queues.erl
++++ b/src/cb_queues.erl
+@@ -25,9 +25,9 @@
+ %%%   DELETE: rm a list of agent_ids
+ %%%
+ %%% /queues/eavesdrop
+-%%%   PUT: ring a phone/user and eavesdrop on given call-id
++%%%   PUT: unavailable (503); use account-scoped channels monitoring actions
+ %%% /queues/QID/eavesdrop
+-%%%   PUT: ring a phone/user and eavesdrop on the queue's calls
++%%%   PUT: unavailable (503); use account-scoped channels monitoring actions
+ %%%
+ %%%
+ %%% @author James Aimonetti
+@@ -253,157 +253,17 @@ validate(Context, QueueId, ?CALLBACKS_PATH_TOKEN, CallbackId) ->
+ validate(Context, _, _, _) ->
+     cb_context:add_system_error('faulty_request', Context).
+ 
+-validate_eavesdrop_on_call(Context) ->
+-    Data = cb_context:req_data(Context),
+-    Fs = [{fun is_valid_endpoint/2, [Context, Data]}
+-         ,{fun is_valid_call/2, [Context, Data]}
+-         ,{fun is_valid_mode/2, [Context, Data]}
+-         ],
+-    case all_true(Fs) of
+-        'true' -> cb_context:set_resp_status(Context, 'success');
+-        {'false', Context1} -> Context1
+-    end.
+-
+-validate_eavesdrop_on_queue(Context, QueueId) ->
+-    Data = cb_context:req_data(Context),
+-    Fs = [{fun is_valid_endpoint/2, [Context, Data]}
+-         ,{fun is_valid_queue/2, [Context, QueueId]}
+-         ,{fun is_valid_mode/2, [Context, Data]}
+-         ],
+-    case all_true(Fs) of
+-        'true' -> cb_context:set_resp_status(Context, 'success');
+-        {'false', Context1} -> Context1
+-    end.
+-
+--spec all_true([{fun(), list()},...]) ->
+-          'true' |
+-          {'false', cb_context:context()}.
+-all_true(Fs) ->
+-    lists:foldl(fun({F, Args}, 'true') -> apply(F, Args);
+-                   (_, Acc) -> Acc
+-                end, 'true', Fs).
+-
+--spec is_valid_mode(cb_context:context(), kz_json:object()) ->
+-          'true' |
+-          {'false', cb_context:context()}.
+-is_valid_mode(Context, Data) ->
+-    Mode = kz_json:get_value(<<"mode">>, Data, <<"listen">>),
+-    case kapi_resource:is_valid_mode(Mode) of
+-        'true' -> 'true';
+-        'false' ->
+-            {'false'
+-            ,cb_context:add_validation_error(<<"mode">>
+-                                            ,<<"enum">>
+-                                            ,kz_json:from_list(
+-                                               [{<<"message">>, <<"Value not found in enumerated list of values">>}
+-                                               ,{<<"cause">>, Mode}
+-                                               ])
+-                                            ,Context
+-                                            )
+-            }
+-    end.
+-
+--spec is_valid_call(cb_context:context(), kz_json:object()) ->
+-          'true' |
+-          {'false', cb_context:context()}.
+-is_valid_call(Context, Data) ->
+-    case kz_json:get_binary_value(<<"call_id">>, Data) of
+-        'undefined' ->
+-            {'false'
+-            ,cb_context:add_validation_error(<<"call_id">>
+-                                            ,<<"required">>
+-                                            ,kz_json:from_list(
+-                                               [{<<"message">>, <<"Field is required but missing">>}]
+-                                              )
+-                                            ,Context
+-                                            )
+-            };
+-        CallId ->
+-            is_active_call(Context, CallId)
+-    end.
+-
+--spec is_active_call(cb_context:context(), kz_term:ne_binary()) ->
+-          'true' |
+-          {'false', cb_context:context()}.
+-is_active_call(Context, CallId) ->
+-    case kapps_call_command:b_channel_status(CallId) of
+-        {'error', _E} ->
+-            lager:debug("is not valid call: ~p", [_E]),
+-            {'false'
+-            ,cb_context:add_validation_error(<<"call_id">>
+-                                            ,<<"not_found">>
+-                                            ,kz_json:from_list(
+-                                               [{<<"message">>, <<"Call was not found">>}
+-                                               ,{<<"cause">>, CallId}
+-                                               ])
+-                                            ,Context
+-                                            )
+-            };
+-        {'ok', _} -> 'true'
+-    end.
+-
+-is_valid_queue(Context, <<QueueId/binary>>) ->
+-    AccountDb = cb_context:db_name(Context),
+-    case kz_datamgr:open_cache_doc(AccountDb, QueueId) of
+-        {'ok', QueueJObj} -> is_valid_queue(Context, QueueJObj);
+-        {'error', _} ->
+-            {'false'
+-            ,cb_context:add_validation_error(<<"queue_id">>
+-                                            ,<<"not_found">>
+-                                            ,kz_json:from_list(
+-                                               [{<<"message">>, <<"Queue was not found">>}
+-                                               ,{<<"cause">>, QueueId}
+-                                               ])
+-                                            ,Context
+-                                            )
+-            }
+-    end;
+-is_valid_queue(Context, QueueJObj) ->
+-    case kz_doc:type(QueueJObj) of
+-        <<"queue">> -> 'true';
+-        _ ->
+-            {'false'
+-            ,cb_context:add_validation_error(<<"queue_id">>
+-                                            ,<<"type">>
+-                                            ,kz_json:from_list([{<<"message">>, <<"Id did not represent a queue">>}])
+-                                            ,Context
+-                                            )
+-            }
+-    end.
++-spec validate_eavesdrop_on_call(cb_context:context()) -> cb_context:context().
++validate_eavesdrop_on_call(Context) -> legacy_monitoring_unavailable(Context).
+ 
+-is_valid_endpoint(Context, DataJObj) ->
+-    AccountDb = cb_context:db_name(Context),
+-    Id = kz_doc:id(DataJObj),
+-    case kz_datamgr:open_cache_doc(AccountDb, Id) of
+-        {'ok', CallMeJObj} -> is_valid_endpoint_type(Context, CallMeJObj);
+-        {'error', _} ->
+-            {'false'
+-            ,cb_context:add_validation_error(<<"id">>
+-                                            ,<<"not_found">>
+-                                            ,kz_json:from_list(
+-                                               [{<<"message">>, <<"Id was not found">>}
+-                                               ,{<<"cause">>, Id}
+-                                               ])
+-                                            ,Context
+-                                            )
+-            }
+-    end.
++-spec validate_eavesdrop_on_queue(cb_context:context(), binary()) -> cb_context:context().
++validate_eavesdrop_on_queue(Context, _QueueId) -> legacy_monitoring_unavailable(Context).
+ 
+-is_valid_endpoint_type(Context, CallMeJObj) ->
+-    case kz_doc:type(CallMeJObj) of
+-        <<"device">> -> 'true';
+-        Type ->
+-            {'false'
+-            ,cb_context:add_validation_error(<<"id">>
+-                                            ,<<"type">>
+-                                            ,kz_json:from_list(
+-                                               [{<<"message">>, <<"Id did not represent a valid endpoint">>}
+-                                               ,{<<"cause">>, Type}
+-                                               ])
+-                                            ,Context
+-                                            )
+-            }
+-    end.
++-spec legacy_monitoring_unavailable(cb_context:context()) -> cb_context:context().
++legacy_monitoring_unavailable(Context) ->
++    crossbar_util:response('error'
++                          ,<<"legacy queue monitoring is unavailable; use POST /accounts/{account_id}/channels/{call_id} with action eavesdrop, whisper, barge or join">>
++                          ,503, Context).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc If the HTTP verb is PUT, execute the actual action, usually a db save.
+@@ -416,62 +276,13 @@ put(Context) ->
+     activate_account_for_acdc(Context),
+     crossbar_doc:save(Context).
+ 
+--spec put(cb_context:context(), path_token()) ->
+-          cb_context:context().
++-spec put(cb_context:context(), path_token()) -> cb_context:context().
+ put(Context, ?EAVESDROP_PATH_TOKEN) ->
+-    Prop = [{<<"Eavesdrop-Call-ID">>, cb_context:req_value(Context, <<"call_id">>)}
+-            | default_eavesdrop_req(Context)
+-           ],
+-    eavesdrop_req(Context, Prop).
++    legacy_monitoring_unavailable(Context).
+ 
+--spec put(cb_context:context(), path_token(), path_token()) ->
+-          cb_context:context().
+-put(Context, QID, ?EAVESDROP_PATH_TOKEN) ->
+-    Prop = [{<<"Eavesdrop-Group-ID">>, QID}
+-            | default_eavesdrop_req(Context)
+-           ],
+-    eavesdrop_req(Context, Prop).
+-
+--spec default_eavesdrop_req(cb_context:context()) -> kz_term:proplist().
+-default_eavesdrop_req(Context) ->
+-    [{<<"Eavesdrop-Mode">>, cb_context:req_value(Context, <<"mode">>, <<"listen">>)}
+-    ,{<<"Account-ID">>, cb_context:account_id(Context)}
+-    ,{<<"Endpoint-ID">>, cb_context:req_value(Context, <<"id">>)}
+-    ,{<<"Endpoint-Timeout">>, kz_term:to_integer(cb_context:req_value(Context, <<"timeout">>, 20))}
+-    ,{<<"Outbound-Caller-ID-Name">>, cb_context:req_value(Context, <<"caller_id_name">>)}
+-    ,{<<"Outbound-Caller-ID-Number">>, cb_context:req_value(Context, <<"caller_id_number">>)}
+-     | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+-    ].
+-
+--spec eavesdrop_req(cb_context:context(), kz_term:proplist()) -> cb_context:context().
+-eavesdrop_req(Context, Prop) ->
+-    case kz_amqp_worker:call(props:filter_undefined(Prop)
+-                            ,fun kapi_resource:publish_eavesdrop_req/1
+-                            ,fun kapi_resource:eavesdrop_resp_v/1
+-                            ,2 * ?MILLISECONDS_IN_SECOND
+-                            )
+-    of
+-        {'ok', Resp} -> crossbar_util:response(filter_response_fields(Resp), Context);
+-        {'error', 'timeout'} ->
+-            cb_context:add_system_error('timeout'
+-                                       ,kz_json:from_list([{<<"cause">>, <<"eavesdrop failed to start">>}])
+-                                       ,Context
+-                                       );
+-        {'error', E} -> crossbar_util:response('error', <<"error">>, 500, E, Context)
+-    end.
+-
+--define(REMOVE_FIELDS, [<<"Server-ID">>
+-                       ,<<"Node">>
+-                       ,<<"Msg-ID">>
+-                       ,<<"App-Version">>
+-                       ,<<"App-Name">>
+-                       ,<<"Event-Name">>
+-                       ,<<"Event-Category">>
+-                       ]).
+-filter_response_fields(JObj) ->
+-    kz_json:set_value(<<"eavesdrop_request_id">>, kz_json:get_value(<<"Msg-ID">>, JObj)
+-                     ,kz_json:normalize(kz_api:remove_defaults(JObj))
+-                     ).
++-spec put(cb_context:context(), path_token(), path_token()) -> cb_context:context().
++put(Context, _QID, ?EAVESDROP_PATH_TOKEN) ->
++    legacy_monitoring_unavailable(Context).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc If the HTTP verb is POST, execute the actual action, usually a db save

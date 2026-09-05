@@ -1,0 +1,12 @@
+<section class="acdc-state">
+	{{#if loading}}
+		<i class="fa fa-spinner fa-spin" aria-hidden="true"></i>
+		<p>{{message}}</p>
+	{{/if}}
+	{{#if error}}
+		<i class="fa fa-exclamation-triangle acdc-error-icon" aria-hidden="true"></i>
+		<h2>{{i18n.acdc.states.couldNotLoad}}</h2>
+		<p>{{message}}</p>
+		<button type="button" class="monster-button-primary acdc-retry">{{i18n.acdc.actions.retry}}</button>
+	{{/if}}
+</section>

@@ -1,0 +1,42 @@
+diff --git a/kazoo_dptools.c b/kazoo_dptools.c
+index 5a01650..0e7042d 100644
+--- a/kazoo_dptools.c
++++ b/kazoo_dptools.c
+@@ -411,15 +411,36 @@ SWITCH_STANDARD_APP(export_encoded_function)
+ 	kz_export(session, data, 1);
+ }
+ 
++/* Dequeuing input emits FreeSWITCH's DTMF event. Without input arguments,
++ * endless playback leaves digits queued until hangup, so Kazoo cannot react
++ * to a queue exit key or callback request while music is playing. Keep the
++ * playback running; the owning Kazoo controller decides when to interrupt it.
++ */
++static switch_status_t kz_endless_playback_input(switch_core_session_t *session,
++                                                void *input,
++                                                switch_input_type_t input_type,
++                                                void *buffer,
++                                                unsigned int buffer_length)
++{
++    (void) session;
++    (void) input;
++    (void) input_type;
++    (void) buffer;
++    (void) buffer_length;
++    return SWITCH_STATUS_SUCCESS;
++}
++
+ // copied from mod_dptools with allow SWITCH_STATUS_BREAK
+ SWITCH_STANDARD_APP(kz_endless_playback_function)
+ {
+ 	switch_channel_t *channel = switch_core_session_get_channel(session);
+ 	switch_status_t status = SWITCH_STATUS_SUCCESS;
+ 	const char *file = data;
++	switch_input_args_t args = { 0 };
++	args.input_callback = kz_endless_playback_input;
+ 
+ 	while (switch_channel_ready(channel)) {
+-		status = switch_ivr_play_file(session, NULL, file, NULL);
++		status = switch_ivr_play_file(session, NULL, file, &args);
+ 
+ 		if (status != SWITCH_STATUS_SUCCESS) {
+ 			break;

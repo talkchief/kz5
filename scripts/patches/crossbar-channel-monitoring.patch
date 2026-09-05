@@ -1,0 +1,310 @@
+diff --git a/src/modules/cb_channels.erl b/src/modules/cb_channels.erl
+index 789f1b59..08651793 100644
+--- a/src/modules/cb_channels.erl
++++ b/src/modules/cb_channels.erl
+@@ -128,8 +128,11 @@ validate_channel(Context, Id, ?HTTP_PUT) ->
+ %% @end
+ %%------------------------------------------------------------------------------
+ -spec post(cb_context:context(), path_token()) -> cb_context:context().
+-post(Context, _UUID) ->
+-    cb_context:set_resp_status(Context, 'success').
++post(Context, UUID) ->
++    case cb_channel_monitor:is_action(kz_json:get_value(<<"action">>, cb_context:req_data(Context))) of
++        'true' -> cb_channel_monitor:execute(Context, UUID);
++        'false' -> cb_context:set_resp_status(Context, 'success')
++    end.
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc If the HTTP verb is PUT, execute the actual action, usually a db save
+@@ -229,6 +232,13 @@ find_channel(AccountId, CallId, [StatusJObj|JObjs]) ->
+ %%------------------------------------------------------------------------------
+ -spec update(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+ update(Context, CallId) ->
++    case cb_channel_monitor:is_action(kz_json:get_value(<<"action">>, cb_context:req_data(Context))) of
++        'true' -> cb_channel_monitor:validate(Context, CallId);
++        'false' -> update_legacy(Context, CallId)
++    end.
++
++-spec update_legacy(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
++update_legacy(Context, CallId) ->
+     Context1 = read(Context, CallId),
+ 
+     case cb_context:has_errors(Context1) of
+diff --git a/src/cb_channel_monitor.erl b/src/cb_channel_monitor.erl
+new file mode 100644
+index 00000000..075e60c0
+--- /dev/null
++++ b/src/cb_channel_monitor.erl
+@@ -0,0 +1,239 @@
++%%% Account-scoped, administrator-only monitoring. No client-supplied routes.
++%%% This Source Code Form is subject to the Mozilla Public License, v. 2.0.
++-module(cb_channel_monitor).
++-export([is_action/1, validate/2, execute/2]).
++-ifdef(TEST).
++-export([valid_data/2, choose_channel/3, endpoint/3, ready/3, request/6, complete/3]).
++-endif.
++-include("crossbar.hrl").
++
++-spec is_action(any()) -> boolean().
++is_action(Action) -> lists:member(Action, [<<"eavesdrop">>, <<"whisper">>, <<"barge">>, <<"join">>, <<"stop_monitoring">>]).
++
++-spec validate(cb_context:context(), binary()) -> cb_context:context().
++validate(Context, CallId) ->
++    Account = cb_context:account_id(Context),
++    Authorized = is_binary(Account) andalso Account =:= cb_context:auth_account_id(Context)
++        andalso cb_context:is_account_admin(Context),
++    case {Authorized, valid_data(cb_context:req_data(Context), CallId)} of
++        {'false', _} -> fail(Context, 403, <<"account administrator required">>);
++        {_, 'false'} -> fail(Context, 400, <<"invalid monitoring request">>);
++        {'true', 'true'} -> prepare(Context, CallId)
++    end.
++
++-spec valid_data(kz_json:object(), binary()) -> boolean().
++valid_data(Data, CallId) ->
++    Action = kz_json:get_value(<<"action">>, Data),
++    Keys = kz_json:get_keys(Data),
++    safe_id(CallId) andalso
++        case Action of
++            <<"stop_monitoring">> ->
++                Keys -- [<<"action">>, <<"request_id">>] =:= []
++                    andalso hex_id(kz_json:get_value(<<"request_id">>, Data));
++            _ ->
++                Timeout = kz_json:get_value(<<"timeout">>, Data, 20),
++                is_action(Action) andalso Keys -- [<<"action">>, <<"device_id">>, <<"timeout">>] =:= []
++                    andalso hex_id(kz_json:get_value(<<"device_id">>, Data))
++                    andalso is_integer(Timeout) andalso Timeout >= 5 andalso Timeout =< 60
++        end.
++
++-spec prepare(cb_context:context(), binary()) -> cb_context:context().
++prepare(Context, CallId) ->
++    Account = cb_context:account_id(Context),
++    case locate(Account, CallId) of
++        {'ok', Channel} -> prepare_device(Context, Channel);
++        {'error', 'not_found'} -> fail(Context, 404, <<"channel not found in account">>);
++        {'error', 'conflict'} -> fail(Context, 409, <<"channel ownership is ambiguous">>);
++        _ -> fail(Context, 503, <<"channel ownership could not be verified">>)
++    end.
++
++-spec prepare_device(cb_context:context(), kz_json:object()) -> cb_context:context().
++prepare_device(Context, Channel) ->
++    Data = cb_context:req_data(Context),
++    case kz_json:get_value(<<"action">>, Data) of
++        <<"stop_monitoring">> ->
++            RequestId = kz_json:get_value(<<"request_id">>, Data),
++            case kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Monitor-Request-ID">>], Channel) of
++                RequestId -> prepared(Context, Channel, 'undefined');
++                _ -> fail(Context, 403, <<"not the correlated supervisor channel">>)
++            end;
++        _ ->
++            DeviceId = kz_json:get_value(<<"device_id">>, Data),
++            Account = cb_context:account_id(Context),
++            case kz_datamgr:open_doc(cb_context:db_name(Context), DeviceId) of
++                {'ok', Device} ->
++                    Realm = kzd_accounts:fetch_realm(Account),
++                    case endpoint(Account, Realm, Device) of
++                        {'ok', Endpoint} -> prepared(Context, Channel, Endpoint);
++                        _ -> fail(Context, 400, <<"an enabled account-owned SIP phone is required">>)
++                    end;
++                _ -> fail(Context, 404, <<"supervisor device not found">>)
++            end
++    end.
++
++-spec prepared(cb_context:context(), kz_json:object(), any()) -> cb_context:context().
++prepared(Context, Channel, Endpoint) ->
++    cb_context:set_resp_status(cb_context:store(Context, 'channel_monitor', {Channel, Endpoint}), 'success').
++
++%% Build only a registrar-resolved SIP endpoint. Device call forwarding, route,
++%% IP, failover, custom headers and client-provided endpoints are never copied.
++-spec endpoint(binary(), binary(), kz_json:object()) -> {'ok', kz_json:object()} | {'error', atom()}.
++endpoint(Account, Realm, Device) ->
++    User = kz_json:get_value([<<"sip">>, <<"username">>], Device),
++    Type = kz_json:get_value(<<"device_type">>, Device),
++    Valid = kz_json:get_value(<<"pvt_account_id">>, Device) =:= Account
++        andalso kz_doc:type(Device) =:= <<"device">>
++        andalso kz_json:get_value(<<"enabled">>, Device, 'true') =:= 'true'
++        andalso lists:member(Type, [<<"sip_device">>, <<"softphone">>])
++        andalso safe_aor(User) andalso safe_realm(Realm)
++        andalso kz_json:get_value([<<"sip">>, <<"realm">>], Device, Realm) =:= Realm,
++    case Valid of
++        'false' -> {'error', 'invalid_device'};
++        'true' ->
++            {'ok', kz_json:from_list([{<<"Invite-Format">>, <<"username">>}
++                                    ,{<<"Endpoint-Type">>, <<"sip">>}
++                                    ,{<<"To-User">>, User}, {<<"To-Username">>, User}, {<<"To-Realm">>, Realm}
++                                    ,{<<"Ignore-Early-Media">>, 'true'}
++                                    ,{<<"Bypass-Media">>, 'false'}])}
++    end.
++
++-spec locate(binary(), binary()) -> {'ok', kz_json:object()} | {'error', atom()}.
++locate(Account, CallId) ->
++    MsgId = kz_binary:rand_hex(16),
++    Req = [{<<"Call-ID">>, CallId}, {<<"Fields">>, <<"all">>}, {<<"Active-Only">>, 'false'}
++           ,{<<"Msg-ID">>, MsgId} | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
++    %% This is only a routing candidate, never authority. The target worker must
++    %% prove the live FS account before READY and again immediately before EXECUTE.
++    Count = kz_nodes:whapp_count('ecallmgr', 'true'),
++    Collector = fun(Replies) -> complete(Replies, Count, MsgId) end,
++    case kz_amqp_worker:call_collect(Req, fun kapi_call:publish_query_channels_req/1, Collector, 3000) of
++        {'ok', Replies} ->
++            case lists:all(fun(R) -> kz_api:msg_id(R) =:= MsgId andalso kapi_call:query_channels_resp_v(R) end, Replies) of
++                'true' -> choose_channel(Account, CallId, Replies);
++                'false' -> {'error', 'unavailable'}
++            end;
++        _ -> {'error', 'unavailable'}
++    end.
++
++-spec complete(kz_json:objects(), integer(), binary()) -> boolean().
++complete(Replies, Count, MsgId) when Count > 0 ->
++    Valid = lists:all(fun(R) -> kz_api:msg_id(R) =:= MsgId
++                        andalso kapi_call:query_channels_resp_v(R)
++                        andalso is_binary(kz_json:get_value(<<"Node">>, R)) end, Replies),
++    Valid andalso length(lists:usort([kz_json:get_value(<<"Node">>, R) || R <- Replies])) >= Count;
++complete(_, _, _) -> 'false'.
++
++-spec choose_channel(binary(), binary(), kz_json:objects()) -> {'ok', kz_json:object()} | {'error', atom()}.
++choose_channel(Account, CallId, Replies) ->
++    Channels = [C || R <- Replies, C <- [kz_json:get_value([<<"Channels">>, CallId], R)], C =/= 'undefined'],
++    Owners = lists:usort([{kz_json:get_value(<<"Account-ID">>, C), kz_json:get_value(<<"Media-Node">>, C)} || C <- Channels]),
++    case Owners of
++        [] -> {'error', 'not_found'};
++        [{Account, Node}] when is_binary(Node), byte_size(Node) > 0 -> {'ok', hd(Channels)};
++        [{_, _}] -> {'error', 'not_found'};
++        _ -> {'error', 'conflict'}
++    end.
++
++-spec execute(cb_context:context(), binary()) -> cb_context:context().
++execute(Context, CallId) ->
++    case cb_context:fetch(Context, 'channel_monitor') of
++        {Channel, Endpoint} -> execute_prepared(Context, CallId, Channel, Endpoint);
++        _ -> fail(Context, 403, <<"monitoring request was not authorized">>)
++    end.
++
++-spec execute_prepared(cb_context:context(), binary(), kz_json:object(), any()) -> cb_context:context().
++execute_prepared(Context, CallId, Channel, Endpoint) ->
++    Data = cb_context:req_data(Context),
++    Account = cb_context:account_id(Context),
++    RequestId = kz_json:get_value(<<"request_id">>, Data, kz_binary:rand_hex(16)),
++    SupervisorId = case kz_json:get_value(<<"action">>, Data) of
++                       <<"stop_monitoring">> -> CallId;
++                       _ -> kz_binary:rand_hex(16)
++                   end,
++    Request = request(Account, Data, Channel, Endpoint, RequestId, SupervisorId),
++    case kz_json:get_value(<<"action">>, Data) of
++        <<"stop_monitoring">> -> stop(Context, Request, RequestId, SupervisorId);
++        Action ->
++            Validator = fun(R) -> ready(R, RequestId, SupervisorId) end,
++            case kz_amqp_worker:call(Request, fun kapi_resource:publish_originate_req/1, Validator, 5000) of
++                {'ok', Ready} ->
++                    Execute = [{<<"Originate-UUID">>, SupervisorId}, {<<"Msg-ID">>, RequestId}
++                               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
++                    Queue = kz_json:get_ne_binary_value(<<"Originate-Queue">>, Ready),
++                    case kz_amqp_worker:cast(Execute, fun(P) -> kapi_dialplan:publish_originate_execute(Queue, P) end) of
++                        'ok' -> accepted(Context, Action, CallId, RequestId, SupervisorId);
++                        _ -> fail(Context, 503, <<"monitor execution could not be submitted">>)
++                    end;
++                _ -> fail(Context, 503, <<"live target or supervisor route could not be verified">>)
++            end
++    end.
++
++-spec ready(kz_json:object(), binary(), binary()) -> boolean().
++ready(R, RequestId, SupervisorId) ->
++    kapi_dialplan:originate_ready_v(R)
++        andalso kz_api:msg_id(R) =:= RequestId
++        andalso kz_json:get_value(<<"Originate-UUID">>, R) =:= SupervisorId
++        andalso kz_json:get_value(<<"Monitor-Request-ID">>, R) =:= RequestId
++        andalso kz_json:get_value(<<"Monitor-Verified">>, R) =:= 'true'.
++
++-spec request(binary(), kz_json:object(), kz_json:object(), any(), binary(), binary()) -> kz_term:proplist().
++request(Account, Data, Channel, Endpoint, RequestId, SupervisorId) ->
++    Action = kz_json:get_value(<<"action">>, Data),
++    Operation = case Action of <<"stop_monitoring">> -> <<"stop">>; _ -> <<"start">> end,
++    Mode = case Action of <<"whisper">> -> <<"whisper">>; <<"barge">> -> <<"full">>; <<"join">> -> <<"full">>; _ -> <<"listen">> end,
++    TargetId = kz_json:get_value(<<"Call-ID">>, Channel),
++    DeviceId = kz_json:get_value(<<"device_id">>, Data),
++    CCVs = kz_json:from_list(props:filter_undefined([{<<"Account-ID">>, Account}
++            ,{<<"Authorizing-ID">>, DeviceId}, {<<"Authorizing-Type">>, <<"device">>}
++            ,{<<"Monitor-Request-ID">>, RequestId}, {<<"Monitor-Target-ID">>, TargetId}
++            ,{<<"Monitor-Mode">>, Mode}, {<<"Eavesdrop-Enable-DTMF">>, 'false'}])),
++    Endpoints = case Endpoint of 'undefined' -> []; _ -> [kz_json:set_value(<<"Outbound-Call-ID">>, SupervisorId, Endpoint)] end,
++    props:filter_undefined([{<<"Application-Name">>, <<"eavesdrop">>}
++        ,{<<"Monitor-Operation">>, Operation}, {<<"Monitor-Account-ID">>, Account}
++        ,{<<"Monitor-Request-ID">>, RequestId}, {<<"Monitor-Device-ID">>, DeviceId}
++        ,{<<"Switch-Nodename">>, kz_json:get_value(<<"Media-Node">>, Channel)}
++        ,{<<"Eavesdrop-Call-ID">>, TargetId}, {<<"Eavesdrop-Mode">>, Mode}
++        ,{<<"Originate-UUID">>, SupervisorId}, {<<"Outbound-Call-ID">>, SupervisorId}
++        ,{<<"Originate-Immediate">>, 'false'}, {<<"Start-Control-Process">>, 'true'}
++        ,{<<"Timeout">>, kz_json:get_value(<<"timeout">>, Data, 20)}
++        ,{<<"Outbound-Caller-ID-Name">>, <<"Call Supervisor">>}, {<<"Outbound-Caller-ID-Number">>, <<"monitor">>}
++        ,{<<"Custom-Channel-Vars">>, CCVs}, {<<"Endpoints">>, Endpoints}
++        ,{<<"Msg-ID">>, RequestId} | kz_api:default_headers(?APP_NAME, ?APP_VERSION)]).
++
++-spec stop(cb_context:context(), kz_term:proplist(), binary(), binary()) -> cb_context:context().
++stop(Context, Request, RequestId, SupervisorId) ->
++    Validator = fun(R) -> kapi_resource:originate_resp_v(R)
++                    andalso kz_api:msg_id(R) =:= RequestId
++                    andalso kz_api:call_id(R) =:= SupervisorId
++                    andalso kz_json:get_value(<<"Monitor-Request-ID">>, R) =:= RequestId
++                    andalso kz_json:get_value(<<"Application-Response">>, R) =:= <<"MONITOR_STOPPED">> end,
++    case kz_amqp_worker:call(Request, fun kapi_resource:publish_originate_req/1, Validator, 5000) of
++        {'ok', _} -> accepted(Context, <<"stop_monitoring">>, SupervisorId, RequestId, SupervisorId);
++        _ -> fail(Context, 503, <<"supervisor termination could not be verified">>)
++    end.
++
++-spec accepted(cb_context:context(), binary(), binary(), binary(), binary()) -> cb_context:context().
++accepted(Context, Action, Target, RequestId, SupervisorId) ->
++    lager:notice("call_monitor account=~s admin=~s action=~s target=~s supervisor=~s request=~s accepted"
++                 ,[cb_context:account_id(Context), cb_context:auth_user_id(Context), Action, Target, SupervisorId, RequestId]),
++    crossbar_util:response_202(<<"monitor request accepted; connection is not confirmed">>,
++        kz_json:from_list([{<<"status">>, <<"accepted">>}, {<<"action">>, Action}
++                          ,{<<"request_id">>, RequestId}, {<<"target_call_id">>, Target}
++                          ,{<<"supervisor_call_id">>, SupervisorId}]), Context).
++
++-spec fail(cb_context:context(), integer(), binary()) -> cb_context:context().
++fail(Context, Code, Message) ->
++    lager:notice("call_monitor account=~p admin=~p rejected code=~B reason=~s"
++                 ,[cb_context:account_id(Context), cb_context:auth_user_id(Context), Code, Message]),
++    crossbar_util:response('error', Message, Code, Context).
++-spec safe_id(any()) -> boolean().
++safe_id(V) -> matches(V, <<"^[A-Za-z0-9_.:@-]{1,128}$">>).
++-spec hex_id(any()) -> boolean().
++hex_id(V) -> matches(V, <<"^[a-f0-9]{32}$">>).
++-spec safe_aor(any()) -> boolean().
++safe_aor(V) -> matches(V, <<"^[A-Za-z0-9_.+-]{1,128}$">>).
++-spec safe_realm(any()) -> boolean().
++safe_realm(V) -> matches(V, <<"^[A-Za-z0-9.-]{1,253}$">>).
++-spec matches(any(), binary()) -> boolean().
++matches(V, Regex) when is_binary(V) -> re:run(V, Regex, [{'capture', 'none'}]) =:= 'match';
++matches(_, _) -> 'false'.
+diff --git a/priv/couchdb/schemas/channel_monitoring.json b/priv/couchdb/schemas/channel_monitoring.json
+new file mode 100644
+index 00000000..fdfa913f
+--- /dev/null
++++ b/priv/couchdb/schemas/channel_monitoring.json
+@@ -0,0 +1,27 @@
++{
++  "$schema": "http://json-schema.org/draft-04/schema#",
++  "id": "channel_monitoring",
++  "description": "Account-administrator-only supervisor actions on an exact channel leg. Whisper speaks only to the selected leg; barge and join are three-way conversation, not takeover. Acceptance does not prove connection.",
++  "type": "object",
++  "oneOf": [
++    {
++      "type": "object",
++      "additionalProperties": false,
++      "properties": {
++        "action": {"type": "string", "enum": ["eavesdrop", "whisper", "barge", "join"]},
++        "device_id": {"type": "string", "pattern": "^[a-f0-9]{32}$", "description": "Enabled SIP phone in the authenticated account; no forwarding or PSTN routes are used."},
++        "timeout": {"type": "integer", "minimum": 5, "maximum": 60, "default": 20, "description": "Supervisor ringing timeout in seconds."}
++      },
++      "required": ["action", "device_id"]
++    },
++    {
++      "type": "object",
++      "additionalProperties": false,
++      "properties": {
++        "action": {"type": "string", "enum": ["stop_monitoring"]},
++        "request_id": {"type": "string", "pattern": "^[a-f0-9]{32}$", "description": "Correlation returned by the original start request. URL UUID must be its supervisor_call_id, never the target UUID."}
++      },
++      "required": ["action", "request_id"]
++    }
++  ]
++}
