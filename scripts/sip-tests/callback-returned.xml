@@ -5,6 +5,13 @@
   <recv request="INVITE" rrs="true" timeout="90000" crlf="true">
     <action>
       <ereg regexp="INVITE sip:\+12025550101@" search_in="msg" check_it="true" assign_to="uri_match"/>
+      <!-- The offer chooses the receive payload. SIPp play_dtmf is fixed at
+           96 and cannot be used for a returned call whose offer selects 101. -->
+      <ereg regexp="m=audio [0-9]+ RTP/AVP ([0-9 ]+)" search_in="body" check_it="true" assign_to="audio_match,audio_payloads"/>
+      <ereg regexp="(^| )0( |$)" search_in="var" variable="audio_payloads" check_it="true" assign_to="pcmu_match"/>
+      <ereg regexp="a=rtpmap:([0-9]+) telephone-event/8000" search_in="body" check_it="true" assign_to="dtmf_match,dtmf_payload_text"/>
+      <todouble assign_to="dtmf_payload" variable="dtmf_payload_text"/>
+      <log message="callback-negotiated-telephone-event=[$dtmf_payload_text]"/>
       <assignstr assign_to="confirm_delay_text" value="[field1]"/>
       <todouble assign_to="confirm_delay_ms" variable="confirm_delay_text"/>
       <assignstr assign_to="bridge_hold_text" value="[field2]"/>
@@ -56,10 +63,10 @@
       s=Kazoo local simulated carrier
       c=IN IP[media_ip_type] [media_ip]
       t=0 0
-      m=audio [media_port] RTP/AVP 0 96
+      m=audio [media_port] RTP/AVP 0 [$dtmf_payload_text]
       a=rtpmap:0 PCMU/8000
-      a=rtpmap:96 telephone-event/8000
-      a=fmtp:96 0-16
+      a=rtpmap:[$dtmf_payload_text] telephone-event/8000
+      a=fmtp:[$dtmf_payload_text] 0-16
       a=sendrecv
     ]]>
   </send>
@@ -71,11 +78,11 @@
       <ereg regexp=": *(.*)" search_in="hdr" header="From" assign_to="_,them"/>
     </action>
   </recv>
-  <Reference variables="_,uri_match"/>
+  <Reference variables="_,uri_match,dtmf_match,audio_match,pcmu_match"/>
 
   <nop><action><exec rtp_stream="apattern,1,0,PCMU/8000"/></action></nop>
   <pause variable="confirm_delay_ms"/>
-  <nop><action><exec play_dtmf="1,200"/></action></nop>
+  <!-- CALLBACK_NEGOTIATED_DTMF: expanded by the local fixture generator. -->
   <!-- Keep the returned caller active while ACDC originates and bridges the
        native agent leg. RTP/call-event evidence is checked by the harness. -->
   <pause variable="bridge_hold_ms"/>

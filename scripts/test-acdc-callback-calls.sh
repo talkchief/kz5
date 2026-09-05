@@ -73,7 +73,7 @@ parse_callback_args() {
 }
 
 validate_callback_scenarios() {
-    local scratch request_input returned_input item scenario input port output
+    local scratch request_input returned_input item scenario input port output scenario_path
     command -v node >/dev/null || die 'Node.js is required for the callback packet-evidence gate'
     node --check "$callback_test_dir/test-fixtures/assert-callback-confirmation-pcap.cjs"
     bash -n "$CALLBACK_FIXTURE_HELPER"
@@ -82,13 +82,16 @@ validate_callback_scenarios() {
     chmod 700 "$scratch"
     request_input=$scratch/request.csv
     returned_input=$scratch/returned.csv
+    node "$callback_test_dir/test-fixtures/create-callback-carrier-scenario.cjs" "$scratch" >/dev/null
     printf 'SEQUENTIAL\ndummy;[authentication username=dummy password=dummy];example.invalid;2000;+12025550101;6\n' > "$request_input"
     printf 'SEQUENTIAL\n+12025550101;3500;15000\n' > "$returned_input"
     chmod 600 "$request_input" "$returned_input"
     for item in 'callback-request.xml request.csv 15064' 'callback-returned.xml returned.csv 16060'; do
         read -r scenario input port <<<"$item"
+        scenario_path=$SCENARIO_DIR/$scenario
+        [[ $scenario != callback-returned.xml ]] || scenario_path=$scratch/$scenario
         output=$scratch/$scenario.out
-        timeout 5 sipp 127.0.0.1:9 -sf "$SCENARIO_DIR/$scenario" -inf "$scratch/$input" \
+        timeout 5 sipp 127.0.0.1:9 -sf "$scenario_path" -inf "$scratch/$input" \
             -i 127.0.0.30 -p "$port" -mi 127.0.0.30 -mp 45000 -m 0 -nostdin >"$output" 2>&1 || true
         ! grep -Eq 'parse error|Unable to load|Unknown element|Variable .* referenced.*(not declared|[01] times)' "$output" || \
             die "SIPp rejected callback scenario $scenario"
@@ -118,11 +121,13 @@ start_returned_carrier() {
     local csv=$RUN_DIR/callback-carrier-input.csv stats=$RUN_DIR/callback-carrier-stats.csv
     local output=$RUN_DIR/callback-carrier.log
     write_returned_carrier_csv "$csv"
-    sipp -sf "$SCENARIO_DIR/callback-returned.xml" -inf "$csv" \
+    node "$callback_test_dir/test-fixtures/create-callback-carrier-scenario.cjs" "$RUN_DIR" >/dev/null
+    sipp -sf "$RUN_DIR/callback-returned.xml" -inf "$csv" \
         -i "$CARRIER_IP" -p "$CARRIER_PORT" -mi "$CARRIER_IP" -mp "$CARRIER_MEDIA_PORT" \
         -min_rtp_port "$CARRIER_MEDIA_PORT" -max_rtp_port "$((CARRIER_MEDIA_PORT + 3))" \
         -rtp_echo -m 1 -l 1 -nostdin -aa -timeout 120s -timeout_error \
-        -trace_stat -fd 1s -stf "$stats" >"$output" 2>&1 &
+        -trace_stat -fd 1s -stf "$stats" \
+        -trace_logs -log_file "$RUN_DIR/callback-carrier-negotiation.log" >"$output" 2>&1 &
     CARRIER_PID=$!
     ACTIVE_PIDS+=("$CARRIER_PID")
     sleep 1
@@ -213,7 +218,8 @@ callback_channel() {
     # Raw channel variables can contain internal credentials; only this fixed
     # projection is ever retained or emitted by the harness.
     jq -e --arg id "$id" 'select(.["Unique-ID"]==$id) |
-        {id:.["Unique-ID"],account:.["variable_ecallmgr_Account-ID"],bridge_to:.variable_bridge_to}' <<<"$raw"
+        {id:.["Unique-ID"],account:.["variable_ecallmgr_Account-ID"],bridge_to:.variable_bridge_to,
+         sip_call_id:.variable_sip_call_id}' <<<"$raw"
 }
 
 wait_callback_registered() {
@@ -233,11 +239,24 @@ wait_callback_registered() {
     return 1
 }
 
+callback_capture_filter() {
+    # Bind every captured port to its exact local fixture endpoint. Merely
+    # matching a broad media range can collect unrelated production calls.
+    [[ $LOCAL_IP == 127.0.0.20 && $CARRIER_IP == 127.0.0.30 ]] ||
+        die 'Callback capture requires the exact isolated loopback endpoints'
+    printf 'udp and (((src host %s and (src port %s or src port %s or src port %s)) or (dst host %s and (dst port %s or dst port %s or dst port %s or dst port %s))) or ((src host %s and (src port %s or src port %s)) or (dst host %s and (dst port %s or dst port %s))))\n' \
+        "$LOCAL_IP" "$CALLBACK_ORIGINAL_MEDIA_PORT" "$SENTINEL_MEDIA_PORT" "$AGENT_MEDIA_MIN" \
+        "$LOCAL_IP" "$CALLBACK_ORIGINAL_MEDIA_PORT" "$SENTINEL_MEDIA_PORT" "$AGENT_MEDIA_MIN" "$AGENT_CONTACT_PORT_BASE" \
+        "$CARRIER_IP" "$CARRIER_MEDIA_PORT" "$CARRIER_PORT" "$CARRIER_IP" "$CARRIER_MEDIA_PORT" "$CARRIER_PORT"
+}
+
 start_callback_capture() {
+    local filter
+    filter=$(callback_capture_filter) || return 1
     RTP_PCAP=$RUN_DIR/callback-rtp.pcap
     RTP_CAPTURE_LOG=$RUN_DIR/callback-rtp-capture.log
     tcpdump -q -n -i any -U -w "$RTP_PCAP" \
-        'udp and (portrange 40000-44998 or dst port 15100)' >"$RTP_CAPTURE_LOG" 2>&1 &
+        "$filter" >"$RTP_CAPTURE_LOG" 2>&1 &
     RTP_CAPTURE_PID=$!
     ACTIVE_PIDS+=("$RTP_CAPTURE_PID")
     sleep 1
@@ -303,6 +322,8 @@ run_callback_acceptance() {
     stop_monitor
     assert_callback_rtp
     node "$callback_test_dir/test-fixtures/assert-callback-confirmation-pcap.cjs" "$RTP_PCAP" \
+        "$RUN_DIR/callback-carrier-negotiation.log" \
+        "$RUN_DIR/callback-bridge-evidence.json" \
         > "$RUN_DIR/callback-confirmation-evidence.json" || die 'Packet evidence failed caller-confirmation-before-agent gate'
     agent_status verify 1 1
     wait_agent_ready 1 || die 'Agent did not return ready after callback bridge'
@@ -312,7 +333,7 @@ run_callback_acceptance() {
 }
 
 callback_cleanup() {
-    local exit_code=$? pid callback_settled=true
+    local exit_code=$? pid callback_settled=true cleanup_failed=false
     [[ $CALLBACK_CLEANING == false ]] || return
     CALLBACK_CLEANING=true
     for pid in "${ACTIVE_PIDS[@]}"; do
@@ -327,19 +348,28 @@ callback_cleanup() {
         [[ $CALLER_REGISTERED != true ]] || best_effort_deregister_caller "$CALLER_PORT" callback-cleanup-caller
         ((STATUS_AGENT_MAX == 0)) || agent_status logout 1 "$STATUS_AGENT_MAX" >/dev/null 2>&1 || true
         if [[ $FIXTURE_CREATED == true && -n $CALLBACK_ORIGINAL_CALL_ID ]]; then
-            callback_fixture cancel-original "$CALLBACK_ORIGINAL_CALL_ID" >/dev/null 2>&1 || callback_settled=false
+            callback_fixture cancel-original "$CALLBACK_ORIGINAL_CALL_ID" >/dev/null 2>&1 || {
+                callback_settled=false
+                cleanup_failed=true
+            }
         fi
         if [[ $FIXTURE_CREATED == true && $KEEP_FIXTURE != true ]]; then
             if [[ $callback_settled == true ]]; then
-                callback_fixture cleanup >/dev/null 2>&1 || \
+                callback_fixture cleanup >/dev/null 2>&1 || {
+                    cleanup_failed=true
                     warn "Fixture cleanup needs attention: $CALLBACK_FIXTURE_HELPER cleanup"
+                }
             else
                 warn 'Callback cancellation has unresolved settlement; retained owned fixture for recovery, not another test run'
             fi
         fi
     fi
     find "${RUN_DIR:-/nonexistent}" -maxdepth 1 -type f -name '*-input.csv' -delete 2>/dev/null || true
-    return "$exit_code"
+    if [[ $exit_code == 0 && $cleanup_failed == true ]]; then exit_code=1; fi
+    # Returning a failure from an EXIT trap does not reliably replace the
+    # original successful status. Exit explicitly, preserving original errors.
+    trap - EXIT
+    exit "$exit_code"
 }
 
 main_callback() {
@@ -351,6 +381,8 @@ main_callback() {
     ensure_sipp
     validate_callback_scenarios
     resolve_local_ip
+    # Fail before any fixture or agent mutation if auto-resolution is not local.
+    callback_capture_filter >/dev/null
     if [[ $CALLBACK_PREPARE == true ]]; then
         log 'PASS: callback fixture helper and SIPp scenarios are ready; no API mutation or SIP traffic sent'
         return 0

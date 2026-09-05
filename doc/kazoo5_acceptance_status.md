@@ -1,7 +1,34 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-05 13:17 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-05 13:31 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
+
+## Callback follow-up (13:31 UTC)
+
+The isolated run `/var/log/kazoo-acceptance/20260905T132127Z` is **not a pass**.
+It registered the callback, answered the returned call, delivered the negotiated
+DTMF confirmation, and reached a real agent answer/bridge. FreeSWITCH emitted
+`CHANNEL_BRIDGE` on the initiating agent leg; the queue tracked only the returned
+caller leg. The durable callback therefore did not reach `completed`, and its
+15-second bridge-proof deadline cancelled the connected call. A narrow repair
+is being tested; no completion is inferred merely from agent acceptance.
+
+Ordinary cleanup now settled the exact failed ticket, cleared its reconciliation
+flag, removed only the owned fixture, and left zero FreeSWITCH calls. MASTER
+configuration and the production test-phone service were not changed. The
+separate missing return number, outbound caller ID and routing prerequisites
+below still apply to the user's account.
+
+The acceptance fixture now generates DTMF using the actual offered dynamic RTP
+payload instead of SIPp's fixed payload. Its evidence gate requires matching
+SIP offer/answer/ACK, exact native caller/agent dialog correlation, negotiated
+media endpoints, and completed digit 1 before the first agent INVITE. Captures
+are limited to the isolated loopback endpoints and their exact ports. Private
+tests pass 39 packet-evidence cases, all 32 dynamic payloads, and 28 capture
+filter cases. Seven actual-shell cleanup test groups also pass: cancellation or
+owned-fixture cleanup failure now makes an otherwise successful gate exit
+nonzero, while preserving existing failures and retaining unsettled resources.
+These fixture tests are not a substitute for the full live callback gate.
 
 ## Latest live fixes (12:44 UTC)
 
