@@ -293,10 +293,113 @@ index 0000000..2a33967
 +-spec fail(any()) -> no_return().
 +fail(Reason) -> throw({'language_media', Reason}).
 diff --git a/src/acdc_announcements.erl b/src/acdc_announcements.erl
-index 9cfab7c..b626cbe 100644
+index 158849d..b626cbe 100644
 --- a/src/acdc_announcements.erl
 +++ b/src/acdc_announcements.erl
-@@ -149,7 +149,7 @@ announcements_media(Props) ->
+@@ -17,7 +17,6 @@
+ 
+ -ifdef(TEST).
+ -export([get_config/1
+-        ,resolve_media/2
+         ,maybe_set_announcement_language/2
+         ,position_prompts/3
+         ,wait_time_prompts/4
+@@ -64,9 +63,8 @@ start_link(Manager, Call, Props) ->
+ %%------------------------------------------------------------------------------
+ -spec init(pid(), kapps_call:call(), kz_term:proplist()) -> 'no_return'.
+ init(Manager, Call, Props) ->
+-    Config0 = get_config(Props),
+-    AnnouncementCall = maybe_set_announcement_language(Call, Config0),
+-    Config = resolve_media(Config0, AnnouncementCall),
++    Config = get_config(Props),
++    AnnouncementCall = maybe_set_announcement_language(Call, Config),
+     kapps_call:put_callid(AnnouncementCall),
+     State = init_state(Manager, AnnouncementCall, Config),
+     %% Pooled event delivery registers this process only; gproc removes the
+@@ -96,13 +94,11 @@ get_config(Props0) ->
+      ,initial_delay => max(1, min(3600, props:get_integer_value(<<"initial_delay">>, Props, 30)))
+      ,announcement_language => props:get_ne_binary_value(<<"language">>, Props)
+      ,announcements_media => announcements_media(Props)
+-     ,configured_announcements_media => normalize_announcements_props(props:get_value(<<"media">>, Props, []))
+      ,callback_announcements_enabled => props:get_is_true(<<"enabled">>, Callback, 'false')
+          andalso props:get_is_true(<<"enabled">>, Offer, 'true')
+      ,callback_initial_delay => bounded_seconds(<<"initial_delay">>, Offer, 30, 1)
+      ,callback_interval => bounded_seconds(<<"interval">>, Offer, 60, 15)
+      ,callback_entry_key => props:get_ne_binary_value(<<"entry_key">>, Callback, <<"6">>)
+-     ,callback_allow_alternate => props:get_is_true(<<"allow_alternate_number">>, Callback, 'false')
+      ,callback_media => normalize_announcements_props(props:get_value(<<"media">>, Callback, []))
+      }.
+ 
+@@ -144,68 +140,6 @@ announcements_media(Props) ->
+      || {Name, Default} <- ?DEFAULT_ANNOUNCEMENTS_MEDIA
+     ].
+ 
+-%% Resolve fixed defaults exactly once before starting the scheduler. No prompt
+-%% lookup or account-override query is made on recurring announcement ticks.
+--spec resolve_media(map(), kapps_call:call()) -> map().
+-resolve_media(Config, Call) ->
+-    Language = acdc_gemini_prompts:canonical(kapps_call:language(Call)),
+-    Account = kapps_call:account_id(Call),
+-    Position = resolve_position(Config, Language, Account),
+-    Wait = resolve_wait(Config, Language, Account),
+-    Callback = case maps:get(callback_announcements_enabled, Config) of
+-                   'false' -> 'unavailable';
+-                   'true' -> acdc_gemini_prompts:callback(
+-                               maps:get(callback_entry_key, Config),
+-                               maps:get(callback_allow_alternate, Config),
+-                               maps:get(callback_media, Config), Language, Account)
+-               end,
+-    Config#{resolved_position => Position, resolved_wait => Wait,
+-            non_gemini_position_dependency => Position =/= 'unavailable',
+-            resolved_callback => Callback}.
+-
+--spec resolve_position(map(), binary(), binary()) -> any().
+-resolve_position(#{position_announcements_enabled := 'false'}, _, _) -> 'unavailable';
+-resolve_position(Config, Language, Account) ->
+-    Prefix = resolve_queue_prompt(<<"you_are_at_position">>, Config, Language, Account),
+-    Suffix = resolve_queue_prompt(<<"in_the_queue">>, Config, Language, Account),
+-    case {Prefix, Suffix} of
+-        {{'gemini', _}, {'gemini', _}} when Language =:= <<"en-us">> ->
+-            case acdc_gemini_prompts:default(<<"acdc-queue-your-current-position-is">>, Language, Account, 'absent') of
+-                {Kind, Prompt} when Kind =:= 'gemini'; Kind =:= 'custom' -> {'ok', Prompt, 'undefined'};
+-                _ -> 'unavailable'
+-            end;
+-        {{K1, P1}, {K2, P2}} when (K1 =:= 'gemini' orelse K1 =:= 'custom')
+-                                      andalso (K2 =:= 'gemini' orelse K2 =:= 'custom')
+-                                      andalso (K1 =:= 'custom' orelse K2 =:= 'custom') ->
+-            %% Explicit queue fields and legacy account recordings retain the
+-            %% two-part playlist; equality to a stock name is not ownership.
+-            {'ok', P1, P2};
+-        _ -> 'unavailable'
+-    end.
+-
+--spec resolve_wait(map(), binary(), binary()) -> any().
+-resolve_wait(#{wait_time_announcements_enabled := 'false'}, _, _) -> 'unavailable';
+-resolve_wait(Config, Language, Account) ->
+-    Keys = [<<"increase_in_call_volume">>, <<"the_estimated_wait_time_is">>],
+-    Fixed = [{K, resolve_queue_prompt(K, Config, Language, Account)} || K <- Keys],
+-    Times = [{time_prompt2(T), resolve_queue_default(time_prompt2(T), Language, Account)}
+-             || T <- [0, 61, 301, 601, 901, 1801, 2701, 3601]],
+-    All = Fixed ++ Times,
+-    case lists:all(fun({_, {Kind, _}}) -> Kind =:= 'gemini' orelse Kind =:= 'custom' end, All) of
+-        'true' -> {'ok', maps:from_list([{K, P} || {K, {_, P}} <- All])};
+-        'false' -> 'unavailable'
+-    end.
+-
+--spec resolve_queue_prompt(binary(), map(), binary(), binary()) -> tuple().
+-resolve_queue_prompt(Name, Config, Language, Account) ->
+-    Legacy = <<"queue-", Name/binary>>,
+-    acdc_gemini_prompts:default_alias(Legacy, <<"acdc-", Legacy/binary>>, Language, Account,
+-      acdc_gemini_prompts:selection(Name, maps:get(configured_announcements_media, Config))).
+-
+--spec resolve_queue_default(binary(), binary(), binary()) -> tuple().
+-resolve_queue_default(Legacy, Language, Account) ->
+-    acdc_gemini_prompts:default_alias(Legacy, <<"acdc-", Legacy/binary>>, Language, Account, 'absent').
+-
+ %%------------------------------------------------------------------------------
+ %% @doc Apply an optional queue-specific language to the announcement call.
+ %% kapps_call_command uses the call language for say macros, so this keeps the
+@@ -215,7 +149,7 @@ resolve_queue_default(Legacy, Language, Account) ->
  -spec maybe_set_announcement_language(kapps_call:call(), map()) -> kapps_call:call().
  maybe_set_announcement_language(Call, #{announcement_language := 'undefined'}) -> Call;
  maybe_set_announcement_language(Call, #{announcement_language := Language}) ->
@@ -305,87 +408,87 @@ index 9cfab7c..b626cbe 100644
  
  %%------------------------------------------------------------------------------
  %% @doc Initialize state for the announcements process
-@@ -329,18 +329,17 @@ maybe_announce_position(#{manager := Manager
- position_prompts(Position, Language, Config) when is_integer(Position), Position > 0 ->
-     Prefix = announcements_media_file(<<"you_are_at_position">>, Config),
-     Suffix = announcements_media_file(<<"in_the_queue">>, Config),
--    case {kz_term:to_lower_binary(Language), Prefix, Suffix} of
--        {<<"en-us">>, <<"queue-you_are_at_position">>, <<"queue-in_the_queue">>} ->
+@@ -392,11 +326,21 @@ maybe_announce_position(#{manager := Manager
+ %%------------------------------------------------------------------------------
+ -spec position_prompts(kz_term:api_pos_integer(), binary(), map()) ->
+           kapps_call_command:audio_macro_prompts().
+-position_prompts(Position, Language, #{resolved_position := {'ok', Prefix, Suffix}})
+-  when is_integer(Position), Position > 0 ->
+-    %% Incremental English or legacy custom path; native speech is NOT Gemini.
+-    [{'prompt', Prefix, Language, <<"A">>}, {'say', kz_term:to_binary(Position), <<"number">>}]
+-        ++ case Suffix of 'undefined' -> []; _ -> [{'prompt', Suffix, Language, <<"A">>}] end;
++position_prompts(Position, Language, Config) when is_integer(Position), Position > 0 ->
++    Prefix = announcements_media_file(<<"you_are_at_position">>, Config),
++    Suffix = announcements_media_file(<<"in_the_queue">>, Config),
 +    Number = acdc_language:number_prompts(Position, Language),
 +    case {acdc_language:bundled(Language), Prefix, Suffix, Number} of
 +        {_, _, _, []} -> [];
 +        {'true', <<"queue-you_are_at_position">>, <<"queue-in_the_queue">>, _} ->
-             %% A separate installed prompt avoids replacing existing system
-             %% audio or changing explicitly customized/localized playlists.
--            [{'prompt', <<"acdc-queue-your-current-position-is">>, Language, <<"A">>}
--            ,{'say', kz_term:to_binary(Position), <<"number">>}
--            ];
++            %% A separate installed prompt avoids replacing existing system
++            %% audio or changing explicitly customized/localized playlists.
 +            [{'prompt', <<"acdc-queue-your-current-position-is">>, acdc_language:canonical(Language), <<"A">>}
 +             | Number];
-         _ ->
--            [{'prompt', Prefix, Language, <<"A">>}
--            ,{'say', kz_term:to_binary(Position), <<"number">>}
--            ,{'prompt', Suffix, Language, <<"A">>}
--            ]
++        _ ->
 +            [{'prompt', localized_default(Prefix, Language, Config), Language, <<"A">>}]
 +                ++ Number ++ [{'prompt', localized_default(Suffix, Language, Config), Language, <<"A">>}]
-     end;
++    end;
  position_prompts(_, _, _) -> [].
  
-@@ -376,12 +375,12 @@ wait_time_prompts(AverageWaitTime, LastAverageWaitTime, Language, Config)
+ %%------------------------------------------------------------------------------
+@@ -426,18 +370,18 @@ maybe_announce_wait_time(PromptAcc, #{call := Call
+ -spec wait_time_prompts(kz_term:api_non_neg_integer(), kz_term:api_non_neg_integer(),
+                         binary(), map()) ->
+           {kapps_call_command:audio_macro_prompts(), kz_term:api_non_neg_integer()}.
+-wait_time_prompts(AverageWaitTime, LastAverageWaitTime, Language, #{resolved_wait := {'ok', Media}})
++wait_time_prompts(AverageWaitTime, LastAverageWaitTime, Language, Config)
+   when is_integer(AverageWaitTime), AverageWaitTime >= 0 ->
      IncreasePrompt =
          case is_integer(LastAverageWaitTime) andalso AverageWaitTime > LastAverageWaitTime of
              'true' ->
--                [{'prompt', announcements_media_file(<<"increase_in_call_volume">>, Config), Language, <<"A">>}];
+-                [{'prompt', maps:get(<<"increase_in_call_volume">>, Media), Language, <<"A">>}];
 +                [{'prompt', localized_default(announcements_media_file(<<"increase_in_call_volume">>, Config), Language, Config), Language, <<"A">>}];
              'false' ->
                  []
          end,
      {IncreasePrompt ++
--         [{'prompt', announcements_media_file(<<"the_estimated_wait_time_is">>, Config), Language, <<"A">>}
+-         [{'prompt', maps:get(<<"the_estimated_wait_time_is">>, Media), Language, <<"A">>}
+-         ,{'prompt', maps:get(time_prompt2(AverageWaitTime), Media), Language, <<"A">>}
 +         [{'prompt', localized_default(announcements_media_file(<<"the_estimated_wait_time_is">>, Config), Language, Config), Language, <<"A">>}
-          ,time_prompt(AverageWaitTime, Language)
++         ,time_prompt(AverageWaitTime, Language)
           ],
       AverageWaitTime};
-@@ -403,13 +402,15 @@ maybe_announce_callback(Due, #{call := Call, config := Config}) ->
+ wait_time_prompts(_, LastAverageWaitTime, _, _) ->
+@@ -456,8 +400,22 @@ maybe_announce_callback(Due, #{call := Call, config := Config}) ->
+ 
+ -spec callback_offer_prompts(binary(), map()) -> list().
  callback_offer_prompts(_, #{callback_announcements_enabled := 'false'}) -> [];
- callback_offer_prompts(Language0, #{callback_entry_key := <<Digit>>=Entry,
-                                   callback_media := Media}) when Digit >= $0, Digit =< $9 ->
--    Language = callback_offer_language(Language0),
--    %% Default installer runtime has no acdc_language module. Match its callflow:
--    %% English defaults or a complete explicit custom media set only. The
--    %% separately staged language layer can expand this after media verification.
+-callback_offer_prompts(Language, #{resolved_callback := {'ok', #{media := #{offer := Offer}}}}) ->
+-    [{'prompt', Offer, acdc_gemini_prompts:canonical(Language), <<"A">>}];
++callback_offer_prompts(Language0, #{callback_entry_key := <<Digit>>=Entry,
++                                  callback_media := Media}) when Digit >= $0, Digit =< $9 ->
 +    Language = acdc_language:canonical(Language0),
 +    %% Match cf_acdc_member's menu readiness gate. In another language, any
 +    %% missing default among these five fields requires the complete localized
 +    %% callback pack (including digits where appropriate). Explicit account
 +    %% media keeps its existing resolution behavior. Do not promise an unusable
 +    %% callback menu merely because its offer alone has an override.
-     AllCustom = lists:all(fun(Name) -> props:get_ne_binary_value(Name, Media) =/= 'undefined' end,
-                          [<<"offer">>, <<"menu">>, <<"number_readback">>, <<"confirmation">>, <<"success">>]),
--    case Language =:= <<"en-us">> orelse AllCustom of
++    AllCustom = lists:all(fun(Name) -> props:get_ne_binary_value(Name, Media) =/= 'undefined' end,
++                         [<<"offer">>, <<"menu">>, <<"number_readback">>, <<"confirmation">>, <<"success">>]),
 +    case Language =:= <<"en-us">> orelse AllCustom orelse acdc_language:callback_available(Language) of
-         'false' -> [];
-         'true' ->
-             Offer = props:get_ne_binary_value(<<"offer">>, Media, <<"acdc-callback-offer-", Entry/binary>>),
-@@ -417,12 +418,6 @@ callback_offer_prompts(Language0, #{callback_entry_key := <<Digit>>=Entry,
-     end;
++        'false' -> [];
++        'true' ->
++            Offer = props:get_ne_binary_value(<<"offer">>, Media, <<"acdc-callback-offer-", Entry/binary>>),
++            [{'prompt', Offer, Language, <<"A">>}]
++    end;
  callback_offer_prompts(_, _) -> [].
  
---spec callback_offer_language(any()) -> binary().
--callback_offer_language('undefined') -> <<"en-us">>;
--callback_offer_language(Language) when is_binary(Language) ->
--    binary:replace(kz_term:to_lower_binary(Language), <<"_">>, <<"-">>, ['global']);
--callback_offer_language(_) -> <<>>.
--
  -spec maybe_play_announcements(kapps_call_command:audio_macro_prompts(), kapps_call:call()) -> any().
- maybe_play_announcements([], _) -> 'ok';
- maybe_play_announcements(Prompts, Call) ->
-@@ -458,7 +453,16 @@ get_average_wait_time(Call) ->
+@@ -493,6 +451,18 @@ get_average_wait_time(Call) ->
+ %% @doc Structure for time prompt entries.
+ %% @end
  %%------------------------------------------------------------------------------
- -spec time_prompt(non_neg_integer(), binary()) -> {'prompt', kz_term:ne_binary(), binary(), kz_term:ne_binary()}.
- time_prompt(Time, Language) ->
--    {'prompt', time_prompt2(Time), Language, <<"A">>}.
++-spec time_prompt(non_neg_integer(), binary()) -> {'prompt', kz_term:ne_binary(), binary(), kz_term:ne_binary()}.
++time_prompt(Time, Language) ->
 +    {'prompt', acdc_language:default_prompt(time_prompt2(Time), Language), Language, <<"A">>}.
 +
 +%% Only remap stock IDs. User-selected UUIDs, URLs and other prompt names keep
@@ -399,19 +502,39 @@ index 9cfab7c..b626cbe 100644
  
  %%------------------------------------------------------------------------------
  %% @doc Returns the appropriate prompt name for the given average wait time.
+@@ -520,3 +490,6 @@ time_prompt2(_) ->
+ %% @doc Return the media file of a given name from the config.
+ %% @end
+ %%------------------------------------------------------------------------------
++-spec announcements_media_file(kz_term:ne_binary(), map()) -> kz_term:api_ne_binary().
++announcements_media_file(Name, #{announcements_media := Media}) ->
++    props:get_binary_value(Name, Media).
 diff --git a/src/cf_acdc_member.erl b/src/cf_acdc_member.erl
-index c588e71..1b92e48 100644
+index 9bbd420..1b92e48 100644
 --- a/src/cf_acdc_member.erl
 +++ b/src/cf_acdc_member.erl
-@@ -20,6 +20,7 @@
+@@ -20,9 +20,8 @@
  
  -ifdef(TEST).
  -export([remaining_wait_ms/3
 +        ,queue_announcement_call/2
          ,callback_test_media/2
+-        ,callback_config/2
+-        ,callback_media_path/3
          ,callback_test_request/3
          ,callback_test_response/2
-@@ -80,14 +81,16 @@ handle(Data, Call) ->
+         ,callback_test_collect_alternate/2
+@@ -43,6 +42,9 @@
+ -define(MEMBER_HANGUP, <<"member_hangup">>).
+ -define(CALLBACK_PAUSE_ACK_TIMEOUT_MS, 5000).
+ -define(CALLBACK_RESUME_ACK_TIMEOUT_MS, 10000).
++-define(CALLBACK_DEFAULT_NUMBER_READBACK, <<"acdc-callback-number-readback">>).
++-define(CALLBACK_DEFAULT_CONFIRMATION, <<"acdc-callback-confirmation">>).
++-define(CALLBACK_DEFAULT_SUCCESS, <<"acdc-callback-success">>).
+ -define(CALLBACK_UNAVAILABLE_TIMEOUT_MS, 3000).
+ 
+ -record(member_call, {call             :: kapps_call:call()
+@@ -79,14 +81,16 @@ handle(Data, Call) ->
      MaxWait = max_wait(kz_json:get_integer_value(<<"connection_timeout">>, QueueJObj, 3600)),
      MaxQueueSize = max_queue_size(kz_json:get_integer_value(<<"max_queue_size">>, QueueJObj, 0)),
  
@@ -430,7 +553,7 @@ index c588e71..1b92e48 100644
                                    ,queue_id=QueueId
                                    ,max_wait=MaxWait
                                    ,callback=callback_config(QueueJObj, Call1)
-@@ -95,6 +98,15 @@ handle(Data, Call) ->
+@@ -94,6 +98,15 @@ handle(Data, Call) ->
                       ,is_queue_full(MaxQueueSize, CurrQueueSize)
                       ).
  
@@ -446,41 +569,152 @@ index c588e71..1b92e48 100644
  -spec lookup_priority(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
  lookup_priority(Data, Call) ->
      FromData = kz_json:get_integer_value(<<"priority">>, Data),
-@@ -268,7 +280,11 @@ callback_media([{Name, Key, Default} | Rest], QueueJObj, Language, Media) ->
-     case {Configured, Language} of
-         {Value, _} when is_binary(Value) -> callback_media(Rest, QueueJObj, Language, Media#{Name => Value});
-         {'undefined', <<"en-us">>} -> callback_media(Rest, QueueJObj, Language, Media#{Name => Default});
--        {'undefined', _} -> {'error', {'missing_media', Name}}
+@@ -214,39 +227,46 @@ process_message(#member_call{call=Call}, _, Start, _Wait, _JObj, {<<"member">>,
+ process_message(MC, Timeout, Start, Wait, _JObj, _Type) ->
+     wait_for_bridge(MC, kz_time:decr_timeout(Timeout, Wait), Start).
+ 
+--spec callback_config(kz_json:object(), kapps_call:call()) -> 'undefined' | map().
+ callback_config(QueueJObj, Call) ->
+     case kz_json:is_true([<<"callback">>, <<"enabled">>], QueueJObj, 'false') of
+         'false' -> 'undefined';
+         'true' ->
+-            Language = normalize_language(kz_json:get_ne_binary_value(
+-                         [<<"announcements">>, <<"language">>], QueueJObj, kapps_call:language(Call))),
++            Language = normalize_language(kapps_call:language(Call)),
+             Entry = kz_json:get_ne_binary_value([<<"callback">>, <<"entry_key">>]
+                                                ,QueueJObj, <<"6">>),
+             AllowAlternate = kz_json:is_true([<<"callback">>, <<"allow_alternate_number">>]
+                                                 ,QueueJObj, 'false'),
+             case valid_callback_entry(Entry)
+-                andalso acdc_gemini_prompts:callback(
+-                          Entry, AllowAlternate,
+-                          kz_json:get_value([<<"callback">>, <<"media">>], QueueJObj),
+-                          Language, kapps_call:account_id(Call)) of
++                andalso callback_media(callback_media_defaults(Entry, AllowAlternate)
++                                      ,QueueJObj, Language, #{}) of
+                 'false' ->
+                     lager:warning("callback menu disabled: invalid entry key"),
+                     'undefined';
+                 {'error', _} ->
+                     lager:warning("callback menu disabled: language ~p requires all callback media", [Language]),
+                     'undefined';
+-                {'ok', Resolved} ->
+-                    Resolved#{entry_key => Entry
+-                     ,language => Language
++                {'ok', Media} ->
++                    #{entry_key => Entry
+                      ,allow_alternate_number => AllowAlternate
+                      ,timeout_ms => kz_json:get_integer_value([<<"callback">>, <<"menu_timeout_ms">>]
+                                                                   ,QueueJObj, 30000)
+                      ,success_timeout_ms => kz_json:get_integer_value([<<"callback">>, <<"success_timeout_ms">>]
+-                                                                          ,QueueJObj, 10000)}
++                                                                          ,QueueJObj, 10000)
++                     ,media => Media}
+             end
+     end.
+ 
++callback_media_defaults(Entry, AllowAlternate) ->
++    Menu = case AllowAlternate of
++               'true' -> <<"acdc-callback-menu-alternate">>;
++               'false' -> <<"acdc-callback-menu-current">>
++           end,
++    [{offer, <<"offer">>, <<"acdc-callback-offer-", Entry/binary>>}
++    ,{menu, <<"menu">>, Menu}
++    ,{number_readback, <<"number_readback">>, ?CALLBACK_DEFAULT_NUMBER_READBACK}
++    ,{confirmation, <<"confirmation">>, ?CALLBACK_DEFAULT_CONFIRMATION}
++    ,{success, <<"success">>, ?CALLBACK_DEFAULT_SUCCESS}].
++
+ valid_callback_entry(<<Digit>>) when Digit >= $0, Digit =< $9 -> 'true';
+ valid_callback_entry(_) -> 'false'.
+ 
+@@ -254,14 +274,25 @@ normalize_language('undefined') -> <<"en-us">>;
+ normalize_language(Language) ->
+     binary:replace(kz_term:to_lower_binary(Language), <<"_">>, <<"-">>, ['global']).
+ 
++callback_media([], _QueueJObj, _Language, Media) -> {'ok', Media};
++callback_media([{Name, Key, Default} | Rest], QueueJObj, Language, Media) ->
++    Configured = kz_json:get_ne_binary_value([<<"callback">>, <<"media">>, Key], QueueJObj),
++    case {Configured, Language} of
++        {Value, _} when is_binary(Value) -> callback_media(Rest, QueueJObj, Language, Media#{Name => Value});
++        {'undefined', <<"en-us">>} -> callback_media(Rest, QueueJObj, Language, Media#{Name => Default});
 +        {'undefined', _} ->
 +            case acdc_language:callback_available(Language) of
 +                'true' -> callback_media(Rest, QueueJObj, Language, Media#{Name => Default});
 +                'false' -> {'error', {'missing_media', Name}}
 +            end
-     end.
- 
++    end.
++
  callback_entry(_Digit, 'undefined', _Pending) -> 'false';
-@@ -657,9 +673,9 @@ collect_callback_confirmation(#member_call{call=Call, callback=Callback}=MC, Sta
+ callback_entry(_Digit, _Callback, Pending) when is_map(Pending) -> 'false';
+ callback_entry(Digit, Callback, 'undefined') -> Digit =:= maps:get(entry_key, Callback).
+ 
+--spec callback_media_path(atom(), map(), kapps_call:call()) -> kz_term:api_binary().
+ callback_media_path(Name, Callback, Call) ->
+-    kapps_call:get_prompt(Call, maps:get(Name, maps:get(media, Callback)),
+-                         maps:get(language, Callback, kapps_call:language(Call))).
++    kapps_call:get_prompt(Call, maps:get(Name, maps:get(media, Callback))).
+ 
+ begin_callback_menu(#member_call{callback=Callback}=MC, Timeout, Start) ->
+     RequestId = kz_binary:rand_hex(16),
+@@ -640,17 +671,11 @@ collect_callback_digit(MediaName, #member_call{call=Call, callback=Callback}, St
+ 
+ collect_callback_confirmation(#member_call{call=Call, callback=Callback}=MC, State) ->
      Digits = maps:get(digits, State),
+-    case acdc_gemini_prompts:callback_readback(Digits, Callback) of
+-        {'error', _} -> 'timeout';
+-        {'ok', NumericPrompts} -> collect_callback_confirmation(MC, State, NumericPrompts, Call, Callback)
+-    end.
+-
+-collect_callback_confirmation(MC, State, NumericPrompts, Call, Callback) ->
      Readback = callback_media_path(number_readback, Callback, Call),
      Confirmation = callback_media_path(confirmation, Callback, Call),
--    NoopId = kapps_call_command:audio_macro([{'play', Readback}
--                                            ,{'say', Digits, <<"telephone_number">>}
--                                            ,{'play', Confirmation}], Call),
+-    MediaCall = kapps_call:set_language(maps:get(language, Callback, kapps_call:language(Call)), Call),
+-    NoopId = kapps_call_command:audio_macro([{'play', Readback}] ++ NumericPrompts ++
+-                                            [{'play', Confirmation}], MediaCall),
 +    NumberPrompts = acdc_language:telephone_prompts(Digits, kapps_call:language(Call)),
 +    NoopId = kapps_call_command:audio_macro([{'play', Readback}] ++ NumberPrompts
 +                                           ++ [{'play', Confirmation}], Call),
      Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
      case Remaining of
          0 -> 'timeout';
+@@ -811,10 +836,8 @@ callback_response(JObj, Context) ->
+ callback_test_media(QueueJObj, Language) ->
+     Entry = kz_json:get_ne_binary_value([<<"callback">>, <<"entry_key">>], QueueJObj, <<"6">>),
+     AllowAlternate = kz_json:is_true([<<"callback">>, <<"allow_alternate_number">>], QueueJObj, 'false'),
+-    acdc_gemini_prompts:callback(Entry, AllowAlternate,
+-                               kz_json:get_value([<<"callback">>, <<"media">>], QueueJObj),
+-                               normalize_language(Language),
+-                               kz_json:get_value(<<"pvt_account_id">>, QueueJObj)).
++    callback_media(callback_media_defaults(Entry, AllowAlternate)
++                  ,QueueJObj, normalize_language(Language), #{}).
+ 
+ -spec callback_test_request(map(), kz_term:ne_binary(), kz_term:proplist()) -> kz_term:proplist().
+ callback_test_request(Context, Operation, Extra) ->
 diff --git a/src/acdc_callback_caller.erl b/src/acdc_callback_caller.erl
-index f4279de..d4c5475 100644
+index 16c9090..d4c5475 100644
 --- a/src/acdc_callback_caller.erl
 +++ b/src/acdc_callback_caller.erl
-@@ -347,7 +347,11 @@ confirmation_prompt(QueueDoc, Call) ->
+@@ -337,22 +337,27 @@ begin_confirmation(#state{returned_call=Call, queue_doc=QueueDoc}=State) ->
+ -spec confirmation_prompt(kz_json:object(), kapps_call:call()) ->
+           {'ok', kz_term:ne_binary()} | {'error', 'missing_localized_media'}.
+ confirmation_prompt(QueueDoc, Call) ->
+-    Media = kz_json:get_value([<<"callback">>, <<"media">>], QueueDoc),
+-    Configured = acdc_gemini_prompts:selection(<<"returned_confirmation">>, Media),
+-    case acdc_gemini_prompts:default(?DEFAULT_CONFIRM_PROMPT, confirmation_language(QueueDoc, Call),
+-                                     kapps_call:account_id(Call), Configured) of
+-        {Kind, Prompt} when Kind =:= 'custom'; Kind =:= 'gemini' ->
++    Configured = kz_json:get_ne_binary_value([<<"callback">>, <<"media">>
++                                             ,<<"returned_confirmation">>]
++                                            ,QueueDoc),
++    case {Configured, normalized_language(kapps_call:language(Call))} of
++        {Prompt, _} when is_binary(Prompt) ->
+             case valid_text(Prompt, 256) of
+-                'true' -> {'ok', kapps_call:get_prompt(Call, Prompt, confirmation_language(QueueDoc, Call))};
++                'true' -> {'ok', Prompt};
                  'false' -> {'error', 'missing_localized_media'}
              end;
-         {'undefined', <<"en-us">>} -> {'ok', ?DEFAULT_CONFIRM_PROMPT};
 -        _ -> {'error', 'missing_localized_media'}
++        {'undefined', <<"en-us">>} -> {'ok', ?DEFAULT_CONFIRM_PROMPT};
 +        {'undefined', Language} ->
 +            case acdc_language:media_available(Language, [?DEFAULT_CONFIRM_PROMPT]) of
 +                'true' -> {'ok', ?DEFAULT_CONFIRM_PROMPT};
@@ -488,7 +722,17 @@ index f4279de..d4c5475 100644
 +            end
      end.
  
- -spec normalized_language(kz_term:api_binary()) -> kz_term:ne_binary().
+--spec confirmation_language(kz_json:object(), kapps_call:call()) -> binary().
+-confirmation_language(QueueDoc, Call) ->
+-    acdc_gemini_prompts:canonical(kz_json:get_ne_binary_value(
+-      [<<"announcements">>, <<"language">>], QueueDoc, kapps_call:language(Call))).
++-spec normalized_language(kz_term:api_binary()) -> kz_term:ne_binary().
++normalized_language('undefined') -> <<"en-us">>;
++normalized_language(Language) ->
++    binary:replace(kz_term:to_lower_binary(Language), <<"_">>, <<"-">>, ['global']).
+ 
+ confirmed(#state{owner=Owner, callback_id=CallbackId, lease_token=Token
+                 ,returned_call=ReturnedCall, queue_doc=QueueDoc}=State) ->
 diff --git a/test/acdc_announcements_tests.erl b/test/acdc_announcements_tests.erl
 index 47cbeac..b2f0305 100644
 --- a/test/acdc_announcements_tests.erl

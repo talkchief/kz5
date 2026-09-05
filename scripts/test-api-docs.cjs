@@ -70,9 +70,13 @@ async function offline() {
     assert(spec.paths['/accounts/{ACCOUNT_ID}/queues/editor'].put.responses['201']);
     assert.equal(spec.components.schemas.QueueEditorSnapshot.required.includes('language_capabilities'), false);
     assert.deepEqual(spec.components.schemas.QueueEditorLanguageCapabilities.properties.backend_mode.enum, ['legacy']);
-    assert(!spec.paths['/accounts/{ACCOUNT_ID}/members/devices'], 'Planned route must not be in current catalog');
+    const members = spec.paths['/accounts/{ACCOUNT_ID}/members/devices'].get;
+    assert.equal(members['x-implementation-status'], 'implemented-source-reviewed');
+    assert.equal(members['x-required-integration'].built_in_custom_route, 'members');
+    assert.equal(members['x-required-integration'].preserve_existing_custom_routes, true);
+    assert.equal(members.responses['200'].headers['Cache-Control'].schema.enum[0], 'no-store');
     const planned = JSON.parse(fs.readFileSync(path.join(committed, 'planned.openapi.json')));
-    assert.equal(planned.paths['/accounts/{ACCOUNT_ID}/members/devices'].get['x-implementation-status'], 'planned-not-implemented');
+    assert(!planned.paths['/accounts/{ACCOUNT_ID}/members/devices'], 'Implemented route must leave the planned catalog');
     const installer = fs.readFileSync(path.join(__dirname, 'install-kazoo5.sh'), 'utf8');
     assert.equal(installer.split('location = /apis { return 308 /apis/; }').length - 1, 2);
     assert.equal(installer.split('location ^~ /apis/').length - 1, 2);
@@ -161,7 +165,7 @@ async function browser() {
         assert.deepEqual(safeguard, {authorization: {}, rejected: true, methods: [], validator: null});
         await page.getByRole('button', {name: 'Planned APIs — not implemented', exact: true}).click();
         await page.waitForFunction(() => document.querySelector('.swagger-ui .title')?.textContent.includes('PLANNED'));
-        assert.equal(await page.evaluate(() => Object.keys(window.kazooApiDocs.specSelectors.specJson().toJS().paths).length), 1);
+        assert.equal(await page.evaluate(() => Object.keys(window.kazooApiDocs.specSelectors.specJson().toJS().paths).length), 0);
         assert.equal(await page.locator('#catalog-status').textContent(), 'PLANNED ONLY — these routes are not implemented or deployed. Do not call them.');
         await page.getByRole('button', {name: 'Current source catalog', exact: true}).click();
         await page.waitForFunction(() => document.querySelector('.swagger-ui .title')?.textContent.includes('source catalog'));

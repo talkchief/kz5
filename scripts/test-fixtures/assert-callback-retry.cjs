@@ -94,8 +94,8 @@ function inspect(directory) {
     'Missing fresh native proof both initial conversation legs ended');
     const receipt = json('retry-registration-reference-receipt.json');
     const rawHash = safeRead(directory, 'retry-registration-reference-sha256.txt', 128).toString().trim();
-    assert(receipt.document_id === 'en-us/acdc-callback-success' && receipt.attachment_name === 'acdc-callback-success.wav'
-        && receipt.reference_ulaw_sha256 === rawHash && evidence.audio.reference_sha256 === rawHash,
+    const voiceFamily = require('./callback-gemini-reference.cjs').validateReceipt(receipt, rawHash);
+    assert(evidence.audio.reference_sha256 === rawHash,
     'Received audio reference does not match installed-prompt receipt');
     const first = require('./assert-callback-unanswered.cjs').inspect(safeRead(directory, 'retry-unanswered.pcap'));
     assert(first.firstCallerSipId === evidence.first.caller.sip_call_id, 'Unanswered packets belong to another native caller');
@@ -114,6 +114,8 @@ function inspect(directory) {
         media.negotiatedPayload(safeRead(directory, 'callback-carrier-negotiation.log', 8192).toString()));
     return {scenario: 'busy-agent-unanswered-first-callback-retry', account_id: ACCOUNT,
         retained_fixture: true, full_cleanup_acceptance: false, original_registration_audio: evidence.audio,
+        confirmation_voice_family: voiceFamily,
+        confirmation_prompt_id: receipt.document_id,
         first_attempt: {...first, unanswered_seconds: first.cancelAt - first.offerAt},
         durable_retry_wait: true, attempts: 2, retry_delay_seconds: 15,
         measured_retry_timing: timing,

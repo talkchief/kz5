@@ -145,7 +145,7 @@ start_phone() {
         # -users 1 limits only primary registrations, not secondary received calls.
         sipp "$proxy" -sf "$SCRIPT_DIR/sip-tests/live-agent-register.xml" \
             -rxsf "$SCRIPT_DIR/sip-tests/agent-answer.xml" -inf "$input" \
-            -i "$PHONE_IP" -p "$port" -mi "$PHONE_IP" \
+            -i "$PHONE_IP" -p "$port" -mi "$PHONE_IP" -ci "$PHONE_IP" \
             -min_rtp_port "$media" -max_rtp_port "$((media + 1))" \
             -rtp_echo -users 1 -nostdin -aa -recv_timeout 15000 \
             -trace_stat -fd 5s -stf "$RUNTIME_DIR/agent-$index-stats.csv" \
@@ -233,7 +233,7 @@ deregister_phones() {
         input="$RUNTIME_DIR/agent-$index-deregister.csv"
         write_input "$index" 0 "$input"
         timeout 12 sipp "$proxy" -sf "$SCRIPT_DIR/sip-tests/register.xml" -inf "$input" \
-            -i "$PHONE_IP" -p "$((SIP_BASE + index - 1))" -m 1 -l 1 -r 1 -rp 1000 \
+            -i "$PHONE_IP" -p "$((SIP_BASE + index - 1))" -ci "$PHONE_IP" -m 1 -l 1 -r 1 -rp 1000 \
             -nostdin -timeout 10s -timeout_error >/dev/null 2>&1 9>&- &
         pids+=("$!")
         if ((${#pids[@]} == 5)); then

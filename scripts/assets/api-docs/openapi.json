@@ -22524,6 +22524,152 @@
           "coverage": "Isolated test tenant: create/edit, exact replay, changed-request-ID conflict, stale revision rejection, managed route removal and exact-CAS fixture cleanup. No agent changes. Restricted-token, cross-node and partial-write recovery coverage remain separate."
         }
       }
+    },
+    "/accounts/{ACCOUNT_ID}/members/devices": {
+      "get": {
+        "operationId": "getAccountMembersDevices",
+        "summary": "List account members and their devices with fresh registration evidence",
+        "tags": [
+          "Members"
+        ],
+        "description": "Read-only account endpoint. Requires existing authenticated account access plus users/devices GET authorization and scopes; an allow does not override a global/module stop. No users, devices, registrations or roster are changed. Online means observed unexpired/permanent SIP registration, not successful calling. Device expiry evaluation requires synchronized cluster clocks. No credentials or registrar contact metadata are returned.",
+        "security": [
+          {
+            "CrossbarToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ACCOUNT_ID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "description": "Strict decimal page size; 0, leading-zero strings, fractions and values above100 are rejected."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 256,
+              "minLength": 1
+            },
+            "description": "Opaque account-bound cursor from next_cursor; omit on the first page. A malformed or different-account cursor is400. No client-controlled database/key/range is accepted."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Fresh member page; per-device evidence may be unknown or inventory explicitly incomplete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDevicesEnvelope"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "Fresh observations must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor/page size or unknown query parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDevicesError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDevicesError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account/resource/scope authorization denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDevicesError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown route",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDevicesError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable or invalid account users/device inventory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDevicesError"
+                }
+              }
+            }
+          }
+        },
+        "x-reject-unknown-query-parameters": true,
+        "x-implementation-status": "implemented-source-reviewed",
+        "x-contract-review": "source-reviewed",
+        "x-runtime-verification": "Source and offline tests only; live acceptance is documented separately.",
+        "x-source-sha256": "4f83a0e8d60d49f1ebe336f035f4e0a1fb7d3c46bd632cfa61be8a20645c8cc0",
+        "x-source-file": "applications/crossbar/src/modules/cb_members.erl",
+        "x-required-integration": {
+          "plugin": "cb_members",
+          "built_in_custom_route": "members",
+          "preserve_existing_custom_routes": true,
+          "scopes_rechecked": [
+            "members:GET",
+            "users:GET",
+            "devices:GET"
+          ],
+          "registrar": "complete correlated peer/part detail responses required",
+          "application_module_list": true,
+          "persisted_crossbar_module_start": true,
+          "new_database_views": false
+        },
+        "x-validation-boundaries": {
+          "member_page_max": 100,
+          "device_catalog_max": 1000,
+          "registrar_rows_max": 10000,
+          "live_authorization_verified": false
+        }
+      }
     }
   },
   "components": {
@@ -49378,6 +49524,624 @@
         ],
         "additionalProperties": false,
         "description": "A lost final receipt-write reply can produce HTTP409 with a reread state/phase of complete; inspect the exact operation before deciding whether to retry. Missing acknowledgements do not prove a write failed. Extension claims may remain reserved after partial or ambiguous failures and require explicit recovery, without expiry or automatic takeover."
+      },
+      "MemberDeviceRegistration": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "online",
+              "offline",
+              "unknown"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "registered",
+              "registered_permanent",
+              "not_registered",
+              "registration_expired",
+              "not_registration_based",
+              "non_registration_auth",
+              "missing_registration_identity",
+              "missing_account_realm",
+              "invalid_registration_identity",
+              "custom_realm_not_queried",
+              "registration_unavailable",
+              "expiry_unavailable"
+            ]
+          },
+          "registrable": {
+            "type": "boolean"
+          },
+          "observed_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Unix epoch milliseconds, not seconds or Gregorian seconds."
+          },
+          "expires_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 946684800000,
+            "description": "Last known unexpired finite binding expiry, in Unix epoch milliseconds. Null or omitted for permanent, absent, expired, or unverified bindings. Never a fabricated cache TTL.",
+            "nullable": true,
+            "maximum": 4102444800000
+          }
+        },
+        "required": [
+          "status",
+          "reason",
+          "registrable",
+          "observed_at_ms"
+        ],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "status": {
+                "enum": [
+                  "online"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "registered"
+                ]
+              },
+              "registrable": {
+                "enum": [
+                  true
+                ]
+              },
+              "expires_at_ms": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 946684800000,
+                "description": "Last known unexpired finite binding expiry, in Unix epoch milliseconds. Null or omitted for permanent, absent, expired, or unverified bindings. Never a fabricated cache TTL.",
+                "nullable": false,
+                "maximum": 4102444800000
+              }
+            },
+            "required": [
+              "expires_at_ms"
+            ]
+          },
+          {
+            "properties": {
+              "status": {
+                "enum": [
+                  "online"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "registered_permanent"
+                ]
+              },
+              "registrable": {
+                "enum": [
+                  true
+                ]
+              },
+              "expires_at_ms": {
+                "type": "integer",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "enum": [
+                  "offline"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "not_registered",
+                  "registration_expired"
+                ]
+              },
+              "registrable": {
+                "enum": [
+                  true
+                ]
+              },
+              "expires_at_ms": {
+                "type": "integer",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "enum": [
+                  "unknown"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "not_registration_based",
+                  "non_registration_auth"
+                ]
+              },
+              "registrable": {
+                "enum": [
+                  false
+                ]
+              },
+              "expires_at_ms": {
+                "type": "integer",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "enum": [
+                  "unknown"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "missing_registration_identity",
+                  "missing_account_realm",
+                  "invalid_registration_identity",
+                  "custom_realm_not_queried",
+                  "registration_unavailable",
+                  "expiry_unavailable"
+                ]
+              },
+              "registrable": {
+                "enum": [
+                  true
+                ]
+              },
+              "expires_at_ms": {
+                "type": "integer",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Registration is distinct from enabled state and call reachability. Offline requires a complete correlated cluster response. Partial peers/parts, timeout and malformed expiry never prove offline. Multiple contacts are online if any finite binding is unexpired or a permanent binding exists. Expired-only rows are offline; expired+unknown-expiry rows remain unknown."
+      },
+      "MemberDevice": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 256,
+            "x-max-utf8-bytes": 256
+          },
+          "type": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 256,
+            "x-max-utf8-bytes": 256
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "registration": {
+            "$ref": "#/components/schemas/MemberDeviceRegistration"
+          }
+        },
+        "required": [
+          "id",
+          "enabled",
+          "registration"
+        ],
+        "additionalProperties": false
+      },
+      "MemberWithDevices": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 256,
+            "x-max-utf8-bytes": 256
+          },
+          "first_name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 256,
+            "x-max-utf8-bytes": 256
+          },
+          "last_name": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 256,
+            "x-max-utf8-bytes": 256
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "devices": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/MemberDevice"
+            }
+          },
+          "devices_complete": {
+            "type": "boolean"
+          },
+          "device_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000,
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "enabled",
+          "devices",
+          "devices_complete"
+        ],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "devices_complete": {
+                "enum": [
+                  true
+                ]
+              },
+              "device_count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              }
+            },
+            "required": [
+              "device_count"
+            ]
+          },
+          {
+            "properties": {
+              "devices_complete": {
+                "enum": [
+                  false
+                ]
+              },
+              "devices": {
+                "maxItems": 0
+              },
+              "device_count": {
+                "type": "integer",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            }
+          }
+        ],
+        "description": "One account user, including users with zero devices. Devices are associated only by their owner_id: unassigned devices are excluded from member lists; shared-device memberships and active hotdesk sessions are not expanded into additional owners. Account device_inventory.count still includes unassigned devices. A complete zero-device member has devices=[] and device_count=0. An incomplete inventory has devices=[] with devices_complete=false and null/omitted device_count; do not interpret that as zero devices."
+      },
+      "MemberDeviceInventory": {
+        "type": "object",
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "enum": [
+              1000
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000,
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "limit_exceeded"
+            ]
+          }
+        },
+        "required": [
+          "complete",
+          "limit",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "complete": {
+                "enum": [
+                  true
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "complete"
+                ]
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000
+              }
+            },
+            "required": [
+              "count"
+            ]
+          },
+          {
+            "properties": {
+              "complete": {
+                "enum": [
+                  false
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "limit_exceeded"
+                ]
+              },
+              "count": {
+                "type": "integer",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "MemberRegistrationSnapshot": {
+        "type": "object",
+        "properties": {
+          "complete": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "not_requested",
+              "missing_account_realm",
+              "registration_unavailable",
+              "invalid_registration_response"
+            ]
+          },
+          "started_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Unix epoch milliseconds, not seconds or Gregorian seconds."
+          },
+          "observed_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Unix epoch milliseconds, not seconds or Gregorian seconds."
+          },
+          "expiry_available": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "cluster_registrar_detail"
+            ]
+          },
+          "semantics": {
+            "type": "string",
+            "enum": [
+              "registration_not_call_reachability"
+            ]
+          }
+        },
+        "required": [
+          "complete",
+          "reason",
+          "started_at_ms",
+          "observed_at_ms",
+          "expiry_available",
+          "source",
+          "semantics"
+        ],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "complete": {
+                "enum": [
+                  true
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "complete"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "complete": {
+                "enum": [
+                  false
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "not_requested",
+                  "missing_account_realm",
+                  "registration_unavailable",
+                  "invalid_registration_response"
+                ]
+              },
+              "expiry_available": {
+                "enum": [
+                  false
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "MemberDevicesPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/MemberWithDevices"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "page_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 256,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "total_members": {
+            "type": "integer",
+            "nullable": true,
+            "enum": [
+              null
+            ]
+          },
+          "device_inventory": {
+            "$ref": "#/components/schemas/MemberDeviceInventory"
+          },
+          "registration_snapshot": {
+            "$ref": "#/components/schemas/MemberRegistrationSnapshot"
+          }
+        },
+        "required": [
+          "items",
+          "count",
+          "page_size",
+          "has_more",
+          "device_inventory",
+          "registration_snapshot"
+        ],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "has_more": {
+                "enum": [
+                  true
+                ]
+              },
+              "next_cursor": {
+                "type": "string",
+                "nullable": false,
+                "minLength": 1
+              }
+            },
+            "required": [
+              "next_cursor"
+            ]
+          },
+          {
+            "properties": {
+              "has_more": {
+                "enum": [
+                  false
+                ]
+              },
+              "next_cursor": {
+                "type": "string",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Member-paginated live listing, not a cross-page database transaction. Count is the current page count; total_members is deliberately unknown. A page includes users with no devices. Optional nullable properties may be omitted by Crossbar envelope null filtering: absent means unknown/not applicable, never zero, false, or an empty complete inventory. Device catalog limit applies to the entire account, not each member. Above1000 account devices, all device inventories are explicitly incomplete; member pagination does not bypass this limit and no device continuation API is currently supplied."
+      },
+      "MemberDevicesEnvelope": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "success"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/MemberDevicesPage"
+          }
+        },
+        "additionalProperties": true
+      },
+      "MemberDevicesError": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "error": {},
+          "data": {
+            "type": "object"
+          }
+        },
+        "additionalProperties": true
       },
       "skels": {
         "description": "Upstream references this schema but does not provide it. No request/response shape or implementation is verified.",

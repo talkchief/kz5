@@ -165,7 +165,7 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
         'Full registration success was not received after selection and before server BYE');
     assert(Math.abs((end - start) - reference.length / 8000) <= 0.25, 'Success RTP wall-clock duration does not match complete phrase');
     return {result: 'PASS', proof_kind: 'installed_prompt_pcm_delivery_not_human_transcription',
-        prompt_id: 'en-us/acdc-callback-success', reference_sha256: crypto.createHash('sha256').update(reference).digest('hex'),
+        reference_sha256: crypto.createHash('sha256').update(reference).digest('hex'),
         reference_duration_seconds: reference.length / 8000, correlation: match.correlation,
         sip_answer_epoch_seconds: answer.time, entry_digit_epoch_seconds: digits[0].start,
         entry_after_answer_seconds: Number((digits[0].start - answer.time).toFixed(6)),

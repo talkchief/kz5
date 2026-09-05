@@ -274,6 +274,21 @@ index 52be2769..4cbcdc3b 100644
          }
      },
      "required": [
+diff --git a/src/api_util.erl b/src/api_util.erl
+index fe82dd7a..c966b62a 100644
+--- a/src/api_util.erl
++++ b/src/api_util.erl
+@@ -836,6 +836,10 @@ parse_path_tokens_module(Context, [Module | Token], Events, 'false') ->
+     parse_path_tokens(Context, List2, [{Module, Params} | Events]).
+ 
+ -spec is_custom_route_module(kz_term:ne_binary()) -> boolean().
++%% The members API owns its devices suffix. Keep this built-in route intact
++%% even when deployments extend/override custom_route_modules; do not rewrite
++%% their configuration or dispatch the suffix to cb_devices.
++is_custom_route_module(<<"members">>) -> 'true';
+ is_custom_route_module(Module) ->
+     CustomRouteModules = kapps_config:get_ne_binaries(?CONFIG_CAT, <<"custom_route_modules">>, ?DEFAULT_CUSTOM_ROUTES),
+     lists:member(Module, CustomRouteModules).
 diff --git a/src/crossbar_auth.erl b/src/crossbar_auth.erl
 index 9329b441..2e732442 100644
 --- a/src/crossbar_auth.erl
@@ -678,3 +693,242 @@ index 00000000..075e60c0
 +-spec matches(any(), binary()) -> boolean().
 +matches(V, Regex) when is_binary(V) -> re:run(V, Regex, [{'capture', 'none'}]) =:= 'match';
 +matches(_, _) -> 'false'.
+diff --git a/src/modules/cb_members.erl b/src/modules/cb_members.erl
+new file mode 100644
+index 00000000..5121def6
+--- /dev/null
++++ b/src/modules/cb_members.erl
+@@ -0,0 +1,233 @@
++%%% SPDX-License-Identifier: MPL-2.0
++%%% Account users with bounded, current device/registration evidence.
++%%% api_util treats members as a built-in custom route; its devices suffix
++%%% belongs to this module, not the independent cb_devices resource.
++-module(cb_members).
++-export([init/0, allowed_methods/0, allowed_methods/1, resource_exists/0,
++         resource_exists/1, validate/2]).
++-ifdef(TEST).
++-export([page_size/1, decode_cursor/2, encode_cursor/2, device_status/5,
++         project/5, authorized/1, scoped/2, page/3]).
++-endif.
++-include_lib("crossbar/src/crossbar.hrl").
++-define(DEVICE_LIMIT, 1000).
++-define(REGISTRATION_LIMIT, 10000).
++-define(NOT_REG_TYPES, [<<"application">>, <<"cellphone">>, <<"sip_url">>, <<"landline">>, <<"smartphone">>]).
++
++-spec init() -> ok.
++init() ->
++    _ = crossbar_bindings:bind(<<"*.allowed_methods.members">>, ?MODULE, allowed_methods),
++    _ = crossbar_bindings:bind(<<"*.resource_exists.members">>, ?MODULE, resource_exists),
++    _ = crossbar_bindings:bind(<<"*.validate.members">>, ?MODULE, validate), ok.
++-spec allowed_methods() -> http_methods().
++allowed_methods() -> [].
++-spec allowed_methods(path_token()) -> http_methods().
++allowed_methods(<<"devices">>) -> [?HTTP_GET];
++allowed_methods(_) -> [].
++-spec resource_exists() -> boolean().
++resource_exists() -> false.
++-spec resource_exists(path_token()) -> boolean().
++resource_exists(<<"devices">>) -> true;
++resource_exists(_) -> false.
++
++-spec validate(cb_context:context(), path_token()) -> cb_context:context().
++validate(Context, <<"devices">>) ->
++    try get_members(Context)
++    catch
++        throw:{members_error, Code, Message} -> cb_context:add_system_error(Code, Message, kz_json:new(), Context);
++        _:_ -> cb_context:add_system_error(503, <<"member_devices_unavailable">>, kz_json:new(), Context)
++    end;
++validate(Context, _) -> cb_context:add_system_error(404, <<"not_found">>, kz_json:new(), Context).
++
++get_members(Context) ->
++    Account = cb_context:account_id(Context),
++    need(id(Account) andalso cb_context:is_authenticated(Context), 403, <<"forbidden">>),
++    need(cb_context:req_nouns(Context) =:= [{<<"members">>, [<<"devices">>]}, {<<"accounts">>, [Account]}]
++         andalso cb_context:req_verb(Context) =:= ?HTTP_GET
++         andalso cb_context:db_name(Context) =:= kzs_util:format_account_db(Account), 403, <<"invalid_member_devices_scope">>),
++    need(authorized(Context) andalso authorized(scoped(Context, <<"users">>))
++         andalso authorized(scoped(Context, <<"devices">>)), 403, <<"member_devices_forbidden">>),
++    Query = cb_context:query_string(Context),
++    need(lists:all(fun(K) -> lists:member(K, [<<"page_size">>, <<"cursor">>]) end, kz_json:get_keys(Query)),
++         400, <<"unsupported_member_devices_query">>),
++    Size = page_size(kz_json:get_value(<<"page_size">>, Query)),
++    After = decode_cursor(Account, kz_json:get_value(<<"cursor">>, Query)),
++    UserStart = case After of undefined -> [<<"user">>]; _ -> [<<"user">>, After] end,
++    UserRows = rows(Context, <<"user">>, UserStart, Size + 2),
++    {Users, HasMore} = page(UserRows, After, Size),
++    DeviceRows = rows(Context, <<"device">>, [<<"device">>], ?DEVICE_LIMIT + 1),
++    Complete = length(DeviceRows) =< ?DEVICE_LIMIT,
++    Devices = case Complete of true -> DeviceRows; false -> [] end,
++    Realm = account_realm(Account),
++    Started = erlang:system_time(millisecond),
++    %% Existing collector has a bounded 2s collection window and rejects
++    %% missing peers/parts/correlation. No local cache or persisted online flag.
++    Snapshot = case Complete andalso Users =/= [] andalso Devices =/= [] of
++                   true -> registrations(Realm);
++                   false -> {error, not_requested}
++               end,
++    Finished = erlang:system_time(millisecond),
++    NotRegTypes = kapps_config:get_ne_binaries(<<"crossbar.devices">>, <<"not_registrable_device_types">>, ?NOT_REG_TYPES),
++    Items = [project(U, Devices, Complete, {Realm, Snapshot, NotRegTypes}, Finished) || U <- Users],
++    Next = case HasMore of true -> encode_cursor(Account, kz_doc:id(lists:last(Users))); false -> null end,
++    Evidence = kz_json:from_list([{<<"complete">>, element(1, Snapshot) =:= ok},
++        {<<"reason">>, snapshot_reason(Snapshot)}, {<<"started_at_ms">>, Started}, {<<"observed_at_ms">>, Finished},
++        {<<"expiry_available">>, expiry_available(Snapshot)},
++        {<<"source">>, <<"cluster_registrar_detail">>}, {<<"semantics">>, <<"registration_not_call_reachability">>}]),
++    Data = kz_json:from_list([{<<"items">>, Items}, {<<"count">>, length(Items)}, {<<"page_size">>, Size},
++        {<<"has_more">>, HasMore}, {<<"next_cursor">>, Next}, {<<"total_members">>, null},
++        {<<"device_inventory">>, kz_json:from_list([{<<"complete">>, Complete}, {<<"limit">>, ?DEVICE_LIMIT},
++            {<<"count">>, case Complete of true -> length(Devices); false -> null end},
++            {<<"reason">>, case Complete of true -> <<"complete">>; false -> <<"limit_exceeded">> end}])},
++        {<<"registration_snapshot">>, Evidence}]),
++    cb_context:setters(Context, [{fun cb_context:set_resp_status/2, success},
++        {fun cb_context:set_resp_data/2, Data}, {fun cb_context:set_resp_etag/2, undefined},
++        {fun(C, V) -> cb_context:set_resp_header(C, <<"cache-control">>, V) end, <<"no-store">>}]).
++
++need(true, _, _) -> ok;
++need(false, Code, Message) -> throw({members_error, Code, Message}).
++id(V) when is_binary(V), byte_size(V) =:= 32 ->
++    lists:all(fun(C) -> (C >= $0 andalso C =< $9) orelse (C >= $a andalso C =< $f) end, binary_to_list(V));
++id(_) -> false.
++
++page_size(undefined) -> 25;
++page_size(N) when is_integer(N), N >= 1, N =< 100 -> N;
++page_size(B) when is_binary(B), byte_size(B) =< 3 ->
++    try N = binary_to_integer(B), need(integer_to_binary(N) =:= B, 400, <<"invalid_page_size">>), page_size(N)
++    catch _:_ -> throw({members_error, 400, <<"invalid_page_size">>}) end;
++page_size(_) -> throw({members_error, 400, <<"invalid_page_size">>}).
++
++encode_cursor(Account, LastId) -> kz_base64url:encode(kz_json:encode([1, Account, LastId])).
++decode_cursor(_, undefined) -> undefined;
++decode_cursor(Account, Value) when is_binary(Value), byte_size(Value) =< 256 ->
++    try
++        [1, Account, LastId] = kz_json:decode(kz_base64url:decode(Value)),
++        true = id(LastId), true = encode_cursor(Account, LastId) =:= Value, LastId
++    catch _:_ -> throw({members_error, 400, <<"invalid_member_cursor">>}) end;
++decode_cursor(_, _) -> throw({members_error, 400, <<"invalid_member_cursor">>}).
++
++rows(Context, Type, Start, Limit) ->
++    Options = [{startkey, Start}, {endkey, [Type, kz_json:new()]}, include_docs, {limit, Limit}, {reduce, false}],
++    case kz_datamgr:get_results(cb_context:db_name(Context), <<"crossbar_listings/by_type_id">>, Options) of
++        {ok, Rows} when is_list(Rows), length(Rows) =< Limit ->
++            Docs = [kz_json:get_json_value(<<"doc">>, Row) || Row <- Rows],
++            need(lists:all(fun(D) -> id(kz_doc:id(D)) andalso kz_doc:type(D) =:= Type
++                       andalso kz_doc:account_id(D) =:= cb_context:account_id(Context)
++                       andalso not kz_doc:is_soft_deleted(D) andalso not kz_json:is_true(<<"_deleted">>, D) end, Docs),
++                 503, <<"invalid_member_devices_inventory">>),
++            Ids = [kz_doc:id(D) || D <- Docs],
++            need(Ids =:= lists:usort(Ids), 503, <<"unordered_member_devices_inventory">>), Docs;
++        _ -> throw({members_error, 503, <<"member_devices_inventory_unavailable">>})
++    end.
++
++page(Docs, After, Size) ->
++    Remaining = case After of undefined -> Docs; _ -> [D || D <- Docs, kz_doc:id(D) > After] end,
++    {lists:sublist(Remaining, Size), length(Remaining) > Size}.
++
++account_realm(Account) ->
++    case kzd_accounts:fetch_realm(Account) of
++        B when is_binary(B), byte_size(B) > 0, byte_size(B) =< 253 -> kz_term:to_lower_binary(B);
++        _ -> undefined
++    end.
++registrations(undefined) -> {error, missing_account_realm};
++registrations(Realm) ->
++    Result = try kapi_registration:search_realm_regs(Realm, <<"detail">>)
++             catch _:_ -> {error, registration_unavailable} end,
++    case Result of
++        Values when is_list(Values), length(Values) =< ?REGISTRATION_LIMIT ->
++            %% Detail also carries Contact/Path/Call-ID. Discard every field
++            %% except validated AOR and expiry immediately; none is returned or
++            %% logged. A complete summary alone may include expired DB rows.
++            try {ok, lists:foldl(fun(V, Acc) ->
++                AOR = kz_json:get_ne_binary_value(<<"AOR">>, V),
++                true = is_binary(AOR) andalso byte_size(AOR) =< 512,
++                [Username, Domain] = binary:split(kz_term:to_lower_binary(AOR), <<"@">>, [global]),
++                true = byte_size(Username) > 0 andalso byte_size(Username) =< 256 andalso Domain =:= Realm,
++                Key = <<Username/binary, "@", Domain/binary>>,
++                Expiry = registration_expiry(kz_json:get_value(<<"Expires">>, V)),
++                maps:update_with(Key, fun(Old) -> [Expiry|Old] end, [Expiry], Acc)
++            end, #{}, Values)} catch _:_ -> {error, invalid_registration_response} end;
++        {error, _} -> {error, registration_unavailable};
++        _ -> {error, invalid_registration_response}
++    end.
++snapshot_reason({ok, _}) -> <<"complete">>;
++snapshot_reason({error, Reason}) -> atom_to_binary(Reason, utf8).
++%% Kamailio usrloc stores absolute time_t (sqlops DB1_DATETIME -> integer).
++%% Zero is its documented permanent-binding sentinel, not a guessed TTL.
++registration_expiry(0) -> permanent;
++registration_expiry(Seconds) when is_integer(Seconds), Seconds >= 946684800, Seconds =< 4102444800 -> Seconds * 1000;
++registration_expiry(_) -> unknown.
++expiry_available({ok, Bindings}) -> not lists:member(unknown, lists:append(maps:values(Bindings)));
++expiry_available(_) -> false.
++
++project(User, Devices, Complete, {Realm, Snapshot, NotRegTypes}, Observed) ->
++    UserId = kz_doc:id(User),
++    Owned = [D || D <- Devices, kz_json:get_value(<<"owner_id">>, D) =:= UserId],
++    SafeDevices = [kz_json:from_list([{<<"id">>, kz_doc:id(D)}, {<<"name">>, text(<<"name">>, D)},
++        {<<"type">>, text(<<"device_type">>, D)}, {<<"enabled">>, not kz_json:is_false(<<"enabled">>, D)},
++        {<<"registration">>, kz_json:set_value(<<"observed_at_ms">>, Observed,
++                                             device_status(D, Realm, Snapshot, NotRegTypes, Observed))}]) || D <- Owned],
++    kz_json:from_list([{<<"id">>, UserId}, {<<"name">>, text(<<"name">>, User)},
++        {<<"first_name">>, text(<<"first_name">>, User)}, {<<"last_name">>, text(<<"last_name">>, User)},
++        {<<"enabled">>, not kz_json:is_false(<<"enabled">>, User)}, {<<"devices">>, SafeDevices},
++        {<<"devices_complete">>, Complete}, {<<"device_count">>, case Complete of true -> length(Owned); false -> null end}]).
++text(Key, Doc) ->
++    case kz_json:get_value(Key, Doc) of
++        B when is_binary(B), byte_size(B) =< 256 -> B;
++        _ -> null
++    end.
++
++device_status(Device, AccountRealm, Snapshot, NotRegTypes, Observed) ->
++    Type = kz_json:get_value(<<"device_type">>, Device),
++    Method = kz_json:get_value([<<"sip">>, <<"method">>], Device, <<"password">>),
++    Username = kz_json:get_ne_binary_value([<<"sip">>, <<"username">>], Device),
++    DeviceRealm = kz_json:get_ne_binary_value([<<"sip">>, <<"realm">>], Device, AccountRealm),
++    RegType = not lists:member(Type, NotRegTypes),
++    case {RegType, Method, Username, DeviceRealm, AccountRealm, Snapshot} of
++        {false, _, _, _, _, _} -> status(<<"unknown">>, <<"not_registration_based">>, false);
++        {_, M, _, _, _, _} when M =/= <<"password">> -> status(<<"unknown">>, <<"non_registration_auth">>, false);
++        {_, _, undefined, _, _, _} -> status(<<"unknown">>, <<"missing_registration_identity">>, true);
++        {_, _, _, _, undefined, _} -> status(<<"unknown">>, <<"missing_account_realm">>, true);
++        {_, _, U, _, _, _} when byte_size(U) > 256 -> status(<<"unknown">>, <<"invalid_registration_identity">>, true);
++        {_, _, _, R, A, _} when not is_binary(R); not is_binary(A) -> status(<<"unknown">>, <<"invalid_registration_identity">>, true);
++        {_, _, U, R, A, {ok, Bindings}} ->
++            case kz_term:to_lower_binary(R) =:= A of
++                false -> status(<<"unknown">>, <<"custom_realm_not_queried">>, true);
++                true ->
++                    Key = <<(kz_term:to_lower_binary(U))/binary, "@", A/binary>>,
++                    binding_status(maps:get(Key, Bindings, []), Observed)
++            end;
++        _ -> status(<<"unknown">>, <<"registration_unavailable">>, true)
++    end.
++status(State, Reason, Registrable) ->
++    kz_json:from_list([{<<"status">>, State}, {<<"reason">>, Reason}, {<<"registrable">>, Registrable}, {<<"expires_at_ms">>, null}]).
++binding_status([], _) -> status(<<"offline">>, <<"not_registered">>, true);
++binding_status(Expiries, Observed) ->
++    Future = [E || E <- Expiries, is_integer(E), E > Observed],
++    case {lists:member(permanent, Expiries), Future, lists:member(unknown, Expiries)} of
++        {true, _, _} -> status(<<"online">>, <<"registered_permanent">>, true);
++        {false, [_|_], _} -> kz_json:set_value(<<"expires_at_ms">>, lists:max(Future), status(<<"online">>, <<"registered">>, true));
++        {false, [], true} -> status(<<"unknown">>, <<"expiry_unavailable">>, true);
++        {false, [], false} -> status(<<"offline">>, <<"registration_expired">>, true)
++    end.
++
++scoped(Context, Resource) ->
++    Account = cb_context:account_id(Context),
++    cb_context:setters(Context, [{fun cb_context:set_req_nouns/2, [{Resource, []}, {<<"accounts">>, [Account]}]},
++        {fun cb_context:set_raw_path/2, <<"/", (cb_context:api_version(Context))/binary, "/accounts/", Account/binary, "/", Resource/binary>>},
++        {fun cb_context:set_req_verb/2, ?HTTP_GET}, {fun cb_context:set_query_string/2, kz_json:new()},
++        {fun cb_context:set_req_data/2, kz_json:new()}, {fun cb_context:set_doc/2, kz_json:new()}]).
++authorized(Context) ->
++    [{Resource, Params}|_] = cb_context:req_nouns(Context),
++    Global = crossbar_bindings:pmap(api_util:create_event_name(Context, <<"authorize">>), Context),
++    Module = crossbar_bindings:pmap(api_util:create_event_name(Context, <<"authorize.", Resource/binary>>), [Context|Params]),
++    NoStop = lists:all(fun(true) -> true; (false) -> true; ({true, _}) -> true; ({false, _}) -> true; (_) -> false end, Global ++ Module),
++    Allowed = lists:any(fun(true) -> true; ({true, _}) -> true; (_) -> false end, Global ++ Module),
++    NoStop andalso Allowed andalso scopes_allowed(Context, Resource).
++scopes_allowed(Context, Resource) ->
++    case {cb_context:auth_token_type(Context), kz_json:get_ne_binary_value(<<"method">>, cb_context:auth_doc(Context))} of
++        {'x-auth-token', Method} when is_binary(Method) ->
++            Required = crossbar_bindings:pmap(api_util:create_event_name(Context, <<"allowed_scopes.", Resource/binary>>), Method),
++            lists:all(fun(Scopes) when is_list(Scopes) -> kz_auth_scope:all(cb_context:auth_token(Context), Scopes); (_) -> false end, Required);
++        _ -> true
++    end.

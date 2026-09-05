@@ -43,10 +43,8 @@ retry_args() {
     [[ -n $RETRY_REFERENCE && -f $RETRY_REFERENCE && ! -L $RETRY_REFERENCE ]] || die 'A verified local confirmation reference is required'
     validate_protected_file "$RETRY_REFERENCE"
     validate_protected_file "${RETRY_REFERENCE%/*}/reference-receipt.json"
-    jq -e --arg hash "$(sha256sum "$RETRY_REFERENCE" | awk '{print $1}')" '
-        .document_id=="en-us/acdc-callback-success" and .attachment_name=="acdc-callback-success.wav" and
-        .reference_ulaw_sha256==$hash and (.installed_wav_sha256|test("^[a-f0-9]{64}$"))' \
-        "${RETRY_REFERENCE%/*}/reference-receipt.json" >/dev/null || die 'Reference does not match installed-prompt receipt'
+    node "$retry_script_dir/test-fixtures/callback-gemini-reference.cjs" verify "$RETRY_REFERENCE" \
+        >/dev/null || die 'Reference does not match installed-prompt receipt'
 }
 
 retry_snapshot() {

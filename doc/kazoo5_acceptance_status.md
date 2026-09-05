@@ -1,7 +1,111 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-05 21:08 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-05 22:27 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
+
+## Live verifier and network checkpoint — 22:27 UTC
+
+The actual all-module verification caught a RabbitMQ CLI hang that the mocked
+password tests missed: installed 3.13.7 disables stdin when `-q` adds a third
+argument to its password command. The protected two-argument authentication
+probe passed. The installer helper now uses exactly two CLI arguments with a
+finite timeout; all32 regression scenarios pass, including hung-client
+termination. Verification reads only an existing configured master ID/catalog,
+uses already-loaded SUP modules and read-only SQLite, and avoids the RabbitMQ
+root plugin wrapper's cookie-permission repair. The failed audit is retained.
+A complete post-fix all-module result is not yet claimed: the Monster UI build
+marker still describes the older direct-IP bundle, while the live UI has been
+incrementally patched. Its provenance/rebuild must be reconciled without merely
+overwriting the marker or removing operator-installed apps.
+
+The test phones' 30 wildcard UDP control sockets are now protected by one
+narrow non-loopback-input rule, after exact ownership checks. No phone or
+application restarted and no SIP/RTP/SSH rule changed. Future phone starts use
+explicit loopback control binding, verified by mock-only tests. Broader public
+listener policy, TLS and external security acceptance remain open; see the
+[network checkpoint](network_hardening_checkpoint.md).
+
+## Gemini rollout checkpoint — 22:02 UTC
+
+All 165 immutable Gemini recordings were freshly downloaded and byte-verified
+without database writes. The new installer verifies them before building or
+restarting applications, removes synthetic ACDC generation, and preserves
+official/customer media. Eleven offline installer scenarios, thirteen invalid
+receipt cases, create-only rerun tests and packaged-path safety tests passed.
+The reviewed default runtime layer compiles with production warnings and passes
+62 tests; its default/language/atomic patch replay remains separate and exact.
+
+The first live Gemini retry test, `20260905T213514Z`, **failed** the received-audio
+gate. The callback registered, but the running media managers had no mappings
+for the new Gemini IDs and returned no playable URL. Direct CouchDB import does
+not populate these ETS caches. Both `media_map` and `kz_media_map` need verified,
+targeted activation on the resolver node; clearing unrelated caches is unnecessary.
+The three consumer modules were initially restored to the exact working baseline
+without restarting services. Preserve that failed result: it is not a successful
+Gemini callback or a regression of the earlier legacy-audio proof.
+
+The targeted refresh subsequently verified all 330 mappings across both caches,
+with no database writes or unrelated cache flush. Actual AMQP media-manager
+lookup and HTTP downloads matched the menu and success WAV hashes. The verified
+consumer modules were reactivated without restart (backup
+`gemini-defaults-live-deploy.qZQbd6`). **Gemini English fixed defaults are active.**
+
+Live run `20260905T215059Z` exited zero. Digit 6 arrived 4.989034 seconds after
+answer; the entire 5.491-second Gemini confirmation arrived before server BYE
+(correlation 0.999993, zero missing phrase samples). The first callback remained
+unanswered for 15.292843 seconds. A second INVITE arrived 17.837644 seconds after
+cancellation, 0.853395 seconds after the durable retry due time; the confirmed
+second attempt formed the reciprocal native bridge and delivered 4,919 PCMU
+packets in each agent direction. Busy-call release was 5.788443 seconds after
+confirmation, including the explicit two-second wait and proof-processing time.
+Final error counters were 0/0, new cores zero, and service PIDs/restarts unchanged.
+Cleanup returned native calls to zero. Historical unresolved fixture state is
+retained; this is not MASTER/PSTN, multi-node, full cleanup or load certification.
+
+The default-source Gemini patch and portable replay suite are packaged. All 62
+tests pass from the pinned installer source, with production warnings and
+actual-input freshness checks. Portable installer cache activation is packaged;
+six helper groups, twelve install-flow scenarios and the actual read-only
+165-document/330-mapping verification pass. Remaining numeric and auxiliary recordings prevent a complete
+five-language claim. A separate
+150/500-request supplemental generation proposal is awaiting approval; no new paid
+requests were made. Existing recordings and transcripts are committed locally in
+`2cc1022`; remote push remains blocked by missing working GitHub write credentials.
+
+The wider release gates remain open: HTTPS has no port 443 listener, the matching
+private key is missing, full 30-call drain and simultaneous-answer repair have
+not passed, and clean-host,
+separated-host, failover and backup-restore acceptance are not complete. All eight
+requested services are active/enabled; that is not enterprise or HA certification.
+
+## Members API and installer checkpoint — 22:12 UTC
+
+`GET /v2/accounts/{ACCOUNT_ID}/members/devices` is deployed and persisted in
+Crossbar autoload, with its built-in route preserving existing custom-route
+configuration. The live MASTER-admin test passed31 members/31 devices across
+two pages:30 online,1 offline at the recorded time. Anonymous and invalid-query/
+different-account-cursor checks passed; catalogs were unchanged. Thirteen
+offline backend/auth groups and nine schema/harness groups pass. Actual
+restricted-token/cross-account-principal tests and cluster-failure cases remain
+unverified. See [the API evidence and exact limits](members_devices_acceptance.md).
+
+The deployed `/apis/` main source catalog contains354 paths,649 operations and
+471 schemas. Local source/manifest/negative-schema checks pass; the members route
+is no longer labeled planned. Public docs contain no credentials or active API
+execution controls. HTTPS remains blocked independently of HTTP docs delivery.
+The browser repeat passed all649 operations with eight same-origin requests,
+zero external requests or console errors, disabled API execution/token storage
+and planned-spec isolation. An earlier10-second render wait timed out while
+other tests ran on this constrained host; it was retained as a failed run. The
+unchanged timeout passed after heavy concurrent testing paused. The harness
+requires its existing Node20+ Playwright toolchain, not the system Node18.
+
+All nine existing offline installer shell suites pass, covering modular endpoint
+selection, pinned builds, service gates/aliases, protected cookies/bootstrap,
+production-BEAM gates, prompt ordering, logging and CouchDB security. Bash syntax
+and ShellCheck warning/error checks pass. RabbitMQ stdin password handling passed
+29 isolated scenarios. None of these is a clean-host/distributed deployment,
+backup restore, failover, traffic-safe upgrade or sustained-capacity certificate.
 
 ## Unified editor and browser checkpoint — 20:59–21:02 UTC
 

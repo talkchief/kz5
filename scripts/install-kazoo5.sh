@@ -3,9 +3,9 @@
 # Install modular or all-in-one Kazoo 5 nodes on Rocky Linux 9.
 #
 # This installer deliberately uses Kazoo's FreeSWITCH and Kamailio wrappers and
-# configuration repositories.  It is safe to re-run: packages, repositories,
-# source checkouts, configuration files and systemd units are converged before
-# their health checks run.
+# configuration repositories. Reruns converge packages, source, configuration
+# and systemd units, then run health checks. Selected services are restarted:
+# schedule a maintenance window; this is not a rolling/zero-downtime upgrader.
 
 set -Eeuo pipefail
 shopt -s inherit_errexit
@@ -1254,6 +1254,28 @@ verify_couchdb() {
     log "PASS CouchDB ${installed_version} authenticated /_up check"
 }
 
+rabbitmqctl_password() (
+    # Never accept a password argument: caller xtrace runs before this helper.
+    # RabbitMQ 3.13 accepts these passwords on stdin when the argument is absent.
+    set +x
+    local operation=${1:-}
+    [[ $# == 1 ]] || return 2
+    case $operation in add_user|change_password|authenticate_user) ;; *) return 2 ;; esac
+    # The CLI trims stdin. Match the existing installer policy so input cannot
+    # be truncated or changed by whitespace, newline or option interpretation.
+    [[ ${KAZOO_RABBITMQ_USER:-} =~ ^[a-zA-Z0-9_.@-]+$ &&
+       ${KAZOO_RABBITMQ_PASSWORD:-} =~ ^[a-zA-Z0-9_.@!%+=:-]+$ ]] || return 2
+    # Do not inherit the clear text or its encoded AMQP-URI form in the child.
+    export -n KAZOO_RABBITMQ_PASSWORD KAZOO_AMQP_URI
+    {
+        builtin printf '%s\n' "$KAZOO_RABBITMQ_PASSWORD" |
+            # RabbitMQ 3.13's shell wrapper enables stdin only for exactly
+            # operation + user. Even -q adds an argument and disables input.
+            timeout --signal=TERM --kill-after=5 30 \
+                rabbitmqctl "$operation" "$KAZOO_RABBITMQ_USER"
+    } >/dev/null 2>&1
+)
+
 install_rabbitmq() {
     local rpm_file="${KAZOO_CACHE_DIR}/rabbitmq-server-${RABBITMQ_VERSION}.rpm"
     local rpm_url="https://github.com/rabbitmq/rabbitmq-server/releases/download/v${RABBITMQ_VERSION}/rabbitmq-server-${RABBITMQ_VERSION}-1.el8.noarch.rpm"
@@ -1282,9 +1304,9 @@ EOF
         timeout 120 bash -c 'until rabbitmq-diagnostics -q ping; do sleep 2; done' || \
             die 'RabbitMQ diagnostics did not become healthy'
         if rabbitmqctl -q list_users | awk '{print $1}' | grep -Fx "$KAZOO_RABBITMQ_USER" >/dev/null; then
-            rabbitmqctl change_password "$KAZOO_RABBITMQ_USER" "$KAZOO_RABBITMQ_PASSWORD"
+            rabbitmqctl_password change_password || die 'RabbitMQ password update failed'
         else
-            rabbitmqctl add_user "$KAZOO_RABBITMQ_USER" "$KAZOO_RABBITMQ_PASSWORD"
+            rabbitmqctl_password add_user || die 'RabbitMQ user creation failed'
         fi
         if ! rabbitmqctl -q list_vhosts name | grep -Fx "$KAZOO_RABBITMQ_VHOST" >/dev/null; then
             rabbitmqctl add_vhost "$KAZOO_RABBITMQ_VHOST"
@@ -1311,9 +1333,12 @@ verify_rabbitmq() {
     [[ $installed_erlang == "$ERLANG_VERSION" ]] || \
         die "Installed Erlang version ${installed_erlang} does not match ${ERLANG_VERSION}"
     rabbitmq-diagnostics -q ping >/dev/null || die 'RabbitMQ ping failed'
-    rabbitmq-plugins list -e -m | grep -Fx rabbitmq_consistent_hash_exchange >/dev/null || \
+    # The root RPM wrapper repairs cookie permissions even for `list`.
+    # Inspect through the underlying CLI as its existing service user instead.
+    runuser --user rabbitmq -- /usr/lib/rabbitmq/bin/rabbitmq-plugins list -e -m | \
+        grep -Fx rabbitmq_consistent_hash_exchange >/dev/null || \
         die 'rabbitmq_consistent_hash_exchange is not enabled'
-    rabbitmqctl authenticate_user "$KAZOO_RABBITMQ_USER" "$KAZOO_RABBITMQ_PASSWORD" >/dev/null || \
+    rabbitmqctl_password authenticate_user || \
         die "RabbitMQ user ${KAZOO_RABBITMQ_USER} failed authentication"
     rabbitmq-diagnostics -q listeners | grep -E "Interface: .* port: ${KAZOO_AMQP_PORT}, protocol: amqp" >/dev/null || \
         die "RabbitMQ is not listening for AMQP on port ${KAZOO_AMQP_PORT}"
@@ -1884,6 +1909,18 @@ master_account_id() {
     timeout --signal=KILL 30 sup kapps_util get_master_account_id </dev/null 2>/dev/null || true
 }
 
+configured_master_account_id() {
+    local configured
+    # get_master_account_id/0 auto-discovers and saves a missing master ID.
+    # Verification must instead fail without bootstrapping configuration.
+    configured=$(timeout --signal=KILL 30 sup -e kapps_config get_ne_binary \
+        '<<"accounts">>' '<<"master_account_id">>' </dev/null) || \
+        die 'Could not read the configured Kazoo master account ID'
+    [[ $configured =~ ^\<\<\"([0-9a-f]{32})\"\>\>$ ]] || \
+        die 'Kazoo master account ID is not configured; verification does not auto-discover or save it'
+    printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
 bootstrap_master_account_rpc() {
     local erl_call_bin account_name_b64 realm_b64 admin_user_b64 admin_password_b64 rpc status
     local xtrace_enabled=false
@@ -1944,6 +1981,10 @@ ensure_master_account() {
 }
 
 install_kazoo_apps() {
+    # Validate/import immutable defaults before touching the application build
+    # or restarting mapped code. Fresh bootstrap needs only configured CouchDB,
+    # not SUP or a running local Kazoo/FreeSWITCH service.
+    install_acdc_language_packs
     build_kazoo
     install_kazoo_systemd_units
     install_sup_cli
@@ -1955,7 +1996,7 @@ install_kazoo_apps() {
         configure_kazoo_api_modules
     fi
     install_kazoo_prompts
-    install_acdc_language_packs
+    activate_acdc_voice_mappings
     verify_kazoo_apps
 }
 
@@ -1976,20 +2017,19 @@ prompt_documents() {
 
 install_kazoo_prompts() (
     local source_dir="$KAZOO_BUILD_ROOT/kazoo-sounds/kazoo-core/en/us"
-    local callback_dir="$KAZOO_BUILD_ROOT/acdc-callback-prompts/en-us"
     local manifest=/usr/local/share/kazoo5-installer/system-media-manifest.json
     local import_dir file documents output imported=0
     prepare_kazoo_sounds
     if [[ $DRY_RUN == true ]]; then
-        log 'Would render English-US callback prompts, import missing system prompts and verify every audio attachment'
+        log 'Would import missing pinned English-US system prompts and verify every audio attachment; no synthetic ACDC generation'
         return 0
     fi
     verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
     [[ -d $source_dir ]] || die 'Pinned Kazoo English-US prompts are missing'
-    [[ -x $SCRIPT_DIR/generate-acdc-callback-prompts.sh ]] || die 'Callback prompt generator is missing'
-    dnf_install espeak-ng sox
-    "$SCRIPT_DIR/generate-acdc-callback-prompts.sh" "$callback_dir"
-    find "$source_dir" "$callback_dir" -maxdepth 1 -type f -name '*.wav' -printf '%f\n' | \
+    # ACDC defaults use separately imported immutable Gemini IDs. Ship this
+    # change with that resolver; never regenerate canonical synthetic media.
+    # Pinned official prompts remain available for ordinary non-ACDC flows.
+    find "$source_dir" -maxdepth 1 -type f -name '*.wav' -printf '%f\n' | \
         sort -u | jq -Rsc '{keys: (split("\n") | map(select(length > 0) | "en-us/" + rtrimstr(".wav")))}' | \
         write_file 0644 "$manifest"
     jq -e '.keys | length > 0' "$manifest" >/dev/null || die 'Kazoo prompt manifest is empty'
@@ -2002,10 +2042,7 @@ install_kazoo_prompts() (
     while IFS= read -r file; do
         [[ $file =~ ^[a-zA-Z0-9_-]+\.wav$ ]] || die 'Invalid source prompt name'
         if [[ -s $source_dir/$file ]]; then
-            [[ ! -e $callback_dir/$file ]] || die 'Callback and official prompt IDs collide'
             install -m 0644 "$source_dir/$file" "$import_dir/$file"
-        elif [[ -s $callback_dir/$file ]]; then
-            install -m 0644 "$callback_dir/$file" "$import_dir/$file"
         else
             die 'A required source prompt is missing'
         fi
@@ -2035,52 +2072,119 @@ validate_prompt_documents() {
     jq -e --argjson expected "$1" '.rows | length == $expected and all(.[]; .error == null and .value.deleted != true and ((.doc._attachments // {}) | length > 0) and all(.doc._attachments[]; .length > 0))' >/dev/null
 }
 
-install_acdc_language_packs() (
-    local pack_dir="$KAZOO_BUILD_ROOT/acdc-language-prompts"
-    local speech_dir="$KAZOO_BUILD_ROOT/espeak-ng-1.52.0" receipt
+ensure_system_media_database() (
+    local response status
     if [[ $DRY_RUN == true ]]; then
-        log "Would prepare pinned speech dependencies and import complete EN/AR/HE/ES/FR packs into configured CouchDB ${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}; preserve existing recordings"
-        log 'Language media import does not require local FreeSWITCH or publish runtime readiness'
+        log "Would ensure only system_media exists in configured CouchDB ${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}; existing contents are preserved"
         return 0
     fi
-    install_nodejs_toolchain
-    dnf_install cmake gcc gcc-c++ make git sox
-    bash "$SCRIPT_DIR/prepare-acdc-speech-engine.sh" "$KAZOO_BUILD_ROOT"
-    if ! node "$SCRIPT_DIR/generate-acdc-language-prompts.cjs" --output-dir "$pack_dir" --verify-only >/dev/null 2>&1; then
-        node "$SCRIPT_DIR/generate-acdc-language-prompts.cjs" --output-dir "$pack_dir" \
-            --espeak "$speech_dir/build/src/espeak-ng" --espeak-data "$speech_dir/build"
+    response=$(mktemp /tmp/kazoo-system-media-database.XXXXXX)
+    trap 'rm -f -- "$response"' EXIT
+    status=$(couchdb_curl --silent --show-error --connect-timeout 5 --max-time 30 \
+        --request PUT --output "$response" --write-out '%{http_code}' \
+        "http://${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}/system_media") || \
+        die 'Could not ensure the configured system_media database'
+    case $status in
+        201|202) jq -e '.ok == true' "$response" >/dev/null || die 'Unconfirmed system_media creation' ;;
+        412) jq -e '.error == "file_exists"' "$response" >/dev/null || die 'Unexpected system_media conflict' ;;
+        *) die 'Configured CouchDB rejected system_media creation/existence check' ;;
+    esac
+    couchdb_curl --fail --silent --show-error --connect-timeout 5 --max-time 30 \
+        "http://${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}/system_media" | \
+        jq -e '.db_name == "system_media"' >/dev/null || die 'Configured system_media identity could not be verified'
+)
+
+install_acdc_language_packs() (
+    local fixed_dir="$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905"
+    local completion_dir="$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" receipt
+    if [[ $DRY_RUN == true ]]; then
+        log "Would create-only import and verify 165 checked-in Gemini EN/AR/HE/ES/FR fixed/callback-digit assets into configured CouchDB ${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}; preserve official and customer recordings"
+        log 'Voice media import requires no provider key, generation call, eSpeak, or local FreeSWITCH; it does not publish runtime or full-position readiness'
+        return 0
     fi
-    receipt=$(mktemp /tmp/kazoo-acdc-language-media.XXXXXX)
+    [[ -s $SCRIPT_DIR/import-acdc-gemini-voices.cjs && -s $SCRIPT_DIR/validate-acdc-gemini-receipt.cjs ]] || \
+        die 'Required immutable voice import/receipt tools are missing'
+    install_nodejs_toolchain
+    receipt=$(mktemp /tmp/kazoo-acdc-gemini-media.XXXXXX)
     trap 'rm -f -- "$receipt"' EXIT
+    # Verify every checked-in source before any database or application effect.
+    node "$SCRIPT_DIR/import-acdc-gemini-voices.cjs" --plan --all-locales \
+        --fixed-pack "$fixed_dir" --completion-pack "$completion_dir" >"$receipt"
+    jq -e '.mode == "PLAN_ONLY_NO_DATABASE_ACCESS" and .count == 165
+        and .creates_only_versioned_ids == true and .preserves_legacy_and_custom_media == true
+        and .runtime_ready == false' "$receipt" >/dev/null || die 'Incomplete immutable voice source plan'
+    ensure_system_media_database
     # Credentials are inherited only by this child, never placed in argv, URLs,
     # receipts, or public capability artifacts. CouchDB may be a separate host.
     export KAZOO_COUCHDB_HOST KAZOO_COUCHDB_PORT KAZOO_COUCHDB_USER KAZOO_COUCHDB_PASSWORD
-    node "$SCRIPT_DIR/import-acdc-language-packs.cjs" --import --pack-dir "$pack_dir" >"$receipt"
-    validate_acdc_language_receipt <"$receipt" || die 'Incomplete localized media import receipt'
-    write_file 0644 /usr/local/share/kazoo5-installer/acdc-language-media.json <"$receipt"
-    log 'PASS complete five-language media import; existing audio preserved; runtime capability is a separate gate'
+    node "$SCRIPT_DIR/import-acdc-gemini-voices.cjs" --import --all-locales \
+        --fixed-pack "$fixed_dir" --completion-pack "$completion_dir" >"$receipt"
+    validate_acdc_language_receipt <"$receipt" || die 'Incomplete or inconsistent immutable Gemini media import receipt'
+    # Do not restart mapped applications based only on a create acknowledgement.
+    # Re-fetch and byte-verify all targets through the importer's read-only mode.
+    # Publish this latest verification receipt, not earlier create revisions.
+    node "$SCRIPT_DIR/import-acdc-gemini-voices.cjs" --verify-only --all-locales \
+        --fixed-pack "$fixed_dir" --completion-pack "$completion_dir" >"$receipt"
+    validate_acdc_language_receipt <"$receipt" || die 'Immutable Gemini media failed final prestart verification'
+    # This receipt is not the language-capabilities runtime manifest. Leave
+    # legacy receipts and existing prompt/queue/account documents untouched.
+    write_file 0644 /usr/local/share/kazoo5-installer/acdc-gemini-media.json <"$receipt"
+    log 'PASS 165 immutable Gemini voice assets verified; existing audio preserved; runtime and full-position readiness are separate gates'
 )
 
 validate_acdc_language_receipt() {
-    jq -e '.schema_version == 1 and .owner == "kazoo5-acdc-media-importer" and .runtime_ready == false
-        and (.languages | keys == ["ar-sa", "en-us", "es-es", "fr-fr", "he-il"])
-        and all(.languages[]; .media_verified == true and .ready == false and .native_speaker_review == false
-            and (.source_catalog_sha256 | test("^[a-f0-9]{64}$"))
-            and (.installed_media_sha256 | test("^[a-f0-9]{64}$")))' >/dev/null
+    node "$SCRIPT_DIR/validate-acdc-gemini-receipt.cjs" \
+        --fixed-pack "$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905" \
+        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905"
+}
+
+run_acdc_voice_mapping_check() {
+    local mode=$1 receipt=$2
+    [[ $mode == --activate || $mode == --check ]] || die 'Invalid voice mapping operation'
+    [[ -n ${KAZOO_HOSTNAME:-} ]] || \
+        die 'Kazoo hostname is not initialized; run installer validation or explicitly set KAZOO_HOSTNAME before sourced verification'
+    [[ -s $SCRIPT_DIR/refresh-acdc-gemini-mappings.cjs && -s $SCRIPT_DIR/refresh-acdc-gemini-mappings.erl.template ]] || \
+        die 'Required immutable voice mapping tools are missing'
+    node "$SCRIPT_DIR/refresh-acdc-gemini-mappings.cjs" "$mode" \
+        --node "kazoo_apps@${KAZOO_HOSTNAME}" --receipt "$receipt" \
+        --fixed-pack "$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905" \
+        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" || \
+        die 'Immutable Gemini prompt mappings could not be verified on the running apps node'
+}
+
+activate_acdc_voice_mappings() {
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would activate/verify only the 165 immutable Gemini prompts in both running media caches; no database or custom recording changes'
+        return 0
+    fi
+    # Imports happen before services start. Existing nodes/reruns also need
+    # targeted cache activation because direct CouchDB imports emit no Kazoo
+    # configuration events. This is safe while initial map loading completes.
+    verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
+    run_acdc_voice_mapping_check --activate /usr/local/share/kazoo5-installer/acdc-gemini-media.json
+    log 'PASS 165 owned Gemini prompts resolve in both active media maps; no language capability was published'
 }
 
 verify_acdc_language_packs() (
     [[ $DRY_RUN != true ]] || return 0
+    local receipt
+    receipt=$(mktemp /tmp/kazoo-acdc-gemini-verify.XXXXXX)
+    trap 'rm -f -- "$receipt"' EXIT
     export KAZOO_COUCHDB_HOST KAZOO_COUCHDB_PORT KAZOO_COUCHDB_USER KAZOO_COUCHDB_PASSWORD
-    node "$SCRIPT_DIR/import-acdc-language-packs.cjs" --verify-only \
-        --pack-dir "$KAZOO_BUILD_ROOT/acdc-language-prompts" | validate_acdc_language_receipt || \
-        die 'Complete localized media could not be verified; install kazoo-apps'
-    log 'PASS EN/AR/HE/ES/FR source packs and current installed audio attachments'
+    node "$SCRIPT_DIR/import-acdc-gemini-voices.cjs" --verify-only --all-locales \
+        --fixed-pack "$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905" \
+        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" >"$receipt" || \
+        die 'Immutable Gemini voice media could not be verified; install kazoo-apps'
+    validate_acdc_language_receipt <"$receipt" || die 'Immutable Gemini voice verification receipt is inconsistent'
+    # Verification must never repair caches or turn on incomplete languages.
+    # Fresh byte verification supplies exact current revisions for this check.
+    run_acdc_voice_mapping_check --check "$receipt"
+    log 'PASS 165 Gemini assets, installed audio bytes and both running prompt maps; no full-position readiness claim'
 )
 
 configure_kazoo_api_modules() {
     local module output
-    for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers; do
+    for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers cb_members; do
         output=$(timeout 30 sup crossbar_maintenance start_module "$module" </dev/null) || \
             die "Could not register Kazoo Crossbar module ${module}"
         [[ $output != *'failed to start'* ]] || die "Kazoo Crossbar module ${module} failed to start"
@@ -2092,7 +2196,7 @@ verify_acdc_interfaces() {
     local modules module credential_hash auth_body token account_id endpoint result
     modules=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || \
         die 'Could not inspect Crossbar module registrations'
-    for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers; do
+    for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers cb_members; do
         [[ $modules == *"$module"* ]] || die "Kazoo Crossbar module ${module} is not registered"
     done
     if [[ -z $KAZOO_MASTER_ADMIN_PASSWORD && ! -r $KAZOO_INSTALLER_SECRETS ]]; then
@@ -2234,7 +2338,7 @@ verify_kazoo_apps() {
         jq -e '.db_name == "acdc"' >/dev/null || die 'ACDC CouchDB database is not ready'
     log 'PASS ACDC database is ready'
     if [[ $KAZOO_BOOTSTRAP_MASTER_ACCOUNT == true ]]; then
-        [[ $(master_account_id) == \{ok,* ]] || die 'Kazoo master account is not ready'
+        configured_master_account_id >/dev/null || die 'Kazoo master account is not ready'
         log 'PASS Kazoo master account is ready'
     fi
     verify_sup_cli
@@ -2254,20 +2358,20 @@ verify_sup_cli() {
         die 'SUP could not read the kapps_controller application configuration'
     [[ $configured_apps == *acdc* ]] || \
         die 'SUP kapps_controller configuration does not include ACDC'
-    loaded=$(timeout --signal=KILL 30 sup -e code ensure_loaded \
+    loaded=$(timeout --signal=KILL 30 sup -e code is_loaded \
         kazoo_maintenance </dev/null) || \
-        die 'SUP could not load kazoo_maintenance'
-    [[ $loaded == \{module,kazoo_maintenance\} ]] || \
-        die "SUP did not load kazoo_maintenance: ${loaded}"
+        die 'SUP could not inspect kazoo_maintenance'
+    [[ $loaded == \{file,* ]] || \
+        die 'kazoo_maintenance is not loaded; verification does not load runtime code'
     exported=$(timeout --signal=KILL 30 sup -e erlang function_exported \
         kazoo_maintenance syslog_level 1 </dev/null) || \
         die 'SUP could not inspect kazoo_maintenance:syslog_level/1'
     [[ $exported == true ]] || die 'SUP syslog_level/1 command is not exported'
-    loaded=$(timeout --signal=KILL 30 sup -e code ensure_loaded \
+    loaded=$(timeout --signal=KILL 30 sup -e code is_loaded \
         kapps_controller </dev/null) || \
-        die 'SUP could not load kapps_controller'
-    [[ $loaded == \{module,kapps_controller\} ]] || \
-        die "SUP did not load kapps_controller: ${loaded}"
+        die 'SUP could not inspect kapps_controller'
+    [[ $loaded == \{file,* ]] || \
+        die 'kapps_controller is not loaded; verification does not load runtime code'
     exported=$(timeout --signal=KILL 30 sup -e erlang function_exported \
         kapps_controller start_app 1 </dev/null) || \
         die 'SUP could not inspect kapps_controller:start_app/1'
@@ -3500,9 +3604,9 @@ verify_kamailio() {
         die 'Kamailio kazoo module is missing'
     systemctl is-enabled --quiet kamailio.service 2>/dev/null && \
         die 'The stock kamailio.service must be disabled in favor of kazoo-kamailio.service'
-    sqlite3 "$KAZOO_CONFIG_DIR/kamailio/db/kazoo.db" 'PRAGMA integrity_check;' | \
+    sqlite3 -readonly "$KAZOO_CONFIG_DIR/kamailio/db/kazoo.db" 'PRAGMA integrity_check;' | \
         grep -Fx ok >/dev/null || die 'Kamailio SQLite database integrity check failed'
-    sqlite3 "$KAZOO_CONFIG_DIR/kamailio/db/kazoo.db" \
+    sqlite3 -readonly "$KAZOO_CONFIG_DIR/kamailio/db/kazoo.db" \
         "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('dispatcher','tmp_probe') ORDER BY name;" | \
         grep -Fx dispatcher >/dev/null || die 'Kamailio dispatcher database table is missing'
     pid=$(systemctl show kazoo-kamailio.service -p MainPID --value)
@@ -3707,7 +3811,7 @@ monster_registration_available() {
 }
 
 verify_monster_app_registration() {
-    local registered app
+    local registered app account_id account_db
     if ! monster_registration_available; then
         [[ $MONSTER_UI_REGISTER_APPS != true ]] || \
             die 'MONSTER_UI_REGISTER_APPS=true requires SUP and a running local kazoo-apps.service'
@@ -3715,10 +3819,16 @@ verify_monster_app_registration() {
         return 0
     fi
     [[ $MONSTER_UI_REGISTER_APPS != false ]] || return 0
-    registered=$(timeout --signal=KILL 180 sup crossbar_maintenance apps </dev/null) || \
-        die 'SUP could not read the Monster UI app catalog'
+    account_id=$(configured_master_account_id) || die 'Cannot verify app catalog without a configured master account'
+    account_db="account%2F${account_id:0:2}%2F${account_id:2:2}%2F${account_id:4}"
+    # Direct read-only view access avoids maintenance:apps/0's implicit
+    # master-account discovery and view repair when prerequisites are absent.
+    registered=$(couchdb_curl --fail --silent --show-error --connect-timeout 5 --max-time 30 \
+        "http://${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}/${account_db}/_design/apps_store/_view/crossbar_listing") || \
+        die 'Could not read the existing Monster UI app catalog view'
     for app in ${MONSTER_UI_APPS_LIST//,/ }; do
-        grep -F "key: \"${app}\"" <<<"$registered" >/dev/null || \
+        jq -e --arg app "$app" '(.rows | type == "array") and any(.rows[]; .key == $app)' \
+            <<<"$registered" >/dev/null || \
             die "Monster UI app ${app} is not registered in the Kazoo master account"
     done
     log "PASS Monster UI app catalog registration: ${MONSTER_UI_APPS_LIST}"

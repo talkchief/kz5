@@ -106,12 +106,12 @@ function applyOverlays(spec, root) {
         const result = require(editor).applyQueueEditor({spec, operation, request, response, envelope, object, ref, hex, root});
         if (result?.inputs) inputs.push(...result.inputs);
     }
+    inputs.push(...require('./api-docs-members-devices.cjs').applyMembersDevices({spec, root}).inputs);
     return {inputs};
 }
 function plannedSpec() {
-    return {openapi: '3.0.3', info: {title: 'PLANNED Kazoo APIs — NOT IMPLEMENTED', version: '0.0.0', description: 'Design proposals only. These routes are not implemented or deployed. Do not call them. Fields, methods and authorization may change.'}, servers: [{url: '/v2'}],
-        paths: {'/accounts/{ACCOUNT_ID}/members/devices': {get: {operationId: 'planned_member_device_presence', tags: ['PLANNED — not implemented'], summary: 'Planned account-wide members, devices and registration status', 'x-implementation-status': 'planned-not-implemented', parameters: parameters('/accounts/{ACCOUNT_ID}/members/devices'),
-            description: 'Proposed bounded, paginated account-wide view of safe member IDs/names and owned device IDs/names/types. Proposed status values online/offline/unknown describe current SIP registration reachability, not ACDC agent availability. Unknown must be used when fresh multi-node registry evidence is incomplete: a missing reply or stale cache must never be reported as offline. Planned observed_at, last_registration_at and expires_at fields must identify their source and freshness. No SIP passwords, authorization hashes, private keys or contact IPs will be exposed. Shared devices must retain explicit member-to-device ownership relationships rather than silently assigning a single owner; unassigned devices must be excluded with a disclosed policy or explicitly returned in a separate unassigned collection. Pagination must provide bounded pages and a cursor allowing full traversal, disclose completeness and snapshot/freshness semantics, and never silently truncate a large company. Exact response, ownership representation, consistency and permission policy remain under design.',
-            responses: {501: {description: 'Not implemented — design placeholder only, not a promised live HTTP response'}}}}}};
+    return {openapi: '3.0.3', info: {title: 'PLANNED Kazoo APIs — NOT IMPLEMENTED', version: '0.0.0',
+        description: 'No remaining API proposals are listed here. Implemented members/devices is in the main source catalog; runtime acceptance remains a separate gate.'},
+        servers: [{url: '/v2'}], paths: {}};
 }
 module.exports = {applyOverlays, plannedSpec};

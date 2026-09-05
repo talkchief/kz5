@@ -1,0 +1,33 @@
+# Gemini runtime regression suite
+
+Run from a prepared Kazoo checkout containing its pinned ACDC Git history, compiled Erlang dependencies and the checked-in Gemini voice assets:
+
+```sh
+bash scripts/test-acdc-gemini-runtime.sh
+```
+
+The suite is offline. It archives the literal `ACDC_REF` from the installer into a private temporary directory, applies a snapshot of `scripts/patches/acdc-kazoo5-integration.patch`, verifies reverse applicability, and compiles that replayed **default deployment baseline**. It does not compile the separately staged media/language implementations in `applications/acdc/src`, install media or change any application BEAM.
+
+Production modules are built with `-Werror +warn_missing_spec` and the Lager parse transform, separately from `-DTEST +debug_info` builds. Their imports and exports are checked so a staged `acdc_language` module or TEST-only entry point cannot slip into the production artifact. The private test VM removes code paths containing the staged language BEAM and uses a test-only storage stub.
+
+The 62 tests cover all165 exact immutable asset mappings, custom/legacy account overrides, missing and tampered imports, prepared AR/HE telephone-digit order, gated incomplete language defaults, preserved legacy custom paths, queue-locale media lookup, real prompt-URI idempotence, periodic announcement scheduling and real timers, manager loss, cancellation/backpressure, callback protocol, truthful error feedback, and accepted-callback success lifecycle. Deliberately killed temporary test workers produce expected supervisor reports. They are not live-service crashes.
+
+For a quick replay/map/production-compilation check without the longer EUnit cases:
+
+```sh
+bash scripts/test-acdc-gemini-runtime.sh --replay-only
+```
+
+An optional `--project-root /path/to/kz5` supports packaging and testing from another working directory. The runner does not clone or fetch missing dependencies; it fails with a clear preparation message if the pinned ACDC commit is not available locally. It snapshots the default patch and rejects a result if the parsed ACDC pin, aggregate patch, verified asset map, runner or compiled test source changes during the run. Asset manifest/audio QA runs again at the final check. Unrelated installer settings do not change those actual replay inputs. Small offline freshness tests cover changed pin/patch/map/test inputs, malformed pins and missing files. Temporary archives and test BEAMs are removed on exit.
+
+## Deterministic map
+
+```sh
+node scripts/generate-acdc-gemini-map.cjs --check
+```
+
+The map generator uses repository-relative source assets and the existing strict importer to verify their bytes. `--output /path/to/table.hrl` can check an isolated replay. `--generate --output /new/path/table.hrl` creates a new file only; it never overwrites an existing table. The original generated header is intentionally retained for exact byte compatibility with the frozen165-asset table.
+
+These tests establish source-level/offline regression coverage, not complete production or native-speaker approval. English default numbers and legacy custom playback still depend on native numeric speech; newly generated non-English callback defaults remain gated until auxiliary/numeric completion. Real SIP/audio/log/cleanup acceptance is a separate deployment gate.
+
+Do not copy `scripts/test-fixtures/gemini-runtime/kz_datamgr.erl` into any application source or runtime directory. It is intentionally confined to this suite.

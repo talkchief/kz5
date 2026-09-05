@@ -24,8 +24,8 @@
     "/accounts/{ACCOUNT_ID}/skels",
     "/accounts/{ACCOUNT_ID}/skels/{THING}"
   ],
-  "path_count": 353,
-  "operation_count": 648,
+  "path_count": 354,
+  "operation_count": 649,
   "source_reviewed_operations": [
     "GET /accounts/{ACCOUNT_ID}/agents",
     "GET /accounts/{ACCOUNT_ID}/agents/stats",
@@ -56,7 +56,8 @@
     "GET /accounts/{ACCOUNT_ID}/queues/editor",
     "PUT /accounts/{ACCOUNT_ID}/queues/editor",
     "GET /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/editor",
-    "PATCH /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/editor"
+    "PATCH /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/editor",
+    "GET /accounts/{ACCOUNT_ID}/members/devices"
   ],
   "upstream_operations_not_individually_reviewed": [
     "GET /about",
@@ -1296,8 +1297,8 @@
     "GET /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}",
     "POST /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}"
   ],
-  "schema_count": 463,
-  "internal_reference_count": 1529,
+  "schema_count": 471,
+  "internal_reference_count": 1541,
   "unresolved_reference_count": 0,
   "schema_adjustments": [
     {
@@ -1908,6 +1909,13 @@
       "sha256": "819a8a24b5994787c67ca0123a4a2f2135d6b71ae0d5f15e33f19ce78fbdf226",
       "literal_binding_nouns": [
         "media"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_members.erl",
+      "sha256": "4f83a0e8d60d49f1ebe336f035f4e0a1fb7d3c46bd632cfa61be8a20645c8cc0",
+      "literal_binding_nouns": [
+        "members"
       ]
     },
     {
@@ -2720,6 +2728,10 @@
       "sha256": "198d929636ef3dec83dfb35910ca59e9cb811205975ad7f37d0b9dac5be35546"
     },
     {
+      "file": "applications/crossbar/src/api_util.erl",
+      "sha256": "3115dcc76409fa6cc0017131c9d96b07075b96ae73ed827e32f4fd3d4f06ab1b"
+    },
+    {
       "file": "applications/crossbar/src/cb_channel_monitor.erl",
       "sha256": "0289551f6bdd97086d8ccdf8ea9d104ae268289069fcd692a822995e184cc0a2"
     },
@@ -2728,8 +2740,16 @@
       "sha256": "7b101ee785c7ed56517291cd4aacea87835064d05a67c12869a442a04d23bec9"
     },
     {
+      "file": "applications/crossbar/src/modules/cb_members.erl",
+      "sha256": "4f83a0e8d60d49f1ebe336f035f4e0a1fb7d3c46bd632cfa61be8a20645c8cc0"
+    },
+    {
+      "file": "scripts/api-docs-members-devices.cjs",
+      "sha256": "b9306fd413d55008310ce4d4da3aa76980ad1ce58cb0a313ea2b83969639a648"
+    },
+    {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "021edd0e1c0d2d34424e5c4ea9c739fab6a897e86df4c7d85688919457f61fae"
+      "sha256": "2e9124ac1f16952612b0c518221a5145066cabcccb3c6142312388e5188f4060"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",

@@ -67,7 +67,7 @@ write_input 1 600 "$test_dir/input.csv"
 [[ $(stat -c '%a' "$test_dir/input.csv") == 600 ]]
 timeout 5 sipp 127.0.0.1:9 -sf "$script_dir/sip-tests/live-agent-register.xml" \
     -rxsf "$script_dir/sip-tests/agent-answer.xml" -inf "$test_dir/input.csv" \
-    -i 127.0.0.41 -p 19999 -mi 127.0.0.41 -mp 48000 -m 0 -nostdin \
+    -i 127.0.0.41 -p 19999 -mi 127.0.0.41 -ci 127.0.0.41 -mp 48000 -m 0 -nostdin \
     >"$test_dir/parse.log" 2>&1
 if rg -i 'parse error|Unable to load|Unknown element' "$test_dir/parse.log" >/dev/null; then
     die 'Mixed-mode SIPp scenario rejected'

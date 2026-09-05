@@ -1,0 +1,74 @@
+%% Generated from a checked-in exact immutable asset plan and a byte-verified
+%% import receipt. Only owned in-memory system-media mappings can be changed.
+try
+    true = <<"@@NODE@@">> =:= atom_to_binary(node(), utf8),
+    Mode = '@@MODE@@',
+    Expected = kz_json:decode(base64:decode(<<"@@EXPECTED_BASE64@@">>)),
+    165 = length(Expected),
+    Modules = [media_map, kz_media_map],
+    true = lists:all(fun(M) -> is_pid(whereis(M)) andalso ets:info(M) =/= undefined end, Modules),
+    Db = <<"system_media">>,
+    Get = fun(K, J) -> kz_json:get_value(K, J) end,
+    Check = fun(E, D) ->
+        true = lists:all(fun(K) -> Get(K, D) =:= Get(K, E) end,
+            [<<"_id">>, <<"_rev">>, <<"prompt_id">>, <<"language">>, <<"source_type">>, <<"content_length">>]),
+        false = kz_json:is_true(<<"_deleted">>, D),
+        false = kz_json:is_true(<<"pvt_deleted">>, D),
+        [] = kz_json:get_value(<<"_conflicts">>, D, []),
+        <<"media">> = Get(<<"pvt_type">>, D),
+        Db = Get(<<"pvt_account_db">>, D),
+        Db = kz_json:get_value(<<"pvt_account_id">>, D, Db),
+        <<"audio/wav">> = Get(<<"content_type">>, D),
+        true = Get(<<"streamable">>, D),
+        Voice = Get(<<"source_voice">>, D),
+        true = lists:all(fun(K) -> Get(K, Voice) =:= Get(K, Get(<<"source_voice">>, E)) end,
+            [<<"provider">>, <<"model">>, <<"voice">>, <<"canonical_prompt_id">>, <<"sha256">>,
+             <<"transcript_sha256">>, <<"source_file">>]),
+        Attachments = Get(<<"_attachments">>, D), Name = Get(<<"attachment">>, E),
+        [Name] = kz_json:get_keys(Attachments), Att = Get(Name, Attachments),
+        <<"audio/wav">> = Get(<<"content_type">>, Att),
+        true = Get(<<"digest">>, Att) =:= Get(<<"digest">>, E),
+        true = Get(<<"length">>, Att) =:= Get(<<"content_length">>, E),
+        ok
+    end,
+    %% All 165 preflight reads and existing mapping checks precede any mutation.
+    Docs = [begin
+        {ok, D} = kz_datamgr:open_doc(Db, Get(<<"_id">>, E), [{conflicts, true}]),
+        ok = Check(E, D), {E, D}
+    end || E <- Expected],
+    Existing = fun(M, E) ->
+        Prompt = Get(<<"prompt_id">>, E), Language = Get(<<"language">>, E),
+        Key = <<Db/binary, "/", Prompt/binary>>,
+        case ets:lookup(M, Key) of
+            [] -> missing;
+            [{media_map, Key, Db, Prompt, Languages}] ->
+                case Get(Language, Languages) of
+                    undefined -> missing;
+                    P -> true = P =:= Get(<<"expected_path">>, E), present
+                end
+        end
+    end,
+    Before = [Existing(M, E) || {E, _} <- Docs, M <- Modules],
+    case Mode of
+        activate ->
+            lists:foreach(fun({E, _Original}) ->
+                {ok, Fresh} = kz_datamgr:open_doc(Db, Get(<<"_id">>, E), [{conflicts, true}]),
+                ok = Check(E, Fresh),
+                lists:foreach(fun(M) ->
+                    %% Synchronous call is handled by the existing map owner;
+                    %% no global flush, process restart, or custom-map deletion.
+                    ok = gen_listener:call(M, {add_mapping, Db, Fresh}, 5000)
+                end, Modules)
+            end, Docs);
+        check -> ok
+    end,
+    lists:foreach(fun({E, _}) ->
+        lists:foreach(fun(M) ->
+            present = Existing(M, E),
+            true = M:prompt_path(Db, Get(<<"prompt_id">>, E), Get(<<"language">>, E)) =:= Get(<<"expected_path">>, E)
+        end, Modules),
+        {ok, Final} = kz_datamgr:open_doc(Db, Get(<<"_id">>, E), [{conflicts, true}]),
+        ok = Check(E, Final)
+    end, Docs),
+    {ok, {gemini_mapping_verified, Mode, 165, 330, length([X || X <- Before, X =:= missing]), no_database_writes}}
+catch _:_ -> {error, gemini_mapping_verification_failed_safely} end.

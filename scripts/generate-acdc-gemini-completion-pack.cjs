@@ -52,7 +52,13 @@ function verifyEntry(directory, entry) {
   return entry;
 }
 function readManifest(directory) {
-  fixed.directoryTarget(directory, true);
+  // Reading checked-in assets is allowed at packaged installation paths. The
+  // stricter live-output ban remains in generate() before any provider or write.
+  check(path.isAbsolute(directory) && path.resolve(directory) === directory,
+    'ABSOLUTE_ASSET_DIRECTORY_REQUIRED');
+  const stat = fs.lstatSync(directory);
+  check(stat.isDirectory() && !stat.isSymbolicLink() && fs.realpathSync(directory) === directory,
+    'INVALID_ASSET_DIRECTORY');
   const manifest = JSON.parse(fixed.regularBytes(path.join(directory, 'manifest.json')));
   check(manifest.owner === OWNER && manifest.model === MODEL && manifest.voice === VOICE &&
     manifest.initial_digit_budget === 20 && manifest.retry_budget === 5, 'UNOWNED_COMPLETION_PACK');

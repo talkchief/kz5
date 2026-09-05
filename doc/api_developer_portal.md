@@ -74,10 +74,13 @@ installer. Do not send authentication over the non-TLS installation endpoint.
   or automatic takeover; an ambiguous write requires explicit recovery.
   Source presence is labeled separately from deployment verification.
 
-The planned members/devices/presence API is in a separate **PLANNED — NOT
-IMPLEMENTED** tab and `planned.openapi.json`. It is not mixed into the current
-catalog. Freshness, online/offline/unknown, complete pagination, shared/unassigned
-ownership and secret-free projections are design requirements, not live features.
+GET `/accounts/{ACCOUNT_ID}/members/devices` is implemented and now included in
+the main catalog. It provides bounded member pages and owner_id device mappings
+with fresh online/offline/unknown registration evidence. Unassigned/shared and
+hotdesk relationships are not expanded. The account device cap is1000, with
+explicit incompleteness above that limit; this is not unbounded company-device
+traversal. See [live evidence and limits](members_devices_acceptance.md).
+The planned spec remains available but currently contains no proposed routes.
 
 ## Rebuild and verify
 

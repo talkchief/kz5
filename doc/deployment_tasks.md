@@ -31,6 +31,16 @@ items below have the specific evidence stated; unchecked items are not finished.
   retain transcripts, WAVs and provenance in Git; validate and install the tested
   pack without overwriting customer recordings. Numeric-language completeness and
   native listening approval remain separate gates.
+  All165 assets were freshly byte-verified at21:33 UTC. The first Gemini live
+  callback run failed because the media-manager prompt caches lacked the newly
+  imported IDs. Targeted activation verified all330 mappings and actual AMQP/HTTP
+  audio hashes. The repeated live run `20260905T215059Z` exited zero with the
+  complete5.491-second Gemini confirmation before BYE, unanswered first attempt,
+  successful second bridge and two-way audio, zero new errors/cores and no
+  service restarts. Gemini English fixed defaults are now active. Numeric and
+  auxiliary completion across allfive languages is still pending approval.
+  The installer now verifies immutable assets before application build/restart,
+  with11 mocked ordering/failure scenarios and exact-receipt protections passing.
 - [ ] OpenAPI 3 specification and local developer reference at `/apis`, including
   queue/callback APIs, unified editor APIs and call monitoring actions.
   The source-derived portal is deployed and publicly returns HTTP 200 at
@@ -43,9 +53,14 @@ items below have the specific evidence stated; unchecked items are not finished.
   availability. Enforce account permissions, omit secrets and provide bounded
   pagination without silently truncating large accounts. Document the planned
   contract in OpenAPI separately from implemented endpoints.
-  Proposed route: `GET /v2/accounts/{ACCOUNT_ID}/members/devices`; the separate
-  `planned.openapi.json` is available in the portal. "Offline" is the assumed
-  correction of "office"; implementation and live tests are still pending.
+  Route: `GET /v2/accounts/{ACCOUNT_ID}/members/devices` is integrated in source
+  and the deployed main OpenAPI catalog. Thirteen backend/auth regression groups
+  and nine schema/harness tests pass. Live MASTER-admin acceptance returned all31
+  users/devices (30online,1offline) with unchanged catalogs. Anonymous and invalid
+  cursors are rejected; restricted-token and cross-account-principal tests remain.
+  "Offline" is the assumed correction of "office". Ownership uses owner_id only;
+  unassigned/shared/hotdesk relationships are not expanded. Above1000devices,
+  inventory is explicitly incomplete rather than falsely empty/complete.
 - [x] Verify actual module services: `kazoo-apps`, `kazoo-ecallmgr`,
   `kazoo-freeswitch`, `kazoo-kamailio`, `couchdb`, `rabbitmq-server`, `haproxy` and
   `nginx` were all loaded, active and enabled on 2026-09-05.
@@ -65,6 +80,19 @@ items below have the specific evidence stated; unchecked items are not finished.
 - [ ] Package source patches, deploy reviewed artifacts with rollback backups,
   verify browser/API/SIP behavior and fresh logs, and give the user test steps.
 - [ ] Commit/push completed changes with a credential scan and verified remote SHA.
+  Local checkpoint `2cc1022` includes the recordings/transcripts and previous
+  tested changes. Actual connector writes return403; remote master remains
+  `57560824`. No successful push of that checkpoint has been claimed.
+- [x] Contain the 30 existing test-phone UDP control sockets without restarting
+  phones; persist explicit loopback control binding for future starts. Exact
+  ownership/post-checks and mock argument tests passed. This is not a complete
+  firewall/security certificate; see [network scope](network_hardening_checkpoint.md).
+- [ ] Fix and repeat the actual all-module installer verification. The live
+  RabbitMQ stdin check caught a command-wrapper argument-count hang missed by
+  mocked tests. The corrected helper has a finite timeout and32 passing
+  regression scenarios; actual authentication passes. Read-only verifier guards
+  are packaged. Full verification still rejects the old Monster build marker;
+  rebuild/provenance reconciliation is in progress, not bypassed.
 
 Broader unresolved acceptance gates remain in
 [the acceptance status](kazoo5_acceptance_status.md): clean/distributed installer
