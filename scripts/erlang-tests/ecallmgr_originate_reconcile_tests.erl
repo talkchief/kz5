@@ -37,6 +37,32 @@ switch_response_parser_is_fail_closed_test() ->
           ?assertEqual(<<"unknown">>, maps:get(status, Parsed))
       end, [{error, timeout}, {ok, <<>>}, {ok, <<"+OK SETTLED success missing-call-id">>}]).
 
+normalized_transport_success_preserves_exact_wire_semantics_test() ->
+    lists:foreach(fun(Body) ->
+        Raw = ecallmgr_fs_channels:parse_originate_reconcile(
+                <<"freeswitch@one">>, {ok, <<"+OK ", Body/binary, "\n">>}),
+        Normalized = ecallmgr_fs_channels:parse_originate_reconcile(
+                       <<"freeswitch@one">>, {ok, Body}),
+        ?assertEqual(Raw, Normalized),
+        ?assertNotEqual(<<"unknown">>, maps:get(status, Normalized))
+    end, [<<"PENDING epoch-one">>
+         ,<<"SETTLED success epoch-one caller-uuid">>
+         ,<<"SETTLED failure epoch-one ORIGINATOR_CANCEL">>]),
+    %% The transport error tag must never be promoted to settlement, even
+    %% if its payload resembles a successful reply. Missing/extra fields
+    %% and unrecognized outcome strings also remain unknown.
+    lists:foreach(fun(Reply) ->
+        Parsed = ecallmgr_fs_channels:parse_originate_reconcile(<<"freeswitch@one">>, Reply),
+        ?assertEqual(<<"unknown">>, maps:get(status, Parsed))
+    end, [{error, <<"UNKNOWN epoch-one">>}
+         ,{error, <<"CORRELATION_MISMATCH epoch-one">>}
+         ,{error, <<"SETTLED success epoch-one caller-uuid">>}
+         ,{ok, <<"SETTLED success epoch-one">>}
+         ,{ok, <<"SETTLED success epoch-one caller-uuid extra">>}
+         ,{ok, <<"SETTLED unknown epoch-one caller-uuid">>}
+         ,{ok, <<"PENDING">>}
+         ,{ok, <<"+OK +OK PENDING epoch-one">>}]).
+
 only_one_media_node_may_be_authoritative_test() ->
     Pending = #{status => <<"pending">>, media_node => <<"freeswitch@one">>
                ,module_epoch => <<"epoch-one">>},

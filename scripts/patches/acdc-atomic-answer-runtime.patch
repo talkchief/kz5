@@ -121,7 +121,7 @@ index ece2a08..655d8fc 100644
                                                            ,outbound_call_ids=[]
                                                            }=State) ->
 diff --git a/src/acdc_queue_fsm.erl b/src/acdc_queue_fsm.erl
-index 41ce902..861ee06 100644
+index efe1400..d74ebec 100644
 --- a/src/acdc_queue_fsm.erl
 +++ b/src/acdc_queue_fsm.erl
 @@ -120,6 +120,7 @@
@@ -236,7 +236,7 @@ index 41ce902..861ee06 100644
  
  callback_remove_winner(AgentId, ProcessId, #state{callback_ctx=#{'mode' := 'native'}=Context, connect_wins=Wins}=State) ->
      Matches = fun(Win) -> kz_json:get_value(<<"Agent-ID">>, Win) =:= AgentId
-@@ -2066,6 +2054,61 @@ callback_recovered_accept_valid(Accepted, #state{callback_ctx=Context, manager_p
+@@ -2072,6 +2060,61 @@ callback_recovered_accept_valid(Accepted, #state{callback_ctx=Context, manager_p
          _ -> callback_reconcile_later(State)
      end.
  
@@ -298,7 +298,7 @@ index 41ce902..861ee06 100644
  callback_accept(Accept, #state{member_call=Call, callback_ctx=Context
                                ,account_id=AccountId, connect_wins=Wins}=State) ->
      Agent = kz_json:get_ne_binary_value(<<"Agent-ID">>, Accept),
-@@ -2075,23 +2118,20 @@ callback_accept(Accept, #state{member_call=Call, callback_ctx=Context
+@@ -2081,23 +2124,20 @@ callback_accept(Accept, #state{member_call=Call, callback_ctx=Context
          andalso kz_json:get_value(<<"Account-ID">>, Accept) =:= AccountId
          andalso is_binary(Agent) andalso is_binary(Process)
          andalso is_binary(AgentLeg) andalso AgentLeg =/= kapps_call:call_id(Call)
@@ -326,7 +326,7 @@ index 41ce902..861ee06 100644
          andalso is_binary(AgentLeg) andalso byte_size(AgentLeg) > 0
          andalso maps:get('bridge_agent_leg', Context, AgentLeg) =:= AgentLeg
          andalso AgentLeg =/= kapps_call:call_id(Call) of
-@@ -2109,15 +2149,18 @@ callback_bridge(Event, #state{member_call=Call, callback_ctx=Context
+@@ -2115,15 +2155,18 @@ callback_bridge(Event, #state{member_call=Call, callback_ctx=Context
          'false' -> {'next_state', 'connecting', State}
      end.
  

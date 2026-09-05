@@ -1,0 +1,17 @@
+diff --git a/kazoo_stdlib/src/kz_log.erl b/kazoo_stdlib/src/kz_log.erl
+--- a/kazoo_stdlib/src/kz_log.erl
++++ b/kazoo_stdlib/src/kz_log.erl
+@@ -185,9 +185,10 @@ log_stacktrace(ST, Fmt, Args) ->
+ 
+ log_stacktrace_mfa(M, F, Arity, Info) when is_integer(Arity) ->
+     ?LOG_ERROR("st: ~s:~s/~b at (~b)", [M, F, Arity, props:get_value('line', Info, 0)]);
+-log_stacktrace_mfa(M, F, Args, Info) ->
+-    ?LOG_ERROR("st: ~s:~s at ~p", [M, F, props:get_value('line', Info, 0)]),
+-    lists:foreach(fun (Arg) -> ?LOG_ERROR("args: ~p", [Arg]) end, Args).
++log_stacktrace_mfa(M, F, Args, Info) when is_list(Args) ->
++    %% Function-clause frames contain complete endpoint/call arguments, including
++    %% SIP passwords and authorization data. Retain location/arity, not values.
++    log_stacktrace_mfa(M, F, length(Args), Info).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Given an JSON Object extracts the `Call-ID' into the processes

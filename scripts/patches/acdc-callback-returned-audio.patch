@@ -1,0 +1,42 @@
+diff --git a/src/acdc_callback_caller.erl b/src/acdc_callback_caller.erl
+index 61e759a..f4279de 100644
+--- a/src/acdc_callback_caller.erl
++++ b/src/acdc_callback_caller.erl
+@@ -12,7 +12,7 @@
+ -ifdef(TEST).
+ -export([confirmation_event/3, failure_message/4, owner_loss_action/1
+         ,confirmation_prompt/2, ready_message/5, settlement/3, valid_start/5
+-        ,ready_correlation_probe/0]).
++        ,ready_correlation_probe/0, returned_call_probe/5]).
+ -endif.
+ 
+ -include("acdc.hrl").
+@@ -441,9 +441,13 @@ returned_call(JObj, ControlQueue, #state{account_id=AccountId
+                                        ,caller_call_id=CallId
+                                        ,original_call=OriginalCall}) ->
+     CallJObj = kz_json:get_json_value(<<"Call">>, JObj, kz_json:new()),
++    %% Offnet responses label the carrier route "offnet-termination". This
++    %% worker returns an AUDIO member to ACDC, whose endpoint policy accepts
++    %% media types, not route classifications. Normalize only the Call field;
++    %% preserve transport CCVs, authorization and callback correlation intact.
+     Call0 = case kz_json:is_json_object(CallJObj) of
+-                'true' -> kapps_call:from_json(CallJObj);
+-                'false' -> kapps_call:new()
++                'true' -> kapps_call:from_json(kz_json:set_value(<<"Resource-Type">>, <<"audio">>, CallJObj));
++                'false' -> kapps_call:from_json(kz_json:from_list([{<<"Resource-Type">>, <<"audio">>}]))
+             end,
+     Call1 = kapps_call:exec([{fun kapps_call:set_account_id/2, AccountId}
+                             ,{fun kapps_call:set_account_db/2, kzs_util:format_account_db(AccountId)}
+@@ -569,6 +573,12 @@ matches(Value, Regex) when is_binary(Value), byte_size(Value) =< 512 ->
+ matches(_, _) -> 'false'.
+ 
+ -ifdef(TEST).
++-spec returned_call_probe(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(),
++                          kz_term:ne_binary(), kapps_call:call()) -> kapps_call:call().
++returned_call_probe(JObj, ControlQueue, AccountId, CallId, OriginalCall) ->
++    returned_call(JObj, ControlQueue, #state{account_id=AccountId, caller_call_id=CallId
++                                           ,original_call=OriginalCall}).
++
+ %% Exercise the actual worker transition, not only the message constructor.
+ -spec ready_correlation_probe() -> tuple().
+ ready_correlation_probe() ->

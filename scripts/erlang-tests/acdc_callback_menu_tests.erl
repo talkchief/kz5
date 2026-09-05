@@ -71,6 +71,64 @@ alternate_number_is_bounded_and_star_cancels_test() ->
         acdc_callback_menu:event({dtmf, <<"*">>}, 4, Retried),
     ?assertEqual(aborted, acdc_callback_menu:status(Aborted)).
 
+unavailable_current_number_allows_only_opted_in_alternate_collection_test() ->
+    lists:foreach(fun(Current) ->
+        {ok, State, [collect_alternate]} = acdc_callback_menu:new(config(), Current, -5000),
+        ?assertEqual(collecting, acdc_callback_menu:status(State)),
+        ?assertEqual(undefined, maps:get(current_number, State)),
+        ?assertEqual(<<>>, maps:get(digits, State)),
+        ?assertEqual(false, maps:get(registration_emitted, State)),
+        ?assertEqual(30000, acdc_callback_menu:remaining_ms(-5000, State))
+    end, unavailable_numbers()).
+
+unavailable_current_number_requires_explicit_alternate_permission_test() ->
+    Configs = [(config())#{allow_alternate_number => false}
+               ,maps:remove(allow_alternate_number, config())
+               ,(config())#{allow_alternate_number => <<"true">>}],
+    lists:foreach(fun(Config) ->
+        lists:foreach(fun(Current) ->
+            ?assertEqual({error, invalid_number}, acdc_callback_menu:new(Config, Current, 0))
+        end, unavailable_numbers())
+    end, Configs).
+
+alternate_only_requires_entered_number_and_separate_confirmation_test() ->
+    {ok, Initial, [collect_alternate]} = acdc_callback_menu:new(config(), <<"fixture-sip-user">>, 0),
+    %% "1" is a digit of the new number here, never a request to dial the
+    %% unavailable current caller ID. Registration requires # and confirmation.
+    {First, []} = acdc_callback_menu:event({dtmf, <<"1">>}, 1, Initial),
+    ?assertEqual(collecting, acdc_callback_menu:status(First)),
+    ?assertEqual(<<"1">>, maps:get(digits, First)),
+    Entered = lists:foldl(fun(Digit, State) ->
+        {Next, []} = acdc_callback_menu:event({dtmf, <<Digit>>}, 2, State), Next
+    end, First, "001"),
+    {Confirming, [{read_back_number, <<"1001">>}, {prompt_confirm_alternate, <<"1">>}]} =
+        acdc_callback_menu:event({dtmf, <<"#">>}, 3, Entered),
+    {Retry, [{retry, 2}]} = acdc_callback_menu:event({dtmf, <<"9">>}, 4, Confirming),
+    ?assertEqual(false, maps:get(registration_emitted, Retry)),
+    {Waiting, [{register_callback, ?QUEUE, ?CALL, ?REQUEST, <<"1001">>}]} =
+        acdc_callback_menu:event({dtmf, <<"1">>}, 5, Retry),
+    ?assertEqual(awaiting_ack, acdc_callback_menu:status(Waiting)),
+    ?assertEqual({Waiting, []}, acdc_callback_menu:event({dtmf, <<"1">>}, 6, Waiting)).
+
+alternate_only_retains_validation_cancellation_and_absolute_deadline_test() ->
+    {ok, Initial, [collect_alternate]} = acdc_callback_menu:new(config(), undefined, -5000),
+    {Empty, [{retry, 2}]} = acdc_callback_menu:event({dtmf, <<"#">>}, -4999, Initial),
+    ?assertEqual(collecting, acdc_callback_menu:status(Empty)),
+    {Invalid, [{retry, 1}]} = acdc_callback_menu:event({dtmf, <<"sip:target">>}, -4998, Empty),
+    ?assertEqual(<<>>, maps:get(digits, Invalid)),
+    ?assertEqual(false, maps:get(registration_emitted, Invalid)),
+    ?assertEqual(25000, maps:get(deadline_ms, Invalid)),
+    {Aborted, [{resume_live_queue, caller_cancelled}]} =
+        acdc_callback_menu:event({dtmf, <<"*">>}, -4997, Invalid),
+    ?assertEqual(aborted, acdc_callback_menu:status(Aborted)),
+    {Expired, [{resume_live_queue, deadline}]} = acdc_callback_menu:event(tick, 25000, Initial),
+    ?assertEqual(aborted, acdc_callback_menu:status(Expired)),
+    {Dead, [abandon_paused_queue]} = acdc_callback_menu:event(caller_hangup, 25000, Initial),
+    ?assertEqual(aborted_dead, acdc_callback_menu:status(Dead)).
+
+unavailable_numbers() -> [undefined, <<>>, <<"anonymous">>, <<"fixture-sip-user">>,
+                         <<"12 34">>, <<"+">>, <<"1234567890123456">>, <<"sip:target@example.invalid">>].
+
 retry_limit_and_absolute_deadline_preserve_queue_test() ->
     Config = (config())#{max_retries => 2, timeout_ms => 1000},
     {ok, Initial, _} = acdc_callback_menu:new(Config, <<"1000">>, 5000),
@@ -167,10 +225,11 @@ success_playback_has_independent_bound_and_never_requeues_test() ->
     ?assertEqual([{end_original_leg, ?CALLBACK, announcement_failed}], FailureActions).
 
 invalid_inputs_test() ->
-    ?assertEqual({error, invalid_number}, acdc_callback_menu:new(config(), <<"12 34">>, 0)),
-    ?assertEqual({error, invalid_number}, acdc_callback_menu:new(config(), <<"+">>, 0)),
+    Disabled = (config())#{allow_alternate_number => false},
+    ?assertEqual({error, invalid_number}, acdc_callback_menu:new(Disabled, <<"12 34">>, 0)),
+    ?assertEqual({error, invalid_number}, acdc_callback_menu:new(Disabled, <<"+">>, 0)),
     ?assertEqual({error, invalid_number}
-                ,acdc_callback_menu:new(config(), <<"1234567890123456">>, 0)),
+                ,acdc_callback_menu:new(Disabled, <<"1234567890123456">>, 0)),
     ?assertEqual({error, invalid_config}
                 ,acdc_callback_menu:new((config())#{confirm_key => <<"2">>}, <<"1000">>, 0)),
     ?assertEqual({error, invalid_config}

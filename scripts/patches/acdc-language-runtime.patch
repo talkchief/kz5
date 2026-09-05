@@ -186,6 +186,7 @@ diff --git a/src/acdc_announcements.erl b/src/acdc_announcements.erl
  %%------------------------------------------------------------------------------
  %% @doc Returns the appropriate prompt name for the given average wait time.
 diff --git a/src/cf_acdc_member.erl b/src/cf_acdc_member.erl
+index 22ed77d..4f4b224 100644
 --- a/src/cf_acdc_member.erl
 +++ b/src/cf_acdc_member.erl
 @@ -20,6 +20,7 @@
@@ -196,7 +197,7 @@ diff --git a/src/cf_acdc_member.erl b/src/cf_acdc_member.erl
          ,callback_test_media/2
          ,callback_test_request/3
          ,callback_test_response/2
-@@ -72,14 +73,16 @@
+@@ -73,14 +74,16 @@ handle(Data, Call) ->
      MaxWait = max_wait(kz_json:get_integer_value(<<"connection_timeout">>, QueueJObj, 3600)),
      MaxQueueSize = max_queue_size(kz_json:get_integer_value(<<"max_queue_size">>, QueueJObj, 0)),
  
@@ -215,7 +216,7 @@ diff --git a/src/cf_acdc_member.erl b/src/cf_acdc_member.erl
                                    ,queue_id=QueueId
                                    ,max_wait=MaxWait
                                    ,callback=callback_config(QueueJObj, Call1)
-@@ -87,6 +90,15 @@
+@@ -88,6 +91,15 @@ handle(Data, Call) ->
                       ,is_queue_full(MaxQueueSize, CurrQueueSize)
                       ).
  
@@ -231,7 +232,7 @@ diff --git a/src/cf_acdc_member.erl b/src/cf_acdc_member.erl
  -spec lookup_priority(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
  lookup_priority(Data, Call) ->
      FromData = kz_json:get_integer_value(<<"priority">>, Data),
-@@ -261,7 +273,11 @@
+@@ -262,7 +274,11 @@ callback_media([{Name, Key, Default} | Rest], QueueJObj, Language, Media) ->
      case {Configured, Language} of
          {Value, _} when is_binary(Value) -> callback_media(Rest, QueueJObj, Language, Media#{Name => Value});
          {'undefined', <<"en-us">>} -> callback_media(Rest, QueueJObj, Language, Media#{Name => Default});
@@ -244,7 +245,7 @@ diff --git a/src/cf_acdc_member.erl b/src/cf_acdc_member.erl
      end.
  
  callback_entry(_Digit, 'undefined', _Pending) -> 'false';
-@@ -504,9 +520,9 @@
+@@ -528,9 +544,9 @@ collect_callback_confirmation(#member_call{call=Call, callback=Callback}=MC, Sta
      Digits = maps:get(digits, State),
      Readback = callback_media_path(number_readback, Callback, Call),
      Confirmation = callback_media_path(confirmation, Callback, Call),
@@ -258,9 +259,10 @@ diff --git a/src/cf_acdc_member.erl b/src/cf_acdc_member.erl
      case Remaining of
          0 -> 'timeout';
 diff --git a/src/acdc_callback_caller.erl b/src/acdc_callback_caller.erl
+index f4279de..d4c5475 100644
 --- a/src/acdc_callback_caller.erl
 +++ b/src/acdc_callback_caller.erl
-@@ -347,7 +347,11 @@
+@@ -347,7 +347,11 @@ confirmation_prompt(QueueDoc, Call) ->
                  'false' -> {'error', 'missing_localized_media'}
              end;
          {'undefined', <<"en-us">>} -> {'ok', ?DEFAULT_CONFIRM_PROMPT};

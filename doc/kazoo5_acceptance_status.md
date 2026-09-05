@@ -1,9 +1,47 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-05 12:44 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-05 13:17 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
 
 ## Latest live fixes (12:44 UTC)
+
+Callback follow-up at 13:13 UTC:
+
+- The callback menu now permits direct audible number entry when caller ID is
+  invalid **and** alternate entry was explicitly enabled. False/default policy
+  remains unchanged. Reducer/wrapper tests pass 21 cases; the baseline-only
+  production modules were hotloaded at 12:57 UTC. See
+  [menu repair](acdc_callback_menu_repair.md).
+- The first returned-call test exposed a test-phone RTP payload mismatch.
+  Correcting its negotiated keypad payload delivered digit 1 and exposed a
+  real endpoint-construction failure: the returned Call carried resource type
+  `offnet-termination`, while native endpoint selection requires `audio`.
+  Normalizing only the top-level call type, preserving route/authentication
+  channel variables, passes 10 baseline tests; the old code reproduces the
+  endpoint failure. The narrow production caller module was hotloaded at
+  13:12 UTC.
+- Failed-test cancellation also exposed an eCallMgr parser mismatch:
+  `freeswitch:api` strips the `+OK` prefix, but reconciliation expected the raw
+  wire reply. The corrected parser accepts the exact normalized success shapes
+  and retains fail-closed handling for errors/malformed responses. Six tests
+  pass; it was hotloaded at 13:12 UTC. The ordinary queue reconciler then moved
+  the exact test ticket to `cancelled`, removed its lease/reconciliation flag,
+  and confirmed both call legs down, without a manual ticket rewrite.
+- MASTER configuration remains incomplete: the incoming SIP username is not a
+  return number; alternate entry is disabled; neither the selected callback
+  user nor the account supplies an outbound caller-ID number; number and
+  carrier-resource inventories are empty. Code fixes alone cannot provide
+  these identities/routes. See [callback identity and routing](acdc_api_reference.md#return-destination-is-separate-from-the-callback-user).
+- Full live returned-caller/agent/order acceptance is being rerun after these
+  repairs. No PSTN traffic, MASTER roster edits, service restarts, staged
+  atomic-answer activation or staged language-backend activation occurred.
+- The endpoint exception exposed credential-bearing argument dumps in the
+  shared stacktrace logger. A narrow `kz_log:log_stacktrace_mfa/4` repair keeps
+  module/function/arity/line diagnostics and omits argument values. Three
+  regressions pass, including a real `badarg` frame. Its reconstructed old
+  production BEAM matched the installed bytecode; the new baseline module was
+  hotloaded on apps and eCallMgr at 13:17 UTC, without a restart. It does not
+  remove earlier protected logs or redact arbitrary caller-supplied messages.
 
 - The browser console repair passed private-preview and then unoverlaid live
   acceptance. Login, Billing, unsaved ACDC forms, actual unsaved Callflows
@@ -28,8 +66,9 @@ active services or this document as production certification.**
 - The isolated 12:47–12:48 callback run registered a durable reservation and
   received the returned local-carrier call, but failed before an agent INVITE;
   the returned call ended early. Cleanup left zero calls and removed the owned
-  fixture. This is an additional open callback defect, not a passing callback
-  gate. Protected evidence: `/var/log/kazoo-acceptance/20260905T124723Z`.
+  fixture. The later investigation above separates the test-phone mismatch
+  from actual backend failures; this first run is not a passing callback gate.
+  Protected evidence: `/var/log/kazoo-acceptance/20260905T124723Z`.
 - Apps, eCallMgr, FreeSWITCH, Kamailio and live test phones remained active with
   unchanged PIDs and zero automatic restarts at the 12:44 check. Disk usage is
   about 12 GiB used / 25 GiB available. The remaining production acceptance and

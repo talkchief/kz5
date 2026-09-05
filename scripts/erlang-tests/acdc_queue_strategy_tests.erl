@@ -100,6 +100,66 @@ with_mocks(Fun) ->
     after [meck:unload(M) || M <- Mods], drain() end.
 drain() -> receive {timeout,_,_} -> drain(); {'$gen_cast',_} -> drain() after 0 -> ok end.
 
+callback_resume_preserves_scope_through_real_manager_test_() ->
+    {timeout,30,fun() -> callback_resume_scope_case(explicit) end}.
+
+callback_menu_deadline_preserves_scope_through_real_manager_test_() ->
+    {timeout,30,fun() -> callback_resume_scope_case(deadline) end}.
+
+callback_resume_scope_case(Trigger) -> with_mocks(fun() ->
+    Mods=[gen_listener,acdc_callback_store,kapi_acdc_callback,kapps_call_command,kapps_config],
+    meck:new(Mods,[non_strict,no_link]),
+    try
+        Account = <<"11111111111111111111111111111111">>, Queue = <<"resume-queue">>,
+        CallId = <<"resume-caller">>, PauseId = <<"resume-pause">>, Timer=make_ref(),
+        meck:expect(kapps_call_command,set,fun(_,_,_) -> ok end),
+        meck:expect(kapps_config,get_integer,fun(_,_,Default) -> Default end),
+        Call=kapps_call:set_language(<<"en-us">>,kapps_call:set_caller_id_number(<<"fixture-sip-user">>,
+               kapps_call:set_caller_id_name(<<"Resume fixture">>,
+                 kapps_call:set_account_id(Account,kapps_call:set_call_id(CallId,kapps_call:new()))))),
+        Manager=#state{account_id=Account,queue_id=Queue,current_member_calls=[Call]
+                       ,strategy_state=#strategy_state{agents=queue:from_list([<<"agent">>])}
+                       ,announcements_pids=#{CallId => self()}},
+        meck:expect(gen_listener,call,fun(_, Request) ->
+            {reply,Reply,_}=acdc_queue_manager:handle_call(Request,self(),Manager), Reply
+        end),
+        meck:expect(acdc_callback_store,find,fun(A,Q,C) ->
+            ?assertEqual({Account,Queue,CallId},{A,Q,C}), {error,not_found}
+        end),
+        meck:expect(kapi_acdc_callback,publish_response,fun(_,_) -> ok end),
+        meck:expect(acdc_queue_listener,delivery,fun(_) -> fixture_delivery end),
+        meck:expect(acdc_queue_listener,member_connect_req,fun(_) -> ok end),
+        meck:expect(webseq,note,fun(_,_,_,_) -> ok end),
+        Request=j([{<<"Account-ID">>,Account},{<<"Queue-ID">>,Queue},{<<"Call-ID">>,CallId}
+                   ,{<<"Request-ID">>,<<"resume-request">>},{<<"Server-ID">>,<<"resume-controller">>}
+                   ,{<<"Operation">>,<<"pause">>}]),
+        Context=#{request => Request,pause_id => PauseId,timer_ref => Timer,previous_state => ready},
+        Initial=qstate([{member_call,Call},{account_id,Account},{queue_id,Queue}
+                        ,{manager_proc,self()},{listener_proc,self()},{callback_ctx,Context}
+                        ,{connection_timeout,30000}]),
+        %% This is the real manager fallback that caused case_clause=ok in
+        %% ready/3 when the old resume envelope contained only Call.
+        ?assertEqual(ok,acdc_queue_manager:should_ignore_member_call(self(),Call,j([{<<"Call">>,kapps_call:to_json(Call)}]))),
+        {next_state,ready,Resumed}=case Trigger of
+            explicit ->
+                Resume=kz_json:set_values([{<<"Operation">>,<<"resume">>},{<<"Pause-ID">>,PauseId}],Request),
+                acdc_queue_fsm:callback_paused(cast,{callback_request,Resume},Initial);
+            deadline -> acdc_queue_fsm:callback_paused(info,{timeout,Timer,callback_menu_deadline},Initial)
+        end,
+        receive
+            {'$gen_cast',{check_if_next,Envelope,fixture_delivery}=Check} ->
+                ?assertEqual(Account,kz_json:get_value(<<"Account-ID">>,Envelope)),
+                ?assertEqual(Queue,kz_json:get_value(<<"Queue-ID">>,Envelope)),
+                ?assertEqual(CallId,kz_json:get_value([<<"Call">>,<<"Call-ID">>],Envelope)),
+                {next_state,connect_req,Connecting}=acdc_queue_fsm:ready(cast,Check,Resumed),
+                ?assert(meck:called(gen_listener,call,['_',{should_ignore_member_call,{Account,Queue,CallId}}])),
+                ?assertEqual(1,meck:num_calls(acdc_queue_listener,member_connect_req,'_')),
+                [erlang:cancel_timer(qfield(Field,Connecting)) || Field <- [collect_ref,connection_timer_ref]]
+        after 100 -> ?assert(false)
+        end
+    after meck:unload(Mods) end
+end).
+
 stale_ring_timer_cannot_change_selection_test() -> with_mocks(fun() ->
     S=qstate([{agent_ring_timer_ref,make_ref()},{member_call_winners,[r(<<"a">>),r(<<"b">>)]}]),
     ?assertEqual({next_state,connecting,S},acdc_queue_fsm:connecting(info,{timeout,make_ref(),agent_timer_expired},S)),

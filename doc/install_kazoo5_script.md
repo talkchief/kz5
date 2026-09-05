@@ -478,6 +478,7 @@ sudo ./scripts/test-install-kazoo5-deployment.sh
 ./scripts/test-install-kazoo5-logging.sh
 ./scripts/test-install-kazoo5-prompts.sh
 ./scripts/test-kazoo-log-redaction.sh
+./scripts/test-kazoo-stacktrace-redaction.sh
 ./scripts/test-ecallmgr-cnode.sh
 ./scripts/test-acdc-unit.sh
 ```
@@ -493,6 +494,12 @@ also checks valued `TEST` macros and rejects paths escaping the project.
 Callback storage tests are foundation tests, not proof of a working callback
 telephone workflow. Live queue acknowledgement, preserved ordering across a
 restart, outbound routing, caller DTMF and agent audio remain separate gates.
+
+Stacktrace logging retains module/function/arity and line locations, but does
+not print function argument values. Endpoint exception frames can contain whole
+SIP device and call documents; those are not safe diagnostic payloads. This
+protection does not redact arbitrary caller-supplied log messages or certify
+that every log source is free of sensitive data.
 
 The callback telephone fixture can be prepared without traffic, then run only
 in a coordinated maintenance window after the aggregate ACDC runtime is active:

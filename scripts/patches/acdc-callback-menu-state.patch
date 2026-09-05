@@ -1,6 +1,6 @@
 --- /dev/null
 +++ b/src/acdc_callback_menu.erl
-@@ -0,0 +1,260 @@
+@@ -0,0 +1,273 @@
 +%%% SPDX-License-Identifier: MPL-2.0
 +%%% Pure callback-menu state reducer. It has no telephony, AMQP or datastore
 +%%% side effects; the caller executes returned actions and feeds correlated
@@ -19,7 +19,7 @@
 +-define(MAX_SUCCESS_TIMEOUT_MS, 30000).
 +-define(MAX_DIGITS, 15).
 +
-+-spec new(map(), binary(), integer()) ->
++-spec new(map(), binary() | 'undefined', integer()) ->
 +          {'ok', state(), [action()]} | {'error', 'invalid_config' | 'invalid_number'}.
 +new(Config, CurrentNumber, NowMs) when is_map(Config), is_integer(NowMs) ->
 +    case {normalize_number(CurrentNumber), config(Config)} of
@@ -32,6 +32,19 @@
 +                             ,registration_emitted => 'false'
 +                             },
 +            {'ok', State, [{'play_menu', Number, maps:get(allow_alternate_number, Settings)}]};
++        {{'error', _}, {'ok', #{allow_alternate_number := 'true'}=Settings}} ->
++            %% An unavailable caller ID is not a callback target. When the
++            %% queue explicitly permits alternatives, collect a new number
++            %% and retain the existing readback/confirmation/authorization
++            %% barriers. Never offer confirmation of the invalid caller ID.
++            State = Settings#{phase => 'collecting'
++                             ,current_number => 'undefined'
++                             ,digits => <<>>
++                             ,retries => 0
++                             ,deadline_ms => NowMs + maps:get(timeout_ms, Settings)
++                             ,registration_emitted => 'false'
++                             },
++            {'ok', State, ['collect_alternate']};
 +        {{'error', _}, _} -> {'error', 'invalid_number'};
 +        {_, {'error', _}} -> {'error', 'invalid_config'}
 +    end;

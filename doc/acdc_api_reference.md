@@ -171,6 +171,28 @@ Legacy device-authority configurations remain supported until deliberately
 changed. Caller identity inheritance is not an override of routing policy or
 permission to call a destination that the user/account forbids.
 
+### Return destination is separate from the callback user
+
+| Value | Purpose |
+| --- | --- |
+| Callback user / outbound authority | The account-owned identity authorizing the outgoing attempt and supplying restrictions/defaults. It is not automatically the recipient. |
+| Outbound caller-ID number | The owned telephone number presented by the return call, inherited from the selected user/account or explicitly selected. |
+| Callback destination | The original caller's valid numeric caller ID, or the number the caller enters and confirms when alternate entry is enabled. |
+
+A SIP login name is not a dialable return number. If current caller ID is invalid
+and `allow_alternate_number` is false, the menu returns to the live queue and
+does not register a callback. With alternate entry explicitly enabled, the
+repaired menu starts with an audible number-entry prompt, reads the entered
+number back, and still requires confirmation. This does not relax number,
+account, caller-ID ownership, or outbound routing checks.
+
+The outgoing callback uses Stepswitch originate routing. An ordinary internal
+extension callflow alone is not a return route: the destination must resolve as
+a provisioned on-net telephone number or match an authorized outbound resource.
+Selecting a callback user cannot supply a missing owned caller-ID number, SIP
+carrier, or return destination. No carrier or PSTN numbers are automatically
+created by enabling the queue setting.
+
 | Method | Account-relative path | Purpose |
 | --- | --- | --- |
 | GET | `/queues/{queue_id}/callbacks` | Bounded callback list; `page_size` maximum 100 and opaque `cursor`. |

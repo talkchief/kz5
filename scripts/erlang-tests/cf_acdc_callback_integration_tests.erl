@@ -56,6 +56,87 @@ english_defaults_and_foreign_language_fail_closed_test() ->
     ?assertEqual(<<"acdc-callback-offer-3">>, maps:get(offer, AlternateDefaults)),
     ?assertEqual(<<"acdc-callback-menu-alternate">>, maps:get(menu, AlternateDefaults)).
 
+alternate_entry_is_audible_without_replaying_between_digits_test_() ->
+    {timeout, 30, fun() -> with_callback_commands(fun() ->
+        lists:foreach(fun(Current) ->
+            Now = erlang:monotonic_time(millisecond),
+            {ok, Initial, _} = acdc_callback_menu:new(menu_config(), Current, Now),
+            Collecting = case acdc_callback_menu:status(Initial) of
+                menu ->
+                    {Selected, [collect_alternate]} = acdc_callback_menu:event({dtmf, <<"2">>}, Now, Initial),
+                    Selected;
+                collecting -> Initial
+            end,
+            Before = meck:num_calls(kapps_call_command, prompt, '_'),
+            {First, []} = collect_and_reduce(<<"1">>, Collecting),
+            ?assertEqual(Before + 1, meck:num_calls(kapps_call_command, prompt, '_')),
+            {Second, []} = collect_and_reduce(<<"0">>, First),
+            ?assertEqual(Before + 1, meck:num_calls(kapps_call_command, prompt, '_')),
+            {Confirming, [{read_back_number, <<"10">>}, {prompt_confirm_alternate, <<"1">>}]} =
+                collect_and_reduce(<<"#">>, Second),
+            ?assertEqual(false, maps:get(registration_emitted, Confirming)),
+            ?assertEqual(confirming_alternate, acdc_callback_menu:status(Confirming))
+        end, [<<"anonymous">>, <<"1000">>]),
+        ?assert(meck:validate(kapps_call_command))
+    end) end}.
+
+alternate_wrapper_preserves_invalid_digits_and_cancellation_test_() ->
+    {timeout, 30, fun() -> with_callback_commands(fun() ->
+        {ok, Initial, _} = acdc_callback_menu:new(menu_config(), undefined, erlang:monotonic_time(millisecond)),
+        {Empty, [{retry, 2}]} = collect_and_reduce(<<"#">>, Initial),
+        {Invalid, [{retry, 1}]} = collect_and_reduce(<<"A">>, Empty),
+        ?assertEqual(<<>>, maps:get(digits, Invalid)),
+        ?assertEqual(false, maps:get(registration_emitted, Invalid)),
+        {Cancelled, [{resume_live_queue, caller_cancelled}]} = collect_and_reduce(<<"*">>, Invalid),
+        ?assertEqual(aborted, acdc_callback_menu:status(Cancelled)),
+        ?assertEqual(3, meck:num_calls(kapps_call_command, prompt, '_'))
+    end) end}.
+
+alternate_wrapper_bounds_prompt_wait_and_observes_hangup_test_() ->
+    {timeout, 30, fun() -> with_callback_commands(fun() ->
+        {ok, Initial, _} = acdc_callback_menu:new(menu_config(), undefined, erlang:monotonic_time(millisecond)),
+        Expired = Initial#{deadline_ms => erlang:monotonic_time(millisecond) - 1},
+        ?assertEqual(timeout, cf_acdc_member:callback_test_collect_alternate(fixture_call, Expired)),
+        ?assertEqual(0, meck:num_calls(kapps_call_command, prompt, '_')),
+        %% Use the real wait_for_dtmf/1 and real mailbox. A missing playback
+        %% noop is bounded, and unrelated/noop events cannot renew the budget.
+        Deadline = erlang:monotonic_time(millisecond) + 100,
+        Waiting = Initial#{deadline_ms => Deadline},
+        Noop = call_event(<<"CHANNEL_EXECUTE_COMPLETE">>, [{<<"Application-Name">>, <<"noop">>}]),
+        self() ! {amqp_msg, Noop},
+        _ = erlang:send_after(30, self(), {amqp_msg, Noop}),
+        _ = erlang:send_after(60, self(), {amqp_msg, Noop}),
+        ?assertEqual(timeout, cf_acdc_member:callback_test_collect_alternate(fixture_call, Waiting)),
+        ?assert(erlang:monotonic_time(millisecond) >= Deadline),
+        ?assert(erlang:monotonic_time(millisecond) < Deadline + 200),
+        {Aborted, [{resume_live_queue, deadline}]} =
+            acdc_callback_menu:event(tick, erlang:monotonic_time(millisecond), Waiting),
+        ?assertEqual(aborted, acdc_callback_menu:status(Aborted)),
+        self() ! {amqp_msg, call_event(<<"CHANNEL_DESTROY">>, [])},
+        ?assertEqual(hangup, cf_acdc_member:callback_test_collect_alternate(fixture_call, Initial)),
+        ?assertEqual(2, meck:num_calls(kapps_call_command, prompt, '_'))
+    end) end}.
+
+with_callback_commands(Fun) ->
+    meck:new(kapps_call_command, [passthrough, no_link]),
+    try
+        meck:expect(kapps_call_command, prompt,
+                    fun(<<"cf-enter_number">>, fixture_call) -> <<"fixture-prompt-noop">> end),
+        Fun()
+    after meck:unload(kapps_call_command) end.
+
+collect_and_reduce(Digit, State) ->
+    self() ! {amqp_msg, call_event(<<"DTMF">>, [{<<"DTMF-Digit">>, Digit}])},
+    {ok, Received} = cf_acdc_member:callback_test_collect_alternate(fixture_call, State),
+    acdc_callback_menu:event({dtmf, Received}, erlang:monotonic_time(millisecond), State).
+
+call_event(Name, Extra) ->
+    kz_json:from_list([{<<"Event-Category">>, <<"call_event">>}, {<<"Event-Name">>, Name} | Extra]).
+
+menu_config() ->
+    #{request_id => ?REQUEST, queue_id => ?QUEUE, original_call_id => ?CALL
+     ,allow_alternate_number => true, max_retries => 3, timeout_ms => 30000}.
+
 context() ->
     #{account_id => ?ACCOUNT
      ,queue_id => ?QUEUE
