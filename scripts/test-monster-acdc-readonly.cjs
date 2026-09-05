@@ -4,7 +4,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const {chromium} = require(process.env.KAZOO_PLAYWRIGHT_MODULE || 'playwright');
+const deploymentProfile = process.env.KAZOO_TEST_ACDC_PROFILE || 'staged';
+assert(['staged', 'baseline'].includes(deploymentProfile), 'Unknown expected ACDC deployment profile');
+const baselineProfile = deploymentProfile === 'baseline';
+assert(!baselineProfile || process.env.KAZOO_TEST_QUEUE_EDITOR !== 'true', 'Baseline must not use the aggregate editor');
+assert(!baselineProfile || process.env.KAZOO_TEST_ACDC_STAGE, 'Baseline preview requires a pinned private build');
 const secretsPath = process.env.KAZOO_INSTALLER_SECRETS || '/etc/kazoo/installer-secrets.env';
 const stat = fs.lstatSync(secretsPath);
 assert(stat.isFile() && !stat.isSymbolicLink() && stat.uid === 0 && (stat.mode & 0o777) === 0o600,
@@ -20,17 +26,43 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
     const browser = await chromium.launch({headless: true});
     const deadline = setTimeout(() => browser.close().catch(() => {}), 120000);
     const errors = [], blockedWrites = [], failedResponses = [], queueResponses = [];
+    const requestCounts = {}, responseCounts = {};
+    const editorRequests = [], separateEditorCatalogRequests = [];
+    const apiOrigins = new Set();
+    const aggregateEditor = process.env.KAZOO_TEST_QUEUE_EDITOR === 'true';
+    let observingEditorLoad = false;
     let stagedAssetsServed = 0;
+    let stagedAppScriptsServed = 0;
+    const previewShellServed = new Set();
     let page;
     try {
         page = await browser.newPage({viewport: {width: 1600, height: 1000}});
         page.on('pageerror', error => errors.push(error.message));
+        page.on('request', request => {
+            const requestUrl = new URL(request.url()), pathname = requestUrl.pathname;
+            if (pathname.startsWith('/v2/')) apiOrigins.add(requestUrl.origin);
+            const category = pathname.startsWith('/v2/') ? pathname.replace(/\/accounts\/[^/]+/, '/accounts/ACCOUNT')
+                .replace(/\/media\/prompts\/[^/]+/, '/media/prompts/PROMPT').replace(/[a-f0-9]{32}/g, 'ID') : undefined;
+            if (category) requestCounts[category] = (requestCounts[category] || 0) + 1;
+            if (baselineProfile && /\/queues\/(?:[a-f0-9]{32}\/)?editor$/.test(pathname)) {
+                editorRequests.push(`${request.method()} ${pathname}`);
+            }
+            if (!aggregateEditor || !observingEditorLoad) return;
+            if (/\/queues\/(?:[a-f0-9]{32}\/)?editor$/.test(pathname)) editorRequests.push(`${request.method()} ${pathname}`);
+            if (/\/accounts\/[a-f0-9]{32}\/(?:users|media|phone_numbers|callflows)(?:\/|$)/.test(pathname)
+                || /\/queues\/[a-f0-9]{32}\/roster$/.test(pathname)
+                || /\/v2\/media(?:\/|$)/.test(pathname)) separateEditorCatalogRequests.push(`${request.method()} ${pathname}`);
+        });
         page.on('console', message => {
             if (message.type() === 'error' && message.text().startsWith('This api does not exist.')) {
                 errors.push(message.text());
             }
         });
         page.on('response', response => {
+            const pathname = new URL(response.url()).pathname;
+            const category = pathname.startsWith('/v2/') ? pathname.replace(/\/accounts\/[^/]+/, '/accounts/ACCOUNT')
+                .replace(/\/media\/prompts\/[^/]+/, '/media/prompts/PROMPT').replace(/[a-f0-9]{32}/g, 'ID') : undefined;
+            if (category) responseCounts[category] = (responseCounts[category] || 0) + 1;
             if (response.status() >= 400) failedResponses.push(`${response.status()} ${new URL(response.url()).pathname}`);
             if (new URL(response.url()).pathname.endsWith('/queues') && response.request().method() === 'GET') {
                 response.json().then(body => queueResponses.push({keys: Object.keys(body),
@@ -49,6 +81,58 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
             const stage = fs.realpathSync(process.env.KAZOO_TEST_ACDC_STAGE);
             assert(stage.startsWith('/usr/local/src/kazoo5-installer/monster-acdc-'), 'Unexpected private build fixture path');
             const appRoot = path.join(stage, 'dist/apps/acdc');
+            if (baselineProfile) {
+                const manifest = JSON.parse(fs.readFileSync(path.join(stage, 'baseline-build.json')));
+                const overlay = require('./build-acdc-baseline-ui.cjs');
+                assert.equal(manifest.base_commit, overlay.BASE);
+                assert.equal(manifest.release_type, 'temporary-legacy-editor-overlay');
+                assert.equal(manifest.aggregate_editor_included, false);
+                assert.equal(manifest.language_readiness_published, false);
+                assert.equal(manifest.overlay_sha256, overlay.digest(fs.readFileSync(path.join(__dirname, 'build-acdc-baseline-ui.cjs'))));
+                for (const [relative, expected] of Object.entries(manifest.files)) {
+                    const filename = path.resolve(stage, relative);
+                    assert(filename.startsWith(stage + '/') && !relative.includes('..'));
+                    assert.equal(crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex'), expected);
+                }
+                assert(!fs.existsSync(path.join(appRoot, 'language-capabilities.json')), 'Baseline cannot publish readiness');
+            }
+            // Production may preload an older named AMD module in main.js.
+            // Overlaying app assets alone never replaces that cached module.
+            // Preview the exact deployer's shell transform in memory, leaving
+            // every other definition and live filesystem byte untouched.
+            const acorn = require('/usr/local/src/kazoo5-installer/monster-ui/node_modules/acorn');
+            const webRoot = '/var/www/html/monster-ui';
+            const main = fs.readFileSync(path.join(webRoot, 'js/main.js'), 'utf8');
+            const tree = acorn.parse(main, {ecmaVersion: 2018}), definitions = [], stack = [tree];
+            while (stack.length) {
+                const node = stack.pop();
+                if (node.type === 'CallExpression' && node.callee.type === 'Identifier' && node.callee.name === 'define'
+                    && node.arguments[0] && node.arguments[0].type === 'Literal' && node.arguments[0].value === 'apps/acdc/app') {
+                    definitions.push(node);
+                }
+                for (const value of Object.values(node)) {
+                    if (Array.isArray(value)) {
+                        for (const child of value) if (child && typeof child.type === 'string') stack.push(child);
+                    } else if (value && typeof value.type === 'string') stack.push(value);
+                }
+            }
+            assert(definitions.length <= 1, 'Ambiguous embedded ACDC preview definitions');
+            const span = definitions[0];
+            const previewMain = span ? main.slice(0, span.start) + 'void 0' + main.slice(span.end) : main;
+            acorn.parse(previewMain, {ecmaVersion: 2018});
+            const build = JSON.parse(fs.readFileSync(path.join(webRoot, 'build-config.json'), 'utf8'));
+            for (const key of ['preloadApps', 'preloadedApps']) {
+                if (Array.isArray(build[key])) build[key] = build[key].filter(name => name !== 'acdc');
+            }
+            for (const [pathname, contentType, body] of [['/js/main.js', 'application/javascript', previewMain],
+                ['/build-config.json', 'application/json', JSON.stringify(build)]]) {
+                await page.route('**' + pathname + '*', route => {
+                    assert.equal(new URL(route.request().url()).pathname, pathname, 'Unexpected preview shell path');
+                    assert.equal(route.request().method(), 'GET', 'Preview shell must be read-only');
+                    previewShellServed.add(pathname);
+                    return route.fulfill({status: 200, contentType, body});
+                });
+            }
             await page.route('**/apps/acdc/**', async route => {
                 const pathname = decodeURIComponent(new URL(route.request().url()).pathname);
                 const relative = pathname.slice(pathname.indexOf('/apps/acdc/') + '/apps/acdc/'.length);
@@ -63,6 +147,7 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
                 }
                 assert(fs.lstatSync(file).isFile(), 'Fixture asset must be a regular file');
                 stagedAssetsServed++;
+                if (relative === 'app.js') stagedAppScriptsServed++;
                 return route.fulfill({path: file});
             });
         }
@@ -104,19 +189,27 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
         if (process.env.KAZOO_TEST_MASTER_ROSTER === 'true') {
             const queueId = process.env.KAZOO_TEST_MASTER_QUEUE_ID || '6729981c1d697e88aa31921eb6bad2da';
             assert(/^[a-f0-9]{32}$/.test(queueId));
+            observingEditorLoad = true;
             const rosterResponse = page.waitForResponse(response =>
-                new URL(response.url()).pathname.endsWith(`/queues/${queueId}/roster`) && response.request().method() === 'GET');
+                new URL(response.url()).pathname.endsWith(`/queues/${queueId}/${aggregateEditor ? 'editor' : 'roster'}`) && response.request().method() === 'GET');
             await page.locator(`.acdc-edit-queue[data-id="${queueId}"]`).click();
             const response = await rosterResponse, body = await response.json();
-            assert.equal(new URL(response.url()).searchParams.get('paginate'), 'false');
+            if (!aggregateEditor) assert.equal(new URL(response.url()).searchParams.get('paginate'), 'false');
             assert.equal(body.status, 'success');
-            assert(Array.isArray(body.data) && body.data.length === 30 && !body.next_start_key);
+            const roster = aggregateEditor ? body.data.roster : body.data;
+            assert(Array.isArray(roster) && roster.length === 30 && !body.next_start_key);
             await page.locator('.acdc-queue-form').waitFor({state: 'visible', timeout: 30000});
+            observingEditorLoad = false;
+            if (aggregateEditor) {
+                assert.equal(body.data.catalogs.users.complete, true);
+                assert.equal(editorRequests.length, 1, 'Existing queue form must load through one aggregate GET');
+                assert.deepEqual(separateEditorCatalogRequests, [], 'Aggregate editor must not fan out browser catalog requests');
+            }
             const selection = await page.locator('.acdc-roster').evaluate(element => ({disabled: element.disabled,
                 selected: Array.from(element.selectedOptions, option => option.value).sort()}));
             assert.equal(selection.disabled, false);
-            assert.deepEqual(selection.selected, body.data.slice().sort(), 'Every current agent must remain selected in the editor');
-            rosterEvidence = {current_members: body.data.length, selected_members: selection.selected.length,
+            assert.deepEqual(selection.selected, roster.slice().sort(), 'Every current agent must remain selected in the editor');
+            rosterEvidence = {current_members: roster.length, selected_members: selection.selected.length,
                 complete_inventory: true, writes: 0};
             if (process.env.KAZOO_TEST_IN_ORDER === 'true') {
                 await page.locator('[name="strategy"]').selectOption('in_order');
@@ -143,22 +236,43 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
             }
             await page.locator('.acdc-cancel').first().click();
         }
+        const existingEditorRequests = editorRequests.length;
+        observingEditorLoad = true;
         await page.locator('.acdc-add-queue').click();
         await page.locator('.acdc-queue-form').waitFor({state: 'visible', timeout: 30000});
+        observingEditorLoad = false;
+        if (aggregateEditor) {
+            assert.equal(editorRequests.length - existingEditorRequests, 1, 'New queue form must load through one aggregate GET');
+            assert.deepEqual(separateEditorCatalogRequests, [], 'Aggregate editor must not fan out browser catalog requests');
+        }
         const requiredControls = ['callback.enabled', 'callback.use_local_resources', 'callback.entry_key',
             'callback.allow_alternate_number', 'callback.outbound_authority.id', 'callback.caller_id_source',
-            'callback.max_attempts', 'callback.retry_delay', 'callback.ttl',
-            'callback.media.offer', 'callback.media.menu', 'callback.media.number_readback', 'callback.media.confirmation',
-            'callback.media.success', 'callback.media.returned_confirmation', 'announcements.language',
+            'callback.max_attempts', 'callback.retry_delay', 'callback.ttl', 'announcements.language',
             'announcements.position_announcements_enabled', 'announcements.wait_time_announcements_enabled'];
         if (process.env.KAZOO_TEST_INITIAL_DELAY === 'true') requiredControls.push('announcements.initial_delay');
+        if (process.env.KAZOO_TEST_CALLBACK_ANNOUNCEMENT === 'true') {
+            requiredControls.push('callback.announcement.enabled', 'callback.announcement.initial_delay', 'callback.announcement.interval');
+        }
         for (const name of requiredControls) {
             assert(await page.locator(`[name="${name}"]`).isVisible(), `Missing rendered control ${name}`);
         }
+        const legacyPromptFields = ['announcements.media.you_are_at_position', 'announcements.media.in_the_queue',
+            'announcements.media.the_estimated_wait_time_is', 'announcements.media.increase_in_call_volume',
+            'callback.media.offer', 'callback.media.menu', 'callback.media.number_readback', 'callback.media.confirmation',
+            'callback.media.success', 'callback.media.returned_confirmation'];
+        const legacyPromptEvidence = await page.locator('.acdc-queue-form').evaluate((form, names) => names.map(name => {
+            const controls = form.querySelectorAll(`[name="${name}"]`), control = controls[0];
+            return {name, count: controls.length, tag: control && control.tagName,
+                type: control && control.type, required: control && control.required};
+        }), legacyPromptFields);
+        assert(baselineProfile ? legacyPromptEvidence.every(control => control.count === 0)
+            : legacyPromptEvidence.every(control => control.count === 1 && control.tag === 'INPUT'
+                && control.type === 'hidden' && control.required === false),
+        'Legacy prompt overrides must be preserved internally without custom recording selectors or required hidden fields: '
+            + JSON.stringify(legacyPromptEvidence));
         const dropdownEvidence = await page.locator('.acdc-queue-form').evaluate(form => {
             const names = ['callback.outbound_authority.id', 'callback.caller_id_source',
-                'callback.outbound_caller_id.number', 'announcements.language', 'moh', 'announce',
-                'callback.media.offer', 'callback.media.returned_confirmation'];
+                'callback.outbound_caller_id.number', 'announcements.language', 'moh', 'announce'];
             const controls = Object.fromEntries(names.map(name => {
                 const element = form.querySelector(`[name="${name}"]`);
                 return [name, {tag: element.tagName, disabled: element.disabled, choices: element.options.length}];
@@ -217,6 +331,52 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
         assert.equal(callback.outbound_authority.type, 'user');
         assert.equal(callback.outbound_authority.id, dropdownEvidence.first_user);
         assert.equal(Object.hasOwn(callback, 'outbound_caller_id'), false);
+        assert.equal(Object.hasOwn(callback, 'media'), false, 'Fresh callbacks must use built-in prompt defaults');
+        if (baselineProfile) {
+            assert.equal(Object.hasOwn(serialization.payload.announcements, 'media'), false,
+                'Baseline creation must omit custom prompt fields and use backend defaults');
+        } else {
+            assert.deepEqual(serialization.payload.announcements.media, {
+                you_are_at_position: 'queue-you_are_at_position', in_the_queue: 'queue-in_the_queue',
+                the_estimated_wait_time_is: 'queue-the_estimated_wait_time_is', increase_in_call_volume: 'queue-increase_in_call_volume'
+            }, 'Fresh queue announcements must serialize real default prompts, not empty overrides');
+        }
+        let callbackAnnouncementEvidence;
+        if (process.env.KAZOO_TEST_CALLBACK_ANNOUNCEMENT === 'true') {
+            assert.deepEqual(callback.announcement, {enabled: true, initial_delay: 30, interval: 60});
+            callbackAnnouncementEvidence = await page.evaluate(() => {
+                const app = window.require('monster').apps.acdc, $ = window.require('jquery'),
+                    view = $('.acdc-queue-editor'), form = view.find('.acdc-queue-form'),
+                    enabled = form.find('[name="callback.announcement.enabled"]'),
+                    initial = form.find('[name="callback.announcement.initial_delay"]'),
+                    interval = form.find('[name="callback.announcement.interval"]'),
+                    beforePosition = app.serializeQueue(form, true).announcements;
+                const numericRequired = [initial[0], interval[0]].every(element =>
+                    element.type === 'number' && element.required && !element.disabled);
+                const invalidValuesRejected = [[initial, '0'], [initial, '3601'], [initial, '1.5'],
+                    [interval, '14'], [interval, '3601'], [interval, '15.5']].every(([field, value]) => {
+                    field.val(value);
+                    return !field[0].checkValidity();
+                });
+                initial.val('12'); interval.val('75');
+                const configured = app.serializeQueue(form, true).callback.announcement;
+                enabled.prop('checked', false).trigger('change');
+                app.setFormBusy(view, true); app.setFormBusy(view, false);
+                const disabledTiming = [initial[0], interval[0]].every(element => element.disabled);
+                const offPayload = app.serializeQueue(form, true);
+                const callbackKeyStillAvailable = offPayload.callback.enabled && offPayload.callback.entry_key === '6'
+                    && !app.callbackKeyError(form) && !app.callbackSelectionError(form);
+                enabled.prop('checked', true).trigger('change');
+                const restoredTiming = [initial[0], interval[0]].every(element => !element.disabled);
+                const positionUnchanged = JSON.stringify(app.serializeQueue(form, true).announcements) === JSON.stringify(beforePosition);
+                initial.val('30'); interval.val('60');
+                return {numericRequired, invalidValuesRejected, configured, disabledTiming, off: offPayload.callback.announcement,
+                    callbackKeyStillAvailable, restoredTiming, positionUnchanged, valid: form[0].checkValidity()};
+            });
+            assert.deepEqual(callbackAnnouncementEvidence, {numericRequired: true, invalidValuesRejected: true,
+                configured: {enabled: true, initial_delay: 12, interval: 75}, disabledTiming: true, off: {enabled: false},
+                callbackKeyStillAvailable: true, restoredTiming: true, positionUnchanged: true, valid: true});
+        }
         await page.locator('[name="callback.caller_id_source"]').selectOption('custom');
         assert(await page.locator('[name="callback.outbound_caller_id.number"]').isVisible());
         const customSelection = await page.locator('[name="callback.outbound_caller_id.number"]').evaluate(element => ({
@@ -250,6 +410,29 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
                 legacy_source_absent: !Object.prototype.hasOwnProperty.call(payload.callback, 'caller_id_source')};
         });
         assert(Object.values(catalogSafetyEvidence).every(Boolean), 'Incomplete catalogs must preserve every existing setting');
+        let baselineEvidence;
+        if (baselineProfile) {
+            baselineEvidence = await page.evaluate(() => {
+                const app = window.require('monster').apps.acdc, $ = window.require('jquery'), _ = window.require('lodash');
+                const view = $('.acdc-queue-editor').clone(false), form = view.find('.acdc-queue-form');
+                const queue = app.defaultQueue();
+                queue.announcements.media.you_are_at_position = 'fixture-custom-position';
+                queue.callback.media.offer = 'fixture-immutable-offer';
+                queue.callback.return_confirmation_prompt = 'fixture-legacy-return';
+                app.populateQueueDropdowns(view, queue, {users: [], media: [], numbers: [], verifiedSystemMedia: []},
+                    {media: 'incomplete', systemMedia: 'incomplete', numbers: 'incomplete'}, true);
+                const payload = app.serializeQueue(form, true), saved = _.merge(_.cloneDeep(queue), payload);
+                const state = form.data('preserved-prompt-overrides');
+                return {editor_route_absent: !Object.values(app.requests).some(request => /\/editor/.test(request.url)),
+                    prompt_fields_omitted: !Object.hasOwn(payload.announcements, 'media') && !Object.hasOwn(payload.callback, 'media')
+                        && !Object.hasOwn(payload.callback, 'return_confirmation_prompt'),
+                    original_state_retained: state.announcements.you_are_at_position === queue.announcements.media.you_are_at_position
+                        && state.callback.offer === queue.callback.media.offer && state.return_confirmation_prompt === queue.callback.return_confirmation_prompt,
+                    saved_overrides_preserved: saved.announcements.media.you_are_at_position === queue.announcements.media.you_are_at_position
+                        && saved.callback.media.offer === queue.callback.media.offer && saved.callback.return_confirmation_prompt === queue.callback.return_confirmation_prompt};
+            });
+            assert(Object.values(baselineEvidence).every(Boolean), 'Baseline prompt preservation or API contract failed');
+        }
         assert.equal(serialization.payload.announcements.language, 'en-us');
         assert.equal(serialization.payload.announcements.position_announcements_enabled, true);
         assert.equal(serialization.payload.announcements.wait_time_announcements_enabled, true);
@@ -343,14 +526,32 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
         }
         assert.deepEqual(blockedWrites, [], 'Browser attempted a non-authentication API write');
         assert.deepEqual(errors, [], 'Browser JavaScript errors');
-        if (process.env.KAZOO_TEST_ACDC_STAGE) assert(stagedAssetsServed > 0, 'Private fixture was not actually loaded');
+        assert.deepEqual(failedResponses, [], 'Read-only browser HTTP requests must not fail');
+        if (process.env.KAZOO_TEST_SAME_ORIGIN_API === 'true') {
+            assert.deepEqual([...apiOrigins], [new URL(page.url()).origin],
+                'Every browser API request must use the UI origin');
+        }
+        if (baselineProfile) assert.deepEqual(editorRequests, [], 'Baseline must never request an aggregate editor endpoint');
+        if (process.env.KAZOO_TEST_ACDC_STAGE) {
+            assert(stagedAppScriptsServed > 0, 'Private ACDC application JavaScript was not actually loaded');
+            assert.deepEqual(Array.from(previewShellServed).sort(), ['/build-config.json', '/js/main.js'],
+                'Private component preview must exercise the actual deployment shell transform');
+        }
         const evidence = {result: 'PASS', checked_at: new Date().toISOString(), catalog, rendered_controls: requiredControls.length,
+            expected_deployment_profile: deploymentProfile, baseline: baselineEvidence,
             artifact: process.env.KAZOO_TEST_ACDC_STAGE ? 'private_build_fixture' : 'live_deployment',
-            staged_assets_served: stagedAssetsServed, roster: rosterEvidence,
+            staged_assets_served: stagedAssetsServed, staged_app_scripts_served: stagedAppScriptsServed,
+            preview_shell_served: Array.from(previewShellServed).sort(), roster: rosterEvidence, hidden_legacy_prompt_fields: legacyPromptEvidence,
             dropdowns: {...dropdownEvidence, first_user: undefined, custom_selection: customSelection,
                 isolated_catalog_fault_checks: catalogSafetyEvidence},
             callback_serialization_matches_schema: true, api_writes_other_than_authentication: 0,
-            javascript_errors: 0, initial_delay: initialDelayEvidence, ordered_ringing: orderEvidence, callflows: callflowsEvidence};
+            javascript_errors: 0, http_failures: failedResponses.length,
+            api_origins: [...apiOrigins].sort(),
+            same_origin_api_verified: process.env.KAZOO_TEST_SAME_ORIGIN_API === 'true',
+            aggregate_editor: aggregateEditor ? {get_requests: editorRequests.length,
+                separate_catalog_requests: separateEditorCatalogRequests.length, live_writes: 0} : undefined,
+            initial_delay: initialDelayEvidence, callback_announcement: callbackAnnouncementEvidence,
+            ordered_ringing: orderEvidence, callflows: callflowsEvidence};
         if (process.env.KAZOO_TEST_UI_EVIDENCE) {
             const evidencePath = path.resolve(process.env.KAZOO_TEST_UI_EVIDENCE);
             assert(evidencePath.startsWith('/var/log/kazoo-acceptance/'), 'Evidence must stay in the acceptance log directory');
@@ -368,10 +569,16 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
                 dragEvents: window.acdcDragEvidence,
                 dialogTitles: Array.from(document.querySelectorAll('.ui-dialog-title')).map(element => element.textContent),
                 queueSelectors: document.querySelectorAll('#acdc_queue_selector').length,
+                queueForms: document.querySelectorAll('.acdc-queue-form').length,
+                statePanels: document.querySelectorAll('.acdc-state').length,
+                requestGeneration: monster.apps.acdc && monster.apps.acdc.appFlags.acdc.requestGeneration,
+                templateNames: Object.keys(monster.cache.templates.acdc && monster.cache.templates.acdc._main || {}),
+                verifiedMediaCount: monster.apps.acdc && monster.apps.acdc.appFlags.acdc.verifiedSystemMedia
+                    && monster.apps.acdc.appFlags.acdc.verifiedSystemMedia.media.length,
                 callflowChildren: monster.apps.callflows && monster.apps.callflows.flow.root &&
                     monster.apps.callflows.flow.root.children.map(child => child.actionName)};
         }).catch(() => ({}));
-        throw new Error(`${error.message}; ${JSON.stringify({diagnostic, errors, blockedWrites, failedResponses, queueResponses})}`);
+        throw new Error(`${error.message}; ${JSON.stringify({diagnostic, errors, blockedWrites, failedResponses, queueResponses, requestCounts, responseCounts})}`);
     } finally {
         clearTimeout(deadline);
         await browser.close();

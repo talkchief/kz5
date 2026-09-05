@@ -138,13 +138,16 @@
 			"initialDelayHelp": "Wait this many seconds before the first position or estimated-wait announcement. For example, 30 waits half a minute after entering the queue. Repeats use the announcement interval independently.",
 			"languageHelp": "Choose a ready installed language, or use the call or account language. Unavailable packs cannot be selected. Synthetic voice readiness does not imply native-speaker pronunciation approval; the system default is English (en-us).",
 			"promptsTitle": "Announcement prompts",
-			"promptsDescription": "Choose audio used around the spoken queue position and estimated wait time. Only verified installed system prompts and account media are offered."
+			"promptsDescription": "Choose audio used around the spoken queue position and estimated wait time. Only verified installed system prompts and account media are offered.",
+			"legacyPromptsPreserved": "This queue has existing custom announcement or callback audio. Those recordings are preserved when you save; changing the language does not replace them."
 		},
 		"callbacks": {
 			"title": "Callback registrations",
 			"description": "Review and cancel account-scoped callback registrations for",
 			"configurationTitle": "Virtual callback",
 			"configurationDescription": "Disabled by default. Callers can request a place-preserving callback. Select the user whose calling permissions and caller ID should be used; the server rechecks them before every attempt.",
+			"announcementTimingHelp": "Schedule the callback option separately from queue-position and estimated-wait announcements. Their timing settings are unchanged.",
+			"announcementDisabledHelp": "Turning this announcement off silences the callback offer only. Callers can still use the callback entry key while virtual callback is enabled.",
 			"keysHelp": "The callback entry key must differ from the queue exit key and fixed confirmation key 1. Alternate-number entry uses key 2 only when enabled.",
 			"keyConflict": "Callback entry, confirmation, alternate-number, and queue exit keys must not conflict.",
 			"authorityDevice": "Device",
@@ -225,6 +228,9 @@
 			"waitTimePrompt": "Estimated wait-time prompt",
 			"volumeIncreasePrompt": "Increased call-volume prompt",
 			"callbackEnabled": "Enable virtual callback",
+			"callbackAnnouncementEnabled": "Announce the callback option while callers wait",
+			"callbackAnnouncementInitialDelay": "First callback announcement delay (seconds)",
+			"callbackAnnouncementInterval": "Callback announcement interval (seconds)",
 			"callbackAllowAlternate": "Allow callers to enter an alternate callback number (key 2)",
 			"callbackUseLocalResources": "Use account-local call resources",
 			"callbackEntryKey": "Callback entry key",

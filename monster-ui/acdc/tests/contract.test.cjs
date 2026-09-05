@@ -99,6 +99,8 @@ const formValues = {
 	'announcements.media.the_estimated_wait_time_is': 'queue-wait-time-fr',
 	'announcements.media.increase_in_call_volume': 'queue-volume-fr',
 	'callback.entry_key': '6',
+	'callback.announcement.initial_delay': '12',
+	'callback.announcement.interval': '75',
 	'callback.max_attempts': '3',
 	'callback.retry_delay': '60',
 	'callback.ttl': '3600',
@@ -125,6 +127,7 @@ const formChecks = {
 	'announcements.position_announcements_enabled': true,
 	'announcements.wait_time_announcements_enabled': true,
 	'callback.enabled': true,
+	'callback.announcement.enabled': true,
 	'callback.allow_alternate_number': false,
 	'callback.use_local_resources': true
 };
@@ -158,6 +161,7 @@ assert.deepStrictEqual(
 		},
 		callback: {
 			enabled: true,
+			announcement: { enabled: true, initial_delay: 12, interval: 75 },
 			entry_key: '6',
 			allow_alternate_number: false,
 			use_local_resources: true,
@@ -317,18 +321,28 @@ app.requestCompleteList('acdc.queues.roster', {}, (error, ids) => {
 	assert.deepStrictEqual(ids, thirtyIds);
 });
 const rosterWrites = [];
+const editorSaveOriginals = Object.fromEntries(['requestQueueEditor', 'newEditorRequestId', 'toastSuccess', 'renderQueues']
+	.map(key => [key, app[key]]));
 app.isCurrentView = () => true;
 app.setFormBusy = () => {};
 app.rememberSavedQueueId = () => 'q1';
 app.finishQueueSave = () => {};
-app.request = (resource, data, done) => {
-	if (resource === 'acdc.queues.updateRoster') rosterWrites.push(data.data);
-	done(null, {id: 'q1'});
+app.newEditorRequestId = () => '11111111111111111111111111111111';
+app.toastSuccess = app.renderQueues = () => {};
+app.requestQueueEditor = (resource, data, done) => {
+	assert.equal(resource, 'acdc.editor.update');
+	rosterWrites.push(data.data.roster);
+	assert.equal(data.data.route, null, 'Read-only route is preserved within the aggregate operation');
+	done(null, {queue_id: '22222222222222222222222222222222', state: 'complete'});
 };
-app.saveQueue('q1', {name: 'Support'}, thirtyIds, null, {}, 1, 'account');
+const editorViewData = {'editor-revisions': {queue: '1-rev', users: {}, callflows: {}}};
+const editorView = {data: (key, value) => value === undefined ? editorViewData[key] : (editorViewData[key] = value),
+	removeData: key => { delete editorViewData[key]; }};
+app.saveQueue('q1', {name: 'Support'}, thirtyIds, null, editorView, 1, 'account');
 assert.deepStrictEqual(rosterWrites, [thirtyIds], 'All 30 selected members must be sent in one replacement');
-app.saveQueue('q1', {name: 'Support'}, null, null, {}, 1, 'account');
-assert.strictEqual(rosterWrites.length, 1, 'An incomplete/read-only roster must never be written');
+app.saveQueue('q1', {name: 'Support'}, null, null, editorView, 1, 'account');
+assert.strictEqual(rosterWrites[1], null, 'An incomplete/read-only roster must explicitly be preserved');
+Object.assign(app, editorSaveOriginals);
 Object.assign(app, inventoryOriginals);
 app.i18n.active = inventoryI18n;
 
@@ -751,9 +765,17 @@ const templates = fs.readdirSync(path.join(appRoot, 'views'))
 const callbacksTemplate = fs.readFileSync(path.join(appRoot, 'views', 'callbacks.html'), 'utf8');
 const queueTemplate = fs.readFileSync(path.join(appRoot, 'views', 'queue-form.html'), 'utf8');
 for (const name of ['callback.outbound_authority.id', 'callback.outbound_caller_id.number',
-	'callback.caller_id_source', 'announcements.language', 'moh', 'announce', 'callback.media.offer']) {
+	'callback.caller_id_source', 'announcements.language', 'moh', 'announce']) {
 	assert(new RegExp('<select[^>]*name="' + name.replaceAll('.', '\\.') + '"').test(queueTemplate),
 		name + ' must be a real select control, not a technical free-text input');
+}
+for (const name of ['announcements.media.you_are_at_position', 'announcements.media.in_the_queue',
+	'announcements.media.the_estimated_wait_time_is', 'announcements.media.increase_in_call_volume',
+	'callback.media.offer', 'callback.media.menu', 'callback.media.number_readback',
+	'callback.media.confirmation', 'callback.media.success', 'callback.media.returned_confirmation']) {
+	assert(new RegExp('<input type="hidden" name="' + name.replaceAll('.', '\\.') + '"').test(queueTemplate),
+		name + ' must preserve existing values without a custom recording selector');
+	assert(!new RegExp('<select[^>]*name="' + name.replaceAll('.', '\\.') + '"').test(queueTemplate));
 }
 assert.match(queueTemplate, /type="hidden" name="callback.outbound_authority.type"/);
 assert.match(queueTemplate, /type="hidden" name="callback.outbound_caller_id.name"/);

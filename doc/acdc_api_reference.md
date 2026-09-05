@@ -235,7 +235,7 @@ The original caller's DTMF menu and durable reservation now work in the isolated
 telephone fixture. Full returned-call, human-confirmation, preserved-order,
 agent-bridge and restart-recovery acceptance is **not yet complete**.
 
-## Cluster-wide call supervision — deployed APIs, live acceptance incomplete
+## Call supervision — deployed APIs, single-server acceptance passed
 
 Account-wide endpoint (not restricted to ACDC):
 
@@ -243,11 +243,13 @@ Account-wide endpoint (not restricted to ACDC):
 POST /v2/accounts/{account_id}/channels/{target_call_id}
 ```
 
-The API implementation is deployed, but its real audio acceptance has not
-passed. The initial test found a direct-call bridge dialstring compatibility
-problem before an agent leg was created; the packaged fix is awaiting rollout.
-An HTTP 202 response alone never proves a connected monitoring leg. See
-[the monitoring acceptance record](channel_monitor_acceptance.md).
+All four modes passed isolated single-server SIP/audio and authorization checks
+on 2026-09-05, 11:29–11:31 UTC. Earlier bridge compatibility and stop-response
+normalization failures were repaired before that successful run. An HTTP 202
+response alone never proves a connected monitoring leg, and these local tests
+do not prove multi-node routing/failover. See
+[the monitoring acceptance record](channel_monitor_acceptance.md) and the
+**Call supervision** section of the current source catalog at `/apis/`.
 
 ```json
 {"data":{"action":"whisper","device_id":"SUPERVISOR_DEVICE_ID","timeout":30}}
@@ -260,18 +262,20 @@ An HTTP 202 response alone never proves a connected monitoring leg. See
 | `barge` | Speak to both parties in a three-way conversation. |
 | `join` | Alias for `barge`; retains the original agent, not a takeover. |
 
-Planned restrictions: exact account authentication and account-admin permission;
+Enforced restrictions: exact account authentication and account-admin permission;
 an enabled account-owned SIP supervisor device; timeout 5–60 seconds; fresh
 target ownership and active-leg verification on the actual FreeSWITCH node.
 Clients cannot supply raw endpoints, dialstrings, media-node names, or commands.
-Supervisor keypad input must not escalate the selected monitoring mode.
+Supervisor keypad input cannot escalate the selected monitoring mode; the live
+audio checks also repeated after digit 3. Use `eavesdrop`, not `spy` or `listen`,
+as the API action name.
 
-A successful request is expected to return HTTP 202 with `status: accepted`,
+A successful monitoring request returns HTTP 202 with `status: accepted`,
 `request_id`, `supervisor_call_id`, `target_call_id`, and `action` inside `data`.
 It means the supervision request was accepted, **not that the supervisor has
 answered or connected**. Observe channel events and state for completion.
 
-Planned termination:
+Supervisor-only termination:
 
 ```text
 POST /v2/accounts/{account_id}/channels/{supervisor_call_id}
@@ -281,8 +285,9 @@ POST /v2/accounts/{account_id}/channels/{supervisor_call_id}
 {"data":{"action":"stop_monitoring","request_id":"MONITOR_REQUEST_ID"}}
 ```
 
-Termination must verify the supervisor marker, account and request correlation,
-and end only the supervisor leg. It must never end the customer's or agent's call.
+Termination verifies the supervisor marker, account and request correlation,
+and ends only the supervisor leg. The recorded live run verified that both
+original legs survived supervisor stop in all four modes.
 
 Do not use the legacy `/queues/eavesdrop` routes as a working fallback: this
 checkout has no consumer for their `eavesdrop.resource.req` message. The new

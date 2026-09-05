@@ -1,0 +1,2751 @@
+{
+  "format_version": 1,
+  "classification": "source catalog, not runtime certification",
+  "upstream_index_paths": 328,
+  "included_upstream_paths": 347,
+  "upstream_paths_missing_from_index": [
+    "/accounts/{ACCOUNT_ID}/access_lists",
+    "/accounts/{ACCOUNT_ID}/agents",
+    "/accounts/{ACCOUNT_ID}/agents/stats",
+    "/accounts/{ACCOUNT_ID}/agents/status",
+    "/accounts/{ACCOUNT_ID}/agents/status/{USER_ID}",
+    "/accounts/{ACCOUNT_ID}/agents/{USER_ID}",
+    "/accounts/{ACCOUNT_ID}/agents/{USER_ID}/queue_status",
+    "/accounts/{ACCOUNT_ID}/agents/{USER_ID}/status",
+    "/accounts/{ACCOUNT_ID}/bulk",
+    "/accounts/{ACCOUNT_ID}/cccps",
+    "/accounts/{ACCOUNT_ID}/cccps/{CCCP_ID}",
+    "/accounts/{ACCOUNT_ID}/queues",
+    "/accounts/{ACCOUNT_ID}/queues/eavesdrop",
+    "/accounts/{ACCOUNT_ID}/queues/stats",
+    "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}",
+    "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/eavesdrop",
+    "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster",
+    "/accounts/{ACCOUNT_ID}/skels",
+    "/accounts/{ACCOUNT_ID}/skels/{THING}"
+  ],
+  "path_count": 353,
+  "operation_count": 648,
+  "source_reviewed_operations": [
+    "GET /accounts/{ACCOUNT_ID}/agents",
+    "GET /accounts/{ACCOUNT_ID}/agents/stats",
+    "GET /accounts/{ACCOUNT_ID}/agents/status",
+    "GET /accounts/{ACCOUNT_ID}/agents/{USER_ID}",
+    "GET /accounts/{ACCOUNT_ID}/agents/{USER_ID}/queue_status",
+    "POST /accounts/{ACCOUNT_ID}/agents/{USER_ID}/queue_status",
+    "GET /accounts/{ACCOUNT_ID}/agents/{USER_ID}/status",
+    "POST /accounts/{ACCOUNT_ID}/agents/{USER_ID}/status",
+    "POST /accounts/{ACCOUNT_ID}/channels/{UUID}",
+    "GET /accounts/{ACCOUNT_ID}/queues",
+    "PUT /accounts/{ACCOUNT_ID}/queues",
+    "PUT /accounts/{ACCOUNT_ID}/queues/eavesdrop",
+    "GET /accounts/{ACCOUNT_ID}/queues/stats",
+    "GET /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/eavesdrop",
+    "GET /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster",
+    "POST /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster",
+    "DELETE /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/roster",
+    "GET /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks",
+    "GET /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks/{CALLBACK_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks/{CALLBACK_ID}",
+    "POST /accounts/{ACCOUNT_ID}/agents/{USER_ID}/restart",
+    "GET /accounts/{ACCOUNT_ID}/acdc_call_stats",
+    "GET /accounts/{ACCOUNT_ID}/queues/editor",
+    "PUT /accounts/{ACCOUNT_ID}/queues/editor",
+    "GET /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/editor",
+    "PATCH /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/editor"
+  ],
+  "upstream_operations_not_individually_reviewed": [
+    "GET /about",
+    "GET /accounts/{ACCOUNT_ID}/access_lists",
+    "POST /accounts/{ACCOUNT_ID}/access_lists",
+    "DELETE /accounts/{ACCOUNT_ID}/access_lists",
+    "PUT /accounts",
+    "GET /accounts/{ACCOUNT_ID}",
+    "PUT /accounts/{ACCOUNT_ID}",
+    "POST /accounts/{ACCOUNT_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/api_key",
+    "PUT /accounts/{ACCOUNT_ID}/api_key",
+    "GET /accounts/{ACCOUNT_ID}/children",
+    "GET /accounts/{ACCOUNT_ID}/descendants",
+    "POST /accounts/{ACCOUNT_ID}/move",
+    "GET /accounts/{ACCOUNT_ID}/parents",
+    "PUT /accounts/{ACCOUNT_ID}/reseller",
+    "DELETE /accounts/{ACCOUNT_ID}/reseller",
+    "GET /accounts/{ACCOUNT_ID}/siblings",
+    "GET /accounts/{ACCOUNT_ID}/tree",
+    "GET /accounts/{ACCOUNT_ID}/acls",
+    "GET /accounts/{ACCOUNT_ID}/agents/status/{USER_ID}",
+    "POST /accounts/{ACCOUNT_ID}/agents/status/{USER_ID}",
+    "GET /accounts/{ACCOUNT_ID}/alerts",
+    "PUT /accounts/{ACCOUNT_ID}/alerts",
+    "GET /accounts/{ACCOUNT_ID}/alerts/{ALERT_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/alerts/{ALERT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/allotments",
+    "POST /accounts/{ACCOUNT_ID}/allotments",
+    "GET /accounts/{ACCOUNT_ID}/allotments/consumed",
+    "PUT /api_auth",
+    "GET /accounts/{ACCOUNT_ID}/applications",
+    "GET /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}",
+    "POST /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/icon",
+    "POST /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/icon",
+    "DELETE /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/icon",
+    "POST /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/screenshots",
+    "GET /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/screenshots/{SCREENSHOT_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/screenshots/{SCREENSHOT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/blocklists",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/entitlements",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/block",
+    "PUT /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/block",
+    "POST /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/block",
+    "DELETE /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/block",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/entitlement",
+    "PUT /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/entitlement",
+    "POST /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/entitlement",
+    "DELETE /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/entitlement",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/icon",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/screenshots/{SCREENSHOT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/apps_link/authorize",
+    "GET /accounts/{ACCOUNT_ID}/apps_store",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/blacklist",
+    "POST /accounts/{ACCOUNT_ID}/apps_store/blacklist",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/marketplace",
+    "PATCH /accounts/{ACCOUNT_ID}/apps_store/marketplace",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}",
+    "POST /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/icon",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override",
+    "PUT /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override",
+    "POST /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override",
+    "DELETE /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/icon",
+    "POST /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/icon",
+    "DELETE /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/icon",
+    "POST /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/screenshot",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/screenshot/{APP_SCREENSHOT_INDEX}",
+    "DELETE /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/screenshot/{APP_SCREENSHOT_INDEX}",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/screenshot/{APP_SCREENSHOT_INDEX}",
+    "GET /accounts/{ACCOUNT_ID}/att_handlers_errors",
+    "GET /accounts/{ACCOUNT_ID}/att_handlers_errors/handler/{HANDLER_ID}",
+    "GET /accounts/{ACCOUNT_ID}/att_handlers_errors/{ERROR_ID}",
+    "PUT /auth",
+    "GET /auth/apps",
+    "GET /auth/apps/{APP_ID}",
+    "POST /auth/apps/{APP_ID}",
+    "DELETE /auth/apps/{APP_ID}",
+    "PUT /auth/authorize",
+    "PUT /auth/callback",
+    "GET /auth/keys",
+    "GET /auth/keys/{KEY_ID}",
+    "PUT /auth/keys/{KEY_ID}",
+    "GET /auth/links",
+    "GET /auth/links/{LINK_ID}",
+    "PUT /auth/links/{LINK_ID}",
+    "DELETE /auth/links/{LINK_ID}",
+    "GET /auth/providers",
+    "GET /auth/providers/{PROVIDER_ID}",
+    "POST /auth/providers/{PROVIDER_ID}",
+    "DELETE /auth/providers/{PROVIDER_ID}",
+    "GET /auth/tokeninfo",
+    "POST /auth/tokeninfo",
+    "GET /accounts/{ACCOUNT_ID}/blacklists",
+    "PUT /accounts/{ACCOUNT_ID}/blacklists",
+    "GET /accounts/{ACCOUNT_ID}/blacklists/{BLACKLIST_ID}",
+    "POST /accounts/{ACCOUNT_ID}/blacklists/{BLACKLIST_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/blacklists/{BLACKLIST_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/blacklists/{BLACKLIST_ID}",
+    "GET /accounts/{ACCOUNT_ID}/bulk",
+    "POST /accounts/{ACCOUNT_ID}/bulk",
+    "DELETE /accounts/{ACCOUNT_ID}/bulk",
+    "GET /accounts/{ACCOUNT_ID}/call_inspector",
+    "GET /accounts/{ACCOUNT_ID}/call_inspector/{CALL_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/call_reports",
+    "GET /accounts/{ACCOUNT_ID}/call_reports/allowed_types",
+    "GET /accounts/{ACCOUNT_ID}/callflows",
+    "PUT /accounts/{ACCOUNT_ID}/callflows",
+    "GET /accounts/{ACCOUNT_ID}/callflows/{CALLFLOW_ID}",
+    "POST /accounts/{ACCOUNT_ID}/callflows/{CALLFLOW_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/callflows/{CALLFLOW_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/callflows/{CALLFLOW_ID}",
+    "GET /accounts/{ACCOUNT_ID}/cccps",
+    "PUT /accounts/{ACCOUNT_ID}/cccps",
+    "GET /accounts/{ACCOUNT_ID}/cccps/{CCCP_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/cccps/{CCCP_ID}",
+    "POST /accounts/{ACCOUNT_ID}/cccps/{CCCP_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/cccps/{CCCP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/cdrs",
+    "GET /accounts/{ACCOUNT_ID}/cdrs/interaction",
+    "GET /accounts/{ACCOUNT_ID}/cdrs/legs/{INTERACTION_ID}",
+    "GET /accounts/{ACCOUNT_ID}/cdrs/summary",
+    "GET /accounts/{ACCOUNT_ID}/cdrs/{CDR_ID}",
+    "GET /accounts/{ACCOUNT_ID}/channels",
+    "GET /accounts/{ACCOUNT_ID}/channels/{UUID}",
+    "PUT /accounts/{ACCOUNT_ID}/channels/{UUID}",
+    "GET /accounts/{ACCOUNT_ID}/clicktocall",
+    "PUT /accounts/{ACCOUNT_ID}/clicktocall",
+    "GET /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}",
+    "POST /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}",
+    "GET /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}/connect",
+    "POST /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}/connect",
+    "GET /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}/history",
+    "GET /accounts/{ACCOUNT_ID}/comments",
+    "PUT /accounts/{ACCOUNT_ID}/comments",
+    "DELETE /accounts/{ACCOUNT_ID}/comments",
+    "GET /accounts/{ACCOUNT_ID}/comments/{COMMENT_ID}",
+    "POST /accounts/{ACCOUNT_ID}/comments/{COMMENT_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/comments/{COMMENT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/commland/compatibility",
+    "PUT /accounts/{ACCOUNT_ID}/conference_auth",
+    "PUT /accounts/{ACCOUNT_ID}/conference_auth/{CONFERENCE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/conferences",
+    "PUT /accounts/{ACCOUNT_ID}/conferences",
+    "GET /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/email_invite",
+    "GET /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants",
+    "PUT /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants",
+    "GET /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants/{PARTICIPANT_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants/{PARTICIPANT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/configs",
+    "GET /accounts/{ACCOUNT_ID}/configs/{CONFIG_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/configs/{CONFIG_ID}",
+    "POST /accounts/{ACCOUNT_ID}/configs/{CONFIG_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/configs/{CONFIG_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/configs/{CONFIG_ID}",
+    "GET /accounts/{ACCOUNT_ID}/connectivity",
+    "PUT /accounts/{ACCOUNT_ID}/connectivity",
+    "GET /accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}",
+    "POST /accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}",
+    "GET /accounts/{ACCOUNT_ID}/contact_list",
+    "GET /accounts/{ACCOUNT_ID}/devices",
+    "PUT /accounts/{ACCOUNT_ID}/devices",
+    "GET /accounts/{ACCOUNT_ID}/devices/status",
+    "GET /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/sync",
+    "GET /accounts/{ACCOUNT_ID}/dialplans",
+    "GET /accounts/{ACCOUNT_ID}/directories",
+    "PUT /accounts/{ACCOUNT_ID}/directories",
+    "GET /accounts/{ACCOUNT_ID}/directories/{DIRECTORY_ID}",
+    "POST /accounts/{ACCOUNT_ID}/directories/{DIRECTORY_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/directories/{DIRECTORY_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/directories/{DIRECTORY_ID}",
+    "GET /accounts/{ACCOUNT_ID}/external_numbers",
+    "PUT /accounts/{ACCOUNT_ID}/external_numbers",
+    "GET /accounts/{ACCOUNT_ID}/external_numbers/{EXTERNAL_NUMBER_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/external_numbers/{EXTERNAL_NUMBER_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/external_numbers/{EXTERNAL_NUMBER_ID}/verify",
+    "POST /accounts/{ACCOUNT_ID}/external_numbers/{EXTERNAL_NUMBER_ID}/verify",
+    "GET /accounts/{ACCOUNT_ID}/faxboxes",
+    "PUT /accounts/{ACCOUNT_ID}/faxboxes",
+    "GET /accounts/{ACCOUNT_ID}/faxboxes/{FAXBOX_ID}",
+    "POST /accounts/{ACCOUNT_ID}/faxboxes/{FAXBOX_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/faxboxes/{FAXBOX_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/faxboxes/{FAXBOX_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/faxes",
+    "GET /accounts/{ACCOUNT_ID}/faxes/inbox",
+    "GET /accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}",
+    "GET /accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}/attachment",
+    "DELETE /accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}/attachment",
+    "GET /accounts/{ACCOUNT_ID}/faxes/incoming",
+    "GET /accounts/{ACCOUNT_ID}/faxes/incoming/{FAX_ID}",
+    "GET /accounts/{ACCOUNT_ID}/faxes/outbox",
+    "GET /accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}",
+    "GET /accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}/attachment",
+    "DELETE /accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}/attachment",
+    "GET /accounts/{ACCOUNT_ID}/faxes/outgoing",
+    "PUT /accounts/{ACCOUNT_ID}/faxes/outgoing",
+    "GET /accounts/{ACCOUNT_ID}/faxes/outgoing/{FAX_JOB_ID}",
+    "GET /accounts/{ACCOUNT_ID}/faxes/smtplog",
+    "GET /accounts/{ACCOUNT_ID}/faxes/smtplog/{ATTEMPT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/functions",
+    "PUT /accounts/{ACCOUNT_ID}/functions",
+    "GET /accounts/{ACCOUNT_ID}/functions/samples",
+    "GET /accounts/{ACCOUNT_ID}/functions/{FUNCTION_ID}",
+    "POST /accounts/{ACCOUNT_ID}/functions/{FUNCTION_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/functions/{FUNCTION_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/functions/{FUNCTION_ID}",
+    "GET /accounts/{ACCOUNT_ID}/getstream",
+    "PUT /accounts/{ACCOUNT_ID}/getstream",
+    "PATCH /accounts/{ACCOUNT_ID}/getstream",
+    "DELETE /accounts/{ACCOUNT_ID}/getstream",
+    "PUT /accounts/{ACCOUNT_ID}/getstream/connect",
+    "GET /accounts/{ACCOUNT_ID}/groups",
+    "PUT /accounts/{ACCOUNT_ID}/groups",
+    "GET /accounts/{ACCOUNT_ID}/groups/{GROUP_ID}",
+    "POST /accounts/{ACCOUNT_ID}/groups/{GROUP_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/groups/{GROUP_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/groups/{GROUP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/hotdesks",
+    "GET /accounts/{ACCOUNT_ID}/i18n/{LANGUAGE}",
+    "PUT /ip_auth",
+    "GET /accounts/{ACCOUNT_ID}/ips",
+    "PUT /accounts/{ACCOUNT_ID}/ips",
+    "POST /accounts/{ACCOUNT_ID}/ips",
+    "DELETE /accounts/{ACCOUNT_ID}/ips",
+    "GET /accounts/{ACCOUNT_ID}/ips/assigned",
+    "GET /accounts/{ACCOUNT_ID}/ips/hosts",
+    "GET /accounts/{ACCOUNT_ID}/ips/zones",
+    "GET /accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}",
+    "POST /accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}",
+    "DELETE /accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}",
+    "GET /accounts/{ACCOUNT_ID}/ledgers",
+    "GET /accounts/{ACCOUNT_ID}/ledgers/available",
+    "PUT /accounts/{ACCOUNT_ID}/ledgers/credit",
+    "PUT /accounts/{ACCOUNT_ID}/ledgers/debit",
+    "GET /accounts/{ACCOUNT_ID}/ledgers/summary/{MODB_SUFFIX}",
+    "GET /accounts/{ACCOUNT_ID}/ledgers/total",
+    "GET /accounts/{ACCOUNT_ID}/ledgers/{SOURCE_SERVICE}",
+    "GET /accounts/{ACCOUNT_ID}/ledgers/{SOURCE_SERVICE}/{LEDGER_ID}",
+    "GET /accounts/{ACCOUNT_ID}/limits",
+    "POST /accounts/{ACCOUNT_ID}/limits",
+    "GET /accounts/{ACCOUNT_ID}/lists",
+    "PUT /accounts/{ACCOUNT_ID}/lists",
+    "GET /accounts/{ACCOUNT_ID}/lists/{LIST_ID}",
+    "POST /accounts/{ACCOUNT_ID}/lists/{LIST_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/lists/{LIST_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/lists/{LIST_ID}",
+    "GET /accounts/{ACCOUNT_ID}/match_lists",
+    "PUT /accounts/{ACCOUNT_ID}/match_lists",
+    "GET /accounts/{ACCOUNT_ID}/match_lists/{MATCH_LIST_ID}",
+    "POST /accounts/{ACCOUNT_ID}/match_lists/{MATCH_LIST_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/match_lists/{MATCH_LIST_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/match_lists/{MATCH_LIST_ID}",
+    "GET /accounts/{ACCOUNT_ID}/media",
+    "PUT /accounts/{ACCOUNT_ID}/media",
+    "GET /accounts/{ACCOUNT_ID}/media/languages",
+    "GET /accounts/{ACCOUNT_ID}/media/languages/{LANGUAGE}",
+    "GET /accounts/{ACCOUNT_ID}/media/prompts",
+    "GET /accounts/{ACCOUNT_ID}/media/prompts/{PROMPT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/media/{MEDIA_ID}",
+    "POST /accounts/{ACCOUNT_ID}/media/{MEDIA_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/media/{MEDIA_ID}",
+    "GET /accounts/{ACCOUNT_ID}/media/{MEDIA_ID}/raw",
+    "POST /accounts/{ACCOUNT_ID}/media/{MEDIA_ID}/raw",
+    "GET /accounts/{ACCOUNT_ID}/menus",
+    "PUT /accounts/{ACCOUNT_ID}/menus",
+    "GET /accounts/{ACCOUNT_ID}/menus/{MENU_ID}",
+    "POST /accounts/{ACCOUNT_ID}/menus/{MENU_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/menus/{MENU_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/menus/{MENU_ID}",
+    "GET /accounts/{ACCOUNT_ID}/metaflows",
+    "POST /accounts/{ACCOUNT_ID}/metaflows",
+    "DELETE /accounts/{ACCOUNT_ID}/metaflows",
+    "GET /accounts/{ACCOUNT_ID}/migrations",
+    "GET /accounts/{ACCOUNT_ID}/migrations/{MIGRATION_ID}",
+    "POST /accounts/{ACCOUNT_ID}/migrations/{MIGRATION_ID}",
+    "GET /accounts/{ACCOUNT_ID}/mms",
+    "PUT /accounts/{ACCOUNT_ID}/mms",
+    "GET /accounts/{ACCOUNT_ID}/mms/{SMS_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/mms/{SMS_ID}",
+    "GET /accounts/{ACCOUNT_ID}/multi_factor",
+    "PUT /accounts/{ACCOUNT_ID}/multi_factor",
+    "GET /accounts/{ACCOUNT_ID}/multi_factor/attempts",
+    "GET /accounts/{ACCOUNT_ID}/multi_factor/attempts/{ATTEMPT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/multi_factor/{CONFIG_ID}",
+    "POST /accounts/{ACCOUNT_ID}/multi_factor/{CONFIG_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/multi_factor/{CONFIG_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/multi_factor/{CONFIG_ID}",
+    "GET /accounts/{ACCOUNT_ID}/notifications",
+    "PUT /accounts/{ACCOUNT_ID}/notifications",
+    "DELETE /accounts/{ACCOUNT_ID}/notifications",
+    "POST /accounts/{ACCOUNT_ID}/notifications/customer_update/message",
+    "GET /accounts/{ACCOUNT_ID}/notifications/smtplog",
+    "GET /accounts/{ACCOUNT_ID}/notifications/smtplog/{SMTP_LOG_ID}",
+    "GET /accounts/{ACCOUNT_ID}/notifications/{NOTIFICATION_ID}",
+    "POST /accounts/{ACCOUNT_ID}/notifications/{NOTIFICATION_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/notifications/{NOTIFICATION_ID}",
+    "POST /accounts/{ACCOUNT_ID}/notifications/{NOTIFICATION_ID}/preview",
+    "GET /accounts/{ACCOUNT_ID}/parked_calls",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/carriers_info",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/check",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/classifiers",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/classifiers/{PHONE_NUMBER}",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/collection",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/collection",
+    "PATCH /accounts/{ACCOUNT_ID}/phone_numbers/collection",
+    "DELETE /accounts/{ACCOUNT_ID}/phone_numbers/collection",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/collection/activate",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/fix",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/fix/{PHONE_NUMBER}",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/locality",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/prefix",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}",
+    "PATCH /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}",
+    "DELETE /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/activate",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/identify",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/port",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/reserve",
+    "GET /accounts/{ACCOUNT_ID}/pivot/debug",
+    "GET /accounts/{ACCOUNT_ID}/pivot/debug/{UUID}",
+    "GET /accounts/{ACCOUNT_ID}/port_requests",
+    "PUT /accounts/{ACCOUNT_ID}/port_requests",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/last_submitted",
+    "POST /accounts/{ACCOUNT_ID}/port_requests/lnp_lookup",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}",
+    "POST /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/attachments",
+    "PUT /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/attachments",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/attachments/{ATTACHMENT_ID}",
+    "POST /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/attachments/{ATTACHMENT_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/attachments/{ATTACHMENT_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/canceled",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/completed",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/loa",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/pending",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/rejected",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/scheduled",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/submitted",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/timeline",
+    "GET /accounts/{ACCOUNT_ID}/presence",
+    "POST /accounts/{ACCOUNT_ID}/presence",
+    "GET /accounts/{ACCOUNT_ID}/presence/report-{REPORT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/presence/{EXTENSION}",
+    "POST /accounts/{ACCOUNT_ID}/presence/{EXTENSION}",
+    "PUT /accounts/{ACCOUNT_ID}/{ENDPOINT_TYPE}/{ENDPOINT_ID}/pushes",
+    "GET /accounts/{ACCOUNT_ID}/{ENDPOINT_TYPE}/{ENDPOINT_ID}/quickcall/{NUMBER}",
+    "POST /accounts/{ACCOUNT_ID}/{ENDPOINT_TYPE}/{ENDPOINT_ID}/quickcall/{NUMBER}",
+    "GET /accounts/{ACCOUNT_ID}/quickroutes",
+    "GET /accounts/{ACCOUNT_ID}/rate_limits",
+    "POST /accounts/{ACCOUNT_ID}/rate_limits",
+    "DELETE /accounts/{ACCOUNT_ID}/rate_limits",
+    "GET /rates",
+    "PUT /rates",
+    "GET /rates/number/{PHONE_NUMBER}",
+    "GET /rates/ratedecks",
+    "GET /rates/{RATE_ID}",
+    "POST /rates/{RATE_ID}",
+    "PATCH /rates/{RATE_ID}",
+    "DELETE /rates/{RATE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/recordings",
+    "GET /accounts/{ACCOUNT_ID}/recordings/{RECORDING_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/recordings/{RECORDING_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/recordings/{RECORDING_ID}",
+    "GET /accounts/{ACCOUNT_ID}/registrations",
+    "DELETE /accounts/{ACCOUNT_ID}/registrations",
+    "GET /accounts/{ACCOUNT_ID}/registrations/count",
+    "DELETE /accounts/{ACCOUNT_ID}/registrations/{USERNAME}",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/name",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/name/{SELECTOR_NAME}",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/name/{SELECTOR_NAME}/resource/{RESOURCE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/resource",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/resource/{RESOURCE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/resource/{RESOURCE_ID}/name/{SELECTOR_NAME}",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/rules",
+    "POST /accounts/{ACCOUNT_ID}/resource_selectors/rules",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/{UUID}",
+    "POST /accounts/{ACCOUNT_ID}/resource_selectors/{UUID}",
+    "DELETE /accounts/{ACCOUNT_ID}/resource_selectors/{UUID}",
+    "GET /accounts/{ACCOUNT_ID}/resource_templates",
+    "PUT /accounts/{ACCOUNT_ID}/resource_templates",
+    "GET /accounts/{ACCOUNT_ID}/resource_templates/{RESOURCE_TEMPLATE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/resource_templates/{RESOURCE_TEMPLATE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/resource_templates/{RESOURCE_TEMPLATE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/resource_templates/{RESOURCE_TEMPLATE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/resources",
+    "PUT /accounts/{ACCOUNT_ID}/resources",
+    "PUT /accounts/{ACCOUNT_ID}/resources/collection",
+    "POST /accounts/{ACCOUNT_ID}/resources/collection",
+    "GET /accounts/{ACCOUNT_ID}/resources/jobs",
+    "PUT /accounts/{ACCOUNT_ID}/resources/jobs",
+    "GET /accounts/{ACCOUNT_ID}/resources/jobs/{JOB_ID}",
+    "GET /accounts/{ACCOUNT_ID}/resources/{RESOURCE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/resources/{RESOURCE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/resources/{RESOURCE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/resources/{RESOURCE_ID}",
+    "GET /schemas",
+    "GET /schemas/{SCHEMA_NAME}",
+    "PUT /schemas/{SCHEMA_NAME}/validation",
+    "GET /accounts/{ACCOUNT_ID}/scope_restrictions",
+    "PUT /accounts/{ACCOUNT_ID}/scope_restrictions",
+    "GET /accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}",
+    "POST /accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}",
+    "DELETE /accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}",
+    "GET /scopes",
+    "PUT /scopes",
+    "GET /scopes/{SCOPE}",
+    "POST /scopes/{SCOPE}",
+    "DELETE /scopes/{SCOPE}",
+    "GET /accounts/{ACCOUNT_ID}/screenpops",
+    "PUT /accounts/{ACCOUNT_ID}/screenpops",
+    "GET /accounts/{ACCOUNT_ID}/screenpops/{SCREENPOP_ID}",
+    "POST /accounts/{ACCOUNT_ID}/screenpops/{SCREENPOP_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/screenpops/{SCREENPOP_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/screenpops/{SCREENPOP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/search",
+    "GET /accounts/{ACCOUNT_ID}/search/multi",
+    "GET /accounts/{ACCOUNT_ID}/security",
+    "POST /accounts/{ACCOUNT_ID}/security",
+    "PATCH /accounts/{ACCOUNT_ID}/security",
+    "DELETE /accounts/{ACCOUNT_ID}/security",
+    "GET /accounts/{ACCOUNT_ID}/security/attempts",
+    "GET /accounts/{ACCOUNT_ID}/security/attempts/{ATTEMPT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/security/login_lock",
+    "DELETE /accounts/{ACCOUNT_ID}/security/login_lock",
+    "GET /accounts/{ACCOUNT_ID}/services",
+    "POST /accounts/{ACCOUNT_ID}/services",
+    "GET /accounts/{ACCOUNT_ID}/services/audit",
+    "GET /accounts/{ACCOUNT_ID}/services/audit/summary",
+    "GET /accounts/{ACCOUNT_ID}/services/audit/summary/{SOURCE_SERVICE}",
+    "GET /accounts/{ACCOUNT_ID}/services/audit/{AUDIT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/services/available",
+    "GET /accounts/{ACCOUNT_ID}/services/editable",
+    "GET /accounts/{ACCOUNT_ID}/services/manual",
+    "POST /accounts/{ACCOUNT_ID}/services/manual",
+    "PATCH /accounts/{ACCOUNT_ID}/services/manual",
+    "GET /accounts/{ACCOUNT_ID}/services/overrides",
+    "POST /accounts/{ACCOUNT_ID}/services/overrides",
+    "PATCH /accounts/{ACCOUNT_ID}/services/overrides",
+    "POST /accounts/{ACCOUNT_ID}/services/quote",
+    "POST /accounts/{ACCOUNT_ID}/services/reconciliation",
+    "GET /accounts/{ACCOUNT_ID}/services/summary",
+    "POST /accounts/{ACCOUNT_ID}/services/synchronization",
+    "POST /accounts/{ACCOUNT_ID}/services/topup",
+    "POST /accounts/{ACCOUNT_ID}/services/{PLAN_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/services/{PLAN_ID}",
+    "GET /accounts/{ACCOUNT_ID}/skels",
+    "PUT /accounts/{ACCOUNT_ID}/skels",
+    "GET /accounts/{ACCOUNT_ID}/skels/{THING}",
+    "POST /accounts/{ACCOUNT_ID}/skels/{THING}",
+    "PATCH /accounts/{ACCOUNT_ID}/skels/{THING}",
+    "DELETE /accounts/{ACCOUNT_ID}/skels/{THING}",
+    "GET /accounts/{ACCOUNT_ID}/sms",
+    "PUT /accounts/{ACCOUNT_ID}/sms",
+    "GET /accounts/{ACCOUNT_ID}/sms/{SMS_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/sms/{SMS_ID}",
+    "GET /accounts/{ACCOUNT_ID}/storage",
+    "PUT /accounts/{ACCOUNT_ID}/storage",
+    "POST /accounts/{ACCOUNT_ID}/storage",
+    "PATCH /accounts/{ACCOUNT_ID}/storage",
+    "DELETE /accounts/{ACCOUNT_ID}/storage",
+    "GET /accounts/{ACCOUNT_ID}/storage/plans",
+    "PUT /accounts/{ACCOUNT_ID}/storage/plans",
+    "GET /accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}",
+    "POST /accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}",
+    "GET /sup/{MODULE}",
+    "GET /sup/{MODULE}/{FUNCTION}",
+    "GET /sup/{MODULE}/{FUNCTION}/{ARGS}",
+    "GET /system_configs",
+    "GET /system_configs/{SYSTEM_CONFIG_ID}",
+    "PUT /system_configs/{SYSTEM_CONFIG_ID}",
+    "POST /system_configs/{SYSTEM_CONFIG_ID}",
+    "PATCH /system_configs/{SYSTEM_CONFIG_ID}",
+    "DELETE /system_configs/{SYSTEM_CONFIG_ID}",
+    "GET /system_configs/{SYSTEM_CONFIG_ID}/{NODE}",
+    "POST /system_configs/{SYSTEM_CONFIG_ID}/{NODE}",
+    "PATCH /system_configs/{SYSTEM_CONFIG_ID}/{NODE}",
+    "DELETE /system_configs/{SYSTEM_CONFIG_ID}/{NODE}",
+    "GET /system_status",
+    "GET /accounts/{ACCOUNT_ID}/tasks",
+    "PUT /accounts/{ACCOUNT_ID}/tasks",
+    "GET /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}",
+    "GET /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/input",
+    "GET /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/output",
+    "PATCH /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/stop",
+    "GET /accounts/{ACCOUNT_ID}/temporal_rules",
+    "PUT /accounts/{ACCOUNT_ID}/temporal_rules",
+    "GET /accounts/{ACCOUNT_ID}/temporal_rules/{TEMPORAL_RULE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/temporal_rules/{TEMPORAL_RULE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/temporal_rules/{TEMPORAL_RULE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/temporal_rules/{TEMPORAL_RULE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/temporal_rules_sets",
+    "PUT /accounts/{ACCOUNT_ID}/temporal_rules_sets",
+    "GET /accounts/{ACCOUNT_ID}/temporal_rules_sets/{TEMPORAL_RULE_SET}",
+    "POST /accounts/{ACCOUNT_ID}/temporal_rules_sets/{TEMPORAL_RULE_SET}",
+    "PATCH /accounts/{ACCOUNT_ID}/temporal_rules_sets/{TEMPORAL_RULE_SET}",
+    "DELETE /accounts/{ACCOUNT_ID}/temporal_rules_sets/{TEMPORAL_RULE_SET}",
+    "GET /token_auth",
+    "DELETE /token_auth",
+    "GET /accounts/{ACCOUNT_ID}/token_restrictions",
+    "POST /accounts/{ACCOUNT_ID}/token_restrictions",
+    "DELETE /accounts/{ACCOUNT_ID}/token_restrictions",
+    "GET /accounts/{ACCOUNT_ID}/transactions",
+    "PUT /accounts/{ACCOUNT_ID}/transactions/refund",
+    "PUT /accounts/{ACCOUNT_ID}/transactions/sale",
+    "GET /accounts/{ACCOUNT_ID}/transactions/{TRANSACTION_ID}",
+    "PUT /user_auth",
+    "PUT /user_auth/recovery",
+    "POST /user_auth/recovery",
+    "GET /user_auth/{AUTH_TOKEN}",
+    "GET /accounts/{ACCOUNT_ID}/users",
+    "PUT /accounts/{ACCOUNT_ID}/users",
+    "GET /accounts/{ACCOUNT_ID}/users/{USER_ID}",
+    "POST /accounts/{ACCOUNT_ID}/users/{USER_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/users/{USER_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/users/{USER_ID}",
+    "GET /accounts/{ACCOUNT_ID}/users/{USER_ID}/photo",
+    "POST /accounts/{ACCOUNT_ID}/users/{USER_ID}/photo",
+    "DELETE /accounts/{ACCOUNT_ID}/users/{USER_ID}/photo",
+    "GET /accounts/{ACCOUNT_ID}/users/{USER_ID}/qrcode",
+    "GET /accounts/{ACCOUNT_ID}/users/{USER_ID}/vcard",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes",
+    "PUT /accounts/{ACCOUNT_ID}/vmboxes",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes/messages",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}",
+    "POST /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages",
+    "PUT /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages",
+    "POST /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages",
+    "DELETE /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages",
+    "POST /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/raw",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}",
+    "POST /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}/raw",
+    "PUT /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}/raw",
+    "GET /accounts/{ACCOUNT_ID}/webhooks",
+    "PUT /accounts/{ACCOUNT_ID}/webhooks",
+    "PATCH /accounts/{ACCOUNT_ID}/webhooks",
+    "GET /accounts/{ACCOUNT_ID}/webhooks/attempts",
+    "GET /accounts/{ACCOUNT_ID}/webhooks/samples",
+    "GET /accounts/{ACCOUNT_ID}/webhooks/samples/{SAMPLE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/webhooks/{WEBHOOK_ID}",
+    "POST /accounts/{ACCOUNT_ID}/webhooks/{WEBHOOK_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/webhooks/{WEBHOOK_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/webhooks/{WEBHOOK_ID}",
+    "GET /accounts/{ACCOUNT_ID}/webhooks/{WEBHOOK_ID}/attempts",
+    "GET /accounts/{ACCOUNT_ID}/websites",
+    "PUT /accounts/{ACCOUNT_ID}/websites",
+    "GET /accounts/{ACCOUNT_ID}/websites/{WEBSITE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/websites/{WEBSITE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/websites/{WEBSITE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/websites/{WEBSITE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/websockets",
+    "GET /accounts/{ACCOUNT_ID}/websockets/{SOCKET_ID}",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel",
+    "PUT /accounts/{ACCOUNT_ID}/whitelabel",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel",
+    "DELETE /accounts/{ACCOUNT_ID}/whitelabel",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/domains",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/domains",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/emails",
+    "PUT /accounts/{ACCOUNT_ID}/whitelabel/emails",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/emails/{EMAIL_ID}",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/emails/{EMAIL_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/whitelabel/emails/{EMAIL_ID}",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/emails/{EMAIL_ID}/verify",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/icon",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/icon",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/logo",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/logo",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/welcome",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/welcome",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/{WHITELABEL_DOMAIN}",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/{WHITELABEL_DOMAIN}/icon",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/{WHITELABEL_DOMAIN}/logo",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/{WHITELABEL_DOMAIN}/welcome",
+    "GET /accounts/{ACCOUNT_ID}/wordle",
+    "GET /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}",
+    "POST /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}"
+  ],
+  "operations_without_response_content_schema": [
+    "GET /about",
+    "GET /accounts/{ACCOUNT_ID}/access_lists",
+    "POST /accounts/{ACCOUNT_ID}/access_lists",
+    "DELETE /accounts/{ACCOUNT_ID}/access_lists",
+    "PUT /accounts",
+    "GET /accounts/{ACCOUNT_ID}",
+    "PUT /accounts/{ACCOUNT_ID}",
+    "POST /accounts/{ACCOUNT_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/api_key",
+    "PUT /accounts/{ACCOUNT_ID}/api_key",
+    "GET /accounts/{ACCOUNT_ID}/children",
+    "GET /accounts/{ACCOUNT_ID}/descendants",
+    "POST /accounts/{ACCOUNT_ID}/move",
+    "GET /accounts/{ACCOUNT_ID}/parents",
+    "PUT /accounts/{ACCOUNT_ID}/reseller",
+    "DELETE /accounts/{ACCOUNT_ID}/reseller",
+    "GET /accounts/{ACCOUNT_ID}/siblings",
+    "GET /accounts/{ACCOUNT_ID}/tree",
+    "GET /accounts/{ACCOUNT_ID}/acls",
+    "GET /accounts/{ACCOUNT_ID}/agents/status/{USER_ID}",
+    "POST /accounts/{ACCOUNT_ID}/agents/status/{USER_ID}",
+    "GET /accounts/{ACCOUNT_ID}/alerts",
+    "PUT /accounts/{ACCOUNT_ID}/alerts",
+    "GET /accounts/{ACCOUNT_ID}/alerts/{ALERT_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/alerts/{ALERT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/allotments",
+    "POST /accounts/{ACCOUNT_ID}/allotments",
+    "GET /accounts/{ACCOUNT_ID}/allotments/consumed",
+    "GET /accounts/{ACCOUNT_ID}/applications",
+    "GET /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}",
+    "POST /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/icon",
+    "POST /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/icon",
+    "DELETE /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/icon",
+    "POST /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/screenshots",
+    "GET /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/screenshots/{SCREENSHOT_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/applications/application/{APP_ID}/screenshots/{SCREENSHOT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/blocklists",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/entitlements",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/block",
+    "PUT /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/block",
+    "POST /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/block",
+    "DELETE /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/block",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/entitlement",
+    "PUT /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/entitlement",
+    "POST /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/entitlement",
+    "DELETE /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/entitlement",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/icon",
+    "GET /accounts/{ACCOUNT_ID}/applications/{APP_TYPE}/{APP_ID}/screenshots/{SCREENSHOT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/apps_link/authorize",
+    "GET /accounts/{ACCOUNT_ID}/apps_store",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/blacklist",
+    "POST /accounts/{ACCOUNT_ID}/apps_store/blacklist",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/marketplace",
+    "PATCH /accounts/{ACCOUNT_ID}/apps_store/marketplace",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}",
+    "POST /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/icon",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override",
+    "PUT /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override",
+    "POST /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override",
+    "DELETE /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/icon",
+    "POST /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/icon",
+    "DELETE /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/icon",
+    "POST /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/screenshot",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/screenshot/{APP_SCREENSHOT_INDEX}",
+    "DELETE /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/override/screenshot/{APP_SCREENSHOT_INDEX}",
+    "GET /accounts/{ACCOUNT_ID}/apps_store/{APP_ID}/screenshot/{APP_SCREENSHOT_INDEX}",
+    "GET /accounts/{ACCOUNT_ID}/att_handlers_errors",
+    "GET /accounts/{ACCOUNT_ID}/att_handlers_errors/handler/{HANDLER_ID}",
+    "GET /accounts/{ACCOUNT_ID}/att_handlers_errors/{ERROR_ID}",
+    "PUT /auth",
+    "GET /auth/apps",
+    "GET /auth/apps/{APP_ID}",
+    "POST /auth/apps/{APP_ID}",
+    "DELETE /auth/apps/{APP_ID}",
+    "PUT /auth/authorize",
+    "PUT /auth/callback",
+    "GET /auth/keys",
+    "GET /auth/keys/{KEY_ID}",
+    "PUT /auth/keys/{KEY_ID}",
+    "GET /auth/links",
+    "GET /auth/links/{LINK_ID}",
+    "PUT /auth/links/{LINK_ID}",
+    "DELETE /auth/links/{LINK_ID}",
+    "GET /auth/providers",
+    "GET /auth/providers/{PROVIDER_ID}",
+    "POST /auth/providers/{PROVIDER_ID}",
+    "DELETE /auth/providers/{PROVIDER_ID}",
+    "GET /auth/tokeninfo",
+    "POST /auth/tokeninfo",
+    "GET /accounts/{ACCOUNT_ID}/blacklists",
+    "PUT /accounts/{ACCOUNT_ID}/blacklists",
+    "GET /accounts/{ACCOUNT_ID}/blacklists/{BLACKLIST_ID}",
+    "POST /accounts/{ACCOUNT_ID}/blacklists/{BLACKLIST_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/blacklists/{BLACKLIST_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/blacklists/{BLACKLIST_ID}",
+    "GET /accounts/{ACCOUNT_ID}/bulk",
+    "POST /accounts/{ACCOUNT_ID}/bulk",
+    "DELETE /accounts/{ACCOUNT_ID}/bulk",
+    "GET /accounts/{ACCOUNT_ID}/call_inspector",
+    "GET /accounts/{ACCOUNT_ID}/call_inspector/{CALL_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/call_reports",
+    "GET /accounts/{ACCOUNT_ID}/call_reports/allowed_types",
+    "GET /accounts/{ACCOUNT_ID}/callflows",
+    "PUT /accounts/{ACCOUNT_ID}/callflows",
+    "GET /accounts/{ACCOUNT_ID}/callflows/{CALLFLOW_ID}",
+    "POST /accounts/{ACCOUNT_ID}/callflows/{CALLFLOW_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/callflows/{CALLFLOW_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/callflows/{CALLFLOW_ID}",
+    "GET /accounts/{ACCOUNT_ID}/cccps",
+    "PUT /accounts/{ACCOUNT_ID}/cccps",
+    "GET /accounts/{ACCOUNT_ID}/cccps/{CCCP_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/cccps/{CCCP_ID}",
+    "POST /accounts/{ACCOUNT_ID}/cccps/{CCCP_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/cccps/{CCCP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/cdrs",
+    "GET /accounts/{ACCOUNT_ID}/cdrs/interaction",
+    "GET /accounts/{ACCOUNT_ID}/cdrs/legs/{INTERACTION_ID}",
+    "GET /accounts/{ACCOUNT_ID}/cdrs/summary",
+    "GET /accounts/{ACCOUNT_ID}/cdrs/{CDR_ID}",
+    "GET /accounts/{ACCOUNT_ID}/channels",
+    "GET /accounts/{ACCOUNT_ID}/channels/{UUID}",
+    "PUT /accounts/{ACCOUNT_ID}/channels/{UUID}",
+    "GET /accounts/{ACCOUNT_ID}/clicktocall",
+    "PUT /accounts/{ACCOUNT_ID}/clicktocall",
+    "GET /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}",
+    "POST /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}",
+    "GET /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}/connect",
+    "POST /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}/connect",
+    "GET /accounts/{ACCOUNT_ID}/clicktocall/{C2C_ID}/history",
+    "GET /accounts/{ACCOUNT_ID}/comments",
+    "PUT /accounts/{ACCOUNT_ID}/comments",
+    "DELETE /accounts/{ACCOUNT_ID}/comments",
+    "GET /accounts/{ACCOUNT_ID}/comments/{COMMENT_ID}",
+    "POST /accounts/{ACCOUNT_ID}/comments/{COMMENT_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/comments/{COMMENT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/commland/compatibility",
+    "PUT /accounts/{ACCOUNT_ID}/conference_auth",
+    "PUT /accounts/{ACCOUNT_ID}/conference_auth/{CONFERENCE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/conferences",
+    "PUT /accounts/{ACCOUNT_ID}/conferences",
+    "GET /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/email_invite",
+    "GET /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants",
+    "PUT /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants",
+    "GET /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants/{PARTICIPANT_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/conferences/{CONFERENCE_ID}/participants/{PARTICIPANT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/configs",
+    "GET /accounts/{ACCOUNT_ID}/configs/{CONFIG_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/configs/{CONFIG_ID}",
+    "POST /accounts/{ACCOUNT_ID}/configs/{CONFIG_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/configs/{CONFIG_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/configs/{CONFIG_ID}",
+    "GET /accounts/{ACCOUNT_ID}/connectivity",
+    "PUT /accounts/{ACCOUNT_ID}/connectivity",
+    "GET /accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}",
+    "POST /accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/connectivity/{CONNECTIVITY_ID}",
+    "GET /accounts/{ACCOUNT_ID}/contact_list",
+    "GET /accounts/{ACCOUNT_ID}/devices",
+    "PUT /accounts/{ACCOUNT_ID}/devices",
+    "GET /accounts/{ACCOUNT_ID}/devices/status",
+    "GET /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/devices/{DEVICE_ID}/sync",
+    "GET /accounts/{ACCOUNT_ID}/dialplans",
+    "GET /accounts/{ACCOUNT_ID}/directories",
+    "PUT /accounts/{ACCOUNT_ID}/directories",
+    "GET /accounts/{ACCOUNT_ID}/directories/{DIRECTORY_ID}",
+    "POST /accounts/{ACCOUNT_ID}/directories/{DIRECTORY_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/directories/{DIRECTORY_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/directories/{DIRECTORY_ID}",
+    "GET /accounts/{ACCOUNT_ID}/external_numbers",
+    "PUT /accounts/{ACCOUNT_ID}/external_numbers",
+    "GET /accounts/{ACCOUNT_ID}/external_numbers/{EXTERNAL_NUMBER_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/external_numbers/{EXTERNAL_NUMBER_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/external_numbers/{EXTERNAL_NUMBER_ID}/verify",
+    "POST /accounts/{ACCOUNT_ID}/external_numbers/{EXTERNAL_NUMBER_ID}/verify",
+    "GET /accounts/{ACCOUNT_ID}/faxboxes",
+    "PUT /accounts/{ACCOUNT_ID}/faxboxes",
+    "GET /accounts/{ACCOUNT_ID}/faxboxes/{FAXBOX_ID}",
+    "POST /accounts/{ACCOUNT_ID}/faxboxes/{FAXBOX_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/faxboxes/{FAXBOX_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/faxboxes/{FAXBOX_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/faxes",
+    "GET /accounts/{ACCOUNT_ID}/faxes/inbox",
+    "GET /accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}",
+    "GET /accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}/attachment",
+    "DELETE /accounts/{ACCOUNT_ID}/faxes/inbox/{FAX_ID}/attachment",
+    "GET /accounts/{ACCOUNT_ID}/faxes/incoming",
+    "GET /accounts/{ACCOUNT_ID}/faxes/incoming/{FAX_ID}",
+    "GET /accounts/{ACCOUNT_ID}/faxes/outbox",
+    "GET /accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}",
+    "PUT /accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}",
+    "GET /accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}/attachment",
+    "DELETE /accounts/{ACCOUNT_ID}/faxes/outbox/{FAX_ID}/attachment",
+    "GET /accounts/{ACCOUNT_ID}/faxes/outgoing",
+    "PUT /accounts/{ACCOUNT_ID}/faxes/outgoing",
+    "GET /accounts/{ACCOUNT_ID}/faxes/outgoing/{FAX_JOB_ID}",
+    "GET /accounts/{ACCOUNT_ID}/faxes/smtplog",
+    "GET /accounts/{ACCOUNT_ID}/faxes/smtplog/{ATTEMPT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/functions",
+    "PUT /accounts/{ACCOUNT_ID}/functions",
+    "GET /accounts/{ACCOUNT_ID}/functions/samples",
+    "GET /accounts/{ACCOUNT_ID}/functions/{FUNCTION_ID}",
+    "POST /accounts/{ACCOUNT_ID}/functions/{FUNCTION_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/functions/{FUNCTION_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/functions/{FUNCTION_ID}",
+    "GET /accounts/{ACCOUNT_ID}/getstream",
+    "PUT /accounts/{ACCOUNT_ID}/getstream",
+    "PATCH /accounts/{ACCOUNT_ID}/getstream",
+    "DELETE /accounts/{ACCOUNT_ID}/getstream",
+    "PUT /accounts/{ACCOUNT_ID}/getstream/connect",
+    "GET /accounts/{ACCOUNT_ID}/groups",
+    "PUT /accounts/{ACCOUNT_ID}/groups",
+    "GET /accounts/{ACCOUNT_ID}/groups/{GROUP_ID}",
+    "POST /accounts/{ACCOUNT_ID}/groups/{GROUP_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/groups/{GROUP_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/groups/{GROUP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/hotdesks",
+    "GET /accounts/{ACCOUNT_ID}/i18n/{LANGUAGE}",
+    "PUT /ip_auth",
+    "GET /accounts/{ACCOUNT_ID}/ips",
+    "PUT /accounts/{ACCOUNT_ID}/ips",
+    "POST /accounts/{ACCOUNT_ID}/ips",
+    "DELETE /accounts/{ACCOUNT_ID}/ips",
+    "GET /accounts/{ACCOUNT_ID}/ips/assigned",
+    "GET /accounts/{ACCOUNT_ID}/ips/hosts",
+    "GET /accounts/{ACCOUNT_ID}/ips/zones",
+    "GET /accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}",
+    "POST /accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}",
+    "DELETE /accounts/{ACCOUNT_ID}/ips/{IP_ADDRESS}",
+    "GET /accounts/{ACCOUNT_ID}/ledgers",
+    "GET /accounts/{ACCOUNT_ID}/ledgers/available",
+    "PUT /accounts/{ACCOUNT_ID}/ledgers/credit",
+    "PUT /accounts/{ACCOUNT_ID}/ledgers/debit",
+    "GET /accounts/{ACCOUNT_ID}/ledgers/summary/{MODB_SUFFIX}",
+    "GET /accounts/{ACCOUNT_ID}/ledgers/total",
+    "GET /accounts/{ACCOUNT_ID}/ledgers/{SOURCE_SERVICE}",
+    "GET /accounts/{ACCOUNT_ID}/ledgers/{SOURCE_SERVICE}/{LEDGER_ID}",
+    "GET /accounts/{ACCOUNT_ID}/limits",
+    "POST /accounts/{ACCOUNT_ID}/limits",
+    "GET /accounts/{ACCOUNT_ID}/lists",
+    "PUT /accounts/{ACCOUNT_ID}/lists",
+    "GET /accounts/{ACCOUNT_ID}/lists/{LIST_ID}",
+    "POST /accounts/{ACCOUNT_ID}/lists/{LIST_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/lists/{LIST_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/lists/{LIST_ID}",
+    "GET /accounts/{ACCOUNT_ID}/match_lists",
+    "PUT /accounts/{ACCOUNT_ID}/match_lists",
+    "GET /accounts/{ACCOUNT_ID}/match_lists/{MATCH_LIST_ID}",
+    "POST /accounts/{ACCOUNT_ID}/match_lists/{MATCH_LIST_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/match_lists/{MATCH_LIST_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/match_lists/{MATCH_LIST_ID}",
+    "GET /accounts/{ACCOUNT_ID}/media",
+    "PUT /accounts/{ACCOUNT_ID}/media",
+    "GET /accounts/{ACCOUNT_ID}/media/languages",
+    "GET /accounts/{ACCOUNT_ID}/media/languages/{LANGUAGE}",
+    "GET /accounts/{ACCOUNT_ID}/media/prompts",
+    "GET /accounts/{ACCOUNT_ID}/media/prompts/{PROMPT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/media/{MEDIA_ID}",
+    "POST /accounts/{ACCOUNT_ID}/media/{MEDIA_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/media/{MEDIA_ID}",
+    "GET /accounts/{ACCOUNT_ID}/media/{MEDIA_ID}/raw",
+    "POST /accounts/{ACCOUNT_ID}/media/{MEDIA_ID}/raw",
+    "GET /accounts/{ACCOUNT_ID}/menus",
+    "PUT /accounts/{ACCOUNT_ID}/menus",
+    "GET /accounts/{ACCOUNT_ID}/menus/{MENU_ID}",
+    "POST /accounts/{ACCOUNT_ID}/menus/{MENU_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/menus/{MENU_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/menus/{MENU_ID}",
+    "GET /accounts/{ACCOUNT_ID}/metaflows",
+    "POST /accounts/{ACCOUNT_ID}/metaflows",
+    "DELETE /accounts/{ACCOUNT_ID}/metaflows",
+    "GET /accounts/{ACCOUNT_ID}/migrations",
+    "GET /accounts/{ACCOUNT_ID}/migrations/{MIGRATION_ID}",
+    "POST /accounts/{ACCOUNT_ID}/migrations/{MIGRATION_ID}",
+    "GET /accounts/{ACCOUNT_ID}/mms",
+    "PUT /accounts/{ACCOUNT_ID}/mms",
+    "GET /accounts/{ACCOUNT_ID}/mms/{SMS_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/mms/{SMS_ID}",
+    "GET /accounts/{ACCOUNT_ID}/multi_factor",
+    "PUT /accounts/{ACCOUNT_ID}/multi_factor",
+    "GET /accounts/{ACCOUNT_ID}/multi_factor/attempts",
+    "GET /accounts/{ACCOUNT_ID}/multi_factor/attempts/{ATTEMPT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/multi_factor/{CONFIG_ID}",
+    "POST /accounts/{ACCOUNT_ID}/multi_factor/{CONFIG_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/multi_factor/{CONFIG_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/multi_factor/{CONFIG_ID}",
+    "GET /accounts/{ACCOUNT_ID}/notifications",
+    "PUT /accounts/{ACCOUNT_ID}/notifications",
+    "DELETE /accounts/{ACCOUNT_ID}/notifications",
+    "POST /accounts/{ACCOUNT_ID}/notifications/customer_update/message",
+    "GET /accounts/{ACCOUNT_ID}/notifications/smtplog",
+    "GET /accounts/{ACCOUNT_ID}/notifications/smtplog/{SMTP_LOG_ID}",
+    "GET /accounts/{ACCOUNT_ID}/notifications/{NOTIFICATION_ID}",
+    "POST /accounts/{ACCOUNT_ID}/notifications/{NOTIFICATION_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/notifications/{NOTIFICATION_ID}",
+    "POST /accounts/{ACCOUNT_ID}/notifications/{NOTIFICATION_ID}/preview",
+    "GET /accounts/{ACCOUNT_ID}/parked_calls",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/carriers_info",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/check",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/classifiers",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/classifiers/{PHONE_NUMBER}",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/collection",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/collection",
+    "PATCH /accounts/{ACCOUNT_ID}/phone_numbers/collection",
+    "DELETE /accounts/{ACCOUNT_ID}/phone_numbers/collection",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/collection/activate",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/fix",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/fix/{PHONE_NUMBER}",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/locality",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/prefix",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}",
+    "POST /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}",
+    "PATCH /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}",
+    "DELETE /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/activate",
+    "GET /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/identify",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/port",
+    "PUT /accounts/{ACCOUNT_ID}/phone_numbers/{PHONE_NUMBER}/reserve",
+    "GET /accounts/{ACCOUNT_ID}/pivot/debug",
+    "GET /accounts/{ACCOUNT_ID}/pivot/debug/{UUID}",
+    "GET /accounts/{ACCOUNT_ID}/port_requests",
+    "PUT /accounts/{ACCOUNT_ID}/port_requests",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/last_submitted",
+    "POST /accounts/{ACCOUNT_ID}/port_requests/lnp_lookup",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}",
+    "POST /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/attachments",
+    "PUT /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/attachments",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/attachments/{ATTACHMENT_ID}",
+    "POST /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/attachments/{ATTACHMENT_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/attachments/{ATTACHMENT_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/canceled",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/completed",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/loa",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/pending",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/rejected",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/scheduled",
+    "PATCH /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/submitted",
+    "GET /accounts/{ACCOUNT_ID}/port_requests/{PORT_REQUEST_ID}/timeline",
+    "GET /accounts/{ACCOUNT_ID}/presence",
+    "POST /accounts/{ACCOUNT_ID}/presence",
+    "GET /accounts/{ACCOUNT_ID}/presence/report-{REPORT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/presence/{EXTENSION}",
+    "POST /accounts/{ACCOUNT_ID}/presence/{EXTENSION}",
+    "PUT /accounts/{ACCOUNT_ID}/{ENDPOINT_TYPE}/{ENDPOINT_ID}/pushes",
+    "GET /accounts/{ACCOUNT_ID}/{ENDPOINT_TYPE}/{ENDPOINT_ID}/quickcall/{NUMBER}",
+    "POST /accounts/{ACCOUNT_ID}/{ENDPOINT_TYPE}/{ENDPOINT_ID}/quickcall/{NUMBER}",
+    "GET /accounts/{ACCOUNT_ID}/quickroutes",
+    "GET /accounts/{ACCOUNT_ID}/rate_limits",
+    "POST /accounts/{ACCOUNT_ID}/rate_limits",
+    "DELETE /accounts/{ACCOUNT_ID}/rate_limits",
+    "GET /rates",
+    "PUT /rates",
+    "GET /rates/number/{PHONE_NUMBER}",
+    "GET /rates/ratedecks",
+    "GET /rates/{RATE_ID}",
+    "POST /rates/{RATE_ID}",
+    "PATCH /rates/{RATE_ID}",
+    "DELETE /rates/{RATE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/recordings",
+    "GET /accounts/{ACCOUNT_ID}/recordings/{RECORDING_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/recordings/{RECORDING_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/recordings/{RECORDING_ID}",
+    "GET /accounts/{ACCOUNT_ID}/registrations",
+    "DELETE /accounts/{ACCOUNT_ID}/registrations",
+    "GET /accounts/{ACCOUNT_ID}/registrations/count",
+    "DELETE /accounts/{ACCOUNT_ID}/registrations/{USERNAME}",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/name",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/name/{SELECTOR_NAME}",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/name/{SELECTOR_NAME}/resource/{RESOURCE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/resource",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/resource/{RESOURCE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/resource/{RESOURCE_ID}/name/{SELECTOR_NAME}",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/rules",
+    "POST /accounts/{ACCOUNT_ID}/resource_selectors/rules",
+    "GET /accounts/{ACCOUNT_ID}/resource_selectors/{UUID}",
+    "POST /accounts/{ACCOUNT_ID}/resource_selectors/{UUID}",
+    "DELETE /accounts/{ACCOUNT_ID}/resource_selectors/{UUID}",
+    "GET /accounts/{ACCOUNT_ID}/resource_templates",
+    "PUT /accounts/{ACCOUNT_ID}/resource_templates",
+    "GET /accounts/{ACCOUNT_ID}/resource_templates/{RESOURCE_TEMPLATE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/resource_templates/{RESOURCE_TEMPLATE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/resource_templates/{RESOURCE_TEMPLATE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/resource_templates/{RESOURCE_TEMPLATE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/resources",
+    "PUT /accounts/{ACCOUNT_ID}/resources",
+    "PUT /accounts/{ACCOUNT_ID}/resources/collection",
+    "POST /accounts/{ACCOUNT_ID}/resources/collection",
+    "GET /accounts/{ACCOUNT_ID}/resources/jobs",
+    "PUT /accounts/{ACCOUNT_ID}/resources/jobs",
+    "GET /accounts/{ACCOUNT_ID}/resources/jobs/{JOB_ID}",
+    "GET /accounts/{ACCOUNT_ID}/resources/{RESOURCE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/resources/{RESOURCE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/resources/{RESOURCE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/resources/{RESOURCE_ID}",
+    "GET /schemas",
+    "GET /schemas/{SCHEMA_NAME}",
+    "PUT /schemas/{SCHEMA_NAME}/validation",
+    "GET /accounts/{ACCOUNT_ID}/scope_restrictions",
+    "PUT /accounts/{ACCOUNT_ID}/scope_restrictions",
+    "GET /accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}",
+    "POST /accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}",
+    "DELETE /accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}",
+    "GET /scopes",
+    "PUT /scopes",
+    "GET /scopes/{SCOPE}",
+    "POST /scopes/{SCOPE}",
+    "DELETE /scopes/{SCOPE}",
+    "GET /accounts/{ACCOUNT_ID}/screenpops",
+    "PUT /accounts/{ACCOUNT_ID}/screenpops",
+    "GET /accounts/{ACCOUNT_ID}/screenpops/{SCREENPOP_ID}",
+    "POST /accounts/{ACCOUNT_ID}/screenpops/{SCREENPOP_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/screenpops/{SCREENPOP_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/screenpops/{SCREENPOP_ID}",
+    "GET /accounts/{ACCOUNT_ID}/search",
+    "GET /accounts/{ACCOUNT_ID}/search/multi",
+    "GET /accounts/{ACCOUNT_ID}/security",
+    "POST /accounts/{ACCOUNT_ID}/security",
+    "PATCH /accounts/{ACCOUNT_ID}/security",
+    "DELETE /accounts/{ACCOUNT_ID}/security",
+    "GET /accounts/{ACCOUNT_ID}/security/attempts",
+    "GET /accounts/{ACCOUNT_ID}/security/attempts/{ATTEMPT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/security/login_lock",
+    "DELETE /accounts/{ACCOUNT_ID}/security/login_lock",
+    "GET /accounts/{ACCOUNT_ID}/services",
+    "POST /accounts/{ACCOUNT_ID}/services",
+    "GET /accounts/{ACCOUNT_ID}/services/audit",
+    "GET /accounts/{ACCOUNT_ID}/services/audit/summary",
+    "GET /accounts/{ACCOUNT_ID}/services/audit/summary/{SOURCE_SERVICE}",
+    "GET /accounts/{ACCOUNT_ID}/services/audit/{AUDIT_ID}",
+    "GET /accounts/{ACCOUNT_ID}/services/available",
+    "GET /accounts/{ACCOUNT_ID}/services/editable",
+    "GET /accounts/{ACCOUNT_ID}/services/manual",
+    "POST /accounts/{ACCOUNT_ID}/services/manual",
+    "PATCH /accounts/{ACCOUNT_ID}/services/manual",
+    "GET /accounts/{ACCOUNT_ID}/services/overrides",
+    "POST /accounts/{ACCOUNT_ID}/services/overrides",
+    "PATCH /accounts/{ACCOUNT_ID}/services/overrides",
+    "POST /accounts/{ACCOUNT_ID}/services/quote",
+    "POST /accounts/{ACCOUNT_ID}/services/reconciliation",
+    "GET /accounts/{ACCOUNT_ID}/services/summary",
+    "POST /accounts/{ACCOUNT_ID}/services/synchronization",
+    "POST /accounts/{ACCOUNT_ID}/services/topup",
+    "POST /accounts/{ACCOUNT_ID}/services/{PLAN_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/services/{PLAN_ID}",
+    "GET /accounts/{ACCOUNT_ID}/skels",
+    "PUT /accounts/{ACCOUNT_ID}/skels",
+    "GET /accounts/{ACCOUNT_ID}/skels/{THING}",
+    "POST /accounts/{ACCOUNT_ID}/skels/{THING}",
+    "PATCH /accounts/{ACCOUNT_ID}/skels/{THING}",
+    "DELETE /accounts/{ACCOUNT_ID}/skels/{THING}",
+    "GET /accounts/{ACCOUNT_ID}/sms",
+    "PUT /accounts/{ACCOUNT_ID}/sms",
+    "GET /accounts/{ACCOUNT_ID}/sms/{SMS_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/sms/{SMS_ID}",
+    "GET /accounts/{ACCOUNT_ID}/storage",
+    "PUT /accounts/{ACCOUNT_ID}/storage",
+    "POST /accounts/{ACCOUNT_ID}/storage",
+    "PATCH /accounts/{ACCOUNT_ID}/storage",
+    "DELETE /accounts/{ACCOUNT_ID}/storage",
+    "GET /accounts/{ACCOUNT_ID}/storage/plans",
+    "PUT /accounts/{ACCOUNT_ID}/storage/plans",
+    "GET /accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}",
+    "POST /accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/storage/plans/{STORAGE_PLAN_ID}",
+    "GET /sup/{MODULE}",
+    "GET /sup/{MODULE}/{FUNCTION}",
+    "GET /sup/{MODULE}/{FUNCTION}/{ARGS}",
+    "GET /system_configs",
+    "GET /system_configs/{SYSTEM_CONFIG_ID}",
+    "PUT /system_configs/{SYSTEM_CONFIG_ID}",
+    "POST /system_configs/{SYSTEM_CONFIG_ID}",
+    "PATCH /system_configs/{SYSTEM_CONFIG_ID}",
+    "DELETE /system_configs/{SYSTEM_CONFIG_ID}",
+    "GET /system_configs/{SYSTEM_CONFIG_ID}/{NODE}",
+    "POST /system_configs/{SYSTEM_CONFIG_ID}/{NODE}",
+    "PATCH /system_configs/{SYSTEM_CONFIG_ID}/{NODE}",
+    "DELETE /system_configs/{SYSTEM_CONFIG_ID}/{NODE}",
+    "GET /system_status",
+    "GET /accounts/{ACCOUNT_ID}/tasks",
+    "PUT /accounts/{ACCOUNT_ID}/tasks",
+    "GET /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}",
+    "GET /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/input",
+    "GET /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/output",
+    "PATCH /accounts/{ACCOUNT_ID}/tasks/{TASK_ID}/stop",
+    "GET /accounts/{ACCOUNT_ID}/temporal_rules",
+    "PUT /accounts/{ACCOUNT_ID}/temporal_rules",
+    "GET /accounts/{ACCOUNT_ID}/temporal_rules/{TEMPORAL_RULE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/temporal_rules/{TEMPORAL_RULE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/temporal_rules/{TEMPORAL_RULE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/temporal_rules/{TEMPORAL_RULE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/temporal_rules_sets",
+    "PUT /accounts/{ACCOUNT_ID}/temporal_rules_sets",
+    "GET /accounts/{ACCOUNT_ID}/temporal_rules_sets/{TEMPORAL_RULE_SET}",
+    "POST /accounts/{ACCOUNT_ID}/temporal_rules_sets/{TEMPORAL_RULE_SET}",
+    "PATCH /accounts/{ACCOUNT_ID}/temporal_rules_sets/{TEMPORAL_RULE_SET}",
+    "DELETE /accounts/{ACCOUNT_ID}/temporal_rules_sets/{TEMPORAL_RULE_SET}",
+    "GET /token_auth",
+    "DELETE /token_auth",
+    "GET /accounts/{ACCOUNT_ID}/token_restrictions",
+    "POST /accounts/{ACCOUNT_ID}/token_restrictions",
+    "DELETE /accounts/{ACCOUNT_ID}/token_restrictions",
+    "GET /accounts/{ACCOUNT_ID}/transactions",
+    "PUT /accounts/{ACCOUNT_ID}/transactions/refund",
+    "PUT /accounts/{ACCOUNT_ID}/transactions/sale",
+    "GET /accounts/{ACCOUNT_ID}/transactions/{TRANSACTION_ID}",
+    "PUT /user_auth/recovery",
+    "POST /user_auth/recovery",
+    "GET /user_auth/{AUTH_TOKEN}",
+    "GET /accounts/{ACCOUNT_ID}/users",
+    "PUT /accounts/{ACCOUNT_ID}/users",
+    "GET /accounts/{ACCOUNT_ID}/users/{USER_ID}",
+    "POST /accounts/{ACCOUNT_ID}/users/{USER_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/users/{USER_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/users/{USER_ID}",
+    "GET /accounts/{ACCOUNT_ID}/users/{USER_ID}/photo",
+    "POST /accounts/{ACCOUNT_ID}/users/{USER_ID}/photo",
+    "DELETE /accounts/{ACCOUNT_ID}/users/{USER_ID}/photo",
+    "GET /accounts/{ACCOUNT_ID}/users/{USER_ID}/qrcode",
+    "GET /accounts/{ACCOUNT_ID}/users/{USER_ID}/vcard",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes",
+    "PUT /accounts/{ACCOUNT_ID}/vmboxes",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes/messages",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}",
+    "POST /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages",
+    "PUT /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages",
+    "POST /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages",
+    "DELETE /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages",
+    "POST /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/raw",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}",
+    "POST /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}",
+    "GET /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}/raw",
+    "PUT /accounts/{ACCOUNT_ID}/vmboxes/{VM_BOX_ID}/messages/{VM_MSG_ID}/raw",
+    "GET /accounts/{ACCOUNT_ID}/webhooks",
+    "PUT /accounts/{ACCOUNT_ID}/webhooks",
+    "PATCH /accounts/{ACCOUNT_ID}/webhooks",
+    "GET /accounts/{ACCOUNT_ID}/webhooks/attempts",
+    "GET /accounts/{ACCOUNT_ID}/webhooks/samples",
+    "GET /accounts/{ACCOUNT_ID}/webhooks/samples/{SAMPLE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/webhooks/{WEBHOOK_ID}",
+    "POST /accounts/{ACCOUNT_ID}/webhooks/{WEBHOOK_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/webhooks/{WEBHOOK_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/webhooks/{WEBHOOK_ID}",
+    "GET /accounts/{ACCOUNT_ID}/webhooks/{WEBHOOK_ID}/attempts",
+    "GET /accounts/{ACCOUNT_ID}/websites",
+    "PUT /accounts/{ACCOUNT_ID}/websites",
+    "GET /accounts/{ACCOUNT_ID}/websites/{WEBSITE_ID}",
+    "POST /accounts/{ACCOUNT_ID}/websites/{WEBSITE_ID}",
+    "PATCH /accounts/{ACCOUNT_ID}/websites/{WEBSITE_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/websites/{WEBSITE_ID}",
+    "GET /accounts/{ACCOUNT_ID}/websockets",
+    "GET /accounts/{ACCOUNT_ID}/websockets/{SOCKET_ID}",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel",
+    "PUT /accounts/{ACCOUNT_ID}/whitelabel",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel",
+    "DELETE /accounts/{ACCOUNT_ID}/whitelabel",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/domains",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/domains",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/emails",
+    "PUT /accounts/{ACCOUNT_ID}/whitelabel/emails",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/emails/{EMAIL_ID}",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/emails/{EMAIL_ID}",
+    "DELETE /accounts/{ACCOUNT_ID}/whitelabel/emails/{EMAIL_ID}",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/emails/{EMAIL_ID}/verify",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/icon",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/icon",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/logo",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/logo",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/welcome",
+    "POST /accounts/{ACCOUNT_ID}/whitelabel/welcome",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/{WHITELABEL_DOMAIN}",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/{WHITELABEL_DOMAIN}/icon",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/{WHITELABEL_DOMAIN}/logo",
+    "GET /accounts/{ACCOUNT_ID}/whitelabel/{WHITELABEL_DOMAIN}/welcome",
+    "GET /accounts/{ACCOUNT_ID}/wordle",
+    "GET /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}",
+    "POST /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}"
+  ],
+  "schema_count": 463,
+  "internal_reference_count": 1529,
+  "unresolved_reference_count": 0,
+  "schema_adjustments": [
+    {
+      "location": "components/schemas/accounts/properties/call_forward",
+      "keyword": "kz:skip_subproperty_builder",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/call_id",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/callee_id_name",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/callee_id_number",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/caller_id_name",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/caller_id_number",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/cdr_id",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/content_type",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/custom_channel_vars",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/description",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/direction",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/duration",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/duration_ms",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/endpoint_id",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/from",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/interaction_id",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/media_source",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/media_type",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/name",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/origin",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/owner_id",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/request",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/source_type",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/start",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/to",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/call_recordings/properties/url",
+      "keyword": "name",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/connectivity/properties/servers/items/properties/server_id",
+      "keyword": "manLength",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/capture_group",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/capture_group/properties/key",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/capture_group/properties/length",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/contacts/items",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/contacts/items/properties/contact",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/contacts/items/properties/ext",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/contacts/items/properties/primary",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/first_name",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/history/items",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/last_name",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/organization",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/contacts/properties/organization/properties/name",
+      "keyword": "examples",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/devices/properties/call_forward",
+      "keyword": "kz:skip_subproperty_builder",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/pushes/properties/fcm",
+      "keyword": "android",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/scope_restrictions",
+      "keyword": "token_restrictions",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/storage.attachment.dropbox/properties/settings/properties/oauth_doc_id",
+      "keyword": "patern",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/storage.attachment.google_drive/properties/settings/properties/oauth_doc_id",
+      "keyword": "patern",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/storage.attachment.onedrive/properties/settings/properties/oauth_doc_id",
+      "keyword": "patern",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/system_config.registrar/properties/access_control/properties/patternProperties",
+      "keyword": "^[a-z_].*$",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/users/properties/call_forward",
+      "keyword": "kz:skip_subproperty_builder",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    }
+  ],
+  "upstream_missing_parameters_documented_as_strings": [
+    "CCCP_ID",
+    "THING"
+  ],
+  "upstream_missing_schemas_explicitly_unknown": [
+    "skels",
+    "system_config.registrar.auth_type"
+  ],
+  "source_inventory": [
+    {
+      "file": "applications/crossbar/src/cb_apps_util.erl",
+      "sha256": "0b77f2cbd4422e61dbd448d88de5e0adfa84c485ed768f17e590dc5cf70457f0",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/cb_channel_monitor.erl",
+      "sha256": "0289551f6bdd97086d8ccdf8ea9d104ae268289069fcd692a822995e184cc0a2",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/cb_context.erl",
+      "sha256": "52de10a9fca20526abf78d8a9cf47742c3538d996c25034a8788f040cbe1f426",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/cb_devices_utils.erl",
+      "sha256": "81e75dcfdfa41145f54ebe13e8c40bc8966e088a77f22fba468f87ebea6a6e69",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/cb_mobile_manager.erl",
+      "sha256": "f78d210e2d0311c928cc546162284f81190d3c73b2ee4de2b8487933c6024be5",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/cb_modules_util.erl",
+      "sha256": "f071acc628272d294c323393e61cc4175532a258e88097898df9e23f356b0841",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/cb_tests.erl",
+      "sha256": "bf6a5445c710eedb60ca0850aed10818f5b120209fa036af09921c0f1545cd71",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_about.erl",
+      "sha256": "ed095d75963abe3ad1e511b0aaf02a1ed6259105ed2f447c7896840c54c7c6ff",
+      "literal_binding_nouns": [
+        "about"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_accounts.erl",
+      "sha256": "8f94c97c1325e529e080d6f88bb708d48d193650276ff7049dd3f28cd4630931",
+      "literal_binding_nouns": [
+        "accounts"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_acls.erl",
+      "sha256": "b6f17ab8bce878d91fabd762440e12d45c96c1317d18204d568c6e5ba66e9a93",
+      "literal_binding_nouns": [
+        "acls"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_alerts.erl",
+      "sha256": "9153046976ea3bf7772c499e9c4e2ff9c49f5ba8550b95f4186194603dbf10b8",
+      "literal_binding_nouns": [
+        "alerts"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_allotments.erl",
+      "sha256": "f992bdd64e4ce33de782fe696477aaccdb5cb7f2885d2b510099bdc30c05850b",
+      "literal_binding_nouns": [
+        "allotments"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_api_auth.erl",
+      "sha256": "f9b836581d2e2408897049d51dda33f6ab92b12544b318f2bc6abf8e4f133d23",
+      "literal_binding_nouns": [
+        "api_auth"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_applications.erl",
+      "sha256": "91f2c20557acf1d22ec52c464d53fadd74d95b0c8c2b548625097ed072bc0a6b",
+      "literal_binding_nouns": [
+        "applications"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_apps_link.erl",
+      "sha256": "120367bfe6efbd6ee9af4f41960be0331ef3a4ec15ff69121c9064eb1f2565a1",
+      "literal_binding_nouns": [
+        "apps_link"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_apps_store.erl",
+      "sha256": "221357d83df2dcf0386fafcf6ecd6c2a863e0084b09e4a3a4ba2abc0b2ab4631",
+      "literal_binding_nouns": [
+        "apps_store"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_att_handlers_errors.erl",
+      "sha256": "3fb7f4248a8e9a86f42d5f1a09b155cee58549f280cd3092642c5759bf265af6",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_auth.erl",
+      "sha256": "e9172c120a31b47797e9a6ac596a0689309234f1fe0a4f63061135856d1a4843",
+      "literal_binding_nouns": [
+        "auth"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_basic_auth.erl",
+      "sha256": "0b318bbd6a9ea6a1be2f80bdea1b0e64a8cf59ca72d43a37c46e48d57376ddd7",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_blacklists.erl",
+      "sha256": "a06070132949f8aa46f57dcd7e390f222c73e8063c73947495fd9546761e9344",
+      "literal_binding_nouns": [
+        "blacklists"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_call_inspector.erl",
+      "sha256": "4644554055912cdcde1e54b0c85d0f2e308e6ef85ca54ada0adc6f0c75c21a15",
+      "literal_binding_nouns": [
+        "call_inspector"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_call_reports.erl",
+      "sha256": "e35b8f5ac7d317fb84fc411801d386caade8834e6474f4997c2ad291c4ea4ca3",
+      "literal_binding_nouns": [
+        "call_reports"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_callflows.erl",
+      "sha256": "d5552389a3a61d7f53753db87423f0273e07f7d416ace9e4ecc242dbed977272",
+      "literal_binding_nouns": [
+        "callflows"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_capabilities.erl",
+      "sha256": "e4f632265e165d5dbe75c9c91879930aa60b06fcab72483738b1b63c21b4e110",
+      "literal_binding_nouns": [
+        "capabilities"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_cdrs.erl",
+      "sha256": "6b61269c7ed3b75b33f274a9af8fbe1c6fc548bab995117d88fa319fdfc601a3",
+      "literal_binding_nouns": [
+        "cdrs"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_channels.erl",
+      "sha256": "7b101ee785c7ed56517291cd4aacea87835064d05a67c12869a442a04d23bec9",
+      "literal_binding_nouns": [
+        "channels"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_clicktocall.erl",
+      "sha256": "ac9a350968f03bbf1a51aafdc6fab370c71d992848263963f66c341f5fe07b98",
+      "literal_binding_nouns": [
+        "clicktocall"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_comments.erl",
+      "sha256": "fda90cf1e0ae858ce9150b16426919419fc271a27b89edf8c9719563aa589721",
+      "literal_binding_nouns": [
+        "comments"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_commland.erl",
+      "sha256": "faab884167e74f9d8c9de1968b4c48d53b4649477d7aad6e8e7b36723fecaffa",
+      "literal_binding_nouns": [
+        "commland"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_conference_auth.erl",
+      "sha256": "4cf0ad283ebfe0db49858b0b329da79f582c985c80fd17f90f78f2749528ccbb",
+      "literal_binding_nouns": [
+        "conference_auth"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_conferences.erl",
+      "sha256": "c96b7ce25c252cf6230160c09190e0ff8cc4a0a00de75c6d5b68f34c7ba14d37",
+      "literal_binding_nouns": [
+        "conferences"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_configs.erl",
+      "sha256": "b43d6f3bd50f0859678e4b51f0db9986f59d237a4560130169a9d19280a7ffb1",
+      "literal_binding_nouns": [
+        "configs"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_connectivity.erl",
+      "sha256": "d44534bd1ab12aefe1d6681b89d4f5ce8937a5c14163c393df7fce484009ebbf",
+      "literal_binding_nouns": [
+        "connectivity"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_contact_list.erl",
+      "sha256": "77b8126f103a6492f2537cc744b181169308ed6c5b67cba4299705b8f7ada158",
+      "literal_binding_nouns": [
+        "contact_list"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_devices.erl",
+      "sha256": "416276fa793e660f249c311077bdbc33ee8161903cdad4dd7c81be03991faa84",
+      "literal_binding_nouns": [
+        "devices"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_dialplans.erl",
+      "sha256": "664a220a557cc6687d9e3fb50a77ca005356d56005b4322d1bd3aae787855972",
+      "literal_binding_nouns": [
+        "dialplans"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_directories.erl",
+      "sha256": "7ab5a7409b35018673fa18dd4a22b09bfb8e4fb8690e85b460247c5deaa1309e",
+      "literal_binding_nouns": [
+        "directories"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_entitlements.erl",
+      "sha256": "b323e780d73c153cde88912aa2a99829d3a47d869dc50c2cd36684ad4b71da70",
+      "literal_binding_nouns": [
+        "entitlements"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_external_numbers.erl",
+      "sha256": "03fdcf2f4631939a2dd96dcdd9316388c5164025f149d60170b8270b121c6a46",
+      "literal_binding_nouns": [
+        "external_numbers"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_faxboxes.erl",
+      "sha256": "6149aad5ac4c069d9bac9a7e722be896edc5498e98ed19ba0ec4c05bf7b4456e",
+      "literal_binding_nouns": [
+        "faxboxes"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_faxes.erl",
+      "sha256": "a1d33b841c5166f91edb793b4e8b6d9cac568f1721de3fd941158bb0d90beb79",
+      "literal_binding_nouns": [
+        "faxes"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_functions.erl",
+      "sha256": "f70fd55251b6502bce833da3499f21ea290f4d94ced00900426cab0a862262f6",
+      "literal_binding_nouns": [
+        "functions"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_getstream.erl",
+      "sha256": "752c040081938aa65891cb039e326dd4c713716f787e02a3a2cddcb32c25c68f",
+      "literal_binding_nouns": [
+        "getstream"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_groups.erl",
+      "sha256": "e79f0d287db39041f04a57c44e4634de94340154e15bf36661f7c51a33860dc0",
+      "literal_binding_nouns": [
+        "groups"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_hotdesks.erl",
+      "sha256": "fb29ab22a2892e120d4ad6931d63bd54e46600fb7cdc7b46efebb135ffd63160",
+      "literal_binding_nouns": [
+        "hotdesks"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_i18n.erl",
+      "sha256": "7b2fc3e69d5c5c4aed6ce21c5d1e745ab688e6a31ec741c67622a407580db0db",
+      "literal_binding_nouns": [
+        "i18n"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_inbound_messaging.erl",
+      "sha256": "c760205295a903cde7531aad1df989b7dd7e163b6b24b604ef4d8ce2edb72793",
+      "literal_binding_nouns": [
+        "inbound_messaging"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_ip_auth.erl",
+      "sha256": "2aad0ec823582b02cd4be67d0473b57ddb014d94d3f2cdb010f5f11c678ae92e",
+      "literal_binding_nouns": [
+        "ip_auth"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_ips.erl",
+      "sha256": "991efc9773205944487b066f6b23d948c9be5a09c3b262a906c681f2b828c3a1",
+      "literal_binding_nouns": [
+        "ips"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_ledgers.erl",
+      "sha256": "c065f0871c067d21441422ee1f78a4cb8f7ab24a606f7b82ed6b4177a5f5d950",
+      "literal_binding_nouns": [
+        "ledgers"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_limits.erl",
+      "sha256": "4b566fb795dbbf76f4de78e9197656ffdd6833396157f4544c34134d196b1675",
+      "literal_binding_nouns": [
+        "limits"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_lists.erl",
+      "sha256": "f9e7702065fd64eaf44d49dbd420edd85fe84236875fea2c430d891fbb2cb22b",
+      "literal_binding_nouns": [
+        "lists"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_match_lists.erl",
+      "sha256": "8c62ab9bc4d68ef18a1b009a199ef417c2b19ceda0b83eb7003f618a65814495",
+      "literal_binding_nouns": [
+        "match_lists"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_media.erl",
+      "sha256": "819a8a24b5994787c67ca0123a4a2f2135d6b71ae0d5f15e33f19ce78fbdf226",
+      "literal_binding_nouns": [
+        "media"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_menus.erl",
+      "sha256": "b5aee5121318ec3792284d35216194ee53f7be02cc02ab0571d0ea80df109328",
+      "literal_binding_nouns": [
+        "menus"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_metaflows.erl",
+      "sha256": "cab641c4fb0157a4482707431d7a2b9da3c144cf5b7640dfd3910801688cbcae",
+      "literal_binding_nouns": [
+        "metaflows"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_migrations.erl",
+      "sha256": "25b58501e57d6b3a043b4be03ac01d7d1a62efd6c87554dd37c18a525e94e6af",
+      "literal_binding_nouns": [
+        "migrations"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_mms.erl",
+      "sha256": "b6736535c918c195817b64048c7a63249bb038791bd70f213cab969c64c32b5d",
+      "literal_binding_nouns": [
+        "mms"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_multi_factor.erl",
+      "sha256": "397b5f002efe307e952aece971b2d2070cadb0022c07a671f3b306c04dbe1b80",
+      "literal_binding_nouns": [
+        "multi_factor"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_noauthn.erl",
+      "sha256": "f026ab2f45eb189bd2943d19d0777a2b8d5868ea77fd7fe9173e44925a95f399",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_noauthz.erl",
+      "sha256": "4e2f29b3dc28e9d20524e9cd2927f73268b91f2700092ded631e7badb071decd",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_notifications.erl",
+      "sha256": "a74e0f6c2c79d8c8b097720a4f570fc5e3fd32f93f873618a862f094298aabe2",
+      "literal_binding_nouns": [
+        "notifications"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_parked_calls.erl",
+      "sha256": "def452591821ac4a6f95f4a371e1e5611dc59a57398a876f0c900e3e3ea809f8",
+      "literal_binding_nouns": [
+        "parked_calls"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_phone_numbers.erl",
+      "sha256": "3bb42c3c32b8ecc8f98fa4723bdae4533a45b67db88b810bd38e31468742b706",
+      "literal_binding_nouns": [
+        "phone_numbers"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_pivot.erl",
+      "sha256": "bc68edfc1d1d975c09843c3170345879c53ef4f035098db8aed5750e254f734f",
+      "literal_binding_nouns": [
+        "pivot"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_port_requests.erl",
+      "sha256": "84d33b284314a0980702722e55e8301a81bfae0e6aa19461a5b4c74922585c9a",
+      "literal_binding_nouns": [
+        "port_requests"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_presence.erl",
+      "sha256": "305d4bcedab80f739fc9962f4c7509e7489e170fa4392f21d1049af2c38e8dfc",
+      "literal_binding_nouns": [
+        "presence"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_profile.erl",
+      "sha256": "d4518a1b31818aadb3336bfe790c943e609506a6b55d6f89ce82607aedd989a5",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_pushes.erl",
+      "sha256": "37e8d029a280a84f9137dbfa55ebe3109278afe62ebd7fc62f149a3812d09d24",
+      "literal_binding_nouns": [
+        "pushes"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_quickcall.erl",
+      "sha256": "db95d074f4b08554db2d85f9288f97dd5e843612f8243afa0d661f9130256d20",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_quickroutes.erl",
+      "sha256": "f3496d329820bd3df2fcaa05f8d10f412b4246bb739c90a9fee9a2d2e176d150",
+      "literal_binding_nouns": [
+        "quickroutes"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_rate_limits.erl",
+      "sha256": "34473556040348493c9bfeb92404af0a436a485cddfc77fc6d495f9ccd5a3c15",
+      "literal_binding_nouns": [
+        "rate_limits"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_rates.erl",
+      "sha256": "279134eadda382bd32caaed1acf144dcfbba73bf953711647ce9c80dd12a6547",
+      "literal_binding_nouns": [
+        "rates"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_recordings.erl",
+      "sha256": "eb1ba5f4fad246c8c95ead3b91dc6730a907690b99558a6cc7bb9f70f498c484",
+      "literal_binding_nouns": [
+        "recordings"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_registrations.erl",
+      "sha256": "dca581bdbe1402d57f7f3f290055114524c0ac0e18719d2ec9d87b5032328a31",
+      "literal_binding_nouns": [
+        "registrations"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_resource_selectors.erl",
+      "sha256": "c7d92bb985ae53d32ca25ee888a6a86d0af135a4660aa77aa5b0c47514bec875",
+      "literal_binding_nouns": [
+        "resource_selectors"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_resource_templates.erl",
+      "sha256": "12a475916b32f031aa9b1a33befb0b61802ed255bc725c66fa775bd74382855d",
+      "literal_binding_nouns": [
+        "resource_templates"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_resources.erl",
+      "sha256": "7ae71674a29617be8790d1c574e27d0541c0b5cae326d0572221d145f18bc1b7",
+      "literal_binding_nouns": [
+        "resources"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_schemas.erl",
+      "sha256": "f4c6b48a7eb71dee0c90e1b31c9a220181ae5d7d206aa67eb81598e09feaec2c",
+      "literal_binding_nouns": [
+        "schemas"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_scope_restrictions.erl",
+      "sha256": "48e98addeff3aeb6b73805a7bc24b59acb3e696d9e573825c17d4f98c345f67c",
+      "literal_binding_nouns": [
+        "scope_restrictions"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_scopes.erl",
+      "sha256": "cbce5a2f01efbcf0476572529a6b20b7caa038e91a1e79cb8c0a2ee7a232a7d0",
+      "literal_binding_nouns": [
+        "scopes"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_screenpops.erl",
+      "sha256": "3e22ed411d2ae17c45d845091ccd56308ba29039bc1ba656a1686ad002d47aa7",
+      "literal_binding_nouns": [
+        "screenpops"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_search.erl",
+      "sha256": "de13140423e60a7eceee864ac5ef797541a0843891b811fb1828155cc5d9c66a",
+      "literal_binding_nouns": [
+        "search"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_security.erl",
+      "sha256": "ba78b22c75c2f546b1ab5ed4ad35c81266ed9bea19f045d41baf36b312f66e86",
+      "literal_binding_nouns": [
+        "security"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_services.erl",
+      "sha256": "35c2ac7ac685a65e6f1a5345f77b58b14b15cfd2749685eb872a0a004582344f",
+      "literal_binding_nouns": [
+        "services"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_simple_authz.erl",
+      "sha256": "9aa6b6e44f20118e35bb7e5ab572bdcc082566d2d229fd14bd61950509074f89",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_sms.erl",
+      "sha256": "88264f280583a778e9b1c80d90a2a9d71a7ba83a2217ed65ac9043fec04eca7c",
+      "literal_binding_nouns": [
+        "sms"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_storage.erl",
+      "sha256": "a28211ec8872d9ddad03014f9bd94d2c641d45253423b62b875f9541ee8b1815",
+      "literal_binding_nouns": [
+        "storage"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_sup.erl",
+      "sha256": "fd509d487c1de6051c0d1b12fda87fcadc1bcb954d0766bb1c7a698d472f7171",
+      "literal_binding_nouns": [
+        "sup"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_system_configs.erl",
+      "sha256": "94f2358c6dd992d7f6b82478d1298fddde724a299117c8ae2b25afc9fc60fdcb",
+      "literal_binding_nouns": [
+        "system_configs"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_system_status.erl",
+      "sha256": "da6eabc011f49201abbccde4b23241f72fa4e8d05b4beaa23fc79b103dbd527c",
+      "literal_binding_nouns": [
+        "system_status"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_tasks.erl",
+      "sha256": "7d459fe4fc3049c5e5f6205bdd0c32bd7ebd3055f702b2ddc09d97ef0a15d734",
+      "literal_binding_nouns": [
+        "tasks"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_temporal_rules.erl",
+      "sha256": "922628844a352dde941996b9806b47c721fd97bb052d63aebb052a75250e1512",
+      "literal_binding_nouns": [
+        "temporal_rules"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_temporal_rules_sets.erl",
+      "sha256": "2bb41cf52a1d044411372cfc17cf94ffa78b293bd5f0f1a697dbbde4a54902eb",
+      "literal_binding_nouns": [
+        "temporal_rules_sets"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_token_auth.erl",
+      "sha256": "8f1f4c5c10c93b615fd9361516410184d52b151259c5e99adcb95a5e6d9e7bd0",
+      "literal_binding_nouns": [
+        "token_auth"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_token_restrictions.erl",
+      "sha256": "39ee5b3217b0ae8a6d8eec0a9787be917c0fefc33373282ef01c8fef04c26654",
+      "literal_binding_nouns": [
+        "token_restrictions"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_transactions.erl",
+      "sha256": "7354c9efb26df42533b879e58de0185decea798a0e25961c3f93884cb124b975",
+      "literal_binding_nouns": [
+        "transactions"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_user_auth.erl",
+      "sha256": "90efc1919fe1986132e356374250a5e29ff594b66001374f03d65bac894a661d",
+      "literal_binding_nouns": [
+        "user_auth"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_users.erl",
+      "sha256": "bf2ae150e15d3a2117aeeeff4c42ace031eacd7ce4907e6c6914d4b09a1b2f45",
+      "literal_binding_nouns": [
+        "users"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_vmboxes.erl",
+      "sha256": "81fb34c08ec0deaa912ec617156135ebe787886ab61a20b0f437a3dfd36968ce",
+      "literal_binding_nouns": [
+        "vmboxes"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_webhooks.erl",
+      "sha256": "4f2dabbd2c1a1ac99c6a376a8f935cdb08e90b2415ae3a183d28bfb8ea402384",
+      "literal_binding_nouns": [
+        "webhooks"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_websites.erl",
+      "sha256": "8de27000af052b614c5a9036f5660e570dbdf884d79f5ab4ca1d8f3a87227e70",
+      "literal_binding_nouns": [
+        "websites"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_websockets.erl",
+      "sha256": "cc79f4dbe7a754a46667920388e97c2b9a17692a432ed9dcde6e0cf3d799451e",
+      "literal_binding_nouns": [
+        "websockets"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_whitelabel.erl",
+      "sha256": "38a7627135f7b465c54f4e15aba805b2847ffcbb769741288735c1829351422c",
+      "literal_binding_nouns": [
+        "whitelabel"
+      ]
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_wordle.erl",
+      "sha256": "36fe7dce1f352b42c4fd8aadf9cf83061dc880d0ea1db7edf83be598939d1c58",
+      "literal_binding_nouns": [
+        "wordle"
+      ]
+    },
+    {
+      "file": "applications/acdc/src/cb_acdc_call_stats.erl",
+      "sha256": "371ee4e109e8dbbb9a6df1f2835e5cc37c4fff4bd6d7c3eed16826b0a59323b5",
+      "literal_binding_nouns": [
+        "acdc_call_stats"
+      ]
+    },
+    {
+      "file": "applications/acdc/src/cb_acdc_queue_editor.erl",
+      "sha256": "fbd749f17e1fc1f71d4af1a8870a5e141bc8fc258e0f31fd80588e5bc3e1ae7d",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/acdc/src/cb_agents.erl",
+      "sha256": "3602effb3ebfed89fbf5bc6c86a7aaa5ea9dfe1de17bf39e5be9b45103ebbe0d",
+      "literal_binding_nouns": [
+        "agents"
+      ]
+    },
+    {
+      "file": "applications/acdc/src/cb_queues.erl",
+      "sha256": "6084ea66584118478e54ae0bebdcd46222fa981de99b18bd927b3a964820de57",
+      "literal_binding_nouns": [
+        "queues"
+      ]
+    }
+  ],
+  "literal_binding_nouns_without_path_segment": [
+    {
+      "file": "applications/crossbar/src/modules/cb_capabilities.erl",
+      "noun": "capabilities"
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_inbound_messaging.erl",
+      "noun": "inbound_messaging"
+    }
+  ],
+  "source_coverage_limits": [
+    "All existing local paths/*.yml entries are included. This is not an exhaustive proof of every dynamically routed Crossbar endpoint.",
+    "Literal binding comparison is a gap detector, not a routing parser; variable/macro bindings and aliases need manual review.",
+    "Most upstream operations have generic responses and resource-only request schemas. Only source-reviewed overlays correct those contracts.",
+    "Schemas include staged repository configuration; source presence does not imply deployment activation or tested telephony behavior.",
+    "Local synthetic supervision acceptance does not certify cross-node failover, external trunks, production capacity, or every API.",
+    "Planned contracts are published separately and must not be called until implemented and deployed."
+  ],
+  "inputs": [
+    {
+      "file": "applications/acdc/src/acdc_callback_store.erl",
+      "sha256": "79c0c21aac1a1454e9bde3780e6f2638a8fec49a914be3216ab86c279a25b112"
+    },
+    {
+      "file": "applications/acdc/src/cb_acdc_queue_editor.erl",
+      "sha256": "fbd749f17e1fc1f71d4af1a8870a5e141bc8fc258e0f31fd80588e5bc3e1ae7d"
+    },
+    {
+      "file": "applications/acdc/src/cb_agents.erl",
+      "sha256": "3602effb3ebfed89fbf5bc6c86a7aaa5ea9dfe1de17bf39e5be9b45103ebbe0d"
+    },
+    {
+      "file": "applications/acdc/src/cb_queues.erl",
+      "sha256": "6084ea66584118478e54ae0bebdcd46222fa981de99b18bd927b3a964820de57"
+    },
+    {
+      "file": "applications/crossbar/priv/couchdb/schemas/queues.json",
+      "sha256": "23b3a0765a3849916a6282a876748207ecda86846268314bcadb1d3854c21967"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/oas3-parameters.yml",
+      "sha256": "8e5f1ade0d34c7ccf0d8c70e33dbeb5ef7b5aad016bb9b9e4d16069013af1e77"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/oas3-schemas.yml",
+      "sha256": "c7b53f31ec83f049a08a8842667b5868784ec7be56b9b1d3b9c34248e8cfe3da"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/openapi.yml",
+      "sha256": "53642c597a6823e340435266dc7ef6209c9e4f73b7a1632b9bc7b82d85130236"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/about.yml",
+      "sha256": "f4905083d260cfe9f82ef5262a6bf92aa2d97a3322348bc298f67402a0a7b935"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/access_lists.yml",
+      "sha256": "685de1482ff630e281f0fca07d3dccf2076be74f12ba88e74c8de6c10476e45c"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/accounts.yml",
+      "sha256": "b847380bbe4cf72f88053eaec8582872cad2f8f2fd24476e9079d72456276389"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/acls.yml",
+      "sha256": "3eb6ae9b61216bde2bae8d243f8319efa6370c0a613713d5c054eab30e45d199"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/agents.yml",
+      "sha256": "85611aa081802c9579c7dc3714b0d215bdab5b862031108311d5de5e08bcb35b"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/alerts.yml",
+      "sha256": "f4f493bff2a3f5152fd8f4856818ee3b1f2960f8cc3c5123c4ad5128b8ef5418"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/allotments.yml",
+      "sha256": "b91e2158491165cb1b81b1d890f2c04c31a79784b01064707a888d61adfe5f6d"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/api_auth.yml",
+      "sha256": "fed983926185c3134a9d8b12c4bb5754e1d2e91b68c90463335d20f26a8450e7"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/applications.yml",
+      "sha256": "dc28cea1f67928f753b58f13f8d95f4e9b0599152822c373cad80b5089e6c00a"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/apps_link.yml",
+      "sha256": "d68e60b53477cab61cefb04842a7313825613027411f27e9cab1a6a78293e44e"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/apps_store.yml",
+      "sha256": "5f3b5fb9f15d56b8c23f0898648b1c82b85aaf70902b0ac30d8867349960cd7c"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/att_handlers_errors.yml",
+      "sha256": "35b0f12823a0156385266c12efd1cde717c17aaede0e2108d3af3928e41fc24a"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/auth.yml",
+      "sha256": "e11b83fe74bcabe945a596a2f08728fa5fffca4bad97bad45cd25f8f7397cbe1"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/blacklists.yml",
+      "sha256": "71693558c3fde1cf4594e948214d641ed41df35f02ca8ccf5221d40836fd60c1"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/bulk.yml",
+      "sha256": "cee5490f98e0909bcc426e99d7aed96e6d02d80b6bedf98da1774078b6fa5c7f"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/call_inspector.yml",
+      "sha256": "3b6bafd7ec4442b1864fa85a3ea19d8e3fe5722b46d87198c873bc2d10a60e5d"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/call_reports.yml",
+      "sha256": "3997d7693781fbebda4fc4f7d76c3bd094bfd8e2217368d9a0769ab7fc6228dc"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/callflows.yml",
+      "sha256": "b58ae034d21078c5378d2168aa5bb154a46954e7bf598b3b7fe1b415249112ba"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/cccps.yml",
+      "sha256": "cd5cf59eb927d1cb5a8d53367221a3266a06ca14cac75287f78c763ff57b0de8"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/cdrs.yml",
+      "sha256": "aad02be77a727cda76970bb00936c3b5da4903c74760e60a18f5c1d354475db5"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/channels.yml",
+      "sha256": "99079dd9e639e76caff122ed41fa170fddb3e0a4cd89c059849714e2b0b04020"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/clicktocall.yml",
+      "sha256": "eebbcc4190fe25a25e769bb44fe6761c959350989c1959cf84b29644f8a3bcac"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/comments.yml",
+      "sha256": "cffed8ae9e73dbff65d276cf9ef85f47906b56c63536aa090b30f5b87c478f79"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/commland.yml",
+      "sha256": "5e554f9f3a17ea322a19911f02ff176e992912d48f6dfbb0e64ce9e6f32fc99c"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/conference_auth.yml",
+      "sha256": "e9b109f71961029d1e254759bcda3a4920f1dcee62718b9b3514b0b758d50eb7"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/conferences.yml",
+      "sha256": "f23657441997b515e66364fe05173bb54abcf3c9bcb0db904cd2ceb8a76de047"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/configs.yml",
+      "sha256": "3f8f9f0106fa0ba769ef9f9ee4ab1f254927c5940bc6d79d7821f8f1f748e49b"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/connectivity.yml",
+      "sha256": "5840a1377b40a68ca725368fdc1166f5b13084b94c7a04170f98e933f9c8f10a"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/contact_list.yml",
+      "sha256": "e6de4930c21e7c78e9c8a6289e3c03517f40b65a1c928b13579f2974fc26709b"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/devices.yml",
+      "sha256": "b78d853bdf5a9cf0eb91587eb55c3ea15b35791d80abc96ff5c397a4bc51ebc2"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/dialplans.yml",
+      "sha256": "8a8339b94d17ab016e233a1c542b83031fdd9e74866a9027a061c6d2de2a0152"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/directories.yml",
+      "sha256": "322bfc1591beada57d85e2b9ddd7b6dee25efd23b19e5c6ce3c1a4b192c98375"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/external_numbers.yml",
+      "sha256": "14be9138a5621c98f3301cc7d4531f70237576162230b2f57a927b1fdf030e73"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/faxboxes.yml",
+      "sha256": "fa21161b9520e5704918e15acaa22096221b9e3d91b52bc4333e7a35f56bad5d"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/faxes.yml",
+      "sha256": "4628511b6f5788555f77e4bf1ef25db89db17982d97ce9381cf6edcad62b0b60"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/functions.yml",
+      "sha256": "a4da17980d244eaa8a088014dd787179a2fc951841cf02054e8488bc920c4c51"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/getstream.yml",
+      "sha256": "61967b1c0e804d53714f553295930378b3ebd01d93f77b7f4858ce8be7bb3a62"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/groups.yml",
+      "sha256": "0372ca45e6e09f659b8b0eb5849d21b0f4e3df1a1a92ce22ab5cf4e4c54e6c9d"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/hotdesks.yml",
+      "sha256": "07dfc859e9a7efa20def2f9d86aec795d11792a579e022349f5492f31437f041"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/i18n.yml",
+      "sha256": "111c93b9781da1b941f53f32ba0fa0da65fe7b790760e9a34162f086e0981b76"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/ip_auth.yml",
+      "sha256": "1197c6784410e5c9b4aef5c6fae9fed0b11e283bd74f32d42da4c15f9e571080"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/ips.yml",
+      "sha256": "3ea1efdd7e18a471d711184b6f993462df399613842b85884c1d720047687500"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/ledgers.yml",
+      "sha256": "b8585d7921f85d9f9145529ccf4e8142cd4b184b15959f9b9f20923ff38a44dc"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/limits.yml",
+      "sha256": "f44c14d67f80b6f3489b16d6b5533114c907e0ef6eceacd555c66e67ad12bee6"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/lists.yml",
+      "sha256": "8e18ce28db607bee268a904d588012cdace7c0b4707ea2f636a71ec8e9c8a256"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/match_lists.yml",
+      "sha256": "51f1c7a3f00e0589ef4d4125ba6365859a0f93220f702cc168f89f1f73801456"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/media.yml",
+      "sha256": "0da8b603a3ef515cfe140e48e7fcdf24c09157685e007fef863713d005a018d4"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/menus.yml",
+      "sha256": "a8d5e2edc8b94c6a585feb5b72edb80a1a6230b96021300312336df4d001bb73"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/metaflows.yml",
+      "sha256": "e32d8ee682092392207f5b9ede84e9e2c5935b087c469c27c757248f24cd3669"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/migrations.yml",
+      "sha256": "17f51615d0e5f88f57108f4f88d925310ac5fe25f56db7b16d246a97ab2c8d49"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/mms.yml",
+      "sha256": "c775b0fcca26b83fab39406ebd9f26bb4c1e186b01a71571ca0157c34c9fad33"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/multi_factor.yml",
+      "sha256": "9e5d425627fab6570098e14b8968a2cea5a0681f1305241617f7aed4b62646aa"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/notifications.yml",
+      "sha256": "78796bc0c698bc24cc52c89a95617d311445ad75cc55a11d197e649e49412ac4"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/parked_calls.yml",
+      "sha256": "4ef7f1f433cde5682537075fa8ef3d95a62194d81a0906d66c6a2278b12c7729"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/phone_numbers.yml",
+      "sha256": "2fb9d21c3a159f93c18aeb02bc1657f1f3a46020f66fb200051176f0cfee626b"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/pivot.yml",
+      "sha256": "e647e9ec322c229b2fa78a82a903247b3a02a3a890b9121004f517908589b534"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/port_requests.yml",
+      "sha256": "c0d91815c7e80bd418887898e6c7ba4efc73ce96e5c72e40172fa28af9064dcf"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/presence.yml",
+      "sha256": "76d33f3bbd965a9c869c4dd55699f1d59fdc5e2538de9dfc03874a2269fe8993"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/pushes.yml",
+      "sha256": "1f70cb8af70b3b3594b66b1b5f6b9ca2b365cfa871336435e3e45f9cea9e6837"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/queues.yml",
+      "sha256": "4e7766c4f66f739e762343e481ea4b34fc23965742ec88d83d9d8ccfd15d0481"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/quickcall.yml",
+      "sha256": "f7a7684522ebe2814e0e272b3eda371b2950966c24f1b026a323c06a103c2bec"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/quickroutes.yml",
+      "sha256": "fdace1fcda3993cb16b1c519183dd831c22d9686a818d7a5d60063db84005732"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/rate_limits.yml",
+      "sha256": "3ccdf1e691d06f8ea15639ae6f5ce63b55fa15709c4e5d87f7917407e3d550fe"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/rates.yml",
+      "sha256": "34a1733a9417b4828463897cfbdf98ecd02b6785a063ec6a59dd4e159031c024"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/recordings.yml",
+      "sha256": "fa642048eefe844d9f341f1cfc71bd10391e9fc32ff7c55de5d4d287672fd8f0"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/registrations.yml",
+      "sha256": "13affefde75757256a7ed9275edd75e4c3c80417cb0549bd47c2364e95dba50f"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/resource_selectors.yml",
+      "sha256": "c91e62e58b1d3abf028a7f3762954db6d2b472bc49314a04bf6942bf64526d69"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/resource_templates.yml",
+      "sha256": "12abfd7aadf170a3a46c513988bec5ad5ebc5871734b8b6e3ecb5a1926a6b844"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/resources.yml",
+      "sha256": "6142b44ff8ca40127885d8272fcc81d9277bf54ece85aa7d32d9c5a09fe1682d"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/schemas.yml",
+      "sha256": "d9ee60b542e14950e737ba387005e5b8095658bc642a500562ab9c1f453188e9"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/scope_restrictions.yml",
+      "sha256": "6fc252e7b629caa36453a80a684afb84c86623a5649008a7008e1949c927307e"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/scopes.yml",
+      "sha256": "2686e050197a3fb6f51806635421c2b2eadf1dfcb1aafc673aebf33fe9325ea0"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/screenpops.yml",
+      "sha256": "0b31e65fe6ceda0c1de88f096a7cbb7d83559355a5d54e0739e8a2dec141359b"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/search.yml",
+      "sha256": "dd098f3588ba50d140d7d4236522f1dd1a5c1e101a0268b5adb6105c1ee8eddf"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/security.yml",
+      "sha256": "0adfa88c9e20291bf9d2fbf1a18f50c35738d43f4b34482945c8d0cf678d0492"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/services.yml",
+      "sha256": "1ed13d47745396712beae8b0d2cb15859917c61f33c922f5f3b61fafc2dda4cf"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/skels.yml",
+      "sha256": "3f83a978306aabd83cb40ca25170e3443c898a45d6cea296f4f901da8ccbf172"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/sms.yml",
+      "sha256": "d6278c9a60b8dfa82ba4e3a93c042af2bfbf9bce1c5f595e0f8331ecfd43c8e0"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/storage.yml",
+      "sha256": "cc98eb8587d4888774845f743ad65f428b6380cf49edc9735b74bbebde362d6f"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/sup.yml",
+      "sha256": "e0b2cfcfe2606fb728bab5c450a235f34a16950fcd1d59c38ed62a86dc3144fd"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/system_configs.yml",
+      "sha256": "03c1bbe741e1b1d492bdeb53a00dc64895546f42bc090f41ecdeca1b6eb2f12e"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/system_status.yml",
+      "sha256": "03857f304e84e24651b3c51e39fa4d05e5113d7a4656bfb264a562b471380f2c"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/tasks.yml",
+      "sha256": "ea43ce2b442c86e6f50a8371d7c70ecc8bc63f0e7d7607f9e17df476a8ea3aa0"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/temporal_rules_sets.yml",
+      "sha256": "963f7ccf2269966d157647d51fbd01d01aaaf379c44713c590f7c9794b4e1545"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/temporal_rules.yml",
+      "sha256": "c7ac68c1fb93e342c55fde4063e5fd2dd5124281c8a3081ff6ec23b523dcbd2c"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/token_auth.yml",
+      "sha256": "9aace5379efbeb186e2569d17af7e54150a19a1ad0f86165ec7e65d322420dcf"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/token_restrictions.yml",
+      "sha256": "bd6560f3dddc517dd5c0dbfd7fa3d28d64946abbe5c523cda4081a6809127e16"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/transactions.yml",
+      "sha256": "f3104836ee591b16db63ec79dd3ec7e5b57108028115f73d48141d5414b41fb1"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/user_auth.yml",
+      "sha256": "96373d179f61e86ee86b64587acc5e4d92ba1de7011f993291ae849e09d14948"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/users.yml",
+      "sha256": "b8b0916c67b1d869a83cf0d22eee588066e7299c4077d720c28ed9ae36ab1374"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/vmboxes.yml",
+      "sha256": "a6a6c92493599203b7fcb812b0d813c340d96e727f59622027ef4e9f2672bace"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/webhooks.yml",
+      "sha256": "76eb498327f2884930ff76e2ad49771d2804214420be74a5228dd24cf033398c"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/websites.yml",
+      "sha256": "7d356964589f3792298447c23fd5ffaf120544e1e1738516c94dca9148add500"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/websockets.yml",
+      "sha256": "e52029fd6fbb8f4143f2dfd9db86dace0e3fa94d2080fbcba06dfc3b3ee57d4d"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/whitelabel.yml",
+      "sha256": "c9db5505bf5ad096800ddd02d8aeec3fb45e9b2d2345f36ae79d847fa90e4a7b"
+    },
+    {
+      "file": "applications/crossbar/priv/oas3/paths/wordle.yml",
+      "sha256": "198d929636ef3dec83dfb35910ca59e9cb811205975ad7f37d0b9dac5be35546"
+    },
+    {
+      "file": "applications/crossbar/src/cb_channel_monitor.erl",
+      "sha256": "0289551f6bdd97086d8ccdf8ea9d104ae268289069fcd692a822995e184cc0a2"
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_channels.erl",
+      "sha256": "7b101ee785c7ed56517291cd4aacea87835064d05a67c12869a442a04d23bec9"
+    },
+    {
+      "file": "scripts/api-docs-overlays.cjs",
+      "sha256": "021edd0e1c0d2d34424e5c4ea9c739fab6a897e86df4c7d85688919457f61fae"
+    },
+    {
+      "file": "scripts/api-docs-queue-editor.cjs",
+      "sha256": "a0dd1e5771259e8c9f5ad16b2fee4254604aed8a2a775698d5be786b3c102479"
+    },
+    {
+      "file": "scripts/api-docs-tooling/package-lock.json",
+      "sha256": "3598d387a6860410e36255d1d5fcd7af5618292e3869e3a546fe0c4b583778cc"
+    },
+    {
+      "file": "scripts/api-docs-tooling/package.json",
+      "sha256": "ddfedc18a0b3b2121e2574c2fd2d48dc69390971e034429b5a3678e5e3d4dc7f"
+    },
+    {
+      "file": "scripts/build-api-docs.cjs",
+      "sha256": "bd2c48c5ed1825720a62b95bcc7ac9dbf5953e153832eda931c3429e50223e3c"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+diff --git a/kazoo_amqp/src/api/kapi_dialplan.erl b/kazoo_amqp/src/api/kapi_dialplan.erl
+index c28c357..0efaeab 100644
+--- a/kazoo_amqp/src/api/kapi_dialplan.erl
++++ b/kazoo_amqp/src/api/kapi_dialplan.erl
+@@ -1148,6 +1148,7 @@ play_definition() ->
+                                                             ,<<"Leg">>
+                                                             ,<<"Loop-Count">>
+                                                             ,<<"Playback-Timeout">>
++                                                            ,<<"Playback-Timeout-Ms">>
+                                                             ,<<"Terminators">>
+                                                             ,<<"Voice">>
+                                                             ]}
+@@ -1161,6 +1162,7 @@ play_definition() ->
+               ,{fun kapi_definition:set_types/2
+                ,[{<<"Endless-Playback">>, fun kz_term:is_boolean/1}
+                 ,{<<"Loop-Count">>, fun kz_term:is_pos_integer/1}
++                ,{<<"Playback-Timeout-Ms">>, fun(V) -> is_integer(V) andalso V >= 1 andalso V =< 60000 end}
+                 ,{<<"Terminators">>, ?IS_TERMINATOR}
+                 ]
+                }
+@@ -2901,8 +2903,21 @@ play(Req) ->
+     kapi_definition:build_message(Req, play_definition()).
+ 
+ -spec play_v(kz_term:api_terms()) -> boolean().
++play_v(Req) when is_list(Req) -> play_v(kz_json:from_list(Req));
+ play_v(Req) ->
+-    kapi_definition:validate(Req, play_definition()).
++    kapi_definition:validate(Req, play_definition())
++        andalso play_file_timeout_v(Req).
++
++%% The millisecond cap applies to one file handle and never changes channel
++%% variables. Mixing it with global timeouts or repeated playback is ambiguous.
++-spec play_file_timeout_v(kz_json:object()) -> boolean().
++play_file_timeout_v(Req) ->
++    case kz_json:get_value(<<"Playback-Timeout-Ms">>, Req) of
++        'undefined' -> 'true';
++        _ -> kz_json:get_value(<<"Playback-Timeout">>, Req) =:= 'undefined'
++            andalso kz_json:get_value(<<"Loop-Count">>, Req) =:= 'undefined'
++            andalso not kz_json:is_true(<<"Endless-Playback">>, Req, 'false')
++    end.
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Moves to the next step in callflow.

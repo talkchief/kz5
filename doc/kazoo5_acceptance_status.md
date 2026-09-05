@@ -1,9 +1,74 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-05 16:20 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-05 21:08 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
 
-## Latest callback retry result (16:20 UTC)
+## Unified editor and browser checkpoint — 20:59–21:02 UTC
+
+The account-scoped editor backend and compiled Monster ACDC component are now
+deployed. The real browser test passed with one editor GET, zero separate catalog
+requests, zero JavaScript errors, zero HTTP failures, and all API traffic on the
+same HTTP origin. The independent callback-announcement enable/delay/interval
+controls passed serialization and validation checks; custom recording selectors
+are hidden and existing selections are preserved internally.
+
+The isolated live API run `queue-editor-live.pkUEWo` passed create, edit, identical
+create/edit replay, changed-body idempotency rejection, stale queue revision
+rejection, fresh GET, managed-route removal and exact-CAS queue cleanup. No users
+or agent memberships changed. Three completed operation receipts and one released
+extension claim remain as normal audit records. The test queue and route are no
+longer API-visible. No new error-priority journal entries or crash-log growth was
+observed in the checked window. Restricted-token and cross-node authorization
+tests, roster writes and ambiguous partial-write recovery still need live coverage.
+
+The repair preserved strict tenant checks: the Couchbeam query needed the atom
+`include_docs`, not the silently ignored tuple. The backend now handles the
+explicit legacy English media manifest without claiming other languages ready.
+Twenty-six offline editor groups and the real client query-parser checks passed.
+Protected UI rollback: `monster-acdc-editor-deploy.9OwDJL`; latest helper rollback:
+`queue-editor-catalog-fix.QHBPZD`, both under the installer build directory.
+
+Gemini fixed clips are imported but default activation remains in progress.
+HTTPS remains unavailable pending the missing matching private key or replacement
+certificate authorization. HTTP browser/API success does not establish TLS.
+
+## Latest callback retry result — clean isolated repeat (20:17 UTC)
+
+A subsequent run, `20260905T210254Z`, also exited zero after the accepted-success
+loop follow-up: digit 6 at 4.989387 seconds, full confirmation before BYE, first
+return unanswered for 15.099118 seconds, then a confirmed/bridged retry after
+17.980275 seconds. Both audio directions progressed; log errors were 0/0 and
+new cores 0. Service PIDs/restart counters remained unchanged. This still proves
+legacy English audio, not the pending Gemini default switch. See
+[the follow-up details](callback_controls_deployment.md#accepted-success-follow-up--approximately-2030-utc).
+
+Run `20260905T201353Z` exited **0**, after the dispatcher/authentication repairs
+and callback control-lifecycle update. The requested one-agent scenario passed:
+digit 6 at 4.996163 seconds, the full 6.124-second installed confirmation before
+server hangup (zero missing samples, correlation 0.999991), a deliberately
+unanswered first attempt lasting 15.752454 seconds, durable `retry_wait`, and
+an answered/confirmed second attempt with a reciprocal native bridge. The next
+INVITE arrived 17.750068 seconds after first-attempt cancellation, consistent
+with the configured 15-second minimum backoff and measured scheduling overhead.
+There were 4,916 progressing PCMU packets in each agent direction. The busy call
+was released 5.974260 seconds after confirmation: the explicit two-second wait
+plus evidence-processing overhead, not exactly two seconds.
+
+The strict log gate recorded zero journal/file error matches and no new core
+dumps. Checked service PIDs/restart counters remained unchanged during the call
+run; cleanup exited zero and native FreeSWITCH calls returned to zero. Apps and
+ecallmgr crash-log sizes/timestamps were unchanged. Protected evidence is under
+`/var/log/kazoo-acceptance/20260905T201353Z`.
+
+This is the isolated local test, not the user's MicroSIP/PSTN route, cross-node
+failover, a sustained-load test or full fixture cleanup. An older unresolved
+callback document is deliberately retained pending positive reconciliation.
+The independent callback-offer scheduler also passed its 19:35 UTC timing/audio
+test. The browser/editor checkpoint above supersedes their earlier deployment
+gap; complete voice activation, HTTPS key availability and other unchecked tasks
+remain open.
+
+## Earlier callback retry result (16:20 UTC)
 
 The requested one-agent busy-call/callback/retry scenario passes its strict
 live functional and packet gates in run `20260905T161308Z`: entry digit at

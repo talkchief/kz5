@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "swagger_ui": {
+    "version": "5.32.15",
+    "license": "Apache-2.0",
+    "package": "swagger-ui-dist",
+    "lock_file": "scripts/api-docs-tooling/package-lock.json"
+  },
+  "files": [
+    {
+      "file": "coverage.json",
+      "bytes": 125575,
+      "sha256": "39b35f707a7cdf5822fee271fe536878051e2eda0ec89e4dc021c3d5f2b2608d"
+    },
+    {
+      "file": "index.html",
+      "bytes": 1388,
+      "sha256": "e2dd415a249a31f91b63424d258a339bcc8bbf988c44acfa29d6335d744f8b00"
+    },
+    {
+      "file": "openapi.json",
+      "bytes": 1595035,
+      "sha256": "c305d10da49fd30c6a3c507571557ef5b6bdf36b6047430f564fbdf853b14101"
+    },
+    {
+      "file": "planned.openapi.json",
+      "bytes": 2231,
+      "sha256": "b4efc3430023b5d5562d8d1580c8f2969c1015bf3eefc78165394046754182b6"
+    },
+    {
+      "file": "portal.css",
+      "bytes": 714,
+      "sha256": "5332df7e98cbe5e883ed8705c5bf9a970569a9bd06febe0c717a8e8cb6b056f0"
+    },
+    {
+      "file": "portal.js",
+      "bytes": 2466,
+      "sha256": "91eec91476cee37209d704a994ba96485c6170d582aa646513acbc3048008390"
+    },
+    {
+      "file": "vendor/LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "vendor/NOTICE",
+      "bytes": 55,
+      "sha256": "0d20d1adef18aee3f40dd258172155521ce702ac445cb5f7b7d60ed32dad2fb2"
+    },
+    {
+      "file": "vendor/swagger-ui-bundle.js",
+      "bytes": 1552209,
+      "sha256": "a7e344f2770b2f07527ce828e0951626983b8f2dcdb7a826689c0232023f995b"
+    },
+    {
+      "file": "vendor/swagger-ui.css",
+      "bytes": 185784,
+      "sha256": "d7f39f764aa18c7b47dd05b9af5613e373e4ac0f3557c2693d52d0abc2464d76"
+    }
+  ]
+}

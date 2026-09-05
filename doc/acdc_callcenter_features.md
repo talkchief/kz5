@@ -59,6 +59,52 @@ call acceptance; the user's desired languages are still being requested.
 
 ## Virtual callback requirements
 
+### Queue editor and keypad behavior
+
+In Monster UI, open **Call Center → Queues → Edit**. The **Virtual callback**
+section controls enablement, entry digit, callback user, attempts, and retry delay.
+The separate **Callback announcement** controls use:
+
+- `callback.announcement.enabled`: default `true`, effective only when callback
+  registration itself is enabled. Turning this off leaves the entry key active.
+- `callback.announcement.initial_delay`: seconds before the first offer,
+  default 30, range 1–3600.
+- `callback.announcement.interval`: seconds between offer scheduling, default
+  60, range 15–3600.
+
+`announcements.initial_delay` and `announcements.interval` remain exclusive to
+position/wait announcements. A single worker maintains independent monotonic
+deadlines and combines prompts due together into one playlist. Audio already
+queued may affect the exact audible start; these settings do not interrupt an
+existing prompt to force an exact wall-clock start. Missed intervals do not
+produce catch-up bursts. The worker is stopped during callback menus, queue
+exit and connection; resuming the waiting caller starts both delays again.
+Older queues without the new object use the new 30/60-second defaults once this
+backend is deployed. The previous unconditional queue-entry offer is removed.
+
+Source and private timer/browser tests do not establish live deployment or
+received-audio timing. Record that acceptance separately before calling the
+controls operational.
+
+With entry digit 6, the normal flow is **6 → audible menu → 1 to confirm the
+current caller-ID number → durable registration → success audio → hang-up**.
+An alphabetic SIP username is not a valid numeric callback destination. If
+alternate-number entry is disabled, it cannot be registered as a return number.
+Allowing alternate entry does not provision outbound caller ID or a carrier route.
+
+The simplified editor removes the ten individual announcement/callback recording
+selectors. Choose a supported installed language instead (EN, HE, AR, FR, ES);
+unready packs remain disabled. Hold music and pre-connect media remain separate.
+Existing custom overrides are preserved on unrelated saves and shown with a
+warning; removing selectors does not delete recordings or clear those overrides.
+Fresh queues use standard prompt IDs, including when older values are empty.
+The API still accepts explicit overrides and retains its validation requirements.
+
+`scripts/test-monster-acdc-language-only.cjs` checks real browser form validity
+and serialization with no API writes. A standalone component also carries its
+own `VERSION` file, matching `metadata/app.json`; that is the app version, not
+the Kazoo server version.
+
 The required flow is: an announcement offers a keypad callback option; the
 caller confirms the return number, hangs up, retains queue priority/position,
 and is called back when eligible. The return call requires keypad confirmation

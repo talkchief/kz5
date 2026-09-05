@@ -30,6 +30,10 @@ define(function(require) {
 		},
 
 		requests: {
+			'acdc.editor.new': { url: 'accounts/{accountId}/queues/editor', verb: 'GET', generateError: false },
+			'acdc.editor.get': { url: 'accounts/{accountId}/queues/{queueId}/editor', verb: 'GET', generateError: false },
+			'acdc.editor.create': { url: 'accounts/{accountId}/queues/editor', verb: 'PUT', generateError: false },
+			'acdc.editor.update': { url: 'accounts/{accountId}/queues/{queueId}/editor', verb: 'PATCH', generateError: false },
 			'acdc.media.list': { url: 'accounts/{accountId}/media?paginate=false', verb: 'GET', generateError: false },
 			'acdc.media.system': { url: 'media?paginate=false', verb: 'GET', generateError: false },
 			'acdc.media.prompt': { url: 'media/prompts/{promptId}?paginate=false', verb: 'GET', generateError: false },
@@ -1096,38 +1100,21 @@ define(function(require) {
 			});
 		},
 
-		renderQueueForm: function(queueId) {
+		renderQueueForm: function(queueId, draft, preloaded) {
 			var self = this,
 				generation = ++self.appFlags.acdc.requestGeneration,
 				accountId = self.accountId,
-				requests = {
-					users: { resource: 'acdc.users.list', completeList: true },
-					media: { resource: 'acdc.media.list', completeList: true },
-					systemMedia: { resource: 'acdc.media.system', completeList: true },
-					numbers: { resource: 'acdc.numbers.list', ownedNumbers: true }
-				},
+				editorRevisions,
 				baseErrors,
 				baseResults,
 				inventoryError,
 				inventory,
 				languageCapabilities,
 				languageCapabilitiesError,
-				pending = 3,
+				pending = 1,
 				finish;
 
 			self.renderLoading(self.i18n.active().acdc.states.loadingQueue);
-			if (queueId) {
-				requests.queue = {
-					resource: 'acdc.queues.get',
-					data: { queueId: queueId }
-				};
-				requests.roster = {
-					resource: 'acdc.queues.roster',
-					completeList: true,
-					data: { queueId: queueId }
-				};
-			}
-
 			finish = function() {
 				var errors,
 					results,
@@ -1154,7 +1141,9 @@ define(function(require) {
 				results.languageCapabilities = languageCapabilities;
 				if (languageCapabilitiesError) { errors.languageCapabilities = languageCapabilitiesError; }
 				queue = self.normalizeQueueCallback(_.merge(self.defaultQueue(), results.queue || {}));
+				if (draft) { queue = _.merge(self.defaultQueue(), self.mergeEditorDraft(queue, draft.queue)); }
 				roster = results.roster || queue.agents || [];
+				if (draft && draft.roster !== null) { roster = draft.roster; }
 				rosterState = self.rosterInventoryState(results.users || [], roster, errors.roster);
 				rosterReadOnly = Boolean(queueId && rosterState.readOnly);
 				roster = _.isArray(roster) ? roster : [];
@@ -1177,7 +1166,7 @@ define(function(require) {
 
 				if (errors.users || errors.queue) {
 					self.renderError(errors.users || errors.queue, function() {
-						self.renderQueueForm(queueId);
+						self.renderQueueForm(queueId, draft);
 					});
 					return;
 				}
@@ -1197,10 +1186,11 @@ define(function(require) {
 						queue: queue,
 						queueId: queueId,
 						isEdit: Boolean(queueId),
+						legacyPromptOverrides: self.hasLegacyPromptOverrides(queue),
 						users: users,
 						rosterWarning: rosterState.warning,
 						rosterReadOnly: rosterReadOnly,
-						routeExtension: _.get(ownedRoute, 'numbers[0]', ''),
+						routeExtension: draft && draft.route !== null ? draft.route.extension : _.get(ownedRoute, 'numbers[0]', ''),
 						routeWarning: Boolean(inventoryError || ownedRoutes.length > 1),
 						routeReadOnly: routeReadOnly,
 						externalExtensions: _.chain(externalRoutes)
@@ -1217,32 +1207,60 @@ define(function(require) {
 				view.data('route-read-only', routeReadOnly);
 				view.data('callflow-summaries', _.get(inventory, 'summaries', []));
 				view.data('owned-route', ownedRoute);
+				view.data('editor-revisions', editorRevisions);
 				self.populateQueueDropdowns(view, queue, results, errors, Boolean(queueId));
 				self.renderAgentOrder(view, queue.agent_order || []);
 				self.bindQueueForm(view, queueId, generation, accountId);
 				self.getContentContainer().empty().append(view);
+				if (draft) { self.showFormError(view, 'Saved state reloaded. Your unsaved entries were retained; review them before saving again.'); }
 			};
 
-			self.requestMany(requests, function(errors, results) {
-				baseErrors = errors;
-				baseResults = results;
-				if (errors.systemMedia) { finish(); return; }
-				self.verifySystemMedia(results.systemMedia || [], function(error, media) {
-					if (error) { baseErrors.systemMedia = error; }
-					baseResults.verifiedSystemMedia = media || [];
-					finish();
-				});
-			});
-			self.loadAcdcCallflowInventory(function(error, result) {
-				inventoryError = error;
-				inventory = result;
+			var receive = function(error, result) {
+				var state = self.queueEditorState(result, error);
+
+				baseErrors = state.errors;
+				baseResults = state.results;
+				inventory = _.get(result, 'callflows');
+				inventoryError = state.errors.callflows;
+				languageCapabilities = _.get(result, 'language_capabilities');
+				languageCapabilitiesError = state.errors.systemMedia;
+				editorRevisions = _.get(result, 'revisions');
 				finish();
+			};
+			if (preloaded) { receive(null, preloaded); }
+			else { self.request(queueId ? 'acdc.editor.get' : 'acdc.editor.new', queueId ? { queueId: queueId } : {}, receive); }
+		},
+
+		queueEditorState: function(data, loadError) {
+			var errors = {}, results = {}, unavailable = loadError || 'The complete queue editor data is unavailable. Reload before making changes.';
+
+			if (loadError || !_.isPlainObject(data) || !_.isPlainObject(data.queue) || !_.isArray(data.roster)
+				|| !_.isPlainObject(data.revisions) || !_.isPlainObject(data.revisions.users)
+				|| !_.isPlainObject(data.revisions.callflows) || !_.has(data.revisions, 'queue')) {
+				return { errors: { queue: unavailable, users: unavailable }, results: {} };
+			}
+			_.each({ users: 'users', media: 'media', numbers: 'numbers', system_media: 'systemMedia', callflows: 'callflows' }, function(target, source) {
+				if (_.get(data, ['catalogs', source, 'complete']) !== true
+					|| (source === 'callflows' ? !_.isArray(_.get(data, 'callflows.summaries')) || !_.isArray(_.get(data, 'callflows.routes')) : !_.isArray(data[source]))) {
+					errors[target] = unavailable + ' (' + source + ': ' + _.get(data, ['catalogs', source, 'reason'], 'invalid') + ')';
+				}
 			});
-			self.loadLanguageCapabilities(function(error, result) {
-				languageCapabilitiesError = error;
-				languageCapabilities = result;
-				finish();
+			results = { queue: data.queue, roster: data.roster, users: data.users, media: data.media,
+				numbers: data.numbers, verifiedSystemMedia: data.system_media };
+			if (errors.users) { errors.roster = errors.users; }
+			return { errors: errors, results: results };
+		},
+
+		mergeEditorDraft: function(current, patch) {
+			var self = this, merged = _.cloneDeep(current);
+
+			_.each(patch, function(value, key) {
+				if (value === null) { delete merged[key]; }
+				else if (_.isPlainObject(value)) {
+					merged[key] = self.mergeEditorDraft(_.isPlainObject(merged[key]) ? merged[key] : {}, value);
+				} else { merged[key] = _.cloneDeep(value); }
 			});
+			return merged;
 		},
 
 		defaultQueue: function() {
@@ -1273,6 +1291,11 @@ define(function(require) {
 				},
 				callback: {
 					enabled: false,
+					announcement: {
+						enabled: true,
+						initial_delay: 30,
+						interval: 60
+					},
 					entry_key: '6',
 					allow_alternate_number: false,
 					use_local_resources: false,
@@ -1314,6 +1337,16 @@ define(function(require) {
 			return queue;
 		},
 
+		hasLegacyPromptOverrides: function(queue) {
+			var defaults = this.defaultQueue().announcements.media;
+
+			return _.some(defaults, function(value, key) {
+				var current = _.get(queue, 'announcements.media.' + key);
+
+				return Boolean(current && current !== value);
+			}) || _.some(_.get(queue, 'callback.media', {}), function(value) { return Boolean(value); });
+		},
+
 		bindQueueForm: function(view, queueId, generation, accountId) {
 			var self = this,
 				form = view.find('.acdc-queue-form'),
@@ -1338,7 +1371,7 @@ define(function(require) {
 				self.renderAgentOrder(view, order);
 			});
 			self.syncCallbackForm(form);
-			form.find('[name="callback.enabled"], [name="callback.caller_id_source"]').on('change', function() {
+			form.find('[name="callback.enabled"], [name="callback.caller_id_source"], [name="callback.announcement.enabled"]').on('change', function() {
 				self.syncCallbackForm(form);
 			});
 			form.find('[name="callback.outbound_authority.id"]').on('change', function() {
@@ -1398,11 +1431,13 @@ define(function(require) {
 
 		syncCallbackForm: function(form) {
 			var enabled = form.find('[name="callback.enabled"]').is(':checked'),
+				announcementEnabled = form.find('[name="callback.announcement.enabled"]').is(':checked'),
 				custom = form.find('[name="callback.caller_id_source"]').val() === 'custom',
 				inherit = form.find('[name="callback.caller_id_source"]').val() === 'inherit';
 
 			form.find('.acdc-callback-required').prop('required', enabled);
 			form.find('.acdc-callback-number').prop('required', enabled && custom);
+			form.find('.acdc-callback-announcement-timing').prop('disabled', !enabled || !announcementEnabled);
 			form.find('.acdc-caller-number-row').toggleClass('hidden', inherit);
 			form.find('.acdc-callback-settings').toggleClass('acdc-disabled-section', !enabled);
 		},
@@ -1445,7 +1480,14 @@ define(function(require) {
 		},
 
 		serializeQueue: function(form, isEdit) {
-			var integerValue = function(name) {
+			var announcementDefaults = this.defaultQueue().announcements.media,
+				announcementMedia = function(key) {
+					// The queue schema requires all four media keys. An empty legacy
+					// value means the backend's standard prompt, not empty audio.
+					return $.trim(form.find('[name="announcements.media.' + key + '"]').val())
+						|| announcementDefaults[key];
+				},
+				integerValue = function(name) {
 					return parseInt(form.find('[name="' + name + '"]').val(), 10) || 0;
 				},
 				optionalMedia = function(name) {
@@ -1461,6 +1503,9 @@ define(function(require) {
 				callerIdSource = form.find('[name="callback.caller_id_source"]').val(),
 				callbackConfig = {
 					enabled: form.find('[name="callback.enabled"]').is(':checked'),
+					announcement: {
+						enabled: form.find('[name="callback.announcement.enabled"]').is(':checked')
+					},
 					entry_key: form.find('[name="callback.entry_key"]').val(),
 					allow_alternate_number: form.find('[name="callback.allow_alternate_number"]').is(':checked'),
 					use_local_resources: form.find('[name="callback.use_local_resources"]').is(':checked'),
@@ -1491,10 +1536,10 @@ define(function(require) {
 						position_announcements_enabled: form.find('[name="announcements.position_announcements_enabled"]').is(':checked'),
 						wait_time_announcements_enabled: form.find('[name="announcements.wait_time_announcements_enabled"]').is(':checked'),
 						media: {
-							you_are_at_position: $.trim(form.find('[name="announcements.media.you_are_at_position"]').val()),
-							in_the_queue: $.trim(form.find('[name="announcements.media.in_the_queue"]').val()),
-							the_estimated_wait_time_is: $.trim(form.find('[name="announcements.media.the_estimated_wait_time_is"]').val()),
-							increase_in_call_volume: $.trim(form.find('[name="announcements.media.increase_in_call_volume"]').val())
+							you_are_at_position: announcementMedia('you_are_at_position'),
+							in_the_queue: announcementMedia('in_the_queue'),
+							the_estimated_wait_time_is: announcementMedia('the_estimated_wait_time_is'),
+							increase_in_call_volume: announcementMedia('increase_in_call_volume')
 						}
 					},
 					callback: callbackConfig
@@ -1503,6 +1548,12 @@ define(function(require) {
 				announce = optionalMedia('announce'),
 				announcementLanguage = optionalMedia('announcements.language');
 
+			if (callbackConfig.enabled && callbackConfig.announcement.enabled) {
+				callbackConfig.announcement.initial_delay = integerValue('callback.announcement.initial_delay');
+				callbackConfig.announcement.interval = integerValue('callback.announcement.interval');
+			}
+			// Disabled timing fields are omitted so PATCH preserves the stored
+			// schedule; schema defaults supply a new queue's 30/60 second timing.
 			_.each(callbackMediaKeys, function(key) {
 				var value = optionalMedia('callback.media.' + key);
 
@@ -1564,50 +1615,86 @@ define(function(require) {
 
 		saveQueue: function(queueId, payload, agentIds, routeExtension, view, generation, accountId) {
 			var self = this,
-				resource = self.queueWriteResource(queueId),
-				data = { data: payload };
+				body = { queue: payload, roster: agentIds, route: routeExtension === null ? null : { extension: routeExtension },
+					revisions: view.data('editor-revisions') },
+				fingerprint = JSON.stringify(body), pending = view.data('editor-pending'), data;
 
-			if (queueId) {
-				data.queueId = queueId;
+			if (!_.isPlainObject(body.revisions)) {
+				self.showFormError(view, 'A complete revision snapshot is required. Reload the queue editor before saving.');
+				return;
 			}
+			if (pending && pending.fingerprint !== fingerprint) {
+				self.showFormError(view, 'The previous save outcome must be resolved first. Retry that request or reload saved state using the recovery button; your entries remain in this form.');
+				return;
+			}
+			if (!pending) {
+				body.request_id = self.newEditorRequestId();
+				pending = { fingerprint: fingerprint, body: body };
+				view.data('editor-pending', pending);
+			}
+			data = { data: pending.body };
+			if (queueId) { data.queueId = queueId; }
 			self.setFormBusy(view, true);
-			self.request(resource, data, function(error, queue) {
-				var savedId;
+			self.requestQueueEditor(queueId ? 'acdc.editor.update' : 'acdc.editor.create', data, function(error, result) {
+				var operation, savedId;
 
 				if (!self.isCurrentView(generation, 'queues', accountId)) {
 					return;
 				}
-
+				self.setFormBusy(view, false);
 				if (error) {
-					self.setFormBusy(view, false);
-					self.showFormError(view, error);
+					operation = _.get(error, 'data', {});
+					savedId = queueId || (/^[a-f0-9]{32}$/.test(operation.queue_id || '') ? operation.queue_id : null);
+					self.showFormError(view, 'Save was not finalized. ' + self.formatApiError(error)
+						+ (operation.phase ? ' Stopped at: ' + operation.phase + '. Some changes may already be saved.' : '')
+						+ ' Your entries are retained. No rollback or automatic retry was performed.');
+					view.find('.acdc-editor-recovery').remove();
+					$('<button>').attr('type', 'button').addClass('monster-button-secondary acdc-editor-recovery')
+						.text(savedId ? 'Reload saved state and keep my edits' : 'Retry the identical save safely')
+						.on('click', function() {
+							if (savedId) {
+								var currentForm = view.find('.acdc-queue-form'), draft = { queue: self.serializeQueue(currentForm, true),
+									roster: view.data('roster-read-only') ? null : view.find('.acdc-roster').val() || [],
+									route: view.data('route-read-only') ? null : { extension: $.trim(currentForm.find('[name="route_extension"]').val()) } };
+
+								// A lost create reply may name a queue that never committed.
+								// Prove the replacement editor can load before removing this
+								// form or changing its request generation.
+								self.request('acdc.editor.get', { queueId: savedId }, function(loadError, snapshot) {
+									if (!self.isCurrentView(generation, 'queues', accountId)) { return; }
+									var state = self.queueEditorState(snapshot, loadError);
+
+									if (state.errors.queue || state.errors.users) {
+										self.showFormError(view, 'Saved state could not be verified. Your current entries are still here. ' + (state.errors.queue || state.errors.users));
+										return;
+									}
+									self.renderQueueForm(savedId, draft, snapshot);
+								});
+							} else { self.saveQueue(queueId, payload, agentIds, routeExtension, view, generation, accountId); }
+						}).insertAfter(view.find('.acdc-form-error'));
 					return;
 				}
-
-				savedId = self.rememberSavedQueueId(view, queueId, queue);
-				if (!savedId) {
-					self.setFormBusy(view, false);
+				if (!result || result.state !== 'complete' || !/^[a-f0-9]{32}$/.test(result.queue_id || '')) {
 					self.showFormError(view, self.i18n.active().acdc.queues.savedMissingId);
 					return;
 				}
-				if (agentIds === null) {
-					self.finishQueueSave(savedId, payload.name, routeExtension, true, view, generation, accountId);
-					return;
-				}
-				self.request('acdc.queues.updateRoster', {
-					queueId: savedId,
-					data: agentIds
-				}, function(rosterError) {
-					if (!self.isCurrentView(generation, 'queues', accountId)) {
-						return;
-					}
-					if (rosterError) {
-						self.setFormBusy(view, false);
-						self.showFormError(view, self.i18n.active().acdc.queues.savedRosterFailed + ' ' + rosterError);
-						return;
-					}
-					self.finishQueueSave(savedId, payload.name, routeExtension, false, view, generation, accountId);
-				});
+				view.removeData('editor-pending');
+				self.toastSuccess(self.i18n.active().acdc.queues.saved);
+				self.renderQueues();
+			});
+		},
+
+		newEditorRequestId: function() {
+			var bytes = new Uint8Array(16);
+
+			window.crypto.getRandomValues(bytes);
+			return Array.prototype.map.call(bytes, function(value) { return ('0' + value.toString(16)).slice(-2); }).join('');
+		},
+
+		requestQueueEditor: function(resource, data, callback) {
+			monster.request({ resource: resource, data: _.merge({ accountId: this.accountId }, data),
+				success: function(response) { callback(null, response && response.data); },
+				error: function(response) { callback(response || { message: 'Queue editor request failed' }); }
 			});
 		},
 
@@ -1720,6 +1807,7 @@ define(function(require) {
 				view.find('.acdc-route-extension').prop('disabled', true);
 			}
 			if (!busy) {
+				this.syncCallbackForm(view.find('.acdc-queue-form'));
 				view.find('.acdc-catalog-readonly').prop('disabled', true);
 			}
 			view.find('.acdc-save-spinner').toggle(busy);

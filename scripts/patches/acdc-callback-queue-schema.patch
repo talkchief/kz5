@@ -16,13 +16,38 @@ index 52be2769..3a57baaf 100644
                  "media": {
                      "description": "Custom prompts to be played for the announcements",
                      "properties": {
-@@ -67,6 +74,180 @@
+@@ -67,6 +74,205 @@
              },
              "type": "object"
          },
 +        "callback": {
 +            "description": "Authenticated virtual callback configuration. Registrations are created only by a live queue member flow.",
 +            "properties": {
++                "announcement": {
++                    "description": "Independent schedule for announcing the callback option while waiting. Disabling this announcement does not disable callback registration with entry_key.",
++                    "properties": {
++                        "enabled": {
++                            "default": true,
++                            "description": "Announce the callback option when virtual callback is enabled",
++                            "type": "boolean"
++                        },
++                        "initial_delay": {
++                            "default": 30,
++                            "description": "Seconds before the first callback option announcement, independent of position and estimated-wait announcements",
++                            "maximum": 3600,
++                            "minimum": 1,
++                            "type": "integer"
++                        },
++                        "interval": {
++                            "default": 60,
++                            "description": "Seconds between callback option announcements, independent of position and estimated-wait announcements",
++                            "maximum": 3600,
++                            "minimum": 15,
++                            "type": "integer"
++                        }
++                    },
++                    "type": "object"
++                },
 +                "allow_alternate_number": {
 +                    "default": false,
 +                    "description": "Allow a caller to enter and explicitly reconfirm a return number other than the current caller ID",

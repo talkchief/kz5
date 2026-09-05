@@ -1,5 +1,5 @@
 diff --git a/priv/couchdb/schemas/queues.json b/priv/couchdb/schemas/queues.json
-index 52be2769..d8ac3223 100644
+index 52be2769..4cbcdc3b 100644
 --- a/priv/couchdb/schemas/queues.json
 +++ b/priv/couchdb/schemas/queues.json
 @@ -22,12 +22,26 @@
@@ -29,13 +29,38 @@ index 52be2769..d8ac3223 100644
                  "media": {
                      "description": "Custom prompts to be played for the announcements",
                      "properties": {
-@@ -67,6 +81,187 @@
+@@ -67,6 +81,212 @@
              },
              "type": "object"
          },
 +        "callback": {
 +            "description": "Authenticated virtual callback configuration. Registrations are created only by a live queue member flow.",
 +            "properties": {
++                "announcement": {
++                    "description": "Independent schedule for announcing the callback option while waiting. Disabling this announcement does not disable callback registration with entry_key.",
++                    "properties": {
++                        "enabled": {
++                            "default": true,
++                            "description": "Announce the callback option when virtual callback is enabled",
++                            "type": "boolean"
++                        },
++                        "initial_delay": {
++                            "default": 30,
++                            "description": "Seconds before the first callback option announcement, independent of position and estimated-wait announcements",
++                            "maximum": 3600,
++                            "minimum": 1,
++                            "type": "integer"
++                        },
++                        "interval": {
++                            "default": 60,
++                            "description": "Seconds between callback option announcements, independent of position and estimated-wait announcements",
++                            "maximum": 3600,
++                            "minimum": 15,
++                            "type": "integer"
++                        }
++                    },
++                    "type": "object"
++                },
 +                "allow_alternate_number": {
 +                    "default": false,
 +                    "description": "Allow a caller to enter and explicitly reconfirm a return number other than the current caller ID",
@@ -217,7 +242,7 @@ index 52be2769..d8ac3223 100644
          "caller_exit_key": {
              "default": "#",
              "description": "Key caller can press while on hold to exit the queue and continue in the callflow",
-@@ -137,7 +332,7 @@
+@@ -137,7 +357,7 @@
          },
          "ring_simultaneously": {
              "default": 1,
@@ -226,7 +251,7 @@ index 52be2769..d8ac3223 100644
              "minimum": 1,
              "type": "integer"
          },
-@@ -147,9 +342,21 @@
+@@ -147,9 +367,21 @@
              "enum": [
                  "ring_all",
                  "round_robin",

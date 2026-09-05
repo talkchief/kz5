@@ -4,6 +4,27 @@ Canonical locales are `en-us`, `ar-sa`, `he-il`, `es-es`, and `fr-fr`.
 The language dropdown must use the installer-verified capability artifact;
 source files or a single media attachment do not establish runtime support.
 
+## Natural female-voice replacement checkpoint — 2026-09-05
+
+Five Gemini/Sulafat callback-confirmation samples, their transcripts and hashes
+are saved in [`scripts/assets/acdc-gemini-samples-20260905`](../scripts/assets/acdc-gemini-samples-20260905/README.md).
+The larger fixed/completion packs are now present under
+`scripts/assets/acdc-gemini-fixed-20260905` and
+`scripts/assets/acdc-gemini-completion-20260905`: 145 fixed prompts (29 per
+language), plus 20 Arabic/Hebrew telephone digits. All 165 immutable versioned
+system-media documents were imported and their downloaded audio hashes verified.
+The protected receipt is in `acdc-callback-controls-deploy.V4lihZ` on this host.
+
+Import is **not default activation**. The running queue/callback defaults still
+select legacy IDs; the immutable Gemini resolver and installer transition remain
+in progress. Existing queue/account custom recordings must not be overwritten.
+English, French and Spanish numeric playback is still native FreeSWITCH audio;
+Arabic/Hebrew whole-number coverage and native-language listening review remain
+incomplete. No full-language or production-readiness claim follows from these
+files. No credential belongs in Git.
+
+## Earlier eSpeak draft implementation (not the requested final voice set)
+
 The applications installer now prepares the pinned speech dependencies and
 imports the complete media packs, including when CouchDB is on a separate host.
 It does **not** yet publish runtime capabilities or activate the new backend

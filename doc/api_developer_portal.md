@@ -1,0 +1,129 @@
+# API developer portal
+
+The Monster UI module installer now carries a static developer reference at
+`/apis/`. `/apis` redirects to `/apis/`. It includes a downloadable, validated
+OpenAPI 3.0.3 JSON document, locally vendored Swagger UI, source hashes, and an
+explicit coverage report. No running API, credentials, caller data or external
+validator is used to generate or view the reference.
+
+This is a source-derived catalog, not a claim that every endpoint is deployed,
+enabled, permission-reviewed, or production-tested. Each operation identifies
+whether it is upstream-generated or source-reviewed. `coverage.json` records
+generic responses, missing schemas/parameters, unsupported upstream schema
+keywords preserved as extensions, and literal routing bindings not represented
+in the catalog. Missing definitions are explicitly unknown, not fabricated.
+For example, the upstream `skels` template schema is absent; its catalog entries
+must not be assumed to be available routes. Source inventory is a gap detector,
+not an Erlang routing parser. Dynamic bindings and aliases need manual review.
+
+## Safety and authentication
+
+The hosted viewer is read-only: all TryItOut methods are disabled, the external
+validator is disabled, authorization actions cannot store a token, and the
+request interceptor accepts only same-origin GETs for the two local specs.
+Query-string overrides cannot change the spec URL. A content security policy
+blocks remote scripts, validators, frames and form submission. No CDN, telemetry
+or OAuth flow is configured. Viewing the portal does not place calls or mutate
+accounts. Its public availability is equivalent to publishing the repository's
+API contracts; do not include private deployment examples in the assets.
+
+Use a separate API client over HTTPS. Authenticate through `PUT /v2/user_auth`
+or `PUT /v2/api_auth`, with the request inside `{"data": ...}`. The returned
+`auth_token` is a secret and is sent as the `X-Auth-Token` header on subsequent
+requests. User-auth `credentials` is the supported hash of `username:password`,
+not a plaintext password. Account API keys must also remain secret. The portal
+contains only synthetic all-zero identifiers, never functional credentials.
+Changing the OpenAPI server URL in an external client does not grant permissions.
+
+For separate-node installations, configure that client's Crossbar HTTPS URL.
+The spec's `/v2` server describes the same-origin TLS proxy provided by the
+installer. Do not send authentication over the non-TLS installation endpoint.
+
+## Source-reviewed additions
+
+- Queue CRUD, full roster replacement/clear, statistics, and historical ACDC stats.
+- Callback list, read and cancel. There is no public callback-create endpoint;
+  a trusted queued caller must explicitly confirm registration. Cancellation of
+  an in-flight callback is not immediate leg-termination proof.
+- Independent `callback.announcement` options alongside queue position/wait
+  announcements. Disabling offer audio does not disable callback digit/menu.
+- Agent availability and queue membership as different operations. The legacy
+  POST `/agents/status/{USER_ID}` alias is flagged because its advertised method
+  lacks a matching source validation handler; use `/agents/{USER_ID}/status`.
+- POST `/accounts/{ACCOUNT_ID}/channels/{UUID}` with `eavesdrop` (listen),
+  `whisper`, `barge`, `join`, and correlated `stop_monitoring`. These require an
+  exact-account administrator and an enabled account-owned SIP supervisor phone.
+  Timeout is **20 seconds by default**, bounded 5–60 seconds. HTTP 202 means
+  accepted, not connected. Choose the agent leg for whisper; stop uses the
+  returned supervisor leg, never the original customer/agent leg. Local synthetic
+  acoustic/authentication acceptance is recorded in
+  [channel_monitor_acceptance.md](channel_monitor_acceptance.md), not a cross-node
+  or production certification. Legacy channel actions are separately identified
+  as incompletely typed; old queue eavesdrop routes fail closed with HTTP 503.
+- GET/PUT `/accounts/{ACCOUNT_ID}/queues/editor` and GET/PATCH
+  `/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/editor`. The coordinated queue editor
+  uses bounded, permission-filtered catalogs, complete revision maps and a stable
+  idempotency key. Its queue/roster/route writes are explicitly **non-atomic**.
+  Inspect recovery phases and reload after ambiguous/partial failures; do not
+  blindly repeat writes or change the idempotency key to bypass an incomplete
+  receipt. Managed extension changes reserve at most the old and target
+  extensions by account-scoped CAS before settings writes, preventing conflicts
+  between aggregate editor writers. Direct legacy callflow writers are outside
+  this guard. Recovery receipts expose `extension_claims` and
+  `reserve_extensions`/`finalize_extensions` phases. Reservations have no expiry
+  or automatic takeover; an ambiguous write requires explicit recovery.
+  Source presence is labeled separately from deployment verification.
+
+The planned members/devices/presence API is in a separate **PLANNED — NOT
+IMPLEMENTED** tab and `planned.openapi.json`. It is not mixed into the current
+catalog. Freshness, online/offline/unknown, complete pagination, shared/unassigned
+ownership and secret-free projections are design requirements, not live features.
+
+## Rebuild and verify
+
+The installer uses committed assets and requires no npm installation for docs.
+Maintainers regenerate with the exact dependency lock:
+
+```sh
+cd /opt/kz5/scripts/api-docs-tooling
+npm ci --ignore-scripts --no-audit --no-fund
+cd /opt/kz5
+node scripts/build-api-docs.cjs --output scripts/assets/api-docs
+node scripts/verify-api-docs.cjs scripts/assets/api-docs
+node scripts/test-api-docs.cjs
+```
+
+For the browser test, use a compatible Node/Playwright installation and existing
+Chromium, setting `KAZOO_PLAYWRIGHT_MODULE` if the package is outside Node's normal
+resolution path:
+
+```sh
+node scripts/test-api-docs.cjs --browser
+```
+
+The test serves only an ephemeral loopback HTTP server, with the same CSP as the
+installer, blocks all nonlocal requests, validates both specs, checks negative
+schema cases, proves deterministic regeneration, detects asset tampering, and
+checks viewer authorization/execution safeguards. It does not call Crossbar.
+The build fails on unresolved references or invalid OpenAPI structure. It does
+not convert unknown upstream contracts into verified ones.
+
+Swagger UI is pinned to `5.32.15`; its unmodified bundle, CSS, Apache license and
+NOTICE are under `scripts/assets/api-docs/vendor/`, with SHA-256 hashes in the
+manifest. Swagger Parser `10.1.1` is pinned for the installed Node 18 build
+toolchain; the browser harness may require newer Node according to Playwright.
+The lockfile retains tarball integrity for reproducible dependencies.
+
+## Deployment boundary
+
+`install_api_developer_docs` verifies committed hashes, refuses a symlinked
+`apis` target, copies the static files after Monster UI's replacement rsync, and
+verifies the deployed copy. Both TLS/non-TLS nginx branches have explicit `/apis/`
+static locations that return a real 404 for missing assets instead of Monster's
+SPA fallback. The normal installer tests nginx before restarting its service.
+
+Publishing this portal alone does not deploy the queue-editor handler, enable
+callback media or load monitoring backend modules. Those have separate build,
+deployment and acceptance gates. Preserve existing live configuration and test
+the exact nginx configuration before reloading; do not rerun an unrelated full
+telephony installation merely to publish documentation.

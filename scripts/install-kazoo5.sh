@@ -977,7 +977,9 @@ preflight() {
     if [[ -n $KAZOO_PUBLIC_HOSTNAME ]]; then
         KAZOO_API_URL=${KAZOO_API_URL:-https://${KAZOO_PUBLIC_HOSTNAME}/v2/}
     else
-        KAZOO_API_URL=${KAZOO_API_URL:-http://${KAZOO_PUBLIC_IP}:8000/v2/}
+        # Fresh UI deployments use nginx's same-origin API proxy. Explicit or
+        # saved external API endpoints remain the operator's configuration.
+        KAZOO_API_URL=${KAZOO_API_URL:-http://${KAZOO_PUBLIC_IP}/v2/}
     fi
     KAZOO_MASTER_ACCOUNT_REALM=${KAZOO_MASTER_ACCOUNT_REALM:-master.${KAZOO_HOSTNAME//_/-}}
     validate_port KAZOO_COUCHDB_PORT "$KAZOO_COUCHDB_PORT"
@@ -1469,6 +1471,8 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-amqp-originate-reconcile.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-registration-collection.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-channel-monitoring.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-playback-file-timeout.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-sup-audit-redaction.patch"
     # One patch per overlapping source stack makes reinstallation idempotent:
     # later callback edits must not invalidate reverse checks of earlier OTP
     # and announcement hunks. Feature patches remain review/test provenance.
@@ -1722,6 +1726,7 @@ LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
+Alias=kazoo-applications.service
 EOF
     write_file 0644 /etc/systemd/system/kazoo-ecallmgr.service <<EOF
 [Unit]
@@ -3032,11 +3037,14 @@ rewrite_kamailio_61_compatibility() {
         "$config_dir/nodes-role.cfg"
 
     # db_sqlite intentionally does not expose DB_CAP_AFFECTED_ROWS. Every
-    # affected-row check in this configuration follows a DML call whose own
-    # return value was already checked. Treat successful DML as changed so
-    # idempotent dispatcher reloads and presence cleanup still run.
+    # legacy presence/older-dispatcher checks retain their existing fallback.
+    # The installed 5.7 dispatcher instead reads SQLite changes() immediately
+    # after DML. Replacing its result with 1 causes unnecessary reloads which
+    # invalidate in-flight OPTIONS identifiers in stock dispatcher 6.1.4.
     for cfg in "${cfg_files[@]}"; do
-        sed -i -E 's/\$sqlrows\([^)]*\)/1/g' "$cfg"
+        if [[ ${cfg##*/} != dispatcher-role-5.7.cfg ]]; then
+            sed -i -E 's/\$sqlrows\([^)]*\)/1/g' "$cfg"
+        fi
         # The current kazoo module's four-argument synchronous query treats
         # argument four as a writable destination PV.  The 2600Hz config uses
         # legacy numeric AMQP flags there and reads the reply from $kzR, so use
@@ -3180,6 +3188,7 @@ configure_kamailio_sqlite() {
     write_file 0644 "$config_dir/db_sqlite.cfg" <<EOF
 #### db_sqlite module (stock Kamailio compatibility) ####
 loadmodule "db_sqlite.so"
+#!define KZ_DISPATCHER_SQLITE_AFFECTED_ROWS
 # Use the exact database component of sqlite:////absolute/path. Without a
 # per-connection busy timeout, concurrent presence/ACL writers fail instantly.
 modparam("db_sqlite", "db_set_busy_timeout", "$config_dir/db/kazoo.db=1000;")
@@ -3300,6 +3309,7 @@ configure_kazoo_kamailio() {
         "$config_source" "$KAMAILIO_CONFIG_REF"
     apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-registration-sequences.patch"
     apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-registered-source-credentials.patch"
+    apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-dispatcher-reload-bookkeeping.patch"
     run mkdir -p "$KAZOO_CONFIG_DIR/kamailio"
     run rsync -a \
         --exclude db/ --exclude local.d/ --exclude defs.d/ \
@@ -3775,8 +3785,54 @@ validate_tls_configuration() {
         die 'TLS certificate chain is incomplete or not trusted by this server'
 }
 
+install_api_developer_docs() {
+    # Committed static assets only: no npm, external validator, API calls or credentials.
+    run node "$SCRIPT_DIR/verify-api-docs.cjs" "$SCRIPT_DIR/assets/api-docs"
+    if [[ $DRY_RUN != true ]]; then
+        [[ ! -L $MONSTER_UI_WEB_ROOT/apis ]] || die 'Refusing a symlinked API documentation directory'
+    fi
+    run node "$SCRIPT_DIR/verify-api-docs.cjs" --check-target "$MONSTER_UI_WEB_ROOT/apis"
+    run install -d -m 0755 "$MONSTER_UI_WEB_ROOT/apis"
+    run cp -a "$SCRIPT_DIR/assets/api-docs/." "$MONSTER_UI_WEB_ROOT/apis/"
+    # Public static documentation only; cp -a can preserve a root-only umask.
+    run chmod 0755 "$MONSTER_UI_WEB_ROOT/apis" "$MONSTER_UI_WEB_ROOT/apis/vendor"
+    local docs_asset
+    for docs_asset in index.html portal.js portal.css openapi.json planned.openapi.json \
+        coverage.json manifest.json vendor/LICENSE vendor/NOTICE \
+        vendor/swagger-ui-bundle.js vendor/swagger-ui.css; do
+        run chmod 0644 "$MONSTER_UI_WEB_ROOT/apis/$docs_asset"
+    done
+    run node "$SCRIPT_DIR/verify-api-docs.cjs" "$MONSTER_UI_WEB_ROOT/apis"
+}
+
+monster_ui_crossbar_proxy() {
+    # One route contract for both transports; HTTP must never claim HTTPS or
+    # send Crossbar failures into the single-page application's HTML fallback.
+    cat <<EOF
+    location = /v2 { return 308 /v2/\$is_args\$args; }
+    location ^~ /v2/ {
+        proxy_pass ${KAZOO_API_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Connection "";
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 120s;
+        proxy_intercept_errors off;
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;
+        client_max_body_size 50m;
+    }
+EOF
+}
+
 configure_monster_ui_nginx() {
     local tls_dir=/etc/nginx/kazoo-tls
+    [[ $KAZOO_API_UPSTREAM =~ ^https?://[a-zA-Z0-9._:-]+/v2/$ ]] || \
+        die 'KAZOO_API_UPSTREAM must be an http(s) host[:port]/v2/ URL without credentials'
     [[ $KAZOO_WEBSOCKET_UPSTREAM =~ ^https?://[a-zA-Z0-9._:-]+/websocket$ ]] || \
         die 'KAZOO_WEBSOCKET_UPSTREAM must be an http(s) host[:port]/websocket URL without credentials'
     if [[ -n $KAZOO_PUBLIC_HOSTNAME ]]; then
@@ -3824,20 +3880,17 @@ server {
         proxy_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;
     }
 
-    location /v2/ {
-        proxy_pass ${KAZOO_API_UPSTREAM};
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-        proxy_set_header Connection "";
-        proxy_connect_timeout 10s;
-        proxy_read_timeout 120s;
-        proxy_ssl_server_name on;
-        proxy_ssl_verify on;
-        proxy_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;
+    location = /apis { return 308 /apis/; }
+    location ^~ /apis/ {
+        index index.html;
+        try_files \$uri \$uri/ =404;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'" always;
     }
+
+$(monster_ui_crossbar_proxy)
 
     location = /apps/acdc/language-capabilities.json {
         default_type application/json;
@@ -3861,6 +3914,18 @@ server {
     server_name _monster_ui_default_;
     root ${MONSTER_UI_WEB_ROOT};
     index index.html;
+
+$(monster_ui_crossbar_proxy)
+
+    location = /apis { return 308 /apis/; }
+    location ^~ /apis/ {
+        index index.html;
+        try_files \$uri \$uri/ =404;
+        add_header Cache-Control "no-store" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'" always;
+    }
 
     location = /websocket {
         proxy_pass ${KAZOO_WEBSOCKET_UPSTREAM};
@@ -3888,7 +3953,7 @@ server {
 }
 EOF
     fi
-    # Both HTTP and HTTPS serve a reverse-proxied Blackhole WebSocket.
+    # Both HTTP and HTTPS proxy Crossbar and the Blackhole WebSocket.
     if [[ $DRY_RUN != true ]] && command -v getenforce >/dev/null && \
        [[ $(getenforce) != Disabled ]]; then
         run setsebool -P httpd_can_network_connect on
@@ -3897,9 +3962,11 @@ EOF
 
 verify_monster_ui_transport() {
     local redirect capability_url capability_status expected_capability_status=404
+    local api_proxy_url api_proxy_result api_proxy_status api_proxy_body
     local -a capability_resolve=()
     if [[ -n $KAZOO_PUBLIC_HOSTNAME ]]; then
         capability_url="https://${KAZOO_PUBLIC_HOSTNAME}/apps/acdc/language-capabilities.json"
+        api_proxy_url="https://${KAZOO_PUBLIC_HOSTNAME}/v2/"
         capability_resolve=(--resolve "${KAZOO_PUBLIC_HOSTNAME}:443:127.0.0.1")
         curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
             --resolve "${KAZOO_PUBLIC_HOSTNAME}:443:127.0.0.1" \
@@ -3915,6 +3982,7 @@ verify_monster_ui_transport() {
         log "PASS HTTPS certificate, hostname, content, and HTTP redirect: ${KAZOO_PUBLIC_HOSTNAME}"
     else
         capability_url=http://127.0.0.1/apps/acdc/language-capabilities.json
+        api_proxy_url=http://127.0.0.1/v2/
         curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
             http://127.0.0.1/ | grep -i '<html' >/dev/null || die 'Monster UI HTTP content check failed'
     fi
@@ -3927,6 +3995,15 @@ verify_monster_ui_transport() {
         die 'Monster UI language capability route is unreachable'
     [[ $capability_status == "$expected_capability_status" ]] || \
         die 'Language capability route must return its actual file or HTTP 404, never the HTML application fallback'
+    api_proxy_result=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+        "${capability_resolve[@]}" --write-out $'\n%{http_code}' "$api_proxy_url") || \
+        die 'Same-origin Crossbar proxy is unreachable'
+    api_proxy_status=${api_proxy_result##*$'\n'}
+    api_proxy_body=${api_proxy_result%$'\n'*}
+    [[ $api_proxy_status =~ ^[234][0-9][0-9]$ ]] && \
+        jq -e 'type == "object" and (.status == "success" or .status == "error")' <<<"$api_proxy_body" >/dev/null || \
+        die 'Same-origin /v2/ must return a Crossbar JSON response, never the HTML application fallback'
+    log 'PASS same-origin Crossbar proxy and JSON response (transport security depends on configured HTTP/HTTPS)'
 }
 
 monster_language_capability_hash() {
@@ -3989,6 +4066,8 @@ install_monster_ui() {
     if [[ $DRY_RUN != true && ",${MONSTER_UI_APPS_LIST}," == *',acdc,'* ]]; then
         node "$SCRIPT_DIR/ensure-acdc-language-capabilities.cjs" --web-root "$MONSTER_UI_WEB_ROOT"
     fi
+    # Re-copy after every Monster UI rsync (which may remove the old /apis directory).
+    install_api_developer_docs
     configure_monster_ui_nginx
     if [[ -f /etc/nginx/nginx.conf && $DRY_RUN != true ]]; then
         sed -i '/^[[:space:]]*server[[:space:]]*{/,/^[[:space:]]*}/ { /listen[[:space:]]\+80 default_server/d; /listen[[:space:]]\+\[::\]:80 default_server/d; }' /etc/nginx/nginx.conf

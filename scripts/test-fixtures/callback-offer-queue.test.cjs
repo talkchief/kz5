@@ -1,0 +1,116 @@
+'use strict';
+// Pure plans and in-memory Couch compare-and-swap; no protected state/live API.
+const assert=require('node:assert/strict');
+const {plan,assertOwned,assertRawOwned,assertExpectedConfiguration,captureOwned,deleteOwned,assertNoReferences,conditionalSaveArguments,
+    erlangTerm,fingerprint,ACCOUNT,ENCODED_DATABASE}=require('./callback-offer-queue.cjs');
+const Q='11111111111111111111111111111111',F='22222222222222222222222222222222',U='33333333333333333333333333333333';
+const marker='acdc-offer-'+'a'.repeat(24),rev='1-'+'b'.repeat(32),next='2-'+'c'.repeat(32);
+const state={ACCEPTANCE_ACCOUNT_ID:ACCOUNT,ACCEPTANCE_REALM:'acceptance-abcdef123456.invalid',
+    ACCEPTANCE_ACCOUNT_NAME:'Kazoo5 Acceptance abcdef123456',ACCEPTANCE_AGENT_1_USER_ID:U};
+const user={id:U,enabled:true},base={account:ACCOUNT,marker,extension:'2098',queue_id:Q,callflow_id:F};
+const clone=x=>JSON.parse(JSON.stringify(x));
+let groups=0;
+const desired=plan(state,user,marker);
+assert.deepEqual(desired.queue.callback.announcement,{enabled:true,initial_delay:3,interval:15});
+assert.equal(desired.queue.announcements.initial_delay,11);assert.equal(desired.queue.announcements.interval,15);
+assert.equal(desired.queue.callback.use_local_resources,true);assert.equal(desired.queue.callback.allow_alternate_number,false);
+assert.equal(desired.queue.callback.entry_key,'6');assert.deepEqual(desired.queue.callback.outbound_authority,{type:'user',id:U});
+assert.deepEqual(desired.route(Q).numbers,['2098']);assert.equal(Object.hasOwn(desired.queue,'agents'),false);groups++;
+for(const wrong of [{...state,ACCEPTANCE_ACCOUNT_ID:Q},{...state,ACCEPTANCE_REALM:'master.example'},
+    {...state,ACCEPTANCE_ACCOUNT_NAME:'KazooMaster'},{...state,ACCEPTANCE_AGENT_1_USER_ID:'bad'}])assert.throws(()=>plan(wrong,user,marker));groups++;
+for(const wrong of [{id:Q,enabled:true},{id:U,enabled:false}])assert.throws(()=>plan(state,wrong,marker));
+assert.throws(()=>plan(state,user,'operator-queue'));assert.throws(()=>desired.route('2098'));groups++;
+const queue={...desired.queue,id:Q,agents:[]},route={...desired.route(Q),id:F};
+assertOwned(queue,base,'queues');assertOwned(route,base,'callflows');groups++;
+for(const wrong of [{...route,kazoo_acceptance_fixture:'foreign'},{...route,numbers:['2000']},
+    {...route,flow:{module:'acdc_member',data:{id:F},children:{}}},{...route,flow:{...route.flow,children:{_: {module:'user'}}}}])assert.throws(()=>assertOwned(wrong,base,'callflows'));groups++;
+for(const wrong of [{...queue,agents:[U]},{...queue,callback:{...queue.callback,enabled:false}},
+    {...queue,callback:{...queue.callback,announcement:{enabled:true,initial_delay:1,interval:15}}}])assert.throws(()=>assertOwned(wrong,base,'queues'));groups++;
+function raw(collection) {
+    const {id:documentId,...body}=collection==='queues'?queue:route;
+    return {...clone(body),_id:documentId,_rev:rev,pvt_type:collection==='queues'?'queue':'callflow',
+        pvt_account_id:ACCOUNT,pvt_account_db:ENCODED_DATABASE,pvt_modified:63900000000};
+}
+function store(collection,hook=()=>{}) {
+    let document=raw(collection);const calls=[];
+    return {calls,get document(){return document;},set document(value){document=value;},
+        async get(documentId){calls.push('get');assert.equal(documentId,document._id);await hook('get',document);return clone(document);},
+        async save(value){calls.push('save');await hook('save',document);
+            assert.equal(value._rev,document._rev,'HTTP409 exact Couch revision conflict');
+            assert.equal(value.pvt_deleted,true);assert.equal(value._deleted,undefined);
+            document={...clone(value),_rev:next};await hook('saved',document);},
+        async apiMissing(){calls.push('apiMissing');return document.pvt_deleted===true;}};
+}
+async function captured(collection,storage){const fixture=clone(base);await captureOwned(storage,fixture,collection,()=>{});storage.calls.length=0;return fixture;}
+(async()=>{
+    for(const collection of ['queues','callflows']) {
+        const storage=store(collection),fixture=await captured(collection,storage),saved=[];
+        assert.equal(fixture[collection+'_couch'].revision,rev);
+        assert.equal(fixture[collection+'_couch'].sha256,fingerprint(storage.document));
+        assert.equal(fixture[collection+'_etag'],undefined);
+        await deleteOwned(storage,fixture,collection,x=>saved.push(clone(x)),async()=>storage.calls.push('guard'));
+        assert.deepEqual(storage.calls,['guard','get','save','get','apiMissing']);
+        assert.equal(saved.length,2);assert.equal(saved[0][collection+'_deleted'],undefined);
+        assert.equal(saved[1][collection+'_deleted'],true);groups++;
+    }
+    const changed=store('queues'),changedFixture=await captured('queues',changed);
+    changed.document._rev=next;
+    await assert.rejects(deleteOwned(changed,changedFixture,'queues',()=>assert.fail('No persist'),async()=>{}),/revision or full document changed/);
+    assert.deepEqual(changed.calls,['get']);groups++;
+    const modified=store('queues'),modifiedFixture=await captured('queues',modified);
+    modified.document.new_administrator_setting=true;
+    await assert.rejects(deleteOwned(modified,modifiedFixture,'queues',()=>assert.fail('No persist'),async()=>{}),/revision or full document changed/);
+    assert.deepEqual(modified.calls,['get']);groups++;
+    const raced=store('queues',(phase,doc)=>{if(phase==='save'){doc._rev=next;doc.administrator_owned=true;}});
+    const racedFixture=await captured('queues',raced);
+    await assert.rejects(deleteOwned(raced,racedFixture,'queues',()=>{},async()=>{}),/HTTP409/);
+    assert.equal(racedFixture.queues_deleted,undefined);assert.equal(raced.document.pvt_deleted,undefined);
+    assert.equal(raced.document.administrator_owned,true);assert.deepEqual(raced.calls,['get','save']);groups++;
+    for(const tag of [undefined,'W/"automatic"','"'+rev+'"']) {
+        const storage=store('queues'),fixture={...base,queues_etag:tag};
+        await assert.rejects(deleteOwned(storage,fixture,'queues',()=>assert.fail('No persist'),async()=>{}),/Missing raw Couch revision/);
+        assert.deepEqual(storage.calls,['get']);
+    }groups++;
+    const stale=store('queues'),staleFixture=await captured('queues',stale);
+    await assert.rejects(captureOwned(stale,staleFixture,'queues',()=>assert.fail('No refresh')),/Never refresh/);
+    assert.deepEqual(stale.calls,[]);groups++;
+    const recovery=store('queues'),recovered=clone(base);
+    await captureOwned(recovery,recovered,'queues',()=>{});
+    assert.equal(recovered.queues_couch.revision,rev);assert.equal(recovery.document.pvt_deleted,undefined);
+    assert.deepEqual(recovery.calls,['get']);groups++;
+    const duringRecovery=store('queues'),validationHash=fingerprint(duringRecovery.document);
+    duringRecovery.document._rev=next;
+    await assert.rejects(captureOwned(duringRecovery,clone(base),'queues',()=>assert.fail('No stale capture'),validationHash),/changed during recovery/);groups++;
+    const schema={properties:{value:{type:'number'},nested:{type:'object',properties:{enabled:{type:'boolean'},limit:{default:3}}},strategy:{default:'round_robin'}}};
+    assertExpectedConfiguration({value:1,nested:{enabled:true,limit:3},strategy:'round_robin',_rev:rev,pvt_type:'queue'},{value:1,nested:{enabled:true}},schema);
+    assert.throws(()=>assertExpectedConfiguration({value:1,nested:{enabled:true,limit:4}},{value:1,nested:{enabled:true}},schema),/Non-default/);
+    assert.throws(()=>assertExpectedConfiguration({value:1,nested:{enabled:true},unrelated:true},{value:1,nested:{enabled:true}},schema),/Unexpected added/);groups++;
+    const crashed=store('queues'),crashedFixture=await captured('queues',crashed);let persisted=0;
+    await assert.rejects(deleteOwned(crashed,crashedFixture,'queues',()=>{if(++persisted===2)throw Error('receipt write crash');},async()=>{}),/receipt write crash/);
+    delete crashedFixture.queues_deleted;crashed.calls.length=0;
+    await deleteOwned(crashed,crashedFixture,'queues',()=>{},async()=>{});
+    assert.deepEqual(crashed.calls,['get','apiMissing']);assert.equal(crashedFixture.queues_deleted,true);groups++;
+    const after=store('queues',(phase,doc)=>{if(phase==='saved'){doc._rev='3-'+'d'.repeat(32);doc.race_after_delete=true;}});
+    const afterFixture=await captured('queues',after);
+    await assert.rejects(deleteOwned(after,afterFixture,'queues',()=>{},async()=>{}),/Soft-delete result differs/);
+    assert.equal(afterFixture.queues_deleted,undefined);assert.deepEqual(after.calls,['get','save','get']);groups++;
+    const foreign=raw('queues');foreign.pvt_account_id=Q;assert.throws(()=>assertRawOwned(foreign,base,'queues'));
+    const missing=store('queues');missing.get=async()=>null;
+    await assert.rejects(deleteOwned(missing,{...base},'queues',()=>{},async()=>{}),/Unexpected raw/);
+    const blocked=store('queues'),blockedFixture=await captured('queues',blocked);
+    await assert.rejects(deleteOwned(blocked,blockedFixture,'queues',()=>assert.fail('No persist'),async()=>{throw Error('calls remain');}),/calls remain/);
+    assert.deepEqual(blocked.calls,[]);groups++;
+    assertNoReferences([raw('queues')],base,'queues');
+    assert.throws(()=>assertNoReferences([raw('callflows')],base,'queues'),/references/);
+    assert.throws(()=>assertNoReferences([{_id:U,pvt_type:'user',queues:[Q]}],base,'queues'),/references/);
+    assertNoReferences([{...raw('callflows'),pvt_deleted:true}],base,'queues');
+    assert.throws(()=>assertNoReferences([{_id:'job',pvt_type:'acdc_callback',queue_id:Q,pvt_deleted:true}],base,'queues'),/callback record/);
+    assert.throws(()=>assertNoReferences(Array(1001).fill(raw('queues')),base,'queues'),/Unbounded/);groups++;
+    const args=conditionalSaveArguments({...raw('queues'),pvt_deleted:true});
+    assert.deepEqual(args.slice(0,3),['-e','kz_datamgr','save_doc']);
+    assert.equal(args.at(-1),'[{publish_change_notice,true}]');
+    assert(args[4].includes(erlangTerm('_rev')+','+erlangTerm(rev)));
+    assert(!args.some(arg=>arg.includes('ensure_saved')||arg.includes('crossbar_doc')));
+    assert.equal(erlangTerm('";halt().'), '<<34,59,104,97,108,116,40,41,46>>');groups++;
+    console.log('PASS '+groups+' memory-only offer fixture plan/ownership/raw-revision/CAS groups; no API/filesystem writes');
+})().catch(error=>{console.error(error.stack);process.exitCode=1;});

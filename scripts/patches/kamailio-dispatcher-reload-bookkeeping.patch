@@ -1,0 +1,75 @@
+diff --git a/kamailio/dispatcher-role-5.7.cfg b/kamailio/dispatcher-role-5.7.cfg
+--- a/kamailio/dispatcher-role-5.7.cfg
++++ b/kamailio/dispatcher-role-5.7.cfg
+@@ -327,12 +327,37 @@
+    }
+ }
+ 
++# Read immediately after successful DML, on the same process-local connection.
++# SQLite has no DB_CAP_AFFECTED_ROWS; successful INSERT ... WHERE NOT EXISTS
++# can still change zero rows. Never turn a duplicate advertisement into a reload.
++route[DISPATCHER_READ_CHANGED_ROWS]
++{
++    $var(dispatcher_changed_rows) = -1;
++    #!ifdef KZ_DISPATCHER_SQLITE_AFFECTED_ROWS
++    if (sql_pvquery("exec", "select changes()", "$var(dispatcher_changed_rows)") != 1) {
++        # The DML already succeeded: preserve an uncertain change for retry.
++        $shv(dispatcher_reload) = 1;
++        xlog("L_ERR", "cannot read dispatcher changed-row count; reload retained\n");
++        return -1;
++    }
++    #!else
++    $var(dispatcher_changed_rows) = $sqlrows(exec);
++    #!endif
++    if ($var(dispatcher_changed_rows) < 0) {
++        $shv(dispatcher_reload) = 1;
++        xlog("L_ERR", "invalid dispatcher changed-row count; reload retained\n");
++        return -1;
++    }
++    return 1;
++}
++
+ route[DISPATCHER_INSERT_DB]
+ {
+     if ($var(skip_dispatcher_insert) == 1) return;
+     xlog("L_DEBUG", "trying to insert $var(MediaUrl) from node $var(MediaName) => KZQ_CHECK_MEDIA_SERVER_INSERT\n");
+     if (sql_query("exec", "KZQ_CHECK_MEDIA_SERVER_INSERT") > 0) {
+-        if($sqlrows(exec) > 0) {
++        if (!route(DISPATCHER_READ_CHANGED_ROWS)) return;
++        if($var(dispatcher_changed_rows) > 0) {
+             $shv(dispatcher_reload) = 1;
+             xlog("L_INFO", "inserted $var(MediaUrl) from node $var(MediaName)\n");
+         } else {
+@@ -362,11 +387,12 @@
+     $var(Query) =  $_s(delete from dispatcher where destination like '$var(MediaUrl)%');
+     xlog("L_INFO", "media server $var(MediaUrl) down, =>  $var(Query)\n");
+     if (sql_query("exec", "$var(Query)") > 0) {
+-        if($sqlrows(exec) > 0) {
++        if (!route(DISPATCHER_READ_CHANGED_ROWS)) return;
++        if($var(dispatcher_changed_rows) > 0) {
+             $shv(dispatcher_reload) = 1;
+             xlog("L_INFO", "removed $var(MediaUrl) from dispatcher\n");
+         } else {
+-            xlog("L_INFO", "media server $var(MediaUrl) down, rows $sqlrows(exec)\n");
++            xlog("L_INFO", "media server $var(MediaUrl) down, rows $var(dispatcher_changed_rows)\n");
+         }
+     } else {
+         xlog("L_INFO", "delete failed for media server $var(MediaUrl)\n");
+@@ -378,10 +404,15 @@
+ {
+    $ki = $uuid(g);
+    if($shv(dispatcher_reload) == 1) {
++      # Consume before loading: a writer arriving during reload must stay dirty.
++      $shv(dispatcher_reload) = 0;
+       xlog("L_WARNING", "reloading dispatcher table\n");
+-      ds_reload();
++      if (ds_reload() < 0) {
++         # Keep failed work queued for the next existing timer tick.
++         $shv(dispatcher_reload) = 1;
++         xlog("L_ERR", "dispatcher reload failed; retry retained\n");
++      }
+    };
+-   $shv(dispatcher_reload) = 0;
+ }
+ 
+ event_route[dispatcher:reloaded]

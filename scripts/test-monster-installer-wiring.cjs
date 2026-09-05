@@ -77,7 +77,7 @@ test('Legacy initializer runs after artifact preservation, outside rebuild-only 
     assert(install.indexOf('run nginx -t') < install.indexOf('service_enable_restart nginx.service'));
 });
 
-function renderNginx(host, upstream) {
+function renderNginx(host, upstream, apiUpstream = 'https://api.fixture.invalid/v2/') {
     const stubs = `
 set -eu
 run() { printf 'RUN %s\\n' "$*" >&2; }
@@ -85,7 +85,10 @@ die() { printf 'REJECT %s\\n' "$*" >&2; exit 42; }
 log() { :; }
 getenforce() { printf 'Enforcing\\n'; }
 restorecon() { printf 'RESTORECON %s\\n' "$*" >&2; }
-cat() { :; }
+cat() {
+    if (( $# )); then return; fi
+    while IFS= read -r line; do printf '%s\\n' "$line"; done
+}
 write_file() {
     while IFS= read -r line; do
         if [[ $2 == /etc/nginx/conf.d/monster-ui.conf ]]; then printf '%s\\n' "$line"; fi
@@ -93,9 +96,10 @@ write_file() {
 }
 `;
     return cp.spawnSync('bash', ['--noprofile', '--norc', '-s'], {encoding: 'utf8', timeout: 10000,
-        input: stubs + functionSource('configure_monster_ui_nginx') + '\nconfigure_monster_ui_nginx\n',
+        input: stubs + functionSource('monster_ui_crossbar_proxy') + '\n'
+            + functionSource('configure_monster_ui_nginx') + '\nconfigure_monster_ui_nginx\n',
         env: {PATH: '/usr/bin:/bin', LANG: 'C', DRY_RUN: 'false', KAZOO_PUBLIC_HOSTNAME: host,
-            KAZOO_WEBSOCKET_UPSTREAM: upstream, KAZOO_API_UPSTREAM: 'https://api.fixture.invalid/v2/',
+            KAZOO_WEBSOCKET_UPSTREAM: upstream, KAZOO_API_UPSTREAM: apiUpstream,
             MONSTER_UI_WEB_ROOT: '/private/web', KAZOO_TLS_CERT_FILE: '/fixture/cert',
             KAZOO_TLS_KEY_FILE: '/fixture/key', KAZOO_TLS_CHAIN_FILE: ''}});
 }
@@ -124,6 +128,85 @@ test('Unsafe upstream credentials, query strings, relative URLs and nginx inject
         'http://events.fixture.invalid/websocket\n}', 'ftp://events.fixture.invalid/websocket']) {
         const result = renderNginx('', upstream);
         assert.notEqual(result.status, 0); assert.equal(result.stdout, '');
+    }
+});
+test('HTTP and HTTPS use the same Crossbar route, retain URL/query forwarding and cannot fall back to UI HTML', () => {
+    for (const host of ['', 'ui.fixture.invalid']) for (const upstream of [
+        'http://127.0.0.1:8000/v2/', 'https://apps.fixture.invalid:8443/v2/']) {
+        const result = renderNginx(host, 'http://events.fixture.invalid:5555/websocket', upstream);
+        assert.equal(result.status, 0, result.stderr);
+        const blocks = [...result.stdout.matchAll(/location \^~ \/v2\/ \{([\s\S]*?)\n    \}/g)];
+        assert.equal(blocks.length, 1, 'Exactly one API route on the serving virtual host');
+        for (const directive of ['proxy_pass ' + upstream + ';', 'proxy_set_header Host $host;',
+            'proxy_set_header X-Forwarded-Proto $scheme;', 'proxy_intercept_errors off;',
+            'proxy_ssl_server_name on;', 'proxy_ssl_verify on;',
+            'proxy_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;', 'client_max_body_size 50m;']) {
+            assert(blocks[0][1].includes(directive), directive);
+        }
+        assert(!blocks[0][1].includes('try_files'));
+        assert(!blocks[0][1].includes('proxy_set_header X-Forwarded-Proto https;'));
+        assert(result.stdout.includes('location = /v2 { return 308 /v2/$is_args$args; }'));
+        assert(result.stdout.includes('location ^~ /apis/'));
+        assert(result.stdout.includes('location = /websocket'));
+        assert(result.stdout.includes('location = /apps/acdc/language-capabilities.json'));
+        assert(result.stdout.includes('try_files $uri $uri/ /index.html;'));
+    }
+});
+test('Unsafe Crossbar upstreams are rejected before either HTTP or TLS configuration is rendered', () => {
+    for (const host of ['', 'ui.fixture.invalid']) for (const upstream of [
+        'http://user:pass@apps.fixture.invalid/v2/', '/v2/', 'https://apps.fixture.invalid/v2/?x=1',
+        'https://apps.fixture.invalid/v2/#fragment', 'http://apps.fixture.invalid/v2/;return 200;',
+        'http://apps.fixture.invalid/v2/\n}', 'ftp://apps.fixture.invalid/v2/', 'http://apps.fixture.invalid/']) {
+        const result = renderNginx(host, 'http://events.fixture.invalid/websocket', upstream);
+        assert.notEqual(result.status, 0); assert.equal(result.stdout, '');
+    }
+});
+test('Only the inferred fresh HTTP endpoint changes; saved or explicitly configured API URLs remain authoritative', () => {
+    const source = functionSource('preflight');
+    const begin = source.indexOf('    if [[ -n $KAZOO_PUBLIC_HOSTNAME ]]; then\n        KAZOO_API_URL=');
+    assert(begin >= 0);
+    const end = source.indexOf('\n    fi', begin) + '\n    fi'.length;
+    const endpointSelection = source.slice(begin, end);
+    for (const [host, configured, expected] of [
+        ['', '', 'http://192.0.2.10/v2/'],
+        ['ui.fixture.invalid', '', 'https://ui.fixture.invalid/v2/'],
+        ['', 'https://external.fixture.invalid/v2/', 'https://external.fixture.invalid/v2/'],
+        ['', 'http://192.0.2.10:8000/v2/', 'http://192.0.2.10:8000/v2/']]) {
+        const result = cp.spawnSync('bash', ['--noprofile', '--norc', '-s'], {encoding: 'utf8', timeout: 10000,
+            input: 'set -eu\n' + endpointSelection + '\nprintf "%s" "$KAZOO_API_URL"\n',
+            env: {PATH: '/usr/bin:/bin', KAZOO_PUBLIC_IP: '192.0.2.10', KAZOO_PUBLIC_HOSTNAME: host, KAZOO_API_URL: configured}});
+        assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout, expected);
+    }
+});
+function verifyTransport(host, apiResult) {
+    const stubs = `
+set -eu
+die() { printf 'REJECT %s\\n' "$*" >&2; exit 42; }
+log() { :; }
+stat() { printf '600:root\\n'; }
+curl() {
+    case "\${@: -1}" in
+        */apps/acdc/language-capabilities.json) printf '404' ;;
+        */v2/) printf '%s' "$FAKE_API_RESULT" ;;
+        https://*) printf '<html>fixture</html>' ;;
+        http://ui.fixture.invalid/) printf '308 https://ui.fixture.invalid/' ;;
+        http://127.0.0.1/) printf '<html>fixture</html>' ;;
+        *) return 99 ;;
+    esac
+}
+`;
+    return cp.spawnSync('bash', ['--noprofile', '--norc', '-s'], {encoding: 'utf8', timeout: 10000,
+        input: stubs + functionSource('verify_monster_ui_transport') + '\nverify_monster_ui_transport\n',
+        env: {PATH: '/usr/bin:/bin', KAZOO_PUBLIC_HOSTNAME: host, MONSTER_UI_WEB_ROOT: '/nonexistent-kazoo-test-web-root', FAKE_API_RESULT: apiResult}});
+}
+test('Real transport verification rejects HTML200 and upstream5xx while allowing an unauthenticated Crossbar JSON error', () => {
+    for (const host of ['', 'ui.fixture.invalid']) {
+        assert.equal(verifyTransport(host, '{"status":"error","error":"404"}\n404').status, 0);
+        for (const response of ['<html>app fallback</html>\n200', '{"status":"error"}\n502',
+            '{"not":"crossbar"}\n200', 'upstream unavailable\n502']) {
+            const result = verifyTransport(host, response);
+            assert.notEqual(result.status, 0); assert(result.stderr.includes('Crossbar JSON response'));
+        }
     }
 });
 

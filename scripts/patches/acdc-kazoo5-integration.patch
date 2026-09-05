@@ -283,11 +283,15 @@ index c0de34a..aef6ff1 100644
  archive_status_fold(#status_stat{key=#status_stat_key{account_id=AccountId}}=Stat, Acc) ->
      Doc = status_stat_to_doc(Stat),
 diff --git a/src/acdc_announcements.erl b/src/acdc_announcements.erl
-index 6b96a55..fdd8625 100644
+index 6b96a55..9cfab7c 100644
 --- a/src/acdc_announcements.erl
 +++ b/src/acdc_announcements.erl
-@@ -15,6 +15,15 @@
- -export([start_link/3]).
+@@ -12,11 +12,33 @@
+ -module(acdc_announcements).
+ 
+ %% API
+--export([start_link/3]).
++-export([start_link/3, announcements_enabled/1]).
  -export([init/3]).
  
 +-ifdef(TEST).
@@ -296,31 +300,49 @@ index 6b96a55..fdd8625 100644
 +        ,position_prompts/3
 +        ,wait_time_prompts/4
 +        ,initial_delay_ms/1
++        ,callback_offer_prompts/2
++        ,schedule_init/2
++        ,schedule_due/2
++        ,schedule_wait_ms/2
++        ,schedule_advance/4
++        ,announcement_event/3
 +        ]).
 +-endif.
 +
  -include("acdc.hrl").
  
++-define(POSITION_LOOKUP_TIMEOUT_MS, 500).
++-ifdef(TEST).
++-define(PLAYBACK_WAIT_TIMEOUT_MS, 500).
++-else.
++-define(PLAYBACK_WAIT_TIMEOUT_MS, 120000).
++-endif.
++
  -define(DEFAULT_ANNOUNCEMENTS_MEDIA, [{<<"you_are_at_position">>, <<"queue-you_are_at_position">>}
-@@ -41,9 +50,15 @@ start_link(Manager, Call, Props) ->
+                                      ,{<<"in_the_queue">>, <<"queue-in_the_queue">>}
+                                      ,{<<"increase_in_call_volume">>, <<"queue-increase_in_call_volume">>}
+@@ -41,10 +63,17 @@ start_link(Manager, Call, Props) ->
  %%------------------------------------------------------------------------------
  -spec init(pid(), kapps_call:call(), kz_term:proplist()) -> 'no_return'.
  init(Manager, Call, Props) ->
 -    kapps_call:put_callid(Call),
      Config = get_config(Props),
 -    State = init_state(Manager, Call, Config),
+-    loop(State).
 +    AnnouncementCall = maybe_set_announcement_language(Call, Config),
 +    kapps_call:put_callid(AnnouncementCall),
 +    State = init_state(Manager, AnnouncementCall, Config),
-+    %% Wait before the first announcement so queue entry can play hold music
-+    %% and an immediately available agent can connect without being cut off.
-+    %% This process does not trap exits: supervisor cancellation still stops
-+    %% the delay immediately when the caller leaves or enters a callback menu.
-+    timer:sleep(initial_delay_ms(Config)),
-     loop(State).
++    %% Pooled event delivery registers this process only; gproc removes the
++    %% registration if the per-call worker is terminated by its supervisor.
++    CallId = kapps_call:call_id(AnnouncementCall),
++    'ok' = kz_events:bind_call_id(CallId),
++    try loop(State)
++    after kz_events:unbind_call_id(CallId)
++    end.
  
  %%%=============================================================================
-@@ -54,26 +69,54 @@ init(Manager, Call, Props) ->
+ %%% Internal functions
+@@ -54,26 +83,73 @@ init(Manager, Call, Props) ->
  %% @doc Load config from props into map
  %% @end
  %%------------------------------------------------------------------------------
@@ -329,6 +351,8 @@ index 6b96a55..fdd8625 100644
 +-spec get_config(kz_term:proplist() | kz_json:object()) -> map().
 +get_config(Props0) ->
 +    Props = normalize_announcements_props(Props0),
++    Callback = normalize_announcements_props(props:get_value(<<"callback">>, Props, [])),
++    Offer = normalize_announcements_props(props:get_value(<<"announcement">>, Callback, [])),
      #{position_announcements_enabled => props:get_is_true(<<"position_announcements_enabled">>, Props, 'false')
       ,wait_time_announcements_enabled => props:get_is_true(<<"wait_time_announcements_enabled">>, Props, 'false')
 -     ,announcements_interval => props:get_integer_value(<<"interval">>, Props, 30)
@@ -336,8 +360,25 @@ index 6b96a55..fdd8625 100644
 +     ,initial_delay => max(1, min(3600, props:get_integer_value(<<"initial_delay">>, Props, 30)))
 +     ,announcement_language => props:get_ne_binary_value(<<"language">>, Props)
       ,announcements_media => announcements_media(Props)
++     ,callback_announcements_enabled => props:get_is_true(<<"enabled">>, Callback, 'false')
++         andalso props:get_is_true(<<"enabled">>, Offer, 'true')
++     ,callback_initial_delay => bounded_seconds(<<"initial_delay">>, Offer, 30, 1)
++     ,callback_interval => bounded_seconds(<<"interval">>, Offer, 60, 15)
++     ,callback_entry_key => props:get_ne_binary_value(<<"entry_key">>, Callback, <<"6">>)
++     ,callback_media => normalize_announcements_props(props:get_value(<<"media">>, Callback, []))
       }.
  
++-spec bounded_seconds(binary(), kz_term:proplist(), pos_integer(), pos_integer()) -> pos_integer().
++bounded_seconds(Key, Props, Default, Minimum) ->
++    max(Minimum, min(3600, props:get_integer_value(Key, Props, Default))).
++
++-spec announcements_enabled(kz_term:proplist() | kz_json:object()) -> boolean().
++announcements_enabled(Props) ->
++    Config = get_config(Props),
++    maps:get(position_announcements_enabled, Config)
++        orelse maps:get(wait_time_announcements_enabled, Config)
++        orelse maps:get(callback_announcements_enabled, Config).
++
 +-spec initial_delay_ms(map()) -> pos_integer().
 +initial_delay_ms(#{initial_delay := Seconds}) -> Seconds * ?MILLISECONDS_IN_SECOND.
 +
@@ -384,14 +425,176 @@ index 6b96a55..fdd8625 100644
  
  %%------------------------------------------------------------------------------
  %% @doc Initialize state for the announcements process
-@@ -108,12 +151,34 @@ maybe_announce_position(#{manager := Manager
+@@ -82,9 +158,12 @@ announcements_media(Props) ->
+ -spec init_state(pid(), kapps_call:call(), map()) -> map().
+ init_state(Manager, Call, Config) ->
+     #{manager => Manager
++     ,manager_monitor => erlang:monitor('process', Manager)
+      ,call => Call
+      ,config => Config
+      ,last_average_wait_time => 'undefined'
++     ,schedule => schedule_init(Config, monotonic_ms())
++     ,pending_playback => 'undefined'
+      }.
+ 
+ %%------------------------------------------------------------------------------
+@@ -92,14 +171,140 @@ init_state(Manager, Call, Config) ->
+ %% @end
+ %%------------------------------------------------------------------------------
+ -spec loop(map()) -> 'no_return'.
+-loop(State) ->
+-    maybe_announce_position(State).
++loop(#{manager_monitor := Monitor}=State) ->
++    Wait = next_wait_ms(State),
++    receive
++        {'DOWN', Monitor, 'process', _, _} -> exit('normal');
++        {'kapi', {_, _, JObj}} -> loop(handle_announcement_event(JObj, State));
++        _Other -> loop(State)
++    after Wait ->
++        loop(emit_announcements(State))
++    end.
++
++-spec next_wait_ms(map()) -> timeout().
++next_wait_ms(#{pending_playback := {_, Deadline}}) -> max(0, Deadline - monotonic_ms());
++next_wait_ms(#{schedule := Schedule}) -> schedule_wait_ms(Schedule, monotonic_ms()).
++
++-spec emit_announcements(map()) -> map().
++emit_announcements(#{pending_playback := {_, _}}) ->
++    %% Never add another playlist if completion was lost or media is stalled.
++    %% Fail quiet, without hanging up the caller or flushing a new owner's audio.
++    lager:warning("queue announcements stopped after playback completion timeout"),
++    exit('normal');
++emit_announcements(#{schedule := Schedule}=State) ->
++    State0 = drain_announcement_events(State),
++    Due = schedule_due(Schedule, monotonic_ms()),
++    {PositionPrompts, State1} = maybe_announce_position(Due, State0),
++    %% Stats lookup may make the callback deadline due; combine it once.
++    Due1 = lists:usort(Due ++ schedule_due(Schedule, monotonic_ms())),
++    CallbackPrompts = maybe_announce_callback(Due1, State1),
++    State2 = drain_announcement_events(State1),
++    Playback = maybe_play_announcements(PositionPrompts ++ CallbackPrompts, maps:get(call, State2)),
++    Pending = case Playback of
++                  'ok' -> 'undefined';
++                  Noop when is_binary(Noop), byte_size(Noop) > 0 ->
++                      {Noop, monotonic_ms() + ?PLAYBACK_WAIT_TIMEOUT_MS};
++                  _ -> exit('normal')
++              end,
++    EmittedDue = case lists:member('callback', Due1) of
++                     'true' -> lists:usort(['callback' | Due]);
++                     'false' -> Due
++                 end,
++    Next = schedule_advance(Schedule, EmittedDue, maps:get(config, State2), monotonic_ms()),
++    State2#{schedule := Next, pending_playback := Pending}.
++
++-spec drain_announcement_events(map()) -> map().
++drain_announcement_events(#{manager_monitor := Monitor}=State) ->
++    receive
++        {'DOWN', Monitor, 'process', _, _} -> exit('normal');
++        {'kapi', {_, _, JObj}} -> drain_announcement_events(handle_announcement_event(JObj, State))
++    after 0 -> State
++    end.
++
++-spec handle_announcement_event(kz_json:object(), map()) -> map().
++handle_announcement_event(JObj, #{call := Call, pending_playback := Pending}=State) ->
++    case announcement_event(JObj, Call, Pending) of
++        'stop' -> exit('normal');
++        'complete' -> State#{pending_playback := 'undefined'};
++        'ignore' -> State
++    end.
++
++-spec announcement_event(kz_json:object(), kapps_call:call(), any()) -> 'stop' | 'complete' | 'ignore'.
++announcement_event(JObj, Call, Pending) ->
++    Account = kz_json:get_ne_binary_value(<<"Account-ID">>, JObj,
++                  kz_json:get_ne_binary_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], JObj)),
++    %% Some noop events omit account metadata. The exact call binding and
++    %% unpredictable command ID still correlate them; conflicting metadata fails.
++    Scoped = kz_call_event:call_id(JObj) =:= kapps_call:call_id(Call)
++        andalso (Account =:= 'undefined' orelse Account =:= kapps_call:account_id(Call)),
++    case {Scoped, kz_api:event_type(JObj), Pending} of
++        {'true', {<<"call_event">>, Name}, _}
++          when Name =:= <<"CHANNEL_DESTROY">>; Name =:= <<"CHANNEL_DISCONNECTED">>;
++               Name =:= <<"CHANNEL_BRIDGE">> -> 'stop';
++        {'true', {<<"call_event">>, <<"usurp_control">>}, _} ->
++            case kz_json:get_ne_binary_value(<<"Fetch-ID">>, JObj)
++                =:= kapps_call:custom_channel_var(<<"Fetch-ID">>, Call) of
++                'true' -> 'ignore'; 'false' -> 'stop'
++            end;
++        {'true', {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>}, {Noop, _}} ->
++            case kz_call_event:application_name(JObj) =:= <<"noop">>
++                andalso kz_call_event:application_response(JObj) =:= Noop of
++                'true' -> 'complete'; 'false' -> 'ignore'
++            end;
++        _ -> 'ignore'
++    end.
++
++-spec monotonic_ms() -> integer().
++monotonic_ms() -> erlang:monotonic_time('millisecond').
++
++%% Pure monotonic scheduler. Disabled clocks use infinity. A delayed wakeup
++%% emits once and schedules from completion, never replays missed intervals.
++-spec schedule_init(map(), integer()) -> map().
++schedule_init(Config, Now) ->
++    PositionEnabled = maps:get(position_announcements_enabled, Config)
++        orelse maps:get(wait_time_announcements_enabled, Config),
++    #{position => first_deadline(PositionEnabled, Now, initial_delay_ms(Config))
++     ,callback => first_deadline(maps:get(callback_announcements_enabled, Config), Now,
++                                 maps:get(callback_initial_delay, Config) * ?MILLISECONDS_IN_SECOND)}.
++
++-spec first_deadline(boolean(), integer(), pos_integer()) -> integer() | 'infinity'.
++first_deadline('false', _, _) -> 'infinity';
++first_deadline('true', Now, DelayMs) -> Now + DelayMs.
++
++-spec schedule_due(map(), integer()) -> list().
++schedule_due(Schedule, Now) ->
++    [Kind || Kind <- ['position', 'callback'],
++             is_integer(maps:get(Kind, Schedule)), maps:get(Kind, Schedule) =< Now].
++
++-spec schedule_wait_ms(map(), integer()) -> non_neg_integer() | 'infinity'.
++schedule_wait_ms(Schedule, Now) ->
++    case [Deadline || Deadline <- maps:values(Schedule), is_integer(Deadline)] of
++        [] -> 'infinity';
++        Deadlines -> max(0, lists:min(Deadlines) - Now)
++    end.
++
++-spec schedule_advance(map(), list(), map(), integer()) -> map().
++schedule_advance(Schedule, Due, Config, Now) ->
++    lists:foldl(fun(Kind, Acc) ->
++                        Interval = case Kind of
++                                       'position' -> maps:get(announcements_interval, Config);
++                                       'callback' -> maps:get(callback_interval, Config)
++                                   end,
++                        Acc#{Kind := Now + Interval * ?MILLISECONDS_IN_SECOND}
++                end, Schedule, Due).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Conditionally add position announcements prompts to playlist
+ %% @end
+ %%------------------------------------------------------------------------------
+--spec maybe_announce_position(map()) -> 'no_return'.
++-spec maybe_announce_position(list(), map()) -> {list(), map()}.
++maybe_announce_position(Due, State) ->
++    case lists:member('position', Due) of
++        'false' -> {[], State};
++        'true' -> maybe_announce_position(State)
++    end.
++
++-spec maybe_announce_position(map()) -> {list(), map()}.
+ maybe_announce_position(#{config := #{position_announcements_enabled := 'false'}}=State) ->
+     maybe_announce_wait_time([], State);
+ maybe_announce_position(#{manager := Manager
+@@ -107,55 +312,121 @@ maybe_announce_position(#{manager := Manager
+                          ,config := Config
                           }=State) ->
      Language = kapps_call:language(Call),
-     Position = gen_listener:call(Manager, {'queue_position', kapps_call:call_id(Call)}),
+-    Position = gen_listener:call(Manager, {'queue_position', kapps_call:call_id(Call)}),
 -
 -    Prompts = [{'prompt', announcements_media_file(<<"you_are_at_position">>, Config), Language, <<"A">>}
 -              ,{'say', kz_term:to_binary(Position), <<"number">>}
 -              ,{'prompt', announcements_media_file(<<"in_the_queue">>, Config), Language, <<"A">>}],
++    Position = try gen_listener:call(Manager, {'queue_position', kapps_call:call_id(Call)},
++                                    ?POSITION_LOOKUP_TIMEOUT_MS)
++               catch exit:_ -> 'undefined'
++               end,
 +    Prompts = position_prompts(Position, Language, Config),
      maybe_announce_wait_time(Prompts, State).
  
@@ -423,14 +626,21 @@ index 6b96a55..fdd8625 100644
  %%------------------------------------------------------------------------------
  %% @doc Conditionally add wait time announcements prompts to playlist
  %% @end
-@@ -127,20 +192,37 @@ maybe_announce_wait_time(PromptAcc, #{call := Call
+ %%------------------------------------------------------------------------------
+--spec maybe_announce_wait_time(kapps_call_command:audio_macro_prompts(), map()) -> 'no_return'.
++-spec maybe_announce_wait_time(kapps_call_command:audio_macro_prompts(), map()) -> {list(), map()}.
+ maybe_announce_wait_time(PromptAcc, #{config := #{wait_time_announcements_enabled := 'false'}}=State) ->
+-    play_announcements(PromptAcc, State);
++    {PromptAcc, State};
+ maybe_announce_wait_time(PromptAcc, #{call := Call
+                                      ,config := Config
+                                      ,last_average_wait_time := LastAverageWaitTime
                                       }=State) ->
      Language = kapps_call:language(Call),
      AverageWaitTime = get_average_wait_time(Call),
 +    {WaitPrompts, NewLastAverageWaitTime} =
 +        wait_time_prompts(AverageWaitTime, LastAverageWaitTime, Language, Config),
-+    play_announcements(PromptAcc ++ WaitPrompts,
-+                       State#{last_average_wait_time := NewLastAverageWaitTime}).
++    {PromptAcc ++ WaitPrompts, State#{last_average_wait_time := NewLastAverageWaitTime}}.
  
 -    PromptAcc1 = case LastAverageWaitTime =/= 'undefined'
 -                     andalso AverageWaitTime > LastAverageWaitTime
@@ -473,27 +683,58 @@ index 6b96a55..fdd8625 100644
 +    {[], LastAverageWaitTime}.
  
  %%------------------------------------------------------------------------------
- %% @doc Play the prompts on the playlist, sleep till the next execution,
-@@ -151,12 +233,17 @@ maybe_announce_wait_time(PromptAcc, #{call := Call
- play_announcements(Prompts, #{call := Call
-                              ,config := Config
-                              }=State) ->
+-%% @doc Play the prompts on the playlist, sleep till the next execution,
+-%% repeat.
++%% @doc Add the independently scheduled callback offer to the same playlist.
+ %% @end
+ %%------------------------------------------------------------------------------
+--spec play_announcements(kapps_call_command:audio_macro_prompts(), map()) -> 'no_return'.
+-play_announcements(Prompts, #{call := Call
+-                             ,config := Config
+-                             }=State) ->
 -    _ = kapps_call_command:audio_macro(Prompts, Call),
-+    _ = maybe_play_announcements(Prompts, Call),
++-spec maybe_announce_callback(list(), map()) -> list().
++maybe_announce_callback(Due, #{call := Call, config := Config}) ->
++    case lists:member('callback', Due) of
++        'false' -> [];
++        'true' -> callback_offer_prompts(kapps_call:language(Call), Config)
++    end.
  
-     AnnouncementsInterval = announcements_interval(Config),
-     timer:sleep(AnnouncementsInterval * ?MILLISECONDS_IN_SECOND),
-     loop(State).
- 
+-    AnnouncementsInterval = announcements_interval(Config),
+-    timer:sleep(AnnouncementsInterval * ?MILLISECONDS_IN_SECOND),
+-    loop(State).
++-spec callback_offer_prompts(binary(), map()) -> list().
++callback_offer_prompts(_, #{callback_announcements_enabled := 'false'}) -> [];
++callback_offer_prompts(Language0, #{callback_entry_key := <<Digit>>=Entry,
++                                  callback_media := Media}) when Digit >= $0, Digit =< $9 ->
++    Language = callback_offer_language(Language0),
++    %% Default installer runtime has no acdc_language module. Match its callflow:
++    %% English defaults or a complete explicit custom media set only. The
++    %% separately staged language layer can expand this after media verification.
++    AllCustom = lists:all(fun(Name) -> props:get_ne_binary_value(Name, Media) =/= 'undefined' end,
++                         [<<"offer">>, <<"menu">>, <<"number_readback">>, <<"confirmation">>, <<"success">>]),
++    case Language =:= <<"en-us">> orelse AllCustom of
++        'false' -> [];
++        'true' ->
++            Offer = props:get_ne_binary_value(<<"offer">>, Media, <<"acdc-callback-offer-", Entry/binary>>),
++            [{'prompt', Offer, Language, <<"A">>}]
++    end;
++callback_offer_prompts(_, _) -> [].
++
++-spec callback_offer_language(any()) -> binary().
++callback_offer_language('undefined') -> <<"en-us">>;
++callback_offer_language(Language) when is_binary(Language) ->
++    binary:replace(kz_term:to_lower_binary(Language), <<"_">>, <<"-">>, ['global']);
++callback_offer_language(_) -> <<>>.
++
 +-spec maybe_play_announcements(kapps_call_command:audio_macro_prompts(), kapps_call:call()) -> any().
 +maybe_play_announcements([], _) -> 'ok';
 +maybe_play_announcements(Prompts, Call) ->
 +    kapps_call_command:audio_macro(Prompts, Call).
-+
+ 
  %%------------------------------------------------------------------------------
  %% @doc Get the average wait time from stats via AMQP.
- %% @end
-@@ -185,7 +272,7 @@ get_average_wait_time(Call) ->
+@@ -185,7 +456,7 @@ get_average_wait_time(Call) ->
  %% @doc Structure for time prompt entries.
  %% @end
  %%------------------------------------------------------------------------------
@@ -502,7 +743,7 @@ index 6b96a55..fdd8625 100644
  time_prompt(Time, Language) ->
      {'prompt', time_prompt2(Time), Language, <<"A">>}.
  
-@@ -193,7 +280,7 @@ time_prompt(Time, Language) ->
+@@ -193,7 +464,7 @@ time_prompt(Time, Language) ->
  %% @doc Returns the appropriate prompt name for the given average wait time.
  %% @end
  %%------------------------------------------------------------------------------
@@ -511,6 +752,55 @@ index 6b96a55..fdd8625 100644
  time_prompt2(Time) when Time < ?SECONDS_IN_MINUTE ->
      <<"queue-less_than_1_minute">>;
  time_prompt2(Time) when Time =< 5 * ?SECONDS_IN_MINUTE ->
+@@ -211,14 +482,6 @@ time_prompt2(Time) when Time =< 60 * ?SECONDS_IN_MINUTE ->
+ time_prompt2(_) ->
+     <<"queue-at_least_1_hour">>.
+ 
+-%%------------------------------------------------------------------------------
+-%% @doc Return the time interval between announcements.
+-%% @end
+-%%------------------------------------------------------------------------------
+--spec announcements_interval(map()) -> non_neg_integer().
+-announcements_interval(#{announcements_interval := Interval}) ->
+-    Interval.
+-
+ %%------------------------------------------------------------------------------
+ %% @doc Return the media file of a given name from the config.
+ %% @end
+diff --git a/src/acdc_announcements_sup.erl b/src/acdc_announcements_sup.erl
+index c41f44c..3b47e9c 100644
+--- a/src/acdc_announcements_sup.erl
++++ b/src/acdc_announcements_sup.erl
+@@ -25,7 +25,9 @@
+ -include("acdc.hrl").
+ 
+ -define(SERVER, ?MODULE).
+--define(CHILDREN, [?WORKER('acdc_announcements')]).
++%% The manager owns the initial PID. A restarted child would be untracked and
++%% could escape menu/bridge cancellation, so per-call producers never restart.
++-define(CHILDREN, [?WORKER_TYPE('acdc_announcements', 'temporary')]).
+ 
+ %%%=============================================================================
+ %%% API functions
+@@ -40,15 +42,14 @@ start_link() ->
+     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+ 
+ %%------------------------------------------------------------------------------
+-%% @doc Start an announcements child if either position or wait time
+-%% announcements are enabled
++%% @doc Start one producer if position, wait-time, or callback-offer
++%% announcements are enabled. Existing stop/resume lifecycle covers all three.
+ %%
+ %% @end
+ %%------------------------------------------------------------------------------
+ -spec maybe_start_announcements(pid(), kapps_call:call(), kz_term:proplist()) -> supervisor:startchild_ret() | 'false'.
+ maybe_start_announcements(Manager, Call, Props) ->
+-    Enabled = props:get_is_true(<<"position_announcements_enabled">>, Props, 'false')
+-        orelse props:get_is_true(<<"wait_time_announcements_enabled">>, Props, 'false'),
++    Enabled = acdc_announcements:announcements_enabled(Props),
+     Enabled
+         andalso supervisor:start_child(?SERVER, [Manager, Call, Props]).
+ 
 diff --git a/src/acdc_maintenance.erl b/src/acdc_maintenance.erl
 index 3d4f481..f3b5153 100644
 --- a/src/acdc_maintenance.erl
@@ -2637,7 +2927,7 @@ index 7d375a8..5048f81 100644
 +    list_to_tuple(['state' | [props:get_value(Name, Values, element(Index, Default)) || {Name, Index} <- Fields]]).
 +-endif.
 diff --git a/src/acdc_queue_manager.erl b/src/acdc_queue_manager.erl
-index 42be958..53fd56e 100644
+index 42be958..f732f7a 100644
 --- a/src/acdc_queue_manager.erl
 +++ b/src/acdc_queue_manager.erl
 @@ -25,12 +25,23 @@
@@ -3343,7 +3633,7 @@ index 42be958..53fd56e 100644
  create_ss_agents('all') -> queue:new().
  
  maybe_start_queue_workers(QueueSup, Count) ->
-@@ -1018,29 +1259,39 @@ maybe_start_queue_workers(QueueSup, Count) ->
+@@ -1018,29 +1259,44 @@ maybe_start_queue_workers(QueueSup, Count) ->
      end.
  
  -spec update_properties(kz_json:object(), mgr_state()) -> mgr_state().
@@ -3367,10 +3657,18 @@ index 42be958..53fd56e 100644
 +
  -spec announcements_config(kz_json:object()) -> kz_term:proplist().
  announcements_config(Config) ->
-     kz_json:recursive_to_proplist(
-       kz_json:get_json_value(<<"announcements">>, Config, kz_json:new())).
- 
+-    kz_json:recursive_to_proplist(
+-      kz_json:get_json_value(<<"announcements">>, Config, kz_json:new())).
+-
 --spec cancel_position_announcements(kapps_call:call() | 'false', map()) ->
++    Announcements = kz_json:recursive_to_proplist(
++                      kz_json:get_json_value(<<"announcements">>, Config, kz_json:new())),
++    %% Keep the independent callback-offer clock in the same cancellable
++    %% worker. Its enable switch affects spoken offers only, never menu DTMF.
++    Callback = kz_json:recursive_to_proplist(
++                 kz_json:get_json_value(<<"callback">>, Config, kz_json:new())),
++    [{<<"callback">>, Callback} | proplists:delete(<<"callback">>, Announcements)].
++
 +-spec cancel_position_announcements(kapps_call:call() | 'false' | 'undefined', map()) ->
            map().
  cancel_position_announcements('false', Pids) -> Pids;
@@ -3391,7 +3689,7 @@ index 42be958..53fd56e 100644
              _ = acdc_announcements_sup:stop_announcements(Pid),
  
              %% Attempt to skip remaining announcement media, but don't flush hangups
-@@ -1054,18 +1305,258 @@ cancel_position_announcements(Call, Pids) ->
+@@ -1054,18 +1310,258 @@ cancel_position_announcements(Call, Pids) ->
              Pids1
      end.
  
@@ -3656,7 +3954,7 @@ index 42be958..53fd56e 100644
  %%------------------------------------------------------------------------------
  %% @doc If there is at least one diagnostics receiver attached to the queue
  %% manager, send the diagnostics message returned by `GetDiagnosticsMessage' to
-@@ -1102,7 +1593,7 @@ maybe_send_diagnostics_for_strategy_update(Strategy
+@@ -1102,7 +1598,7 @@ maybe_send_diagnostics_for_strategy_update(Strategy
                                            ,AgentId
                                            ,RingingAgents
                                            ,BusyAgents
@@ -3892,7 +4190,7 @@ index 6084408..8b6006d 100644
  
  %%%=============================================================================
 diff --git a/src/cb_queues.erl b/src/cb_queues.erl
-index 0d65374..2f9335c 100644
+index 0d65374..70cd231 100644
 --- a/src/cb_queues.erl
 +++ b/src/cb_queues.erl
 @@ -25,9 +25,9 @@
@@ -3920,8 +4218,9 @@ index 0d65374..2f9335c 100644
 +        ,validate/1, validate/2, validate/3, validate/4
          ,put/1, put/2, put/3
          ,post/2, post/3
-         ,patch/2
+-        ,patch/2
 -        ,delete/2, delete/3
++        ,patch/2, patch/3
 +        ,delete/2, delete/3, delete/4
          ,delete_account/2
          ]).
@@ -3939,19 +4238,31 @@ index 0d65374..2f9335c 100644
  -include_lib("crossbar/src/crossbar.hrl").
  -include("acdc_config.hrl").
  
-@@ -63,6 +73,8 @@
+@@ -63,6 +73,9 @@
  -define(STATS_PATH_TOKEN, <<"stats">>).
  -define(ROSTER_PATH_TOKEN, <<"roster">>).
  -define(EAVESDROP_PATH_TOKEN, <<"eavesdrop">>).
 +-define(CALLBACKS_PATH_TOKEN, <<"callbacks">>).
++-define(EDITOR_PATH_TOKEN, <<"editor">>).
 +-define(MAX_CALLBACK_PAGE_SIZE, 100).
  
  -define(STAT_TIMESTAMP_PROCESSED, <<"finished_with_agent">>).
  -define(STAT_TIMESTAMP_HANDLING, <<"connected_with_agent">>).
-@@ -130,9 +142,16 @@ allowed_methods(_QueueId) ->
+@@ -122,6 +135,8 @@ allowed_methods() ->
+ -spec allowed_methods(path_token()) -> http_methods().
+ allowed_methods(?STATS_PATH_TOKEN) ->
+     [?HTTP_GET];
++allowed_methods(?EDITOR_PATH_TOKEN) ->
++    [?HTTP_GET, ?HTTP_PUT];
+ allowed_methods(?EAVESDROP_PATH_TOKEN) ->
+     [?HTTP_PUT];
+ allowed_methods(_QueueId) ->
+@@ -130,9 +145,18 @@ allowed_methods(_QueueId) ->
  -spec allowed_methods(path_token(), path_token()) -> http_methods().
  allowed_methods(_QueueId, ?ROSTER_PATH_TOKEN) ->
      [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE];
++allowed_methods(_QueueId, ?EDITOR_PATH_TOKEN) ->
++    [?HTTP_GET, ?HTTP_PATCH];
 +allowed_methods(_QueueId, ?CALLBACKS_PATH_TOKEN) ->
 +    [?HTTP_GET];
  allowed_methods(_QueueId, ?EAVESDROP_PATH_TOKEN) ->
@@ -3965,10 +4276,11 @@ index 0d65374..2f9335c 100644
  %%------------------------------------------------------------------------------
  %% @doc Does the path point to a valid resource.
  %% For example:
-@@ -152,8 +171,13 @@ resource_exists(_) -> 'true'.
+@@ -152,8 +176,14 @@ resource_exists(_) -> 'true'.
  
  -spec resource_exists(path_token(), path_token()) -> 'true'.
  resource_exists(_, ?ROSTER_PATH_TOKEN) -> 'true';
++resource_exists(_, ?EDITOR_PATH_TOKEN) -> 'true';
 +resource_exists(_, ?CALLBACKS_PATH_TOKEN) -> 'true';
  resource_exists(_, ?EAVESDROP_PATH_TOKEN) -> 'true'.
  
@@ -3979,7 +4291,26 @@ index 0d65374..2f9335c 100644
  %%------------------------------------------------------------------------------
  %% @doc Add content types accepted and provided by this module
  %% @end
-@@ -217,160 +241,29 @@ validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_POST) ->
+@@ -195,6 +225,10 @@ validate(Context, PathToken) ->
+ 
+ validate_queue(Context, ?STATS_PATH_TOKEN, ?HTTP_GET) ->
+     fetch_all_queue_stats(Context);
++validate_queue(Context, ?EDITOR_PATH_TOKEN, ?HTTP_GET) ->
++    cb_acdc_queue_editor:get(Context, 'undefined');
++validate_queue(Context, ?EDITOR_PATH_TOKEN, ?HTTP_PUT) ->
++    cb_acdc_queue_editor:validate_write(Context, 'undefined');
+ validate_queue(Context, ?EAVESDROP_PATH_TOKEN, ?HTTP_PUT) ->
+     validate_eavesdrop_on_call(Context);
+ validate_queue(Context, Id, ?HTTP_GET) ->
+@@ -213,164 +247,37 @@ validate(Context, Id, Token) ->
+ 
+ validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_GET) ->
+     load_agent_roster(Id, Context);
++validate_queue_operation(Context, Id, ?EDITOR_PATH_TOKEN, ?HTTP_GET) ->
++    cb_acdc_queue_editor:get(Context, Id);
++validate_queue_operation(Context, Id, ?EDITOR_PATH_TOKEN, ?HTTP_PATCH) ->
++    cb_acdc_queue_editor:validate_write(Context, Id);
+ validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_POST) ->
      add_queue_to_agents(Id, Context);
  validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_DELETE) ->
      rm_queue_from_agents(Id, Context);
@@ -4037,7 +4368,13 @@ index 0d65374..2f9335c 100644
 -                                            )
 -            }
 -    end.
--
++-spec validate(cb_context:context(), path_token(), path_token(), path_token()) ->
++          cb_context:context().
++validate(Context, QueueId, ?CALLBACKS_PATH_TOKEN, CallbackId) ->
++    validate_callback(Context, QueueId, CallbackId, cb_context:req_verb(Context));
++validate(Context, _, _, _) ->
++    cb_context:add_system_error('faulty_request', Context).
+ 
 --spec is_valid_call(cb_context:context(), kz_json:object()) ->
 -          'true' |
 -          {'false', cb_context:context()}.
@@ -4056,7 +4393,9 @@ index 0d65374..2f9335c 100644
 -        CallId ->
 -            is_active_call(Context, CallId)
 -    end.
--
++-spec validate_eavesdrop_on_call(cb_context:context()) -> cb_context:context().
++validate_eavesdrop_on_call(Context) -> legacy_monitoring_unavailable(Context).
+ 
 --spec is_active_call(cb_context:context(), kz_term:ne_binary()) ->
 -          'true' |
 -          {'false', cb_context:context()}.
@@ -4076,12 +4415,8 @@ index 0d65374..2f9335c 100644
 -            };
 -        {'ok', _} -> 'true'
 -    end.
-+-spec validate(cb_context:context(), path_token(), path_token(), path_token()) ->
-+          cb_context:context().
-+validate(Context, QueueId, ?CALLBACKS_PATH_TOKEN, CallbackId) ->
-+    validate_callback(Context, QueueId, CallbackId, cb_context:req_verb(Context));
-+validate(Context, _, _, _) ->
-+    cb_context:add_system_error('faulty_request', Context).
++-spec validate_eavesdrop_on_queue(cb_context:context(), binary()) -> cb_context:context().
++validate_eavesdrop_on_queue(Context, _QueueId) -> legacy_monitoring_unavailable(Context).
  
 -is_valid_queue(Context, <<QueueId/binary>>) ->
 -    AccountDb = cb_context:db_name(Context),
@@ -4111,9 +4446,7 @@ index 0d65374..2f9335c 100644
 -                                            )
 -            }
 -    end.
-+-spec validate_eavesdrop_on_call(cb_context:context()) -> cb_context:context().
-+validate_eavesdrop_on_call(Context) -> legacy_monitoring_unavailable(Context).
- 
+-
 -is_valid_endpoint(Context, DataJObj) ->
 -    AccountDb = cb_context:db_name(Context),
 -    Id = kz_doc:id(DataJObj),
@@ -4131,9 +4464,7 @@ index 0d65374..2f9335c 100644
 -                                            )
 -            }
 -    end.
-+-spec validate_eavesdrop_on_queue(cb_context:context(), binary()) -> cb_context:context().
-+validate_eavesdrop_on_queue(Context, _QueueId) -> legacy_monitoring_unavailable(Context).
- 
+-
 -is_valid_endpoint_type(Context, CallMeJObj) ->
 -    case kz_doc:type(CallMeJObj) of
 -        <<"device">> -> 'true';
@@ -4157,7 +4488,7 @@ index 0d65374..2f9335c 100644
  
  %%------------------------------------------------------------------------------
  %% @doc If the HTTP verb is PUT, execute the actual action, usually a db save.
-@@ -383,62 +276,13 @@ put(Context) ->
+@@ -383,62 +290,15 @@ put(Context) ->
      activate_account_for_acdc(Context),
      crossbar_doc:save(Context).
  
@@ -4169,7 +4500,9 @@ index 0d65374..2f9335c 100644
 -            | default_eavesdrop_req(Context)
 -           ],
 -    eavesdrop_req(Context, Prop).
-+    legacy_monitoring_unavailable(Context).
++    legacy_monitoring_unavailable(Context);
++put(Context, ?EDITOR_PATH_TOKEN) ->
++    cb_acdc_queue_editor:execute(Context).
  
 --spec put(cb_context:context(), path_token(), path_token()) ->
 -          cb_context:context().
@@ -4225,7 +4558,18 @@ index 0d65374..2f9335c 100644
  
  %%------------------------------------------------------------------------------
  %% @doc If the HTTP verb is POST, execute the actual action, usually a db save
-@@ -478,6 +322,13 @@ delete(Context, Id, ?ROSTER_PATH_TOKEN) ->
+@@ -463,6 +323,10 @@ post(Context, Id, ?ROSTER_PATH_TOKEN) ->
+ -spec patch(cb_context:context(), path_token()) -> cb_context:context().
+ patch(Context, Id) ->
+     post(Context, Id).
++
++-spec patch(cb_context:context(), path_token(), path_token()) -> cb_context:context().
++patch(Context, _Id, ?EDITOR_PATH_TOKEN) ->
++    cb_acdc_queue_editor:execute(Context).
+ %%------------------------------------------------------------------------------
+ %% @doc If the HTTP verb is DELETE, execute the actual action, usually a db delete
+ %% @end
+@@ -478,6 +342,13 @@ delete(Context, Id, ?ROSTER_PATH_TOKEN) ->
      activate_account_for_acdc(Context),
      read(Id, crossbar_doc:save(Context)).
  
@@ -4239,7 +4583,7 @@ index 0d65374..2f9335c 100644
  -spec delete_account(cb_context:context(), path_token()) -> cb_context:context().
  delete_account(Context, AccountId) ->
      lager:debug("account ~s is being deleted, cleaning up ~s", [AccountId, ?KZ_ACDC_DB]),
-@@ -500,6 +351,169 @@ read(Id, Context) ->
+@@ -500,6 +371,169 @@ read(Id, Context) ->
          _Status -> Context1
      end.
  
@@ -4409,7 +4753,7 @@ index 0d65374..2f9335c 100644
  %%------------------------------------------------------------------------------
  %% @doc
  %% @end
-@@ -554,20 +568,31 @@ load_agent_roster(Id, Context) ->
+@@ -554,20 +588,31 @@ load_agent_roster(Id, Context) ->
                ],
      crossbar_view:load(Context, ?CB_AGENTS_LIST, Options).
  
@@ -4443,7 +4787,7 @@ index 0d65374..2f9335c 100644
      CurrAgentIds = cb_context:resp_data(Context1),
  
      {InQueueAgents, RmAgentIds} = lists:partition(fun(A) -> lists:member(A, AgentIds) end, CurrAgentIds),
-@@ -615,7 +640,7 @@ maybe_rm_agents(Id, Context, AgentIds) ->
+@@ -615,7 +660,7 @@ maybe_rm_agents(Id, Context, AgentIds) ->
  -spec rm_queue_from_agents(kz_term:ne_binary(), cb_context:context()) ->
            cb_context:context().
  rm_queue_from_agents(Id, Context) ->
@@ -4453,10 +4797,10 @@ index 0d65374..2f9335c 100644
  
  -spec rm_queue_from_agents(kz_term:ne_binary(), cb_context:context(), kz_json:path()) ->
 diff --git a/src/cf_acdc_member.erl b/src/cf_acdc_member.erl
-index 9cec71a..22ed77d 100644
+index 9cec71a..c588e71 100644
 --- a/src/cf_acdc_member.erl
 +++ b/src/cf_acdc_member.erl
-@@ -18,17 +18,33 @@
+@@ -18,17 +18,40 @@
  
  -export([handle/2]).
  
@@ -4466,6 +4810,12 @@ index 9cec71a..22ed77d 100644
 +        ,callback_test_request/3
 +        ,callback_test_response/2
 +        ,callback_test_collect_alternate/2
++        ,callback_test_paused/3
++        ,callback_test_unavailable/4
++        ,callback_test_control_ack/4
++        ,callback_test_pause/3
++        ,callback_test_registration/3
++        ,callback_test_success/4
 +        ]).
 +-endif.
 +
@@ -4480,6 +4830,7 @@ index 9cec71a..22ed77d 100644
 +-define(CALLBACK_DEFAULT_NUMBER_READBACK, <<"acdc-callback-number-readback">>).
 +-define(CALLBACK_DEFAULT_CONFIRMATION, <<"acdc-callback-confirmation">>).
 +-define(CALLBACK_DEFAULT_SUCCESS, <<"acdc-callback-success">>).
++-define(CALLBACK_UNAVAILABLE_TIMEOUT_MS, 3000).
  
  -record(member_call, {call             :: kapps_call:call()
                       ,queue_id         :: kz_term:api_binary()
@@ -4490,7 +4841,7 @@ index 9cec71a..22ed77d 100644
                       }).
  -type member_call() :: #member_call{}.
  
-@@ -67,6 +83,7 @@ handle(Data, Call) ->
+@@ -67,6 +90,7 @@ handle(Data, Call) ->
                                    ,config_data=MemberCall
                                    ,queue_id=QueueId
                                    ,max_wait=MaxWait
@@ -4498,7 +4849,7 @@ index 9cec71a..22ed77d 100644
                                    }
                       ,is_queue_full(MaxQueueSize, CurrQueueSize)
                       ).
-@@ -91,11 +108,13 @@ maybe_enter_queue(#member_call{call=Call
+@@ -91,11 +115,12 @@ maybe_enter_queue(#member_call{call=Call
                                ,max_wait=MaxWait
                                }=MC
                   ,'false') ->
@@ -4509,12 +4860,11 @@ index 9cec71a..22ed77d 100644
      _ = kapps_call_command:flush_dtmf(Call),
 -    wait_for_bridge(MC#member_call{call=kapps_call:kvs_store('queue_id', QueueId, Call)}
 +    Ready = MC#member_call{call=kapps_call:kvs_store('queue_id', QueueId, Call)},
-+    _ = maybe_play_callback_offer(Ready),
 +    wait_for_bridge(Ready
                     ,MaxWait
                     ).
  
-@@ -107,20 +126,32 @@ wait_for_bridge(MC, Timeout) ->
+@@ -107,20 +132,32 @@ wait_for_bridge(MC, Timeout) ->
  wait_for_bridge(#member_call{call=Call}, Timeout, _Start) when Timeout < 0 ->
      lager:debug("timeout is less than 0: ~p", [Timeout]),
      end_member_call(Call);
@@ -4557,7 +4907,7 @@ index 9cec71a..22ed77d 100644
  end_member_call(Call) ->
      cancel_member_call(Call, ?MEMBER_TIMEOUT),
      stop_hold_music(Call),
-@@ -152,16 +183,23 @@ process_message(#member_call{call=Call
+@@ -152,16 +189,23 @@ process_message(#member_call{call=Call
              lager:info("failure json was for a different queue, ignoring"),
              wait_for_bridge(MC, kz_time:decr_timeout(Timeout, Wait), Start)
      end;
@@ -4585,7 +4935,7 @@ index 9cec71a..22ed77d 100644
              lager:info("caller pressed ~s, ignoring", [DigitPressed]),
              wait_for_bridge(MC, kz_time:decr_timeout(Timeout, Wait), Start)
      end;
-@@ -171,6 +209,458 @@ process_message(#member_call{call=Call}, _, Start, _Wait, _JObj, {<<"member">>,
+@@ -171,6 +215,673 @@ process_message(#member_call{call=Call}, _, Start, _Wait, _JObj, {<<"member">>,
  process_message(MC, Timeout, Start, Wait, _JObj, _Type) ->
      wait_for_bridge(MC, kz_time:decr_timeout(Timeout, Wait), Start).
  
@@ -4649,13 +4999,6 @@ index 9cec71a..22ed77d 100644
 +callback_entry(_Digit, _Callback, Pending) when is_map(Pending) -> 'false';
 +callback_entry(Digit, Callback, 'undefined') -> Digit =:= maps:get(entry_key, Callback).
 +
-+maybe_play_callback_offer(#member_call{callback='undefined'}) -> 'ok';
-+maybe_play_callback_offer(#member_call{call=Call, callback=Callback}) ->
-+    Entry = maps:get(entry_key, Callback),
-+    Media = callback_media_path(offer, Callback, Call),
-+    _ = kapps_call_command:play(Media, [Entry], Call),
-+    'ok'.
-+
 +callback_media_path(Name, Callback, Call) ->
 +    kapps_call:get_prompt(Call, maps:get(Name, maps:get(media, Callback))).
 +
@@ -4708,36 +5051,59 @@ index 9cec71a..22ed77d 100644
 +        {'ok', <<"pause">>, <<"rejected">>, _, _} ->
 +            lager:info("callback pause rejected; caller remains in the live queue"),
 +            wait_for_bridge(MC#member_call{callback_pending='undefined'}, Timeout, Start);
-+        'nomatch' ->
++        _ ->
 +            case callback_pause_call_event(MC, JObj, kz_api:event_type(JObj), Start) of
 +                'continue' -> wait_for_pause(MC, Timeout, Start, Deadline);
 +                'finished' -> 'ok'
 +            end
 +    end.
 +
-+callback_pause_call_event(#member_call{call=Call}, _JObj
-+                         ,{<<"call_event">>, <<"CHANNEL_BRIDGE">>}, Start) ->
-+    lager:info("member bridged while callback pause was pending (took ~b s)", [kz_time:elapsed_s(Start)]),
-+    cf_exe:control_usurped(Call),
-+    'finished';
-+callback_pause_call_event(#member_call{call=Call}, _JObj
-+                         ,{<<"call_event">>, <<"CHANNEL_DESTROY">>}, _Start) ->
++callback_pause_call_event(#member_call{callback_pending=Context}=MC, JObj, _Type, _Start) ->
++    finish_callback_event(MC, Context, callback_call_event(MC, Context, JObj)).
++
++%% Callback receives share a mailbox with channel/ownership events. Never
++%% consume a terminal event as unrelated ACK noise, or react to another leg.
++callback_call_event(#member_call{call=Call}, Context, JObj) ->
++    case {kz_json:get_ne_binary_value(<<"Call-ID">>, JObj) =:= kapps_call:call_id(Call), kz_api:event_type(JObj)} of
++        {'true', {<<"call_event">>, Name}}
++          when Name =:= <<"CHANNEL_DESTROY">>; Name =:= <<"CHANNEL_DISCONNECTED">> -> 'hangup';
++        {'true', {<<"call_event">>, <<"CHANNEL_BRIDGE">>}} -> 'usurped';
++        {'true', {<<"call_event">>, <<"usurp_control">>}} ->
++            case kz_json:get_ne_binary_value(<<"Fetch-ID">>, JObj) =:= kapps_call:custom_channel_var(<<"Fetch-ID">>, Call) of
++                'true' -> 'continue';
++                'false' -> 'usurped'
++            end;
++        {'true', {<<"member">>, <<"call_success">>}} ->
++            case kz_json:get_ne_binary_value(<<"Account-ID">>, JObj) =:= maps:get(account_id, Context)
++                andalso kz_json:get_ne_binary_value(<<"Queue-ID">>, JObj) =:= maps:get(queue_id, Context) of
++                'true' -> 'usurped';
++                'false' -> 'continue'
++            end;
++        _ -> 'continue'
++    end.
++
++finish_callback_event(_MC, _Context, 'continue') -> 'continue';
++finish_callback_event(#member_call{call=Call}=MC, Context, 'hangup') ->
++    case maps:get(pause_id, Context, 'undefined') of
++        PauseId when is_binary(PauseId) -> abandon_callback_queue_nowait(MC, Context, 'undefined');
++        _ -> 'ok'
++    end,
 +    cancel_member_call(Call, ?MEMBER_HANGUP),
 +    cf_exe:stop(Call),
 +    'finished';
-+callback_pause_call_event(#member_call{call=Call}, _JObj
-+                         ,{<<"member">>, <<"call_success">>}, _Start) ->
++finish_callback_event(#member_call{call=Call}, _Context, 'usurped') ->
 +    cf_exe:control_usurped(Call),
-+    'finished';
-+callback_pause_call_event(_MC, _JObj, _Type, _Start) -> 'continue'.
++    'finished'.
 +
 +handle_late_pause_response(#member_call{callback_pending=Context}=MC, Timeout, Start, JObj) ->
 +    case callback_response(JObj, Context) of
 +        {'ok', <<"pause">>, <<"paused">>, PauseId, _} ->
 +            lager:warning("late callback pause acknowledgement; resuming the live queue"),
 +            ResumeContext = Context#{pause_id => PauseId},
-+            _ = resume_callback_queue(MC, ResumeContext, 'undefined'),
-+            wait_for_bridge(MC#member_call{callback_pending='undefined'}, Timeout, Start);
++            case resume_callback_live_queue(MC, ResumeContext, 'undefined') of
++                'finished' -> 'ok';
++                'resume' -> wait_for_bridge(MC#member_call{callback_pending='undefined'}, Timeout, Start)
++            end;
 +        {'ok', <<"pause">>, <<"rejected">>, _, _} ->
 +            wait_for_bridge(MC#member_call{callback_pending='undefined'}, Timeout, Start);
 +        _ -> wait_for_bridge(MC, Timeout, Start)
@@ -4762,8 +5128,101 @@ index 9cec71a..22ed77d 100644
 +            end;
 +        {'error', Reason} ->
 +            lager:warning("callback menu unavailable: ~p; resuming live queue", [Reason]),
-+            _ = resume_callback_queue(MC, Context, 'undefined'),
-+            wait_for_bridge(MC, Timeout, Start)
++            case callback_unavailable(MC, Context, ?CALLBACK_UNAVAILABLE_TIMEOUT_MS) of
++                'resume' ->
++                    case resume_callback_live_queue(MC, Context, 'undefined') of
++                        'finished' -> 'ok';
++                        %% Keep the original queue entry and absolute wait budget.
++                        'resume' -> wait_for_bridge(MC, Timeout, Start)
++                    end;
++                'finished' -> 'ok'
++            end
++    end.
++
++%% An unusable caller ID is not a registered callback. Give truthful feedback
++%% while the original member is paused, without silently enabling alternatives
++%% or playing the callback-success announcement. Normal prompt lookup retains
++%% account/language overrides. Never use an unbounded blocking prompt here.
++callback_unavailable(#member_call{call=Call}=MC, Context, TimeoutMs) ->
++    Deadline = monotonic_ms() + min(?CALLBACK_UNAVAILABLE_TIMEOUT_MS, max(0, TimeoutMs)),
++    %% Bound the file handle, not the channel's inherited playback variables.
++    %% Reserve one second for delivery/completion within the wrapper budget.
++    PromptResult = try
++                       Media = kapps_call:get_prompt(Call, <<"agent-invalid_choice">>),
++                       Noop = kapps_call_command:noop_id(),
++                       Play = kz_json:set_values([{<<"Playback-Timeout-Ms">>, 2000}, {<<"Msg-ID">>, Noop}],
++                                  kapps_call_command:play_command(Media, [], Call)),
++                       Done = kz_json:from_list([{<<"Application-Name">>, <<"noop">>}, {<<"Msg-ID">>, Noop}
++                                                ,{<<"Call-ID">>, kapps_call:call_id(Call)}]),
++                       kapps_call_command:send_command([{<<"Application-Name">>, <<"queue">>}
++                                                       ,{<<"Commands">>, [Done, Play]}], Call),
++                       Noop
++                   catch _:_ -> 'undefined'
++                   end,
++    case PromptResult of
++        NoopId when is_binary(NoopId), byte_size(NoopId) > 0 ->
++            wait_callback_unavailable(MC, Context, NoopId, Deadline);
++        _ -> 'resume'
++    end.
++
++wait_callback_unavailable(MC, Context, NoopId, Deadline) ->
++    case max(0, Deadline - monotonic_ms()) of
++        0 -> 'resume';
++        Remaining ->
++            receive
++                {'amqp_msg', JObj} ->
++                    case callback_unavailable_event(MC, Context, NoopId, JObj) of
++                        'continue' -> wait_callback_unavailable(MC, Context, NoopId, Deadline);
++                        Result -> Result
++                    end
++            after Remaining -> 'resume'
++            end
++    end.
++
++callback_unavailable_event(#member_call{call=Call}=MC, Context, NoopId, JObj) ->
++    CallId = kapps_call:call_id(Call),
++    EventCallId = kz_json:get_ne_binary_value(<<"Call-ID">>, JObj,
++                    kz_json:get_ne_binary_value([<<"Request">>, <<"Call-ID">>], JObj)),
++    case {EventCallId =:= CallId, kz_api:event_type(JObj)} of
++        {'true', {<<"call_event">>, Name}}
++          when Name =:= <<"CHANNEL_DESTROY">>; Name =:= <<"CHANNEL_DISCONNECTED">> ->
++            abandon_callback_queue_nowait(MC, Context, 'undefined'),
++            cancel_member_call(Call, ?MEMBER_HANGUP),
++            cf_exe:stop(Call),
++            'finished';
++        {'true', {<<"call_event">>, <<"CHANNEL_BRIDGE">>}} ->
++            cf_exe:control_usurped(Call),
++            'finished';
++        {'true', {<<"call_event">>, <<"usurp_control">>}} ->
++            case kz_json:get_ne_binary_value(<<"Fetch-ID">>, JObj)
++                    =:= kapps_call:custom_channel_var(<<"Fetch-ID">>, Call) of
++                'true' -> 'continue';
++                'false' -> cf_exe:control_usurped(Call), 'finished'
++            end;
++        {'true', {<<"member">>, <<"call_success">>}} ->
++            case kz_json:get_ne_binary_value(<<"Account-ID">>, JObj) =:= maps:get(account_id, Context)
++                andalso kz_json:get_ne_binary_value(<<"Queue-ID">>, JObj) =:= maps:get(queue_id, Context) of
++                'true' -> cf_exe:control_usurped(Call), 'finished';
++                'false' -> 'continue'
++            end;
++        {'true', {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>}} ->
++            case kz_call_event:application_name(JObj) =:= <<"noop">>
++                andalso kz_call_event:application_response(JObj) =:= NoopId of
++                'true' -> 'resume';
++                'false' -> 'continue'
++            end;
++        {'true', {<<"error">>, _}} -> callback_unavailable_media_error(NoopId, JObj);
++        {'true', {<<"call_event">>, <<"CHANNEL_EXECUTE_ERROR">>}} ->
++            callback_unavailable_media_error(NoopId, JObj);
++        _ -> 'continue'
++    end.
++
++callback_unavailable_media_error(NoopId, JObj) ->
++    case kz_call_event:application_response(JObj) =:= NoopId
++        orelse kz_json:get_ne_binary_value(<<"Msg-ID">>, JObj) =:= NoopId
++        orelse kz_json:get_ne_binary_value([<<"Request">>, <<"Msg-ID">>], JObj) =:= NoopId of
++        'true' -> 'resume';
++        'false' -> 'continue'
 +    end.
 +
 +run_callback_actions(MC, Context, State, []) ->
@@ -4779,14 +5238,14 @@ index 9cec71a..22ed77d 100644
 +        'aborted_dead' -> 'finished';
 +        _ ->
 +            lager:error("callback menu produced no action in phase ~p", [acdc_callback_menu:status(State)]),
-+            _ = resume_callback_queue(MC, Context, 'undefined'),
-+            'resume'
++            resume_callback_live_queue(MC, Context, 'undefined')
 +    end;
 +run_callback_actions(MC, Context, State
 +                    ,[{'resume_live_queue', _}, {'cancel_callback', CallbackId} | Rest]) ->
-+    _ = resume_callback_queue(MC, Context, CallbackId),
-+    run_callback_actions(MC, Context, State, Rest),
-+    'resume';
++    case resume_callback_live_queue(MC, Context, CallbackId) of
++        'finished' -> 'finished';
++        'resume' -> run_callback_actions(MC, Context, State, Rest)
++    end;
 +run_callback_actions(MC, Context, State, [{'play_menu', _, _} | Rest]) ->
 +    case collect_callback_digit(menu, MC, State) of
 +        {'ok', Digit} -> reduce_callback_event(MC, Context, State, {'dtmf', Digit}, Rest);
@@ -4813,8 +5272,7 @@ index 9cec71a..22ed77d 100644
 +                         ,[{<<"Pause-ID">>, maps:get(pause_id, Context)}, {<<"Number">>, Number}]),
 +    wait_callback_registration(MC, Context, State, Rest);
 +run_callback_actions(MC, Context, _State, [{'resume_live_queue', _} | _Rest]) ->
-+    _ = resume_callback_queue(MC, Context, 'undefined'),
-+    'resume';
++    resume_callback_live_queue(MC, Context, 'undefined');
 +run_callback_actions(MC, Context, _State, ['abandon_paused_queue' | _Rest]) ->
 +    %% CHANNEL_DESTROY may reach the queue listener before this request and
 +    %% clear its callback binding. Publish the explicit abandon required by
@@ -4823,19 +5281,34 @@ index 9cec71a..22ed77d 100644
 +    abandon_callback_queue_nowait(MC, Context, 'undefined'),
 +    'finished';
 +run_callback_actions(MC, Context, State, [{'cancel_callback', CallbackId} | Rest]) ->
-+    _ = abandon_callback_queue(MC, Context, CallbackId),
-+    run_callback_actions(MC, Context, State, Rest);
++    case abandon_callback_queue(MC, Context, CallbackId) of
++        'finished' -> 'finished';
++        _ -> run_callback_actions(MC, Context, State, Rest)
++    end;
 +run_callback_actions(MC, Context, State, [{'handoff_to_callback', _} | Rest]) ->
 +    run_callback_actions(MC, Context, State, Rest);
-+run_callback_actions(MC, Context, State, [{'play_success_announcement', CallbackId} | Rest]) ->
-+    Event = case wait_callback_success(MC, State) of
-+                'complete' -> {trusted_announcement_complete, maps:get(queue_id, Context)
-+                              ,maps:get(call_id, Context), CallbackId};
-+                'hangup' -> 'caller_hangup';
-+                'failed' -> {trusted_announcement_failed, maps:get(queue_id, Context)
-+                            ,maps:get(call_id, Context), CallbackId}
-+            end,
-+    reduce_callback_event(MC, Context, State, Event, Rest);
++run_callback_actions(#member_call{call=Call}=MC, Context, State
++                    ,[{'play_success_announcement', CallbackId} | Rest]) ->
++    case wait_callback_success(MC, Context, State) of
++        'hangup' ->
++            %% Registration is durable now: stop only this dead executor.
++            %% Do not send the pre-registration abandon/cancel protocol.
++            cf_exe:stop(Call),
++            'finished';
++        'usurped' ->
++            %% Another owner/bridge must not receive our delayed hangup.
++            %% Durable-ticket reconciliation belongs to the queue worker.
++            cf_exe:control_usurped(Call),
++            'finished';
++        Result ->
++            Event = case Result of
++                        'complete' -> {trusted_announcement_complete, maps:get(queue_id, Context)
++                                      ,maps:get(call_id, Context), CallbackId};
++                        'failed' -> {trusted_announcement_failed, maps:get(queue_id, Context)
++                                    ,maps:get(call_id, Context), CallbackId}
++                    end,
++            reduce_callback_event(MC, Context, State, Event, Rest)
++    end;
 +run_callback_actions(#member_call{call=Call}, _Context, _State, ['hangup' | _]) ->
 +    _ = kapps_call_command:hangup(Call),
 +    cf_exe:stop(Call),
@@ -4942,11 +5415,10 @@ index 9cec71a..22ed77d 100644
 +                                    ,maps:get(call_id, Context), maps:get(request_id, Context)
 +                                    ,{'error', 'rejected'}},
 +                            reduce_callback_event(MC, Context, State, Event, Rest);
-+                        'nomatch' ->
-+                            case kz_api:event_type(JObj) of
-+                                {<<"call_event">>, <<"CHANNEL_DESTROY">>} ->
-+                                    reduce_callback_event(MC, Context, State, 'caller_hangup', Rest);
-+                                _ -> wait_callback_registration(MC, Context, State, Rest)
++                        _ ->
++                            case finish_callback_event(MC, Context, callback_call_event(MC, Context, JObj)) of
++                                'finished' -> 'finished';
++                                'continue' -> wait_callback_registration(MC, Context, State, Rest)
 +                            end
 +                    end
 +            after Remaining ->
@@ -4954,27 +5426,62 @@ index 9cec71a..22ed77d 100644
 +            end
 +    end.
 +
-+wait_callback_success(#member_call{call=Call, callback=Callback}, State) ->
++wait_callback_success(#member_call{call=Call, callback=Callback}=MC, Context, State) ->
 +    NoopId = kapps_call_command:play(callback_media_path(success, Callback, Call), Call),
-+    wait_callback_success_event(NoopId, acdc_callback_menu:remaining_ms(monotonic_ms(), State)).
++    wait_callback_success_event(MC, Context, NoopId, maps:get(success_deadline_ms, State)).
 +
-+wait_callback_success_event(_NoopId, 0) -> 'failed';
-+wait_callback_success_event(NoopId, Remaining) ->
-+    Start = monotonic_ms(),
-+    receive
-+        {'amqp_msg', JObj} ->
-+            case {kz_api:event_type(JObj), kz_call_event:application_response(JObj)} of
-+                {{<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>}, NoopId} -> 'complete';
-+                {{<<"call_event">>, <<"CHANNEL_DESTROY">>}, _} -> 'hangup';
-+                _ -> wait_callback_success_event(NoopId, max(0, Remaining - (monotonic_ms() - Start)))
++wait_callback_success_event(MC, Context, NoopId, Deadline) ->
++    case max(0, Deadline - monotonic_ms()) of
++        0 -> 'failed';
++        Remaining ->
++            receive
++                {'amqp_msg', JObj} ->
++                    case callback_success_event(MC, Context, NoopId, JObj) of
++                        'continue' -> wait_callback_success_event(MC, Context, NoopId, Deadline);
++                        Result -> Result
++                    end
++            after Remaining -> 'failed'
 +            end
-+    after Remaining -> 'failed'
++    end.
++
++callback_success_event(#member_call{call=Call}, Context, NoopId, JObj) ->
++    %% The accepted context names the original leg, even if call helpers have
++    %% since been updated by a transfer. Completion also needs this play's noop.
++    case {kz_json:get_ne_binary_value(<<"Call-ID">>, JObj) =:= maps:get(call_id, Context)
++         ,kz_api:event_type(JObj)} of
++        {'true', {<<"call_event">>, Name}}
++          when Name =:= <<"CHANNEL_DESTROY">>; Name =:= <<"CHANNEL_DISCONNECTED">> -> 'hangup';
++        {'true', {<<"call_event">>, <<"CHANNEL_BRIDGE">>}} -> 'usurped';
++        {'true', {<<"call_event">>, <<"usurp_control">>}} ->
++            case kz_json:get_ne_binary_value(<<"Fetch-ID">>, JObj) =:= kapps_call:custom_channel_var(<<"Fetch-ID">>, Call) of
++                'true' -> 'continue';
++                'false' -> 'usurped'
++            end;
++        {'true', {<<"member">>, <<"call_success">>}} ->
++            case kz_json:get_ne_binary_value(<<"Account-ID">>, JObj) =:= maps:get(account_id, Context)
++                andalso kz_json:get_ne_binary_value(<<"Queue-ID">>, JObj) =:= maps:get(queue_id, Context) of
++                'true' -> 'usurped';
++                'false' -> 'continue'
++            end;
++        {'true', {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>}} ->
++            case kz_call_event:application_name(JObj) =:= <<"noop">>
++                andalso kz_call_event:application_response(JObj) =:= NoopId of
++                'true' -> 'complete';
++                'false' -> 'continue'
++            end;
++        _ -> 'continue'
 +    end.
 +
 +resume_callback_queue(MC, Context, CallbackId) ->
 +    Extra = [{<<"Pause-ID">>, maps:get(pause_id, Context)}, {<<"Callback-ID">>, CallbackId}],
 +    send_callback_request(MC, Context, <<"resume">>, Extra),
 +    wait_callback_control_ack(MC, Context, <<"resume">>, ?CALLBACK_RESUME_ACK_TIMEOUT_MS).
++
++resume_callback_live_queue(MC, Context, CallbackId) ->
++    case resume_callback_queue(MC, Context, CallbackId) of
++        'finished' -> 'finished';
++        _ -> 'resume'
++    end.
 +
 +abandon_callback_queue(MC, Context, CallbackId) ->
 +    Extra = [{<<"Pause-ID">>, maps:get(pause_id, Context)}, {<<"Callback-ID">>, CallbackId}],
@@ -4992,14 +5499,25 @@ index 9cec71a..22ed77d 100644
 +        {'amqp_msg', JObj} ->
 +            case callback_response(JObj, Context) of
 +                {'ok', Operation, Status, _, _}
-+                  when Status =:= <<"resumed">>; Status =:= <<"abandoned">> -> 'ok';
++                  when Operation =:= <<"resume">>, Status =:= <<"resumed">>;
++                       Operation =:= <<"abandon">>, Status =:= <<"abandoned">> -> 'ok';
 +                {'ok', <<"register">>, <<"registered">>, _, CallbackId}
 +                  when Operation =:= <<"resume">> ->
-+                    lager:warning("callback registered while resume was pending; abandoning it"),
-+                    abandon_callback_queue(MC, Context, CallbackId);
++                    %% Resume cancels durable registration AND restores the
++                    %% original live member. Abandon would remove that member.
++                    %% Keep this receive's original deadline, never start a
++                    %% fresh ten-second ACK loop on a duplicate/late result.
++                    send_callback_request(MC, Context, <<"resume">>,
++                        [{<<"Pause-ID">>, maps:get(pause_id, Context)}, {<<"Callback-ID">>, CallbackId}]),
++                    wait_callback_control_ack(MC, Context, Operation,
++                        max(0, Remaining - (monotonic_ms() - Start)));
 +                {'ok', Operation, <<"rejected">>, _, _} -> {'error', {Operation, 'rejected'}};
-+                _ -> wait_callback_control_ack(MC, Context, Operation
-+                                              ,max(0, Remaining - (monotonic_ms() - Start)))
++                _ ->
++                    case finish_callback_event(MC, Context, callback_call_event(MC, Context, JObj)) of
++                        'finished' -> 'finished';
++                        'continue' -> wait_callback_control_ack(MC, Context, Operation,
++                            max(0, Remaining - (monotonic_ms() - Start)))
++                    end
 +            end
 +    after Remaining -> {'error', {Operation, 'timeout'}}
 +    end.
@@ -5009,7 +5527,10 @@ index 9cec71a..22ed77d 100644
 +        andalso maps:get(account_id, Context) =:= kz_json:get_value(<<"Account-ID">>, JObj)
 +        andalso maps:get(queue_id, Context) =:= kz_json:get_value(<<"Queue-ID">>, JObj)
 +        andalso maps:get(call_id, Context) =:= kz_json:get_value(<<"Call-ID">>, JObj)
-+        andalso maps:get(request_id, Context) =:= kz_json:get_value(<<"Request-ID">>, JObj) of
++        andalso maps:get(request_id, Context) =:= kz_json:get_value(<<"Request-ID">>, JObj)
++        andalso (maps:get(pause_id, Context, 'undefined') =:= 'undefined'
++                 orelse kz_json:get_value(<<"Status">>, JObj) =:= <<"rejected">>
++                 orelse maps:get(pause_id, Context) =:= kz_json:get_value(<<"Pause-ID">>, JObj)) of
 +        'false' -> 'nomatch';
 +        'true' ->
 +            {'ok', kz_json:get_value(<<"Operation">>, JObj)
@@ -5037,6 +5558,50 @@ index 9cec71a..22ed77d 100644
 +          {'ok', binary()} | 'timeout' | 'hangup'.
 +callback_test_collect_alternate(Call, State) ->
 +    collect_callback_alternate(#member_call{call=Call}, State).
++
++-spec callback_test_paused(kapps_call:call(), map(), map()) -> 'ok'.
++callback_test_paused(Call, Callback, Context) ->
++    MC = #member_call{call=Call, queue_id=maps:get(queue_id, Context), callback=Callback},
++    callback_paused(MC, Context, 60, kz_time:start_time()).
++
++-spec callback_test_unavailable(kapps_call:call(), map(), map(), non_neg_integer()) -> 'resume' | 'finished'.
++callback_test_unavailable(Call, Callback, Context, TimeoutMs) ->
++    MC = #member_call{call=Call, queue_id=maps:get(queue_id, Context), callback=Callback},
++    callback_unavailable(MC, Context, TimeoutMs).
++
++-spec callback_test_control_ack(kapps_call:call(), map(), binary(), non_neg_integer()) -> term().
++callback_test_control_ack(Call, Context, Operation, TimeoutMs) ->
++    MC = #member_call{call=Call, queue_id=maps:get(queue_id, Context)},
++    wait_callback_control_ack(MC, Context, Operation, TimeoutMs).
++
++-spec callback_test_pause(kapps_call:call(), map(), non_neg_integer()) -> term().
++callback_test_pause(Call, Context, TimeoutMs) ->
++    MC = #member_call{call=Call, queue_id=maps:get(queue_id, Context), callback_pending=Context},
++    wait_for_pause(MC, 60, kz_time:start_time(), monotonic_ms() + TimeoutMs).
++
++-spec callback_test_registration(kapps_call:call(), map(), non_neg_integer()) -> term().
++callback_test_registration(Call, Context, TimeoutMs) ->
++    Now = monotonic_ms(),
++    Config = #{request_id => maps:get(request_id, Context), queue_id => maps:get(queue_id, Context),
++               original_call_id => maps:get(call_id, Context)},
++    {ok, Menu, _} = acdc_callback_menu:new(Config, <<"1001">>, Now),
++    {Awaiting, _} = acdc_callback_menu:event({dtmf, <<"1">>}, Now, Menu),
++    MC = #member_call{call=Call, queue_id=maps:get(queue_id, Context)},
++    wait_callback_registration(MC, Context, Awaiting#{deadline_ms => Now + TimeoutMs}, []).
++
++-spec callback_test_success(kapps_call:call(), map(), map(), non_neg_integer()) -> term().
++callback_test_success(Call, Callback, Context, TimeoutMs) ->
++    Now = monotonic_ms(),
++    Config = #{request_id => maps:get(request_id, Context), queue_id => maps:get(queue_id, Context),
++               original_call_id => maps:get(call_id, Context)},
++    {ok, Menu, _} = acdc_callback_menu:new(Config, <<"1001">>, Now),
++    {Awaiting, _} = acdc_callback_menu:event({dtmf, <<"1">>}, Now, Menu),
++    CallbackId = <<"acdc-callback-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>,
++    Ack = {trusted_queue_ack, maps:get(queue_id, Context), maps:get(call_id, Context),
++           maps:get(request_id, Context), {ok, CallbackId}},
++    {Accepted, Actions} = acdc_callback_menu:event(Ack, Now, Awaiting),
++    MC = #member_call{call=Call, queue_id=maps:get(queue_id, Context), callback=Callback},
++    run_callback_actions(MC, Context, Accepted#{success_deadline_ms => Now + TimeoutMs}, Actions).
 +-endif.
 +
 +monotonic_ms() -> erlang:monotonic_time('millisecond').
@@ -9054,6 +9619,751 @@ index 0000000..3ad6f9d
 +        lager:debug("archive table ~p is no longer available", [Table]),
 +        []
 +    end.
+diff --git a/src/cb_acdc_queue_editor.erl b/src/cb_acdc_queue_editor.erl
+new file mode 100644
+index 0000000..bff5e24
+--- /dev/null
++++ b/src/cb_acdc_queue_editor.erl
+@@ -0,0 +1,739 @@
++%%% SPDX-License-Identifier: MPL-2.0
++%%% Account-scoped queue editor. Catalog reads are bounded; writes are a
++%%% revision-checked saga, NOT a CouchDB cross-document transaction.
++-module(cb_acdc_queue_editor).
++-export([get/2, validate_write/2, execute/1]).
++-ifdef(TEST).
++-export([scoped/4, authorized/1, strict_route/2, roster_plan/3,
++         digest/1, operation_id/3, public_catalog/2, valid_manifest/1,
++         required_prompts/0, merge_patch/2, check_body/1, verified_manifest_media/1]).
++-endif.
++-include_lib("crossbar/src/crossbar.hrl").
++-include_lib("kernel/include/file.hrl").
++-define(LIMIT, 500).
++-define(CAT, <<"acdc.queues">>).
++-define(FLAG, <<"talkchief-acdc-managed">>).
++-define(QFLAG, <<"talkchief-acdc-queue:">>).
++
++-spec get(cb_context:context(), binary() | 'undefined') -> cb_context:context().
++get(Context, QueueId) ->
++    guarded(Context, fun() ->
++        require_authorized(Context),
++        _ = permit(Context, <<"queues">>, case QueueId of undefined -> []; _ -> [QueueId] end, ?HTTP_GET),
++        Queue = load_queue(Context, QueueId),
++        {Catalog, Internal} = catalogs(Context),
++        Data = editor_data(Queue, Catalog, Internal),
++        Relevant = kz_json:get_list_value([<<"callflows">>, <<"routes">>], Data, []),
++        Permitted = lists:all(fun(R) -> authorized(scoped(Context, <<"callflows">>, [kz_json:get_value(<<"id">>, R)], ?HTTP_GET)) end, Relevant),
++        SafeData = case Permitted of
++                       true -> Data;
++                       false -> kz_json:set_values([{[<<"callflows">>, <<"routes">>], []},
++                                                    {[<<"catalogs">>, <<"callflows">>], catalog_state(false, <<"forbidden">>, 0)}], Data)
++                   end,
++        success(SafeData, Context)
++    end).
++
++%% Fail closed. No save is allowed during validation, including roster edits.
++-spec validate_write(cb_context:context(), binary() | 'undefined') -> cb_context:context().
++validate_write(Context, QueueId) ->
++    guarded(Context, fun() -> prepare_write(Context, QueueId) end).
++
++-spec execute(cb_context:context()) -> cb_context:context().
++execute(Context) ->
++    guarded(Context, fun() -> execute_plan(Context, cb_context:fetch(Context, editor_plan)) end).
++
++guarded(Context, Fun) ->
++    try Fun()
++    catch
++        throw:{editor_error, Code, Message, Details} -> error(Code, Message, Details, Context);
++        throw:{editor_context, Failed} -> Failed;
++        _Class:_Reason:_Stack ->
++            %% Never return a document, token, or provider exception to the client.
++            error(503, <<"queue_editor_unavailable">>, kz_json:new(), Context)
++    end.
++
++fail(Code, Message) -> fail(Code, Message, kz_json:new()).
++fail(Code, Message, Details) -> throw({editor_error, Code, Message, Details}).
++need(true, _, _) -> ok;
++need(false, Code, Message) -> fail(Code, Message).
++success(Data, Context) ->
++    cb_context:setters(Context, [{fun cb_context:set_resp_status/2, success},
++                                {fun cb_context:set_resp_data/2, Data},
++                                {fun cb_context:set_resp_etag/2, undefined}]).
++error(Code, Message, Details, Context) ->
++    cb_context:set_resp_data(cb_context:add_system_error(Code, Message, Details, Context), Details).
++
++%% Reapply scopes and ALL stop decisions for each embedded resource. A token
++%% authorized for /queues does not thereby gain access to /users or /callflows.
++scoped(Context, Resource, Params, Verb) ->
++    Account = cb_context:account_id(Context),
++    Nouns = [{Resource, Params}, {<<"accounts">>, [Account]}],
++    Path = iolist_to_binary([<<"/">>, cb_context:api_version(Context), <<"/accounts/">>,
++                            Account, <<"/">>, Resource,
++                            [[<<"/">>, P] || P <- Params]]),
++    cb_context:setters(Context, [{fun cb_context:set_req_nouns/2, Nouns},
++                                {fun cb_context:set_raw_path/2, Path},
++                                {fun cb_context:set_req_verb/2, Verb},
++                                {fun cb_context:set_query_string/2, kz_json:new()},
++                                {fun cb_context:set_resp_status/2, success},
++                                {fun cb_context:set_doc/2, kz_json:new()},
++                                {fun cb_context:set_req_data/2, kz_json:new()}]).
++
++authorized(Context) ->
++    [{Resource, Params}|_] = cb_context:req_nouns(Context),
++    Global = crossbar_bindings:pmap(api_util:create_event_name(Context, <<"authorize">>), Context),
++    Module = crossbar_bindings:pmap(api_util:create_event_name(Context, <<"authorize.", Resource/binary>>),
++                                   [Context|Params]),
++    NoStop = lists:all(fun(true) -> true; (false) -> true; ({true, _}) -> true;
++                          ({false, _}) -> true; (_) -> false end, Global ++ Module),
++    Allowed = lists:any(fun(true) -> true; ({true, _}) -> true; (_) -> false end, Global ++ Module),
++    NoStop andalso Allowed andalso scopes_allowed(Context, Resource).
++
++scopes_allowed(Context, Resource) ->
++    case {cb_context:auth_token_type(Context),
++          kz_json:get_ne_binary_value(<<"method">>, cb_context:auth_doc(Context))} of
++        {'x-auth-token', Method} when is_binary(Method) ->
++            Scopes = crossbar_bindings:pmap(api_util:create_event_name(Context, <<"allowed_scopes.", Resource/binary>>), Method),
++            lists:all(fun(Required) when is_list(Required) -> kz_auth_scope:all(cb_context:auth_token(Context), Required);
++                         (_) -> false end, Scopes);
++        _ -> true
++    end.
++
++require_authorized(Context) ->
++    need(id(cb_context:account_id(Context)) andalso cb_context:is_authenticated(Context), 403, <<"forbidden">>),
++    need(authorized(Context), 403, <<"forbidden">>).
++permit(Context, Resource, Params, Verb) ->
++    Sub = scoped(Context, Resource, Params, Verb),
++    need(authorized(Sub), 403, <<"queue_editor_resource_forbidden">>), Sub.
++
++load_queue(_Context, undefined) -> kz_json:new();
++load_queue(Context, QueueId) ->
++    need(id(QueueId), 404, <<"queue_not_found">>),
++    case kz_datamgr:open_doc(cb_context:db_name(Context), QueueId) of
++        {ok, Doc} -> need(scoped_doc(Doc, Context, <<"queue">>), 404, <<"queue_not_found">>), Doc;
++        {error, not_found} -> fail(404, <<"queue_not_found">>);
++        _ -> fail(503, <<"queue_unavailable">>)
++    end.
++
++scoped_doc(Doc, Context, Type) ->
++    kz_doc:type(Doc) =:= Type andalso kz_doc:account_id(Doc) =:= cb_context:account_id(Context)
++        andalso not kz_doc:is_deleted(Doc) andalso not kz_doc:is_soft_deleted(Doc).
++
++catalogs(Context) ->
++    Specs = [{<<"users">>, <<"user">>}, {<<"media">>, <<"media">>}, {<<"callflows">>, <<"callflow">>}],
++    {Values, Internal, States} = lists:foldl(fun({Resource, Type}, {V, I, S}) ->
++        Allowed = authorized(scoped(Context, Resource, [], ?HTTP_GET)),
++        {Docs, State} = catalog(Context, Type, Allowed),
++        {kz_json:set_value(Resource, public_catalog(Type, Docs), V),
++         maps:put(Resource, Docs, I), kz_json:set_value(Resource, State, S)}
++    end, {kz_json:new(), #{}, kz_json:new()}, Specs),
++    {Numbers, NumberState} = numbers(Context),
++    {Manifest, Media, MediaState} = system_media(Context),
++    Catalog = kz_json:set_values([{<<"numbers">>, Numbers}, {<<"system_media">>, Media},
++                                  {<<"language_capabilities">>, Manifest},
++                                  {<<"catalogs">>, kz_json:set_values([{<<"numbers">>, NumberState},
++                                                                      {<<"system_media">>, MediaState}], States)}], Values),
++    {Catalog, Internal}.
++
++catalog(_Context, _Type, false) -> {[], catalog_state(false, <<"forbidden">>, 0)};
++catalog(Context, Type, true) ->
++    Options = [{startkey, [Type]}, {endkey, [Type, kz_json:new()]},
++               include_docs, {limit, ?LIMIT + 1}, {reduce, false}],
++    case kz_datamgr:get_results(cb_context:db_name(Context), <<"crossbar_listings/by_type_id">>, Options) of
++        {ok, Rows} when length(Rows) =< ?LIMIT ->
++            Docs = [kz_json:get_json_value(<<"doc">>, Row) || Row <- Rows],
++            case lists:all(fun(Doc) -> scoped_doc(Doc, Context, Type) end, Docs) of
++                true -> {Docs, catalog_state(true, <<"complete">>, length(Docs))};
++                false -> {[], catalog_state(false, <<"invalid_scope">>, 0)}
++            end;
++        {ok, _} -> {[], catalog_state(false, <<"limit_exceeded">>, 0)};
++        _ -> {[], catalog_state(false, <<"unavailable">>, 0)}
++    end.
++
++catalog_state(Complete, Reason, Count) ->
++    kz_json:from_list([{<<"complete">>, Complete}, {<<"reason">>, Reason},
++                       {<<"count">>, Count}, {<<"limit">>, ?LIMIT}]).
++
++public_catalog(Type, Docs) ->
++    Keys = case Type of
++               <<"user">> -> [<<"name">>, <<"first_name">>, <<"last_name">>, <<"enabled">>];
++               <<"media">> -> [<<"name">>, <<"language">>, <<"media_type">>, <<"media_source">>];
++               <<"callflow">> -> [<<"name">>, <<"numbers">>, <<"patterns">>, <<"flags">>, <<"flow">>]
++           end,
++    [project(Doc, Keys) || Doc <- Docs].
++project(Doc, Keys) ->
++    kz_json:from_list([{<<"id">>, kz_doc:id(Doc)} | [{K, V} || K <- Keys,
++                        (V = kz_json:get_value(K, Doc)) =/= undefined]]).
++
++numbers(Context) ->
++    case authorized(scoped(Context, <<"phone_numbers">>, [], ?HTTP_GET)) of
++        false -> {[], catalog_state(false, <<"forbidden">>, 0)};
++        true ->
++            case kz_datamgr:get_results(cb_context:db_name(Context), <<"phone_numbers/crossbar_listing">>,
++                                       [{limit, ?LIMIT + 1}, {reduce, false}]) of
++                {ok, Rows} when length(Rows) =< ?LIMIT ->
++                    Data = [kz_json:from_list([{<<"number">>, kz_json:get_value(<<"id">>, Row)},
++                                               {<<"state">>, <<"in_service">>}]) || Row <- Rows,
++                            kz_json:get_value([<<"value">>, <<"assigned_to">>], Row) =:= cb_context:account_id(Context),
++                            kz_json:get_value([<<"value">>, <<"state">>], Row) =:= <<"in_service">>],
++                    {Data, catalog_state(true, <<"complete">>, length(Data))};
++                {ok, _} -> {[], catalog_state(false, <<"limit_exceeded">>, 0)};
++                _ -> {[], catalog_state(false, <<"unavailable">>, 0)}
++            end
++    end.
++
++locales() -> [<<"en-us">>, <<"ar-sa">>, <<"he-il">>, <<"es-es">>, <<"fr-fr">>].
++required_prompts() ->
++    [<<"acdc-callback-offer-", (integer_to_binary(N))/binary>> || N <- lists:seq(0, 9)] ++
++    [<<"acdc-callback-", S/binary>> || S <- [<<"menu-current">>, <<"menu-alternate">>, <<"number-readback">>,
++                                            <<"confirmation">>, <<"success">>, <<"returned-confirmation">>]] ++
++    [<<"acdc-queue-", S/binary>> || S <- [<<"your-current-position-is">>, <<"you_are_at_position">>, <<"in_the_queue">>,
++        <<"increase_in_call_volume">>, <<"the_estimated_wait_time_is">>, <<"less_than_1_minute">>,
++        <<"about_5_minutes">>, <<"about_10_minutes">>, <<"about_15_minutes">>, <<"about_30_minutes">>,
++        <<"about_45_minutes">>, <<"about_1_hour">>, <<"at_least_1_hour">>]].
++
++system_media(Context) ->
++    %% This corresponds to existing authenticated GET /media, not arbitrary
++    %% tenant media. Only the fixed ACDC catalog is fetched, in one batch.
++    Global = cb_context:set_account_id(scoped(Context, <<"media">>, [], ?HTTP_GET), undefined),
++    System = cb_context:setters(Global, [{fun cb_context:set_req_nouns/2, [{<<"media">>, []}]},
++                                        {fun cb_context:set_raw_path/2, <<"/v2/media">>}]),
++    case authorized(System) of
++        false -> {null, [], catalog_state(false, <<"forbidden">>, 0)};
++        true ->
++            try
++                {Manifest, Media} = verified_manifest_media(read_manifest()),
++                {Manifest, Media, catalog_state(true, <<"complete">>, length(Media))}
++            catch _:_ -> {null, [], catalog_state(false, <<"unverified_language_manifest">>, 0)} end
++    end.
++
++verified_manifest_media(Manifest) ->
++    true = valid_manifest(Manifest),
++    case kz_json:get_value(<<"backend_mode">>, Manifest) of
++        <<"legacy">> -> verified_legacy_media(Manifest);
++        undefined -> verified_full_media(Manifest)
++    end.
++
++%% A baseline runtime has only English canonical prompts. Verify that bounded
++%% catalog without promoting staged multilingual capabilities or changing the
++%% explicit all-false manifest contract understood by Monster's legacy adapter.
++verified_legacy_media(Manifest) ->
++    Ids = [<<"en-us/", (legacy_prompt(P))/binary>> || P <- required_prompts()],
++    {_Docs, Media} = verified_media(Ids),
++    {Manifest, Media}.
++
++legacy_prompt(<<"acdc-queue-your-current-position-is">> = P) -> P;
++legacy_prompt(<<"acdc-queue-", S/binary>>) -> <<"queue-", S/binary>>;
++legacy_prompt(P) -> P.
++
++verified_media(Ids) ->
++    {ok, Rows} = kz_datamgr:open_docs(<<"system_media">>, Ids),
++    true = lists:sort([kz_json:get_value(<<"id">>, R, kz_json:get_value(<<"key">>, R)) || R <- Rows]) =:= lists:sort(Ids),
++    Docs = [Doc || Row <- Rows, (Doc = kz_json:get_json_value(<<"doc">>, Row)) =/= undefined,
++                   lists:member(kz_doc:id(Doc), Ids), kz_doc:type(Doc) =:= <<"media">>, attached(Doc)],
++    Media = [kz_json:set_values([{<<"language">>, hd(binary:split(kz_doc:id(D), <<"/">>))},
++                                 {<<"has_attachments">>, true}], project(D, [<<"name">>])) || D <- Docs],
++    {Docs, Media}.
++
++verified_full_media(Manifest) ->
++    Ids = [<<L/binary, "/", P/binary>> || L <- locales(), P <- required_prompts()],
++    {Docs, Media} = verified_media(Ids),
++    Keys = [<<"ready">>, <<"position">>, <<"wait_time">>, <<"callback">>, <<"native_speaker_review">>,
++            <<"numbers">>, <<"number_range">>, <<"numeric_prompt_count">>, <<"required_prompt_ids">>,
++            <<"source_catalog_sha256">>, <<"installed_media_sha256">>],
++    Languages = lists:foldl(fun(L, Acc) ->
++        All = lists:all(fun(P) -> lists:any(fun(D) -> kz_doc:id(D) =:= <<L/binary, "/", P/binary>> end, Docs) end, required_prompts()),
++        Original = kz_json:get_json_value([<<"languages">>, L], Manifest),
++        Entry = kz_json:from_list([{K, V} || K <- Keys, (V = kz_json:get_value(K, Original)) =/= undefined]),
++        Flags = [{K, All andalso kz_json:is_true(K, Entry)} || K <- [<<"ready">>, <<"position">>, <<"wait_time">>, <<"callback">>]],
++        kz_json:set_value(L, kz_json:set_values(Flags, Entry), Acc)
++    end, kz_json:new(), locales()),
++    {kz_json:from_list([{<<"schema_version">>, 1}, {<<"generated_at">>, kz_json:get_value(<<"generated_at">>, Manifest)},
++                        {<<"languages">>, Languages}]), Media}.
++
++attached(Doc) ->
++    not kz_doc:is_deleted(Doc) andalso not kz_doc:is_soft_deleted(Doc)
++        andalso lists:any(fun(N) -> kz_doc:attachment_length(Doc, N, 0) > 0 end, kz_doc:attachment_names(Doc)).
++
++read_manifest() ->
++    Path = binary_to_list(kapps_config:get_ne_binary(?CAT, <<"editor_language_capabilities_path">>,
++                    <<"/var/www/html/monster-ui/apps/acdc/language-capabilities.json">>)),
++    true = filename:pathtype(Path) =:= absolute,
++    protected_parent(filename:dirname(Path)),
++    {ok, Before = #file_info{type = regular, uid = 0, mode = Mode, size = Size}} = file:read_link_info(Path),
++    true = Mode band 8#022 =:= 0 andalso Size > 0 andalso Size =< 131072,
++    {ok, Bytes} = file:read_file(Path), {ok, After} = file:read_link_info(Path),
++    true = Before =:= After andalso byte_size(Bytes) =:= Size,
++    Manifest = kz_json:decode(Bytes), true = valid_manifest(Manifest), Manifest.
++
++protected_parent(Path) ->
++    {ok, #file_info{type = directory, uid = 0, mode = Mode}} = file:read_link_info(Path),
++    true = Mode band 8#022 =:= 0,
++    case filename:dirname(Path) of Path -> ok; Parent -> protected_parent(Parent) end.
++
++valid_manifest(M) ->
++    kz_json:get_value(<<"schema_version">>, M) =:= 1
++        andalso timestamp(kz_json:get_value(<<"generated_at">>, M))
++        andalso lists:sort(kz_json:get_keys(kz_json:get_json_value(<<"languages">>, M, kz_json:new()))) =:= lists:sort(locales())
++        andalso case kz_json:get_value(<<"backend_mode">>, M) of
++            undefined -> lists:all(fun(L) -> valid_language(L, kz_json:get_json_value([<<"languages">>, L], M)) end, locales());
++            <<"legacy">> -> valid_legacy_manifest(M);
++            _ -> false
++        end.
++
++valid_legacy_manifest(M) ->
++    Flags = [<<"ready">>, <<"position">>, <<"wait_time">>, <<"callback">>, <<"native_speaker_review">>],
++    lists:sort(kz_json:get_keys(M)) =:= lists:sort([<<"schema_version">>, <<"backend_mode">>, <<"generated_at">>, <<"languages">>])
++        andalso lists:all(fun(L) ->
++            Entry = kz_json:get_json_value([<<"languages">>, L], M, kz_json:new()),
++            lists:sort(kz_json:get_keys(Entry)) =:= lists:sort(Flags)
++                andalso lists:all(fun(K) -> kz_json:get_value(K, Entry) =:= false end, Flags)
++        end, locales()).
++
++valid_language(L, E) ->
++    Flags = [<<"ready">>, <<"position">>, <<"wait_time">>, <<"callback">>, <<"native_speaker_review">>],
++    lists:all(fun(K) -> is_boolean(kz_json:get_value(K, E)) end, Flags) andalso
++    (not kz_json:is_true(<<"ready">>, E) orelse
++     (lists:all(fun(K) -> kz_json:is_true(K, E) end, [<<"position">>, <<"wait_time">>, <<"callback">>])
++      andalso lists:sort(kz_json:get_list_value(<<"required_prompt_ids">>, E, [])) =:= lists:sort(required_prompts())
++      andalso kz_json:get_value(<<"number_range">>, E) =:= [0, 999999999]
++      andalso hex(kz_json:get_value(<<"source_catalog_sha256">>, E), 64)
++      andalso hex(kz_json:get_value(<<"installed_media_sha256">>, E), 64)
++      andalso case L =:= <<"ar-sa">> orelse L =:= <<"he-il">> of
++                  true -> kz_json:get_value(<<"numbers">>, E) =:= <<"prerecorded">> andalso kz_json:get_value(<<"numeric_prompt_count">>, E) =:= 2999;
++                  false -> kz_json:get_value(<<"numbers">>, E) =:= <<"native_say">> andalso kz_json:get_value(<<"numeric_prompt_count">>, E) =:= 0
++              end)).
++
++timestamp(V) when is_binary(V) ->
++    re:run(V, <<"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$">>, [{capture, none}]) =:= match;
++timestamp(_) -> false.
++
++editor_data(Queue, Catalog, Internal) ->
++    QueueId = kz_doc:id(Queue), Users = maps:get(<<"users">>, Internal), Routes = maps:get(<<"callflows">>, Internal),
++    Roster = [kz_doc:id(U) || U <- Users, lists:member(QueueId, kz_json:get_list_value(<<"queues">>, U, []))],
++    FullRoutes = public_catalog(<<"callflow">>, Routes),
++    Summaries = [kz_json:delete_key(<<"flow">>, R) || R <- FullRoutes],
++    Relevant = [R || R <- FullRoutes, references(kz_json:get_json_value(<<"flow">>, R), QueueId)],
++    Revisions = kz_json:from_list([{<<"queue">>, default(kz_doc:revision(Queue), null)},
++                                  {<<"users">>, revisions(Users)}, {<<"callflows">>, revisions(Routes)}]),
++    kz_json:set_values([{<<"queue">>, kz_json:set_value(<<"agents">>, Roster, kz_doc:public_fields(Queue))},
++                        {<<"roster">>, Roster}, {<<"revisions">>, Revisions},
++                        {<<"callflows">>, kz_json:from_list([{<<"summaries">>, Summaries}, {<<"routes">>, Relevant}])}], Catalog).
++revisions(Docs) -> kz_json:from_list([{kz_doc:id(D), kz_doc:revision(D)} || D <- Docs]).
++default(undefined, D) -> D;
++default(V, _) -> V.
++references(_Flow, undefined) -> false;
++references(Flow, QueueId) ->
++    (kz_json:get_value(<<"module">>, Flow) =:= <<"acdc_member">> andalso kz_json:get_value([<<"data">>, <<"id">>], Flow) =:= QueueId)
++        orelse lists:any(fun(Child) -> references(Child, QueueId) end,
++                          element(1, kz_json:get_values(kz_json:get_json_value(<<"children">>, Flow, kz_json:new())))).
++
++id(V) -> hex(V, 32).
++hex(V, N) when is_binary(V), byte_size(V) =:= N ->
++    lists:all(fun(C) -> (C >= $0 andalso C =< $9) orelse (C >= $a andalso C =< $f) end, binary_to_list(V));
++hex(_, _) -> false.
++
++%% Type-preserving canonical hash: kz_json:canonicalize/1 deliberately coerces
++%% strings such as "true", so it is not suitable for idempotency identity.
++digest(Value) -> kz_term:to_hex_binary(crypto:hash(sha256, kz_json:encode(sorted(Value)))).
++sorted({Props}) -> {[{K, sorted(V)} || {K, V} <- lists:keysort(1, Props)]};
++sorted(List) when is_list(List) -> [sorted(V) || V <- List];
++sorted(Value) -> Value.
++operation_id(Account, Owner, RequestId) ->
++    <<"acdc_queue_editor_", (digest([Account, Owner, RequestId]))/binary>>.
++owner(Context) ->
++    digest([cb_context:auth_account_id(Context), default(cb_context:auth_user_id(Context), null),
++            default(kz_json:get_value(<<"method">>, cb_context:auth_doc(Context)), null)]).
++
++check_body(Body) ->
++    need(kz_json:is_json_object(Body), 400, <<"editor_body_must_be_object">>),
++    Allowed = [<<"queue">>, <<"roster">>, <<"route">>, <<"revisions">>, <<"request_id">>],
++    need(lists:sort(kz_json:get_keys(Body)) =:= lists:sort(Allowed), 400, <<"editor_body_requires_exact_fields">>),
++    need(id(kz_json:get_value(<<"request_id">>, Body)), 400, <<"invalid_request_id">>),
++    Queue = kz_json:get_json_value(<<"queue">>, Body),
++    need(kz_json:is_json_object(Queue) andalso byte_size(kz_json:encode(Queue)) =< 65536, 400, <<"invalid_queue_settings">>),
++    need(lists:all(fun(<<"pvt_", _/binary>>) -> false; (<<"_", _/binary>>) -> false;
++                      (<<"id">>) -> false; (<<"agents">>) -> false; (_) -> true end, kz_json:get_keys(Queue)),
++         400, <<"queue_identity_and_roster_are_server_owned">>),
++    need(kz_json:is_json_object(kz_json:get_value(<<"revisions">>, Body)), 400, <<"revision_snapshot_required">>),
++    Roster = kz_json:get_value(<<"roster">>, Body),
++    need(Roster =:= null orelse (is_list(Roster) andalso length(Roster) =< ?LIMIT
++                               andalso lists:all(fun id/1, Roster) andalso length(lists:usort(Roster)) =:= length(Roster)),
++         400, <<"invalid_roster">>),
++    Route = kz_json:get_value(<<"route">>, Body),
++    need(Route =:= null orelse (kz_json:is_json_object(Route) andalso kz_json:get_keys(Route) =:= [<<"extension">>]
++                               andalso extension(kz_json:get_value(<<"extension">>, Route))), 400, <<"invalid_route_extension">>),
++    ok.
++extension(<<>>) -> true;
++extension(V) when is_binary(V), byte_size(V) =< 32 ->
++    re:run(V, <<"^\\+?[0-9*#]+$">>, [{capture, none}]) =:= match;
++extension(_) -> false.
++
++prepare_write(Context, QueueId) ->
++    require_authorized(Context), Body = cb_context:req_data(Context), check_body(Body),
++    Owner = owner(Context), OperationId = operation_id(cb_context:account_id(Context), Owner, kz_json:get_value(<<"request_id">>, Body)),
++    Hash = digest([default(QueueId, null), cb_context:req_verb(Context), Body]),
++    case kz_datamgr:open_doc(cb_context:db_name(Context), OperationId) of
++        {ok, Receipt} ->
++            need(kz_doc:type(Receipt) =:= <<"acdc_queue_editor_operation">>
++                 andalso kz_doc:account_id(Receipt) =:= cb_context:account_id(Context)
++                 andalso kz_json:get_value(<<"owner">>, Receipt) =:= Owner
++                 andalso kz_json:get_value(<<"body_hash">>, Receipt) =:= Hash, 409, <<"request_id_reused_with_different_request">>),
++            case kz_json:get_value(<<"state">>, Receipt) of
++                <<"complete">> -> cb_context:store(success(kz_json:get_json_value(<<"result">>, Receipt), Context), editor_plan, {replay, Receipt});
++                _ -> fail(409, <<"operation_incomplete_reload_before_recovery">>, operation_public(Receipt))
++            end;
++        {error, not_found} -> prepare_new(Context, QueueId, Body, Owner, OperationId, Hash);
++        _ -> fail(503, <<"operation_receipt_unavailable">>)
++    end.
++
++prepare_new(Context, QueueId, Body, Owner, OperationId, Hash) ->
++    Original = load_queue(Context, QueueId),
++    {Catalog, Internal} = catalogs(Context),
++    ensure_catalog(Catalog, <<"users">>),
++    Revisions = kz_json:get_json_value(<<"revisions">>, Body),
++    need(kz_json:get_value(<<"queue">>, Revisions) =:= default(kz_doc:revision(Original), null), 409, <<"queue_revision_conflict_reload">>),
++    Users = maps:get(<<"users">>, Internal), Routes = maps:get(<<"callflows">>, Internal),
++    SavedId = case QueueId of undefined -> binary:part(digest([OperationId, <<"queue">>]), 0, 32); _ -> QueueId end,
++    QueueBody = kz_json:get_json_value(<<"queue">>, Body),
++    validate_selections(Original, QueueBody, Catalog, Users),
++    QueueContext = queue_context(Context, QueueId, SavedId, QueueBody, Original),
++    UserDocs = case kz_json:get_value(<<"roster">>, Body) of
++                   null -> [];
++                   Roster ->
++                       _ = permit(Context, <<"queues">>, [SavedId, <<"roster">>], ?HTTP_POST),
++                       need(digest(kz_json:get_value(<<"users">>, Revisions)) =:= digest(revisions(Users)), 409, <<"roster_revision_conflict_reload">>),
++                       roster_plan(SavedId, Users, Roster)
++               end,
++    RoutePlan = case kz_json:get_value(<<"route">>, Body) of
++                    null -> preserve;
++                    RouteBody ->
++                        ensure_catalog(Catalog, <<"callflows">>),
++                        need(digest(kz_json:get_value(<<"callflows">>, Revisions)) =:= digest(revisions(Routes)), 409, <<"route_revision_conflict_reload">>),
++                        route_plan(Context, SavedId, OperationId, kz_json:get_value(<<"name">>, cb_context:doc(QueueContext)),
++                                   kz_json:get_value(<<"extension">>, RouteBody), Routes)
++                end,
++    Reservations = reservation_plan(Context, SavedId, OperationId, RoutePlan, Routes),
++    Remaining = case Reservations of
++                    [] -> [<<"queue">>, <<"roster">>, <<"route">>];
++                    _ -> [<<"reserve_extensions">>, <<"queue">>, <<"roster">>, <<"route">>, <<"finalize_extensions">>]
++                end,
++    Receipt = kz_doc:update_pvt_parameters(kz_json:from_list([
++                    {<<"_id">>, OperationId}, {<<"owner">>, Owner}, {<<"body_hash">>, Hash},
++                    {<<"queue_id">>, SavedId}, {<<"state">>, <<"running">>}, {<<"phase">>, <<"prepared">>},
++                    {<<"committed">>, []}, {<<"in_flight">>, []}, {<<"remaining">>, Remaining}]),
++                  cb_context:db_name(Context), [{account_id, cb_context:account_id(Context)}, {type, <<"acdc_queue_editor_operation">>}]),
++    Plan = #{queue => QueueContext, create => QueueId =:= undefined, users => UserDocs,
++             route => RoutePlan, reservations => Reservations, receipt => Receipt, body => Body},
++    cb_context:store(cb_context:set_resp_status(Context, success), editor_plan, Plan).
++
++ensure_catalog(Catalog, Key) ->
++    need(kz_json:is_true([<<"catalogs">>, Key, <<"complete">>], Catalog), 503, <<"editor_catalog_incomplete">>).
++
++queue_context(Context, QueueId, SavedId, Body, Original) ->
++    case QueueId of
++        undefined ->
++            Sub = permit(Context, <<"queues">>, [], ?HTTP_PUT),
++            Valid = cb_queues:validate(cb_context:set_req_data(Sub, Body)),
++            validated(Valid), cb_context:set_doc(Valid, kz_doc:set_id(cb_context:doc(Valid), SavedId));
++        _ ->
++            %% Validate a full merge, then retain the exact originally observed
++            %% revision: a racing change is a conflict, never silently overwritten.
++            Sub = permit(Context, <<"queues">>, [QueueId], ?HTTP_PATCH),
++            Valid = cb_queues:validate(cb_context:set_req_data(Sub, Body), QueueId),
++            validated(Valid), cb_context:set_doc(Valid, kz_doc:set_revision(cb_context:doc(Valid), kz_doc:revision(Original)))
++    end.
++validated(Context) ->
++    case cb_context:resp_status(Context) of success -> ok; _ -> throw({editor_context, Context}) end.
++
++merge_patch(Target, Patch) ->
++    kz_json:foldl(fun(Key, null, Acc) -> kz_json:delete_key(Key, Acc);
++                    (Key, Value, Acc) ->
++                        case kz_json:is_json_object(Value) of
++                            true -> kz_json:set_value(Key, merge_patch(kz_json:get_json_value(Key, Acc, kz_json:new()), Value), Acc);
++                            false -> kz_json:set_value(Key, Value, Acc)
++                        end
++                 end, Target, Patch).
++
++validate_selections(Original, Patch, Catalog, Users) ->
++    Next = merge_patch(kz_doc:public_fields(Original), Patch),
++    Authority = kz_json:get_value([<<"callback">>, <<"outbound_authority">>], Next),
++    ChangedAuthority = Authority =/= kz_json:get_value([<<"callback">>, <<"outbound_authority">>], Original),
++    case ChangedAuthority andalso kz_json:is_true([<<"callback">>, <<"enabled">>], Next) of
++        true ->
++            UserId = kz_json:get_value(<<"id">>, Authority),
++            need(kz_json:get_value(<<"type">>, Authority) =:= <<"user">> andalso
++                 lists:any(fun(U) -> kz_doc:id(U) =:= UserId andalso not kz_json:is_false(<<"enabled">>, U) end, Users),
++                 400, <<"callback_authority_must_be_enabled_account_user">>);
++        false -> ok
++    end,
++    Language = kz_json:get_value([<<"announcements">>, <<"language">>], Next),
++    case Language =/= undefined andalso Language =/= kz_json:get_value([<<"announcements">>, <<"language">>], Original) of
++        true -> need(lists:member(Language, locales()) andalso kz_json:is_true([<<"language_capabilities">>, <<"languages">>, Language, <<"ready">>], Catalog),
++                     400, <<"language_not_verified_ready">>);
++        false -> ok
++    end,
++    lists:foreach(fun(Key) ->
++        Value = kz_json:get_value(Key, Next),
++        case Value =/= undefined andalso Value =/= <<>> andalso Value =/= kz_json:get_value(Key, Original) of
++            false -> ok;
++            true ->
++                ensure_catalog(Catalog, <<"media">>),
++                AccountIds = [kz_json:get_value(<<"id">>, M) || M <- kz_json:get_list_value(<<"media">>, Catalog, [])],
++                SystemIds = [lists:last(binary:split(kz_json:get_value(<<"id">>, M), <<"/">>, [global]))
++                             || M <- kz_json:get_list_value(<<"system_media">>, Catalog, [])],
++                need(lists:member(Value, AccountIds ++ SystemIds), 400, <<"media_selection_not_in_catalog">>)
++        end
++    end, [<<"moh">>, <<"announce">>]),
++    NumberPath = [<<"callback">>, <<"outbound_caller_id">>, <<"number">>],
++    Number = kz_json:get_value(NumberPath, Next),
++    case Number =/= undefined andalso Number =/= kz_json:get_value(NumberPath, Original) of
++        true -> ensure_catalog(Catalog, <<"numbers">>),
++                need(lists:any(fun(N) -> kz_json:get_value(<<"number">>, N) =:= Number end,
++                               kz_json:get_list_value(<<"numbers">>, Catalog, [])), 400, <<"caller_id_not_owned_in_service">>);
++        false -> ok
++    end.
++
++roster_plan(QueueId, Users, Requested) ->
++    need(id(QueueId) andalso is_list(Requested) andalso length(Requested) =< ?LIMIT
++         andalso lists:all(fun id/1, Requested) andalso length(lists:usort(Requested)) =:= length(Requested), 400, <<"invalid_roster">>),
++    Known = [kz_doc:id(U) || U <- Users],
++    need(lists:all(fun(Id) -> lists:member(Id, Known) end, Requested), 400, <<"roster_contains_unknown_user">>),
++    lists:filtermap(fun(User) ->
++        Queues = kz_json:get_value(<<"queues">>, User, []),
++        need(is_list(Queues) andalso lists:all(fun is_binary/1, Queues), 409, <<"invalid_existing_roster_preserved">>),
++        Before = lists:member(QueueId, Queues), After = lists:member(kz_doc:id(User), Requested),
++        case {Before, After} of
++            {false, true} -> need(not kz_json:is_false(<<"enabled">>, User), 400, <<"cannot_assign_disabled_user">>),
++                             {true, kz_json:set_value(<<"queues">>, [QueueId|Queues], User)};
++            {true, false} -> {true, kz_json:set_value(<<"queues">>, lists:delete(QueueId, Queues), User)};
++            _ -> false
++        end
++    end, Users).
++
++strict_route(Route, QueueId) ->
++    Numbers = kz_json:get_value(<<"numbers">>, Route), Flow = kz_json:get_json_value(<<"flow">>, Route, kz_json:new()),
++    Data = kz_json:get_json_value(<<"data">>, Flow, kz_json:new()),
++    Children = kz_json:get_json_value(<<"children">>, Flow, kz_json:new()),
++    id(default(kz_doc:id(Route), kz_json:get_value(<<"id">>, Route)))
++        andalso is_list(Numbers) andalso length(Numbers) =:= 1 andalso extension(hd(Numbers)) andalso hd(Numbers) =/= <<>>
++        andalso kz_json:get_value(<<"flags">>, Route) =:= [?FLAG, <<?QFLAG/binary, QueueId/binary>>]
++        andalso lists:sort(kz_json:get_keys(Flow)) =:= lists:sort([<<"module">>, <<"data">>, <<"children">>])
++        andalso kz_json:get_value(<<"module">>, Flow) =:= <<"acdc_member">>
++        andalso kz_json:get_keys(Data) =:= [<<"id">>] andalso kz_json:get_value(<<"id">>, Data) =:= QueueId
++        andalso kz_json:is_empty(Children) andalso kz_json:get_value(<<"patterns">>, Route, []) =:= [].
++
++route_plan(Context, QueueId, OperationId, Name, Extension, Routes) ->
++    Owned = [R || R <- Routes, strict_route(R, QueueId)],
++    need(length(Owned) =< 1, 409, <<"multiple_managed_routes_preserved">>),
++    Existing = case Owned of [] -> undefined; [R] -> R end,
++    %% A removed route is soft-deleted for recovery. A later new operation must
++    %% use a new stable ID, not overwrite that tombstone without its revision.
++    RouteId = case Existing of undefined -> binary:part(digest([<<"acdc_managed_route">>, QueueId, OperationId]), 0, 32); _ -> kz_doc:id(Existing) end,
++    case {Existing, Extension} of
++        {undefined, <<>>} -> preserve;
++        {_, <<>>} ->
++            Sub = permit(Context, <<"callflows">>, [RouteId], ?HTTP_DELETE),
++            {delete, cb_context:store(cb_context:set_doc(Sub, Existing), db_doc, Existing)};
++        _ ->
++            need(not lists:any(fun(R) -> kz_doc:id(R) =/= RouteId andalso lists:member(Extension, kz_json:get_list_value(<<"numbers">>, R, [])) end, Routes),
++                 409, <<"extension_already_in_use">>),
++            Route = kz_json:set_values([{<<"name">>, <<Name/binary, " (ACDC)">>}, {<<"numbers">>, [Extension]}, {<<"patterns">>, []},
++                        {<<"flags">>, [?FLAG, <<?QFLAG/binary, QueueId/binary>>]},
++                        {<<"flow">>, kz_json:from_list([{<<"module">>, <<"acdc_member">>},
++                                {<<"data">>, kz_json:from_list([{<<"id">>, QueueId}])}, {<<"children">>, kz_json:new()}])}],
++                       case Existing of undefined -> kz_json:new(); _ -> kz_doc:public_fields(Existing) end),
++            case Existing of
++                undefined ->
++                    Sub = permit(Context, <<"callflows">>, [], ?HTTP_PUT),
++                    Valid = cb_callflows:validate(cb_context:set_req_data(Sub, Route)), validated(Valid),
++                    {create, cb_context:set_doc(Valid, kz_doc:set_id(cb_context:doc(Valid), RouteId))};
++                _ ->
++                    Sub = permit(Context, <<"callflows">>, [RouteId], ?HTTP_POST),
++                    Valid = cb_callflows:validate(cb_context:set_req_data(Sub, Route), RouteId), validated(Valid),
++                    {update, cb_context:set_doc(Valid, kz_doc:set_revision(cb_context:doc(Valid), kz_doc:revision(Existing)))}
++            end
++    end.
++
++%% A durable account-local extension index closes races between aggregate
++%% writers for DIFFERENT queues. These are not expiring locks: an unresolved
++%% operation retains its reservation and receipt for explicit recovery. Direct
++%% legacy callflow writers do not participate and remain outside this guard.
++%% At most the old and target extension are read/claimed, in deterministic order.
++reservation_plan(_Context, _QueueId, _OperationId, preserve, _Routes) -> [];
++reservation_plan(Context, QueueId, OperationId, {Action, RouteContext}, Routes) ->
++    Route = cb_context:doc(RouteContext), RouteId = kz_doc:id(Route),
++    Existing = case [R || R <- Routes, kz_doc:id(R) =:= RouteId] of [] -> undefined; [R] -> R end,
++    Old = case Existing of undefined -> []; _ -> kz_json:get_list_value(<<"numbers">>, Existing) end,
++    Target = case Action of delete -> []; _ -> kz_json:get_list_value(<<"numbers">>, Route) end,
++    Extensions = lists:usort(Old ++ Target),
++    need(length(Extensions) =< 2 andalso lists:all(fun extension/1, Extensions), 409, <<"invalid_managed_route_extensions">>),
++    [{reservation_doc(Context, QueueId, RouteId, OperationId, Extension, Existing), lists:member(Extension, Target)}
++     || Extension <- Extensions].
++
++reservation_doc(Context, QueueId, RouteId, OperationId, Extension, Existing) ->
++    Account = cb_context:account_id(Context), Db = cb_context:db_name(Context),
++    ExistingRevision = case Existing of undefined -> null; _ -> kz_doc:revision(Existing) end,
++    Id = <<"acdc_queue_extension_", (digest([Account, Extension]))/binary>>,
++    Current = case kz_datamgr:open_doc(Db, Id) of
++                  {error, not_found} -> kz_json:from_list([{<<"_id">>, Id}]);
++                  {ok, D} ->
++                      need(scoped_doc(D, Context, <<"acdc_queue_extension">>)
++                           andalso kz_json:get_value(<<"extension">>, D) =:= Extension,
++                           409, <<"extension_reservation_identity_conflict">>),
++                      Released = kz_json:get_value(<<"state">>, D) =:= <<"released">>,
++                      Assigned = Existing =/= undefined andalso kz_json:get_value(<<"state">>, D) =:= <<"assigned">>
++                          andalso kz_json:get_value(<<"queue_id">>, D) =:= QueueId
++                          andalso kz_json:get_value(<<"route_id">>, D) =:= RouteId
++                          andalso kz_json:get_value(<<"route_revision">>, D) =:= kz_doc:revision(Existing)
++                          andalso lists:member(Extension, kz_json:get_list_value(<<"numbers">>, Existing, [])),
++                      need(Released orelse Assigned, 409, <<"extension_reserved_reload_or_recover">>), D;
++                  _ -> fail(503, <<"extension_reservation_unavailable">>)
++              end,
++    kz_doc:update_pvt_parameters(kz_json:set_values([{<<"extension">>, Extension}, {<<"queue_id">>, QueueId},
++        {<<"route_id">>, RouteId}, {<<"operation_id">>, OperationId}, {<<"state">>, <<"reserved">>},
++        {<<"route_revision">>, ExistingRevision}], Current),
++        Db, [{account_id, Account}, {type, <<"acdc_queue_extension">>}]).
++
++reserve_extensions(_Context, [], Receipt) -> {[], Receipt};
++reserve_extensions(Context, Plans, Receipt0) ->
++    Ids = [kz_doc:id(D) || {D, _} <- Plans],
++    Receipt1 = phase(Context, Receipt0, <<"reserve_extensions">>, Ids),
++    {Claimed, Receipt2} = lists:foldl(fun({Doc, Target}, {Acc, Receipt}) ->
++        case kz_datamgr:save_doc(cb_context:db_name(Context), Doc) of
++            {ok, Saved} ->
++                %% Persist each confirmed claim before starting another one.
++                %% A lost reply still leaves its exact ID in in_flight.
++                Claims = kz_json:get_list_value(<<"extension_claims">>, Receipt, []),
++                Claim = kz_json:from_list([{<<"id">>, kz_doc:id(Saved)}, {<<"extension">>, kz_json:get_value(<<"extension">>, Saved)},
++                                          {<<"revision">>, kz_doc:revision(Saved)}]),
++                Next = persist_receipt(Context, kz_json:set_value(<<"extension_claims">>, Claims ++ [Claim], Receipt)),
++                {Acc ++ [{Saved, Target}], Next};
++            {error, conflict} -> fail(409, <<"extension_reservation_conflict_no_settings_written">>);
++            _ -> fail(503, <<"extension_reservation_outcome_unknown">>)
++        end
++    end, {[], Receipt1}, Plans),
++    {Claimed, committed(Context, Receipt2, <<"reserve_extensions">>, Ids)}.
++
++finalize_extensions(_Context, [], _SavedRoute, Receipt) -> Receipt;
++finalize_extensions(Context, Claims, SavedRoute, Receipt0) ->
++    Revision = kz_doc:revision(SavedRoute),
++    need(is_binary(Revision), 503, <<"saved_route_revision_unavailable">>),
++    Ids = [kz_doc:id(D) || {D, _} <- Claims],
++    Receipt1 = phase(Context, Receipt0, <<"finalize_extensions">>, Ids),
++    lists:foreach(fun({Doc, Target}) ->
++        State = case Target of true -> <<"assigned">>; false -> <<"released">> end,
++        Final = kz_json:set_values([{<<"state">>, State}, {<<"route_revision">>, Revision}], Doc),
++        case kz_datamgr:save_doc(cb_context:db_name(Context), Final) of
++            {ok, _} -> ok;
++            _ -> fail(503, <<"extension_finalization_requires_recovery">>)
++        end
++    end, Claims),
++    committed(Context, Receipt1, <<"finalize_extensions">>, Ids).
++
++%% The receipt itself is the unique CAS claim. There is no process lock or lease
++%% to expire/reacquire while an earlier writer might still be running. A crashed
++%% or ambiguous operation remains explicit and requires a fresh editor read;
++%% it is never automatically replayed over documents changed by another writer.
++execute_plan(Context, {replay, Receipt}) -> success(kz_json:get_json_value(<<"result">>, Receipt), Context);
++execute_plan(Context, Plan) when is_map(Plan) ->
++    Db = cb_context:db_name(Context),
++    case kz_datamgr:save_doc(Db, maps:get(receipt, Plan)) of
++        {error, conflict} -> fail(409, <<"request_already_claimed_retry_identical_request">>);
++        {error, _} -> fail(503, <<"operation_claim_failed_no_settings_written">>);
++        {ok, Receipt} ->
++            %% Once claimed, ALL failures carry the persisted operation identity.
++            try execute_claimed(Context, Plan, Receipt)
++            catch _:_ ->
++                Current = case kz_datamgr:open_doc(Db, kz_doc:id(Receipt)) of {ok, R} -> R; _ -> Receipt end,
++                fail(409, <<"operation_incomplete_reload_before_recovery">>, operation_public(Current))
++            end
++    end.
++
++execute_claimed(Context, Plan, Receipt0) ->
++    QueueContext = maps:get(queue, Plan), QueueId = kz_doc:id(cb_context:doc(QueueContext)),
++    {Claims, ReservedReceipt} = reserve_extensions(Context, maps:get(reservations, Plan), Receipt0),
++    Receipt1 = phase(Context, ReservedReceipt, <<"queue">>, [QueueId]),
++    SavedContext = case maps:get(create, Plan) of true -> cb_queues:put(QueueContext); false -> cb_queues:post(QueueContext, QueueId) end,
++    validated(SavedContext),
++    Receipt2 = committed(Context, Receipt1, <<"queue">>, [QueueId]),
++    Users = maps:get(users, Plan), UserIds = [kz_doc:id(U) || U <- Users],
++    Receipt3 = phase(Context, Receipt2, <<"roster">>, UserIds),
++    case Users of
++        [] -> ok;
++        _ ->
++            Updated = [kz_doc:update_pvt_parameters(U, cb_context:db_name(Context), [{account_id, cb_context:account_id(Context)}]) || U <- Users],
++            case kz_datamgr:save_docs(cb_context:db_name(Context), Updated) of
++                {ok, Results} ->
++                    Good = [kz_doc:id(R) || R <- Results, kz_json:get_value(<<"error">>, R) =:= undefined,
++                             is_binary(kz_doc:revision(R)), lists:member(kz_doc:id(R), UserIds)],
++                    case lists:sort(Good) =:= lists:sort(UserIds) of
++                        true -> ok;
++                        false ->
++                            _ = record_partial(Context, Receipt3, Good),
++                            fail(409, <<"roster_partial_write">>)
++                    end;
++                _ -> fail(503, <<"roster_write_outcome_unknown">>)
++            end
++    end,
++    Receipt4 = committed(Context, Receipt3, <<"roster">>, UserIds),
++    Route = maps:get(route, Plan),
++    RouteIds = case Route of preserve -> []; {_, RC} -> [kz_doc:id(cb_context:doc(RC))] end,
++    Receipt5 = phase(Context, Receipt4, <<"route">>, RouteIds),
++    SavedRouteContext = case Route of
++        preserve -> undefined;
++        {create, RC1} -> cb_callflows:put(RC1);
++        {update, RC1} -> cb_callflows:post(RC1, kz_doc:id(cb_context:doc(RC1)));
++        {delete, RC1} -> delete_route_cas(RC1)
++    end,
++    SavedRoute = case SavedRouteContext of undefined -> undefined; _ -> validated(SavedRouteContext), cb_context:doc(SavedRouteContext) end,
++    Receipt6 = finalize_extensions(Context, Claims, SavedRoute, committed(Context, Receipt5, <<"route">>, RouteIds)),
++    Result = kz_json:from_list([{<<"queue_id">>, QueueId}, {<<"operation_id">>, kz_doc:id(Receipt6)},
++                  {<<"state">>, <<"complete">>}, {<<"atomic">>, false},
++                  {<<"roster_preserved">>, kz_json:get_value(<<"roster">>, maps:get(body, Plan)) =:= null},
++                  {<<"route_preserved">>, kz_json:get_value(<<"route">>, maps:get(body, Plan)) =:= null},
++                  {<<"reload_required">>, true}]),
++    _ = persist_receipt(Context, kz_json:set_values([{<<"state">>, <<"complete">>}, {<<"phase">>, <<"complete">>},
++                                                    {<<"result">>, Result}], Receipt6)),
++    success(Result, Context).
++
++delete_route_cas(Context) ->
++    %% crossbar_doc:delete/1 refreshes the current revision before its default
++    %% soft-delete. That is unsuitable here: a route changed after validation
++    %% must conflict. Save the tombstone against our exact observed revision,
++    %% preserving the full original route for recovery and using normal save
++    %% hooks. Number assignment tracking happens only after the CAS succeeds.
++    Doc = cb_context:doc(Context),
++    Saved = crossbar_doc:save(cb_context:set_doc(Context, kz_doc:set_soft_deleted(Doc, true))),
++    validated(Saved),
++    Account = cb_context:account_id(Context),
++    Unassigned = [{N, undefined} || N <- kz_json:get_list_value(<<"numbers">>, Doc, []),
++                                   knm_converters:is_reconcilable(N, Account)],
++    Updates = cb_modules_util:apply_assignment_updates(Unassigned, Context),
++    cb_modules_util:log_assignment_updates(Updates), Saved.
++
++phase(Context, Receipt, Phase, Ids) ->
++    persist_receipt(Context, kz_json:set_values([{<<"phase">>, Phase}, {<<"in_flight">>, Ids}], Receipt)).
++committed(Context, Receipt, Phase, Ids) ->
++    Before = kz_json:get_list_value(<<"committed">>, Receipt, []),
++    Entry = kz_json:from_list([{<<"phase">>, Phase}, {<<"ids">>, Ids}]),
++    Remaining = lists:delete(Phase, kz_json:get_list_value(<<"remaining">>, Receipt, [])),
++    persist_receipt(Context, kz_json:set_values([{<<"committed">>, Before ++ [Entry]}, {<<"in_flight">>, []},
++                                                {<<"remaining">>, Remaining}], Receipt)).
++record_partial(Context, Receipt, Good) ->
++    Before = kz_json:get_list_value(<<"committed">>, Receipt, []),
++    Entry = kz_json:from_list([{<<"phase">>, <<"roster_partial">>}, {<<"ids">>, Good}]),
++    persist_receipt(Context, kz_json:set_values([{<<"state">>, <<"partial">>}, {<<"committed">>, Before ++ [Entry]}], Receipt)).
++persist_receipt(Context, Receipt) ->
++    case kz_datamgr:save_doc(cb_context:db_name(Context), Receipt) of
++        {ok, Saved} -> Saved;
++        _ -> fail(503, <<"operation_receipt_update_failed">>)
++    end.
++operation_public(Receipt) ->
++    kz_json:from_list([{<<"operation_id">>, kz_doc:id(Receipt)}, {<<"queue_id">>, kz_json:get_value(<<"queue_id">>, Receipt)},
++                       {<<"state">>, kz_json:get_value(<<"state">>, Receipt)}, {<<"phase">>, kz_json:get_value(<<"phase">>, Receipt)},
++                       {<<"committed">>, kz_json:get_value(<<"committed">>, Receipt, [])},
++                       {<<"in_flight">>, kz_json:get_value(<<"in_flight">>, Receipt, [])},
++                       {<<"remaining">>, kz_json:get_value(<<"remaining">>, Receipt, [])},
++                       {<<"extension_claims">>, kz_json:get_value(<<"extension_claims">>, Receipt, [])},
++                       {<<"atomic">>, false}, {<<"reload_required">>, true}]).
 diff --git a/src/kapi_acdc_callback.erl b/src/kapi_acdc_callback.erl
 new file mode 100644
 index 0000000..84ce65e

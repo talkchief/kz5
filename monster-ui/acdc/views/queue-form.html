@@ -31,13 +31,16 @@
 			<label class="acdc-field"><span>{{i18n.acdc.fields.announcementInterval}}</span><input class="acdc-announcement-interval" type="number" name="announcements.interval" min="15" value="{{queue.announcements.interval}}" required><small>{{i18n.acdc.announcements.intervalHelp}}</small></label>
 			<label class="acdc-field"><span>{{i18n.acdc.fields.announcementInitialDelay}}</span><input class="acdc-announcement-initial-delay" type="number" name="announcements.initial_delay" min="1" max="3600" value="{{queue.announcements.initial_delay}}" required><small>{{i18n.acdc.announcements.initialDelayHelp}}</small></label>
 			<label class="acdc-field"><span>{{i18n.acdc.fields.announcementLanguage}}</span><select class="acdc-announcement-language" name="announcements.language"></select><small>{{i18n.acdc.announcements.languageHelp}}</small></label>
-			<div class="acdc-form-subsection acdc-field-wide"><h3>{{i18n.acdc.announcements.promptsTitle}}</h3><p>{{i18n.acdc.announcements.promptsDescription}}</p></div>
-			<label class="acdc-field"><span>{{i18n.acdc.fields.positionPrefixPrompt}}</span><select class="acdc-media-select" name="announcements.media.you_are_at_position" required></select></label>
-			<label class="acdc-field"><span>{{i18n.acdc.fields.positionSuffixPrompt}}</span><select class="acdc-media-select" name="announcements.media.in_the_queue" required></select></label>
-			<label class="acdc-field"><span>{{i18n.acdc.fields.waitTimePrompt}}</span><select class="acdc-media-select" name="announcements.media.the_estimated_wait_time_is" required></select></label>
-			<label class="acdc-field"><span>{{i18n.acdc.fields.volumeIncreasePrompt}}</span><select class="acdc-media-select" name="announcements.media.increase_in_call_volume" required></select></label>
+			{{#if legacyPromptOverrides}}<div class="acdc-warning acdc-field-wide acdc-legacy-prompt-warning" role="status">{{i18n.acdc.announcements.legacyPromptsPreserved}}</div>{{/if}}
+			<input type="hidden" name="announcements.media.you_are_at_position" value="{{queue.announcements.media.you_are_at_position}}">
+			<input type="hidden" name="announcements.media.in_the_queue" value="{{queue.announcements.media.in_the_queue}}">
+			<input type="hidden" name="announcements.media.the_estimated_wait_time_is" value="{{queue.announcements.media.the_estimated_wait_time_is}}">
+			<input type="hidden" name="announcements.media.increase_in_call_volume" value="{{queue.announcements.media.increase_in_call_volume}}">
 			<div class="acdc-form-subsection acdc-field-wide"><h3>{{i18n.acdc.callbacks.configurationTitle}}</h3><p>{{i18n.acdc.callbacks.configurationDescription}}</p></div>
 			<label class="acdc-check"><input class="acdc-callback-enabled" type="checkbox" name="callback.enabled"{{#if queue.callback.enabled}} checked{{/if}}> <span>{{i18n.acdc.fields.callbackEnabled}}</span></label>
+			<label class="acdc-check acdc-callback-settings"><input class="acdc-callback-announcement-enabled" type="checkbox" name="callback.announcement.enabled"{{#if queue.callback.announcement.enabled}} checked{{/if}}> <span>{{i18n.acdc.fields.callbackAnnouncementEnabled}}</span></label>
+			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackAnnouncementInitialDelay}}</span><input class="acdc-callback-announcement-timing" type="number" name="callback.announcement.initial_delay" min="1" max="3600" value="{{queue.callback.announcement.initial_delay}}" required><small>{{i18n.acdc.callbacks.announcementTimingHelp}}</small></label>
+			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackAnnouncementInterval}}</span><input class="acdc-callback-announcement-timing" type="number" name="callback.announcement.interval" min="15" max="3600" value="{{queue.callback.announcement.interval}}" required><small>{{i18n.acdc.callbacks.announcementDisabledHelp}}</small></label>
 			<label class="acdc-check acdc-callback-settings"><input type="checkbox" name="callback.allow_alternate_number"{{#if queue.callback.allow_alternate_number}} checked{{/if}}> <span>{{i18n.acdc.fields.callbackAllowAlternate}}</span></label>
 			<label class="acdc-check acdc-callback-settings"><input class="acdc-callback-local-resources" type="checkbox" name="callback.use_local_resources"{{#if queue.callback.use_local_resources}} checked{{/if}}> <span>{{i18n.acdc.fields.callbackUseLocalResources}}</span><small>{{i18n.acdc.callbacks.localResourcesHelp}}</small></label>
 			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackEntryKey}}</span><select name="callback.entry_key" required>{{#select queue.callback.entry_key}}<option value="0">0</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>{{/select}}</select><small>{{i18n.acdc.callbacks.keysHelp}}</small></label>
@@ -55,13 +58,12 @@
 			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackHandoffTimeout}}</span><input type="number" name="callback.handoff_timeout" min="1" max="10" value="{{queue.callback.handoff_timeout}}" required></label>
 			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackMenuTimeout}}</span><input type="number" name="callback.menu_timeout_ms" min="1000" max="120000" value="{{queue.callback.menu_timeout_ms}}" required></label>
 			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackSuccessTimeout}}</span><input type="number" name="callback.success_timeout_ms" min="1000" max="30000" value="{{queue.callback.success_timeout_ms}}" required></label>
-			<div class="acdc-form-subsection acdc-field-wide acdc-callback-settings"><h3>{{i18n.acdc.callbacks.mediaTitle}}</h3><p>{{i18n.acdc.callbacks.mediaDescription}}</p></div>
-			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackOfferMedia}}</span><select class="acdc-media-select" name="callback.media.offer"></select></label>
-			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackMenuMedia}}</span><select class="acdc-media-select" name="callback.media.menu"></select></label>
-			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackReadbackMedia}}</span><select class="acdc-media-select" name="callback.media.number_readback"></select></label>
-			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackConfirmationMedia}}</span><select class="acdc-media-select" name="callback.media.confirmation"></select></label>
-			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackSuccessMedia}}</span><select class="acdc-media-select" name="callback.media.success"></select></label>
-			<label class="acdc-field acdc-callback-settings"><span>{{i18n.acdc.fields.callbackReturnedMedia}}</span><select class="acdc-media-select" name="callback.media.returned_confirmation"></select></label>
+			<input type="hidden" name="callback.media.offer" value="{{queue.callback.media.offer}}">
+			<input type="hidden" name="callback.media.menu" value="{{queue.callback.media.menu}}">
+			<input type="hidden" name="callback.media.number_readback" value="{{queue.callback.media.number_readback}}">
+			<input type="hidden" name="callback.media.confirmation" value="{{queue.callback.media.confirmation}}">
+			<input type="hidden" name="callback.media.success" value="{{queue.callback.media.success}}">
+			<input type="hidden" name="callback.media.returned_confirmation" value="{{queue.callback.media.returned_confirmation}}">
 		</div>
 		<div class="acdc-form-actions"><button type="button" class="monster-button-secondary acdc-cancel">{{i18n.acdc.actions.cancel}}</button><button type="submit" class="monster-button-primary"><i class="fa fa-spinner fa-spin acdc-save-spinner"></i> {{i18n.acdc.actions.save}}</button></div>
 	</form>

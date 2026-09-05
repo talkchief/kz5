@@ -73,6 +73,8 @@ if (require.main === module) {
     // Generated configuration is public. Do not print its contents or keys.
     const temporary = file + '.' + process.pid + '.tmp';
     fs.writeFileSync(temporary, output, {flag: 'wx', mode: 0o644});
+    // Installers run with umask077; the browser still needs this public asset.
+    fs.chmodSync(temporary, 0o644);
     fs.renameSync(temporary, file);
     console.log('PASS public Monster configuration: preserved existing settings and explicit optional capabilities');
 }

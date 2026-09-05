@@ -1,0 +1,23 @@
+diff --git a/sup/src/sup.erl b/sup/src/sup.erl
+--- a/sup/src/sup.erl
++++ b/sup/src/sup.erl
+@@ -119,13 +119,16 @@ parse_erl_terms_from_arg(Arg) ->
+             print_erl_term_args_help()
+     end.
+ 
+--spec in_kazoo(atom(), module(), atom(), kz_term:binaries()) -> no_return().
++-spec in_kazoo(atom(), module(), atom(), [term()]) -> term().
+ in_kazoo(SUPName, M, F, As) ->
+     kz_log:put_callid(SUPName),
+     erlang:put('is_sup_call', 'true'),
+-    lager:notice("~s: ~s ~s ~s", [?MODULE, M, F, kz_term:iolist_join($,, As)]),
++    %% -e arguments are arbitrary Erlang terms, not strings. Audit metadata
++    %% only: arguments and results may contain credentials or customer data.
++    Arity = length(As),
++    lager:notice("sup RPC ~p:~p/~B started", [M, F, Arity]),
+     R = apply(M, F, As),
+-    lager:notice("~s result: ~p", [?MODULE, R]),
++    lager:notice("sup RPC ~p:~p/~B completed", [M, F, Arity]),
+     R.
+ 
+ -spec print_result(any(), boolean()) -> 'ok'.
