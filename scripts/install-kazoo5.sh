@@ -32,13 +32,14 @@ readonly KAZOO_PERSISTED_KEYS=(
     KAZOO_BOOTSTRAP_MASTER_ACCOUNT KAZOO_MASTER_ACCOUNT_NAME
     KAZOO_MASTER_ACCOUNT_REALM KAZOO_MASTER_ADMIN_USER KAZOO_INSTALLER_SECRETS
     KAZOO_PUBLIC_HOSTNAME KAZOO_TLS_CERT_FILE KAZOO_TLS_KEY_FILE
-    KAZOO_TLS_CHAIN_FILE KAZOO_API_UPSTREAM
+    KAZOO_TLS_CHAIN_FILE KAZOO_API_UPSTREAM KAZOO_WEBSOCKET_UPSTREAM
     COUCHDB_VERSION RABBITMQ_VERSION ERLANG_VERSION HTMLDOC_VERSION HTMLDOC_REF
     FREESWITCH_VERSION FREESWITCH_REF SPANDSP_REF SOFIA_SIP_REF MOD_KAZOO_REF
     FREESWITCH_CONFIG_REF KAZOO_CORE_CONFIG_REF KAZOO_CORE_REF KAZOO_CROSSBAR_REF KAZOO_ECALLMGR_REF KAZOO_STEPSWITCH_REF KAZOO_CDR_REF KAZOO_SOUNDS_REF ACDC_REF KAMAILIO_VERSION
     KAMAILIO_CONFIG_REF KAMAILIO_CHILDREN KAMAILIO_TCP_CHILDREN
     KAMAILIO_AMQP_CONSUMERS KAMAILIO_AMQP_WORKERS MONSTER_UI_REF
     MONSTER_UI_NODE_MAJOR MONSTER_UI_WEB_ROOT MONSTER_UI_REGISTER_APPS
+    MONSTER_UI_WEBSOCKET_URL MONSTER_UI_REMOTE_BRANDING MONSTER_UI_BRAINTREE
     MONSTER_UI_APPS_LIST MONSTER_UI_ACCOUNTS_REF MONSTER_UI_CALLFLOWS_REF
     MONSTER_UI_CSV_ONBOARDING_REF MONSTER_UI_FAX_REF MONSTER_UI_NUMBERS_REF
     MONSTER_UI_PBXS_REF MONSTER_UI_VOICEMAILS_REF MONSTER_UI_WEBHOOKS_REF
@@ -177,6 +178,10 @@ MONSTER_UI_REF=${MONSTER_UI_REF:-7ef735eada6fd0e2b96c06f32c0bb868867f7d18}
 MONSTER_UI_NODE_MAJOR=${MONSTER_UI_NODE_MAJOR:-18}
 MONSTER_UI_WEB_ROOT=${MONSTER_UI_WEB_ROOT:-/var/www/html/monster-ui}
 MONSTER_UI_REGISTER_APPS=${MONSTER_UI_REGISTER_APPS:-auto}
+MONSTER_UI_WEBSOCKET_URL=${MONSTER_UI_WEBSOCKET_URL:-auto}
+MONSTER_UI_REMOTE_BRANDING=${MONSTER_UI_REMOTE_BRANDING:-auto}
+MONSTER_UI_BRAINTREE=${MONSTER_UI_BRAINTREE:-auto}
+KAZOO_WEBSOCKET_UPSTREAM=${KAZOO_WEBSOCKET_UPSTREAM:-http://127.0.0.1:5555/websocket}
 MONSTER_UI_APPS_LIST=${MONSTER_UI_APPS_LIST:-acdc,accounts,callflows,csv-onboarding,fax,numbers,pbxs,voicemails,webhooks,voip}
 MONSTER_UI_ACCOUNTS_REF=${MONSTER_UI_ACCOUNTS_REF:-bcdc6b734c45f370f835276a79827513b111482a}
 MONSTER_UI_CALLFLOWS_REF=${MONSTER_UI_CALLFLOWS_REF:-11d6a7f797576f2ddd3cbadf6474787e95d5c760}
@@ -3555,13 +3560,20 @@ monster_local_app_fingerprint() {
 }
 
 monster_ui_build_fingerprint() {
-    local app ref
+    local app ref patch
     printf '%s\n' \
         "monster_ui=${MONSTER_UI_REF}" \
         "node=${MONSTER_UI_NODE_MAJOR}" \
-        "api=${KAZOO_API_URL}"
+        "api=${KAZOO_API_URL}" \
+        "socket=${MONSTER_UI_WEBSOCKET_URL}" \
+        "remote_branding=${MONSTER_UI_REMOTE_BRANDING}" \
+        "braintree=${MONSTER_UI_BRAINTREE}"
     printf 'framework_myaccount_patch=%s\n' \
         "$(sha256sum "$SCRIPT_DIR/patches/monster-ui-myaccount-transition.patch" | awk '{print $1}')"
+    for patch in monster-ui-branding-billing.patch monster-ui-websocket-config.patch monster-ui-optional-integrations.patch; do
+        printf '%s=%s\n' "$patch" "$(sha256sum "$SCRIPT_DIR/patches/$patch" | awk '{print $1}')"
+    done
+    printf 'runtime_configuration=%s\n' "$(sha256sum "$SCRIPT_DIR/configure-monster-runtime.cjs" | awk '{print $1}')"
     for app in ${MONSTER_UI_APPS_LIST//,/ }; do
         ref=$(monster_app_ref "$app")
         printf 'app_%s=%s\n' "$app" "$ref"
@@ -3600,7 +3612,7 @@ sync_monster_ui_sources() {
     local app ref app_dir callflows_patch myaccount_patch supported_app
     local -a supported_apps=(acdc accounts callflows csv-onboarding fax numbers pbxs voicemails webhooks voip)
     if [[ $DRY_RUN != true && -d $source_dir/.git ]]; then
-        git -C "$source_dir" checkout -- package.json package-lock.json src/js/config.js
+        git -C "$source_dir" checkout -- package.json package-lock.json
     fi
     sync_git https://github.com/2600hz/monster-ui.git "$source_dir" "$MONSTER_UI_REF"
     myaccount_patch="$SCRIPT_DIR/patches/monster-ui-myaccount-transition.patch"
@@ -3612,6 +3624,9 @@ sync_monster_ui_sources() {
     elif ! git -C "$source_dir" apply --reverse --check "$myaccount_patch" 2>/dev/null; then
         die 'Monster UI source does not match the MyAccount visibility patch'
     fi
+    apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-branding-billing.patch"
+    apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-websocket-config.patch"
+    apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-optional-integrations.patch"
     for supported_app in "${supported_apps[@]}"; do
         if [[ ",${MONSTER_UI_APPS_LIST}," != *",${supported_app},"* ]]; then
             if [[ $DRY_RUN == true ]]; then
@@ -3665,19 +3680,9 @@ sync_monster_ui_sources() {
 
 configure_monster_ui_api() {
     local source_dir=$1
-    local escaped_api
     [[ $DRY_RUN != true ]] || return 0
-    git -C "$source_dir" checkout -- src/js/config.js
-    escaped_api=${KAZOO_API_URL//\\/\\\\}
-    escaped_api=${escaped_api//&/\\&}
-    escaped_api=${escaped_api//#/\\#}
-    if grep -Eq "['\"]default['\"][[:space:]]*:" "$source_dir/src/js/config.js"; then
-        sed -i -E "s#(['\"]default['\"][[:space:]]*:[[:space:]]*)['\"][^'\"]*['\"]#\\1'${escaped_api}'#" \
-            "$source_dir/src/js/config.js"
-    else
-        sed -i "/^[[:space:]]*define({/a\\\tapi: { 'default': '${escaped_api}' }," \
-            "$source_dir/src/js/config.js"
-    fi
+    node "$SCRIPT_DIR/configure-monster-runtime.cjs" "$source_dir/src/js/config.js" \
+        "$KAZOO_API_URL" "$MONSTER_UI_WEBSOCKET_URL" "$MONSTER_UI_REMOTE_BRANDING" "$MONSTER_UI_BRAINTREE"
     if [[ ",${MONSTER_UI_APPS_LIST}," == *',acdc,'* ]]; then
         jq --arg api "$KAZOO_API_URL" '.api_url = $api' \
             "$source_dir/src/apps/acdc/metadata/app.json" | \
@@ -3770,6 +3775,8 @@ validate_tls_configuration() {
 
 configure_monster_ui_nginx() {
     local tls_dir=/etc/nginx/kazoo-tls
+    [[ $KAZOO_WEBSOCKET_UPSTREAM =~ ^https?://[a-zA-Z0-9._:-]+/websocket$ ]] || \
+        die 'KAZOO_WEBSOCKET_UPSTREAM must be an http(s) host[:port]/websocket URL without credentials'
     if [[ -n $KAZOO_PUBLIC_HOSTNAME ]]; then
         run install -d -m 0700 "$tls_dir"
         {
@@ -3801,6 +3808,20 @@ server {
     index index.html;
     client_max_body_size 50m;
 
+    location = /websocket {
+        proxy_pass ${KAZOO_WEBSOCKET_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;
+    }
+
     location /v2/ {
         proxy_pass ${KAZOO_API_UPSTREAM};
         proxy_http_version 1.1;
@@ -3830,10 +3851,6 @@ EOF
         if [[ $DRY_RUN != true ]] && command -v restorecon >/dev/null; then
             restorecon -RF "$tls_dir"
         fi
-        if [[ $DRY_RUN != true ]] && command -v getenforce >/dev/null && \
-           [[ $(getenforce) != Disabled ]]; then
-            run setsebool -P httpd_can_network_connect on
-        fi
     else
         write_file 0644 /etc/nginx/conf.d/monster-ui.conf <<EOF
 server {
@@ -3842,6 +3859,20 @@ server {
     server_name _monster_ui_default_;
     root ${MONSTER_UI_WEB_ROOT};
     index index.html;
+
+    location = /websocket {
+        proxy_pass ${KAZOO_WEBSOCKET_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /etc/pki/tls/certs/ca-bundle.crt;
+    }
 
     location = /apps/acdc/language-capabilities.json {
         default_type application/json;
@@ -3854,6 +3885,11 @@ server {
     }
 }
 EOF
+    fi
+    # Both HTTP and HTTPS serve a reverse-proxied Blackhole WebSocket.
+    if [[ $DRY_RUN != true ]] && command -v getenforce >/dev/null && \
+       [[ $(getenforce) != Disabled ]]; then
+        run setsebool -P httpd_can_network_connect on
     fi
 }
 
@@ -3947,6 +3983,9 @@ install_monster_ui() {
         else
             log "Would configure Monster UI API as ${KAZOO_API_URL} and run gulp build-prod"
         fi
+    fi
+    if [[ $DRY_RUN != true && ",${MONSTER_UI_APPS_LIST}," == *',acdc,'* ]]; then
+        node "$SCRIPT_DIR/ensure-acdc-language-capabilities.cjs" --web-root "$MONSTER_UI_WEB_ROOT"
     fi
     configure_monster_ui_nginx
     if [[ -f /etc/nginx/nginx.conf && $DRY_RUN != true ]]; then

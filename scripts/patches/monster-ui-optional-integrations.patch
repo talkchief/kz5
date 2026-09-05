@@ -1,0 +1,243 @@
+diff --git a/src/apps/common/external/buyNumbers-googleMapsLoader.js b/src/apps/common/external/buyNumbers-googleMapsLoader.js
+index f3fb82b..a6c3cd6 100644
+--- a/src/apps/common/external/buyNumbers-googleMapsLoader.js
++++ b/src/apps/common/external/buyNumbers-googleMapsLoader.js
+@@ -1,9 +1,23 @@
+ $(document).ready(function() {
+-	if (!window.hasOwnProperty('google')) {
+-		var script = document.createElement('script');
+-		script.type = 'text/javascript';
+-		script.src = '//maps.google.com/maps/api/js?v=3&callback=gmap_draw';
++	var config = window.monster && window.monster.config,
++		maps = config && config.api && config.api.googleMaps,
++		key = maps && typeof maps.apiKey === 'string' && maps.apiKey.trim();
++
++	// Maps is optional. Do not contact Google without an operator-supplied key.
++	if (!key || maps.enabled === false || (window.google && window.google.maps)
++		|| document.getElementById('monster-google-maps-loader')) {
++		return;
++	}
++
++	var script = document.createElement('script');
++	script.id = 'monster-google-maps-loader';
++	script.type = 'text/javascript';
++	script.async = true;
++	script.defer = true;
++	script.src = 'https://maps.googleapis.com/maps/api/js?v=quarterly&loading=async&key='
++		+ encodeURIComponent(key) + '&callback=gmap_draw';
++	if (typeof window.gmap_draw !== 'function') {
+ 		window.gmap_draw = function() {};
+-		$('head').append(script);
+ 	}
++	$('head').append(script);
+ });
+diff --git a/src/apps/common/submodules/e911/e911.js b/src/apps/common/submodules/e911/e911.js
+index d27f923..5916939 100644
+--- a/src/apps/common/submodules/e911/e911.js
++++ b/src/apps/common/submodules/e911/e911.js
+@@ -5,20 +5,6 @@ define(function(require) {
+ 
+ 	var e911 = {
+ 
+-		requests: {
+-			'google.geocode.address': {
+-				apiRoot: '//maps.googleapis.com/',
+-				url: 'maps/api/geocode/json?address={zipCode}',
+-				verb: 'GET',
+-				generateError: false,
+-				removeHeaders: [
+-					'X-Kazoo-Cluster-ID',
+-					'X-Auth-Token',
+-					'Content-Type'
+-				]
+-			}
+-		},
+-
+ 		subscribe: {
+ 			'common.e911.renderPopup': 'e911Edit'
+ 		},
+@@ -337,18 +323,28 @@ define(function(require) {
+ 		},
+ 
+ 		e911GetAddressFromZipCode: function(args) {
+-			var self = this;
++			var maps = _.get(monster, 'config.api.googleMaps', {}) || {},
++				Geocoder = _.get(window, 'google.maps.Geocoder');
++
++			// Manual E911 entry does not require Google. Paid ZIP autofill is a
++			// separate explicit opt-in and uses the browser-keyed Maps JS service.
++			if (maps.enabled === false || maps.geocoding !== true
++				|| typeof maps.apiKey !== 'string' || !maps.apiKey.trim()
++				|| typeof Geocoder !== 'function') {
++				if (typeof args.error === 'function') {
++					args.error({ code: 'geocoding_unavailable' });
++				}
++				return false;
++			}
+ 
+-			monster.request({
+-				resource: 'google.geocode.address',
+-				data: args.data,
+-				success: function(data, status) {
+-					args.hasOwnProperty('success') && args.success(data.results);
+-				},
+-				error: function(errorPayload, data, globalHandler) {
+-					args.hasOwnProperty('error') ? args.error() : globalHandler(data, { generateError: true });
++			new Geocoder().geocode({ address: args.data.zipCode }, function(results, status) {
++				if (status === 'OK' || status === 'ZERO_RESULTS') {
++					typeof args.success === 'function' && args.success(results || []);
++				} else if (typeof args.error === 'function') {
++					args.error({ code: 'geocoding_failed', status: status });
+ 				}
+ 			});
++			return true;
+ 		}
+ 	};
+ 
+diff --git a/src/js/lib/monster.webphone.js b/src/js/lib/monster.webphone.js
+index 1c8e049..09e25e7 100644
+--- a/src/js/lib/monster.webphone.js
++++ b/src/js/lib/monster.webphone.js
+@@ -5,6 +5,31 @@ define(function(require) {
+ 
+ 	var privateWebphone = {
+ 		initialized: false,
++		initializing: false,
++
++		isConfigured: function() {
++			var endpoint = _.get(monster, 'config.api.socketWebphone');
++
++			if (typeof endpoint !== 'string' || /\s/.test(endpoint)) {
++				return false;
++			}
++			try {
++				var url = new window.URL(endpoint);
++				return (url.protocol === 'wss:' || (url.protocol === 'ws:' && window.location.protocol !== 'https:'))
++					&& !!url.hostname && !url.username && !url.password && !url.hash;
++			} catch (error) {
++				return false;
++			}
++		},
++
++		unavailable: function(args) {
++			var callback = args && (typeof args.error === 'function' ? args.error : args.onError);
++
++			if (typeof callback === 'function') {
++				callback({ code: 'webphone_unavailable', message: 'Webphone is not configured or not ready.' });
++			}
++			return false;
++		},
+ 
+ 		printLogs: true,
+ 
+@@ -19,7 +44,10 @@ define(function(require) {
+ 		init: function() {
+ 			var self = this;
+ 
+-			if (monster.config.api.hasOwnProperty('socketWebphone')) {
++			if (!self.isConfigured()) {
++				return false;
++			}
++			if (!self.initialized && !self.initializing) {
+ 				var paramsInit = {
+ 					forceRTMP: false,
+ 					//flashContainer: 'flash_div',
+@@ -27,16 +55,22 @@ define(function(require) {
+ 					onLoaded: function() {
+ 						self.log('Kazoo.js loaded successfully');
+ 						self.initialized = true;
++						self.initializing = false;
+ 					},
+ 					onFlashMissing: function(container) {
+ 						self.log('This content requires the Adobe Flash Player. <a href=http://www.adobe.com/go/getflash/>Get Flash</a>');
+ 					}
+ 				};
+ 
+-				kazooWebphone.init(paramsInit);
+-			} else {
+-				self.log('No config.js API configured for the Webphone');
++				self.initializing = true;
++				try {
++					kazooWebphone.init(paramsInit);
++				} catch (error) {
++					self.initializing = false;
++					throw error;
++				}
+ 			}
++			return true;
+ 		},
+ 
+ 		login: function(args) {
+@@ -44,7 +78,7 @@ define(function(require) {
+ 				realm = monster.apps.auth.originalAccount.realm,
+ 				device = args.device;
+ 
+-			if (self.initialized) {
++			if (self.initialized && self.isConfigured()) {
+ 				var kazooParams = {
+ 					wsUrl: monster.config.api.socketWebphone,
+ 					realm: realm,
+@@ -78,7 +112,7 @@ define(function(require) {
+ 					//onTransfer: onTransfer,
+ 					//onNotified: onNotified,
+ 					onError: function() {
+-						args.onError();
++						args.onError && args.onError();
+ 					}
+ 					//reconnectMaxAttempts: 3, // Unlimited autoreconnect attempts
+ 					//reconnectDelay: 5000 // New autoreconnect attempt every 5 seconds
+@@ -86,23 +120,27 @@ define(function(require) {
+ 
+ 				kazooWebphone.register(kazooParams);
+ 			} else {
+-				args.error();
+-				self.log('Webphone Not initialized');
++				return self.unavailable(args);
+ 			}
+ 		},
+ 
+ 		loginWebphoneUser: function(args) {
+-			var self = this,
+-				newArgs = {
+-					success: function(device) {
+-						args.device = device;
++			var self = this;
+ 
+-						webphone.device = device;
++			// Do not create or modify a SIP device for an unavailable integration.
++			if (!self.isConfigured() || !self.initialized) {
++				return self.unavailable(args);
++			}
++			var newArgs = {
++				success: function(device) {
++					args.device = device;
+ 
+-						self.login(args);
+-					},
+-					error: args.error
+-				};
++					webphone.device = device;
++
++					self.login(args);
++				},
++				error: args.error
++			};
+ 
+ 			monster.pub('common.webphone.getOrCreateUserDevice', newArgs);
+ 		},
+@@ -192,10 +230,13 @@ define(function(require) {
+ 
+ 	var webphone = {
+ 		init: function() {
+-			privateWebphone.init();
++			return privateWebphone.init();
++		},
++		isAvailable: function() {
++			return privateWebphone.isConfigured() && privateWebphone.initialized;
+ 		},
+ 		login: function(args) {
+-			privateWebphone.loginWebphoneUser(args);
++			return privateWebphone.loginWebphoneUser(args);
+ 		},
+ 		hangup: function(callId) {
+ 			privateWebphone.hangup(callId);

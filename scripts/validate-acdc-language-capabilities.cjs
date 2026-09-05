@@ -14,8 +14,13 @@ const requiredPromptIds = [
 ];
 const plain = value => value && typeof value === 'object' && !Array.isArray(value)
     && Object.getPrototypeOf(value) === Object.prototype;
+const flags = ['ready', 'position', 'wait_time', 'callback', 'native_speaker_review'];
 function assertLanguageCapabilities(manifest) {
     assert(plain(manifest) && manifest.schema_version === 1, 'Unknown language capability schema');
+    assert(manifest.backend_mode === undefined || manifest.backend_mode === 'legacy', 'Unknown capability backend mode');
+    const legacy = manifest.backend_mode === 'legacy';
+    if (legacy) assert.deepEqual(Object.keys(manifest).sort(),
+        ['schema_version', 'backend_mode', 'generated_at', 'languages'].sort(), 'Unexpected legacy capability claim');
     assert(typeof manifest.generated_at === 'string'
         && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(manifest.generated_at)
 		&& Number.isFinite(Date.parse(manifest.generated_at)), 'Invalid capability generation timestamp');
@@ -24,8 +29,12 @@ function assertLanguageCapabilities(manifest) {
     for (const locale of locales) {
         const entry = manifest.languages[locale], prerecorded = ['ar-sa', 'he-il'].includes(locale);
         assert(plain(entry), 'Invalid language capability entry');
-        for (const key of ['ready', 'position', 'wait_time', 'callback', 'native_speaker_review']) {
+        for (const key of flags) {
             assert.equal(typeof entry[key], 'boolean', 'Invalid capability flag: ' + key);
+        }
+        if (legacy) {
+            assert.deepEqual(Object.keys(entry).sort(), flags.slice().sort(), 'Unexpected legacy language proof');
+            assert(flags.every(key => entry[key] === false), 'Legacy mode must not claim localized readiness');
         }
         if (!entry.ready) continue;
         assert(entry.position && entry.wait_time && entry.callback, 'Incomplete ready language functions');
@@ -41,4 +50,8 @@ function assertLanguageCapabilities(manifest) {
     }
     return manifest;
 }
-module.exports = {assertLanguageCapabilities, locales, requiredPromptIds};
+function legacyLanguageCapabilities(generatedAt = new Date().toISOString()) {
+    return assertLanguageCapabilities({schema_version: 1, backend_mode: 'legacy', generated_at: generatedAt,
+        languages: Object.fromEntries(locales.map(locale => [locale, Object.fromEntries(flags.map(key => [key, false]))]))});
+}
+module.exports = {assertLanguageCapabilities, legacyLanguageCapabilities, locales, requiredPromptIds};

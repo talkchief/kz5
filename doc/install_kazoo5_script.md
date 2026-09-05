@@ -396,10 +396,66 @@ acceptance check.
 | `KAZOO_MAKE_JOBS` | detected CPUs, capped at 2 to limit memory/disk pressure |
 | `KAZOO_MIN_BUILD_FREE_MB` | `4096` hard preflight floor for build-heavy selections |
 | `MONSTER_UI_REGISTER_APPS` | `auto` |
+| `KAZOO_WEBSOCKET_UPSTREAM` | `http://127.0.0.1:5555/websocket`; set the remote Blackhole endpoint on a standalone UI server |
+| `MONSTER_UI_WEBSOCKET_URL` | `auto`; preserve an explicit endpoint or use the browser origin's `/websocket` proxy |
+| `MONSTER_UI_REMOTE_BRANDING` | `auto`; preserve an explicit setting, otherwise use local branding without whitelabel API probes |
+| `MONSTER_UI_BRAINTREE` | `auto`; preserve an explicit setting, otherwise enable only when a Braintree API endpoint is configured |
 
 Run `./scripts/install-kazoo5.sh --help` for the complete interface. Version
 and source-ref variables are overrides for controlled testing; change them as a
 compatibility set and re-run all acceptance checks.
+
+### Optional browser integrations
+
+The installer preserves existing static public source `src/js/config.js` settings,
+including custom integrations, instead of resetting them to upstream defaults.
+Keep persistent custom settings in that source file under the Monster UI build
+directory; edits made only to generated live `js/config.js` are not imported
+automatically and will be replaced by a rebuild. Executable
+configuration hooks that cannot be preserved as static settings fail explicitly.
+The generated same-origin socket URL chooses `ws` on HTTP and `wss` on HTTPS;
+nginx forwards the exact `/websocket` path to Blackhole. A standalone UI host
+must set `KAZOO_WEBSOCKET_UPSTREAM` to its reachable Kazoo apps server. HTTPS
+upstreams use certificate verification. `MONSTER_UI_WEBSOCKET_URL` also accepts
+`same-origin`, `disabled`, or an explicit `ws://`/`wss://` endpoint. Malformed,
+missing, or mixed-content socket configuration does not start a retry loop.
+
+Remote branding and Braintree can each be explicitly enabled or disabled with
+`true` or `false`. Local branding uses the bundled/custom local logo and favicon;
+a missing remote profile no longer causes additional logo/icon API failures.
+Disabled Braintree does not query customer/payment endpoints, but manual billing
+contact editing remains available. No payment processor is provisioned.
+
+Google Maps loads only with an explicitly configured `api.googleMaps.apiKey`
+and uses the asynchronous loader. Optional E911 ZIP autofill additionally needs
+`api.googleMaps.geocoding: true`; manual emergency-address forms remain available
+without Maps. Webphone startup requires a valid `api.socketWebphone` endpoint.
+The installer does not manufacture third-party keys or pretend an absent
+webphone/payment backend is operational.
+
+When ACDC is selected, an absent `apps/acdc/language-capabilities.json` receives
+an explicit negative `backend_mode: "legacy"` state. This avoids a missing-file
+request without claiming the staged multilingual backend is ready. English
+still requires the complete legacy media catalog; other languages remain
+disabled until independently verified. Existing valid readiness artifacts are
+preserved; unsafe or malformed artifacts fail installation rather than being
+overwritten. See [language packs](acdc_language_packs.md).
+
+Focused browser/configuration regressions:
+
+```sh
+node scripts/test-monster-runtime-config.cjs
+node scripts/test-monster-websocket-config.cjs
+node scripts/test-monster-optional-integrations.cjs
+node scripts/test-monster-branding-billing.cjs
+sudo node scripts/test-acdc-language-capability-state.cjs
+```
+
+`scripts/test-monster-console.cjs` is a deployment-specific Playwright gate for
+this server's protected MASTER account. It tests login, billing, an unsaved
+queue form, unsaved Callflows drag/drop, and authenticated WebSocket events.
+It permits authentication but blocks other API writes and unconfigured external
+integrations; it is not a generic fresh-host smoke test or call-audio test.
 
 ## Tests
 

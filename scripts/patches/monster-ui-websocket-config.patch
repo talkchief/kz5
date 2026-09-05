@@ -1,0 +1,117 @@
+diff --git a/src/js/lib/monster.socket.js b/src/js/lib/monster.socket.js
+index 5d54b58..7a4a2a5 100644
+--- a/src/js/lib/monster.socket.js
++++ b/src/js/lib/monster.socket.js
+@@ -5,6 +5,48 @@
+ define(function(require) {
+ 	var _ = require('lodash');
+ 	var monster = require('monster');
++	var unavailableReason;
++
++	// WebSocket(undefined) is a valid relative browser URL, not an exception:
++	// it opens /undefined on the page's host and enters the reconnect loop.
++	// Configuration is not backend readiness; only an OPEN socket is connected.
++	function socketConfiguration() {
++		var uri = _.get(monster, 'config.api.socket');
++		var endpoint;
++		var error = null;
++
++		if (uri === false) {
++			error = 'disabled';
++		} else if (!_.isString(uri) || !uri.length) {
++			error = 'not_configured';
++		} else {
++			try {
++				endpoint = new URL(uri);
++				if (!/^wss?:\/\//i.test(uri) || /\s/.test(uri)
++					|| !endpoint.hostname || endpoint.username || endpoint.password || uri.indexOf('#') !== -1
++					|| /^(undefined|null)$/i.test(endpoint.hostname)
++					|| /\/(undefined|null)(\/|$)/i.test(endpoint.pathname)) {
++					error = 'invalid_url';
++				} else if (window.location.protocol === 'https:' && endpoint.protocol !== 'wss:') {
++					error = 'insecure_url';
++				}
++			} catch (e) {
++				error = 'invalid_url';
++			}
++		}
++		if (!error && typeof WebSocket !== 'function') {
++			error = 'unsupported_browser';
++		}
++
++		return { uri: error ? undefined : endpoint.href, error: error };
++	}
++
++	function reportUnavailable(reason) {
++		if (unavailableReason !== reason) {
++			unavailableReason = reason;
++			monster.pub('socket.unavailable', { reason: reason });
++		}
++	}
+ 
+ 	function Handshakes() {
+ 		this.entries = {};
+@@ -244,6 +286,14 @@ define(function(require) {
+ 		 * Creates a new WebSocket connection to uri when none is already connecting/connected.
+ 		 */
+ 		connect: function connect() {
++			var configuration = socketConfiguration();
++
++			if (configuration.error || configuration.uri !== this.uri) {
++				this.disconnect();
++				reportUnavailable(configuration.error || 'configuration_changed');
++				return;
++			}
++
+ 			if (this.isConnecting() || this.isOpen()) {
+ 				this.logger.log('already connected');
+ 				return;
+@@ -631,25 +681,42 @@ define(function(require) {
+ 
+ 	return {
+ 		getInfo: function getInfo() {
+-			var uri = _.get(monster, 'config.api.socket');
++			var configuration = socketConfiguration();
+ 
+ 			return _.merge({
+-				isConfigured: _.isString(uri) && /^ws{1,2}:\/\//i.test(uri),
+-				isConnected: !_.isUndefined(client) && client.isOpen(),
+-				uri: uri
++				isConfigured: !configuration.error,
++				isConnected: !configuration.error && !_.isUndefined(client)
++					&& client.uri === configuration.uri && client.isOpen(),
++				configurationError: configuration.error,
++				uri: configuration.uri
+ 			}, monster.isDev() && {
+ 				client: client
+ 			});
+ 		},
+ 
+ 		connect: function connect() {
+-			if (_.isUndefined(client)) {
++			var configuration = socketConfiguration();
++
++			if (configuration.error) {
++				if (!_.isUndefined(client)) {
++					client.disconnect();
++				}
++				reportUnavailable(configuration.error);
++				return false;
++			}
++
++			unavailableReason = undefined;
++			if (_.isUndefined(client) || client.uri !== configuration.uri) {
++				if (!_.isUndefined(client)) {
++					client.disconnect();
++				}
+ 				client = new WebSocketClient({
+-					uri: monster.config.api.socket
++					uri: configuration.uri
+ 				});
+ 			}
+ 
+ 			client.connect();
++			return true;
+ 		},
+ 
+ 		disconnect: function disconnect() {

@@ -361,9 +361,13 @@ define(function(require) {
 
 		validLanguageCapabilities: function(manifest) {
 			var self = this,
-				required = self.requiredLanguagePromptIds().sort();
+				required = self.requiredLanguagePromptIds().sort(),
+				flags = ['ready', 'position', 'wait_time', 'callback', 'native_speaker_review'],
+				legacy = _.get(manifest, 'backend_mode') === 'legacy';
 
 			return _.isPlainObject(manifest) && manifest.schema_version === 1
+				&& (manifest.backend_mode === undefined || legacy)
+				&& (!legacy || _.isEqual(_.keys(manifest).sort(), ['schema_version', 'backend_mode', 'generated_at', 'languages'].sort()))
 				&& typeof manifest.generated_at === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(manifest.generated_at)
 				&& isFinite(Date.parse(manifest.generated_at))
 				&& _.isPlainObject(manifest.languages)
@@ -371,8 +375,12 @@ define(function(require) {
 				&& _.every(self.announcementLocales, function(locale) {
 					var entry = manifest.languages[locale], prerecorded = locale === 'ar-sa' || locale === 'he-il';
 
-					if (!_.isPlainObject(entry) || !_.every(['ready', 'position', 'wait_time', 'callback', 'native_speaker_review'],
+					if (!_.isPlainObject(entry) || !_.every(flags,
 						function(key) { return typeof entry[key] === 'boolean'; })) { return false; }
+					if (legacy) {
+						return _.isEqual(_.keys(entry).sort(), flags.slice().sort())
+							&& _.every(flags, function(key) { return entry[key] === false; });
+					}
 					if (!entry.ready) { return true; }
 					return entry.position && entry.wait_time && entry.callback
 						&& entry.numbers === (prerecorded ? 'prerecorded' : 'native_say')
@@ -395,10 +403,9 @@ define(function(require) {
 				success: function(manifest) {
 					callback(self.validLanguageCapabilities(manifest) ? null : self.i18n.active().acdc.dropdowns.capabilitiesUnavailable, manifest);
 				},
-				error: function(response) {
-					// A missing new artifact must not invent readiness for a new
-					// language. Only the previously verified English pack may remain.
-					callback(response.status === 404 ? null : self.i18n.active().acdc.dropdowns.capabilitiesUnavailable, null);
+				error: function() {
+					// Absence and runtime failures are not proof of a legacy backend.
+					callback(self.i18n.active().acdc.dropdowns.capabilitiesUnavailable, null);
 				}
 			});
 		},
@@ -407,16 +414,17 @@ define(function(require) {
 			var self = this, labels = self.i18n.active().acdc.dropdowns,
 				ids = _.map(media, 'id'),
 				valid = self.validLanguageCapabilities(manifest),
+				legacy = valid && manifest.backend_mode === 'legacy',
 				legacyRequired = _.map(self.requiredLanguagePromptIds(), function(id) {
 					return id.indexOf('acdc-queue-') === 0 && id !== 'acdc-queue-your-current-position-is' ? id.slice(5) : id;
 				});
 
 			return _.map(self.announcementLocales, function(locale) {
 				var entry = valid ? manifest.languages[locale] : null,
-					ready = !loadError && (entry ? entry.ready && _.every(entry.required_prompt_ids, function(id) {
-						return ids.indexOf(locale + '/' + id) >= 0;
-					}) : manifest === null && locale === 'en-us' && _.every(legacyRequired, function(id) {
+					ready = !loadError && valid && (legacy ? locale === 'en-us' && _.every(legacyRequired, function(id) {
 						return ids.indexOf('en-us/' + id) >= 0;
+					}) : entry.ready && _.every(entry.required_prompt_ids, function(id) {
+						return ids.indexOf(locale + '/' + id) >= 0;
 					})),
 					reviewPending = ready && locale !== 'en-us' && entry.native_speaker_review === false;
 

@@ -443,17 +443,48 @@ assert.strictEqual(preservedHebrew.preserved, true);
 assert.strictEqual(preservedHebrew.ready, false);
 const legacyEnglish = app.requiredLanguagePromptIds().map(id => ({id: 'en-us/' + (
 	id.startsWith('acdc-queue-') && id !== 'acdc-queue-your-current-position-is' ? id.slice(5) : id)}));
-assert.deepStrictEqual(Array.from(app.languageCapabilityOptions(null, legacyEnglish).filter(option => option.ready), option => option.value), ['en-us']);
+const legacyCapabilities = capabilityValidator.legacyLanguageCapabilities();
+assert.strictEqual(app.validLanguageCapabilities(legacyCapabilities), true);
+assert.deepStrictEqual(Array.from(app.languageCapabilityOptions(legacyCapabilities, legacyEnglish).filter(option => option.ready), option => option.value), ['en-us']);
+assert(app.languageCapabilityOptions(legacyCapabilities, legacyEnglish.slice(1)).every(option => option.disabled),
+	'Explicit legacy mode still requires every one of the29 verified English prompts');
+assert(app.languageCapabilityOptions(legacyCapabilities, fixedMedia).every(option => option.disabled),
+	'Localized prompt names are not proof of the legacy English prompt pack');
+assert(app.languageCapabilityOptions(legacyCapabilities, legacyEnglish, 'runtime error').every(option => option.disabled));
+assert(app.languageCapabilityOptions(null, legacyEnglish).every(option => option.disabled),
+	'A missing artifact must not imply a functioning legacy backend');
+for (const alter of [
+	m => { m.backend_mode = 'unknown'; },
+	m => { m.runtime_ready = true; },
+	m => { m.languages['en-us'].ready = true; },
+	m => { m.languages['ar-sa'].position = true; },
+	m => { m.languages['he-il'].wait_time = true; },
+	m => { m.languages['es-es'].callback = true; },
+	m => { m.languages['fr-fr'].native_speaker_review = true; },
+	m => { m.languages['ar-sa'].installed_media_sha256 = 'a'.repeat(64); },
+	m => { delete m.languages['ar-sa']; }
+]) {
+	const invalid = JSON.parse(JSON.stringify(legacyCapabilities)); alter(invalid);
+	assert.strictEqual(app.validLanguageCapabilities(invalid), false);
+	assert.throws(() => capabilityValidator.assertLanguageCapabilities(invalid));
+	assert(app.languageCapabilityOptions(invalid, legacyEnglish).every(option => option.disabled));
+}
+const failedRuntime = JSON.parse(JSON.stringify(legacyCapabilities)); delete failedRuntime.backend_mode;
+assert.strictEqual(app.validLanguageCapabilities(failedRuntime), true);
+assert(app.languageCapabilityOptions(failedRuntime, legacyEnglish).every(option => option.disabled),
+	'A localized runtime reporting false must not fall back to legacy English');
 assert(app.languageCapabilityOptions(null, legacyEnglish, 'network error').every(option => option.disabled));
 assert(app.languageCapabilityOptions(null, [], null).every(option => option.disabled));
 const previousAjax = jqueryStub.ajax;
 app.appPath = 'apps/acdc';
 jqueryStub.ajax = options => { assert.strictEqual(options.cache, false); options.error({status: 404}); };
-app.loadLanguageCapabilities((error, value) => { assert.strictEqual(error, null); assert.strictEqual(value, null); });
+app.loadLanguageCapabilities((error, value) => { assert(error); assert.strictEqual(value, null); });
 jqueryStub.ajax = options => options.error({status: 503});
 app.loadLanguageCapabilities((error, value) => { assert(error); assert.strictEqual(value, null); });
 jqueryStub.ajax = options => options.success({schema_version: 1});
 app.loadLanguageCapabilities(error => assert(error));
+jqueryStub.ajax = options => options.success(legacyCapabilities);
+app.loadLanguageCapabilities((error, value) => { assert.strictEqual(error, null); assert.strictEqual(value, legacyCapabilities); });
 jqueryStub.ajax = previousAjax;
 app.i18n.active = capabilityI18n;
 

@@ -1,0 +1,149 @@
+diff --git a/src/apps/auth/app.js b/src/apps/auth/app.js
+index 71f8b20..363ecf2 100644
+--- a/src/apps/auth/app.js
++++ b/src/apps/auth/app.js
+@@ -862,8 +862,17 @@ define(function(require) {
+ 				fillLogo = function(url) {
+ 					var formattedURL = url.indexOf('src/') === 0 ? url.substr(4, url.length) : url;
+ 					template.find('.logo-block').css('background-image', 'url(' + formattedURL + ')');
++				},
++				localLogo = function() {
++					fillLogo(_.get(monster.config, 'whitelabel.logoPath') || 'apps/auth/style/static/images/logo.svg');
++					callback();
+ 				};
+ 
++			if (_.get(monster.config, 'whitelabel.fetchFromApi') === false
++				|| _.get(monster.apps.core, 'appFlags.remoteWhitelabel') === false) {
++				return localLogo();
++			}
++
+ 			self.callApi({
+ 				resource: 'whitelabel.getLogoByDomain',
+ 				data: {
+@@ -875,15 +884,7 @@ define(function(require) {
+ 					fillLogo(monster.config.api.default + 'whitelabel/' + domain + '/logo?_=' + new Date().getTime());
+ 					callback();
+ 				},
+-				error: function(error) {
+-					if (monster.config.whitelabel.hasOwnProperty('logoPath') && monster.config.whitelabel.logoPath.length) {
+-						fillLogo(monster.config.whitelabel.logoPath);
+-					} else {
+-						fillLogo('apps/auth/style/static/images/logo.svg');
+-					}
+-
+-					callback();
+-				}
++				error: localLogo
+ 			});
+ 		},
+ 
+diff --git a/src/apps/core/app.js b/src/apps/core/app.js
+index 44a5ef5..aab4033 100644
+--- a/src/apps/core/app.js
++++ b/src/apps/core/app.js
+@@ -47,6 +47,11 @@ define(function(require) {
+ 		load: function(callback) {
+ 			var self = this;
+ 
++			self.appFlags.remoteWhitelabel = false;
++			if (_.get(monster.config, 'whitelabel.fetchFromApi') === false) {
++				return callback(self);
++			}
++
+ 			self.callApi({
+ 				resource: 'whitelabel.getByDomain',
+ 				data: {
+@@ -54,6 +59,7 @@ define(function(require) {
+ 					generateError: false
+ 				},
+ 				success: function(data) {
++					self.appFlags.remoteWhitelabel = true;
+ 					callback(self);
+ 				},
+ 				error: function(err) {
+@@ -587,8 +593,15 @@ define(function(require) {
+ 				fillLogo = function(url) {
+ 					var formattedURL = url.indexOf('src/') === 0 ? url.substr(4, url.length) : url;
+ 					container.find('#main_topbar_brand').css('background-image', 'url(' + formattedURL + ')');
++				},
++				localLogo = function() {
++					fillLogo(_.get(monster.config, 'whitelabel.logoPath') || 'apps/core/style/static/images/logo.svg');
+ 				};
+ 
++			if (self.appFlags.remoteWhitelabel === false) {
++				return localLogo();
++			}
++
+ 			self.callApi({
+ 				resource: 'whitelabel.getLogoByDomain',
+ 				data: {
+@@ -599,13 +612,7 @@ define(function(require) {
+ 				success: function(_data) {
+ 					fillLogo(apiUrl + 'whitelabel/' + domain + '/logo?_=' + new Date().getTime());
+ 				},
+-				error: function(error) {
+-					if (monster.config.whitelabel.hasOwnProperty('logoPath') && monster.config.whitelabel.logoPath.length) {
+-						fillLogo(monster.config.whitelabel.logoPath);
+-					} else {
+-						fillLogo('apps/core/style/static/images/logo.svg');
+-					}
+-				}
++				error: localLogo
+ 			});
+ 		},
+ 
+@@ -628,6 +635,10 @@ define(function(require) {
+ 					document.head.appendChild(link);
+ 				};
+ 
++			if (self.appFlags.remoteWhitelabel === false) {
++				return changeFavIcon(_.get(monster.config, 'whitelabel.faviconPath') || 'apps/core/style/static/images/favicon.png');
++			}
++
+ 			self.callApi({
+ 				resource: 'whitelabel.getIconByDomain',
+ 				data: {
+diff --git a/src/apps/myaccount/submodules/billing/billing.js b/src/apps/myaccount/submodules/billing/billing.js
+index 4e3dac2..665ef6a 100644
+--- a/src/apps/myaccount/submodules/billing/billing.js
++++ b/src/apps/myaccount/submodules/billing/billing.js
+@@ -262,6 +262,7 @@ define(function(require) {
+ 							name: 'layout',
+ 							data: _.assign({
+ 								displayPamentMethods: isReseller && isAdmin && !isMasquerading
++									&& _.get(monster.config, 'whitelabel.bookkeepers.braintree') !== false
+ 							}, results),
+ 							submodule: 'billing'
+ 						})),
+@@ -441,7 +442,7 @@ define(function(require) {
+ 		billingGetBillingData: function(callback) {
+ 			var self = this;
+ 
+-			if (!monster.util.isReseller()) {
++			if (!monster.util.isReseller() || _.get(monster.config, 'whitelabel.bookkeepers.braintree') === false) {
+ 				return callback(null, {});
+ 			}
+ 
+@@ -997,7 +998,7 @@ define(function(require) {
+ 					self.billingRequestUpdateBilling({
+ 						data: {
+ 							data: {
+-								company:  monster.apps.auth.originalAccount.name,
++								company: monster.apps.auth.originalAccount.name,
+ 								first_name: monster.apps.auth.currentUser.first_name,
+ 								last_name: monster.apps.auth.currentUser.last_name
+ 							}
+diff --git a/src/apps/myaccount/submodules/creditCard/creditCard.js b/src/apps/myaccount/submodules/creditCard/creditCard.js
+index 43f8c6c..12f09c6 100644
+--- a/src/apps/myaccount/submodules/creditCard/creditCard.js
++++ b/src/apps/myaccount/submodules/creditCard/creditCard.js
+@@ -557,7 +557,8 @@ define(function(require) {
+ 				isMasquerading = monster.util.isMasquerading(),
+ 				isAdmin = monster.util.isAdmin();
+ 
+-			if (!isReseller || isMasquerading || !isAdmin) {
++			if (!isReseller || isMasquerading || !isAdmin
++				|| _.get(monster.config, 'whitelabel.bookkeepers.braintree') === false) {
+ 				return;
+ 			}
+ 

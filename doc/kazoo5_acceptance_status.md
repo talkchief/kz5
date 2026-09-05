@@ -1,7 +1,39 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-05 11:42 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-05 12:44 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
+
+## Latest live fixes (12:44 UTC)
+
+- The browser console repair passed private-preview and then unoverlaid live
+  acceptance. Login, Billing, unsaved ACDC forms, actual unsaved Callflows
+  drag/drop, and authenticated WebSocket subscribe/unsubscribe pass with zero
+  console warnings/errors or failed requests. Missing optional branding,
+  payment, Webphone and Maps integrations no longer cause startup failures.
+  `/websocket` has a real Blackhole proxy and the ACDC language artifact states
+  its legacy/unready status explicitly. No third-party credentials or fake
+  backend capability were created. See [browser evidence](monster_console_acceptance.md).
+- Eleven differing browser assets were replaced with recoverable backups;
+  1,921 unrelated files remained byte-identical. The current queue roster has
+  one selected member according to the live API; browser tests preserve that
+  operator state rather than restoring historical 30-member selections.
+- The user's callback call at 12:08 UTC failed before registration because
+  caller ID was a nonnumeric SIP username and alternate-number entry was
+  disabled. Its resume path exposed a separate missing account/queue scope
+  that crashed a queue worker. The narrow resume fix passed two targeted
+  regressions and was hotloaded as a baseline-only production BEAM at 12:31 UTC,
+  with no service restart. This does not manufacture a dialable callback target
+  or prove returned-caller completion. Alternate-entry behavior and isolated
+  live callback acceptance are being checked separately.
+- The isolated 12:47–12:48 callback run registered a durable reservation and
+  received the returned local-carrier call, but failed before an agent INVITE;
+  the returned call ended early. Cleanup left zero calls and removed the owned
+  fixture. This is an additional open callback defect, not a passing callback
+  gate. Protected evidence: `/var/log/kazoo-acceptance/20260905T124723Z`.
+- Apps, eCallMgr, FreeSWITCH, Kamailio and live test phones remained active with
+  unchanged PIDs and zero automatic restarts at the 12:44 check. Disk usage is
+  about 12 GiB used / 25 GiB available. The remaining production acceptance and
+  HTTPS/private-key limitations listed below still apply.
 
 ## Latest checkpoint (11:42 UTC)
 
