@@ -711,10 +711,20 @@ new_error_log_matches() {
     while IFS=$'\t' read -r path lines; do
         [[ -r $path && $lines =~ ^[0-9]+$ ]] || continue
         found=$(tail -n "+$((lines + 1))" -- "$path" 2>/dev/null |
-            grep -Eic '(^|[^[:alpha:]])(error|fatal|crash|segfault|core dumped)([^[:alpha:]]|$)' || true)
+            # Event identifiers such as CHANNEL_EXECUTE_ERROR occur in normal
+            # subscription logs. Match diagnostic words, not identifier parts.
+            grep -Eic '\[(err|crit|alert|emerg)\]|(^|[^[:alnum:]_])(error|fatal|crash|segfault|core dumped)([^[:alnum:]_]|$)' || true)
         count=$((count + found))
     done < "$RUN_DIR/$label-log-baseline.tsv"
     printf '%s\n' "$count"
+}
+
+count_journal_error_messages() {
+    # Kamailio uses "ERROR:" as well as bracketed native severities. Preserve
+    # routing/AMQP failure checks without mistaking event identifiers for errors.
+    awk 'BEGIN{IGNORECASE=1}
+        /\[(err|crit|alert|emerg)\]|(^|[^[:alnum:]_])(error|fatal|crash|segfault|core dumped)([^[:alnum:]_]|$)|badmatch|no amqp connection available|timeout after .* receiving route response|no available handlers/{count++}
+        END{print count+0}'
 }
 
 stop_monitor() {
@@ -759,7 +769,7 @@ record_stage() {
         -u kazoo-apps -u kazoo-ecallmgr -u kazoo-freeswitch -u kazoo-kamailio \
         -u rabbitmq-server -u couchdb 2>/dev/null |
         jq -r '.MESSAGE | if type == "array" then implode elif type == "string" then . else empty end' |
-        awk 'BEGIN{IGNORECASE=1} /\[error\]|fatal|crash report|segfault|core dumped|badmatch|no amqp connection available|timeout after .* receiving route response|no available handlers/{count++} END{print count+0}')
+        count_journal_error_messages)
     file_errors=$(new_error_log_matches "$label")
     cores_after=$(core_count); new_cores=$((cores_after - cores_before)); ((new_cores >= 0)) || new_cores=0
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \

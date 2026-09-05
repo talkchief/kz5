@@ -3299,6 +3299,7 @@ configure_kazoo_kamailio() {
     sync_git https://github.com/2600hz/kazoo-configs-kamailio.git \
         "$config_source" "$KAMAILIO_CONFIG_REF"
     apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-registration-sequences.patch"
+    apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-registered-source-credentials.patch"
     run mkdir -p "$KAZOO_CONFIG_DIR/kamailio"
     run rsync -a \
         --exclude db/ --exclude local.d/ --exclude defs.d/ \

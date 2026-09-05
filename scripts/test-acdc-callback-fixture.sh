@@ -35,16 +35,20 @@ FIXTURE_ORIGINAL_QUEUE=
 
 fixture_usage() {
     cat <<'EOF'
-Usage: sudo ./scripts/test-acdc-callback-fixture.sh setup|verify|evidence|cleanup
+Usage: sudo ./scripts/test-acdc-callback-fixture.sh setup|setup-retry|verify|evidence|cleanup
        sudo ./scripts/test-acdc-callback-fixture.sh cancel-original CALL_ID
 
 setup    Create an exact-prefix, account-local SIP resource on 127.0.0.30:16060,
          assign +12025550100/+12025550101 through knm_local, and enable callback
          settings on the isolated acceptance queue.
+setup-retry Same owned fixture with two attempts, 15-second ring timeout and
+            15-second retry delay for the busy-agent/unanswered-retry test.
 verify   Read-only validation of the saved fixture and its ownership markers.
 evidence Read-only, secret-free durable callback projection for acceptance gates.
 cleanup Restore the exact queue snapshot and delete only marked fixture objects.
-cancel-original Cancel only the callback belonging to one exact SIPp caller ID.
+cancel-original Cancel only the callback belonging to one exact SIPp caller ID;
+                a completed test conversation is cleared only with fresh exact
+                saved-leg, tenant, callback and localhost endpoint proofs.
 
 The RFC 5733/NANP fictional-use numbers never leave this host. Setup and cleanup
 require the root-owned acceptance and installer credential files. The state file
@@ -64,7 +68,7 @@ parse_fixture_args() {
     fi
     (($# == 1)) || { fixture_usage; fixture_die 'Choose exactly setup, verify, evidence, or cleanup'; }
     case $1 in
-        setup|verify|evidence|cleanup) ACTION=$1 ;;
+        setup|setup-retry|verify|evidence|cleanup) ACTION=$1 ;;
         -h|--help) fixture_usage; exit 0 ;;
         *) fixture_usage; fixture_die "Unknown action: $1" ;;
     esac
@@ -180,13 +184,13 @@ api_get_optional() {
         "$API_BASE/$path") || { rm -f -- "$output"; fixture_die "Crossbar GET transport failed for $path"; }
     case $status in
         200) cat "$output"; rm -f -- "$output" ;;
-        404) rm -f -- "$output"; return 1 ;;
+        404) rm -f -- "$output"; return 4 ;;
         *) rm -f -- "$output"; fixture_die "Crossbar GET $path returned HTTP $status" ;;
     esac
 }
 
 create_owned_number() {
-    local encoded=$1 number=$2 response body
+    local encoded=$1 number=$2 response body status
     if response=$(api_get_optional "accounts/$ACCEPTANCE_ACCOUNT_ID/phone_numbers/$encoded"); then
         jq -e --arg marker "$FIXTURE_MARKER" --arg number "$number" --arg account "$ACCEPTANCE_ACCOUNT_ID" \
             '.status == "success" and .data.id == $number and
@@ -194,6 +198,9 @@ create_owned_number() {
              ((.data.assigned_to // .data.account_id // $account) == $account)' <<<"$response" >/dev/null || \
             fixture_die "Refusing existing unowned fictional number: $number"
         return 0
+    else
+        status=$?
+        [[ $status == 4 ]] || fixture_die 'Number lookup failed; refusing to create from unknown state'
     fi
     body=$(jq -cn --arg marker "$FIXTURE_MARKER" \
         '{data:{create_with_state:"in_service",kazoo_acceptance_fixture:$marker}}')
@@ -232,7 +239,8 @@ create_local_resource() {
 }
 
 configure_acceptance_queue() {
-    local response current callback updated body
+    local response current callback updated body attempts=1 ring_timeout=45
+    if [[ $ACTION == setup-retry ]]; then attempts=2; ring_timeout=15; fi
     response=$(api_request GET "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID")
     current=$(jq -c '.data' <<<"$response")
     jq -e '.name == "Acceptance Queue 2000"' <<<"$current" >/dev/null || fixture_die 'Refusing unexpected queue document'
@@ -241,11 +249,12 @@ configure_acceptance_queue() {
         save_fixture_state
     fi
     callback=$(jq -cn --arg authority "$ACCEPTANCE_CALLER_DEVICE_ID" --arg cid "$OUTBOUND_CALLER_ID" \
+        --argjson attempts "$attempts" --argjson ring_timeout "$ring_timeout" \
         '{enabled:true,entry_key:"6",allow_alternate_number:false,use_local_resources:true,
           outbound_authority:{id:$authority,type:"device"},
           outbound_caller_id:{number:$cid,name:"Kazoo Callback Acceptance"},
-          menu_timeout_ms:30000,success_timeout_ms:15000,ttl:600,max_attempts:1,
-          retry_delay:15,originate_timeout:45,confirmation_timeout:15,
+          menu_timeout_ms:30000,success_timeout_ms:15000,ttl:600,max_attempts:$attempts,
+          retry_delay:15,originate_timeout:$ring_timeout,confirmation_timeout:15,
           ready_ack_timeout:5,handoff_timeout:5}')
     updated=$(jq -c --argjson callback "$callback" '.callback=$callback' <<<"$current")
     body=$(jq -cn --argjson data "$updated" '{data:$data}')
@@ -299,12 +308,148 @@ callback_evidence() {
          [.rows[].doc | select(.pvt_type == "acdc_callback" and .pvt_deleted != true and
                               .pvt_account_id == $account and .queue_id == $queue) |
           {id:._id,status,original_call_id,enqueued_at,enqueue_sequence,attempts,
+           account_id:.pvt_account_id,queue_id,number,max_attempts,retry_delay,next_attempt_at,last_cause,
            caller_call_id:.pvt_caller_call_id,agent_call_id:.pvt_agent_call_id,
            selected_agents:.pvt_selected_agents,reconciliation_required}] end' <<<"$response"
 }
 
+fixture_cleanup_scope() {
+    local response
+    [[ $ACCEPTANCE_ACCOUNT_ID =~ ^[a-f0-9]{32}$ && $MASTER_ACCOUNT_ID =~ ^[a-f0-9]{32}$ && \
+       $ACCEPTANCE_ACCOUNT_ID != "$MASTER_ACCOUNT_ID" && \
+       $ACCEPTANCE_ACCOUNT_ID != 302ae5a70c403124f764cbc54229cfcd && \
+       $FIXTURE_ACCOUNT_ID == "$ACCEPTANCE_ACCOUNT_ID" && -n $FIXTURE_ORIGINAL_QUEUE && \
+       $ACCEPTANCE_ACCOUNT_NAME =~ ^Kazoo5\ Acceptance\ [a-f0-9]{12}$ ]] || \
+        fixture_die 'Refusing cleanup outside the saved isolated fixture'
+    jq -e --arg id "$ACCEPTANCE_QUEUE_ID" '.id==$id and .name=="Acceptance Queue 2000"' \
+        <<<"$FIXTURE_ORIGINAL_QUEUE" >/dev/null || fixture_die 'Saved queue restoration identity is invalid; retained'
+    response=$(api_request GET "accounts/$ACCEPTANCE_ACCOUNT_ID") || return 1
+    jq -e --arg id "$ACCEPTANCE_ACCOUNT_ID" --arg name "$ACCEPTANCE_ACCOUNT_NAME" \
+        '.data.id==$id and .data.name==$name' <<<"$response" >/dev/null || \
+        fixture_die 'Live account identity changed; fixture retained'
+}
+
+fixture_fs_command() {
+    timeout 5 /usr/local/freeswitch/bin/fs_cli -x "$1" </dev/null 2>/dev/null
+}
+
+fixture_channel_snapshot() {
+    local response
+    response=$(fixture_fs_command 'show channels as json') || return 1
+    jq -ce 'type=="object" and (.row_count|type)=="number" and .row_count>=0 and
+        (if .row_count==0 then (.rows==null or .rows==[]) else
+         (.rows|type)=="array" and .row_count==(.rows|length) and
+         all(.rows[]; (.uuid|type)=="string" and (.uuid|length)>0) and
+         ([.rows[].uuid]|unique|length)==.row_count end) | select(.)' \
+        <<<"$response" >/dev/null || return 1
+    printf '%s\n' "$response"
+}
+
+fixture_terminal_document() {
+    jq -e --arg account "$ACCEPTANCE_ACCOUNT_ID" --arg queue "$ACCEPTANCE_QUEUE_ID" --arg number "$CALLBACK_NUMBER" '
+        .account_id==$account and .queue_id==$queue and .number==$number and
+        (.id|type)=="string" and (.id|test("^acdc-callback-[a-f0-9]{64}$")) and
+        (.original_call_id|type)=="string" and (.original_call_id|test("^1-[1-9][0-9]*@127\\.0\\.0\\.20$")) and
+        (.status=="completed" or .status=="cancelled" or .status=="failed" or .status=="expired") and
+        .reconciliation_required!=true and
+        all([.caller_call_id,.agent_call_id][]; .==null or (type=="string" and test("^[a-f0-9-]{32,128}$"))) and
+        (if .status=="completed" then
+         (.attempts==1 or (.attempts==2 and .max_attempts==2 and .retry_delay==15)) and
+         (.caller_call_id|type)=="string" and (.caller_call_id|test("^[a-f0-9]{32}$")) and
+         (.agent_call_id|type)=="string" and (.agent_call_id|test("^[a-f0-9-]{32,128}$")) and
+         .caller_call_id!=.agent_call_id else true end)' <<<"$1" >/dev/null
+}
+
+fixture_document_legs_down() {
+    jq -e --argjson document "$1" '
+        [.rows[]?.uuid] as $live |
+        all([$document.original_call_id,$document.caller_call_id,$document.agent_call_id][];
+            .==null or (. as $id | ($live|index($id))==null))' <<<"$2" >/dev/null
+}
+
+fixture_channel_dump() {
+    local response
+    [[ $1 =~ ^[a-f0-9-]{32,128}$ ]] || return 1
+    response=$(fixture_fs_command "uuid_dump $1") || return 1
+    # Parse only complete unique key/value lines; no raw dump reaches diagnostics.
+    jq -Rsc 'split("\n")|map(select(length>0))|
+        map(if test("^[^:]+: ?.*$") then capture("^(?<key>[^:]+): ?(?<value>.*)$")
+            else error("invalid channel line") end)|
+        if length>0 and (map(.key)|unique|length)==length then from_entries
+        else error("invalid channel dump") end' <<<"$response" 2>/dev/null
+}
+
+teardown_completed_test_pair() {
+    local document=$1 snapshot caller agent caller_id agent_id response attempt
+    if ! fixture_terminal_document "$document" || [[ $(jq -r '.status' <<<"$document") != completed ]]; then
+        fixture_die 'Invalid completed fixture callback; retained'
+    fi
+    snapshot=$(fixture_channel_snapshot) || fixture_die 'Cannot establish fresh channel inventory; retained'
+    fixture_document_legs_down "$document" "$snapshot" && return 0
+    # Destructive test-only path: the real cancellation API intentionally never
+    # terminates completed conversations. Marker checks precede any FS command.
+    verify_fixture >/dev/null || fixture_die 'Fixture ownership verification failed; retained'
+    caller_id=$(jq -r '.caller_call_id' <<<"$document")
+    agent_id=$(jq -r '.agent_call_id' <<<"$document")
+    jq -e --arg original "$(jq -r '.original_call_id' <<<"$document")" \
+        'all(.rows[]?; .uuid!=$original)' <<<"$snapshot" >/dev/null || \
+        fixture_die 'Original test leg is unexpectedly active; retained'
+    caller=$(fixture_channel_dump "$caller_id") || fixture_die 'Caller identity unavailable; retained'
+    agent=$(fixture_channel_dump "$agent_id") || fixture_die 'Agent identity unavailable; retained'
+    jq -e --argjson document "$document" --argjson caller "$caller" --argjson agent "$agent" \
+        --arg account "$ACCEPTANCE_ACCOUNT_ID" --arg ip "$CARRIER_IP" --arg port "$CARRIER_PORT" '
+        $caller["Unique-ID"]==$document.caller_call_id and $agent["Unique-ID"]==$document.agent_call_id and
+        $caller["variable_ecallmgr_Account-ID"]==$account and $agent["variable_ecallmgr_Account-ID"]==$account and
+        $caller["variable_ecallmgr_Callback-ID"]==$document.id and
+        $agent["variable_ecallmgr_Member-Call-ID"]==$document.caller_call_id and
+        $caller.variable_bridge_to==$document.agent_call_id and $agent.variable_bridge_to==$document.caller_call_id and
+        $caller.variable_sip_contact_host==$ip and $caller.variable_sip_contact_port==$port and
+        $agent.variable_sip_contact_host=="127.0.0.20" and $agent.variable_sip_contact_port=="15100" and
+        all([$caller,$agent][]; .["Channel-Call-State"]=="ACTIVE" and
+            (.["Channel-State"]=="CS_EXECUTE" or .["Channel-State"]=="CS_EXCHANGE_MEDIA"))' \
+        <<< '{}' >/dev/null || fixture_die 'Exact completed test-pair proof failed; retained'
+    response=$(fixture_fs_command "uuid_kill $caller_id NORMAL_CLEARING") || \
+        fixture_die 'Exact returned-test-leg hangup failed; retained'
+    [[ $response == '+OK' ]] || fixture_die 'Unexpected returned-test-leg hangup result; retained'
+    for ((attempt=0; attempt<20; attempt++)); do
+        snapshot=$(fixture_channel_snapshot) || fixture_die 'Post-hangup channel inventory unavailable; retained'
+        fixture_document_legs_down "$document" "$snapshot" && {
+            fixture_log 'PASS: exact completed test caller/agent/original legs are down'
+            return 0
+        }
+        sleep 0.25
+    done
+    fixture_die 'Completed test legs remain active; retained without another hangup'
+}
+
+fixture_assert_quiescent() {
+    local callbacks document snapshot response
+    fixture_cleanup_scope
+    callbacks=$(callback_evidence) || fixture_die 'Cannot inspect durable fixture callbacks; retained'
+    jq -e 'type=="array" and length<=1000 and
+        (map(.id)|unique|length)==length and (map(.original_call_id)|unique|length)==length' \
+        <<<"$callbacks" >/dev/null || fixture_die 'Ambiguous fixture callback inventory; retained'
+    snapshot=$(fixture_channel_snapshot) || fixture_die 'Cannot prove fixture channel absence; retained'
+    # Conservative local maintenance gate: even an untracked local call must
+    # finish before deleting routing resources. Never hang up an unknown call.
+    jq -e '.row_count==0' <<<"$snapshot" >/dev/null || fixture_die 'Local media node is not idle; resources retained'
+    while IFS= read -r document; do
+        if ! fixture_terminal_document "$document" || ! fixture_document_legs_down "$document" "$snapshot"; then
+            fixture_die 'Nonterminal, unknown or live fixture callback; resources retained'
+        fi
+    done < <(jq -c '.[]' <<<"$callbacks")
+    # Additional veto for any visible untracked call, including a sentinel.
+    # This API may return partial cluster observations: empty is NOT proof of
+    # distributed absence. The exact localhost fixture IDs above are proved
+    # down directly on this fixture's local FreeSWITCH, not on remote nodes.
+    response=$(api_request GET "accounts/$ACCEPTANCE_ACCOUNT_ID/channels") || return 1
+    jq -e '(.data|type)=="array" and (.data|length)==0 and (.next_start_key==null or .next_start_key=="")' \
+        <<<"$response" >/dev/null || fixture_die 'Isolated account is not freshly idle; resources retained'
+}
+
 cancel_original_callback() {
-    local callbacks document callback_id status response
+    local callbacks document callback_id status response snapshot
+    fixture_cleanup_scope
     callbacks=$(callback_evidence) || fixture_die 'Cannot establish callback ownership for cancellation'
     document=$(jq -ce --arg call "$CANCEL_ORIGINAL_CALL_ID" \
         '[.[] | select(.original_call_id==$call)] |
@@ -314,11 +459,27 @@ cancel_original_callback() {
     [[ -n $callback_id ]] || return 0
     [[ $callback_id =~ ^acdc-callback-[a-f0-9]{64}$ ]] || fixture_die 'Unexpected callback ID during cleanup'
     status=$(jq -r '.status' <<<"$document")
-    case $status in completed|cancelled|failed|expired) return 0 ;; esac
-    response=$(api_request DELETE "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID/callbacks/$callback_id")
-    status=$(jq -r '.data.status' <<<"$response")
     case $status in
-        cancelled|completed|failed|expired) fixture_log 'PASS: exact test callback is terminal' ;;
+        completed|cancelled|failed|expired) ;;
+        *)
+            response=$(api_request DELETE "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID/callbacks/$callback_id")
+            status=$(jq -r '.data.status' <<<"$response")
+            callbacks=$(callback_evidence) || fixture_die 'Cannot refresh callback after cancellation; retained'
+            document=$(jq -ce --arg id "$callback_id" --arg call "$CANCEL_ORIGINAL_CALL_ID" \
+                '[.[]|select(.id==$id and .original_call_id==$call)]|if length==1 then .[0] else error("identity changed") end' \
+                <<<"$callbacks") || fixture_die 'Callback identity changed after cancellation; retained'
+            [[ $(jq -r '.status' <<<"$document") == "$status" ]] || fixture_die 'Cancellation result is not durable; retained'
+            ;;
+    esac
+    case $status in
+        completed) teardown_completed_test_pair "$document" ;;
+        cancelled|failed|expired)
+            snapshot=$(fixture_channel_snapshot) || fixture_die 'Terminal callback channel proof unavailable; retained'
+            if ! fixture_terminal_document "$document" || ! fixture_document_legs_down "$document" "$snapshot"; then
+                fixture_die 'Terminal callback still has live or unknown test legs; retained'
+            fi
+            fixture_log 'PASS: exact test callback is terminal and its known legs are down'
+            ;;
         cancelling) fixture_die 'Exact test callback still requires positive live-leg/originate settlement; fixture retained' ;;
         *) fixture_die 'Unexpected callback cancellation response; fixture retained' ;;
     esac
@@ -345,19 +506,32 @@ setup_fixture() {
     configure_acceptance_queue
     reload_local_resources
     verify_fixture
+    if [[ $ACTION == setup-retry ]]; then
+        response=$(api_request GET "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID")
+        jq -e '.data.callback.max_attempts==2 and .data.callback.originate_timeout==15 and
+               .data.callback.retry_delay==15' <<<"$response" >/dev/null || \
+            fixture_die 'Busy-agent retry policy was not persisted exactly'
+    fi
 }
 
 delete_marked_number() {
-    local encoded=$1 number=$2 response
-    if ! response=$(api_get_optional "accounts/$ACCEPTANCE_ACCOUNT_ID/phone_numbers/$encoded"); then return 0; fi
+    local encoded=$1 number=$2 response status
+    if response=$(api_get_optional "accounts/$ACCEPTANCE_ACCOUNT_ID/phone_numbers/$encoded"); then
+        :
+    else
+        status=$?
+        [[ $status == 4 ]] && return 0
+        fixture_die 'Number lookup failed; fixture state retained'
+    fi
     jq -e --arg marker "$FIXTURE_MARKER" --arg number "$number" \
-        '.data.id == $number and .data.kazoo_acceptance_fixture == $marker' <<<"$response" >/dev/null || \
+        '.status == "success" and .data.id == $number and .data.kazoo_acceptance_fixture == $marker' <<<"$response" >/dev/null || \
         fixture_die "Refusing to delete unowned number: $number"
     api_request DELETE "accounts/$ACCEPTANCE_ACCOUNT_ID/phone_numbers/$encoded?hard=true" >/dev/null
 }
 
 cleanup_fixture() {
-    local response body
+    local response body status
+    fixture_assert_quiescent
     [[ $FIXTURE_ACCOUNT_ID == "$ACCEPTANCE_ACCOUNT_ID" && -n $FIXTURE_ORIGINAL_QUEUE ]] || \
         fixture_die 'No complete owned callback fixture state is available for cleanup'
     response=$(api_request GET "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID")
@@ -365,10 +539,15 @@ cleanup_fixture() {
     body=$(jq -cn --argjson data "$FIXTURE_ORIGINAL_QUEUE" '{data:$data}')
     api_request POST "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID" "$body" >/dev/null
     if [[ -n $FIXTURE_RESOURCE_ID ]]; then
-        response=$(api_request GET "accounts/$ACCEPTANCE_ACCOUNT_ID/resources/$FIXTURE_RESOURCE_ID")
-        jq -e --arg marker "$FIXTURE_MARKER" '.data.kazoo_acceptance_fixture == $marker' <<<"$response" >/dev/null || \
-            fixture_die 'Refusing to delete an unowned local resource'
-        api_request DELETE "accounts/$ACCEPTANCE_ACCOUNT_ID/resources/$FIXTURE_RESOURCE_ID" >/dev/null
+        if response=$(api_get_optional "accounts/$ACCEPTANCE_ACCOUNT_ID/resources/$FIXTURE_RESOURCE_ID"); then
+            jq -e --arg marker "$FIXTURE_MARKER" --arg id "$FIXTURE_RESOURCE_ID" \
+                '.status == "success" and .data.id == $id and .data.kazoo_acceptance_fixture == $marker' \
+                <<<"$response" >/dev/null || fixture_die 'Refusing to delete an unowned local resource'
+            api_request DELETE "accounts/$ACCEPTANCE_ACCOUNT_ID/resources/$FIXTURE_RESOURCE_ID" >/dev/null
+        else
+            status=$?
+            [[ $status == 4 ]] || fixture_die 'Resource lookup failed; fixture state retained'
+        fi
     fi
     delete_marked_number "$ENCODED_CALLBACK_NUMBER" "$CALLBACK_NUMBER"
     delete_marked_number "$ENCODED_OUTBOUND_CALLER_ID" "$OUTBOUND_CALLER_ID"
@@ -386,7 +565,7 @@ main_fixture() {
     if [[ $ACTION == evidence ]]; then callback_evidence; return; fi
     authenticate_master
     case $ACTION in
-        setup) setup_fixture ;;
+        setup|setup-retry) setup_fixture ;;
         verify) verify_fixture ;;
         cleanup) cleanup_fixture ;;
         cancel-original) cancel_original_callback ;;

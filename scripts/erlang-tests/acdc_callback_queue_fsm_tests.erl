@@ -20,6 +20,7 @@ callback_queue_test_() ->
     ,     {"native_hangup_does_not_ack_before_durable_cleanup", {timeout, 30, fun native_hangup_does_not_ack_before_durable_cleanup_case/0}}
     ,     {"native_cancellation_retains_delivery_until_channels_settle", {timeout, 30, fun native_cancellation_retains_delivery_until_channels_settle_case/0}}
     ,     {"bridge_without_acceptance_has_bounded_proof_deadline", {timeout, 30, fun bridge_without_acceptance_has_bounded_proof_deadline_case/0}}
+    ,     {"accepted_snapshot_probe_deadline_retains_delivery", {timeout, 30, fun accepted_snapshot_probe_deadline_retains_delivery_case/0}}
     ,     {"acceptance_from_unselected_agent_is_ignored", {timeout, 30, fun acceptance_from_unselected_agent_is_ignored_case/0}}
     ,     {"native_retry_clears_old_agent_proof", {timeout, 30, fun native_retry_clears_old_agent_proof_case/0}}
     ,     {"native_acceptance_requires_exact_agent_leg", {timeout, 30, fun native_acceptance_requires_exact_agent_leg_case/0}}
@@ -192,6 +193,24 @@ acceptance_from_unselected_agent_is_ignored_case() -> with_mocks(fun() ->
     ?assertEqual({next_state, connecting, Initial}, acdc_queue_fsm:connecting(cast, {accepted, Accept}, Initial))
 end).
 
+accepted_snapshot_probe_deadline_retains_delivery_case() -> with_mocks(fun() ->
+    Winner = winner(<<"agent-a">>, <<"process-a">>),
+    Initial = native_state([{connect_wins, [Winner]}, {member_call_winners, [Winner]}]),
+    {next_state, connecting, Waiting} = acdc_queue_fsm:connecting(cast,
+        {accepted, acceptance(Winner, <<"leg-a">>)}, Initial),
+    Context = field(callback_ctx, Waiting), Deadline = maps:get(timer_ref, Context),
+    Probe = maps:get(bridge_probe_ref, Context),
+    _ = erlang:cancel_timer(Deadline),
+    {next_state, callback_waiting, Ending} = acdc_queue_fsm:connecting(info,
+        {timeout, Deadline, callback_proof_deadline}, Waiting),
+    ?assertEqual(native_ending, maps:get(mode, field(callback_ctx, Ending))),
+    ?assertEqual(1, meck:num_calls(acdc_callback_store, cancel, '_')),
+    ?assertEqual(0, meck:num_calls(acdc_queue_listener, retire_callback_member, '_')),
+    ?assertEqual({next_state, callback_waiting, Ending}, acdc_queue_fsm:callback_waiting(cast,
+        {callback_bridge_snapshot, Probe, {ok, #{complete => true}}}, Ending)),
+    cancel_timer(Ending)
+end).
+
 native_retry_clears_old_agent_proof_case() -> with_mocks(fun() ->
     Winner = winner(<<"agent-a">>, <<"process-a">>), Accept = acceptance(Winner, <<"leg-a">>),
     Initial = native_state([{connect_wins, [Winner]}, {member_call_winners, [Winner]}]),
@@ -200,6 +219,7 @@ native_retry_clears_old_agent_proof_case() -> with_mocks(fun() ->
     {next_state, connect_req, Retried} = acdc_queue_fsm:connecting(cast, {retry, Winner}, Accepted),
     ?assertEqual(false, erlang:read_timer(OldTimer)),
     ?assertEqual(undefined, maps:get(accepted, field(callback_ctx, Retried), undefined)),
+    ?assertEqual(undefined, maps:get(bridge_probe_ref, field(callback_ctx, Retried), undefined)),
     ?assertEqual([], field(connect_wins, Retried)),
     ?assertEqual({next_state, connect_req, Retried}, acdc_queue_fsm:connect_req(cast, {accepted, Accept}, Retried)),
     WinnerB = winner(<<"agent-b">>, <<"process-b">>),
@@ -375,10 +395,11 @@ cancel_timer(State) ->
 
 with_mocks(Fun) ->
     put(callid, <<"callback-fsm-test">>), erase(response), erase(persisted_ready),
-    Modules = [acdc_queue_manager, acdc_queue_listener, acdc_callback_store, acdc_callback_caller, kz_amqp_util, kapps_call_command],
+    Modules = [acdc_queue_manager, acdc_queue_listener, acdc_callback_store, acdc_callback_caller, acdc_callback_recovery_io, kz_amqp_util, kapps_call_command],
     meck:new(Modules, [non_strict, no_link]),
     try
         meck:expect(acdc_queue_manager, stop_announcements, fun(_, _) -> ok end),
+        meck:expect(acdc_callback_recovery_io, observe, fun(_) -> {'unknown', #{'complete' => 'false'}} end),
         meck:expect(acdc_queue_listener, member_connect_req, fun(_) -> ok end),
         meck:expect(acdc_queue_listener, cancel_member_call, fun(_, _) -> ok end),
         meck:expect(acdc_queue_listener, retire_callback_member, fun(_, _) -> ok end),

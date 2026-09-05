@@ -139,6 +139,15 @@ Configuration is stored under the queue's `callback` object. For the complete
 field bounds, outbound-authority checks, prompt overrides, and state machine,
 see [Call Center features](acdc_callcenter_features.md#callback-http-and-menu-contracts-staged-live-acceptance-pending).
 
+In the current runtime, the caller worker waits for returned-call confirmation
+internally. The durable `caller_answered` and `caller_confirmed` transitions are
+written together after the accepted digit, so polling may never observe
+`confirming`. Do not use that transient database status to measure the audible
+confirmation wait. `completed` records a durable handoff, not the end of the
+subsequent conversation; cancelling a completed callback does not authorize
+hanging up that conversation. See [callback acceptance](acdc_callback_acceptance.md)
+for packet-level confirmation and live bridge evidence.
+
 ### Callback user and inherited outbound identity
 
 The simplified configuration selects an enabled account-owned user by name:

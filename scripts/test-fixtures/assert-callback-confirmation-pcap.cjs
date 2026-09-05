@@ -6,7 +6,8 @@
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const IP = {carrier: '127.0.0.30', agent: '127.0.0.20'};
-const PORT = {carrierSip: 16060, carrierRtp: 44000, agentSip: 15100};
+const PORT = {carrierSip: 16060, carrierRtp: 44000, agentSip: 15100, agentRtp: 40000};
+const MIN_AGENT_AUDIO_PACKETS = 10;
 const validId = value => typeof value === 'string' && /^[A-Za-z0-9@._:-]{1,128}$/.test(value);
 const ipv4 = value => /^\d{1,3}(\.\d{1,3}){3}$/.test(value) && value.split('.').every(part => Number(part) <= 255);
 
@@ -61,7 +62,7 @@ function sip(packet) {
         'SIP body length mismatch');
     return {...packet, first, body, callId, cseq: Number(cseq[1]), method: cseq[2], headers};
 }
-function audioSdp(message) {
+function audioSdp(message, requireTelephoneEvent = true) {
     assert(message.headers['content-type']?.length === 1
         && /^application\/sdp(?:\s*;.*)?$/i.test(message.headers['content-type'][0]), 'Missing SDP content type');
     const lines = message.body.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
@@ -70,14 +71,19 @@ function audioSdp(message) {
     const start = media[0], m = /^m=audio (\d+) RTP\/AVP ((?:\d+)(?: \d+)*)$/.exec(lines[start]);
     assert(m && Number(m[1]) > 0 && Number(m[1]) < 65536, 'Invalid audio media line');
     const formats = m[2].split(' ').map(Number);
-    assert(formats.includes(0) && new Set(formats).size === formats.length, 'Missing PCMU or duplicate media payload');
+    assert(formats.includes(0) && formats.every(format => format >= 0 && format <= 127)
+        && new Set(formats).size === formats.length, 'Missing PCMU or invalid/duplicate media payload');
     const sessionConnections = lines.slice(0, start).filter(line => line.startsWith('c='));
     const mediaConnections = lines.slice(start + 1).filter(line => line.startsWith('c='));
     assert(sessionConnections.length <= 1 && mediaConnections.length <= 1, 'Ambiguous media address');
     const connection = /^c=IN IP4 (\S+)$/.exec((mediaConnections[0] || sessionConnections[0]) || '');
     assert(connection && ipv4(connection[1]) && connection[1] !== '0.0.0.0', 'Unsupported media address');
     const mappings = lines.slice(start + 1).filter(line => line.startsWith('a=rtpmap:'));
-    assert(mappings.includes('a=rtpmap:0 PCMU/8000'), 'Fixture requires PCMU/8000');
+    const pcmu = mappings.filter(line => /^a=rtpmap:0\s/.test(line));
+    assert(pcmu.length === 1 && /^a=rtpmap:0 PCMU\/8000(?:\/1)?$/i.test(pcmu[0]),
+        'Fixture requires unambiguous PCMU/8000');
+    assert(!lines.some(line => ['a=inactive', 'a=sendonly', 'a=recvonly'].includes(line)), 'Inactive or one-way callback audio');
+    if (!requireTelephoneEvent) return {ip: connection[1], port: Number(m[1]), formats};
     const events = mappings.map(line => /^a=rtpmap:(\d+) telephone-event\/8000(?:\/1)?$/i.exec(line)).filter(Boolean);
     assert(events.length === 1, 'Expected exactly one audio telephone-event mapping');
     const payload = Number(events[0][1]);
@@ -89,8 +95,48 @@ function audioSdp(message) {
     assert(ranges.every(range => /^\d+(?:-\d+)?$/.test(range)), 'Unsupported telephone-event range');
     assert(ranges.some(range => {const [low, high = low] = range.split('-').map(Number); return low <= 1 && high >= 1;}),
         'Telephone event 1 is not supported');
-    assert(!lines.some(line => ['a=inactive', 'a=sendonly', 'a=recvonly'].includes(line)), 'Inactive or one-way callback audio');
     return {ip: connection[1], port: Number(m[1]), payload};
+}
+function agentAudio(all, remote, local, establishedAt) {
+    const directions = {to_agent: [], from_agent: []};
+    for (const packet of all) {
+        const incoming = packet.src === remote.ip && packet.sport === remote.port
+            && packet.dst === local.ip && packet.dport === local.port;
+        const outgoing = packet.src === local.ip && packet.sport === local.port
+            && packet.dst === remote.ip && packet.dport === remote.port;
+        if ((!incoming && !outgoing) || packet.time < establishedAt) continue;
+        const payload = packet.payload;
+        assert(payload.length >= 12 && payload[0] >> 6 === 2, 'Invalid agent RTP version/header');
+        assert((payload[1] & 127) === 0, 'Agent RTP did not use negotiated PCMU payload');
+        let offset = 12 + (payload[0] & 15) * 4;
+        assert(offset <= payload.length, 'Truncated agent RTP header');
+        if (payload[0] & 16) {
+            assert(offset + 4 <= payload.length, 'Truncated agent RTP extension');
+            offset += 4 + payload.readUInt16BE(offset + 2) * 4;
+        }
+        const padding = payload[0] & 32 ? payload[payload.length - 1] : 0;
+        assert(!(payload[0] & 32) || padding > 0, 'Invalid agent RTP padding');
+        assert(offset < payload.length - padding, 'Missing or truncated agent PCMU audio');
+        directions[incoming ? 'to_agent' : 'from_agent'].push({time: packet.time,
+            sequence: payload.readUInt16BE(2), timestamp: payload.readUInt32BE(4), ssrc: payload.readUInt32BE(8)});
+    }
+    const counts = {};
+    for (const [direction, stream] of Object.entries(directions)) {
+        assert(new Set(stream.map(packet => packet.ssrc)).size === 1, 'Missing or ambiguous agent ' + direction + ' RTP stream');
+        const unique = new Set(stream.map(packet => packet.sequence + ':' + packet.timestamp));
+        assert(unique.size >= MIN_AGENT_AUDIO_PACKETS
+            && new Set(stream.map(packet => packet.sequence)).size >= MIN_AGENT_AUDIO_PACKETS
+            && new Set(stream.map(packet => packet.timestamp)).size >= MIN_AGENT_AUDIO_PACKETS,
+        'Insufficient negotiated agent ' + direction + ' PCMU flow');
+        const firstTime = stream.reduce((time, packet) => Math.min(time, packet.time), Infinity);
+        const lastTime = stream.reduce((time, packet) => Math.max(time, packet.time), -Infinity);
+        assert(lastTime > firstTime,
+            'Agent PCMU packets do not demonstrate media progression');
+        counts[direction] = unique.size;
+    }
+    // This proves negotiated media transport, not intelligibility or speech
+    // quality; no audio payload is written to the evidence report.
+    return {codec: 'PCMU/8000', payload: 0, ...counts};
 }
 function bridgeProof(evidence) {
     const {caller, agent, callback} = evidence || {};
@@ -113,7 +159,7 @@ function uniqueTransaction(messages, description) {
 }
 function inspect(buffer, proof, logPayload) {
     assert(validId(proof?.callerCallId) && validId(proof?.agentCallId), 'Missing expected fixture dialogs');
-    const all = packets(buffer), offers = [], answers = [], acknowledgements = [], agentInvites = [];
+    const all = packets(buffer), offers = [], answers = [], acknowledgements = [], agentInvites = [], agentAnswers = [], agentAcks = [];
     for (const packet of all) {
         const first = packet.payload.subarray(0, 16).toString('latin1');
         if (packet.dst === IP.carrier && packet.dport === PORT.carrierSip && first.startsWith('INVITE ')) {
@@ -130,6 +176,10 @@ function inspect(buffer, proof, logPayload) {
             const message = sip(packet);
             assert(message.callId === proof.agentCallId, 'Unrelated agent INVITE cannot prove callback ordering');
             agentInvites.push(message);
+        } else if (packet.src === IP.agent && packet.sport === PORT.agentSip && first.startsWith('SIP/2.0 200 ')) {
+            if (/\r\nCSeq:\s*\d+ INVITE\r\n/i.test(packet.payload.toString('latin1'))) agentAnswers.push(sip(packet));
+        } else if (packet.dst === IP.agent && packet.dport === PORT.agentSip && first.startsWith('ACK ')) {
+            agentAcks.push(sip(packet));
         }
     }
     const offer = uniqueTransaction(offers, 'returned-caller offer');
@@ -174,9 +224,24 @@ function inspect(buffer, proof, logPayload) {
     let duration = 0;
     for (const event of events) {assert(event.duration >= duration, 'Telephone-event duration regressed'); duration = event.duration;}
     assert(agent.time > ended.time, 'Agent INVITE preceded completed returned caller confirmation');
+    const agentAnswer = uniqueTransaction(agentAnswers, 'native agent answer');
+    const agentAck = uniqueTransaction(agentAcks, 'native agent ACK');
+    assert(agentAnswer.callId === agent.callId && agentAck.callId === agent.callId
+        && agentAnswer.cseq === agent.cseq && agentAck.cseq === agent.cseq
+        && agentAnswer.dst === agent.src && agentAnswer.dport === agent.sport
+        && agentAck.src === agent.src && agentAck.sport === agent.sport
+        && agent.time <= agentAnswer.time && agentAnswer.time <= agentAck.time,
+    'Agent SIP dialog transaction/direction mismatch');
+    const agentRemote = audioSdp(agent, false), agentLocal = audioSdp(agentAnswer, false);
+    assert(agentLocal.ip === IP.agent && agentLocal.port === PORT.agentRtp
+        && agentLocal.formats.length === 1 && agentLocal.formats[0] === 0
+        && !(agentRemote.ip === agentLocal.ip && agentRemote.port === agentLocal.port),
+    'Agent offer/answer media negotiation mismatch');
+    const media = agentAudio(all, agentRemote, agentLocal, agentAck.time);
     return {negotiated_telephone_event: remote.payload, digit_packets: events.length, agent_invites: agentInvites.length,
         first_agent_invite_after_digit_ms: Math.round((agent.time - first.time) * 1000),
-        first_agent_invite_after_digit_end_ms: Math.round((agent.time - ended.time) * 1000)};
+        first_agent_invite_after_digit_end_ms: Math.round((agent.time - ended.time) * 1000),
+        agent_audio: media};
 }
 function negotiatedPayload(log) {
     assert(!log.includes('callback-unsupported-telephone-event'), 'Carrier rejected negotiated payload');

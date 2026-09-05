@@ -9,13 +9,14 @@ function fixture(payload, agentTime = 2, address = '127.0.0.20') {
     const dialogs = records(payload);
     dialogs[5].time = agentTime; dialogs[5].dst = address;
     return Buffer.concat([capture(dialogs.slice(0, 3), 1), digitPcap(payload).subarray(24),
-        capture([dialogs[5]], 1).subarray(24)]);
+        capture(dialogs.slice(5), 1).subarray(24)]);
 }
 for (let payload = 96; payload <= 127; payload++) {
     const packets = fixture(payload), actual = inspect(packets, proof, payload);
     assert.equal(actual.negotiated_telephone_event, payload);
     assert.equal(actual.digit_packets, 13);
     assert.equal(actual.agent_invites, 1);
+    assert.deepEqual(actual.agent_audio, {codec: 'PCMU/8000', payload: 0, to_agent: 10, from_agent: 10});
     assert.equal(actual.first_agent_invite_after_digit_ms, 1000);
     assert.equal(actual.first_agent_invite_after_digit_end_ms, 800);
     assert.throws(() => inspect(packets, proof, payload === 96 ? 101 : 96), /negotiation mismatch/);

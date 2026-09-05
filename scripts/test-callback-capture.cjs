@@ -43,7 +43,7 @@ for (const port of [40000, 42000, 43000, 43010, 44000, 44998, 15100]) {
 }
 cases.push(['127.0.0.20', 42000, '192.0.2.1', 18000, false]);
 cases.push(['127.0.0.30', 43000, '192.0.2.1', 18000, false]);
-cases.push(['127.0.0.20', 15100, '192.0.2.1', 5060, false]);
+cases.push(['127.0.0.20', 15100, '192.0.2.1', 5060, true]);
 const header = Buffer.alloc(24);
 header.writeUInt32LE(0xa1b2c3d4); header.writeUInt16LE(2, 4); header.writeUInt16LE(4, 6);
 header.writeUInt32LE(65535, 16); header.writeUInt32LE(1, 20);

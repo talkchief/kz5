@@ -475,6 +475,15 @@ sudo ./scripts/test-install-kazoo5-deployment.sh
 ./scripts/test-acdc-callback-store.sh
 ./scripts/test-acdc-callback-menu.sh
 ./scripts/test-acdc-callback-menu-integration.sh
+./scripts/test-acdc-callback-bridge-snapshot.sh
+./scripts/test-acdc-callback-queue.sh
+./scripts/test-acdc-callback-recovery-io.sh
+node scripts/test-callback-cleanup-exit.cjs
+node scripts/test-callback-timing.cjs
+node scripts/test-callback-lifecycle.cjs
+node scripts/test-callback-fixture-cleanup.cjs
+node scripts/test-callback-media-binding.cjs
+node scripts/test-call-log-evidence.cjs
 ./scripts/test-install-kazoo5-logging.sh
 ./scripts/test-install-kazoo5-prompts.sh
 ./scripts/test-kazoo-log-redaction.sh
@@ -516,6 +525,13 @@ same-number callback with DTMF 6/1; a later sentinel stays queued while the
 returned local-carrier leg confirms with DTMF 1 and bridges agent 1002. The
 simulated carrier is loopback-only and the numbers are reserved fictional-use
 numbers, so no PSTN call can leave the host.
+
+The fixture negotiates its actual returned-call keypad payload and checks
+correlated SIP/RTP evidence. Its later sentinel clears normally before the
+returned caller releases the agent, without weakening the ordering test.
+Cancellation or owned-fixture cleanup failure makes the live command fail and
+retains unresolved resources for recovery. See [callback acceptance](acdc_callback_acceptance.md)
+for build, test and live-result boundaries.
 
 The live lifecycle test creates a uniquely named temporary child account and
 queue, verifies its ACDC worker and APIs, then deletes those exact test fixtures:

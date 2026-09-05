@@ -1,9 +1,105 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-05 13:31 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-05 16:20 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
 
-## Callback follow-up (13:31 UTC)
+## Latest callback retry result (16:20 UTC)
+
+The requested one-agent busy-call/callback/retry scenario passes its strict
+live functional and packet gates in run `20260905T161308Z`: entry digit at
+4.9892 seconds, complete received 6.124-second confirmation, first callback
+unanswered for 15.103999 seconds with the complete cancellation transaction,
+then a retry 17.735992 seconds after cancellation that confirms and bridges
+the same agent. The ticket completes on attempt two with its enqueue identity
+preserved; 4,916 progressing PCMU packets are verified in each direction.
+The initial conversation was released 5.796588 seconds after prompt completion
+(two-second explicit wait plus evidence-processing overhead), not exactly two
+seconds. Both caller/agent aggregate counters are two successes, zero failures.
+Normal cleanup leaves FreeSWITCH idle, the checked service PIDs unchanged and
+active, restart counts zero and no new core dumps.
+
+**Overall exit is still 1:** one known Kamailio `consume_credentials` script
+error fails the final log gate. Its narrow authentication-preserving fix and
+ten regression groups are now in the installer repository, but the running
+proxy was not changed for this run. Historical unresolved callback resources
+remain retained. The result is an isolated local functional pass, not MASTER
+or PSTN callback acceptance, full cleanup or production certification. See
+[complete callback evidence and exact timing](acdc_callback_acceptance.md#busy-agent-callback-and-unanswered-first-attempt-diagnostic).
+
+## Requested one-agent callback retry (15:59 UTC)
+
+Run `20260905T155305Z` connected the initial conversation to the single test
+agent. The second caller sent digit 6 at 4.990916 seconds after answer and
+received the entire installed 6.124-second callback confirmation before
+hangup, with zero missing phrase samples and PCM correlation 0.999991.
+This is measured packet/audio delivery, not human listening.
+
+The full scenario did not finish. The test phone's echo-pattern check rejected
+the correctly received queue audio despite successful SIP signaling. Cleanup
+also exposed an ordering issue: releasing the busy agent before cancellation
+briefly allowed callback origination. The new test is being corrected to use
+a non-pattern queued caller with independent received-prompt verification and to
+cancel the exact current callback before releasing the initial conversation.
+The ticket is cancelled and FreeSWITCH is idle. The deliberate first missed
+call, retry, second bridge and final clean-log gates remain unproven for this
+scenario; no MASTER or external-carrier changes were made. See the
+[detailed retry diagnostic](acdc_callback_acceptance.md#busy-agent-callback-and-unanswered-first-attempt-diagnostic).
+
+## Previous callback and system review (14:54 UTC)
+
+The latest isolated callback run `20260905T143709Z` reached a durable completed
+ticket on attempt one, verified the exact reciprocal caller/agent bridge, and
+preserved enqueue identity/order while the later sentinel remained waiting.
+All three phones ended naturally with one successful SIP call and zero failed
+calls, and FreeSWITCH returned to zero calls. **The overall test failed**:
+the agent RTP check saw no packets. SIPp's active-pattern phones had failed to
+bind streaming ports because they also reserved those ports for echo. The
+fixture is being corrected and must pass a new full run, including packet,
+audio, teardown, readiness and log gates.
+
+Cleanup also correctly retained the isolated fixture because a historical
+callback remains `cancelling` with reconciliation required. Idle channels are
+not sufficient evidence to mark that origination settled. No manual ticket
+rewrite, broad hangup, MASTER routing/roster edit or service restart was used.
+See [callback completion evidence and safeguards](acdc_callback_acceptance.md).
+
+All nine services are active and enabled, with zero recorded automatic
+restarts and no core dumps. **Logs are not clean:** the broader installer
+check found Kamailio authentication and unresolved acceptance-realm routing
+errors during callback setup, including the latest run. The earlier journal
+counter incorrectly missed native `ERROR:` messages; this has been corrected.
+The corrected counter finds eleven journal errors between 14:37:09 and
+14:40:00 UTC in the latest callback run.
+A separate normal `CHANNEL_EXECUTE_ERROR` event subscription caused one
+false-positive file-log match. The revised counters pass fourteen file/journal
+test pairs plus four routing/AMQP cases, retaining actual failure detection.
+Disk use is about 12 GiB, with 24 GiB available.
+
+Installer syntax, component selection, pinned Kazoo media builds and modular
+dry-run checks pass. The fresh live `--verify-only all` check **failed** at
+complete localized-media verification. Before stopping, it passed CouchDB,
+RabbitMQ, HAProxy, production BEAMs, running Kazoo applications, ACDC database,
+SUP, administrator authentication, queue/agent/external-number APIs and 192
+English-US prompt attachments. Protected receipt:
+`/var/log/kazoo-acceptance/installer-status-verify.6M8HHI`.
+These checks do **not** prove clean-host or multi-server installs.
+Separate live component verification passes eCallMgr and Kazoo FreeSWITCH.
+Kamailio verification fails on the runtime integration errors above, and
+Monster UI verification fails because its deployed fingerprint differs from
+the requested pinned build/bundle. Neither failed result has been bypassed by
+resetting logs or replacing the receipt with an unverified fingerprint.
+The later read-only SUP verification also exposed an existing logging-format
+defect: typed command arguments are passed to a string formatter, producing
+`FORMAT ERROR` notices. The SUP commands returned successfully, but this
+logging defect remains open; it is not described as a service crash.
+Crossbar and browser checks cover the exercised login, queue/callflow,
+callback and supervision paths, not every endpoint. Complete 30-call draining,
+simultaneous ring-all, restart/failover recovery, backup restoration, external
+calling and matching-key HTTPS remain outstanding. The MASTER callback return
+identity/route prerequisites below are still missing. The system is not
+finalized or certified production-ready.
+
+## Earlier callback follow-up (13:31 UTC)
 
 The isolated run `/var/log/kazoo-acceptance/20260905T132127Z` is **not a pass**.
 It registered the callback, answered the returned call, delivered the negotiated

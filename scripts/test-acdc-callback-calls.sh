@@ -18,7 +18,13 @@ readonly CALLBACK_ORIGINAL_MEDIA_PORT=43000
 readonly SENTINEL_MEDIA_PORT=43010
 readonly CALLBACK_SENTINEL_HOLD_MS=90000
 readonly CALLBACK_CARRIER_CONFIRM_DELAY_MS=8000
-readonly CALLBACK_BRIDGE_HOLD_MS=30000
+# All agents remain logged out until the sentinel is answered. Callback
+# origination requires a ready agent, so this hold begins after its hold did.
+# Keep the callback busy until the sentinel clears normally, with 10s margin.
+readonly CALLBACK_BRIDGE_HOLD_MS=$((CALLBACK_SENTINEL_HOLD_MS + 10000))
+# Cover the XML's 90s INVITE wait, 300ms answer delay, 10s ACK wait, both
+# dynamic holds and 10s teardown; round up instead of truncating milliseconds.
+readonly CALLBACK_CARRIER_TIMEOUT_S=$(((90000 + 300 + 10000 + CALLBACK_CARRIER_CONFIRM_DELAY_MS + CALLBACK_BRIDGE_HOLD_MS + 10000 + 999) / 1000))
 
 CALLBACK_LIVE=false
 CALLBACK_PREPARE=false
@@ -31,7 +37,6 @@ SENTINEL_PID=
 CALLBACK_ORIGINAL_CALL_ID=
 CALLBACK_TICKET_ID=
 CALLBACK_REGISTRATION_EVIDENCE=
-CALLBACK_CONFIRMING_OBSERVED=false
 
 callback_usage() {
     cat <<'EOF'
@@ -122,10 +127,12 @@ start_returned_carrier() {
     local output=$RUN_DIR/callback-carrier.log
     write_returned_carrier_csv "$csv"
     node "$callback_test_dir/test-fixtures/create-callback-carrier-scenario.cjs" "$RUN_DIR" >/dev/null
+    # This endpoint generates rtp_stream audio. Do not also enable -rtp_echo:
+    # echo reserves min/+2 and starves streaming of its advertised local port.
     sipp -sf "$RUN_DIR/callback-returned.xml" -inf "$csv" \
         -i "$CARRIER_IP" -p "$CARRIER_PORT" -mi "$CARRIER_IP" -mp "$CARRIER_MEDIA_PORT" \
         -min_rtp_port "$CARRIER_MEDIA_PORT" -max_rtp_port "$((CARRIER_MEDIA_PORT + 3))" \
-        -rtp_echo -m 1 -l 1 -nostdin -aa -timeout 120s -timeout_error \
+        -m 1 -l 1 -nostdin -aa -timeout "${CALLBACK_CARRIER_TIMEOUT_S}s" -timeout_error \
         -trace_stat -fd 1s -stf "$stats" \
         -trace_logs -log_file "$RUN_DIR/callback-carrier-negotiation.log" >"$output" 2>&1 &
     CARRIER_PID=$!
@@ -141,7 +148,7 @@ start_callback_request() {
     sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$SCENARIO_DIR/callback-request.xml" -inf "$csv" -i "$LOCAL_IP" -p "$CALLER_PORT" \
         -mi "$LOCAL_IP" -mp "$CALLBACK_ORIGINAL_MEDIA_PORT" -min_rtp_port "$CALLBACK_ORIGINAL_MEDIA_PORT" \
-        -max_rtp_port "$((CALLBACK_ORIGINAL_MEDIA_PORT + 3))" -rtp_echo \
+        -max_rtp_port "$((CALLBACK_ORIGINAL_MEDIA_PORT + 3))" \
         -m 1 -l 1 -r 1 -rp 1000 -nostdin -aa -timeout 75s -timeout_error \
         -trace_stat -fd 1s -stf "$stats" >"$output" 2>&1 &
     CALLBACK_ORIGINAL_PID=$!
@@ -156,24 +163,25 @@ start_sentinel_caller() {
     sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$SCENARIO_DIR/caller-to-queue.xml" -inf "$csv" -i "$LOCAL_IP" -p "$CALLER_PORT" \
         -mi "$LOCAL_IP" -mp "$SENTINEL_MEDIA_PORT" -min_rtp_port "$SENTINEL_MEDIA_PORT" -max_rtp_port "$((SENTINEL_MEDIA_PORT + 3))" \
-        -rtp_echo -m 1 -l 1 -r 1 -rp 1000 -nostdin -aa -timeout 150s -timeout_error \
+        -m 1 -l 1 -r 1 -rp 1000 -nostdin -aa -timeout 150s -timeout_error \
         -trace_stat -fd 1s -stf "$stats" >"$output" 2>&1 &
     SENTINEL_PID=$!
     ACTIVE_PIDS+=("$SENTINEL_PID")
 }
 
 wait_callback_bridge() {
-    local deadline=$((SECONDS + 75)) document callback_status agent_current caller_id agent_id caller agent sentinel
+    local deadline=$((SECONDS + 75)) document callback_status caller_id agent_id caller agent sentinel
     while ((SECONDS < deadline)); do
         kill -0 "$CARRIER_PID" 2>/dev/null || return 1
         document=$(callback_document) || return 1
         callback_status=$(jq -r '.status' <<<"$document")
-        agent_current=$(stat_value "$RUN_DIR/callback-agent-1-stats.csv" 'CurrentCall' 2>/dev/null || printf 0)
-        if [[ $callback_status == confirming ]] && ((agent_current == 0)); then
-            CALLBACK_CONFIRMING_OBSERVED=true
-        fi
         if [[ $callback_status == completed ]]; then
-            [[ $CALLBACK_CONFIRMING_OBSERVED == true ]] || die 'No returned-caller confirmation wait was observed'
+            # The worker waits for DTMF internally; durable caller_answered and
+            # caller_confirmed transitions are written together after that
+            # digit. Polling transient "confirming" cannot prove the wait.
+            # The final strict packet gate instead requires an established
+            # returned SIP dialog and completed negotiated digit 1 BEFORE the
+            # first agent INVITE. Durable completion alone is never a PASS.
             caller_id=$(jq -er '.caller_call_id | select(type=="string" and length>0)' <<<"$document") || return 1
             agent_id=$(jq -er '.agent_call_id | select(type=="string" and length>0)' <<<"$document") || return 1
             caller=$(callback_channel "$caller_id") || return 1
@@ -244,8 +252,8 @@ callback_capture_filter() {
     # matching a broad media range can collect unrelated production calls.
     [[ $LOCAL_IP == 127.0.0.20 && $CARRIER_IP == 127.0.0.30 ]] ||
         die 'Callback capture requires the exact isolated loopback endpoints'
-    printf 'udp and (((src host %s and (src port %s or src port %s or src port %s)) or (dst host %s and (dst port %s or dst port %s or dst port %s or dst port %s))) or ((src host %s and (src port %s or src port %s)) or (dst host %s and (dst port %s or dst port %s))))\n' \
-        "$LOCAL_IP" "$CALLBACK_ORIGINAL_MEDIA_PORT" "$SENTINEL_MEDIA_PORT" "$AGENT_MEDIA_MIN" \
+    printf 'udp and (((src host %s and (src port %s or src port %s or src port %s or src port %s)) or (dst host %s and (dst port %s or dst port %s or dst port %s or dst port %s))) or ((src host %s and (src port %s or src port %s)) or (dst host %s and (dst port %s or dst port %s))))\n' \
+        "$LOCAL_IP" "$CALLBACK_ORIGINAL_MEDIA_PORT" "$SENTINEL_MEDIA_PORT" "$AGENT_MEDIA_MIN" "$AGENT_CONTACT_PORT_BASE" \
         "$LOCAL_IP" "$CALLBACK_ORIGINAL_MEDIA_PORT" "$SENTINEL_MEDIA_PORT" "$AGENT_MEDIA_MIN" "$AGENT_CONTACT_PORT_BASE" \
         "$CARRIER_IP" "$CARRIER_MEDIA_PORT" "$CARRIER_PORT" "$CARRIER_IP" "$CARRIER_MEDIA_PORT" "$CARRIER_PORT"
 }
@@ -261,6 +269,19 @@ start_callback_capture() {
     ACTIVE_PIDS+=("$RTP_CAPTURE_PID")
     sleep 1
     kill -0 "$RTP_CAPTURE_PID" 2>/dev/null || die 'Callback RTP/SIP evidence capture failed'
+}
+
+assert_callback_media_logs() {
+    local name file
+    for name in original carrier agent-1 sentinel; do
+        file=$RUN_DIR/callback-$name.log
+        [[ -r $file && -s $file ]] || die "Missing callback $name process log"
+        # SIPp may finish SIP successfully after a streaming bind WARNING.
+        # Such a call is not a valid generated-audio acceptance result.
+        if LC_ALL=C grep -Eqi 'Could not (bind port for|open socket for|set up media IP for) RTP streaming' "$file"; then
+            die "Callback $name could not start its RTP stream"
+        fi
+    done
 }
 
 assert_callback_rtp() {
@@ -314,12 +335,13 @@ run_callback_acceptance() {
     assert_stats 'returned local carrier' "$RUN_DIR/callback-carrier-stats.csv" 1
     assert_agent_stats callback 1 1
 
-    # The sentinel leaves normally after its bounded queue hold; no second
-    # agent endpoint is available, so it must not increment the agent result.
+    # The sentinel's shorter hold ends normally while the callback still keeps
+    # the agent busy. It must not cause a second agent offer when that call ends.
     wait_checked 'later queue sentinel' "$SENTINEL_PID"
     assert_stats 'later queue sentinel' "$RUN_DIR/callback-sentinel-stats.csv" 1
     stop_rtp_capture
     stop_monitor
+    assert_callback_media_logs
     assert_callback_rtp
     node "$callback_test_dir/test-fixtures/assert-callback-confirmation-pcap.cjs" "$RTP_PCAP" \
         "$RUN_DIR/callback-carrier-negotiation.log" \
@@ -392,4 +414,4 @@ main_callback() {
     run_callback_acceptance
 }
 
-main_callback "$@"
+if [[ ${KAZOO_CALLBACK_CALLS_LIBRARY:-false} != true ]]; then main_callback "$@"; fi

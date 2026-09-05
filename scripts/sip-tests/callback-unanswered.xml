@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<scenario name="Kazoo isolated first callback attempt rings without answering">
+  <!-- Launch only on 127.0.0.30:16060 with -m 1 and no RTP/media flags.
+       No CSV or credentials. The controller must cancel the unanswered call. -->
+  <recv request="INVITE" timeout="90000">
+    <action>
+      <ereg regexp="^INVITE sip:\+12025550101@127\.0\.0\.30(:16060)?(;transport=udp)? SIP/2\.0" search_in="msg" check_it="true" assign_to="target_match"/>
+      <ereg regexp=".*" search_in="hdr" header="Via:" check_it="true" assign_to="invite_via"/>
+      <ereg regexp=".*" search_in="hdr" header="From:" check_it="true" assign_to="invite_from"/>
+      <ereg regexp=".*" search_in="hdr" header="To:" check_it="true" assign_to="invite_to"/>
+      <ereg regexp=".*" search_in="hdr" header="Call-ID:" check_it="true" assign_to="invite_call_id"/>
+      <ereg regexp="^ *([0-9]+) INVITE" search_in="hdr" header="CSeq:" check_it="true" assign_to="invite_cseq,invite_sequence"/>
+      <log message="callback-unanswered-invite timestamp=[timestamp]"/>
+    </action>
+  </recv>
+  <send>
+    <![CDATA[
+      SIP/2.0 100 Trying
+      Via: [$invite_via]
+      From: [$invite_from]
+      To: [$invite_to]
+      Call-ID: [$invite_call_id]
+      CSeq: [$invite_cseq]
+      Content-Length: 0
+    ]]>
+  </send>
+  <send>
+    <![CDATA[
+      SIP/2.0 180 Ringing
+      Via: [$invite_via]
+      From: [$invite_from]
+      To: [$invite_to];tag=[pid]unanswered[call_number]
+      Call-ID: [$invite_call_id]
+      CSeq: [$invite_cseq]
+      Content-Length: 0
+    ]]>
+  </send>
+  <recv request="CANCEL" timeout="65000">
+    <action>
+      <ereg regexp=".*" search_in="hdr" header="Via:" check_it="true" assign_to="cancel_via"/>
+      <ereg regexp=".*" search_in="hdr" header="Call-ID:" check_it="true" assign_to="cancel_call_id"/>
+      <ereg regexp="^ *([0-9]+) CANCEL" search_in="hdr" header="CSeq:" check_it="true" assign_to="cancel_cseq,cancel_sequence"/>
+      <strcmp variable="invite_via" variable2="cancel_via" check_it="true"/>
+      <strcmp variable="invite_call_id" variable2="cancel_call_id" check_it="true"/>
+      <strcmp variable="invite_sequence" variable2="cancel_sequence" check_it="true"/>
+      <log message="callback-unanswered-cancel timestamp=[timestamp]"/>
+    </action>
+  </recv>
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[pid]unanswered[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+  <!-- last_* now refers to CANCEL, not INVITE: use only the saved INVITE
+       transaction headers for its final response, especially CSeq INVITE. -->
+  <send retrans="500">
+    <![CDATA[
+      SIP/2.0 487 Request Terminated
+      Via: [$invite_via]
+      From: [$invite_from]
+      To: [$invite_to];tag=[pid]unanswered[call_number]
+      Call-ID: [$invite_call_id]
+      CSeq: [$invite_cseq]
+      Content-Length: 0
+    ]]>
+  </send>
+  <recv request="ACK" timeout="10000">
+    <action>
+      <ereg regexp=".*" search_in="hdr" header="Via:" check_it="true" assign_to="ack_via"/>
+      <ereg regexp=".*" search_in="hdr" header="Call-ID:" check_it="true" assign_to="ack_call_id"/>
+      <ereg regexp="^ *([0-9]+) ACK" search_in="hdr" header="CSeq:" check_it="true" assign_to="ack_cseq,ack_sequence"/>
+      <strcmp variable="invite_via" variable2="ack_via" check_it="true"/>
+      <strcmp variable="invite_call_id" variable2="ack_call_id" check_it="true"/>
+      <strcmp variable="invite_sequence" variable2="ack_sequence" check_it="true"/>
+      <log message="callback-unanswered-ack timestamp=[timestamp]"/>
+    </action>
+  </recv>
+  <Reference variables="target_match,cancel_cseq,ack_cseq"/>
+  <timewait milliseconds="500"/>
+</scenario>

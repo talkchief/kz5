@@ -1,0 +1,168 @@
+diff --git a/src/acdc_queue_fsm.erl b/src/acdc_queue_fsm.erl
+index efe1400..0fd4aa6 100644
+--- a/src/acdc_queue_fsm.erl
++++ b/src/acdc_queue_fsm.erl
+@@ -40,7 +40,7 @@
+         ]).
+ 
+ -ifdef(TEST).
+--export([callback_commit/3]).
++-export([callback_commit/3, callback_observed_agent/3]).
+ -export([announcement_media/3
+         ,announcement_event_id/1
+         ,start_announcement/2
+@@ -699,6 +699,10 @@ handle_event({'channel_bridged', Event}, 'connecting', #state{callback_ctx=#{'mo
+     callback_bridge(Event, State);
+ handle_event({'channel_bridged', _}, StateName, #state{callback_ctx=#{'mode' := 'native'}}=State) ->
+     {'next_state', StateName, State};
++handle_event({'callback_bridge_snapshot', Ref, Result}, 'connecting'
++             ,#state{callback_ctx=#{'mode' := 'native', 'bridge_probe_ref' := Ref}=Context}=State) ->
++    callback_bridge_snapshot(Result, State#state{callback_ctx=maps:remove('bridge_probe_ref', Context)});
++handle_event({'callback_bridge_snapshot', _, _}, StateName, State) -> {'next_state', StateName, State};
+ handle_event({'callback_accept_probe', Ref, Result}, _StateName
+               ,#state{callback_ctx=#{'mode' := 'native', 'accept_probe_ref' := Ref}=Context}=State) ->
+     Next = State#state{callback_ctx=maps:remove('accept_probe_ref', Context)},
+@@ -889,6 +893,7 @@ clear_member_call(#state{connection_timer_ref=ConnRef
+     maybe_stop_timer(CollectRef),
+     maybe_stop_timer(maps:get('timer_ref', Callback, 'undefined')),
+     maybe_stop_timer(maps:get('lease_timer_ref', Callback, 'undefined')),
++    maybe_stop_timer(maps:get('bridge_probe_ref', Callback, 'undefined')),
+     State#state{connect_resps=[]
+                ,connect_wins=[]
+                ,collect_ref='undefined'
+@@ -1113,7 +1118,8 @@ callback_prepare_winners(State) -> maybe_announce_before_connect(State).
+ 
+ callback_clear_proofs(Context) ->
+     maybe_stop_timer(maps:get('timer_ref', Context, 'undefined')),
+-    maps:without(['accepted', 'bridge_agent_leg', 'accept_probe_ref', 'timer_ref'], Context).
++    maybe_stop_timer(maps:get('bridge_probe_ref', Context, 'undefined')),
++    maps:without(['accepted', 'bridge_agent_leg', 'accept_probe_ref', 'bridge_probe_ref', 'timer_ref'], Context).
+ 
+ callback_reset_selection(#state{callback_ctx=#{'mode' := 'native'}=Context}=State) ->
+     State#state{callback_ctx=callback_clear_proofs(Context), connect_wins=[]};
+@@ -2093,28 +2099,28 @@ callback_same_acceptance(Previous, Current) ->
+     lists:all(fun(Key) -> kz_json:get_value(Key, Previous) =:= kz_json:get_value(Key, Current) end,
+               [<<"Agent-ID">>, <<"Process-ID">>, <<"Agent-Call-ID">>]).
+ 
+-callback_bridge(Event, #state{member_call=Call, callback_ctx=Context
+-                              ,account_id=AccountId, queue_id=QueueId
+-                              ,connection_timer_ref=ConnRef, agent_ring_timer_ref=AgentRef}=State) ->
++callback_bridge(Event, #state{member_call=Call, callback_ctx=Context}=State) ->
+     AgentLeg = kz_call_event:other_leg_call_id(Event),
+     case kz_call_event:call_id(Event) =:= kapps_call:call_id(Call)
+         andalso is_binary(AgentLeg) andalso byte_size(AgentLeg) > 0
+         andalso maps:get('bridge_agent_leg', Context, AgentLeg) =:= AgentLeg
+         andalso AgentLeg =/= kapps_call:call_id(Call) of
+-        'true' ->
+-            maybe_stop_timer(ConnRef), maybe_stop_timer(AgentRef),
+-            Next = State#state{callback_ctx=Context#{'bridge_agent_leg' => AgentLeg}
+-                                ,connection_timer_ref='undefined', agent_ring_timer_ref='undefined'},
+-            %% Record the observed other leg before waiting for acceptance.
+-            %% Cleanup after a lost acceptance must still know both legs.
+-            Doc = maps:get('reservation', Context),
+-            case acdc_callback_store:bind_leg(AccountId, QueueId, kz_doc:id(Doc), maps:get('token', Context), 'agent', AgentLeg) of
+-                {'ok', Bound} -> callback_complete(Next#state{callback_ctx=(Next#state.callback_ctx)#{'reservation' => Bound}});
+-                _ -> callback_native_end('agent_unavailable', Next)
+-            end;
++        'true' -> callback_record_bridge(AgentLeg, State);
+         'false' -> {'next_state', 'connecting', State}
+     end.
+ 
++callback_record_bridge(AgentLeg, #state{callback_ctx=Context, account_id=AccountId, queue_id=QueueId
++                                        ,connection_timer_ref=ConnRef, agent_ring_timer_ref=AgentRef}=State) ->
++    maybe_stop_timer(ConnRef), maybe_stop_timer(AgentRef),
++    Next = State#state{callback_ctx=Context#{'bridge_agent_leg' => AgentLeg}
++                        ,connection_timer_ref='undefined', agent_ring_timer_ref='undefined'},
++    %% Persist a positively observed other leg before waiting for acceptance.
++    Doc = maps:get('reservation', Context),
++    case acdc_callback_store:bind_leg(AccountId, QueueId, kz_doc:id(Doc), maps:get('token', Context), 'agent', AgentLeg) of
++        {'ok', Bound} -> callback_complete(Next#state{callback_ctx=(Next#state.callback_ctx)#{'reservation' => Bound}});
++        _ -> callback_native_end('agent_unavailable', Next)
++    end.
++
+ callback_complete(#state{callback_ctx=Context}=State) ->
+     case {maps:get('accepted', Context, 'undefined'), maps:get('bridge_agent_leg', Context, 'undefined')} of
+         {'undefined', _} -> callback_proof_deadline(State);
+@@ -2127,13 +2133,70 @@ callback_complete(#state{callback_ctx=Context}=State) ->
+     end.
+ 
+ callback_proof_deadline(#state{callback_ctx=Context}=State) ->
+-    case maps:get('timer_ref', Context, 'undefined') of
++    Next = case maps:get('timer_ref', Context, 'undefined') of
+         'undefined' ->
+             Ref = erlang:start_timer(15000, self(), 'callback_proof_deadline'),
+-            {'next_state', 'connecting', State#state{callback_ctx=Context#{'timer_ref' => Ref}}};
++            State#state{callback_ctx=Context#{'timer_ref' => Ref}};
++        _ -> State
++    end,
++    callback_start_bridge_probe(Next).
++
++%% Native intercept emits CHANNEL_BRIDGE on the initiating AGENT leg only.
++%% The queue listens to the returned member, so selected-agent acceptance also
++%% starts a fresh account-scoped reciprocal-channel proof. Acceptance alone
++%% never completes a callback and the original 15-second deadline is unchanged.
++callback_start_bridge_probe(#state{callback_ctx=Context}=State) ->
++    case {maps:get('bridge_agent_leg', Context, 'undefined')
++          ,maps:get('bridge_probe_ref', Context, 'undefined'), callback_candidate_legs(State)} of
++        {'undefined', 'undefined', [_|_]} ->
++            Owner = self(), Ref = make_ref(), Doc = maps:get('reservation', Context),
++            _ = spawn(fun() ->
++                Result = try acdc_callback_recovery_io:observe(Doc)
++                         catch _:_ -> {'error', 'unknown'} end,
++                gen_statem:cast(Owner, {'callback_bridge_snapshot', Ref, Result})
++            end),
++            {'next_state', 'connecting', State#state{callback_ctx=Context#{'bridge_probe_ref' => Ref}}};
+         _ -> {'next_state', 'connecting', State}
+     end.
+ 
++callback_candidate_legs(#state{callback_ctx=Context, connect_wins=Wins}) ->
++    Candidates = case maps:get('accepted', Context, 'undefined') of
++        'undefined' -> maps:values(maps:get('accepted_candidates', Context, #{}));
++        Accepted -> [Accepted]
++    end,
++    lists:usort([Leg || A <- Candidates, Leg <- [kz_json:get_ne_binary_value(<<"Agent-Call-ID">>, A)]
++                       ,is_binary(Leg), lists:any(fun(W) -> acdc_queue_strategy:process_matches(A, W) end, Wins)]).
++
++callback_bridge_snapshot(Result, #state{callback_ctx=Context, member_call=Call}=State) ->
++    case callback_observed_agent(Result, kapps_call:call_id(Call), callback_candidate_legs(State)) of
++        {'ok', Leg} ->
++            case maps:get('bridge_agent_leg', Context, Leg) =:= Leg of
++                'true' -> callback_record_bridge(Leg, State);
++                'false' -> {'next_state', 'connecting', State}
++            end;
++        'unknown' ->
++            Ref = erlang:start_timer(250, self(), 'callback_bridge_snapshot_retry'),
++            {'next_state', 'connecting', State#state{callback_ctx=Context#{'bridge_probe_ref' => Ref}}}
++    end.
++
++-spec callback_observed_agent(any(), kz_term:ne_binary(), [kz_term:ne_binary()]) ->
++          {'ok', kz_term:ne_binary()} | 'unknown'.
++callback_observed_agent({'ok', #{'complete' := 'true', 'channels' := Channels
++                               ,'bridge' := #{'state' := 'bridged', 'call_ids' := Pair}}}, Caller, Candidates)
++  when is_list(Pair), length(Pair) =:= 2, is_list(Channels) ->
++    try
++        'true' = lists:member(Caller, Pair),
++        [Agent] = Pair -- [Caller],
++        'true' = Agent =/= Caller andalso lists:member(Agent, Candidates),
++        [C] = [O || #{'call_id' := Id}=O <- Channels, Id =:= Caller],
++        [A] = [O || #{'call_id' := Id}=O <- Channels, Id =:= Agent],
++        #{'state' := 'active', 'answered' := 'true', 'other_leg_call_id' := Agent, 'switch_node' := Node} = C,
++        #{'state' := 'active', 'answered' := 'true', 'other_leg_call_id' := Caller, 'switch_node' := Node} = A,
++        'true' = is_binary(Node) andalso byte_size(Node) > 0,
++        {'ok', Agent}
++    catch _:_ -> 'unknown' end;
++callback_observed_agent(_, _, _) -> 'unknown'.
++
+ -spec callback_commit(kz_term:ne_binary(), kz_json:object(), state()) -> kz_types:handle_fsm_ret(state()).
+ callback_commit(AgentLeg, Accepted, #state{callback_ctx=Context, account_id=AccountId, queue_id=QueueId
+                                           ,member_call=Call, listener_proc=Listener, connect_wins=Wins}=State) ->
+@@ -2174,6 +2237,9 @@ callback_commit_retry(#state{callback_ctx=Context}=State) ->
+ 
+ %% Worker replies and already-delivered cancelled timers can cross a completed
+ %% handoff. Never crash/log private token-bearing payloads for stale messages.
++callback_native_info({'timeout', Ref, 'callback_bridge_snapshot_retry'}, 'connecting'
++                      ,#state{callback_ctx=#{'mode' := 'native', 'bridge_probe_ref' := Ref}=Context}=State) ->
++    callback_start_bridge_probe(State#state{callback_ctx=maps:remove('bridge_probe_ref', Context)});
+ callback_native_info({'timeout', Ref, 'callback_proof_deadline'}, _StateName
+                       ,#state{callback_ctx=#{'mode' := 'native', 'timer_ref' := Ref}=Context
+                               ,account_id=AccountId, member_call=Call, connect_wins=Wins}=State) ->

@@ -38,8 +38,12 @@
   </send>
 
   <recv response="100" optional="true" response_txn="invite1"/>
-  <recv response="401" auth="true" optional="true" response_txn="invite1" next="challenge_ack"/>
-  <recv response="407" auth="true" optional="true" response_txn="invite1" next="challenge_ack"/>
+  <recv response="401" auth="true" optional="true" response_txn="invite1" next="challenge_ack">
+    <action><ereg regexp=".*" search_in="hdr" header="Via:" case_indep="true" check_it="true" assign_to="challenge_via"/></action>
+  </recv>
+  <recv response="407" auth="true" optional="true" response_txn="invite1" next="challenge_ack">
+    <action><ereg regexp=".*" search_in="hdr" header="Via:" case_indep="true" check_it="true" assign_to="challenge_via"/></action>
+  </recv>
 
   <!-- A source socket recognized from REGISTER is trusted by the Kazoo ACL
        path and can proceed without a second digest challenge. -->
@@ -48,10 +52,12 @@
   <recv response="200" rrs="true" response_txn="invite1" next="direct_answer" counter="answered"/>
 
   <label id="challenge_ack"/>
+  <!-- Save invite1's response Via even for late challenge retransmissions:
+       ack_txn does not preserve [branch] or the changing [last_Via:] value. -->
   <send ack_txn="invite1">
     <![CDATA[
       ACK sip:[field3]@[field2] SIP/2.0
-      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      Via: [$challenge_via]
       Max-Forwards: 70
       From: <sip:[field0]@[field2]>;tag=[pid]call[call_number]
       To: <sip:[field3]@[field2]>[peer_tag_param]

@@ -1,6 +1,6 @@
 # Callback menu and live-queue resume repair
 
-Status: the narrow backend repairs below are deployed. This is **not** an end-to-end callback acceptance result or a claim that the reported MASTER-account callback problem is resolved. A separate returned-call handoff repair is deployed but still awaits a new live acceptance run.
+Status: the narrow backend repairs below are deployed. This is **not** an end-to-end callback acceptance result or a claim that the reported MASTER-account callback problem is resolved. Later runs reached a durable completed agent bridge, but the full live gate remains incomplete; see [current callback acceptance](acdc_callback_acceptance.md).
 
 ## Changes and safety boundaries
 
@@ -81,4 +81,4 @@ Native settled-registry entries have a 15-minute retention period; pending entri
 
 ## Remaining acceptance work
 
-The isolated live callback test reached same-number selection and returned-leg DTMF using payload type 101. It then failed the actual agent handoff: the returned call retained `resource_type = offnet-termination`, causing `kz_endpoint_v5:maybe_owner_called_self/4` to fail before an agent INVITE. The separate construction-boundary repair has since been deployed, and the retained ticket's cancellation is now verified as described above. A new live acceptance run must still prove the agent bridge and complete callback lifecycle. No MASTER-user callback recovery is claimed here.
+The initial isolated live test reached same-number selection and returned-leg DTMF using payload type 101, then failed agent handoff: `resource_type = offnet-termination` caused `kz_endpoint_v5:maybe_owner_called_self/4` to fail before an agent INVITE. The construction-boundary repair was deployed, and that retained ticket's cancellation was verified as described above. Subsequent bridge-proof repairs and live partial results are recorded in [callback acceptance](acdc_callback_acceptance.md); the complete live gate and restart recovery remain required. No MASTER-user callback recovery is claimed here.
