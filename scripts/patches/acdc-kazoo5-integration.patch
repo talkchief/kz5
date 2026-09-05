@@ -9338,14 +9338,15 @@ index 0000000..be95acf
 +]).
 diff --git a/src/acdc_gemini_prompts.erl b/src/acdc_gemini_prompts.erl
 new file mode 100644
-index 0000000..08ff004
+index 0000000..0033516
 --- /dev/null
 +++ b/src/acdc_gemini_prompts.erl
-@@ -0,0 +1,272 @@
+@@ -0,0 +1,303 @@
 +%%% Immutable fixed Gemini defaults, never global aliases for customer media.
 +-module(acdc_gemini_prompts).
 +-export([canonical/1, default/4, default_alias/5, selection/2,
-+         callback/5, callback_readback/2, telephone/3, capabilities/1]).
++         callback/5, callback_readback/2, telephone/3, capabilities/1,
++         fixed_media_ids/1, verified_fixed_media/2, fixed_media_complete/2]).
 +-ifdef(TEST).
 +-export([default_with/6, telephone_with/5, capabilities_with/2, asset/2, imported/2]).
 +-endif.
@@ -9539,6 +9540,36 @@ index 0000000..08ff004
 +      imported_audio_sha256_requires_importer_verification => true,
 +      position_available => false, callback_runtime_ready => false,
 +      full_language_ready => false, native_speaker_review => false}.
++
++%% Bounded editor projection of actual immutable identities. This checks fresh
++%% document metadata supplied by the caller; it does not verify audio bytes,
++%% resolver caches, native number speech, or whole-language runtime readiness.
++-spec fixed_media_ids(binary()) -> list().
++fixed_media_ids(Language) -> [media_id(A) || A <- fixed_assets(Language)].
++
++-spec verified_fixed_media(binary(), list()) -> list().
++verified_fixed_media(Language, Docs) ->
++    [fixed_projection(A) || A <- fixed_assets(Language),
++        lists:any(fun(Doc) -> safe(fun() -> imported(A, {ok, Doc}) end) =:= true end, Docs)].
++
++-spec fixed_media_complete(binary(), list()) -> boolean().
++fixed_media_complete(Language, Media) ->
++    Assets = fixed_assets(Language),
++    length(Assets) =:= 29 andalso
++        lists:all(fun(A) -> lists:any(fun(M) ->
++            lists:all(fun({K,V}) -> get(K,M) =:= V end, element(1, fixed_projection(A)))
++        end, Media) end, Assets).
++
++-spec fixed_assets(binary()) -> list().
++fixed_assets(Language) -> [A || A <- ?GEMINI_ASSETS, element(1,A) =:= Language, not digit_asset(A)].
++
++-spec fixed_projection(tuple()) -> tuple().
++fixed_projection({Language,Canonical,Prompt,Sha,_Md5,_Length,_Transcript}=A) ->
++    {[{<<"id">>,media_id(A)}, {<<"name">>,Canonical}, {<<"language">>,Language},
++      {<<"has_attachments">>,true}, {<<"prompt_id">>,Prompt},
++      {<<"canonical_prompt_id">>,Canonical}, {<<"source_type">>,?OWNER},
++      {<<"source_map_sha256">>,?GEMINI_MAP_SHA256}, {<<"sha256">>,Sha},
++      {<<"import_metadata_verified">>,true}]}.
 +
 +-spec asset(binary(), binary()) -> tuple() | undefined.
 +asset(Language, Prompt) ->
@@ -10107,10 +10138,10 @@ index 0000000..3ad6f9d
 +    end.
 diff --git a/src/cb_acdc_queue_editor.erl b/src/cb_acdc_queue_editor.erl
 new file mode 100644
-index 0000000..871eb83
+index 0000000..bcf252a
 --- /dev/null
 +++ b/src/cb_acdc_queue_editor.erl
-@@ -0,0 +1,780 @@
+@@ -0,0 +1,803 @@
 +%%% SPDX-License-Identifier: MPL-2.0
 +%%% Account-scoped queue editor. Catalog reads are bounded; writes are a
 +%%% revision-checked saga, NOT a CouchDB cross-document transaction.
@@ -10120,7 +10151,7 @@ index 0000000..871eb83
 +-export([scoped/4, authorized/1, strict_route/2, roster_plan/3,
 +         digest/1, operation_id/3, public_catalog/2, valid_manifest/1,
 +         required_prompts/0, merge_patch/2, check_body/1, verified_manifest_media/1,
-+         language_selection_ready/2, manifest_path/3]).
++         language_selection_ready/2, manifest_path/3, system_media_state/2]).
 +-endif.
 +-include_lib("crossbar/src/crossbar.hrl").
 +-include_lib("kernel/include/file.hrl").
@@ -10317,8 +10348,22 @@ index 0000000..871eb83
 +        true ->
 +            try
 +                {Manifest, Media} = verified_manifest_media(read_manifest()),
-+                {Manifest, Media, catalog_state(true, <<"complete">>, length(Media))}
++                {Manifest, Media, system_media_state(Manifest, Media)}
 +            catch _:_ -> {null, [], catalog_state(false, <<"unverified_language_manifest">>, 0)} end
++    end.
++
++-spec system_media_state(kz_json:object(), list()) -> kz_json:object().
++system_media_state(Manifest, Media) ->
++    case kz_json:get_value(<<"backend_mode">>, Manifest) of
++        <<"legacy">> ->
++            Required = legacy_official_ids() ++ acdc_gemini_prompts:fixed_media_ids(<<"en-us">>),
++            Present = [kz_json:get_value(<<"id">>, M) || M <- Media],
++            case Required -- Present of
++                [] -> catalog_state(true, <<"complete">>, length(Media));
++                Missing -> kz_json:set_value(<<"missing_prompt_ids">>, Missing,
++                    catalog_state(false, <<"english_media_prerequisites_incomplete">>, length(Media)))
++            end;
++        _ -> catalog_state(true, <<"complete">>, length(Media))
 +    end.
 +
 +verified_manifest_media(Manifest) ->
@@ -10328,13 +10373,21 @@ index 0000000..871eb83
 +        undefined -> verified_full_media(Manifest)
 +    end.
 +
-+%% A baseline runtime has only English canonical prompts. Verify that bounded
-+%% catalog without promoting staged multilingual capabilities or changing the
-+%% explicit all-false manifest contract understood by Monster's legacy adapter.
++%% The deployed English baseline resolves fixed defaults to immutable Gemini
++%% media, not obsolete canonical callback aliases. Keep its official legacy
++%% phrases/auxiliary branches and all 29 actual fixed defaults in one batch.
++%% This does not promote the all-false multilingual capability manifest.
 +verified_legacy_media(Manifest) ->
-+    Ids = [<<"en-us/", (legacy_prompt(P))/binary>> || P <- required_prompts()],
-+    {_Docs, Media} = verified_media(Ids),
-+    {Manifest, Media}.
++    Official = legacy_official_ids(),
++    Ids = Official ++ acdc_gemini_prompts:fixed_media_ids(<<"en-us">>),
++    {Docs, Media} = verified_media(Ids),
++    Canonical = [M || M <- Media, lists:member(kz_json:get_value(<<"id">>, M), Official)],
++    {Manifest, Canonical ++ acdc_gemini_prompts:verified_fixed_media(<<"en-us">>, Docs)}.
++
++legacy_official_ids() ->
++    [<<"en-us/", (legacy_prompt(P))/binary>> || P <- required_prompts(),
++         legacy_prompt(P) =/= P] ++
++        [<<"en-us/agent-invalid_choice">>, <<"en-us/menu-invalid_entry">>, <<"en-us/cf-enter_number">>].
 +
 +legacy_prompt(<<"acdc-queue-your-current-position-is">> = P) -> P;
 +legacy_prompt(<<"acdc-queue-", S/binary>>) -> <<"queue-", S/binary>>;
@@ -10603,8 +10656,9 @@ index 0000000..871eb83
 +                              kz_json:get_value(<<"language">>, M) =:= <<"en-us">>,
 +                              kz_json:is_true(<<"has_attachments">>, M)],
 +                    Language =:= <<"en-us">> andalso
-+                        lists:all(fun(P) -> lists:member(<<"en-us/", (legacy_prompt(P))/binary>>, Ids) end,
-+                                  required_prompts());
++                        lists:all(fun(Id) -> lists:member(Id, Ids) end, legacy_official_ids())
++                        andalso acdc_gemini_prompts:fixed_media_complete(<<"en-us">>,
++                            kz_json:get_list_value(<<"system_media">>, Catalog, []));
 +                undefined -> kz_json:is_true([<<"languages">>, Language, <<"ready">>], Manifest)
 +            end
 +    end.

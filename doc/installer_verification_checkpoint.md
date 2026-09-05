@@ -109,9 +109,33 @@ integration has not changed live manifests or restarted units.
 
 A further pinned-source audit found only 175 official top-level English WAVs in
 the selected sounds revision; 17 ignored/generated legacy extras had entered
-the old manifest through a broad file scan. Fresh immutable Gemini imports and
-those canonical aliases are different inventories. Official-source selection
-and editor prerequisites must follow the actual runtime mappings without
-fabricating aliases or five-language readiness. That repair remains under review.
+the old manifest through a broad file scan. The source repair now derives the
+inventory from that exact Git tree and reads missing imports from pinned Git
+blobs, while preserving existing attached documents. The editor validates the
+actual 29 immutable English Gemini records plus 12 official compatibility
+phrases and three official auxiliary prompts in one 44-document batch. It does
+not invent canonical aliases or assert five-language readiness.
+
+All 31 editor/path backend tests passed after integration. The focused official
+inventory tests and explicit baseline UI regression tests pass, including every
+missing prerequisite and invalid immutable-provenance cases. Default patch
+forward/layered/reverse replay passes with experimental layers kept separate.
+The generated OpenAPI additions validate but are not yet deployed. The mapper,
+editor and matching ACDC UI must be deployed together in dependency order;
+current live English selection still uses the previous deployed contract.
 No fresh installation, remote dependency fetch or separated-node deployment was
 performed for this checkpoint.
+
+## Subsequent clean-build failure and memory incident
+
+A later actual private Monster dependency installation did fetch registry
+metadata. Its pinned upstream lock failed `npm ci`. A reviewed native-override
+package amendment plus retained migrated lock still failed a second isolated
+`npm ci --ignore-scripts` on a semver dependency mismatch. Both failures are
+retained; neither source-only lock audit is a clean-install pass. Live UI and
+its provenance marker are unchanged.
+
+At 23:27 a host-global OOM also coincided with new AMQP failures in both Kazoo
+nodes. Read [the incident record](host_memory_incident_20260905.md); earlier
+component passes are not current enterprise certification. Heavy work is now
+being serialized and resource-capped while recovery is checked.

@@ -2043,9 +2043,10 @@ install_kazoo_prompts() (
     # ACDC defaults use separately imported immutable Gemini IDs. Ship this
     # change with that resolver; never regenerate canonical synthetic media.
     # Pinned official prompts remain available for ordinary non-ACDC flows.
-    find "$source_dir" -maxdepth 1 -type f -name '*.wav' -printf '%f\n' | \
-        sort -u | jq -Rsc '{keys: (split("\n") | map(select(length > 0) | "en-us/" + rtrimstr(".wav")))}' | \
-        write_file 0644 "$manifest"
+    output=$(node "$SCRIPT_DIR/official-kazoo-prompt-manifest.cjs" \
+        --source-root "$KAZOO_BUILD_ROOT/kazoo-sounds" --ref "$KAZOO_SOUNDS_REF") || \
+        die 'Could not verify the pinned official prompt inventory'
+    printf '%s\n' "$output" | write_file 0644 "$manifest"
     jq -e '.keys | length > 0' "$manifest" >/dev/null || die 'Kazoo prompt manifest is empty'
     output=$(timeout 30 sup kz_datamgr db_create system_media) || die 'Could not create system_media'
     [[ $output == true ]] || die 'system_media database is unavailable'
@@ -2055,11 +2056,13 @@ install_kazoo_prompts() (
     chmod 0755 "$import_dir"
     while IFS= read -r file; do
         [[ $file =~ ^[a-zA-Z0-9_-]+\.wav$ ]] || die 'Invalid source prompt name'
-        if [[ -s $source_dir/$file ]]; then
-            install -m 0644 "$source_dir/$file" "$import_dir/$file"
-        else
-            die 'A required source prompt is missing'
-        fi
+        # Import the selected immutable blob, not a possibly modified/ignored
+        # checkout file. Existing remote/custom attachments remain untouched.
+        git -C "$KAZOO_BUILD_ROOT/kazoo-sounds" show \
+            "${KAZOO_SOUNDS_REF}:kazoo-core/en/us/${file}" >"$import_dir/$file" || \
+            die 'A required pinned source prompt is missing'
+        [[ -s $import_dir/$file ]] || die 'A required pinned source prompt is empty'
+        chmod 0644 "$import_dir/$file"
         imported=$((imported + 1))
     done < <(jq -r '.rows[] | select(.error == "not_found" or .value.deleted == true or ((.doc._attachments // {}) | length == 0)) | .key | ltrimstr("en-us/") + ".wav"' <<<"$documents")
     if ((imported > 0)); then

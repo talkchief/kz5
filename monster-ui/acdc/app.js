@@ -414,20 +414,44 @@ define(function(require) {
 			});
 		},
 
+		// These records are projected only after server-side immutable document
+		// provenance checks. A purpose name by itself is never an alias or proof.
+		verifiedGeminiEnglishPurposes: function(media) {
+			var self = this, required = self.requiredLanguagePromptIds(),
+				mapHash = '36665a8916e18503ae3214c5fd77748a7739c300b8989e24cc26b3214d2f8aa0';
+
+			return _.map(_.filter(media, function(item) {
+				return _.isPlainObject(item) && item.language === 'en-us' && item.has_attachments === true
+					&& item.import_metadata_verified === true
+					&& item.source_type === 'kazoo5_acdc_gemini_voice_installer'
+					&& item.source_map_sha256 === mapHash
+					&& typeof item.sha256 === 'string' && /^[a-f0-9]{64}$/.test(item.sha256)
+					&& required.indexOf(item.canonical_prompt_id) >= 0
+					&& item.prompt_id === item.canonical_prompt_id + '-gemini-sulafat-' + item.sha256.slice(0, 16)
+					&& item.id === 'en-us/' + item.prompt_id;
+			}), 'canonical_prompt_id');
+		},
+
 		languageCapabilityOptions: function(manifest, media, loadError) {
 			var self = this, labels = self.i18n.active().acdc.dropdowns,
 				ids = _.map(media, 'id'),
 				valid = self.validLanguageCapabilities(manifest),
 				legacy = valid && manifest.backend_mode === 'legacy',
-				legacyRequired = _.map(self.requiredLanguagePromptIds(), function(id) {
-					return id.indexOf('acdc-queue-') === 0 && id !== 'acdc-queue-your-current-position-is' ? id.slice(5) : id;
-				});
+				fixedRequired = self.requiredLanguagePromptIds(),
+				geminiPurposes = self.verifiedGeminiEnglishPurposes(media),
+				legacyRequired = _.map(_.filter(fixedRequired, function(id) {
+					return id.indexOf('acdc-queue-') === 0 && id !== 'acdc-queue-your-current-position-is';
+				}), function(id) { return id.slice(5); }).concat(['agent-invalid_choice', 'menu-invalid_entry', 'cf-enter_number']),
+				legacyIds = _.map(_.filter(media, function(item) {
+					return _.isPlainObject(item) && item.language === 'en-us' && item.has_attachments === true;
+				}), 'id');
 
 			return _.map(self.announcementLocales, function(locale) {
 				var entry = valid ? manifest.languages[locale] : null,
 					ready = !loadError && valid && (legacy ? locale === 'en-us' && _.every(legacyRequired, function(id) {
-						return ids.indexOf('en-us/' + id) >= 0;
-					}) : entry.ready && _.every(entry.required_prompt_ids, function(id) {
+						return legacyIds.indexOf('en-us/' + id) >= 0;
+					}) && _.every(fixedRequired, function(id) { return geminiPurposes.indexOf(id) >= 0; })
+						: entry.ready && _.every(entry.required_prompt_ids, function(id) {
 						return ids.indexOf(locale + '/' + id) >= 0;
 					})),
 					reviewPending = ready && locale !== 'en-us' && entry.native_speaker_review === false;

@@ -1,7 +1,20 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-05 23:02 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-05 23:35 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
+
+## Host memory incident and deployment hold
+
+The 23:27 global OOM event killed a Codex worker, and both Kazoo nodes recorded
+new AMQP timeouts. The broker alarm cleared and read-only checks observed
+reconnected clients without platform restarts. Heavy validation is paused until
+serialized resource controls are in place; recovery is not a call-test pass.
+See [the incident evidence and remaining gates](host_memory_incident_20260905.md).
+
+A real resource-capped private Monster UI `npm ci` also failed on the pinned
+upstream dependency lock's inconsistency. The live UI was not replaced.
+A reviewed package/lock compatibility repair and actual clean build remain
+required; no provenance marker is being changed to hide this failure.
 
 ## Queue editor and standalone-apps checkpoint
 

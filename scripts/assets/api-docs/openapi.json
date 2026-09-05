@@ -47926,6 +47926,14 @@
             "enum": [
               500
             ]
+          },
+          "missing_prompt_ids": {
+            "type": "array",
+            "maxItems": 44,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -47935,7 +47943,7 @@
           "limit"
         ],
         "additionalProperties": false,
-        "description": "Incomplete catalogs must not be treated as empty selections. A limit-exceeded catalog returns an empty list with complete=false and reason=limit_exceeded, never a silently truncated list. Other reasons include forbidden, invalid_scope, unavailable and unverified_language_manifest."
+        "description": "Incomplete catalogs must not be treated as empty selections. A limit-exceeded catalog returns an empty list with complete=false and reason=limit_exceeded, never a silently truncated list. Other reasons include forbidden, invalid_scope, unavailable and unverified_language_manifest. In legacy English mode, missing or provenance-invalid fixed media returns complete=false, reason=english_media_prerequisites_incomplete, and exact missing_prompt_ids. The bounded prerequisites are 29 immutable Gemini fixed records, 12 official queue phrases and three official callback auxiliary prompts, fetched in one batch. This does not verify resolver caches, downloaded audio bytes, native speech modules or external routing."
       },
       "QueueEditorUser": {
         "type": "object",
@@ -48003,6 +48011,32 @@
             "enum": [
               true
             ]
+          },
+          "prompt_id": {
+            "type": "string"
+          },
+          "canonical_prompt_id": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "kazoo5_acdc_gemini_voice_installer"
+            ]
+          },
+          "source_map_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "import_metadata_verified": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "required": [
@@ -48010,7 +48044,8 @@
           "language",
           "has_attachments"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "id is always the actual stored media document ID, never a fabricated canonical alias. Immutable Gemini records additionally carry the canonical playback purpose and fixed-map/hash provenance after exact attachment/document metadata checks. These fields prove metadata only, not fresh audio bytes, caches, native-number completeness or all-Gemini readiness."
       },
       "QueueEditorRouteSummary": {
         "type": "object",

@@ -170,7 +170,8 @@ async function main() {
   const source = fs.readFileSync(path.join(__dirname, 'install-kazoo5.sh'), 'utf8');
   const officialSection = source.slice(source.indexOf('install_kazoo_prompts() ('), source.indexOf('\nverify_kazoo_prompts()'));
   assert(!/callback_dir|generate-acdc-|dnf_install|espeak-ng/.test(officialSection));
-  assert(officialSection.includes('find "$source_dir" -maxdepth 1') && officialSection.includes('prompt_documents "$manifest"') &&
+  assert(officialSection.includes('official-kazoo-prompt-manifest.cjs') && !officialSection.includes('find "$source_dir"') &&
+    officialSection.includes('git -C "$KAZOO_BUILD_ROOT/kazoo-sounds" show') && officialSection.includes('prompt_documents "$manifest"') &&
     officialSection.includes('kazoo_media_maintenance import_prompts') && officialSection.includes('verify_kazoo_prompts'));
   const voicesSection = source.slice(source.indexOf('install_acdc_language_packs() ('), source.indexOf('\nconfigure_kazoo_api_modules()'));
   assert(!/prepare-acdc-speech|generate-acdc-|--generate|--key-file|dnf_install/.test(voicesSection));

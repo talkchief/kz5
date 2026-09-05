@@ -3,6 +3,12 @@
 This checklist records requested work, not production certification. The checked
 items below have the specific evidence stated; unchecked items are not finished.
 
+- [ ] Resolve and revalidate the 23:27 host-memory/AMQP incident. Broker alarms
+  cleared without platform restarts, but the subsequent read-only directory
+  check reported all31 devices offline. Contract validity is not registration
+  recovery. Serialize and cap further heavy validation; see
+  [the incident evidence](host_memory_incident_20260905.md).
+
 - [ ] Unified account-scoped queue editor API: one initial read and consolidated
   create/edit operations, bounded batch reads, authorization, revision checks,
   retry/idempotency and explicit partial-write recovery.
@@ -80,8 +86,8 @@ items below have the specific evidence stated; unchecked items are not finished.
 - [ ] Package source patches, deploy reviewed artifacts with rollback backups,
   verify browser/API/SIP behavior and fresh logs, and give the user test steps.
 - [ ] Commit/push completed changes with a credential scan and verified remote SHA.
-  Local checkpoint `2cc1022` includes the recordings/transcripts and previous
-  tested changes. Actual connector writes return403; remote master remains
+  Local checkpoints through `9171043` include recordings/transcripts, source
+  repairs and scoped test evidence. Actual connector writes return403; remote master remains
   `57560824`. No successful push of that checkpoint has been claimed.
 - [x] Contain the 30 existing test-phone UDP control sockets without restarting
   phones; persist explicit loopback control binding for future starts. Exact

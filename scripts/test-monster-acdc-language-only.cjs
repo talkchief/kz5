@@ -4,7 +4,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
-const sourceRoot = path.resolve(__dirname, '..');
+const sourceRoot = process.env.KAZOO_PROJECT_ROOT || path.resolve(__dirname, '..');
+const englishCandidate = process.env.KAZOO_ENGLISH_MEDIA_CANDIDATE;
 const vendorRoot = process.env.KAZOO_MONSTER_VENDOR_ROOT
     || '/usr/local/src/kazoo5-installer/monster-ui/src/js/vendor';
 const {chromium} = require(process.env.KAZOO_PLAYWRIGHT_MODULE || 'playwright');
@@ -15,6 +16,14 @@ const fields = keys.map(key => 'announcements.media.' + key)
 const defaults = Object.fromEntries(keys.map(key => [key, 'queue-' + key]));
 const template = fs.readFileSync(path.join(sourceRoot, 'monster-ui/acdc/views/queue-form.html'), 'utf8');
 const translations = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'monster-ui/acdc/i18n/en-US.json'), 'utf8'));
+const voiceMap = fs.readFileSync(englishCandidate ? path.join(englishCandidate, 'acdc_gemini_map.hrl')
+    : path.join(sourceRoot, 'applications/acdc/src/acdc_gemini_map.hrl'), 'utf8');
+const voiceMapHash = voiceMap.match(/GEMINI_MAP_SHA256, <<"([a-f0-9]{64})">>/)[1];
+const geminiMedia = [...voiceMap.matchAll(/\{<<"en-us">>,<<"([^"]+)">>,<<"([^"]+)">>,<<"([a-f0-9]{64})">>/g)]
+    .map(m => ({id: 'en-us/' + m[2], name: m[1], language: 'en-us', has_attachments: true,
+        prompt_id: m[2], canonical_prompt_id: m[1], source_type: 'kazoo5_acdc_gemini_voice_installer',
+        source_map_sha256: voiceMapHash, sha256: m[3], import_metadata_verified: true}));
+assert.equal(geminiMedia.length, 29, 'English fixture must match all fixed immutable assets');
 const schema = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'applications/crossbar/priv/couchdb/schemas/queues.json'), 'utf8'));
 const requiredMedia = schema.properties.announcements.properties.media.required;
 assert.deepEqual(requiredMedia.slice().sort(), keys.slice().sort(), 'Test must cover every schema-required announcement prompt');
@@ -80,8 +89,8 @@ async function main() {
                 return element.html();
             });
         });
-        await page.addScriptTag({path: path.join(sourceRoot, 'monster-ui/acdc/app.js')});
-        await page.evaluate(({template, translations}) => {
+        await page.addScriptTag({path: englishCandidate ? path.join(englishCandidate, 'app.js') : path.join(sourceRoot, 'monster-ui/acdc/app.js')});
+        await page.evaluate(({template, translations, geminiMedia}) => {
             const app = window.acdc, $ = window.jQuery, _ = window._;
             app.i18n = {active: () => translations};
             app.renderQueues = () => { throw new Error('Unexpected navigation'); };
@@ -116,17 +125,18 @@ async function main() {
                 const manifest = {schema_version: 1, backend_mode: 'legacy', generated_at: '2026-09-05T00:00:00Z',
                     languages: Object.fromEntries(app.announcementLocales.map(locale => [locale,
                         {ready: false, position: false, wait_time: false, callback: false, native_speaker_review: false}]))};
-                const systemMedia = app.requiredLanguagePromptIds().map(id => ({
-                    id: 'en-us/' + (id.indexOf('acdc-queue-') === 0 && id !== 'acdc-queue-your-current-position-is' ? id.slice(5) : id),
-                    language: 'en-us', name: id
-                }));
+                const systemMedia = app.requiredLanguagePromptIds().filter(id =>
+                    id.indexOf('acdc-queue-') === 0 && id !== 'acdc-queue-your-current-position-is')
+                    .map(id => id.slice(5)).concat(['agent-invalid_choice', 'menu-invalid_entry', 'cf-enter_number'])
+                    .map(id => ({id: 'en-us/' + id, language: 'en-us', name: id, has_attachments: true}))
+                    .concat(geminiMedia);
                 app.populateQueueDropdowns(view, queue, {users: [{id: 'fixture-callback-user', first_name: 'Fixture', last_name: 'Agent'}],
                     media: [], numbers: [], verifiedSystemMedia: systemMedia, languageCapabilities: manifest}, {}, legacy);
                 app.renderAgentOrder(view, []);
                 app.bindQueueForm(view, legacy ? 'fixture-queue' : undefined, 1, 'fixture-account');
                 return queue;
             };
-        }, {template, translations});
+        }, {template, translations, geminiMedia});
 
         async function render(options) { return page.evaluate(options => window.renderFixture(options), options); }
         async function submit() {

@@ -3,6 +3,7 @@
 -module(acdc_queue_editor_tests).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("couchbeam/include/couchbeam.hrl").
+-include("acdc_gemini_map.hrl").
 -define(A, <<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>).
 -define(Q, <<"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb">>).
 -define(U, <<"cccccccccccccccccccccccccccccccc">>).
@@ -475,16 +476,17 @@ legacy_language_readiness_batch() ->
          kz_json:set_value(<<"private_extra">>, <<"must_not_leak">>, M),
          kz_json:set_value(<<"backend_mode">>, <<"unknown">>, M)]),
     meck:expect(kz_datamgr, open_docs, fun(<<"system_media">>, Ids) ->
-        ?assertEqual(29, length(Ids)),
+        ?assertEqual(44, length(Ids)),
         ?assert(lists:member(<<"en-us/queue-about_5_minutes">>, Ids)),
-        ?assert(lists:member(<<"en-us/acdc-queue-your-current-position-is">>, Ids)),
-        ?assert(lists:member(<<"en-us/acdc-callback-success">>, Ids)),
+        ?assertNot(lists:member(<<"en-us/acdc-queue-your-current-position-is">>, Ids)),
+        ?assertNot(lists:member(<<"en-us/acdc-callback-success">>, Ids)),
+        ?assert(lists:member(<<"en-us/agent-invalid_choice">>, Ids)),
+        ?assertEqual(29, length(acdc_gemini_prompts:fixed_media_ids(<<"en-us">>))),
         ?assert(lists:all(fun(<<"en-us/", _/binary>>) -> true; (_) -> false end, Ids)),
-        {ok, [j([{<<"key">>, Id}, {<<"doc">>, doc(Id, <<"media">>,
-            [{<<"_attachments">>, j([{<<"prompt.wav">>, j([{<<"length">>, 16000}])}])}])}]) || Id <- Ids]}
+        {ok, [j([{<<"key">>, Id}, {<<"doc">>, english_media_doc(Id)}]) || Id <- Ids]}
     end),
     {Verified, Media} = cb_acdc_queue_editor:verified_manifest_media(M),
-    ?assertEqual(M, Verified), ?assertEqual(29, length(Media)),
+    ?assertEqual(M, Verified), ?assertEqual(44, length(Media)),
     ?assertEqual(1, meck:num_calls(kz_datamgr, open_docs, '_')),
     Catalog = j([{<<"language_capabilities">>, Verified}, {<<"system_media">>, Media},
                  {<<"catalogs">>, j([{<<"system_media">>, j([{<<"complete">>, true}])}])}]),
@@ -502,8 +504,58 @@ legacy_language_readiness_batch() ->
           kz_json:set_value(<<"system_media">>, [kz_json:set_value(<<"language">>, <<"he-il">>, X) || X <- Media], Catalog),
           kz_json:set_value([<<"language_capabilities">>, <<"languages">>, <<"en-us">>, <<"ready">>], true, Catalog)]),
     ?assertEqual(false, kz_json:get_value([<<"language_capabilities">>, <<"languages">>, <<"en-us">>, <<"ready">>], Catalog)),
+    ?assert(kz_json:is_true(<<"complete">>, cb_acdc_queue_editor:system_media_state(M, Media))),
+    %% Every fresh-install prerequisite is necessary, including all 29 mapped
+    %% recordings. Actual immutable IDs are never replaced with canonical IDs.
+    lists:foreach(fun(Entry) ->
+        Id = kz_json:get_value(<<"id">>, Entry),
+        Partial = lists:delete(Entry, Media),
+        ?assertNot(cb_acdc_queue_editor:language_selection_ready(<<"en-us">>,
+            kz_json:set_value(<<"system_media">>, Partial, Catalog))),
+        State = cb_acdc_queue_editor:system_media_state(M, Partial),
+        ?assertEqual(false, kz_json:get_value(<<"complete">>, State)),
+        ?assertEqual(<<"english_media_prerequisites_incomplete">>, kz_json:get_value(<<"reason">>, State)),
+        ?assertEqual([Id], kz_json:get_value(<<"missing_prompt_ids">>, State))
+    end, Media),
+    [Gemini|_] = [D || D <- Media, kz_json:is_true(<<"import_metadata_verified">>, D)],
+    lists:foreach(fun({Key, Value}) ->
+        Tampered = [kz_json:set_value(Key, Value, Gemini)|lists:delete(Gemini, Media)],
+        ?assertNot(cb_acdc_queue_editor:language_selection_ready(<<"en-us">>,
+            kz_json:set_value(<<"system_media">>, Tampered, Catalog)))
+    end, [{<<"source_type">>, <<"customer">>}, {<<"sha256">>, binary:copy(<<"0">>,64)},
+          {<<"source_map_sha256">>, binary:copy(<<"0">>,64)}, {<<"import_metadata_verified">>, false},
+          {<<"canonical_prompt_id">>, <<"acdc-callback-offer-unknown">>}]),
+    [GeminiId|_] = acdc_gemini_prompts:fixed_media_ids(<<"en-us">>),
+    ValidDoc = english_media_doc(GeminiId),
+    lists:foreach(fun(BadDoc) ->
+        meck:expect(kz_datamgr, open_docs, fun(_, Ids) ->
+            {ok, [j([{<<"key">>, Id}, {<<"doc">>, case Id of GeminiId -> BadDoc; _ -> english_media_doc(Id) end}]) || Id <- Ids]}
+        end),
+        {M, Partial} = cb_acdc_queue_editor:verified_manifest_media(M),
+        ?assertEqual(43, length(Partial)),
+        ?assertNot(cb_acdc_queue_editor:language_selection_ready(<<"en-us">>,
+            kz_json:set_value(<<"system_media">>, Partial, Catalog)))
+    end, [kz_json:set_value(<<"source_type">>, <<"customer">>, ValidDoc),
+          kz_json:set_value([<<"source_voice">>, <<"sha256">>], binary:copy(<<"0">>,64), ValidDoc),
+          kz_json:set_value(<<"pvt_deleted">>, true, ValidDoc),
+          kz_json:set_value(<<"_attachments">>, j([]), ValidDoc),
+          kz_json:set_value(<<"pvt_account_db">>, <<"other_account">>, ValidDoc)]),
     meck:expect(kz_datamgr, open_docs, fun(_, Ids) ->
         {ok, [j([{<<"key">>, Id}, {<<"error">>, <<"not_found">>}]) || Id <- Ids]} end),
     ?assertEqual({M, []}, cb_acdc_queue_editor:verified_manifest_media(M)),
     meck:expect(kz_datamgr, open_docs, fun(_, _) -> {ok, []} end),
     ?assertError({badmatch,false}, cb_acdc_queue_editor:verified_manifest_media(M)).
+
+english_media_doc(Id) ->
+    case [A || A <- ?GEMINI_ASSETS, <<(element(1,A))/binary,"/",(element(3,A))/binary>> =:= Id] of
+        [{L,C,P,S,M,N,T}] ->
+            j([{<<"_id">>,Id},{<<"_rev">>,?REV},{<<"pvt_type">>,<<"media">>},
+              {<<"pvt_account_db">>,<<"system_media">>},{<<"source_type">>,<<"kazoo5_acdc_gemini_voice_installer">>},
+              {<<"prompt_id">>,P},{<<"language">>,L},{<<"content_type">>,<<"audio/wav">>},
+              {<<"content_length">>,N},{<<"streamable">>,true},
+              {<<"source_voice">>,j([{<<"provider">>,<<"google-gemini">>},{<<"model">>,<<"gemini-2.5-pro-preview-tts">>},
+                  {<<"voice">>,<<"Sulafat">>},{<<"canonical_prompt_id">>,C},{<<"sha256">>,S},{<<"transcript_sha256">>,T}])},
+              {<<"_attachments">>,j([{<<P/binary,".wav">>,j([{<<"content_type">>,<<"audio/wav">>},
+                  {<<"length">>,N},{<<"digest">>,M}])}])}]);
+        [] -> doc(Id, <<"media">>, [{<<"_attachments">>,j([{<<"prompt.wav">>,j([{<<"length">>,16000}])}])}])
+    end.
