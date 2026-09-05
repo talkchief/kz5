@@ -49,7 +49,7 @@ announcement_main() {
     sleep 1
     kill -0 "$announcement_capture_pid" || die 'Capture did not start'
     write_caller_csv "$RUN_DIR/announcement-input.csv" 1 1 75000 75000 0
-    sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+    sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$SCENARIO_DIR/caller-to-queue.xml" -inf "$RUN_DIR/announcement-input.csv" \
         -i "$LOCAL_IP" -p "$CALLER_PORT" -mi "$LOCAL_IP" -mp "$announcement_media_port" \
         -min_rtp_port "$announcement_media_port" -max_rtp_port "$((announcement_media_port+3))" \

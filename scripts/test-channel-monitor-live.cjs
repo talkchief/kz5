@@ -186,7 +186,7 @@ function registration(e,expiry) {
     const csv=writePrivate(`registration-${e.role}-${expiry}-${hex()}.csv`,
         `SEQUENTIAL\n${e.username};[authentication username=${e.username} password=${e.password}];${state.ACCEPTANCE_REALM};${e.port};${expiry}\n`);
     if(expiry)registered.add(e.role); // A lost REGISTER response still requires exact cleanup.
-    try {command('sipp',[state.ACCEPTANCE_SIP_PROXY_HOST+':5060','-sf',path.join(SCENARIOS,'register.xml'),'-inf',csv,
+    try {command('sipp',['-ci','127.0.0.1',state.ACCEPTANCE_SIP_PROXY_HOST+':5060','-sf',path.join(SCENARIOS,'register.xml'),'-inf',csv,
         '-i',audio.IP,'-p',String(e.port),'-m','1','-l','1','-r','1','-nostdin','-timeout','15s','-timeout_error'],20000);}
     finally {fs.unlinkSync(csv);}
     if(expiry) {
@@ -196,7 +196,7 @@ function registration(e,expiry) {
     } else registered.delete(e.role);
 }
 function spawnPhone(e,scenario,csv) {
-    const args=[...(e.role==='customer'?[state.ACCEPTANCE_SIP_PROXY_HOST+':5060']:[]),'-sf',path.join(SCENARIOS,scenario),'-inf',csv,
+    const args=['-ci','127.0.0.1',...(e.role==='customer'?[state.ACCEPTANCE_SIP_PROXY_HOST+':5060']:[]),'-sf',path.join(SCENARIOS,scenario),'-inf',csv,
         '-i',audio.IP,'-p',String(e.port),'-mi',audio.IP,'-mp',String(e.rtp),'-min_rtp_port',String(e.rtp),'-max_rtp_port',String(e.rtp+1),
         '-m','1','-l','1','-nostdin','-aa','-timeout','150s','-timeout_error',
         '-trace_shortmsg','-shortmessage_file',csv.replace(/\.csv$/,'-sip.tsv')];

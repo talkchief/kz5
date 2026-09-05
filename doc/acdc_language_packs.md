@@ -15,9 +15,15 @@ language), plus 20 Arabic/Hebrew telephone digits. All 165 immutable versioned
 system-media documents were imported and their downloaded audio hashes verified.
 The protected receipt is in `acdc-callback-controls-deploy.V4lihZ` on this host.
 
-Import is **not default activation**. The running queue/callback defaults still
-select legacy IDs; the immutable Gemini resolver and installer transition remain
-in progress. Existing queue/account custom recordings must not be overwritten.
+Import is **not default activation**. The immutable resolver and targeted cache
+activation are now packaged, and the reviewed English fixed defaults are active.
+The first live attempt failed because resolver caches lacked the imported IDs;
+that failure was retained. After all 330 mappings across both resolver caches
+were verified, run `20260905T215059Z` passed full received Gemini confirmation,
+unanswered first attempt, second-attempt confirmation/bridge and two-way audio,
+with unchanged services and no new error/critical log entries or cores. See
+[the rollout checkpoint](kazoo5_acceptance_status.md). Existing queue/account
+custom recordings are preserved; they are not replaced by a global alias.
 English, French and Spanish numeric playback is still native FreeSWITCH audio;
 Arabic/Hebrew whole-number coverage and native-language listening review remain
 incomplete. No full-language or production-readiness claim follows from these
@@ -25,10 +31,11 @@ files. No credential belongs in Git.
 
 ## Earlier eSpeak draft implementation (not the requested final voice set)
 
-The applications installer now prepares the pinned speech dependencies and
-imports the complete media packs, including when CouchDB is on a separate host.
-It does **not** yet publish runtime capabilities or activate the new backend
-mappings. The supplemental
+The historical draft generator below is not the default installer voice source.
+The applications installer now imports and verifies committed immutable Gemini
+assets before build/restart, including with remote CouchDB, and activates their
+targeted resolver mappings after apps start. It does **not** publish full-language
+readiness or synthesize fresh eSpeak ACDC recordings. The supplemental
 `scripts/patches/acdc-language-runtime.patch` is deliberately separate from the
 installer's main ACDC integration patch until full media verification is done.
 Do not apply that supplemental patch to a running release before importing the

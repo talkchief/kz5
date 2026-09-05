@@ -228,7 +228,7 @@ validate_scenarios() {
     printf 'SEQUENTIAL\ndummy;[authentication username=dummy password=dummy];example.invalid;5099;600\n' > "$input"
     chmod 600 "$input"
     for scenario in register.xml caller-to-queue.xml agent-answer.xml; do
-        timeout 5 sipp 127.0.0.1:9 -sf "$SCENARIO_DIR/$scenario" -inf "$input" \
+        timeout 5 sipp -ci 127.0.0.1 127.0.0.1:9 -sf "$SCENARIO_DIR/$scenario" -inf "$input" \
             -i 127.0.0.1 -p 5099 -mi 127.0.0.1 -mp 45000 -m 0 -nostdin \
             >"$scratch/$scenario.out" 2>&1 || die "SIPp rejected scenario $scenario"
         ! grep -Eq 'parse error|is not a floating point|Unable to load|Unknown element' "$scratch/$scenario.out" ||
@@ -406,7 +406,7 @@ register_agents() {
         stats=$RUN_DIR/$label-agent-$index-register-stats.csv
         output=$RUN_DIR/$label-agent-$index-register.log
         write_agent_registration_csv "$csv" "$index" "$expires"
-        if ! sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+        if ! sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
             -sf "$SCENARIO_DIR/register.xml" -inf "$csv" -i "$LOCAL_IP" -p "$port" \
             -m 1 -l 1 -r 1 -rp 1000 -nostdin -timeout 30s -timeout_error \
             -trace_stat -fd 1s -stf "$stats" >"$output" 2>&1; then
@@ -424,7 +424,7 @@ register_caller() {
     local csv=$RUN_DIR/$label-caller-register-input.csv
     local stats=$RUN_DIR/$label-caller-register-stats.csv output=$RUN_DIR/$label-caller-register.log
     write_caller_registration_csv "$csv" "$contact_port" "$expires"
-    if ! sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+    if ! sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$SCENARIO_DIR/register.xml" -inf "$csv" -i "$LOCAL_IP" -p "$contact_port" \
         -m 1 -l 1 -r 1 -rp 1000 -nostdin -timeout 30s -timeout_error \
         -trace_stat -fd 1s -stf "$stats" >"$output" 2>&1; then
@@ -446,7 +446,7 @@ negative_registration_test() {
         "$(auth_keyword "$username" "$bad_secret")" "${STATE[ACCEPTANCE_REALM]}" \
         "$NEGATIVE_REGISTER_PORT" 600 > "$csv"
     chmod 600 "$csv"
-    if sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+    if sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$SCENARIO_DIR/register.xml" -inf "$csv" -i "$LOCAL_IP" -p "$NEGATIVE_REGISTER_PORT" \
         -m 1 -l 1 -r 1 -rp 1000 -nostdin -timeout 30s -timeout_error \
         -trace_stat -fd 1s -stf "$stats" >"$output" 2>&1; then
@@ -465,7 +465,7 @@ best_effort_deregister_agents() {
         port=$((AGENT_CONTACT_PORT_BASE + index - 1))
         csv=$RUN_DIR/cleanup-agent-$index-register-input.csv
         write_agent_registration_csv "$csv" "$index" 0
-        sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+        sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
             -sf "$SCENARIO_DIR/register.xml" -inf "$csv" -i "$LOCAL_IP" -p "$port" \
             -m 1 -l 1 -r 1 -rp 1000 -nostdin -timeout 15s \
             >"$RUN_DIR/cleanup-agent-$index-register.log" 2>&1 || true
@@ -477,7 +477,7 @@ best_effort_deregister_caller() {
     local contact_port=$1 label=$2
     local csv=$RUN_DIR/$label-register-input.csv
     write_caller_registration_csv "$csv" "$contact_port" 0
-    sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+    sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$SCENARIO_DIR/register.xml" -inf "$csv" -i "$LOCAL_IP" -p "$contact_port" \
         -m 1 -l 1 -r 1 -rp 1000 -nostdin -timeout 15s \
         >"$RUN_DIR/$label-register.log" 2>&1 || true
@@ -497,7 +497,7 @@ start_agent_uas() {
         media=$((AGENT_MEDIA_MIN + (index - 1) * 4))
         stats=$RUN_DIR/$label-agent-$index-stats.csv
         output=$RUN_DIR/$label-agent-$index.log
-        sipp -sf "$SCENARIO_DIR/agent-answer.xml" -i "$LOCAL_IP" -p "$port" \
+        sipp -ci 127.0.0.1 -sf "$SCENARIO_DIR/agent-answer.xml" -i "$LOCAL_IP" -p "$port" \
             -mi "$LOCAL_IP" -min_rtp_port "$media" -max_rtp_port "$((media + 1))" \
             -rtp_echo -m "$calls" -l 1 -r 1 -rp 1000 -nostdin -aa \
             -timeout 600s -timeout_error -trace_stat -fd 1s -stf "$stats" >"$output" 2>&1 &
@@ -521,7 +521,7 @@ start_callers() {
     # this 2-vCPU acceptance host's dialplan-fetch timeout into the bottleneck.
     ((rate > CALL_START_RATE)) && rate=$CALL_START_RATE
     write_caller_csv "$csv" "$count" "$main_count" "$hold_ms" "$excess_hold_ms" "$excess_delay_ms"
-    sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+    sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$SCENARIO_DIR/caller-to-queue.xml" -inf "$csv" -i "$LOCAL_IP" -p "$port" \
         -mi "$LOCAL_IP" -min_rtp_port "$media_min" -max_rtp_port "$media_max" \
         -m "$count" -l "$count" -r "$rate" -rp 1000 -nostdin -aa -audiotolerance 0.95 \

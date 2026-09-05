@@ -169,7 +169,7 @@ retry_stop_capture() {
 retry_start_busy() {
     local csv=$RUN_DIR/retry-busy-input.csv
     write_caller_csv "$csv" 1 1 120000 120000 0
-    sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+    sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$RUN_DIR/callback-busy-caller.xml" -inf "$csv" -i "$LOCAL_IP" -p "$RETRY_BUSY_PORT" \
         -mi "$LOCAL_IP" -min_rtp_port "$RETRY_BUSY_MEDIA" -max_rtp_port "$((RETRY_BUSY_MEDIA + 3))" \
         -m 1 -l 1 -nostdin -timeout 150s -timeout_error -trace_stat -fd 1s \
@@ -181,7 +181,7 @@ retry_start_busy() {
 retry_start_original() {
     local csv=$RUN_DIR/callback-original-input.csv
     write_callback_request_csv "$csv"
-    sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+    sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$RUN_DIR/callback-retry-request.xml" -inf "$csv" -i "$LOCAL_IP" -p "$CALLER_PORT" \
         -mi "$LOCAL_IP" -min_rtp_port "$CALLBACK_ORIGINAL_MEDIA_PORT" -max_rtp_port "$((CALLBACK_ORIGINAL_MEDIA_PORT + 3))" \
         -rtp_echo -m 1 -l 1 -nostdin -aa -timeout 75s -timeout_error -trace_stat -fd 1s \
@@ -192,7 +192,7 @@ retry_start_original() {
 }
 
 retry_start_unanswered() {
-    sipp -sf "$SCENARIO_DIR/callback-unanswered.xml" -i "$CARRIER_IP" -p "$CARRIER_PORT" \
+    sipp -ci 127.0.0.1 -sf "$SCENARIO_DIR/callback-unanswered.xml" -i "$CARRIER_IP" -p "$CARRIER_PORT" \
         -m 1 -l 1 -nostdin -timeout 90s -timeout_error -trace_stat -fd 1s \
         -stf "$RUN_DIR/retry-unanswered-stats.csv" -trace_logs \
         -log_file "$RUN_DIR/retry-unanswered-events.log" >"$RUN_DIR/retry-unanswered.log" 2>&1 &

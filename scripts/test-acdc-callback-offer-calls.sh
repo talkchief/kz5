@@ -107,7 +107,7 @@ offer_main() {
     offer_capture_pid=$!; ACTIVE_PIDS+=("$offer_capture_pid"); sleep 1
     kill -0 "$offer_capture_pid" || die 'Capture did not start'
     write_caller_csv "$RUN_DIR/offer-input.csv" 1 1 46000 46000 0
-    sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+    sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$RUN_DIR/offer-caller.xml" -inf "$RUN_DIR/offer-input.csv" \
         -i "$LOCAL_IP" -p "$CALLER_PORT" -mi "$LOCAL_IP" -mp 47200 -min_rtp_port 47200 -max_rtp_port 47203 \
         -m 1 -l 1 -r 1 -rp 1000 -nostdin -aa -timeout 75s -timeout_error \

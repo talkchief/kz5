@@ -1737,6 +1737,7 @@ UMask=0027
 WorkingDirectory=${KAZOO_ROOT}
 Environment=HOME=/var/lib/kazoo
 Environment=KAZOO_CONFIG=${KAZOO_CONFIG_DIR}/core/config.ini
+Environment=KAZOO_ACDC_EDITOR_CAPABILITIES=${KAZOO_CONFIG_DIR}/acdc/language-capabilities.json
 Environment=KAZOO_LOG_ROOT=/var/log/kazoo/kazoo_apps
 Environment="KAZOO_APPS=${KAZOO_APPS_LIST}"
 Environment="KAZOO_NODE_NAME_TYPE=${KAZOO_NODE_NAME_TYPE}"
@@ -1980,11 +1981,24 @@ ensure_master_account() {
     die 'Crossbar returned success but the Kazoo master account was not discoverable'
 }
 
+install_acdc_editor_capabilities() {
+    if [[ $DRY_RUN == true ]]; then
+        log "Would preserve or create a protected all-false editor language manifest in ${KAZOO_CONFIG_DIR}/acdc; no full-language readiness publication"
+        return 0
+    fi
+    # Node is installed by the immutable voice preflight. The configuration root
+    # exists from common installation preparation. No SUP or database lookup is
+    # needed, so a separate apps host works before its first service start.
+    node "$SCRIPT_DIR/ensure-acdc-language-capabilities.cjs" --config-root "$KAZOO_CONFIG_DIR" || \
+        die 'Could not safely initialize the apps-owned editor capability fallback'
+}
+
 install_kazoo_apps() {
     # Validate/import immutable defaults before touching the application build
     # or restarting mapped code. Fresh bootstrap needs only configured CouchDB,
     # not SUP or a running local Kazoo/FreeSWITCH service.
     install_acdc_language_packs
+    install_acdc_editor_capabilities
     build_kazoo
     install_kazoo_systemd_units
     install_sup_cli

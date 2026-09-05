@@ -114,7 +114,7 @@ test('No new agent may be offered; optional fullcapture exception is exact busy 
     assert.throws(() => inspect(capture(r), '3'.repeat(32)));
 });
 if (process.argv.includes('--parse')) test('Actual installed SIPp parses scenario with zero-call limit', () => {
-    const result = cp.spawnSync('sipp', ['-sf', file, '-i', '127.0.0.31', '-p', '0', '-m', '0', '-nostdin'],
+    const result = cp.spawnSync('sipp', ['-ci','127.0.0.1','-sf', file, '-i', '127.0.0.31', '-p', '0', '-m', '0', '-nostdin'],
         {encoding: 'utf8', timeout: 5000, maxBuffer: 1024 * 1024});
     assert.ifError(result.error); assert.equal(result.status, 0, result.stderr);
     assert(!/parse error|Unable to load|Unknown element|Variable .* referenced.*(?:not declared|[01] times)/i.test(result.stdout + result.stderr));

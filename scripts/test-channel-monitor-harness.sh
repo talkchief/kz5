@@ -14,7 +14,7 @@ trap cleanup EXIT
 umask 077
 printf 'SEQUENTIAL\ndummy;[authentication username=dummy password=dummy];example.invalid;1002;120000;0;/dev/null\n' >"$work/input.csv"
 for scenario in monitor-customer.xml monitor-agent.xml monitor-supervisor.xml; do
-    if ! timeout 5 sipp 127.0.0.1:9 -sf "scripts/sip-tests/$scenario" -inf "$work/input.csv" \
+    if ! timeout 5 sipp -ci 127.0.0.1 127.0.0.1:9 -sf "scripts/sip-tests/$scenario" -inf "$work/input.csv" \
         -i 127.0.0.51 -p 18999 -mi 127.0.0.51 -mp 49990 -m 0 -nostdin >"$work/parse.log" 2>&1; then
         printf 'FAIL: SIPp parse did not exit successfully for %s\n' "$scenario" >&2
         exit 1

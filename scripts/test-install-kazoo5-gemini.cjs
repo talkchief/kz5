@@ -130,7 +130,7 @@ async function main() {
 
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'kazoo-gemini-installer-tests.'));
   for (const scenario of ['success', 'database-exists', 'missing-assets', 'database-forbidden',
-    'bad-database-ack', 'wrong-database-identity', 'import-failure', 'verify-failure', 'invalid-receipt', 'verify-only', 'dry-run', 'cache-failure']) {
+    'bad-database-ack', 'wrong-database-identity', 'import-failure', 'verify-failure', 'invalid-receipt', 'verify-only', 'dry-run', 'cache-failure', 'capability-failure']) {
     const trace = path.join(workspace, scenario + '.trace'); fs.writeFileSync(trace, '');
     const run = cp.spawnSync('bash', [path.join(__dirname, 'test-fixtures/gemini-installer.sh')], {encoding: 'utf8', timeout: 60000,
       env: {...process.env, KAZOO_TEST_CASE: scenario, KAZOO_TEST_SOURCE_ROOT: ROOT,
@@ -143,12 +143,18 @@ async function main() {
       assert.equal(run.status, 0, logs);
       assert.deepEqual(steps, ['node-tooling', 'plan', 'db-ensure', 'db-identity', 'import', 'receipt-validated',
         'verify-only', 'receipt-validated', 'receipt-validated', 'receipt-published',
-        'build', 'units', 'sup-install', 'restart', 'apps-config', 'master-account', 'api-modules', 'official-prompts', 'apps-ready', 'cache-activate', 'apps-verify']);
+        'editor-capabilities', 'build', 'units', 'sup-install', 'restart', 'apps-config', 'master-account', 'api-modules', 'official-prompts', 'apps-ready', 'cache-activate', 'apps-verify']);
     } else if (scenario === 'verify-only') {
       assert.equal(run.status, 0, logs); assert.deepEqual(steps, ['verify-only', 'receipt-validated', 'cache-check']);
     } else if (scenario === 'cache-failure') {
       assert.notEqual(run.status, 0, logs);
       assert(steps.includes('restart') && steps.includes('cache-activate') && !steps.includes('apps-verify'));
+    } else if (scenario === 'capability-failure') {
+      assert.notEqual(run.status, 0, logs);
+      assert.equal(steps.at(-1), 'editor-capabilities');
+      assert(steps.includes('receipt-published'), 'Verified immutable-media receipt remains separate from editor capabilities');
+      for (const forbidden of ['build', 'units', 'sup-install', 'restart', 'apps-verify'])
+        assert(!steps.includes(forbidden), 'Unsafe capability state must block application deployment');
     } else if (scenario === 'dry-run') {
       assert.equal(run.status, 0, logs); assert.deepEqual(steps, []);
       assert(logs.includes('database.example.invalid:15984') && logs.includes('165 checked-in Gemini'));

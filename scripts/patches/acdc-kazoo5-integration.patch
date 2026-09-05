@@ -9338,11 +9338,11 @@ index 0000000..be95acf
 +]).
 diff --git a/src/acdc_gemini_prompts.erl b/src/acdc_gemini_prompts.erl
 new file mode 100644
-index 0000000..09005d3
+index 0000000..08ff004
 --- /dev/null
 +++ b/src/acdc_gemini_prompts.erl
 @@ -0,0 +1,272 @@
-+%%% Private candidate, not deployed. Fixed Gemini defaults, never global aliases.
++%%% Immutable fixed Gemini defaults, never global aliases for customer media.
 +-module(acdc_gemini_prompts).
 +-export([canonical/1, default/4, default_alias/5, selection/2,
 +         callback/5, callback_readback/2, telephone/3, capabilities/1]).
@@ -10107,10 +10107,10 @@ index 0000000..3ad6f9d
 +    end.
 diff --git a/src/cb_acdc_queue_editor.erl b/src/cb_acdc_queue_editor.erl
 new file mode 100644
-index 0000000..bff5e24
+index 0000000..871eb83
 --- /dev/null
 +++ b/src/cb_acdc_queue_editor.erl
-@@ -0,0 +1,739 @@
+@@ -0,0 +1,780 @@
 +%%% SPDX-License-Identifier: MPL-2.0
 +%%% Account-scoped queue editor. Catalog reads are bounded; writes are a
 +%%% revision-checked saga, NOT a CouchDB cross-document transaction.
@@ -10119,7 +10119,8 @@ index 0000000..bff5e24
 +-ifdef(TEST).
 +-export([scoped/4, authorized/1, strict_route/2, roster_plan/3,
 +         digest/1, operation_id/3, public_catalog/2, valid_manifest/1,
-+         required_prompts/0, merge_patch/2, check_body/1, verified_manifest_media/1]).
++         required_prompts/0, merge_patch/2, check_body/1, verified_manifest_media/1,
++         language_selection_ready/2, manifest_path/3]).
 +-endif.
 +-include_lib("crossbar/src/crossbar.hrl").
 +-include_lib("kernel/include/file.hrl").
@@ -10369,8 +10370,10 @@ index 0000000..bff5e24
 +        andalso lists:any(fun(N) -> kz_doc:attachment_length(Doc, N, 0) > 0 end, kz_doc:attachment_names(Doc)).
 +
 +read_manifest() ->
-+    Path = binary_to_list(kapps_config:get_ne_binary(?CAT, <<"editor_language_capabilities_path">>,
-+                    <<"/var/www/html/monster-ui/apps/acdc/language-capabilities.json">>)),
++    %% Reading editor data must not persist a filesystem-dependent default.
++    Path = manifest_path(kapps_config:get_ne_binary(?CAT, <<"editor_language_capabilities_path">>),
++                         fun file:read_link_info/1,
++                         os:getenv("KAZOO_ACDC_EDITOR_CAPABILITIES")),
 +    true = filename:pathtype(Path) =:= absolute,
 +    protected_parent(filename:dirname(Path)),
 +    {ok, Before = #file_info{type = regular, uid = 0, mode = Mode, size = Size}} = file:read_link_info(Path),
@@ -10378,6 +10381,21 @@ index 0000000..bff5e24
 +    {ok, Bytes} = file:read_file(Path), {ok, After} = file:read_link_info(Path),
 +    true = Before =:= After andalso byte_size(Bytes) =:= Size,
 +    Manifest = kz_json:decode(Bytes), true = valid_manifest(Manifest), Manifest.
++
++-spec manifest_path(kz_term:api_binary(), fun((string()) -> term()), false | string()) -> string().
++manifest_path(undefined, Probe, Environment) ->
++    Legacy = "/var/www/html/monster-ui/apps/acdc/language-capabilities.json",
++    case Probe(Legacy) of
++        {error, enoent} ->
++            case Environment of
++                false -> "/etc/kazoo/acdc/language-capabilities.json";
++                _ -> Environment
++            end;
++        %% Present, unreadable or unsafe legacy artifacts still go through the
++        %% protected reader. Never bypass one with a less restrictive fallback.
++        _ -> Legacy
++    end;
++manifest_path(Configured, _Probe, _Environment) -> binary_to_list(Configured).
 +
 +protected_parent(Path) ->
 +    {ok, #file_info{type = directory, uid = 0, mode = Mode}} = file:read_link_info(Path),
@@ -10568,6 +10586,29 @@ index 0000000..bff5e24
 +                        end
 +                 end, Target, Patch).
 +
++%% Match the UI's explicitly declared legacy-English contract, without turning
++%% its all-false multilingual flags into a full-pack readiness claim. Missing,
++%% incomplete or forbidden catalogs cannot authorize a new language selection.
++-spec language_selection_ready(any(), kz_json:object()) -> boolean().
++language_selection_ready(Language, Catalog) ->
++    Manifest = kz_json:get_json_value(<<"language_capabilities">>, Catalog, kz_json:new()),
++    Complete = kz_json:is_true([<<"catalogs">>, <<"system_media">>, <<"complete">>], Catalog),
++    case Complete andalso lists:member(Language, locales()) andalso valid_manifest(Manifest) of
++        false -> false;
++        true ->
++            case kz_json:get_value(<<"backend_mode">>, Manifest) of
++                <<"legacy">> ->
++                    Ids = [kz_json:get_value(<<"id">>, M)
++                           || M <- kz_json:get_list_value(<<"system_media">>, Catalog, []),
++                              kz_json:get_value(<<"language">>, M) =:= <<"en-us">>,
++                              kz_json:is_true(<<"has_attachments">>, M)],
++                    Language =:= <<"en-us">> andalso
++                        lists:all(fun(P) -> lists:member(<<"en-us/", (legacy_prompt(P))/binary>>, Ids) end,
++                                  required_prompts());
++                undefined -> kz_json:is_true([<<"languages">>, Language, <<"ready">>], Manifest)
++            end
++    end.
++
 +validate_selections(Original, Patch, Catalog, Users) ->
 +    Next = merge_patch(kz_doc:public_fields(Original), Patch),
 +    Authority = kz_json:get_value([<<"callback">>, <<"outbound_authority">>], Next),
@@ -10582,7 +10623,7 @@ index 0000000..bff5e24
 +    end,
 +    Language = kz_json:get_value([<<"announcements">>, <<"language">>], Next),
 +    case Language =/= undefined andalso Language =/= kz_json:get_value([<<"announcements">>, <<"language">>], Original) of
-+        true -> need(lists:member(Language, locales()) andalso kz_json:is_true([<<"language_capabilities">>, <<"languages">>, Language, <<"ready">>], Catalog),
++        true -> need(language_selection_ready(Language, Catalog),
 +                     400, <<"language_not_verified_ready">>);
 +        false -> ok
 +    end,

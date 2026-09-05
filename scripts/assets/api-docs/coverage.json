@@ -2274,7 +2274,7 @@
     },
     {
       "file": "applications/acdc/src/cb_acdc_queue_editor.erl",
-      "sha256": "fbd749f17e1fc1f71d4af1a8870a5e141bc8fc258e0f31fd80588e5bc3e1ae7d",
+      "sha256": "4b59dbb78ab9d2283c5a1045e2ebd3cd4886b39ce762f0aa5224f304462d8561",
       "literal_binding_nouns": []
     },
     {
@@ -2317,7 +2317,7 @@
     },
     {
       "file": "applications/acdc/src/cb_acdc_queue_editor.erl",
-      "sha256": "fbd749f17e1fc1f71d4af1a8870a5e141bc8fc258e0f31fd80588e5bc3e1ae7d"
+      "sha256": "4b59dbb78ab9d2283c5a1045e2ebd3cd4886b39ce762f0aa5224f304462d8561"
     },
     {
       "file": "applications/acdc/src/cb_agents.erl",
@@ -2753,7 +2753,7 @@
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",
-      "sha256": "a0dd1e5771259e8c9f5ad16b2fee4254604aed8a2a775698d5be786b3c102479"
+      "sha256": "d7b4bcb13fd26e3477a17cf51eda4f1bfc2945dc83d42c4628b79900f8704315"
     },
     {
       "file": "scripts/api-docs-tooling/package-lock.json",

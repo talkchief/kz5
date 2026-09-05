@@ -41,7 +41,7 @@ async function fixture(name, csv, body) {
     let child, exit, diagnostic = '', received = [];
     peer.on('message', (buffer, source) => {received.push({buffer, source});});
     try {
-        const args = [IP + ':' + peer.address().port, '-sf', path.join(__dirname, 'sip-tests', name),
+        const args = ['-ci', '127.0.0.1', IP + ':' + peer.address().port, '-sf', path.join(__dirname, 'sip-tests', name),
             '-i', IP, '-p', String(port), '-m', '1', '-l', '1', '-nostdin', '-timeout', '8s', '-timeout_error'];
         if (csv) {const file = path.join(directory, 'synthetic.csv'); fs.writeFileSync(file, csv, {mode: 0o600}); args.push('-inf', file);}
         child = cp.spawn('sipp', args, {cwd: directory, stdio: ['ignore', 'pipe', 'pipe']});

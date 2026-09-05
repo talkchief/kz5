@@ -2,6 +2,11 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {ACCOUNT,DATABASE}=require('./callback-offer-queue.cjs');
 const h=require('./queue-editor-acceptance.cjs');
+test('Repeat acceptance extension is bounded and explicitly selected, never auto-allocated',()=>{
+    assert.equal(h.selectedExtension(undefined),'2097');
+    for(const value of ['2090','2096','2099'])assert.equal(h.selectedExtension(value),value);
+    for(const value of ['',2096,'2000','2100','+2096','2096;bad','20960'])assert.throws(()=>h.selectedExtension(value));
+});
 const copy=x=>JSON.parse(JSON.stringify(x)),owner='a'.repeat(64),userId='1'.repeat(32);
 function fixture() {
     let serial=0,writes=0,deletes=0,calls=0,callbackCount=0;
@@ -65,7 +70,7 @@ test('entire isolated sequence uses real raw revisions; GET/create/edit/replay/c
     assert.deepEqual(f.counts(),{writes:3,deletes:1});
     assert.deepEqual(f.receipt.checks,['anonymous_rejected','create_queue_and_route_one_write','identical_create_replay',
         'changed_create_request_id_rejected','edit_queue_and_route_one_write','identical_edit_replay','stale_queue_revision_rejected',
-        'fresh_get_confirms_edit','aggregate_route_cleanup','exact_cas_queue_cleanup']);
+        'fresh_get_confirms_edit','explicit_english_language_selection_preserved','aggregate_route_cleanup','exact_cas_queue_cleanup']);
     assert(f.documents[f.receipt.route_id].pvt_deleted);assert(f.documents[f.receipt.queue_id].pvt_deleted);
     assert.equal(Object.values(f.documents).filter(d=>d.pvt_type==='acdc_queue_editor_operation').length,3);
 });

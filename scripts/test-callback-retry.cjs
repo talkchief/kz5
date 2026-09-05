@@ -129,7 +129,7 @@ try {
             const file = path.join(temporary, name), csv = path.join(temporary, name + '.csv');
             fs.writeFileSync(file, xml, {mode: 0o600});
             fs.writeFileSync(csv, 'SEQUENTIAL\ndummy;[authentication username=dummy password=dummy];example.invalid;2000;120000;0\n', {mode: 0o600});
-            const result = spawnSync('sipp', ['127.0.0.62:9', '-sf', file, '-inf', csv,
+            const result = spawnSync('sipp', ['-ci','127.0.0.1','127.0.0.62:9', '-sf', file, '-inf', csv,
                 '-i', '127.0.0.62', '-p', String(18562 + Number(index)), '-m', '0', '-nostdin'],
             {encoding: 'utf8', timeout: 5000});
             assert.equal(result.status, 0, 'Actual SIPp rejected generated ' + name + ': ' + result.stderr);

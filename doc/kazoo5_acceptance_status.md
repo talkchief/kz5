@@ -1,22 +1,50 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-05 22:27 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-05 23:02 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
 
-## Live verifier and network checkpoint — 22:27 UTC
+## Queue editor and standalone-apps checkpoint
+
+The explicit English dropdown/API validation mismatch is repaired and deployed.
+The 22:50–22:51 isolated real create/edit/replay/conflict/cleanup sequence passed
+without agent changes. The separate 22:36 full browser check passed with one
+unified editor GET, zero catalog fanout and no JS/HTTP errors. See
+[the recorded scope and log warnings](queue_editor_acceptance.md).
+
+The apps-owned negative capability manifest and custom configuration-root path
+are now integrated in installer source. All 31 editor/path backend tests and
+11 memory-only initializer groups pass, as do order/unit-wiring checks.
+No live manifest or service was changed by this portability integration.
+A fresh-source audit identified 17 generated legacy WAVs incorrectly included
+alongside 175 pinned official recordings by the old broad scan. Correcting
+source selection and making editor prerequisites follow the actual immutable
+runtime mappings remains in progress; existing recordings will be preserved.
+
+The private simultaneous-answer repair also uncovered a DTMF queue-exit race:
+the callflow can continue before the queue confirms media ownership closure.
+The candidate remains isolated until its acknowledgement contract and live
+acceptance pass. Unit tests alone do not authorize its rollout.
+
+## Live verifier and network checkpoint — 22:32 UTC
 
 The actual all-module verification caught a RabbitMQ CLI hang that the mocked
 password tests missed: installed 3.13.7 disables stdin when `-q` adds a third
 argument to its password command. The protected two-argument authentication
 probe passed. The installer helper now uses exactly two CLI arguments with a
-finite timeout; all32 regression scenarios pass, including hung-client
+finite timeout; all 32 regression scenarios pass, including hung-client
 termination. Verification reads only an existing configured master ID/catalog,
 uses already-loaded SUP modules and read-only SQLite, and avoids the RabbitMQ
 root plugin wrapper's cookie-permission repair. The failed audit is retained.
-A complete post-fix all-module result is not yet claimed: the Monster UI build
-marker still describes the older direct-IP bundle, while the live UI has been
-incrementally patched. Its provenance/rebuild must be reconciled without merely
-overwriting the marker or removing operator-installed apps.
+The actual unwrapped post-fix `--verify-only all` completed in 52.675 seconds and
+exited 1 solely on the Monster UI bundle fingerprint. CouchDB, RabbitMQ, HAProxy,
+Kazoo apps, eCallMgr, FreeSWITCH and Kamailio verification passed; nginx is active
+and enabled. Separate HTTP/same-origin API and ten-app catalog checks passed,
+but do not waive the mismatch: the marker describes an older bundle while live
+UI changes were incremental. Reconcile its provenance/build without merely
+overwriting the marker or removing operator-installed apps. Public HTTPS still
+refuses port 443, and the current five-language capability manifest keeps every
+full-pack readiness flag false. See the [exact verifier receipts, repair and
+limits](installer_verification_checkpoint.md).
 
 The test phones' 30 wildcard UDP control sockets are now protected by one
 narrow non-loopback-input rule, after exact ownership checks. No phone or

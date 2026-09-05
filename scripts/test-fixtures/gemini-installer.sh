@@ -3,10 +3,14 @@
 set -Eeuo pipefail
 export KAZOO_DEPLOYMENT_CONFIG="$KAZOO_TEST_WORK/no-deployment.env"
 export KAZOO_ROOT="$KAZOO_TEST_WORK/not-deployed-source" KAZOO_BUILD_ROOT="$KAZOO_TEST_WORK/build"
+export KAZOO_CONFIG_DIR="$KAZOO_TEST_WORK/config"
 export KAZOO_COUCHDB_HOST=database.example.invalid KAZOO_COUCHDB_PORT=15984
 export KAZOO_COUCHDB_USER=fixture-user KAZOO_COUCHDB_PASSWORD=fixture-password
 # shellcheck source=/dev/null
 source "$KAZOO_TEST_SOURCE_ROOT/scripts/install-kazoo5.sh"
+# Normal CLI validation initializes this derived value. This sourced fixture
+# intentionally skips host validation and supplies its isolated node explicitly.
+export KAZOO_HOSTNAME=kazoo-fixture.example.invalid
 record() { printf '%s\n' "$1" >>"$KAZOO_TEST_TRACE"; }
 node() {
     local file=$1
@@ -17,9 +21,18 @@ node() {
         validate-acdc-gemini-receipt.cjs)
             "$KAZOO_TEST_NODE" "$KAZOO_TEST_SOURCE_ROOT/scripts/test-install-kazoo5-gemini.cjs" --fixture-validator "$@" ;;
         refresh-acdc-gemini-mappings.cjs)
-            [[ $1 == --check || $1 == --activate ]] || return 1
+            [[ $# == 9 && ( $1 == --check || $1 == --activate ) &&
+               $2 == --node && $3 == kazoo_apps@kazoo-fixture.example.invalid &&
+               $4 == --receipt && $6 == --fixed-pack &&
+               $7 == "$KAZOO_TEST_SOURCE_ROOT/scripts/assets/acdc-gemini-fixed-20260905" &&
+               $8 == --completion-pack &&
+               $9 == "$KAZOO_TEST_SOURCE_ROOT/scripts/assets/acdc-gemini-completion-20260905" ]] || return 1
             record "cache-${1#--}"
             [[ $KAZOO_TEST_CASE != cache-failure ]] || return 1 ;;
+        ensure-acdc-language-capabilities.cjs)
+            [[ $# == 2 && $1 == --config-root && $2 == "$KAZOO_TEST_WORK/config" ]] || return 1
+            record editor-capabilities
+            [[ $KAZOO_TEST_CASE != capability-failure ]] || return 1 ;;
         *) printf 'Forbidden fixture node command\n' >&2; return 1 ;;
     esac
 }

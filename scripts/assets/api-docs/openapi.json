@@ -22240,7 +22240,7 @@
         "x-live-verification": {
           "host": "kz5.talkchief.io",
           "date": "2026-09-05",
-          "coverage": "Isolated test tenant: create/edit, exact replay, changed-request-ID conflict, stale revision rejection, managed route removal and exact-CAS fixture cleanup. No agent changes. Restricted-token, cross-node and partial-write recovery coverage remain separate."
+          "coverage": "Isolated test tenant: create/edit including explicit English selection, exact replay, changed-request-ID conflict, stale revision rejection, managed route removal and exact-CAS fixture cleanup. No agent changes. Restricted-token, cross-node and partial-write recovery coverage remain separate."
         }
       }
     },
@@ -22521,7 +22521,7 @@
         "x-live-verification": {
           "host": "kz5.talkchief.io",
           "date": "2026-09-05",
-          "coverage": "Isolated test tenant: create/edit, exact replay, changed-request-ID conflict, stale revision rejection, managed route removal and exact-CAS fixture cleanup. No agent changes. Restricted-token, cross-node and partial-write recovery coverage remain separate."
+          "coverage": "Isolated test tenant: create/edit including explicit English selection, exact replay, changed-request-ID conflict, stale revision rejection, managed route removal and exact-CAS fixture cleanup. No agent changes. Restricted-token, cross-node and partial-write recovery coverage remain separate."
         }
       }
     },
@@ -48358,7 +48358,7 @@
             "enum": [
               "legacy"
             ],
-            "description": "Present only for the explicitly declared English baseline. Its language flags remain false; available canonical English media are reported separately. Never infer multilingual readiness from this mode."
+            "description": "Present only for the explicitly declared English baseline. Its full-pack language flags remain false. Explicit en-us selection additionally requires a complete system_media catalog and every required English baseline prompt with an attachment; this is not multilingual or all-Gemini readiness. Missing proof rejects the selection."
           }
         }
       },

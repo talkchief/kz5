@@ -86,7 +86,7 @@ function contacts(e){const r=cp.spawnSync('kamcmd',['ul.lookup','location',e.use
     return [...r.stdout.matchAll(/^\s*Address:\s*(sip:\S+)/gm)].map(m=>m[1].split(';')[0]);}
 function register(e,expires){const expected=`sip:${e.username}@${IP}:${e.port}`;assert(contacts(e).every(c=>c===expected),'Fixture identity has a foreign contact');
     const csv=write(`registration-${e.index}-${hex()}.csv`,`SEQUENTIAL\n${e.username};[authentication username=${e.username} password=${e.password}];${state.ACCEPTANCE_REALM};${e.port};${expires}\n`);
-    if(expires)registered.add(e.index);try{command('sipp',[state.ACCEPTANCE_SIP_PROXY_HOST+':5060','-sf',path.join(__dirname,'sip-tests/register.xml'),'-inf',csv,
+    if(expires)registered.add(e.index);try{command('sipp',['-ci','127.0.0.1',state.ACCEPTANCE_SIP_PROXY_HOST+':5060','-sf',path.join(__dirname,'sip-tests/register.xml'),'-inf',csv,
         '-i',IP,'-p',String(e.port),'-m','1','-l','1','-r','1','-nostdin','-timeout','15s','-timeout_error'],20000);}finally{fs.unlinkSync(csv);}
     assert(JSON.stringify(contacts(e))===JSON.stringify(expires?[expected]:[]),'Exact fixture registration mismatch');if(!expires)registered.delete(e.index);}
 function channel(id){assert(CALL.test(id),'Unsafe channel ID');const t=command(FSCLI,['-x',`uuid_dump ${id} json`],5000);if(t.trim().startsWith('-ERR'))return null;
@@ -120,7 +120,7 @@ async function startEventReader(){const child=cp.spawn('stdbuf',['-oL',FSCLI,'-b
     await until(()=>reader.filtered,10);
     child.stdin.write('/event json CHANNEL_BRIDGE CHANNEL_UNBRIDGE\n');await until(()=>reader.subscribed,10);}
 function startCaller(){const e=es()[0],csv=write('caller-'+hex()+'.csv',`SEQUENTIAL\n${e.username};[authentication username=${e.username} password=${e.password}];${state.ACCEPTANCE_REALM};2700;60000;0;${path.join(runDir,'tone-440.ulaw')}\n`);
-    const child=cp.spawn('sipp',[state.ACCEPTANCE_SIP_PROXY_HOST+':5060','-sf',path.join(__dirname,'sip-tests/monitor-customer.xml'),'-inf',csv,
+    const child=cp.spawn('sipp',['-ci','127.0.0.1',state.ACCEPTANCE_SIP_PROXY_HOST+':5060','-sf',path.join(__dirname,'sip-tests/monitor-customer.xml'),'-inf',csv,
         '-i',IP,'-p',String(e.port),'-mi',IP,'-mp',String(e.rtp),'-min_rtp_port',String(e.rtp),'-max_rtp_port',String(e.rtp+1),
         '-m','1','-l','1','-r','1','-nostdin','-aa','-timeout','90s','-timeout_error'],{stdio:'ignore'});
     children.add(child);child.once('error',()=>{child.fixtureError=true;});child.once('exit',()=>children.delete(child));return child;}

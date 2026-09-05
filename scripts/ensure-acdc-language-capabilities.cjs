@@ -38,11 +38,11 @@ function readExisting(target) {
         return {sha256: crypto.createHash('sha256').update(bytes).digest('hex'), manifest};
     } finally { fs.closeSync(fd); }
 }
-function ensureCapabilities(webRoot) {
+function ensureCapabilitiesFile(target) {
     assert(typeof process.getuid === 'function' && process.getuid() === 0, 'Run capability initialization as root');
-    assert(typeof webRoot === 'string' && path.isAbsolute(webRoot) && path.resolve(webRoot) === webRoot && webRoot !== '/',
-        'Pass an absolute canonical Monster UI web root');
-    const directory = path.join(webRoot, 'apps', 'acdc'), target = path.join(directory, 'language-capabilities.json');
+    assert(typeof target === 'string' && path.isAbsolute(target) && path.resolve(target) === target && target !== '/',
+        'Pass an absolute canonical capability file');
+    const directory = path.dirname(target);
     protectedParents(directory);
     const existing = readExisting(target);
     if (existing) return {result: 'preserved', path: target, sha256: existing.sha256};
@@ -74,12 +74,31 @@ function ensureCapabilities(webRoot) {
     assert(installed, 'Capability disappeared during publication');
     return {result: published ? 'created_legacy_pending' : 'preserved', path: target, sha256: installed.sha256};
 }
-module.exports = {ensureCapabilities};
+function ensureCapabilities(webRoot) {
+    assert(typeof webRoot === 'string' && path.isAbsolute(webRoot) && path.resolve(webRoot) === webRoot && webRoot !== '/',
+        'Pass an absolute canonical Monster UI web root');
+    return ensureCapabilitiesFile(path.join(webRoot, 'apps', 'acdc', 'language-capabilities.json'));
+}
+function ensureAppsCapabilities(configRoot) {
+    assert(typeof process.getuid === 'function' && process.getuid() === 0, 'Run capability initialization as root');
+    assert(typeof configRoot === 'string' && path.isAbsolute(configRoot) && path.resolve(configRoot) === configRoot && configRoot !== '/',
+        'Pass an absolute canonical Kazoo configuration root');
+    // Validate existing ancestors before making this one installer-owned child.
+    // Never recursively mkdir or chmod an operator's existing directory.
+    protectedParents(configRoot);
+    const directory = path.join(configRoot, 'acdc');
+    try { fs.mkdirSync(directory, {mode: 0o755}); }
+    catch (error) { if (error.code !== 'EEXIST') throw error; }
+    protectedParents(directory);
+    return ensureCapabilitiesFile(path.join(directory, 'language-capabilities.json'));
+}
+module.exports = {ensureCapabilities, ensureAppsCapabilities, ensureCapabilitiesFile};
 if (require.main === module) {
     try {
-        assert(process.argv.length === 4 && process.argv[2] === '--web-root',
-            'Usage: node ensure-acdc-language-capabilities.cjs --web-root /absolute/monster-ui');
-        console.log(JSON.stringify(ensureCapabilities(process.argv[3])));
+        assert(process.argv.length === 4 && ['--web-root', '--config-root', '--file'].includes(process.argv[2]),
+            'Usage: node ensure-acdc-language-capabilities.cjs {--web-root|--config-root|--file} /absolute/path');
+        const operation = {'--web-root': ensureCapabilities, '--config-root': ensureAppsCapabilities, '--file': ensureCapabilitiesFile}[process.argv[2]];
+        console.log(JSON.stringify(operation(process.argv[3])));
     } catch (error) {
         console.error('Language capability initialization failed: ' + error.message);
         process.exitCode = 1;

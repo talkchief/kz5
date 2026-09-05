@@ -445,6 +445,11 @@ language_readiness_batch() ->
     end),
     {Verified, Media} = cb_acdc_queue_editor:verified_manifest_media(M),
     ?assertEqual(29, length(Media)), ?assertEqual(1, meck:num_calls(kz_datamgr, open_docs, '_')),
+    ReadyCatalog = j([{<<"language_capabilities">>, Verified}, {<<"system_media">>, Media},
+                     {<<"catalogs">>, j([{<<"system_media">>, j([{<<"complete">>, true}])}])}]),
+    ?assert(cb_acdc_queue_editor:language_selection_ready(<<"en-us">>, ReadyCatalog)),
+    ?assertNot(cb_acdc_queue_editor:language_selection_ready(<<"he-il">>, ReadyCatalog)),
+    ?assertNot(cb_acdc_queue_editor:language_selection_ready(<<"unknown">>, ReadyCatalog)),
     ?assertEqual(true, kz_json:get_value([<<"languages">>, <<"en-us">>, <<"ready">>], Verified)),
     ?assertEqual(false, kz_json:get_value([<<"languages">>, <<"he-il">>, <<"ready">>], Verified)),
     ?assertEqual(undefined, kz_json:get_value(<<"private_extra">>, Verified)),
@@ -481,6 +486,22 @@ legacy_language_readiness_batch() ->
     {Verified, Media} = cb_acdc_queue_editor:verified_manifest_media(M),
     ?assertEqual(M, Verified), ?assertEqual(29, length(Media)),
     ?assertEqual(1, meck:num_calls(kz_datamgr, open_docs, '_')),
+    Catalog = j([{<<"language_capabilities">>, Verified}, {<<"system_media">>, Media},
+                 {<<"catalogs">>, j([{<<"system_media">>, j([{<<"complete">>, true}])}])}]),
+    ?assert(cb_acdc_queue_editor:language_selection_ready(<<"en-us">>, Catalog)),
+    lists:foreach(fun(Language) ->
+        ?assertNot(cb_acdc_queue_editor:language_selection_ready(Language, Catalog))
+    end, [<<"ar-sa">>, <<"he-il">>, <<"fr-fr">>, <<"es-es">>, <<"unknown">>, undefined]),
+    lists:foreach(fun(Bad) ->
+        ?assertNot(cb_acdc_queue_editor:language_selection_ready(<<"en-us">>, Bad))
+    end, [kz_json:set_value([<<"catalogs">>, <<"system_media">>, <<"complete">>], false, Catalog),
+          kz_json:delete_key(<<"catalogs">>, Catalog),
+          kz_json:delete_key(<<"language_capabilities">>, Catalog),
+          kz_json:set_value(<<"system_media">>, tl(Media), Catalog),
+          kz_json:set_value(<<"system_media">>, [kz_json:delete_key(<<"has_attachments">>, X) || X <- Media], Catalog),
+          kz_json:set_value(<<"system_media">>, [kz_json:set_value(<<"language">>, <<"he-il">>, X) || X <- Media], Catalog),
+          kz_json:set_value([<<"language_capabilities">>, <<"languages">>, <<"en-us">>, <<"ready">>], true, Catalog)]),
+    ?assertEqual(false, kz_json:get_value([<<"language_capabilities">>, <<"languages">>, <<"en-us">>, <<"ready">>], Catalog)),
     meck:expect(kz_datamgr, open_docs, fun(_, Ids) ->
         {ok, [j([{<<"key">>, Id}, {<<"error">>, <<"not_found">>}]) || Id <- Ids]} end),
     ?assertEqual({M, []}, cb_acdc_queue_editor:verified_manifest_media(M)),

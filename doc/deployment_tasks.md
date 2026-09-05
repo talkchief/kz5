@@ -89,10 +89,14 @@ items below have the specific evidence stated; unchecked items are not finished.
   firewall/security certificate; see [network scope](network_hardening_checkpoint.md).
 - [ ] Fix and repeat the actual all-module installer verification. The live
   RabbitMQ stdin check caught a command-wrapper argument-count hang missed by
-  mocked tests. The corrected helper has a finite timeout and32 passing
+  mocked tests. The corrected helper has a finite timeout and 32 passing
   regression scenarios; actual authentication passes. Read-only verifier guards
-  are packaged. Full verification still rejects the old Monster build marker;
-  rebuild/provenance reconciliation is in progress, not bypassed.
+  are packaged. The actual unwrapped post-fix run completed in 52.675 seconds,
+  with all seven backend/media/SIP components passing and its sole failure the
+  Monster UI bundle fingerprint. Separate HTTP/same-origin API and ten-app
+  catalog checks pass; rebuild/provenance reconciliation is not bypassed.
+  HTTPS still refuses port 443 and all five full-language readiness flags remain
+  false. See [the exact checkpoint and private receipt locations](installer_verification_checkpoint.md).
 
 Broader unresolved acceptance gates remain in
 [the acceptance status](kazoo5_acceptance_status.md): clean/distributed installer

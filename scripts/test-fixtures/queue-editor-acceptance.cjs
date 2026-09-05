@@ -5,7 +5,14 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {spawnSync}=require('node:child_process');
 const {ACCOUNT,DATABASE,ENCODED_DATABASE,fingerprint,contentFingerprint,conditionalSaveArguments,
     assertExpectedConfiguration}=require('./callback-offer-queue.cjs');
-const EXTENSION='2097', TYPES=['queue','callflow','user','acdc_callback','acdc_queue_editor_operation','acdc_queue_extension'];
+function selectedExtension(value) {
+    const extension=value===undefined?'2097':value;
+    assert(typeof extension==='string'&&/^209[0-9]$/.test(extension),'Choose only an explicit2090–2099 isolated acceptance extension');
+    return extension;
+}
+// Each run still proves the chosen extension is virgin and not a public number.
+// Reusing an old receipt for cleanup requires the same configured extension.
+const EXTENSION=selectedExtension(process.env.KAZOO_TEST_QUEUE_EDITOR_EXTENSION), TYPES=['queue','callflow','user','acdc_callback','acdc_queue_editor_operation','acdc_queue_extension'];
 const id=v=>typeof v==='string'&&/^[a-f0-9]{32}$/.test(v), hex64=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
 const revision=v=>typeof v==='string'&&/^[1-9][0-9]*-[a-f0-9]{32}$/.test(v);
 const hash=value=>fingerprint(value), clone=value=>JSON.parse(JSON.stringify(value));
@@ -176,7 +183,7 @@ async function runAcceptance(io,receipt) {
     await guard(io,receipt);const empty=editorData(await io.editor('GET'),null);
     const initial=body({name:receipt.marker,kazoo_acceptance_fixture:receipt.marker,enter_when_empty:false,
         connection_timeout:30,strategy:'round_robin',callback:{enabled:false},
-        announcements:{position_announcements_enabled:false,wait_time_announcements_enabled:false}},
+        announcements:{language:'en-us',position_announcements_enabled:false,wait_time_announcements_enabled:false}},
     empty.revisions,{extension:EXTENSION},io.randomId());
     const created=await change(io,receipt,null,initial,'create_queue_and_route_one_write');
     await unchangedRequest(io,receipt,null,initial,created.status,'identical_create_replay',created.body.data);
@@ -189,9 +196,9 @@ async function runAcceptance(io,receipt) {
     await unchangedRequest(io,receipt,receipt.queue_id,editedBody,edited.status,'identical_edit_replay',edited.body.data);
     await unchangedRequest(io,receipt,receipt.queue_id,body({connection_timeout:32},fresh.revisions,null,io.randomId()),409,'stale_queue_revision_rejected');
     const current=editorData(await io.editor('GET',receipt.queue_id),receipt.queue_id);
-    assert(current.queue.connection_timeout===31&&current.queue.callback?.announcement?.initial_delay===5
+    assert(current.queue.announcements?.language==='en-us'&&current.queue.connection_timeout===31&&current.queue.callback?.announcement?.initial_delay===5
         &&current.queue.callback?.announcement?.interval===30,'Fresh editor did not return edited settings');
-    receipt.checks.push('fresh_get_confirms_edit');io.persist(receipt);await cleanup(io,receipt);return receipt;
+    receipt.checks.push('fresh_get_confirms_edit','explicit_english_language_selection_preserved');io.persist(receipt);await cleanup(io,receipt);return receipt;
 }
 function protectedRead(file) {
     const s=fs.lstatSync(file);assert(s.isFile()&&!s.isSymbolicLink()&&s.uid===0&&(s.mode&511)===384&&s.size<4*1024*1024,'Protected root-owned0600 file required');
@@ -280,7 +287,7 @@ async function runtime(action,arm,run) {
             coverage_limits:['master-admin auth only; restricted-token authorization not proven','no SIP or callback calling','no cross-document atomicity claim']}));
     } finally {fs.closeSync(lock);fs.unlinkSync(lockFile);}
 }
-module.exports={ACCOUNT,EXTENSION,TYPES,hash,merge,body,checkReceipt,checkQueue,checkRoute,checkOperation,checkClaim,
+module.exports={ACCOUNT,EXTENSION,TYPES,selectedExtension,hash,merge,body,checkReceipt,checkQueue,checkRoute,checkOperation,checkClaim,
     inventoryMap,assertBaseline,assertNoReferences,guard,change,unchangedRequest,cleanup,runAcceptance};
 if(require.main===module)runtime(...process.argv.slice(2)).catch(error=>{
     // Never echo assertion actual/expected documents, HTTP bodies, tokens, or

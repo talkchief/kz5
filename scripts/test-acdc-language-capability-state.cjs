@@ -19,11 +19,16 @@ validator.assertLanguageCapabilities(full);
 const fullBytes = JSON.stringify(full, null, 2) + '\n';
 
 function fixture(options = {}) {
+    const configRoot = options.configRoot || '/private/custom-kazoo';
+    const directory = options.apps ? configRoot + '/acdc' : webRoot + '/apps/acdc';
+    const target = directory + '/language-capabilities.json';
     const nodes = new Map(), fds = new Map(), mutations = [];
     let nextInode = 1, nextFd = 40;
     const make = (kind, data, properties = {}) => ({kind, data: Buffer.from(data || ''), uid: 0,
         mode: kind === 'directory' ? 0o755 : 0o644, dev: 1, ino: nextInode++, mtimeMs: 1, nlink: 1, ...properties});
-    for (const name of ['/', '/private', webRoot, webRoot + '/apps', directory]) nodes.set(name, make('directory'));
+    for (const name of ['/', '/private', ...(options.apps ? [configRoot] : [webRoot, webRoot + '/apps']), directory]) nodes.set(name, make('directory'));
+    if (options.missingDirectory) nodes.delete(directory);
+    if (options.configParent) Object.assign(nodes.get(configRoot), options.configParent);
     if (options.parent) Object.assign(nodes.get(directory), options.parent);
     if (options.content !== undefined) nodes.set(target, make('file', options.content, options.properties));
     const error = code => Object.assign(new Error('fixture ' + code), {code});
@@ -34,6 +39,12 @@ function fixture(options = {}) {
     }
     const fakeFs = {
         constants: fs.constants,
+        mkdirSync(name, parameters) {
+            assert.equal(name, directory); assert.deepEqual(parameters.mode, 0o755);
+            assert.equal(parameters.recursive, undefined);
+            if (nodes.has(name)) throw error('EEXIST');
+            nodes.set(name, make('directory', '', {mode: parameters.mode})); mutations.push(['mkdir', name]);
+        },
         lstatSync: name => info(nodeFor(name)),
         fstatSync: fd => info(fds.get(fd)),
         openSync(name, flags, mode) {
@@ -81,7 +92,8 @@ function fixture(options = {}) {
             return require(name);
         }};
     vm.runInNewContext(source, sandbox);
-    return {run: () => module.exports.ensureCapabilities(webRoot), nodes, mutations, fds,
+    return {run: () => options.apps ? module.exports.ensureAppsCapabilities(configRoot) : module.exports.ensureCapabilities(webRoot),
+        nodes, mutations, fds, target, directory,
         content: () => nodes.get(target) && nodes.get(target).data.toString(),
         temporaryCount: () => [...nodes.keys()].filter(name => name.includes('/.language-capabilities-')).length};
 }
@@ -145,3 +157,33 @@ test('Read error and runtime mutation preserve existing artifact and fail closed
     }
 });
 console.log(`PASS: ${passed} memory-only legacy capability initializer groups`);
+test('Apps-only custom configuration root creates one protected child and all-false fallback without a webroot', () => {
+    const item = fixture({apps: true, missingDirectory: true}), result = item.run();
+    assert.equal(result.path, '/private/custom-kazoo/acdc/language-capabilities.json');
+    assert.equal(result.result, 'created_legacy_pending');
+    assert.equal(item.nodes.has(webRoot), false);
+    assert.deepEqual(item.mutations.filter(x => x[0] === 'mkdir'), [['mkdir', '/private/custom-kazoo/acdc']]);
+    assert(Object.values(JSON.parse(item.content()).languages).every(entry => Object.values(entry).every(value => value === false)));
+    assert.equal(item.nodes.get(item.target).uid, 0); assert.equal(item.nodes.get(item.target).mode, 0o644);
+});
+test('Apps rerun preserves complete or negative existing manifests byte-for-byte without chmod', () => {
+    for (const content of [fullBytes, legacy]) {
+        const item = fixture({apps: true, content});
+        assert.equal(item.run().result, 'preserved'); assert.equal(item.content(), content);
+        assert.deepEqual(item.mutations, []);
+    }
+});
+test('Apps initialization rejects unsafe existing root/child and corrupt manifest without repair', () => {
+    for (const configParent of [{kind: 'symlink'}, {uid: 1000}, {mode: 0o777}]) {
+        const item = fixture({apps: true, configParent, missingDirectory: true});
+        assert.throws(item.run); assert.deepEqual(item.mutations, []);
+    }
+    for (const parent of [{kind: 'symlink'}, {uid: 1000}, {mode: 0o777}]) {
+        const item = fixture({apps: true, parent}); assert.throws(item.run); assert.deepEqual(item.mutations, []);
+    }
+    for (const content of ['{}', '{broken']) {
+        const item = fixture({apps: true, content}); assert.throws(item.run);
+        assert.equal(item.content(), content); assert.deepEqual(item.mutations, []);
+    }
+});
+console.log(`PASS: ${passed} total memory-only web/apps capability initializer groups; no live files or API calls`);

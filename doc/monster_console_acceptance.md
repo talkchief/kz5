@@ -1,7 +1,39 @@
 # Monster UI console regression, 2026-09-05
 
-The live browser gate passed at 12:44 UTC, without a private asset overlay.
+The live browser gate passed again at 22:36 UTC, without a private asset overlay.
 This is scoped UI evidence, not complete telephony/production certification.
+
+## Unified-editor repeat — 22:36 UTC
+
+The first repeat at22:35 failed its queue-stage wait because the harness still
+expected the separate `/queues/{id}/roster` request. The deployed editor now
+uses `/queues/{id}/editor`. That failed receipt is retained; it had no console,
+JavaScript or HTTP errors and its other four stages passed.
+
+The harness now validates the real unified response's queue identity, revision,
+complete user catalog, unique roster and corresponding selected UI options. It
+requires exactly one editor GET and zero separate catalog requests. Missing
+users, incomplete catalogs, wrong queue IDs, duplicate members, missing revision
+and paginated snapshots fail its self-test contract. The existing15-second
+wait limit was not increased.
+
+The unchanged live UI passed all five stages at22:36:47: login, billing, unsaved
+queue editing, unsaved Callflows ACDC drag/drop and authenticated WebSocket
+subscribe/unsubscribe. The current queue still has one selected member, matching
+the API; no roster was modified. There were zero console warnings/errors,
+JavaScript errors, failed HTTP requests/responses or blocked non-auth writes.
+Two WebSocket upgrades returned101. This is HTTP-only, not TLS acceptance.
+
+Protected receipts:
+
+- Failed old-contract repeat:
+  `/var/log/kazoo-acceptance/monster-console-2026-09-05T22-35-08-627Z.json`
+- Passing unified-contract repeat:
+  `/var/log/kazoo-acceptance/monster-console-2026-09-05T22-36-46-977Z.json`
+
+The separate full installer fingerprint check still fails because its old build
+marker does not describe the subsequent incremental deployments. Browser success
+does not waive that provenance/rebuild gate.
 
 ## Causes and fixes
 

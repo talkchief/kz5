@@ -96,7 +96,7 @@ validate_callback_scenarios() {
         scenario_path=$SCENARIO_DIR/$scenario
         [[ $scenario != callback-returned.xml ]] || scenario_path=$scratch/$scenario
         output=$scratch/$scenario.out
-        timeout 5 sipp 127.0.0.1:9 -sf "$scenario_path" -inf "$scratch/$input" \
+        timeout 5 sipp -ci 127.0.0.1 127.0.0.1:9 -sf "$scenario_path" -inf "$scratch/$input" \
             -i 127.0.0.30 -p "$port" -mi 127.0.0.30 -mp 45000 -m 0 -nostdin >"$output" 2>&1 || true
         ! grep -Eq 'parse error|Unable to load|Unknown element|Variable .* referenced.*(not declared|[01] times)' "$output" || \
             die "SIPp rejected callback scenario $scenario"
@@ -129,7 +129,7 @@ start_returned_carrier() {
     node "$callback_test_dir/test-fixtures/create-callback-carrier-scenario.cjs" "$RUN_DIR" >/dev/null
     # This endpoint generates rtp_stream audio. Do not also enable -rtp_echo:
     # echo reserves min/+2 and starves streaming of its advertised local port.
-    sipp -sf "$RUN_DIR/callback-returned.xml" -inf "$csv" \
+    sipp -ci 127.0.0.1 -sf "$RUN_DIR/callback-returned.xml" -inf "$csv" \
         -i "$CARRIER_IP" -p "$CARRIER_PORT" -mi "$CARRIER_IP" -mp "$CARRIER_MEDIA_PORT" \
         -min_rtp_port "$CARRIER_MEDIA_PORT" -max_rtp_port "$((CARRIER_MEDIA_PORT + 3))" \
         -m 1 -l 1 -nostdin -aa -timeout "${CALLBACK_CARRIER_TIMEOUT_S}s" -timeout_error \
@@ -145,7 +145,7 @@ start_callback_request() {
     local csv=$RUN_DIR/callback-original-input.csv stats=$RUN_DIR/callback-original-stats.csv
     local output=$RUN_DIR/callback-original.log
     write_callback_request_csv "$csv"
-    sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+    sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$SCENARIO_DIR/callback-request.xml" -inf "$csv" -i "$LOCAL_IP" -p "$CALLER_PORT" \
         -mi "$LOCAL_IP" -mp "$CALLBACK_ORIGINAL_MEDIA_PORT" -min_rtp_port "$CALLBACK_ORIGINAL_MEDIA_PORT" \
         -max_rtp_port "$((CALLBACK_ORIGINAL_MEDIA_PORT + 3))" \
@@ -160,7 +160,7 @@ start_sentinel_caller() {
     local csv=$RUN_DIR/callback-sentinel-input.csv stats=$RUN_DIR/callback-sentinel-stats.csv
     local output=$RUN_DIR/callback-sentinel.log
     write_caller_csv "$csv" 1 1 "$CALLBACK_SENTINEL_HOLD_MS" "$CALLBACK_SENTINEL_HOLD_MS" 0
-    sipp "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+    sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$SCENARIO_DIR/caller-to-queue.xml" -inf "$csv" -i "$LOCAL_IP" -p "$CALLER_PORT" \
         -mi "$LOCAL_IP" -mp "$SENTINEL_MEDIA_PORT" -min_rtp_port "$SENTINEL_MEDIA_PORT" -max_rtp_port "$((SENTINEL_MEDIA_PORT + 3))" \
         -m 1 -l 1 -r 1 -rp 1000 -nostdin -aa -timeout 150s -timeout_error \

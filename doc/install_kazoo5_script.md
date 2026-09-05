@@ -4,7 +4,8 @@
 standalone component, a distributed Kazoo topology, or an all-in-one host. It
 installs dependencies, writes configuration, installs a named systemd service,
 enables and starts that service, and runs component-specific acceptance checks.
-It is designed to be safely re-run.
+Re-runs use ownership and compatibility checks; a failed preflight must be
+resolved, not bypassed. Clean-host and split-host acceptance remain incomplete.
 
 This repository checkpoint is not a production-ready certification. Consult
 [the current acceptance status](kazoo5_acceptance_status.md) before deploying:
@@ -44,9 +45,10 @@ a different state file. Verification and dry runs do not rewrite it.
   host so there is room for database and log growth; that is capacity planning,
   not the installer's temporary build footprint.
 
-The compiler sources are cached under `/usr/local/src/kazoo5-installer`. They
-can be removed after a successful installation and `--verify-only` run; the
-installer downloads them again if a future rebuild is required.
+Compiler sources, deployment receipts and rollback artifacts currently share
+`/usr/local/src/kazoo5-installer`. Do not remove that entire directory as a cache
+cleanup. Retain deployment provenance and exact rollback artifacts; review
+individual reproducible build caches separately before removing anything.
 
 ## Commands
 
@@ -634,10 +636,14 @@ external certificate issuance and renewal are not automated by this mode.
 
 ## Diagnostic retention
 
-Selecting `kazoo-apps` automatically imports missing official English-US system
-prompts plus the generated English-US callback prompts into CouchDB and verifies
-that every required document has audio. The current English-US import is 191
-media documents: 175 official prompts and 16 deterministic callback prompts.
+Selecting `kazoo-apps` imports and verifies the committed 165 immutable Gemini
+assets, then imports missing official English-US system prompts and activates
+the verified resolver mappings. It no longer generates eSpeak ACDC prompts.
+The pinned sounds source has 175 official top-level English-US WAVs. This
+server's older 192-document manifest also includes 17 locally generated legacy
+extras; that observed inventory is not evidence that a fresh clone supplies
+them. The source-selection and editor prerequisite repair is tracked in the
+[installer checkpoint](installer_verification_checkpoint.md).
 Existing prompt attachments are preserved. Selecting `freeswitch` also installs
 the pinned English-US local speech and hold-music files without overwriting existing files.
 `KAZOO_SOUNDS_REF` pins the shared `2600hz/kazoo-sounds` checkout. This default

@@ -32,6 +32,19 @@ function isStaticFont(method, url, headers) {
             || (url.hostname === 'fonts.gstatic.com' && /^\/s\/[A-Za-z0-9_./-]+\.(woff2?|ttf|otf)$/.test(url.pathname)));
 }
 function unique(items) { return [...new Set(items)]; }
+function editorRoster(body, queueId) {
+    const data = body && body.data;
+    assert(body && body.status === 'success' && !body.next_start_key && data
+        && data.queue && data.queue.id === queueId && Array.isArray(data.roster)
+        && data.catalogs && data.catalogs.users && data.catalogs.users.complete === true
+        && Array.isArray(data.users) && data.revisions && typeof data.revisions.queue === 'string',
+    'Current unified editor must contain complete users, queue identity and revision');
+    const ids = data.users.map(user => user.id);
+    assert(ids.every(id => /^[a-f0-9]{32}$/.test(id)) && new Set(ids).size === ids.length
+        && data.roster.every(id => ids.includes(id)) && new Set(data.roster).size === data.roster.length,
+    'Current roster must be unique and represented in the complete user catalog');
+    return data.roster;
+}
 if (process.argv.includes('--self-test')) {
     assert.equal(urlPath('https://u:p@host/path?token=secret#secret'), 'https://host/path');
     const cleaned = sanitize('password=topsecret https://host/path?auth_token=topsecret aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', ['topsecret']);
@@ -41,7 +54,18 @@ if (process.argv.includes('--self-test')) {
     assert(isStaticFont('GET', new URL('https://fonts.gstatic.com/s/lato/v1/example.woff2'), {}));
     assert(!isStaticFont('GET', new URL('https://fonts.googleapis.com/css?key=secret'), {}));
     assert(!isStaticFont('GET', new URL('https://maps.google.com/maps/api/js'), {}));
-    console.log('PASS console harness redaction and write guards');
+    const user = '1'.repeat(32);
+    const editor = {status: 'success', data: {queue: {id: QUEUE}, roster: [user], users: [{id: user}],
+        catalogs: {users: {complete: true}}, revisions: {queue: '1-fixture'}}};
+    assert.deepEqual(editorRoster(editor, QUEUE), [user]);
+    for (const change of [e => { e.data.queue.id = '2'.repeat(32); },
+        e => { e.data.catalogs.users.complete = false; }, e => { e.data.users = []; },
+        e => { e.data.roster.push(user); }, e => { delete e.data.revisions.queue; },
+        e => { e.next_start_key = 'partial'; }]) {
+        const invalid = JSON.parse(JSON.stringify(editor)); change(invalid);
+        assert.throws(() => editorRoster(invalid, QUEUE));
+    }
+    console.log('PASS console harness redaction, write guards and unified-editor complete-roster contract');
 } else {
     main().catch(error => { console.error('Console harness failed: ' + sanitize(error.message)); process.exitCode = 1; });
 }
@@ -151,20 +175,37 @@ async function main() {
             await page.evaluate(() => window.require('monster').routing.goTo('apps/acdc'));
             await page.locator('#acdc_wrapper .acdc-summary-grid').waitFor({state: 'visible', timeout: 30000});
             await page.locator('.acdc-tab[data-tab="queues"]').click();
-            const rosterReply = page.waitForResponse(response => new URL(response.url()).pathname === `/v2/accounts/${MASTER}/queues/${QUEUE}/roster`
+            const editorPath = `/v2/accounts/${MASTER}/queues/${QUEUE}/editor`;
+            const editorRequests = [], separateCatalogs = [];
+            const observe = request => {
+                if (request.method() !== 'GET') return;
+                const pathname = new URL(request.url()).pathname;
+                if (pathname === editorPath) editorRequests.push(pathname);
+                if (pathname === `/v2/accounts/${MASTER}/queues/${QUEUE}/roster`
+                    || new RegExp(`^/v2/accounts/${MASTER}/(?:users|media|phone_numbers|callflows)(?:/|$)`).test(pathname)
+                    || /^\/v2\/media(?:\/|$)/.test(pathname)) separateCatalogs.push(pathname);
+            };
+            page.on('request', observe);
+            try {
+            const editorReply = page.waitForResponse(response => new URL(response.url()).pathname === editorPath
                 && response.request().method() === 'GET');
             await page.locator(`.acdc-edit-queue[data-id="${QUEUE}"]`).click();
-            const response = await rosterReply, roster = await response.json();
-            assert(response.ok() && roster.status === 'success' && Array.isArray(roster.data) && !roster.next_start_key, 'Current roster must be complete');
+            const response = await editorReply;
+            assert(response.ok(), 'Unified queue editor request must succeed');
+            const roster = editorRoster(await response.json(), QUEUE);
             await page.locator('.acdc-queue-form').waitFor({state: 'visible'});
             await page.waitForFunction(expected => {
                 const rosterSelect = document.querySelector('.acdc-roster');
                 return rosterSelect && JSON.stringify(Array.from(rosterSelect.selectedOptions, o => o.value).sort()) === JSON.stringify(expected.slice().sort());
-            }, roster.data);
-            const members = roster.data.length;
+            }, roster);
+            const members = roster.length;
             assert(await page.locator('[name="callback.enabled"]').isVisible(), 'Callback editor must render');
             await page.locator('.acdc-cancel').first().click();
-            return {selected_members: members, matches_current_api_roster: true, saved: false};
+            assert.equal(editorRequests.length, 1, 'Queue edit must use exactly one unified snapshot request');
+            assert.equal(separateCatalogs.length, 0, 'Queue edit must not fan out separate catalog requests');
+            return {selected_members: members, matches_current_api_roster: true, saved: false,
+                unified_editor_requests: editorRequests.length, separate_catalog_requests: separateCatalogs.length};
+            } finally { page.off('request', observe); }
         });
         await stage('callflows_unsaved', async () => {
             await hideMyAccount();
