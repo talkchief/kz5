@@ -31,6 +31,17 @@ The app provides:
   preserve unavailable existing values. Roster replacement is disabled when a
   current member is missing from the complete user inventory.
 
+The staged language selector lists English, Arabic, Hebrew, Spanish, and French,
+but only enables verified installed packs. Automatic multilingual import,
+backend activation, and publication of `apps/acdc/language-capabilities.json`
+are not yet wired into the installer. That artifact must only be published
+after runtime verification; builds must never manufacture it. The UI checks the version 1 capability proof
+and all 29 fixed prompt attachments. Internal `acdc-number-*` audio chunks are
+excluded from editable media choices and per-prompt browser requests. Missing
+capabilities allow only the existing verified English fallback; corrupt or
+unreachable capability data disables language editing. Synthetic packs lacking
+native-speaker review are explicitly labeled, not presented as native-approved.
+
 It uses the account-scoped Crossbar resources implemented by `cb_queues`,
 `cb_agents`, `cb_acdc_call_stats`, and `cb_callflows`; it does not include mock
 data. Callflows without the app's complete ownership marker and expected shape

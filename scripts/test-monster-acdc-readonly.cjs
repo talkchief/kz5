@@ -55,7 +55,12 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
                 const file = path.resolve(appRoot, relative);
                 assert(file.startsWith(appRoot + '/'), 'Unsafe private fixture asset');
                 assert.equal(route.request().method(), 'GET', 'Fixture assets must be read-only');
-                if (!fs.existsSync(file)) return route.fulfill({status: 404, body: ''});
+                if (!fs.existsSync(file)) {
+                    // Installer-owned readiness comes from the live publisher,
+                    // never a source/build fixture's unsupported ready claim.
+                    if (relative === 'language-capabilities.json') return route.continue();
+                    return route.fulfill({status: 404, body: ''});
+                }
                 assert(fs.lstatSync(file).isFile(), 'Fixture asset must be a regular file');
                 stagedAssetsServed++;
                 return route.fulfill({path: file});
@@ -160,10 +165,12 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
             }));
             const users = Array.from(form.querySelector('[name="callback.outbound_authority.id"]').options)
                 .filter(option => option.value && option.dataset.authorityType === 'user' && option.dataset.preserved !== 'true');
-            const languages = Array.from(form.querySelector('[name="announcements.language"]').options)
-                .map(option => option.value).filter(Boolean);
+            const languageOptions = Array.from(form.querySelector('[name="announcements.language"]').options)
+                .filter(option => option.value).map(option => ({locale: option.value, label: option.textContent,
+                    disabled: option.disabled, preserved: option.dataset.preserved === 'true'}));
+            const languages = languageOptions.filter(option => !option.disabled && !option.preserved).map(option => option.locale);
             return {controls, named_users: users.length, first_user: users[0] && users[0].value,
-                users_have_names: users.every(option => option.textContent !== option.value), languages,
+                users_have_names: users.every(option => option.textContent !== option.value), languages, language_options: languageOptions,
                 authority_type_hidden: form.querySelector('[name="callback.outbound_authority.type"]').type === 'hidden',
                 caller_name_hidden: form.querySelector('[name="callback.outbound_caller_id.name"]').type === 'hidden'};
         });
@@ -174,6 +181,14 @@ const secrets = Object.fromEntries(fs.readFileSync(secretsPath, 'utf8').split('\
         assert(dropdownEvidence.named_users > 0 && dropdownEvidence.users_have_names);
         assert(dropdownEvidence.authority_type_hidden && dropdownEvidence.caller_name_hidden);
         assert(dropdownEvidence.languages.includes('en-us'));
+        if (process.env.KAZOO_TEST_LANGUAGE_CAPABILITIES === 'true') {
+            assert.deepEqual(dropdownEvidence.language_options.map(option => option.locale).sort(),
+                ['en-us', 'ar-sa', 'he-il', 'es-es', 'fr-fr'].sort());
+            if (process.env.KAZOO_TEST_READY_LANGUAGES) {
+                assert.deepEqual(dropdownEvidence.languages.slice().sort(), process.env.KAZOO_TEST_READY_LANGUAGES.split(',').sort());
+            }
+            assert(dropdownEvidence.language_options.filter(option => option.disabled).every(option => option.label.includes('Not installed or incomplete')));
+        }
         await page.locator('[name="callback.outbound_authority.id"]').selectOption(dropdownEvidence.first_user);
         await page.locator('[name="callback.caller_id_source"]').selectOption('inherit');
         assert.equal(await page.locator('[name="callback.outbound_caller_id.number"]').isVisible(), false);

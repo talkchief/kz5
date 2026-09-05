@@ -207,11 +207,18 @@ function channel(id) {
         ip:d.variable_sip_contact_host,port:Number(d.variable_sip_contact_port),peer:d.variable_sip_network_ip,
         auth_ip:d['variable_sip_h_X-AUTH-IP'],bridge:d.variable_bridge_to||d['Other-Leg-Unique-ID'],request:d['variable_ecallmgr_Monitor-Request-ID'],
         target:d['variable_ecallmgr_Monitor-Target-ID'],mode:d['variable_ecallmgr_Monitor-Mode'],
+        observed_state:d['Channel-State'],observed_answer_epoch:d.variable_answer_epoch,
+        observed_answer_us:d['Caller-Channel-Answered-Time'],observed_bridge_uuid:d.variable_bridge_uuid,observed_signal_bond:d.variable_signal_bond,
+        observed_authorizing_type:d['variable_ecallmgr_Authorizing-Type'],observed_endpoint_id:d['variable_ecallmgr_Endpoint-ID'],
+        observed_device_id:d['variable_ecallmgr_Device-ID'],observed_sip_to_user:d.variable_sip_to_user,
         active:['CS_NEW','CS_INIT','CS_ROUTING','CS_SOFT_EXECUTE','CS_EXECUTE','CS_EXCHANGE_MEDIA','CS_PARK','CS_CONSUME_MEDIA','CS_HIBERNATE','CS_RESET'].includes(d['Channel-State']),
-        answered:Number(d.variable_answer_epoch||0)>0};
+        // uuid_dump exposes the actual answered timestamp as an event header;
+        // answer_epoch is not populated on every live channel before CDR close.
+        answered:Number(d['Caller-Channel-Answered-Time']||d.variable_answer_epoch||0)>0};
 }
 function ownedChannel(c,e,account=state.ACCEPTANCE_ACCOUNT_ID,proxy=state.ACCEPTANCE_SIP_PROXY_HOST) {
-    return c&&c.active===true&&c.account===account&&c.device===e.device&&c.ip===audio.IP&&c.port===e.port&&
+    const endpoint=c&&(c.device===e.device||(c.device===e.user&&c.observed_authorizing_type==='user'&&c.observed_sip_to_user===e.device));
+    return c&&c.active===true&&c.account===account&&endpoint&&c.ip===audio.IP&&c.port===e.port&&
         [audio.IP,proxy].includes(c.peer)&&(!c.auth_ip||c.auth_ip===audio.IP);
 }
 function monitorMatches(c) {
@@ -265,11 +272,13 @@ async function stage(mode) {
     await sleep(500);assert(agent.exitCode===null&&supervisor.exitCode===null&&tcpdump.exitCode===null,'Fixture listener failed');
     const caller=spawnPhone(es[0],'monitor-customer.xml',input.customer);
     current={mode,caller_id:`1-${caller.pid}@${audio.IP}`};fixture.current=current;saveFixture();
+    let lastObservation;
     const target=await until(()=>{
-        const c=channel(current.caller_id);if(!c?.bridge||!c.answered)return false;
+        const c=channel(current.caller_id);lastObservation={caller:c};if(!c?.bridge||!c.answered)return false;
         assert(ownedChannel(c,es[0]),'Caller scope mismatch');const a=channel(c.bridge);
+        lastObservation.agent=a;
         return ownedChannel(a,es[1])&&a.answered?a:false;
-    });
+    }).catch(error=>{writePrivate(mode+'-channel-observation.json',JSON.stringify(lastObservation,null,2)+'\n');throw error;});
     current.agent_id=target.id;saveFixture();
     const body={action:mode,device_id:es[2].device,timeout:10};
     await request('POST',route('channels',target.id),body,masterToken,403);

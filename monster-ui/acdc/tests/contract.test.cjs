@@ -373,9 +373,89 @@ app.verifySystemMedia(mediaInventory, (error, media) => {
 	assert.strictEqual(error, 'partial inventory');
 	assert.strictEqual(media, undefined, 'A partial prompt verification must fail closed');
 });
+app.appFlags.acdc.verifiedSystemMedia = undefined;
+let promptReads = 0;
+app.requestCompleteList = (_resource, data, done) => {
+	promptReads++;
+	assert.strictEqual(data.promptId, 'ready', 'Numeric chunk assets must never fan out into browser detail requests');
+	done(null, [{id: 'en-us/ready', has_attachments: true}]);
+};
+app.verifySystemMedia([{id: 'en-us/ready', language: 'en-us', is_prompt: true}].concat(
+	Array.from({length: 6000}, (_, i) => ({id: 'he-il/acdc-number-' + i, language: 'he-il', is_prompt: true}))
+), (error, media) => {
+	assert.strictEqual(error, null, 'Implementation-only number chunks must be excluded before the1000 editable cap');
+	assert.deepStrictEqual(media.map(item => item.id), ['en-us/ready']);
+});
+assert.strictEqual(promptReads, 1);
 app.requestEnvelope = catalogOriginals.requestEnvelope;
 app.requestCompleteList = catalogOriginals.requestCompleteList;
 app.i18n.active = catalogOriginals.i18nActive;
+
+const capabilityValidator = require(path.join(projectRoot, 'scripts', 'validate-acdc-language-capabilities.cjs'));
+const capabilityI18n = app.i18n.active;
+app.i18n.active = () => JSON.parse(fs.readFileSync(path.join(appRoot, 'i18n/en-US.json'), 'utf8'));
+assert.deepStrictEqual(Array.from(app.requiredLanguagePromptIds()).sort(), capabilityValidator.requiredPromptIds.slice().sort());
+assert.strictEqual(app.requiredLanguagePromptIds().length, 29);
+const readyEntry = locale => ({ready: true, position: true, wait_time: true, callback: true,
+	numbers: ['ar-sa', 'he-il'].includes(locale) ? 'prerecorded' : 'native_say',
+	number_range: [0, 999999999], required_prompt_ids: Array.from(app.requiredLanguagePromptIds()),
+	numeric_prompt_count: ['ar-sa', 'he-il'].includes(locale) ? 2999 : 0,
+	source_catalog_sha256: 'a'.repeat(64), installed_media_sha256: 'b'.repeat(64), native_speaker_review: false});
+const manifest = {schema_version: 1, generated_at: new Date().toISOString(), languages:
+	Object.fromEntries(Array.from(app.announcementLocales).map(locale => [locale, readyEntry(locale)]))};
+const fixedMedia = Array.from(app.announcementLocales).flatMap(locale =>
+	app.requiredLanguagePromptIds().map(id => ({id: locale + '/' + id, language: locale, is_prompt: true})));
+assert.strictEqual(app.validLanguageCapabilities(manifest), true);
+assert.doesNotThrow(() => capabilityValidator.assertLanguageCapabilities(manifest));
+assert(app.languageCapabilityOptions(manifest, fixedMedia).every(option => option.ready && !option.disabled));
+assert(app.languageCapabilityOptions(manifest, fixedMedia).find(option => option.value === 'he-il').label
+	.includes('Synthetic voice; native-speaker review pending'));
+for (const alter of [
+	m => { m.schema_version = 2; }, m => { m.generated_at = 'not-a-time'; },
+	m => { m.languages['he-il'].numeric_prompt_count = 2998; },
+	m => { m.languages['he-il'].numbers = 'native_say'; },
+	m => { m.languages['he-il'].number_range = [0, 99]; },
+	m => { m.languages['he-il'].installed_media_sha256 = ''; },
+	m => { m.languages['he-il'].callback = false; },
+	m => { m.languages['he-il'].native_speaker_review = 'false'; },
+	m => { m.languages['he-il'].required_prompt_ids.pop(); },
+	m => { m.languages['he-il'].required_prompt_ids[0] = {toString: null}; },
+	m => { m.languages['he-il'].required_prompt_ids[0] = m.languages['he-il'].required_prompt_ids[1]; }
+]) {
+	const invalid = JSON.parse(JSON.stringify(manifest)); alter(invalid);
+	assert.strictEqual(app.validLanguageCapabilities(invalid), false);
+	assert.throws(() => capabilityValidator.assertLanguageCapabilities(invalid));
+	assert(app.languageCapabilityOptions(invalid, fixedMedia).every(option => option.disabled));
+}
+const missingAttachment = fixedMedia.filter(item => item.id !== 'he-il/acdc-queue-your-current-position-is');
+assert.strictEqual(app.languageCapabilityOptions(manifest, missingAttachment).find(option => option.value === 'he-il').disabled, true,
+	'A published ready flag is insufficient without the required fixed prompt attachments');
+const unavailable = JSON.parse(JSON.stringify(manifest));
+unavailable.languages['he-il'] = {ready: false, position: false, wait_time: false, callback: false, native_speaker_review: false};
+assert.strictEqual(app.validLanguageCapabilities(unavailable), true);
+assert.doesNotThrow(() => capabilityValidator.assertLanguageCapabilities(unavailable));
+const unavailableOptions = app.languageCapabilityOptions(unavailable, fixedMedia);
+assert.strictEqual(unavailableOptions.find(option => option.value === 'he-il').disabled, true);
+const preservedHebrew = app.selectionOptions(unavailableOptions, 'he-il', 'Default', 'Keep current').find(option => option.selected);
+assert.strictEqual(preservedHebrew.value, 'he-il');
+assert.strictEqual(preservedHebrew.disabled, false, 'Existing unavailable selections must remain serializable');
+assert.strictEqual(preservedHebrew.preserved, true);
+assert.strictEqual(preservedHebrew.ready, false);
+const legacyEnglish = app.requiredLanguagePromptIds().map(id => ({id: 'en-us/' + (
+	id.startsWith('acdc-queue-') && id !== 'acdc-queue-your-current-position-is' ? id.slice(5) : id)}));
+assert.deepStrictEqual(Array.from(app.languageCapabilityOptions(null, legacyEnglish).filter(option => option.ready), option => option.value), ['en-us']);
+assert(app.languageCapabilityOptions(null, legacyEnglish, 'network error').every(option => option.disabled));
+assert(app.languageCapabilityOptions(null, [], null).every(option => option.disabled));
+const previousAjax = jqueryStub.ajax;
+app.appPath = 'apps/acdc';
+jqueryStub.ajax = options => { assert.strictEqual(options.cache, false); options.error({status: 404}); };
+app.loadLanguageCapabilities((error, value) => { assert.strictEqual(error, null); assert.strictEqual(value, null); });
+jqueryStub.ajax = options => options.error({status: 503});
+app.loadLanguageCapabilities((error, value) => { assert(error); assert.strictEqual(value, null); });
+jqueryStub.ajax = options => options.success({schema_version: 1});
+app.loadLanguageCapabilities(error => assert(error));
+jqueryStub.ajax = previousAjax;
+app.i18n.active = capabilityI18n;
 
 assert.deepStrictEqual(
 	JSON.parse(JSON.stringify(app.normalizeStatuses({
@@ -696,6 +776,7 @@ assert.strictEqual(callbackSchema.originate_timeout.minimum, 5);
 assert.strictEqual(callbackSchema.originate_timeout.maximum, 300);
 assert.strictEqual(callbackSchema.media.properties.returned_confirmation.type, 'string');
 assert(announcementsRuntime.includes('{\'queue_position\', kapps_call:call_id(Call)}'));
-assert(announcementsRuntime.includes('{\'say\', kz_term:to_binary(Position), <<"number">>}'));
+assert(announcementsRuntime.includes('{\'say\', kz_term:to_binary(Position), <<"number">>}')
+	|| announcementsRuntime.includes('acdc_language:number_prompts(Position, Language)'));
 
 console.log('PASS ACDC Monster UI contract checks');

@@ -28,6 +28,10 @@ assert(h.ownedChannel(channel,endpoint,base.ACCEPTANCE_ACCOUNT_ID,base.ACCEPTANC
 for(const mutation of [{active:false},{account:h.MASTER},{device:id(99)},{ip:'127.0.0.20'},
     {port:18103},{peer:'192.0.2.1'},{auth_ip:'192.0.2.2'}])
     assert(!h.ownedChannel({...channel,...mutation},endpoint,base.ACCEPTANCE_ACCOUNT_ID,base.ACCEPTANCE_SIP_PROXY_HOST));
+const userLeg={...channel,device:endpoint.user,observed_authorizing_type:'user',observed_sip_to_user:endpoint.device};
+assert(h.ownedChannel(userLeg,endpoint,base.ACCEPTANCE_ACCOUNT_ID,base.ACCEPTANCE_SIP_PROXY_HOST));
+for(const mutation of [{observed_authorizing_type:'device'},{observed_sip_to_user:id(99)},{device:id(99)}])
+    assert(!h.ownedChannel({...userLeg,...mutation},endpoint,base.ACCEPTANCE_ACCOUNT_ID,base.ACCEPTANCE_SIP_PROXY_HOST));
 const user={id:saved.users.admin.id,username:saved.users.admin.username,enabled:true,priv_level:'admin',
     kz5_monitor_test:{owner:h.OWNER,deployment_id:saved.deployment_id,account_id:saved.account_id,kind:'admin'}};
 assert(h.ownedUser(user,'admin',saved));
@@ -38,4 +42,5 @@ assert(source.indexOf("if(args[0]==='--prepare-only')return;")<source.indexOf('a
 assert(!source.includes("action:'hangup'")&&!source.includes('--agent-status'));
 assert(source.includes('uuid_kill ${c.id} NORMAL_CLEARING')&&source.includes('ownedChannel(c,endpoints(state)[0])'));
 assert(source.includes("'403'")===false); // Numeric response codes, not truthy string checks.
+assert(source.includes("d['Caller-Channel-Answered-Time']||d.variable_answer_epoch||0"));
 console.log('PASS monitor fixture: master/PSTN/injection/duplicate rejection, exact saved identity, account/device/IP cleanup guards, web-user markers, opt-in and no queue-status mutations');

@@ -13,6 +13,7 @@ define(function(require) {
 		kazooEpochOffsetSeconds: 62167219200,
 		managedRouteFlag: 'talkchief-acdc-managed',
 		managedRouteQueueFlagPrefix: 'talkchief-acdc-queue:',
+		announcementLocales: ['en-us', 'ar-sa', 'he-il', 'es-es', 'fr-fr'],
 
 		css: ['app'],
 
@@ -315,7 +316,7 @@ define(function(require) {
 			_.each(media, function(item) {
 				var match = typeof item.id === 'string' && item.id.match(/^([a-z]{2,3}(?:-[a-z0-9]{2,8})*)\/([A-Za-z0-9_.-]+)$/);
 
-				if (item.is_prompt && match && item.language === match[1]) {
+				if (item.is_prompt && match && item.language === match[1] && match[2].indexOf('acdc-number-') !== 0) {
 					prompts[match[2]] = true;
 				}
 			});
@@ -348,6 +349,80 @@ define(function(require) {
 			pump();
 		},
 
+		requiredLanguagePromptIds: function() {
+			return _.map(_.range(10), function(key) { return 'acdc-callback-offer-' + key; })
+				.concat(_.map(['menu-current', 'menu-alternate', 'number-readback', 'confirmation', 'success', 'returned-confirmation'],
+					function(name) { return 'acdc-callback-' + name; }))
+				.concat(_.map(['your-current-position-is', 'you_are_at_position', 'in_the_queue', 'increase_in_call_volume',
+					'the_estimated_wait_time_is', 'less_than_1_minute', 'about_5_minutes', 'about_10_minutes',
+					'about_15_minutes', 'about_30_minutes', 'about_45_minutes', 'about_1_hour', 'at_least_1_hour'],
+					function(name) { return 'acdc-queue-' + name; }));
+		},
+
+		validLanguageCapabilities: function(manifest) {
+			var self = this,
+				required = self.requiredLanguagePromptIds().sort();
+
+			return _.isPlainObject(manifest) && manifest.schema_version === 1
+				&& typeof manifest.generated_at === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(manifest.generated_at)
+				&& isFinite(Date.parse(manifest.generated_at))
+				&& _.isPlainObject(manifest.languages)
+				&& _.isEqual(_.keys(manifest.languages).sort(), self.announcementLocales.slice().sort())
+				&& _.every(self.announcementLocales, function(locale) {
+					var entry = manifest.languages[locale], prerecorded = locale === 'ar-sa' || locale === 'he-il';
+
+					if (!_.isPlainObject(entry) || !_.every(['ready', 'position', 'wait_time', 'callback', 'native_speaker_review'],
+						function(key) { return typeof entry[key] === 'boolean'; })) { return false; }
+					if (!entry.ready) { return true; }
+					return entry.position && entry.wait_time && entry.callback
+						&& entry.numbers === (prerecorded ? 'prerecorded' : 'native_say')
+						&& _.isEqual(entry.number_range, [0, 999999999])
+						&& entry.numeric_prompt_count === (prerecorded ? 2999 : 0)
+						&& _.isArray(entry.required_prompt_ids) && _.every(entry.required_prompt_ids, function(id) { return typeof id === 'string'; })
+						&& _.isEqual(entry.required_prompt_ids.slice().sort(), required)
+						&& /^[a-f0-9]{64}$/.test(entry.source_catalog_sha256 || '')
+						&& /^[a-f0-9]{64}$/.test(entry.installed_media_sha256 || '');
+				});
+		},
+
+		loadLanguageCapabilities: function(callback) {
+			var self = this;
+
+			$.ajax({url: self.appPath + '/language-capabilities.json', dataType: 'json', cache: false, timeout: 10000,
+				success: function(manifest) {
+					callback(self.validLanguageCapabilities(manifest) ? null : self.i18n.active().acdc.dropdowns.capabilitiesUnavailable, manifest);
+				},
+				error: function(response) {
+					// A missing new artifact must not invent readiness for a new
+					// language. Only the previously verified English pack may remain.
+					callback(response.status === 404 ? null : self.i18n.active().acdc.dropdowns.capabilitiesUnavailable, null);
+				}
+			});
+		},
+
+		languageCapabilityOptions: function(manifest, media, loadError) {
+			var self = this, labels = self.i18n.active().acdc.dropdowns,
+				ids = _.map(media, 'id'),
+				valid = self.validLanguageCapabilities(manifest),
+				legacyRequired = _.map(self.requiredLanguagePromptIds(), function(id) {
+					return id.indexOf('acdc-queue-') === 0 && id !== 'acdc-queue-your-current-position-is' ? id.slice(5) : id;
+				});
+
+			return _.map(self.announcementLocales, function(locale) {
+				var entry = valid ? manifest.languages[locale] : null,
+					ready = !loadError && (entry ? entry.ready && _.every(entry.required_prompt_ids, function(id) {
+						return ids.indexOf(locale + '/' + id) >= 0;
+					}) : manifest === null && locale === 'en-us' && _.every(legacyRequired, function(id) {
+						return ids.indexOf('en-us/' + id) >= 0;
+					})),
+					reviewPending = ready && locale !== 'en-us' && entry.native_speaker_review === false;
+
+				return {value: locale, disabled: !ready, ready: Boolean(ready),
+					label: labels.languages[locale] + ' — ' + (ready ? labels.languageReady : labels.languageNotInstalled)
+						+ (reviewPending ? ' — ' + labels.nativeReviewPending : '')};
+			});
+		},
+
 		selectionOptions: function(items, current, emptyLabel, currentLabel) {
 			var options = [{ value: '', label: emptyLabel }].concat(items),
 				value = current === undefined || current === null ? '' : String(current);
@@ -355,7 +430,12 @@ define(function(require) {
 			if (value && !_.some(options, function(item) { return item.value === value; })) {
 				options.push({ value: value, label: currentLabel, preserved: true });
 			}
-			return _.map(options, function(item) { return _.assign({}, item, { selected: item.value === value }); });
+			return _.map(options, function(item) {
+				var selected = item.value === value;
+
+				return _.assign({}, item, {selected: selected}, selected && item.disabled
+					? {disabled: false, preserved: true, label: item.label + ' — ' + currentLabel} : {});
+			});
 		},
 
 		populateQueueDropdowns: function(view, queue, results, errors, isEdit) {
@@ -365,12 +445,14 @@ define(function(require) {
 				systemMedia = results.verifiedSystemMedia || [],
 				media = _.map(results.media || [], function(item) {
 					return { value: item.id, label: labels.accountMedia + ': ' + (item.name || item.id) };
-				}).concat(_.map(systemMedia, function(item) {
-					return { value: item.id.split('/').slice(1).join('/'), label: labels.systemPrompt + ': ' + item.name + ' (' + item.language + ')' };
-				})),
-				languages = _.map(_.uniq(_.map(systemMedia, 'language')).sort(), function(language) {
-					return { value: language, label: _.get(labels, ['languages', language], language) };
-				}),
+				}).concat(_.chain(systemMedia)
+					.groupBy(function(item) { return item.id.split('/').slice(1).join('/'); })
+					.map(function(entries, id) {
+						return {value: id, label: labels.systemPrompt + ': ' + (entries[0].name || id)
+							+ ' (' + _.uniq(_.map(entries, 'language')).sort().join(', ') + ')'};
+					}).value()),
+				languages = self.languageCapabilityOptions(results.languageCapabilities === undefined ? null : results.languageCapabilities,
+					systemMedia, errors.languageCapabilities || errors.systemMedia),
 				authority = _.get(queue, 'callback.outbound_authority', {}),
 				users = _.map(_.filter(results.users || [], function(user) { return user.enabled !== false; }), function(user) {
 					return { value: user.id || user._id, label: self.getAgentName(user), authorityType: 'user' };
@@ -385,6 +467,7 @@ define(function(require) {
 					select.empty();
 					_.each(self.selectionOptions(choices, value, emptyLabel, labels.currentPreserved), function(item) {
 						$('<option>').val(item.value).text(item.label).prop('selected', item.selected)
+							.prop('disabled', Boolean(item.disabled))
 							.attr('data-authority-type', item.authorityType || (item.preserved ? authority.type : ''))
 							.attr('data-preserved', item.preserved ? 'true' : 'false')
 							.appendTo(select);
@@ -398,7 +481,8 @@ define(function(require) {
 
 				setSelect(name, media, _.get(queue, name), labels.useDefault, errors.media || errors.systemMedia);
 			});
-			setSelect('announcements.language', languages, _.get(queue, 'announcements.language'), labels.inheritLanguage, errors.systemMedia);
+			setSelect('announcements.language', languages, _.get(queue, 'announcements.language'), labels.inheritLanguage,
+				errors.systemMedia || errors.languageCapabilities);
 			if (authority.type === 'device' && authority.id) {
 				users.push({ value: authority.id, label: labels.legacyDevice, authorityType: 'device' });
 			}
@@ -413,7 +497,7 @@ define(function(require) {
 			}
 			form.find('[name="callback.caller_id_source"]').val(source);
 			form.data('original-caller-id-source', source);
-			form.data('catalog-errors', Boolean(errors.media || errors.systemMedia || errors.numbers));
+			form.data('catalog-errors', Boolean(errors.media || errors.systemMedia || errors.numbers || errors.languageCapabilities));
 			view.find('.acdc-catalog-warning').toggleClass('hidden', !form.data('catalog-errors'));
 		},
 
@@ -1012,7 +1096,9 @@ define(function(require) {
 				baseResults,
 				inventoryError,
 				inventory,
-				pending = 2,
+				languageCapabilities,
+				languageCapabilitiesError,
+				pending = 3,
 				finish;
 
 			self.renderLoading(self.i18n.active().acdc.states.loadingQueue);
@@ -1051,6 +1137,8 @@ define(function(require) {
 
 				errors = baseErrors || {};
 				results = baseResults || {};
+				results.languageCapabilities = languageCapabilities;
+				if (languageCapabilitiesError) { errors.languageCapabilities = languageCapabilitiesError; }
 				queue = self.normalizeQueueCallback(_.merge(self.defaultQueue(), results.queue || {}));
 				roster = results.roster || queue.agents || [];
 				rosterState = self.rosterInventoryState(results.users || [], roster, errors.roster);
@@ -1134,6 +1222,11 @@ define(function(require) {
 			self.loadAcdcCallflowInventory(function(error, result) {
 				inventoryError = error;
 				inventory = result;
+				finish();
+			});
+			self.loadLanguageCapabilities(function(error, result) {
+				languageCapabilitiesError = error;
+				languageCapabilities = result;
 				finish();
 			});
 		},

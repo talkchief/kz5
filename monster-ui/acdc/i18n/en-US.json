@@ -117,6 +117,10 @@
 			"inheritCallerId": "Use callback user's caller ID",
 			"customCallerId": "Choose account number",
 			"keepCallerId": "Keep existing caller-ID behavior",
+			"capabilitiesUnavailable": "Installed language readiness could not be verified. Language changes are disabled; existing settings are preserved.",
+			"languageReady": "Ready",
+			"languageNotInstalled": "Not installed or incomplete",
+			"nativeReviewPending": "Synthetic voice; native-speaker review pending",
 			"languages": {
 				"en-us": "English (United States)",
 				"ar-sa": "العربية — Arabic",
@@ -132,7 +136,7 @@
 			"preConnectMediaHelp": "Optional audio played once to the caller after an agent is selected and before connection.",
 			"intervalHelp": "Announcements repeat at this interval; Kazoo requires at least 15 seconds.",
 			"initialDelayHelp": "Wait this many seconds before the first position or estimated-wait announcement. For example, 30 waits half a minute after entering the queue. Repeats use the announcement interval independently.",
-			"languageHelp": "Choose an installed prompt language, or use the call or account language. The system default is English (en-us).",
+			"languageHelp": "Choose a ready installed language, or use the call or account language. Unavailable packs cannot be selected. Synthetic voice readiness does not imply native-speaker pronunciation approval; the system default is English (en-us).",
 			"promptsTitle": "Announcement prompts",
 			"promptsDescription": "Choose audio used around the spoken queue position and estimated wait time. Only verified installed system prompts and account media are offered."
 		},

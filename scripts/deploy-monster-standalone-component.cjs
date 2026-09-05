@@ -6,6 +6,7 @@
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const acorn = require('/usr/local/src/kazoo5-installer/monster-ui/node_modules/acorn');
+const {assertLanguageCapabilities} = require('./validate-acdc-language-capabilities.cjs');
 const [app, stage, backup] = process.argv.slice(2);
 assert(['acdc', 'callflows'].includes(app), 'Only acdc or callflows may be deployed');
 assert(stage && backup && path.isAbsolute(stage) && path.isAbsolute(backup), 'Absolute stage/backup paths required');
@@ -64,16 +65,35 @@ const nextConfig = JSON.stringify(config);
 const unaffected = relative => relative === 'js/main.js' || relative === 'build-config.json' || relative === `apps/${app}`;
 const before = snapshot(web, unaffected);
 const stagedHash = snapshot(builtApp);
+const runtimeName = 'language-capabilities.json', runtimePath = path.join(appPath, runtimeName);
+let runtimeCapability = null;
+if (app === 'acdc') {
+    assert(!Object.hasOwn(stagedHash, runtimeName), 'A build must not publish runtime language readiness');
+    if (fs.existsSync(runtimePath)) {
+        const stat = fs.lstatSync(runtimePath);
+        assert(stat.isFile() && !stat.isSymbolicLink() && stat.uid === 0 && (stat.mode & 0o022) === 0,
+            'Runtime language capability must be a protected root-owned regular file');
+        assert(stat.size <= 131072, 'Oversized language capability artifact');
+        runtimeCapability = fs.readFileSync(runtimePath);
+        assertLanguageCapabilities(JSON.parse(runtimeCapability.toString('utf8')));
+        stagedHash[runtimeName] = sha(runtimeCapability);
+    }
+}
 fs.copyFileSync(mainPath, path.join(backup, 'main.js'));
 fs.copyFileSync(configPath, path.join(backup, 'build-config.json'));
 fs.cpSync(appPath, path.join(backup, app), {recursive: true, errorOnExist: true});
 const stagedDirectory = fs.mkdtempSync(path.join(web, 'apps', `.${app}-deploy-`));
 fs.cpSync(builtApp, stagedDirectory, {recursive: true});
+if (runtimeCapability) fs.writeFileSync(path.join(stagedDirectory, runtimeName), runtimeCapability, {mode: 0o644});
 publicModes(stagedDirectory);
 assert.deepEqual(snapshot(stagedDirectory), stagedHash, 'Built component staging differs');
 // Detect concurrent edits before making any live replacement.
 assert.equal(fs.readFileSync(mainPath, 'utf8'), source, 'Shared AMD bundle changed during staging');
 assert.equal(fs.readFileSync(configPath, 'utf8'), configSource, 'Build configuration changed during staging');
+if (app === 'acdc') {
+    assert.equal(fs.existsSync(runtimePath), Boolean(runtimeCapability), 'Runtime capability appeared/disappeared during staging');
+    if (runtimeCapability) assert(fs.readFileSync(runtimePath).equals(runtimeCapability), 'Runtime capability changed during staging');
+}
 assert.deepEqual(snapshot(web, relative => unaffected(relative) || relative === 'apps/' + path.basename(stagedDirectory)), before,
     'Another web component changed while preparing this deployment');
 // Generated build artifacts are mechanically transformed; preserve all bytes
@@ -86,11 +106,12 @@ fs.writeFileSync(mainPath, nextMain, {mode: 0o644});
 fs.writeFileSync(configPath, nextConfig, {mode: 0o644});
 fs.chmodSync(mainPath, 0o644); fs.chmodSync(configPath, 0o644);
 assert.deepEqual(snapshot(web, unaffected), before, 'An unrelated web artifact changed during deployment');
-assert.deepEqual(snapshot(appPath), stagedHash, 'Deployed component does not match built stage');
+assert.deepEqual(snapshot(appPath), stagedHash, 'Deployed component differs from built stage and preserved runtime artifact');
 const manifest = {component: app, deployed_at: new Date().toISOString(), stage, rollback_directory: backup,
     embedded_amd_definitions_removed: definitions.length, shared_main_before_sha256: sha(source),
     shared_main_after_sha256: sha(nextMain), untouched_files_verified: Object.keys(before).length,
-    build_config_before_sha256: sha(configSource), build_config_after_sha256: sha(nextConfig), files: stagedHash};
+    build_config_before_sha256: sha(configSource), build_config_after_sha256: sha(nextConfig),
+    runtime_files_preserved: runtimeCapability ? {[runtimeName]: sha(runtimeCapability)} : {}, files: stagedHash};
 fs.writeFileSync(path.join(backup, 'component-manifest.json'), JSON.stringify(manifest, null, 2) + '\n', {mode: 0o600});
 const manifestPath = `/usr/local/share/kazoo5-installer/monster-ui-${app}-component.json`;
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', {mode: 0o644});

@@ -16,6 +16,7 @@ export ERL_LIBS="$project_root/deps:$project_root/core:$project_root/application
 erlc -DTEST -Werror +warn_missing_spec \
     -I "$project_root/applications/acdc/include" -o "$test_dir" \
     "$project_root/applications/acdc/src/acdc_callback_menu.erl" \
+    "$project_root/applications/acdc/src/acdc_language.erl" \
     "$project_root/applications/acdc/src/cf_acdc_member.erl" \
     "$project_root/applications/acdc/src/kapi_acdc_callback.erl"
 erlc -Werror -pa "$test_dir" -o "$test_dir" \

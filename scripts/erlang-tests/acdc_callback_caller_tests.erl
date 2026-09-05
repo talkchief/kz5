@@ -81,6 +81,13 @@ confirmation_events_are_fail_closed_test() ->
                    confirming, <<"CHANNEL_EXECUTE_COMPLETE">>, undefined)).
 
 returned_confirmation_media_is_language_safe_test() ->
+    ok = meck:new(kz_datamgr, [passthrough, no_link]),
+    meck:expect(kz_datamgr, open_cache_doc, fun(_, _) -> {error, not_found} end),
+    try returned_confirmation_media_is_language_safe()
+    after meck:unload(kz_datamgr)
+    end.
+
+returned_confirmation_media_is_language_safe() ->
     English = kapps_call:set_language(<<"en_US">>, original_call()),
     ?assertEqual({ok, <<"acdc-callback-returned-confirmation">>},
                  acdc_callback_caller:confirmation_prompt(queue(), English)),
