@@ -32,3 +32,8 @@ python3 scripts/test-acdc-source-ownership.py
 bash scripts/test-acdc-unit.sh
 bash scripts/test-acdc-strategies.sh
 ```
+
+The outbound-agent regression covers a delayed queue satisfaction event during
+multiple direct calls, readiness after the final hangup, preservation of an
+existing pause and application of a pending logout. These checks run in
+isolated processes and do not deploy or replace live BEAMs.

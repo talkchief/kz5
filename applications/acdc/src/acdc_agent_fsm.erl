@@ -1369,8 +1369,11 @@ outbound('cast', {'member_connect_win', JObj, 'same_node'}, #state{agent_listene
     acdc_agent_listener:member_connect_retry(AgentListener, JObj),
     {'next_state', 'outbound', State};
 outbound('cast', {'member_connect_satisfied', _}, State) ->
-    lager:info("unexpected connect_satisfied"),
-    {'next_state', 'wrapup', State};
+    %% A queue offer can finish after the agent switched to a direct call.
+    %% Keep tracking that call until hangup; entering wrapup here would leave
+    %% no wrapup timer to restore availability or apply pending status updates.
+    lager:debug("ignoring connect_satisfied while on outbound call"),
+    {'next_state', 'outbound', State};
 outbound('cast', {'originate_uuid', ACallId, ACtrlQ}, #state{agent_listener=AgentListener}=State) ->
     acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
     {'next_state', 'outbound', State};
