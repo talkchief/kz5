@@ -1,13 +1,28 @@
 'use strict';
 
 // Pure authoring-time building block. No files, provider, native SAY, playback,
-// account lookup or runtime fallback. AR remains required, not implemented.
+// account lookup or runtime fallback. Grammar support is NOT audio readiness.
 const VERSION = 'acdc-cardinal-v1';
 const MAX_NUMBER = 999999999;
 const MAX_TOKENS = 14;
-const MAX_TOKENS_BY_LOCALE = Object.freeze({'en-us': 14, 'es-es': 14, 'fr-fr': 8, 'he-il': 11});
+const MAX_TOKENS_BY_LOCALE = Object.freeze({'en-us': 14, 'es-es': 14, 'fr-fr': 8, 'he-il': 11, 'ar-sa': 9});
 const REQUIRED_LOCALES = Object.freeze(['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa']);
-const IMPLEMENTED_LOCALES = Object.freeze(['en-us', 'es-es', 'fr-fr', 'he-il']);
+const IMPLEMENTED_LOCALES = Object.freeze(['en-us', 'es-es', 'fr-fr', 'he-il', 'ar-sa']);
+const ARABIC_CONTEXT = 'msa-masculine-nominative-number-label';
+const ARABIC_DELIVERY = 'pausal-chunks';
+// Provisional authoring text: each recording ends at a deliberate pause.
+// Internal construct/case endings are part of WHOLE scale phrases; no WAV or
+// ta-marbuta ending is spliced. Intro/context and listening still need review.
+const arSmall = ['صِفْر', 'وَاحِد', 'اِثْنَان', 'ثَلَاثَة', 'أَرْبَعَة', 'خَمْسَة',
+  'سِتَّة', 'سَبْعَة', 'ثَمَانِيَة', 'تِسْعَة', 'عَشَرَة', 'أَحَدَ عَشَر',
+  'اِثْنَا عَشَر', 'ثَلَاثَةَ عَشَر', 'أَرْبَعَةَ عَشَر', 'خَمْسَةَ عَشَر',
+  'سِتَّةَ عَشَر', 'سَبْعَةَ عَشَر', 'ثَمَانِيَةَ عَشَر', 'تِسْعَةَ عَشَر'];
+const arTens = ['عِشْرُون', 'ثَلَاثُون', 'أَرْبَعُون', 'خَمْسُون', 'سِتُّون',
+  'سَبْعُون', 'ثَمَانُون', 'تِسْعُون'];
+const arHundreds = ['مِئَة', 'مِئَتَان', 'ثَلَاثُمِئَة', 'أَرْبَعُمِئَة', 'خَمْسُمِئَة',
+  'سِتُّمِئَة', 'سَبْعُمِئَة', 'ثَمَانِمِئَة', 'تِسْعُمِئَة'];
+const arHundredsBeforeScale = ['مِئَةُ', 'مِئَتَا', 'ثَلَاثُمِئَةِ', 'أَرْبَعُمِئَةِ',
+  'خَمْسُمِئَةِ', 'سِتُّمِئَةِ', 'سَبْعُمِئَةِ', 'ثَمَانِمِئَةِ', 'تِسْعُمِئَةِ'];
 // This is NOT a masculine counted-place or ordinal grammar. Existing queue
 // introductions require a separate context review; this module changes none.
 const HEBREW_CONTEXT = 'abstract-number-label-feminine';
@@ -124,6 +139,36 @@ for (const [role, base, joined, multiplier, kind, scale] of [
 });
 hebrewRecord('million', 'מִילְיוֹן', 'whole-scale', 1, 1000000);
 hebrewRecord('two-million', 'שְׁנֵי מִילְיוֹן', 'whole-scale', 2, 1000000);
+function arabicRecord(role, text, kind, value, scale, joined = false) {
+  // Hamzat al-wasl is not restarted after the attached conjunction. This
+  // defines a new whole recording transcript, never an audio transformation.
+  const transcript = joined ? 'وَ' + text.replace(/^اِ/, 'ا') : text;
+  records.push(Object.freeze({catalog_version: VERSION, locale: 'ar-sa', id: `${VERSION}-${role}`,
+    role, transcript, kind, value, ...(scale === undefined ? {} : {scale}), joined,
+    grammatical_context: ARABIC_CONTEXT, recording_delivery: ARABIC_DELIVERY,
+    authoring_status: 'provisional-needs-language-review'}));
+}
+function arabicPair(role, text, kind, value, scale, includeJoined = true) {
+  arabicRecord(role, text, kind, value, scale);
+  if (includeJoined) arabicRecord(`joined-${role}`, text, kind, value, scale, true);
+}
+arSmall.forEach((text, number) => arabicPair(`number-${number}`, text, 'number', number, undefined, number !== 0));
+arTens.forEach((text, index) => arabicPair(`number-${(index + 2) * 10}`, text, 'number', (index + 2) * 10));
+arHundreds.forEach((text, index) => arabicPair(`number-${(index + 1) * 100}`, text, 'number', (index + 1) * 100));
+for (const [scale, singular, dual, plural, accusative] of [
+  [1000, 'أَلْف', 'أَلْفَان', 'آلَاف', 'أَلْفًا'],
+  [1000000, 'مِلْيُون', 'مِلْيُونَان', 'مَلَايِين', 'مِلْيُونًا']
+]) {
+  for (let number = 1; number <= 19; number++) {
+    const text = number === 1 ? singular : number === 2 ? dual : number <= 10
+      ? `${arSmall[number]}ُ ${plural}` : `${arSmall[number]}َ ${accusative}`;
+    arabicPair(`scale-${scale}-small-${number}`, text, 'additive-scale', number, scale);
+  }
+  arTens.forEach((text, index) => arabicPair(`scale-${scale}-decade-${(index + 2) * 10}`,
+    `${text}َ ${accusative}`, 'additive-scale-tail', (index + 2) * 10, scale));
+  arHundredsBeforeScale.forEach((text, index) => arabicPair(`scale-${scale}-hundred-${(index + 1) * 100}`,
+    `${text} ${singular}`, 'additive-scale', (index + 1) * 100, scale, scale === 1000));
+}
 const PROMPTS = Object.freeze(records);
 const lookup = new Map(PROMPTS.map(entry => [`${entry.locale}/${entry.id}`, entry]));
 
@@ -208,10 +253,30 @@ function hebrewNumber(number) {
   atoms.push(...hebrewAtoms(number % 1000, 'feminine'));
   return hebrewAdd(atoms);
 }
+function arabicNumber(number) {
+  if (!number) return ['number-0'];
+  const roles = [];
+  for (const scale of [1000000, 1000, 1]) {
+    const group = Math.floor(number / scale) % 1000;
+    const hundreds = Math.floor(group / 100) * 100, rest = group % 100;
+    // Explicit sum: 101K = hundred-thousand + one-thousand, not a
+    // coefficient101 followed by a guessed singular/dual scale ending.
+    if (hundreds) roles.push(scale === 1 ? `number-${hundreds}` : `scale-${scale}-hundred-${hundreds}`);
+    if (rest >= 20) {
+      // Arabic units precede decades. The whole decade+scale recording
+      // closes only this unit/decade coefficient, not earlier scaled sums.
+      if (rest % 10) roles.push(`number-${rest % 10}`);
+      const decade = Math.floor(rest / 10) * 10;
+      roles.push(scale === 1 ? `number-${decade}` : `scale-${scale}-decade-${decade}`);
+    } else if (rest) roles.push(scale === 1 ? `number-${rest}` : `scale-${scale}-small-${rest}`);
+  }
+  return roles.map((role, index) => index ? `joined-${role}` : role);
+}
 function compose(number, locale) {
   assertLocale(locale); assertNumber(number);
   const roles = [];
   if (locale === 'he-il') roles.push(...hebrewNumber(number));
+  else if (locale === 'ar-sa') roles.push(...arabicNumber(number));
   else if (number === 0) roles.push(locale === 'fr-fr' ? 'terminal-0' : 'number-0');
   for (const scale of [1000000, 1000, 1]) {
     const coefficient = Math.floor(number / scale) % 1000;
@@ -258,4 +323,5 @@ function plan(locale) {
   return PROMPTS.filter(entry => locale === undefined || entry.locale === locale).map(entry => ({...entry}));
 }
 module.exports = Object.freeze({VERSION, MAX_NUMBER, MAX_TOKENS, MAX_TOKENS_BY_LOCALE, REQUIRED_LOCALES,
-  IMPLEMENTED_LOCALES, FRENCH_SCALED_TAILS, HEBREW_CONTEXT, PROMPTS, CardinalError, compose, tokens, transcript, plan});
+  IMPLEMENTED_LOCALES, FRENCH_SCALED_TAILS, HEBREW_CONTEXT, ARABIC_CONTEXT, ARABIC_DELIVERY,
+  PROMPTS, CardinalError, compose, tokens, transcript, plan});

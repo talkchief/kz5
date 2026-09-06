@@ -26,7 +26,7 @@ function entries(number, locale) {
   });
   // Independent numeric interpretation: multipliers and descending scale
   // boundaries, not the compositor's decimal splitting or language branches.
-  let total = 0, subtotal = 0, priorScale = Infinity;
+  let total = 0, subtotal = 0, priorScale = Infinity, priorArabicCoefficient = 0;
   for (const entry of resultEntries) {
     if (entry.kind === 'number') subtotal += entry.value;
     else if (entry.kind === 'hundred-multiplier') {
@@ -44,6 +44,19 @@ function entries(number, locale) {
       assert(entry.scale < priorScale); priorScale = entry.scale;
       if (subtotal) assert.equal(entry.value, 1, 'only singular scale recording can close a preceding coefficient');
       total += (subtotal || entry.value) * entry.scale; subtotal = 0;
+    } else if (entry.kind === 'additive-scale' || entry.kind === 'additive-scale-tail') {
+      assert.equal(locale, 'ar-sa'); assert([1000, 1000000].includes(entry.scale));
+      assert(entry.scale <= priorScale, 'Arabic explicit scaled sums still descend');
+      if (entry.scale === priorScale) {
+        assert(priorArabicCoefficient >= 100 && priorArabicCoefficient % 100 === 0);
+        assert(entry.value < 100, 'same-scale continuation can only be the remainder after whole hundreds');
+      }
+      if (entry.kind === 'additive-scale-tail') {
+        assert(entry.value >= 20 && entry.value <= 90 && entry.value % 10 === 0);
+        assert(subtotal >= 0 && subtotal <= 9, 'decade tail closes only its preceding unit');
+      } else assert.equal(subtotal, 0, 'whole scale phrase cannot consume unscaled material');
+      total += (subtotal + entry.value) * entry.scale; subtotal = 0;
+      priorScale = entry.scale; priorArabicCoefficient = entry.value;
     } else assert.equal(entry.kind, 'conjunction');
   }
   assert.equal(total + subtotal, number, 'token semantics must preserve the entire integer');
@@ -61,20 +74,23 @@ function entries(number, locale) {
 }
 try {
   assert.equal(c.VERSION, 'acdc-cardinal-v1'); assert.equal(c.MAX_NUMBER, 999999999);
-  assert.equal(c.PROMPTS.length, 376); assert.equal(c.plan('en-us').length, 31); assert.equal(c.plan('es-es').length, 53);
+  assert.equal(c.PROMPTS.length, 584); assert.equal(c.plan('en-us').length, 31); assert.equal(c.plan('es-es').length, 53);
   assert.equal(c.plan('fr-fr').length, 161);
   assert.equal(c.plan('he-il').length, 131);
-  assert.equal(byKey.size, 376); assert(Object.isFrozen(c)); assert(Object.isFrozen(c.PROMPTS));
+  assert.equal(c.plan('ar-sa').length, 208);
+  assert.equal(byKey.size, 584); assert(Object.isFrozen(c)); assert(Object.isFrozen(c.PROMPTS));
   assert.deepEqual(c.REQUIRED_LOCALES, ['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa']);
-  assert.deepEqual(c.IMPLEMENTED_LOCALES, ['en-us', 'es-es', 'fr-fr', 'he-il']);
-  assert.deepEqual(c.MAX_TOKENS_BY_LOCALE, {'en-us': 14, 'es-es': 14, 'fr-fr': 8, 'he-il': 11});
+  assert.deepEqual(c.IMPLEMENTED_LOCALES, ['en-us', 'es-es', 'fr-fr', 'he-il', 'ar-sa']);
+  assert.deepEqual([...c.IMPLEMENTED_LOCALES].sort(), [...c.REQUIRED_LOCALES].sort());
+  assert.deepEqual(c.MAX_TOKENS_BY_LOCALE, {'en-us': 14, 'es-es': 14, 'fr-fr': 8, 'he-il': 11, 'ar-sa': 9});
   assert(Object.isFrozen(c.MAX_TOKENS_BY_LOCALE));
   for (const entry of c.PROMPTS) {
     assert(Object.isFrozen(entry)); assert.equal(entry.catalog_version, c.VERSION);
     assert.equal(entry.id, c.VERSION + '-' + entry.role); assert(!/[0-9]/.test(entry.transcript));
-    assert(['number', 'hundred-multiplier', 'scale', 'conjunction', 'scaled-tail', 'whole-scale'].includes(entry.kind));
+    assert(['number', 'hundred-multiplier', 'scale', 'conjunction', 'scaled-tail', 'whole-scale',
+      'additive-scale', 'additive-scale-tail'].includes(entry.kind));
   }
-  report('versioned immutable exact31 EN +53 ES +161 FR +131 HE inventory; all five locales remain required');
+  report('versioned immutable exact31 EN +53 ES +161 FR +131 HE +208 AR inventory; all five pure grammars present');
   const golden = {
     'en-us': [[0, 'zero'], [1, 'one'], [19, 'nineteen'], [21, 'twenty one'], [40, 'forty'],
       [100, 'one hundred'], [101, 'one hundred one'], [110, 'one hundred ten'], [121, 'one hundred twenty one'],
@@ -319,17 +335,113 @@ try {
   for (let group = 0; group <= 999; group++) heCheck(group * 1000000 + ((group * 37) % 1000) * 1000 + ((group * 91) % 1000));
   assert.equal(c.tokens(999999999, 'he-il').length, 11);
   report('10648 Hebrew boundary cross-products +1000 mixed cases; nested conjunctions and strict11-token bound');
+  // Independent Arabic spelling/reference tables. Full pointed goldens below
+  // separately check construct endings and hamzat al-wasl; plain spelling is
+  // not used to claim pronunciation or approved pausal delivery.
+  const arBare = text => text.replace(/[\u064b-\u065f\u0670]/g, '');
+  const arWords = ['صفر', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة',
+    'عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+  const arDecades = ['عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+  const arCenturies = ['مئة', 'مئتان', 'ثلاثمئة', 'أربعمئة', 'خمسمئة', 'ستمئة', 'سبعمئة', 'ثمانمئة', 'تسعمئة'];
+  const arScaleHundreds = ['مئة', 'مئتا', 'ثلاثمئة', 'أربعمئة', 'خمسمئة', 'ستمئة', 'سبعمئة', 'ثمانمئة', 'تسعمئة'];
+  const arPlan = c.plan('ar-sa');
+  assert.equal(c.ARABIC_CONTEXT, 'msa-masculine-nominative-number-label');
+  assert.equal(c.ARABIC_DELIVERY, 'pausal-chunks');
+  assert.equal(arPlan.filter(entry => entry.joined).length, 99);
+  assert.equal(arPlan.filter(entry => entry.kind === 'number').length, 73);
+  assert.equal(arPlan.filter(entry => entry.kind === 'additive-scale').length, 103);
+  assert.equal(arPlan.filter(entry => entry.kind === 'additive-scale-tail').length, 32);
+  for (const entry of arPlan) {
+    assert.equal(entry.grammatical_context, c.ARABIC_CONTEXT);
+    assert.equal(entry.recording_delivery, 'pausal-chunks');
+    assert.equal(entry.authoring_status, 'provisional-needs-language-review');
+    assert.equal(entry.joined, entry.role.startsWith('joined-'));
+    assert(/[\u064b-\u0652]/.test(entry.transcript));
+    assert(!['and', 'joined-number-0'].includes(entry.role));
+    assert(!entry.role.startsWith('joined-scale-1000000-hundred-'), 'unreachable million-hundred join omitted');
+    if (entry.joined) assert(entry.transcript.startsWith('وَ'));
+  }
+  for (let number = 0; number < 20; number++) assert.equal(arBare(c.transcript(number, 'ar-sa')), arWords[number]);
+  const arPointed = [
+    [0, 'صِفْر'], [1, 'وَاحِد'], [2, 'اِثْنَان'], [11, 'أَحَدَ عَشَر'], [12, 'اِثْنَا عَشَر'],
+    [22, 'اِثْنَان وَعِشْرُون'], [102, 'مِئَة وَاثْنَان'], [112, 'مِئَة وَاثْنَا عَشَر'],
+    [1000, 'أَلْف'], [2000, 'أَلْفَان'], [3000, 'ثَلَاثَةُ آلَاف'], [8000, 'ثَمَانِيَةُ آلَاف'],
+    [10000, 'عَشَرَةُ آلَاف'], [11000, 'أَحَدَ عَشَرَ أَلْفًا'], [12000, 'اِثْنَا عَشَرَ أَلْفًا'],
+    [13000, 'ثَلَاثَةَ عَشَرَ أَلْفًا'], [20000, 'عِشْرُونَ أَلْفًا'], [100000, 'مِئَةُ أَلْف'],
+    [101000, 'مِئَةُ أَلْف وَأَلْف'], [102000, 'مِئَةُ أَلْف وَأَلْفَان'],
+    [103000, 'مِئَةُ أَلْف وَثَلَاثَةُ آلَاف'], [200000, 'مِئَتَا أَلْف'],
+    [300000, 'ثَلَاثُمِئَةِ أَلْف'], [800000, 'ثَمَانِمِئَةِ أَلْف'],
+    [2000000, 'مِلْيُونَان'], [3000000, 'ثَلَاثَةُ مَلَايِين'],
+    [12000000, 'اِثْنَا عَشَرَ مِلْيُونًا'], [200000000, 'مِئَتَا مِلْيُون']
+  ];
+  for (const [number, text] of arPointed) { entries(number, 'ar-sa'); assert.equal(c.transcript(number, 'ar-sa'), text); }
+  const arGolden = [
+    [19, 'تسعة عشر'], [21, 'واحد وعشرون'], [99, 'تسعة وتسعون'], [100, 'مئة'], [101, 'مئة وواحد'],
+    [120, 'مئة وعشرون'], [121, 'مئة وواحد وعشرون'], [200, 'مئتان'], [999, 'تسعمئة وتسعة وتسعون'],
+    [1001, 'ألف وواحد'], [1002, 'ألف واثنان'], [1011, 'ألف وأحد عشر'], [1012, 'ألف واثنا عشر'],
+    [1100, 'ألف ومئة'], [1200, 'ألف ومئتان'], [2001, 'ألفان وواحد'], [3001, 'ثلاثة آلاف وواحد'],
+    [21000, 'واحد وعشرون ألفا'], [22000, 'اثنان وعشرون ألفا'], [100001, 'مئة ألف وواحد'],
+    [101001, 'مئة ألف وألف وواحد'], [102002, 'مئة ألف وألفان واثنان'],
+    [110000, 'مئة ألف وعشرة آلاف'], [111000, 'مئة ألف وأحد عشر ألفا'],
+    [112000, 'مئة ألف واثنا عشر ألفا'], [120000, 'مئة ألف وعشرون ألفا'],
+    [124000, 'مئة ألف وأربعة وعشرون ألفا'], [201000, 'مئتا ألف وألف'], [202000, 'مئتا ألف وألفان'],
+    [1000000, 'مليون'], [1001000, 'مليون وألف'], [1001001, 'مليون وألف وواحد'],
+    [1200000, 'مليون ومئتا ألف'], [2002000, 'مليونان وألفان'], [3003000, 'ثلاثة ملايين وثلاثة آلاف'],
+    [21000000, 'واحد وعشرون مليونا'], [101000000, 'مئة مليون ومليون'],
+    [102000000, 'مئة مليون ومليونان'], [201000000, 'مئتا مليون ومليون'],
+    [202000000, 'مئتا مليون ومليونان'],
+    [121121121, 'مئة مليون وواحد وعشرون مليونا ومئة ألف وواحد وعشرون ألفا ومئة وواحد وعشرون'],
+    [999999999, 'تسعمئة مليون وتسعة وتسعون مليونا وتسعمئة ألف وتسعة وتسعون ألفا وتسعمئة وتسعة وتسعون']
+  ];
+  for (const [number, text] of arGolden) { entries(number, 'ar-sa'); assert.equal(arBare(c.transcript(number, 'ar-sa')), text); }
+  report(`${arPointed.length} Arabic pointed +${arGolden.length} full-number goldens; exact208 provisional roles and whole scale morphology`);
+  function arReference(number) {
+    const phrases = [];
+    for (const [scale, singular, dual, plural] of [[1000000, 'مليون', 'مليونان', 'ملايين'],
+      [1000, 'ألف', 'ألفان', 'آلاف'], [1, '', '', '']]) {
+      const group = Math.floor(number / scale) % 1000, hundreds = Math.floor(group / 100), rest = group % 100;
+      if (hundreds) phrases.push(scale === 1 ? arCenturies[hundreds - 1] : arScaleHundreds[hundreds - 1] + ' ' + singular);
+      if (!rest) continue;
+      if (scale !== 1 && rest <= 2) phrases.push(rest === 1 ? singular : dual);
+      else if (rest < 20) phrases.push(arWords[rest] + (scale === 1 ? '' : ' ' + (rest <= 10 ? plural : singular + 'ا')));
+      else {
+        if (rest % 10) phrases.push(arWords[rest % 10]);
+        phrases.push(arDecades[Math.floor(rest / 10) - 2] + (scale === 1 ? '' : ' ' + singular + 'ا'));
+      }
+    }
+    return phrases.map((phrase, index) => index ? 'و' + phrase : phrase).join(' ') || 'صفر';
+  }
+  const reachableArabic = new Set();
+  function arCheck(number) {
+    const result = entries(number, 'ar-sa'); result.forEach(entry => reachableArabic.add(entry.id));
+    assert.equal(arBare(c.transcript(number, 'ar-sa')), arReference(number));
+    for (let index = 0; index < result.length; index++) {
+      assert.equal(result[index].joined, index > 0, 'every later additive term has attached whole-recording wa');
+      if (result[index].kind === 'additive-scale-tail' && index && result[index - 1].kind === 'number') {
+        assert(result[index - 1].value >= 1 && result[index - 1].value <= 9, 'only an Arabic unit precedes the whole decade/scale tail');
+      }
+    }
+  }
+  for (let number = 0; number <= 999; number++) {
+    for (const scale of [1, 1000, 1000000]) arCheck(number * scale);
+    arCheck(1000000 + number); arCheck(1000000 + number * 1000); arCheck(1000001 + number * 1000);
+  }
+  assert.deepEqual([...reachableArabic].sort(), arPlan.map(entry => entry.id).sort(), 'all208 proposed recordings reachable');
+  report('6000 exhaustive Arabic group/scale/join cases; exact repeated-scale semantics, singular/dual/plural and all208-role reachability');
+  const arBoundaries = [0, 1, 2, 3, 8, 10, 11, 12, 19, 20, 21, 22, 99, 100, 101, 102, 110, 111, 120, 200, 201, 999];
+  for (const million of arBoundaries) for (const thousand of arBoundaries) for (const unit of arBoundaries) {
+    arCheck(million * 1000000 + thousand * 1000 + unit);
+  }
+  for (let group = 0; group <= 999; group++) arCheck(group * 1000000 + ((group * 37) % 1000) * 1000 + ((group * 91) % 1000));
+  assert.equal(c.tokens(999999999, 'ar-sa').length, 9);
+  report('10648 Arabic boundary cross-products +1000 mixed cases; complete range and strict9-token bound, not audio acceptance');
   for (const number of [-1, 1000000000, 1.5, NaN, Infinity, -Infinity, '1', null, undefined, true, 1n, {}, []]) {
     for (const locale of c.IMPLEMENTED_LOCALES) assert.throws(() => c.compose(number, locale), expectedCode('CARDINAL_NUMBER_OUT_OF_RANGE'));
-  }
-  for (const locale of ['ar-sa']) {
-    assert.throws(() => c.compose(1, locale), expectedCode('CARDINAL_LANGUAGE_NOT_IMPLEMENTED'));
-    assert.throws(() => c.plan(locale), expectedCode('CARDINAL_LANGUAGE_NOT_IMPLEMENTED'));
   }
   for (const locale of [undefined, null, 'en', 'EN-US', 'en_us', 'es', 'de-de', {}, ['en-us']]) {
     assert.throws(() => c.compose(1, locale), expectedCode('CARDINAL_LANGUAGE_UNSUPPORTED'));
   }
-  const copy = c.plan(); copy[0].transcript = 'not retained'; copy.pop(); assert.equal(c.plan().length, 376);
+  const copy = c.plan(); copy[0].transcript = 'not retained'; copy.pop(); assert.equal(c.plan().length, 584);
   assert.equal(c.transcript(0, 'en-us'), 'zero');
   assert.throws(() => c.tokens(1, 'en-us').push('unknown'), TypeError);
   report('invalid ranges/locales fail closed; no aliases/defaults or caller mutation');
@@ -338,12 +450,13 @@ try {
   assert.equal(isolated.module.exports.transcript(999999999, 'es-es'), c.transcript(999999999, 'es-es'));
   assert.equal(isolated.module.exports.transcript(999999999, 'fr-fr'), c.transcript(999999999, 'fr-fr'));
   assert.equal(isolated.module.exports.transcript(999999999, 'he-il'), c.transcript(999999999, 'he-il'));
-  assert.equal(isolated.module.exports.plan().length, 376);
+  assert.equal(isolated.module.exports.transcript(999999999, 'ar-sa'), c.transcript(999999999, 'ar-sa'));
+  assert.equal(isolated.module.exports.plan().length, 584);
   report('entire module imports/composes in VM without require/process/files/network/provider globals');
 } finally {
   const after = Object.fromEntries(pinned.map(file => [file, hash(file)]));
   assert.deepEqual(after, before, 'source pins stable, including on failure');
-  console.log(JSON.stringify({schema_version: 1, stage: groups.length === 12 ? 'complete' : 'incomplete',
+  console.log(JSON.stringify({schema_version: 1, stage: groups.length === 15 ? 'complete' : 'incomplete',
     passed_groups: groups, compositions_checked: compositions, sources_sha256: after,
     artifact_generation: false, native_acceptance: false, full_five_locale_ready: false}));
 }

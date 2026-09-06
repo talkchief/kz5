@@ -1,6 +1,6 @@
 # Prerecorded queue cardinal numbers: finite-catalog design
 
-Status: design and isolated EN/ES/FR/HE source building block, **not runtime readiness**.
+Status: isolated five-language source building block, **not runtime readiness**.
 The release requirement remains EN/HE/FR/ES/AR, each covering every integer
 0..999999999 using one built-in female Gemini voice and recordings authored in
 this release. No native SAY, digit-spelling substitute for cardinals, runtime TTS,
@@ -13,12 +13,13 @@ separate digit-by-digit operation. Existing manifests/assets must not be rewritt
 ## Source contract and next action
 
 `scripts/acdc-cardinal-catalog.cjs` is a pure versioned authoring-time building
-block. Version `acdc-cardinal-v1` contains31 EN,53 ES,161 FR and131 HE logical recordings.
+block. Version `acdc-cardinal-v1` contains31 EN,53 ES,161 FR,131 HE and208 AR
+logical recordings (584 total). Arabic authoring text remains provisional.
 `compose(number, locale)` returns `{catalog_version, locale, number, token_ids}`;
 `tokens`, `transcript` and `plan` expose playback IDs, review text and the catalog.
 The module has no imports, I/O, provider, playback or account integration.
-Only exact `en-us`, `es-es`, `fr-fr` and `he-il` currently compose. Required but
-unimplemented `ar-sa` fails explicitly. This is not a reduced release scope.
+All five exact locales `en-us`, `es-es`, `fr-fr`, `he-il`, `ar-sa` now compose.
+Unknown locales and invalid numbers fail explicitly; there is no fallback.
 
 IDs are `acdc-cardinal-v1-<role>` with locale forming part of the media identity.
 They are distinct from historical `acdc-number-*` IDs; do not overwrite the
@@ -27,7 +28,7 @@ transcripts, context, request/response provenance and exact audio bytes. Existin
 digits may be reused only after their precise form and cadence are qualified;
 counts below do not silently assume reuse.
 
-Next: finish AR/HE transcript gates below, implement the remaining Arabic grammar,
+Next: finish AR/HE transcript and language-context gates below,
 freeze the reachable token catalog, author/verify every required WAV now, then
 integrate the catalog into canonical ACDC and the system-media importer. All
 existing/future accounts and subaccounts use these same shared recordings. The
@@ -244,71 +245,112 @@ cross-check, not a normative text oracle: its current conjunction helper omits
 vav for120, so it must not replace the explicit tests or Academy rules. These
 gates do not reduce the required full range or authorize fallback/native SAY.
 
-## AR historical draft: 103 roles, not approved
+## Implemented provisional AR catalog: 208 whole-context roles, no WAVs
 
-Provisional role accounting (not an approved generation manifest):
+The pure Arabic grammar covers every integer0..999999999 in the explicit context
+`msa-masculine-nominative-number-label` (`ARABIC_CONTEXT`). It is not a feminine
+counted-noun, ordinal, currency, dialect or oblique-case API. All208 entries carry
+`authoring_status: provisional-needs-language-review` and
+`recording_delivery: pausal-chunks` (`ARABIC_DELIVERY`). Adding an implemented
+locale does not approve its transcripts, introductions, audio or live playback.
 
-- Masculine/nominative number-label0..19:20; decades20..90:8;
-  nine free hundreds and nine construct-before-scale hundreds:18;
-  five scale forms for each of thousand/million:10. Base56.
-- Attached-wa variants:1..19:19; decades:8; free/construct hundreds:18;
-  one/two-thousand:2. Additional47. Draft total103.
+| Roles | Complete recording content | Count |
+| --- | --- | ---: |
+| `number-N`, `joined-number-N` | N=0..19,20,30,...90,100,200,...900; no joined zero | 73 |
+| `scale-S-small-N`, `joined-scale-S-small-N` | N=1..19; S=1000 or1000000 | 76 |
+| `scale-S-decade-N`, `joined-scale-S-decade-N` | N=20,30,...90; S=1000 or1000000 | 32 |
+| `scale-S-hundred-N` | N=100,200,...900; S=1000 or1000000 | 18 |
+| `joined-scale-1000-hundred-N` | N=100,200,...900; whole thousand phrases | 9 |
 
-The five scale roles distinguish one, dual nominative,3..10 plural,11..99
-singular accusative and exact-hundred genitive. Examples to freeze include
-ألف، ألفان، ثلاثة آلاف، أحد عشر ألفًا، مئة ألف; the analogous million forms
-include مليون، مليونان، ثلاثة ملايين. Units precede decades; compound11/12,
-hundreds, dual construct endings and conjunctions require actual contextual text.
+Total208 =109 plain +99 joined. No joined million-hundred roles exist: that
+component can only start the entire supported number. The earlier103-role draft
+was never an approved inventory; it relied on unqualified free/construct word
+joins. The implemented bank is a bounded whole-context alternative, **not a
+minimum proof**. Existing0..19 telephone/cardinal recordings are not assumed
+interchangeable, and no historical assets or manifests are overwritten.
 
-The103 count is **not established as sufficient**. In particular,101/102-scale
-composition and construct/pausal endings must be settled with exact grammatical
-and spoken goldens; those may require additional roles. Do not silently select a
-dialect, misuse accusative duals in a nominative frame, or certify a draft library
-merely because a third-party number converter emits it. Freeze the introduction's
-number-label context too. The previously cited Al Jazeera node21410 resolves to
-an oil-barrel lesson, not the intended grammar source; do not use it as evidence.
+Arabic reads units before decades, with attached wa on every later additive
+term. Whole teens distinguish standalone10 from compound11..19 and preserve
+nominative12. Whole1/2 scale phrases use the singular or nominative dual;
+3..10 use the plural scale noun in the genitive;11..99 use singular accusative.
+Whole-hundred scale phrases preserve the internal construct endings, including
+مِئَتَا أَلْف rather than free-standing مِئَتَان. The million equivalents are
+recorded separately. No suffix, ta-marbuta, dual nun or case ending is modified
+at playback. Attached-wa recordings are also whole clips; the joined spelling
+does not restart hamzat al-wasl in اثنان / اثنا عشر.
 
-### Arabic continuation checkpoint — research only, September6
+For each nonzero scale group, emit its whole hundred-times-scale phrase first,
+then its scaled remainder. A remainder1..19 is one complete scale phrase.
+For21..99, emit the unit and then the complete decade-plus-scale phrase; an exact
+decade uses only that complete phrase. Finally emit unscaled hundreds and the
+unit/decade or teen remainder. This requires no more than three recordings per
+scale group, hence at most9 overall. A catalog or test bound is not a measured
+duration or native media-completion guarantee.
 
-No Arabic catalog/test implementation, generation or runtime edit was made.
-The researcher proposed208 whole-context roles to avoid the unresolved joins
-in the103-role draft. This is **not a frozen manifest, minimum proof or approved
-transcript set**:
+Typed metadata distinguishes `additive-scale` (one complete coefficient×scale)
+from `additive-scale-tail` (a decade-plus-scale phrase closing only a preceding
+unit0..9). For example124000 is [whole100000, joined4, joined20000-tail], whose
+meaning is100000+(4+20)×1000. Do not treat the already scaled hundred as part of
+the tail coefficient. Same-scale addition is permitted only for this whole
+hundred followed by its remainder; scales otherwise descend. The tests retain
+stricter earlier-language scale semantics rather than globally relaxing them.
 
-- 73 unscaled roles:37 plain (0..19,8 decades,9 whole hundreds) and36 joined
-  counterparts excluding zero.
-- 76 whole1..19 ×2 scale phrases, plain and joined.
-- 32 whole-decade ×2 scale phrases, plain and joined.
-- 27 whole-hundred ×scale phrases:18 plain plus9 joined thousand phrases;
-  joined million-hundreds would be unreachable under the proposed ordering.
+Examples (unpointed spelling for readability):
 
-The estimated9-token maximum and reachability have not been implemented or
-tested. Proposed101000 = `مئة ألف وألف`,102000 = `مئة ألف وألفان` apply an
-additive repeated-scale rule by **inference**, not a directly sourced example.
-Whole phrases preserve contextual case/dual/plural forms rather than splicing
-isolated ta-marbuta endings. Pausal delivery and conjunction cadence still need
-qualified review, as do all vocalized authoring transcripts.
+- 21: واحد وعشرون;101: مئة وواحد;102: مئة واثنان.
+- 2000: ألفان;3000: ثلاثة آلاف;12000: اثنا عشر ألفًا.
+- 101000: مئة ألف وألف;102000: مئة ألف وألفان.
+- 103000: مئة ألف وثلاثة آلاف;124000: مئة ألف وأربعة وعشرون ألفًا.
+- 201000: مئتا ألف وألف;202000: مئتا ألف وألفان.
+- 101000000: مئة مليون ومليون;102000000: مئة مليون ومليونان.
+- 1001001: مليون وألف وواحد.
 
-The proposed MSA masculine/nominative numeric-label context must denote the
-**current queue position**, not an ordinal, ticket number or callers ahead.
-Existing `scripts/acdc-language-catalog.cjs` intro `مَوْقِعُكَ الحالي هُوَ.` and
-alternative `أَنْتَ في المَوْقِعِ.` do not explicitly introduce a number.
-Compatibility is unresolved; no replacement intro has been selected or recorded.
+The101/102 treatment is an explicit additive-rule **inference**, not a directly
+sourced quote of those values. It deliberately avoids inventing a coefficient101
+or102 followed by an invariant scale. Both value and full phrasing are included
+in goldens and remain subject to qualified Arabic review.
 
-Research handoff references (retrieved by the language research agent; they do
-not approve the proposed recordings):
+### Arabic context, pausal delivery and acceptance gates
 
-- [Al Jazeera grammar answer](https://learning.aljazeera.net/ar/node/590), covering
-  genitive nouns after hundred/thousand/million and linking the actual
-  [number-agreement lesson](https://learning.aljazeera.net/tr/languageofmedia/جائزة-الشيخ-حمد-للترجمة-1).
-- [Virtual Academy2018 adopted decision](https://almajma3.blogspot.com/2018/04/blog-post_20.html),
-  covering large-to-small ordering and an explicit100K+24K repeated-scale
-  example. This is the Virtual Academy, not a Cairo Academy decision.
+The existing immutable intro `مَوْقِعُكَ الحالي هُوَ.` and alternate
+`أَنْتَ في المَوْقِعِ.` do not explicitly introduce a number. The new abstract
+cardinal context must denote the **current queue position**, not a ticket number,
+an ordinal or a count of callers ahead. Compatibility remains unresolved; no
+replacement introduction has been selected, authored or integrated. If a new
+explicit-number frame is needed, give it a new versioned identity and preserve
+all historical WAVs/transcripts/provenance.
 
-Next: independently review that evidence/context, implement exact grammar and
-goldens, prove full-range coverage and role reachability, review transcripts,
-then author missing immutable WAVs once. Do not start paid generation from the
-provisional role count alone.
+The authored text intentionally leaves the final case vowel off pausal chunks;
+internal scale-phrase vowels remain explicit. Accusative ألفًا / مليونًا retains
+its final pausal alif. A terminal تاء مربوطة is not interchangeable with a
+connected construct ending. Therefore authoring must preserve deliberate brief
+pauses between these complete recordings; stripping all boundary silence and
+calling the result continuous inflected speech is not approved. The pure module
+does not enforce this delivery or call a speech provider. Qualified review must
+approve the complete vocalized table and natural number-reading cadence, then
+listening must confirm the actual clips and long joined playlists. If that
+delivery is not acceptable, revise/version the contextual catalog before paid
+generation rather than silently replacing morphology or reducing the range.
+
+The new isolated tests include28 pointed and42 full-number goldens, all0..999
+group/scale and outer-join contexts, exact208-role reachability, independent
+numeric/full-text checks,22³ boundary cross-products and1000 mixed values. They
+preserve the prior61,747 EN/ES/FR/HE composition checks. Guarded run20652 passed
+this scope as recorded below; native/audio acceptance remains separate.
+
+Primary grammar evidence rechecked on2026-09-06:
+
+- [Al Jazeera grammar answer](https://learning.aljazeera.net/ar/node/590) and its
+  [actual number-agreement lesson](https://learning.aljazeera.net/tr/languageofmedia/جائزة-الشيخ-حمد-للترجمة-1)
+  explain number gender and singular/plural genitive or accusative complements.
+- [Virtual Academy2018 adopted decision](https://almajma3.blogspot.com/2018/04/blog-post_20.html)
+  supports large-to-small order and includes the100K+24K repeated-scale example.
+  This is the Virtual Academy's own decision, not a Cairo Academy decision.
+
+The historical Al Jazeera node21410 citation resolves to an oil-barrel lesson,
+not the intended grammar source. General pausal rules alone do not prove that
+every proposed clip boundary sounds natural in queue announcements. No source
+citation is an automatic paid-transcript or listening approval.
 
 ## Tests and acceptance boundaries
 
@@ -359,6 +401,25 @@ removing checks. Source/test pins remained stable. Exact vocalization and the
 current-position introduction/context still require review before paid WAV
 generation; the existing immutable introduction was not changed. Arabic remains
 unimplemented; this does not establish four-language runtime or audio readiness.
+
+Arabic extension run20652 exited0 on September6 under the128-MiB cap,
+768-MiB reserve,60-second deadline and network-isolated resource guard. All15
+groups passed with79,465 semantic composition checks, retaining61,747 preceding
+EN/ES/FR/HE checks and adding28 pointed plus42 full-number Arabic goldens,
+6,000 group/scale/join cases,10,648 boundary cross-products and1,000 mixed
+values. All208 Arabic roles were reachable and the9-token maximum held.
+Catalog SHA-256:
+`402be11bfb4da7d2113c06940d41a362cd89b159436fefe092c13f4b56c2f855`;
+test SHA-256:
+`2de2daf5e19fc6fb6b95ea8ce391c612aa886b5a876bf20a8e6588b9b58b7006`.
+Both source/test pins remained stable; the pre-run design hash
+`6d110dffd1975216ccf3f569afa79b5dcfc30480b17eb073e70e0f2240f67033`
+was also unchanged before this evidence-only documentation update. The terminal
+receipt reported `stage: complete`, `artifact_generation: false`,
+`native_acceptance: false` and `full_five_locale_ready: false`. All five pure
+grammars are now covered by this isolated regression; no WAVs were generated,
+no runtime paths changed, and provisional Arabic/Hebrew transcript, pausal
+delivery, current-position introduction and listening gates remain open.
 
 Reproduce from a prepared host with Node18 or later:
 
