@@ -150,6 +150,12 @@ These cover source completion behavior and link closure, not loader lifecycle,
 full native playback, prompt/voice acceptance or deployment. Public admission
 remains closed; the installer/real-call acceptance tasks remain open.
 
+Loader fixture run `610fd9` passes eight groups/39 fault scenarios in plain and
+ASan+UBSan modes, including unload/global-drain races and poisoned cleanup.
+It uses exact source functions with local dependency/destructor doubles, not
+native module/session teardown. This narrows the remaining SAY acceptance gap
+but does not close live callback, prompt-language, deployment or installer tasks.
+
 The three recovery findings above were added from the operator's 2026-09-06
 review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
 delayed-notification regression verifies recovery after direct calls finish and

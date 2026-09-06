@@ -101,3 +101,29 @@ stopped at two previously unlisted APR declaration headers newly selected by
 the complete loader TU. Those headers were read and explicitly pinned before
 the successful rerun. All source, cached-object and selected dependency checks
 remain enabled. No live library was replaced, loaded or restarted.
+
+## Loader fault scenarios
+
+After full review of the extractor, dependency doubles, tests and runner,
+guarded run `610fd9` passes all eight groups/39 leaf scenarios in both plain and
+ASan+UBSan modes. The runner checks 108 selected compiler/tool dependencies and
+its source pins before/after execution. The cap was 320 MiB with a 768-MiB
+reserve, zero swap, 60-second outer deadline and separate network namespace.
+
+Evidence: `native-say-scope.MfDQMl/loader-lease-proof.jWyEMH/receipt.json`.
+SHA-256: `e2aec9212b984db9d14eeaf00c9d663cac85973d1502470bc5f5428c85ed09be`.
+
+Coverage includes balanced leases, full registry/serial exhaustion, acquisition
+and release lock faults, poisoned cleanup, foreign-thread/stale/duplicate/ABA
+release, normal/forced unload refusal, every admitted unload exit, and both
+remove-before-shutdown and failure-before-reinsertion races against global drain.
+The real extracted shutdown admission/drain prefix waits for active loads,
+unloads and owned SAY leases. Its destructor tail is a counted local effect,
+not actual native destruction. Recursive global shutdown remains unsupported:
+the fixture proves it self-waits rather than returning unsafe success, then
+uses a fixture-only escape. It does not make that misuse responsive in production.
+
+The root source/test snapshot is recorded in private `say-root-inputs.sha256`
+and was rechecked unchanged afterward. Full native session/module teardown,
+language-module fragment playback, real callback retries/DTMF and installer
+packaging remain open. No readiness/admission switch was enabled.
