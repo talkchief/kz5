@@ -60,17 +60,30 @@ const translations = JSON.parse(fs.readFileSync(path.join(appRoot, 'i18n/en-US.j
             };
             window.openEditor = ({create = false, error = null, partialCatalog = null} = {}) => {
                 window.requests = []; window.successes = 0; window.navigations = 0; window.writeError = error;
+                window.deferEditorGet = false; window.deferredEditorReads = [];
+                app.accountId = 'a'.repeat(32); app.appFlags.acdc.currentTab = 'queues';
                 window.next = window.resultData();
                 if (create) { window.next.queue = {}; window.next.roster = []; window.next.revisions.queue = null; }
                 if (partialCatalog) window.next.catalogs[partialCatalog] = {complete: false, reason: 'limit_exceeded', count: 0, limit: 500};
                 window.monster.request = options => {
                     window.requests.push({resource: options.resource, data: JSON.parse(JSON.stringify(options.data))});
-                    if (['acdc.editor.new', 'acdc.editor.get'].includes(options.resource)) return options.success({status: 'success', data: window.next});
+                    if (['acdc.editor.new', 'acdc.editor.get'].includes(options.resource)) {
+                        if (options.resource === 'acdc.editor.get' && window.deferEditorGet) {
+                            window.deferEditorGet = false; window.deferredEditorReads.push(options); return;
+                        }
+                        return options.success({status: 'success', data: window.next});
+                    }
                     if (!['acdc.editor.create', 'acdc.editor.update'].includes(options.resource)) throw new Error('Unexpected legacy API request ' + options.resource);
                     if (window.writeError) return options.error(window.writeError);
                     options.success({status: 'success', data: {state: 'complete', queue_id: window.qid, atomic: false, reload_required: true}});
                 };
                 app.renderQueueForm(create ? undefined : window.qid);
+            };
+            window.resolveEditorGet = (error = null) => {
+                const options = window.deferredEditorReads.shift();
+                if (!options) throw new Error('No deferred editor GET');
+                if (error) options.error(error);
+                else options.success({status: 'success', data: window.next});
             };
             window.submitEditor = () => {
                 const form = document.querySelector('.acdc-queue-form'), valid = form.checkValidity();
@@ -120,6 +133,109 @@ const translations = JSON.parse(fs.readFileSync(path.join(appRoot, 'i18n/en-US.j
         result = await page.evaluate(() => window.submitEditor()); assert.equal(result.requests[1].data.data.route, null); cases++;
         await page.evaluate(() => window.openEditor({partialCatalog: 'users'}));
         assert.equal(await page.locator('.acdc-queue-form').count(), 0, 'Incomplete users cannot render a writable roster'); cases++;
+        const selectedRoster = ['2', '7'].map(id => id.padStart(32, '0'));
+        const beginDeferredRecovery = async () => {
+            const initial = await page.evaluate(() => {
+                window.openEditor({error: {message: 'operation_incomplete_reload_before_recovery', data: {
+                    queue_id: window.qid, operation_id: 'acdc_queue_editor_' + '0'.repeat(64), state: 'partial', phase: 'roster',
+                    committed: [{phase: 'queue', ids: [window.qid]}], in_flight: [],
+                    remaining: ['roster', 'route', 'finalize_extensions'], extension_claims: [], atomic: false, reload_required: true}}});
+                const result = window.submitEditor();
+                window.recoveryView = window.jQuery('.acdc-queue-editor');
+                window.recoveryPending = window.recoveryView.data('editor-pending');
+                window.recoveryPendingJson = JSON.stringify(window.recoveryPending);
+                window.deferEditorGet = true;
+                return result;
+            });
+            assert(initial.valid); assert.equal(initial.requests.length, 2);
+            await page.locator('.acdc-editor-recovery').click();
+            assert.deepEqual(await page.evaluate(() => ({reads: window.deferredEditorReads.length,
+                requests: window.requests.map(r => r.resource), successes: window.successes, navigations: window.navigations})),
+            {reads: 1, requests: ['acdc.editor.get', 'acdc.editor.update', 'acdc.editor.get'], successes: 0, navigations: 0});
+            assert(await page.locator('[type="submit"]').isDisabled(), 'Save must wait for the recovery read');
+            assert(await page.locator('.acdc-editor-recovery').isDisabled(), 'Duplicate recovery must wait');
+            for (const selector of ['[name="name"]', '.acdc-roster', '[name="route_extension"]']) {
+                assert.equal(await page.locator(selector).isDisabled(), false, 'Recovery must keep edits enabled: ' + selector);
+            }
+            const blocked = await page.evaluate(() => {
+                // Exercise the handlers even though native clicks are disabled:
+                // identical Save must not launch an overlapping write, nor may
+                // a duplicate recovery action replace the outstanding read.
+                const saved = window.submitEditor();
+                window.jQuery('.acdc-editor-recovery').triggerHandler('click');
+                return {valid: saved.valid, reads: window.deferredEditorReads.length, requests: window.requests.length,
+                    unchangedPending: JSON.stringify(window.recoveryView.data('editor-pending')) === window.recoveryPendingJson};
+            });
+            assert.deepEqual(blocked, {valid: true, reads: 1, requests: 3, unchangedPending: true});
+        };
+        await beginDeferredRecovery();
+        await page.locator('[name="name"]').fill('Latest edits while reload is pending');
+        await page.locator('.acdc-roster').selectOption(selectedRoster);
+        await page.locator('[name="route_extension"]').fill('2096');
+        result = await page.evaluate(() => window.submitEditor());
+        assert(result.valid); assert.equal(result.requests.length, 3, 'Edited Save must also wait for recovery GET');
+        await page.evaluate(() => {
+            window.next.queue.name = 'Server state before latest edits'; window.next.roster = [window.next.users[0].id];
+            window.next.revisions.queue = '2-reloaded';
+            window.next.revisions.users = Object.fromEntries(window.next.users.map(u => [u.id, '2-reloaded-user']));
+            window.writeError = null; window.resolveEditorGet();
+        });
+        assert.equal(await page.locator('[name="name"]').inputValue(), 'Latest edits while reload is pending');
+        assert.deepEqual(await page.locator('.acdc-roster').evaluate(e => Array.from(e.selectedOptions, o => o.value)), selectedRoster);
+        assert.equal(await page.locator('[name="route_extension"]').inputValue(), '2096');
+        assert.deepEqual(await page.evaluate(() => ({requests: window.requests.length, successes: window.successes, navigations: window.navigations})),
+            {requests: 3, successes: 0, navigations: 0}, 'Recovery GET must not submit or report a saved queue');
+        result = await page.evaluate(() => window.submitEditor()); assert(result.valid); assert.equal(result.requests.length, 4);
+        const recoveredBody = result.requests[3].data.data;
+        assert.equal(recoveredBody.queue.name, 'Latest edits while reload is pending'); assert.deepEqual(recoveredBody.roster, selectedRoster);
+        assert.deepEqual(recoveredBody.route, {extension: '2096'}); assert.equal(recoveredBody.revisions.queue, '2-reloaded');
+        assert.equal(Object.keys(recoveredBody.revisions.users).length, 30);
+        assert(Object.values(recoveredBody.revisions.users).every(rev => rev === '2-reloaded-user'));
+        assert.notEqual(recoveredBody.request_id, result.requests[1].data.data.request_id); cases++;
+        await beginDeferredRecovery();
+        await page.locator('[name="name"]').fill('Latest edits before failed reload');
+        await page.locator('.acdc-roster').selectOption(selectedRoster);
+        await page.locator('[name="route_extension"]').fill('2098');
+        await page.evaluate(() => window.resolveEditorGet({message: 'Fixture recovery GET unavailable'}));
+        assert.equal(await page.locator('[name="name"]').inputValue(), 'Latest edits before failed reload');
+        assert.deepEqual(await page.locator('.acdc-roster').evaluate(e => Array.from(e.selectedOptions, o => o.value)), selectedRoster);
+        assert.equal(await page.locator('[name="route_extension"]').inputValue(), '2098');
+        assert.match(await page.locator('.acdc-form-error').textContent(), /Saved state could not be verified/);
+        assert.deepEqual(await page.evaluate(() => ({sameView: window.jQuery('.acdc-queue-editor')[0] === window.recoveryView[0],
+            samePending: window.recoveryView.data('editor-pending') === window.recoveryPending,
+            unchangedPending: JSON.stringify(window.recoveryView.data('editor-pending')) === window.recoveryPendingJson,
+            requests: window.requests.length, successes: window.successes, navigations: window.navigations})),
+        {sameView: true, samePending: true, unchangedPending: true, requests: 3, successes: 0, navigations: 0});
+        assert.equal(await page.locator('[type="submit"]').isDisabled(), false, 'A failed recovery read must restore Save');
+        assert.equal(await page.locator('.acdc-editor-recovery').isDisabled(), false, 'A failed recovery read must allow explicit retry');
+        assert.equal(await page.evaluate(() => Boolean(window.recoveryView.data('editor-recovery-pending'))), false);
+        await page.evaluate(() => { window.deferEditorGet = true; });
+        await page.locator('.acdc-editor-recovery').click();
+        assert.deepEqual(await page.evaluate(() => ({reads: window.deferredEditorReads.length, requests: window.requests.length,
+            writes: window.requests.filter(r => r.resource === 'acdc.editor.update').length})), {reads: 1, requests: 4, writes: 1});
+        await page.evaluate(() => window.resolveEditorGet());
+        assert.equal(await page.locator('[name="name"]').inputValue(), 'Latest edits before failed reload');
+        assert.deepEqual(await page.locator('.acdc-roster').evaluate(e => Array.from(e.selectedOptions, o => o.value)), selectedRoster);
+        assert.equal(await page.locator('[name="route_extension"]').inputValue(), '2098'); cases++;
+        for (const departure of ['replacement', 'account', 'detached']) {
+            await beginDeferredRecovery();
+            const after = await page.evaluate(departure => {
+                if (departure === 'replacement') {
+                    window.app.renderQueueForm(window.qid);
+                    window.jQuery('[name="name"]').val('Replacement editor stays visible');
+                } else if (departure === 'account') window.app.accountId = 'c'.repeat(32);
+                else { window.recoveryView.detach(); window.jQuery('#content').text('Original editor was removed'); }
+                const content = document.querySelector('#content'), html = content.innerHTML;
+                const currentView = content.querySelector('.acdc-queue-editor'), generation = window.app.appFlags.acdc.requestGeneration;
+                window.resolveEditorGet();
+                return {unchanged: content.innerHTML === html && content.querySelector('.acdc-queue-editor') === currentView,
+                    generationUnchanged: window.app.appFlags.acdc.requestGeneration === generation,
+                    requests: window.requests.length, reads: window.deferredEditorReads.length,
+                    successes: window.successes, navigations: window.navigations};
+            }, departure);
+            assert.deepEqual(after, {unchanged: true, generationUnchanged: true, requests: departure === 'replacement' ? 4 : 3,
+                reads: 0, successes: 0, navigations: 0}, 'Late recovery GET must ignore ' + departure); cases++;
+        }
         assert.deepEqual(errors, []); assert.deepEqual(network, []);
         console.log(JSON.stringify({result: 'PASS', artifact: stage ? 'private_build_mocked_API' : 'source_mocked_API', cases, one_editor_GET: true, one_create_or_edit_write: true,
             legacy_prompts_preserved: true, revision_snapshot: true, idempotency_and_partial_recovery: true, network_requests: 0, live_writes: 0}));

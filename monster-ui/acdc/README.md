@@ -55,6 +55,18 @@ It uses the account-scoped Crossbar resources implemented by `cb_queues`,
 data. Callflows without the app's complete ownership marker and expected shape
 are never modified or removed.
 
+Queue-editor recovery keeps the form editable while its explicit reload GET is
+pending, but disables Save and duplicate recovery actions until that read ends.
+The replacement form uses the latest name, roster and route edits, not a draft
+captured before the request. Failed reads retain the original form and pending
+operation; late replies cannot replace a detached form or a newer account/view.
+This source repair requires a matching rebuilt UI before deployment; previous
+artifact/browser receipts do not certify these changed bytes.
+The 2026-09-06 isolated source-browser regression passed all15 cases, including
+deferred reloads, overlapping Save/duplicate-read prevention, failed-read retry
+and stale-response suppression. Its API responses were mocked; it made zero
+network requests and is not live backend or compiled-artifact acceptance.
+
 The announcement language is a lowercase BCP 47 locale such as `en-us`. When
 it is blank, ACDC retains the incoming call/account prompt language and Kazoo's
 system prompt default is English (`en-us`). Callback configuration and

@@ -1654,6 +1654,7 @@ define(function(require) {
 					revisions: view.data('editor-revisions') },
 				fingerprint = JSON.stringify(body), pending = view.data('editor-pending'), data;
 
+			if (view.data('editor-recovery-pending')) { return; }
 			if (!_.isPlainObject(body.revisions)) {
 				self.showFormError(view, 'A complete revision snapshot is required. Reload the queue editor before saving.');
 				return;
@@ -1687,22 +1688,33 @@ define(function(require) {
 					$('<button>').attr('type', 'button').addClass('monster-button-secondary acdc-editor-recovery')
 						.text(savedId ? 'Reload saved state and keep my edits' : 'Retry the identical save safely')
 						.on('click', function() {
+							if (view.data('editor-recovery-pending')) { return; }
 							if (savedId) {
-								var currentForm = view.find('.acdc-queue-form'), draft = { queue: self.serializeQueue(currentForm, true),
-									roster: view.data('roster-read-only') ? null : view.find('.acdc-roster').val() || [],
-									route: view.data('route-read-only') ? null : { extension: $.trim(currentForm.find('[name="route_extension"]').val()) } };
-
+								view.data('editor-recovery-pending', true);
+								view.find('[type="submit"], .acdc-editor-recovery').prop('disabled', true);
 								// A lost create reply may name a queue that never committed.
 								// Prove the replacement editor can load before removing this
 								// form or changing its request generation.
 								self.request('acdc.editor.get', { queueId: savedId }, function(loadError, snapshot) {
-									if (!self.isCurrentView(generation, 'queues', accountId)) { return; }
-									var state = self.queueEditorState(snapshot, loadError);
+									var state, currentForm, draft;
+
+									if (!self.isCurrentView(generation, 'queues', accountId)
+										|| !view[0] || !$.contains(document.documentElement, view[0])) { return; }
+									view.removeData('editor-recovery-pending');
+									view.find('[type="submit"], .acdc-editor-recovery').prop('disabled', false);
+									state = self.queueEditorState(snapshot, loadError);
 
 									if (state.errors.queue || state.errors.users) {
 										self.showFormError(view, 'Saved state could not be verified. Your current entries are still here. ' + (state.errors.queue || state.errors.users));
 										return;
 									}
+									// The form stays editable during the GET. Capture its latest
+									// values only when the verified replacement is ready.
+									currentForm = view.find('.acdc-queue-form');
+									if (currentForm.length !== 1) { return; }
+									draft = { queue: self.serializeQueue(currentForm, true),
+										roster: view.data('roster-read-only') ? null : view.find('.acdc-roster').val() || [],
+										route: view.data('route-read-only') ? null : { extension: $.trim(currentForm.find('[name="route_extension"]').val()) } };
 									self.renderQueueForm(savedId, draft, snapshot);
 								});
 							} else { self.saveQueue(queueId, payload, agentIds, routeExtension, view, generation, accountId); }
