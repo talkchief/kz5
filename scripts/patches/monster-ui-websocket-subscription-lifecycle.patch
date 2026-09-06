@@ -1,0 +1,463 @@
+diff --git a/src/js/lib/monster.socket.js b/src/js/lib/monster.socket.js
+--- a/src/js/lib/monster.socket.js
++++ b/src/js/lib/monster.socket.js
+@@ -75,6 +75,281 @@
+ 		}
+ 	};
+ 
++	// Opt-in subscriptions share this client's socket, not the legacy listener
++	// registry. Acknowledgement means a Blackhole reply, never broker readiness.
++	function lifecycleNotify(params, name, code, generation) {
++		var callback = params.lifecycle && params.lifecycle[name];
++
++		if (_.isFunction(callback)) {
++			try {
++				callback({ accountId: params.accountId, binding: params.binding,
++					code: code, connectionGeneration: generation,
++					ackScope: 'blackhole_subscription_reply', brokerReadinessVerified: false });
++			} catch (e) {
++				// A consumer exception cannot retain a handshake or affect siblings.
++			}
++		}
++	}
++
++	function SubscriptionLifecycle(owner) {
++		this.owner = owner;
++		this.entries = Object.create(null);
++		this.requests = Object.create(null);
++		this.size = 0;
++		this.listeners = 0;
++		this.generation = 0;
++		this.socket = null;
++	}
++	SubscriptionLifecycle.prototype = {
++		bind: function bind(params) {
++			var self = this, options = params.lifecycle, timeout = options && options.timeoutMs,
++				key = JSON.stringify([params.accountId, params.binding]), entry, listener;
++
++			if (_.isUndefined(timeout)) { timeout = 3000; }
++			if (!_.isPlainObject(options) || !_.isFunction(options.onAck) || !_.isFunction(options.onError)
++				|| !/^[a-f0-9]{32}$/.test(params.accountId) || !_.isString(params.binding)
++				|| params.binding.length > 256 || !/^[A-Za-z0-9_.:-]+$/.test(params.binding)
++				|| !params.binding.length
++				|| !_.isString(params.source) || !params.source.length || params.source.length > 128
++				|| !_.isFunction(params.callback) || !Number.isInteger(timeout) || timeout < 100 || timeout > 15000) {
++				lifecycleNotify(params, 'onError', 'invalid_options', this.generation);
++				return function() {};
++			}
++			entry = this.entries[key];
++			if (entry && (entry.phase === 'removing' || entry.phase === 'blocked')) {
++				lifecycleNotify(params, 'onError', 'cleanup_pending', this.generation);
++				return function() {};
++			}
++			if (this.listeners >= 256 || (!entry && this.size >= 256)) {
++				lifecycleNotify(params, 'onError', 'subscription_limit', this.generation);
++				return function() {};
++			}
++			if (this.owner.legacyUncertain || this.owner.bindings.isSubscribed(params.binding) || this.owner.legacyPending[params.binding]) {
++				lifecycleNotify(params, 'onError', this.owner.legacyUncertain ? 'legacy_ownership_unknown' : 'binding_in_use', this.generation);
++				return function() {};
++			}
++			params = { accountId: params.accountId, binding: params.binding, source: params.source,
++				callback: params.callback, lifecycle: { timeoutMs: timeout, onAck: options.onAck,
++					onError: options.onError, onDisconnect: options.onDisconnect } };
++			if (!entry) {
++				entry = { key: key, accountId: params.accountId, binding: params.binding,
++					phase: 'queued', listeners: [], sent: false, requestId: null };
++				this.entries[key] = entry;
++				this.size++;
++			}
++			listener = { params: params, timeout: timeout, active: true, cancelled: false, timer: null };
++			entry.listeners.push(listener);
++			this.listeners++;
++			if (entry.phase === 'acknowledged') {
++				lifecycleNotify(params, 'onAck', 'acknowledged', this.generation);
++			} else {
++				this.deadline(entry, listener);
++				if (this.socket && this.owner.isOpen() && entry.phase === 'queued') { this.send(entry, 'subscribe'); }
++			}
++			return function() { self.remove(entry, listener); };
++		},
++
++		deadline: function deadline(entry, listener) {
++			var self = this;
++
++			clearTimeout(listener.timer);
++			listener.timer = setTimeout(function() {
++				if (!listener.active) { return; }
++				self.remove(entry, listener);
++				lifecycleNotify(listener.params, 'onError', 'timeout', self.generation);
++			}, listener.timeout);
++		},
++
++		clearRequest: function clearRequest(entry) {
++			var request = this.requests[entry.requestId];
++
++			if (request) { clearTimeout(request.timer); delete this.requests[entry.requestId]; }
++			entry.requestId = null;
++		},
++
++		drop: function drop(entry) {
++			this.clearRequest(entry);
++			if (this.entries[entry.key] === entry) { delete this.entries[entry.key]; this.size--; }
++		},
++
++		remove: function remove(entry, listener) {
++			listener.cancelled = true;
++			if (!listener.active) { return; }
++			listener.active = false;
++			clearTimeout(listener.timer);
++			listener.timer = null;
++			this.listeners--;
++			entry.listeners = entry.listeners.filter(function(item) { return item !== listener; });
++			if (!entry.listeners.length) {
++				this.clearRequest(entry);
++				if (entry.sent && this.socket && this.owner.isOpen()) { this.send(entry, 'unsubscribe'); }
++				else { this.drop(entry); }
++			}
++		},
++
++		fail: function fail(entry, code, uncertain) {
++			var self = this, listeners = entry.listeners.slice();
++
++			listeners.forEach(function(listener) {
++				listener.active = false;
++				clearTimeout(listener.timer);
++				listener.timer = null;
++				self.listeners--;
++			});
++			entry.listeners = [];
++			this.clearRequest(entry);
++			if (uncertain && entry.sent && this.socket && this.owner.isOpen()) { this.send(entry, 'unsubscribe'); }
++			else { this.drop(entry); }
++			listeners.forEach(function(listener) {
++				if (!listener.cancelled) { lifecycleNotify(listener.params, 'onError', code, self.generation); }
++			});
++		},
++
++		send: function send(entry, action) {
++			var self = this, id = 'lifecycle-' + monster.util.guid(), request;
++
++			this.clearRequest(entry);
++			entry.phase = action === 'subscribe' ? 'subscribing' : 'removing';
++			entry.requestId = id;
++			request = { entry: entry, action: action, generation: this.generation, socket: this.socket, timer: null };
++			this.requests[id] = request;
++			if (action === 'unsubscribe') {
++				request.timer = setTimeout(function() {
++					self.clearRequest(entry);
++					entry.phase = 'blocked'; // No safe reuse until disconnect; no retry storm.
++				}, 15000);
++			}
++			try {
++				// Mark sent before invoking a transport: a throw is potentially ambiguous.
++				entry.sent = true;
++				this.socket.send(JSON.stringify({ action: action, auth_token: monster.util.getAuthToken(),
++					request_id: id, data: { account_id: entry.accountId, binding: entry.binding } }));
++			} catch (e) {
++				this.clearRequest(entry);
++				if (action === 'subscribe') { this.fail(entry, 'send_failed', true); }
++				else { entry.phase = 'blocked'; }
++			}
++		},
++
++		reply: function reply(data) {
++			var self = this, id = data.request_id, request = this.requests[id], entry, subscriptions, unsubscribed;
++
++			if (!_.isString(id) || id.indexOf('lifecycle-') !== 0) { return false; }
++			if (!request || request.socket !== this.socket || request.generation !== this.generation) { return true; }
++			entry = request.entry;
++			subscriptions = _.get(data, 'data.subscriptions');
++			unsubscribed = _.get(data, 'data.unsubscribed');
++			this.clearRequest(entry);
++			if (request.action === 'unsubscribe') {
++				// Another account may retain the same client binding string. The
++				// request ID correlates this acknowledgement to this account's key.
++				if (data.status === 'success' && ((_.isArray(unsubscribed) && unsubscribed.indexOf(entry.binding) >= 0)
++					|| (_.isArray(subscriptions) && subscriptions.indexOf(entry.binding) < 0))) {
++					this.drop(entry);
++				} else { entry.phase = 'blocked'; }
++				return true;
++			}
++			if (data.status === 'error') { this.fail(entry, 'rejected', false); return true; }
++			if (data.status !== 'success' || !_.isArray(subscriptions) || subscriptions.indexOf(entry.binding) < 0) {
++				this.fail(entry, 'invalid_reply', true);
++				return true;
++			}
++			entry.phase = 'acknowledged';
++			entry.listeners.forEach(function(listener) { clearTimeout(listener.timer); listener.timer = null; });
++			entry.listeners.slice().forEach(function(listener) {
++				if (listener.active && entry.phase === 'acknowledged' && self.socket === request.socket
++					&& self.generation === request.generation) {
++					lifecycleNotify(listener.params, 'onAck', 'acknowledged', request.generation);
++				}
++			});
++			return true;
++		},
++
++		event: function event(data) {
++			var self = this, socket = this.socket, generation = this.generation,
++				accountId = _.get(data, 'data.account_id'), binding = data.subscribed_key,
++				entry = this.entries[JSON.stringify([accountId, binding])];
++
++			if (!_.isPlainObject(data.data) || !entry || entry.phase !== 'acknowledged') { return; }
++			entry.listeners.slice().forEach(function(listener) {
++				if (!listener.active || entry.phase !== 'acknowledged' || self.socket !== socket || self.generation !== generation) { return; }
++				try { listener.params.callback(_.cloneDeep(data.data)); } catch (e) { /* isolated consumer */ }
++			});
++		},
++
++		open: function open() {
++			var self = this;
++
++			if (this.socket === this.owner.ws) { return; }
++			this.socket = this.owner.ws;
++			this.generation++;
++			Object.keys(this.entries).forEach(function(key) {
++				var entry = self.entries[key];
++
++				if (!entry) { return; }
++				if (!entry.listeners.length) { self.drop(entry); return; }
++				entry.listeners.forEach(function(listener) {
++					if (entry.phase === 'suspended' && listener.timer === null) { self.deadline(entry, listener); }
++				});
++				self.send(entry, 'subscribe');
++			});
++		},
++
++		closed: function closed(intentional) {
++			var self = this;
++
++			this.socket = null;
++			Object.keys(this.entries).forEach(function(key) {
++				var entry = self.entries[key], phase, listeners;
++
++				if (!entry) { return; }
++				phase = entry.phase;
++				listeners = entry.listeners.slice();
++
++				self.clearRequest(entry);
++				entry.sent = false;
++				entry.phase = 'suspended';
++				listeners.forEach(function(listener) { clearTimeout(listener.timer); listener.timer = null; });
++				if (intentional) {
++					listeners.forEach(function(listener) { listener.active = false; self.listeners--; });
++					entry.listeners = [];
++				}
++				if (!entry.listeners.length) { self.drop(entry); }
++				if (phase !== 'suspended') {
++					listeners.forEach(function(listener) {
++						if (!listener.cancelled) {
++							lifecycleNotify(listener.params, phase === 'acknowledged' ? 'onDisconnect' : 'onError',
++								'disconnected', self.generation);
++						}
++					});
++				}
++			});
++		},
++
++		unbind: function unbind(params) {
++			var self = this, owned = false;
++
++			Object.keys(this.entries).forEach(function(key) {
++				var entry = self.entries[key];
++
++				if (!entry || entry.binding !== params.binding || (!_.isUndefined(params.accountId) && entry.accountId !== params.accountId)) { return; }
++				owned = true;
++				entry.listeners.slice().forEach(function(listener) {
++					if (listener.params.source === params.source && (_.isUndefined(params.callback) || listener.params.callback === params.callback)) {
++						self.remove(entry, listener);
++					}
++				});
++			});
++			return owned;
++		},
++
++		hasBinding: function hasBinding(binding) {
++			var self = this;
++
++			return Object.keys(this.entries).some(function(key) { return self.entries[key].binding === binding; });
++		}
++	};
++
+ 	function Listener(metadata) {
+ 		this.accountId = metadata.accountId;
+ 		this.source = metadata.source;
+@@ -280,6 +555,9 @@
+ 		 * @type {Handshakes}
+ 		 */
+ 		this.handshakes = new Handshakes();
++		this.lifecycle = new SubscriptionLifecycle(this);
++		this.legacyPending = Object.create(null);
++		this.legacyUncertain = false;
+ 	}
+ 	WebSocketClient.prototype = {
+ 		/**
+@@ -304,9 +582,9 @@
+ 			try {
+ 				this.ws = new WebSocket(this.uri);
+ 
+-				this.ws.addEventListener('open', this.onOpen.bind(this));
+-				this.ws.addEventListener('close', this.onClose.bind(this));
+-				this.ws.addEventListener('message', this.onMessage.bind(this));
++				this.ws.addEventListener('open', this.onOpen.bind(this, this.ws));
++				this.ws.addEventListener('close', this.onClose.bind(this, this.ws));
++				this.ws.addEventListener('message', this.onMessage.bind(this, this.ws));
+ 
+ 				this.ws.addEventListener('open', monster.pub.bind(null, 'socket.connected'));
+ 				this.ws.addEventListener('close', monster.pub.bind(null, 'socket.disconnected'));
+@@ -356,6 +634,7 @@
+ 		 * Closes the connection without reconnection attempts.
+ 		 */
+ 		disconnect: function disconnect() {
++			this.lifecycle.closed(true);
+ 			this.resetReconnect();
+ 
+ 			if (this.isClosed()) {
+@@ -396,6 +675,8 @@
+ 		 * @return {Function} Callback to unsubscribe this listener specifically.
+ 		 */
+ 		bind: function bind(params) {
++			if (Object.prototype.hasOwnProperty.call(params, 'lifecycle')) { return this.lifecycle.bind(params); }
++			if (this.lifecycle.hasBinding(params.binding)) { return function() {}; }
+ 			var wsc = this;
+ 			var binding = params.binding;
+ 			var isAuthError = function(payload) {
+@@ -476,6 +757,7 @@
+ 		 * @param  {Function} [param.callback]
+ 		 */
+ 		unbind: function unbind(params) {
++			if (this.lifecycle.unbind(params)) { return; }
+ 			var wsc = this;
+ 			var binding = params.binding;
+ 
+@@ -513,10 +795,30 @@
+ 		 * @param  {string} params.binding
+ 		 * @param  {Function} params.handleReply
+ 		 */
++		observeLegacyRequest: function observeLegacyRequest(binding) {
++			var pending = this.legacyPending, released = false;
++
++			// Observe ownership without limiting or changing legacy wire behavior.
++			// Exhaustion closes only opt-in admission until this connection ends.
++			if (this.legacyUncertain || (!pending[binding] && Object.keys(pending).length >= 256)
++				|| pending[binding] >= 256) {
++				this.legacyUncertain = true;
++				return function() {};
++			}
++			pending[binding] = (pending[binding] || 0) + 1;
++			return function() {
++				if (released) { return; }
++				released = true;
++				pending[binding]--;
++				if (!pending[binding]) { delete pending[binding]; }
++			};
++		},
++
+ 		subscribe: function subscribe(params) {
+ 			this.logger.log('subscribing to ' + params.binding + '...');
+ 
+-			var requestId = this.handshakes.add(params.handleReply);
++			var releasePending = this.observeLegacyRequest(params.binding),
++				requestId = this.handshakes.add(function(reply) { releasePending(); params.handleReply(reply); });
+ 
+ 			try {
+ 				this.ws.send(
+@@ -533,6 +835,7 @@
+ 				this.logger.warn(e);
+ 
+ 				this.handshakes.remove(requestId);
++				releasePending();
+ 			}
+ 		},
+ 
+@@ -545,7 +848,8 @@
+ 		unsubscribe: function unsubscribe(params) {
+ 			this.logger.log('unsubscribing from ' + params.binding + '...');
+ 
+-			var requestId = this.handshakes.add(params.handleReply);
++			var releasePending = this.observeLegacyRequest(params.binding),
++				requestId = this.handshakes.add(function(reply) { releasePending(); params.handleReply(reply); });
+ 
+ 			try {
+ 				this.ws.send(
+@@ -562,6 +866,7 @@
+ 				this.logger.warn(e);
+ 
+ 				this.handshakes.remove(requestId);
++				releasePending();
+ 			}
+ 		},
+ 
+@@ -569,6 +874,7 @@
+ 		 * @param {Object} data Parsed MessageEvent payload.
+ 		 */
+ 		handleReply: function handleReply(data) {
++			if (this.lifecycle.reply(data)) { return; }
+ 			var logger = this.logger;
+ 			[
+ 				{ key: 'errors', method: 'warn' },
+@@ -587,14 +893,17 @@
+ 		 * @param  {Object} data Parsed MessageEvent payload.
+ 		 */
+ 		handleEvent: function handleEvent(data) {
++			this.lifecycle.event(data);
+ 			this.bindings.dispatch(data.subscribed_key, data.data);
+ 		},
+ 
+ 		/**
+ 		 * Called when the connection's state changes to open.
+ 		 */
+-		onOpen: function onOpen() {
++		onOpen: function onOpen(socket) {
++			if (socket !== this.ws) { return; }
+ 			this.logger.log('connected successfully');
++			this.lifecycle.open();
+ 			this.rebind();
+ 			this.resetReconnect();
+ 		},
+@@ -603,7 +912,11 @@
+ 		 * Called when the connection's state changes to closed.
+ 		 * @param {CloseEvent} event
+ 		 */
+-		onClose: function onClose(event) {
++		onClose: function onClose(socket, event) {
++			if (socket !== this.ws) { return; }
++			this.lifecycle.closed(this.shouldClose);
++			this.legacyPending = Object.create(null);
++			this.legacyUncertain = false;
+ 			if (this.shouldClose) {
+ 				this.logger.log('disconnected successfully');
+ 				this.shouldClose = false;
+@@ -620,8 +933,12 @@
+ 		/**
+ 		 * @param  {MessageEvent} event
+ 		 */
+-		onMessage: function onMessage(event) {
+-			var parsedData = JSON.parse(event.data);
++		onMessage: function onMessage(socket, event) {
++			if (socket !== this.ws) { return; }
++			var parsedData;
++
++			try { parsedData = JSON.parse(event.data); } catch (e) { return; }
++			if (!parsedData || typeof parsedData !== 'object' || _.isArray(parsedData)) { return; }
+ 			var action = parsedData.action;
+ 
+ 			switch (action) {
+@@ -737,6 +1054,16 @@
+ 		 * @return {Function} Callback to unbind listener
+ 		 */
+ 		bind: function bind(params) {
++			if (Object.prototype.hasOwnProperty.call(params, 'lifecycle')) {
++				var configuration = socketConfiguration();
++
++				if (configuration.error || (!_.isUndefined(client) && client.uri !== configuration.uri)) {
++					lifecycleNotify(params, 'onError', 'configuration_unavailable', 0);
++					return function() {};
++				}
++				if (_.isUndefined(client)) { client = new WebSocketClient({ uri: configuration.uri }); }
++				return client.bind(_.assign({}, params));
++			}
+ 			if (_.isUndefined(client)) {
+ 				return;
+ 			}

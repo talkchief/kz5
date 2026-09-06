@@ -58,12 +58,16 @@ test('New settings are persisted, fingerprinted and passed through the real sour
     const fingerprint = functionSource('monster_ui_build_fingerprint');
     for (const name of ['MONSTER_UI_WEBSOCKET_URL', 'MONSTER_UI_REMOTE_BRANDING', 'MONSTER_UI_BRAINTREE',
         'configure-monster-runtime.cjs', 'monster-ui-branding-billing.patch', 'monster-ui-websocket-config.patch',
+        'monster-ui-websocket-subscription-lifecycle.patch',
         'monster-ui-optional-integrations.patch']) assert(fingerprint.includes(name), 'Missing build identity input: ' + name);
     const configureApi = functionSource('configure_monster_ui_api');
     assert(configureApi.includes('"$KAZOO_API_URL" "$MONSTER_UI_WEBSOCKET_URL" "$MONSTER_UI_REMOTE_BRANDING" "$MONSTER_UI_BRAINTREE"'));
     assert(configureApi.includes('[[ $DRY_RUN != true ]] || return 0'));
     assert(!configureApi.includes('checkout'), 'Configuration hook must not discard operator settings');
     assert(!/checkout[^\n]*src\/js\/config\.js/.test(functionSource('sync_monster_ui_sources')));
+    const syncSource = functionSource('sync_monster_ui_sources');
+    assert(syncSource.indexOf('patches/monster-ui-websocket-config.patch') < syncSource.indexOf('patches/monster-ui-websocket-subscription-lifecycle.patch'));
+    assert(syncSource.includes('apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-websocket-subscription-lifecycle.patch"'));
 });
 test('Legacy initializer runs after artifact preservation, outside rebuild-only path, before nginx verification', () => {
     const install = functionSource('install_monster_ui');

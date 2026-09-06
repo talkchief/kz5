@@ -50,7 +50,7 @@ try {
             fs.copyFileSync(path.join(__dirname,file),path.join(scripts,file));
         write(path.join(scripts,'assets/monster-ui/package-lock.npm10.json'),fs.readFileSync(path.join(__dirname,'assets/monster-ui/package-lock.npm10.json')));
         write(path.join(scripts,'assets/monster-ui/minifier-profile.json'),fs.readFileSync(path.join(__dirname,'assets/monster-ui/minifier-profile.json')));
-        const patches=['monster-ui-myaccount-transition.patch','monster-ui-branding-billing.patch','monster-ui-websocket-config.patch',
+        const patches=['monster-ui-myaccount-transition.patch','monster-ui-branding-billing.patch','monster-ui-websocket-config.patch','monster-ui-websocket-subscription-lifecycle.patch',
             'monster-ui-optional-integrations.patch','monster-ui-callflows-acdc-queue.patch','monster-ui-callflows-css-nesting.patch','monster-ui-npm-native-overrides.patch','monster-ui-isolated-minify.patch','monster-ui-preloaded-apps.patch'];
         for(const file of patches)write(path.join(scripts,'patches',file),fs.readFileSync(path.join(['monster-ui-npm-native-overrides.patch','monster-ui-isolated-minify.patch'].includes(file)?__dirname:path.join(project,'scripts'),'patches',file)));
         const env={SCRIPT_DIR:scripts,MONSTER_UI_REF:'a'.repeat(40),MONSTER_UI_NODE_MAJOR:'18',MONSTER_UI_LOCK_SHA256:'b'.repeat(64),
