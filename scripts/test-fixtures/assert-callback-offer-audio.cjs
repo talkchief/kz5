@@ -82,6 +82,9 @@ function inspect(buffer, refs, expected) {
         for (let j=0;j<p.audio.length;j++) { assert(!covered[offset+j] || audio[offset+j] === p.audio[j], 'Conflicting duplicate RTP');
             if (!covered[offset+j]) times[offset+j] = p.time+j/8000; covered[offset+j]=1; audio[offset+j]=p.audio[j]; }
     }
+    // Absence claims (no offer on entry or extra offer between expected ones)
+    // require the whole observed stream, not just the matching phrases.
+    assert(covered.every(Boolean), 'Missing RTP in observed announcement timeline');
     const anchor = expected.queue_entry;
     assert(Number.isFinite(anchor) && Math.abs(anchor-answer.time)<5, 'Missing exact queue-entry anchor');
     const result = {};

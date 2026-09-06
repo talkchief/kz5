@@ -23,7 +23,7 @@ function capture(options={}) {
     const audio=Buffer.alloc(46*8000,255);
     for(const at of options.offer||[3,18,33])refs.offer.copy(audio,at*8000);
     for(const at of options.position||[11,26,41])refs.position.copy(audio,at*8000);
-    for(let offset=0;offset<audio.length;offset+=160){if(options.loss&&offset===3*8000+160)continue;
+    for(let offset=0;offset<audio.length;offset+=160){if((options.loss&&offset===3*8000+160)||offset===options.lossAt*8000)continue;
         const rtp=Buffer.alloc(172);rtp[0]=128;rtp.writeUInt16BE(offset/160,2);rtp.writeUInt32BE(offset,4);rtp.writeUInt32BE(77,8);audio.copy(rtp,12,offset,offset+160);
         udp(100+offset/8000,rtp,options.foreign?'127.0.0.2':'127.0.0.1','127.0.0.20',30000,47200);}
     if(options.dtmf){const b=Buffer.alloc(16);b[0]=128;b[1]=101;udp(108,b,'127.0.0.20','127.0.0.1',47200,30000);}
@@ -37,7 +37,8 @@ assert.deepEqual(result.position.map(m=>m.after_queue_entry_seconds),[11,26,41])
 for(const [options,pattern] of [[{offer:[0,18,33]},/schedule/],[{offer:[3,17,31]},/schedule/],
     [{offer:[3,18]},/exactly3/],[{position:[8,23,38]},/schedule/],[{position:[11,26]},/exactly3/],
     [{foreign:true},/Foreign RTP/],[{remote:'198.51.100.2'},/Non-local/],[{noAck:true},/Missing dialog ACK/],
-    [{badTag:true},/Missing dialog ACK/],[{noByeAck:true},/Missing BYE200/],[{dtmf:true},/DTMF/],[{loss:true},/exactly3|Missing RTP/]]) {
+    [{badTag:true},/Missing dialog ACK/],[{noByeAck:true},/Missing BYE200/],[{dtmf:true},/DTMF/],[{loss:true},/exactly3|Missing RTP/],
+    [{lossAt:1},/Missing RTP/],[{lossAt:16},/Missing RTP/],[{lossAt:45},/Missing RTP/]]) {
     assert.throws(()=>inspect(capture(options),refs,expected),pattern);groups++;
 }
 assert.throws(()=>inspect(valid,refs,{...expected,call_id:'1-888@127.0.0.20'}),/Foreign dialog/);groups++;
