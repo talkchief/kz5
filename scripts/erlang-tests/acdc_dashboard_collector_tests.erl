@@ -16,6 +16,8 @@ collect(T, Options) ->
 source(R) -> maps:get(source, R).
 queue(R) -> [Q]=maps:get(queues, R), Q.
 metrics(R) -> maps:get(metrics, queue(R)).
+active(R) -> maps:get(active_calls, R).
+active_rows(R) -> maps:get(rows, active(R)).
 
 complete_empty_local_is_not_cluster_complete_test() ->
     with_table(fun(T) ->
@@ -30,6 +32,9 @@ complete_empty_local_is_not_cluster_complete_test() ->
         ?assertEqual(0, maps:get(scan_keys, S)),
         ?assertEqual(exhausted, maps:get(completion_reason, S)),
         ?assertEqual(kazoo_gregorian_seconds, maps:get(timestamp_unit, R)),
+        ?assertEqual(#{rows=>[],limit=>200,observed_count=>0,truncated=>false,
+                       complete=>true,order=>queue_id_entered_call_id,
+                       coverage=>local_table_only,atomic_snapshot=>false},active(R)),
         ?assertEqual(false, ets:info(T, safe_fixed))
     end).
 
@@ -90,6 +95,11 @@ older_live_occupancy_and_selected_scope_test() ->
         ?assertEqual(2,maps:get(input_rows,source(R))),
         ?assertEqual(1,maps:get(current_waiting,C)), ?assertEqual(1,maps:get(current_handled,C)),
         ?assertEqual(0,maps:get(records_entered,C)),
+        ?assertEqual([#{call_id=><<"1">>,queue_id=><<"q">>,status=><<"waiting">>,
+                        entered_timestamp=>E,handled_timestamp=>undefined},
+                       #{call_id=><<"2">>,queue_id=><<"q">>,status=><<"handled">>,
+                        entered_timestamp=>E,handled_timestamp=>E+5}],active_rows(R)),
+        ?assertEqual(true,maps:get(complete,active(R))),
         ?assert(maps:get(max_current_wait_seconds,C)>=500),
         ?assertEqual(false,ets:info(T,safe_fixed))
     end).
@@ -102,6 +112,8 @@ all_foreign_keys_count_against_scan_budget_test() ->
         ?assertEqual(0,maps:get(input_rows,source(R))),
         ?assertEqual(scan_limit,maps:get(completion_reason,source(R))),
         ?assertEqual(false,maps:get(exhausted,source(R))),
+        ?assertEqual([],active_rows(R)),
+        ?assertEqual(false,maps:get(complete,active(R))),
         ?assertEqual(undefined,metrics(R)), ?assertEqual(false,ets:info(T,safe_fixed))
     end).
 
@@ -119,6 +131,10 @@ zero_deadline_does_not_read_or_invent_metrics_test() ->
     ?assertEqual(not_read,maps:get(availability,source(R))),
     ?assertEqual(deadline,maps:get(completion_reason,source(R))),
     ?assertEqual(0,maps:get(scan_keys,source(R))),
+    ?assertEqual([],active_rows(R)),
+    ?assertEqual(0,maps:get(observed_count,active(R))),
+    ?assertEqual(false,maps:get(truncated,active(R))),
+    ?assertEqual(false,maps:get(complete,active(R))),
     ?assertEqual(undefined,metrics(R)).
 
 large_source_respects_small_deadline_and_releases_test() ->
@@ -130,6 +146,8 @@ large_source_respects_small_deadline_and_releases_test() ->
         ?assertEqual(false,maps:get(exhausted,source(R))),
         ?assertEqual(deadline,maps:get(completion_reason,source(R))),
         ?assertEqual(undefined,metrics(R)),
+        ?assertEqual(false,maps:get(complete,active(R))),
+        ?assert(length(active_rows(R))=<200),
         %% Scheduler delays are not a strict wall-clock/SLA assertion.
         ?assert(Elapsed<2000), ?assertEqual(false,ets:info(T,safe_fixed))
     end).
@@ -143,6 +161,87 @@ caller_and_misses_fields_not_copied_into_projection_test() ->
         ?assertEqual(1,maps:get(current_waiting,metrics(R))),
         Encoded=term_to_binary(R), ?assert(byte_size(Encoded)<4096),
         ?assertEqual(nomatch,binary:match(Encoded,<<"DO-NOT-RETURN-PII">>))
+    end).
+
+active_row_cap_preserves_overview_test_() ->
+    [?_test(with_table(fun(T) ->
+        E=now_s()-500,
+        Rows=[row(I,<<"a">>,<<"q">>,<<"waiting">>,E+I) || I<-lists:seq(1,N)],
+        ets:insert(T,lists:reverse(Rows)), {ok,R}=collect(T,#{}), A=active(R),
+        ?assertEqual(N,maps:get(current_waiting,metrics(R))),
+        ?assertEqual(N,maps:get(input_rows,source(R))),
+        ?assertEqual(N,maps:get(scan_keys,source(R))),
+        ?assertEqual(true,maps:get(exhausted,source(R))),
+        ?assertEqual(N,maps:get(observed_count,A)),
+        ?assertEqual(N>200,maps:get(truncated,A)),
+        ?assertEqual(N=<200,maps:get(complete,A)),
+        ?assertEqual([integer_to_binary(I) || I<-lists:seq(1,erlang:min(N,200))],
+                     [maps:get(call_id,Call) || Call<-active_rows(R)]),
+        ?assertEqual(false,ets:info(T,safe_fixed))
+    end)) || N<-[199,200,201]].
+
+active_order_scope_and_terminal_exclusion_test() ->
+    with_table(fun(T) ->
+        E=now_s()-500,
+        Rows=[row(20,<<"a">>,<<"q">>,<<"waiting">>,E),
+              row(10,<<"a">>,<<"q">>,<<"waiting">>,E),
+              row(1,<<"a">>,<<"q">>,<<"waiting">>,E+1),
+              (row(2,<<"a">>,<<"p">>,<<"handled">>,E+10))#call_stat{handled_timestamp=E+20},
+              (row(3,<<"a">>,<<"q">>,<<"processed">>,E))#call_stat{
+                  handled_timestamp=E+10,processed_timestamp=E+20},
+              (row(4,<<"a">>,<<"q">>,<<"abandoned">>,E))#call_stat{abandoned_timestamp=E+20},
+              row(5,<<"foreign">>,<<"q">>,<<"waiting">>,E),
+              row(6,<<"a">>,<<"other">>,<<"waiting">>,E)],
+        ets:insert(T,Rows), Now=now_s(),
+        {ok,R}=acdc_dashboard_collector:collect(T,<<"a">>,[<<"q">>,<<"p">>],Now-100,Now,#{}),
+        Expected=[{<<"p">>,<<"2">>},{<<"q">>,<<"10">>},{<<"q">>,<<"20">>},{<<"q">>,<<"1">>}],
+        ?assertEqual(Expected,[{maps:get(queue_id,C),maps:get(call_id,C)} || C<-active_rows(R)]),
+        ?assertEqual(4,maps:get(observed_count,active(R))),
+        ?assertEqual(true,maps:get(complete,active(R))),
+        ?assertEqual(8,maps:get(scan_keys,source(R))),
+        ?assertEqual(6,maps:get(input_rows,source(R))),
+        [ ?assertEqual([call_id,entered_timestamp,handled_timestamp,queue_id,status],
+                       lists:sort(maps:keys(C))) || C<-active_rows(R)],
+        %% Reinsert in another order: order means entry age plus identity only,
+        %% never a queue position or a promise of an atomic observation.
+        ets:delete_all_objects(T),ets:insert(T,lists:reverse(Rows)),
+        {ok,R2}=acdc_dashboard_collector:collect(T,<<"a">>,[<<"p">>,<<"q">>],Now-100,Now,#{}),
+        ?assertEqual(active(R),active(R2))
+    end).
+
+active_scan_limit_is_not_complete_test() ->
+    with_table(fun(T) ->
+        ets:insert(T,[waiting(I) || I<-lists:seq(1,20)]),
+        {ok,R}=collect(T,#{max_scan=>7}), A=active(R),
+        ?assertEqual(7,maps:get(observed_count,A)),
+        ?assertEqual(7,length(maps:get(rows,A))),
+        ?assertEqual(false,maps:get(truncated,A)),
+        ?assertEqual(false,maps:get(complete,A)),
+        ?assertEqual(undefined,metrics(R)),
+        ?assertEqual(scan_limit,maps:get(completion_reason,source(R)))
+    end).
+
+terminal_only_source_has_complete_empty_active_list_test() ->
+    with_table(fun(T) ->
+        E=now_s()-20,
+        ets:insert(T,[(row(1,<<"a">>,<<"q">>,<<"processed">>,E))#call_stat{
+                          handled_timestamp=E+1,processed_timestamp=E+2},
+                      (row(2,<<"a">>,<<"q">>,<<"abandoned">>,E))#call_stat{
+                          abandoned_timestamp=E+2}]),
+        {ok,R}=collect(T,#{}),
+        ?assertEqual([],active_rows(R)),
+        ?assertEqual(0,maps:get(observed_count,active(R))),
+        ?assertEqual(true,maps:get(complete,active(R))),
+        ?assertEqual(2,maps:get(records_entered,metrics(R))),
+        ?assertEqual(1,maps:get(processed_in_cohort,metrics(R))),
+        ?assertEqual(1,maps:get(abandoned_in_cohort,metrics(R)))
+    end).
+
+invalid_active_timeline_never_returns_partial_detail_test() ->
+    with_table(fun(T) ->
+        ets:insert(T,[waiting(1),(waiting(2))#call_stat{handled_timestamp=now_s()}]),
+        ?assertEqual({error,invalid_record_timeline},collect(T,#{})),
+        ?assertEqual(false,ets:info(T,safe_fixed))
     end).
 
 invalid_selected_record_releases_fixation_test_() ->

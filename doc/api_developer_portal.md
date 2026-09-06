@@ -60,7 +60,7 @@ carry `Cache-Control: no-store`; ordinary pre-handler authentication behavior
 remains separate.
 
 The Crossbar `data` envelope contains version1, account identity, generation
-time, a fixed last-hour window, queue rows, pagination, source evidence and
+time, a fixed last-hour window, queue rows, `calls`, pagination, source evidence and
 capabilities. All public timestamps use **Unix seconds**, not the native
 Gregorian epoch. Generation time is not an observation timestamp. Source
 coverage is `observed_replicas`, with `atomic_snapshot=false`; replicas are
@@ -77,10 +77,32 @@ time. Null maximum/average values mean no applicable observation or denominator.
 The underlying identity is a call/queue pair, not a distinct queue visit; these
 are not service-level, abandonment-rate or average-handle-time KPIs.
 
-All four v1 capabilities remain explicitly false: `live_call_details`,
-`agent_runtime`, `websocket_updates`, and `historical_reporting`. No caller rows,
-queue-ready agent count, inferred endpoint reachability or WebSocket protocol
-may be synthesized from this contract. Historical dashboards, WFM and ClickHouse
+Overview has `calls=null` and `capabilities.live_call_details=false`. Selected
+detail sets that capability true and returns a `calls` object; capability support
+does not imply data availability. Available rows contain only `call_id`,
+`queue_id`, `status` (`waiting` or `handled`), `entered_at`, and `handled_at`.
+Call timestamps are **signed Unix integer seconds**: retained calls can predate
+the Unix epoch. Waiting rows have `handled_at=null`; handled rows have an integer
+timestamp. Observation and generation timestamps remain positive Unix seconds.
+Active calls entered before the last-hour cohort window are still included.
+
+The call list is capped at 200 and ordered by queue ID, entered timestamp, then
+call ID (`order=queue_id_entered_call_id`), oldest entered first within the queue.
+This is not actual queue position. With unavailable or conflicting sources,
+`calls.available=false`, `complete=false`, `truncated=false`, `observed_count=null`
+and `rows=[]`; queue metrics are also withheld. An available complete empty
+observation instead has `observed_count=0` and `complete=true`. A capped list has
+`available=true`, `complete=false`, `truncated=true`, exactly 200 rows and an
+observed count above 200 (at most 10000). Replica agreement includes call rows as
+well as metrics; neither is summed. Runtime validation enforces unique scoped
+identities, timestamp ordering, deterministic row ordering and count agreement;
+OpenAPI documents these cross-value invariants but cannot express all of them.
+Completeness never establishes an atomic global snapshot.
+
+The other capabilities remain false: `agent_runtime`, `websocket_updates`, and
+`historical_reporting`. Caller names/numbers, agent IDs, queue-ready agent counts,
+inferred endpoint reachability and WebSocket protocols are not supplied or
+inferred from this contract. Historical dashboards, WFM and ClickHouse
 remain postponed; no such integration is introduced here. The focused overlay
 and tests are `scripts/api-docs-queue-live.cjs` and
 `scripts/test-api-docs-queue-live.cjs`; generated portal assets and live

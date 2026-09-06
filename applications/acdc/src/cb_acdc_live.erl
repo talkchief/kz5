@@ -28,16 +28,18 @@ get(Context, QueueId) ->
         Next = case length(Docs) > Size of true -> kz_doc:id(lists:nth(Size+1, Docs)); false -> null end,
         Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
         Ids = [kz_doc:id(D) || D <- Page],
-        {Metrics, Source} = snapshot(cb_context:account_id(Context), Ids, Now),
+        IncludeCalls = QueueId =/= undefined,
+        {Metrics, Source, ActiveCalls} = snapshot(cb_context:account_id(Context), Ids, Now, IncludeCalls),
         ResponseTime = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
         Data = obj([{<<"version">>,1}, {<<"account_id">>,cb_context:account_id(Context)},
             {<<"generated_at">>,ResponseTime-?EPOCH},
             {<<"window">>,obj([{<<"from">>,Now-?EPOCH-3600},{<<"to">>,Now-?EPOCH},{<<"seconds">>,3600}])},
             {<<"queues">>,[public_queue(D, Metrics) || D <- Page]},
+            {<<"calls">>,public_calls(IncludeCalls, ActiveCalls)},
             {<<"pagination">>,obj([{<<"page_size">>,Size},{<<"next_start_queue_id">>,Next},{<<"has_more">>,Next=/=null}])},
             {<<"source">>,Source},
-            {<<"capabilities">>,obj([{K,false} || K <- [<<"live_call_details">>,<<"agent_runtime">>,
-                <<"websocket_updates">>,<<"historical_reporting">>]])}]),
+            {<<"capabilities">>,obj([{<<"live_call_details">>,IncludeCalls},
+                {<<"agent_runtime">>,false},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}])}]),
         crossbar_util:response(Data, Safe)
     catch
         throw:{live_error, Code, Message} -> crossbar_util:response(error, Message, Code, Safe);
@@ -92,18 +94,23 @@ public_queue(D, Metrics) ->
 safe_text(B,_) when is_binary(B),byte_size(B)>0,byte_size(B)=<256 -> B;
 safe_text(_,Default) -> Default.
 
-snapshot(_,[],_) -> {#{},source(<<"empty_scope">>,true,true,[])};
-snapshot(Account,Ids,Now) ->
+snapshot(_,[],_,_) -> {#{},source(<<"empty_scope">>,true,true,[]),null};
+snapshot(Account,Ids,Now,IncludeCalls) ->
     Expected = sources(),
     Req = [{<<"Account-ID">>,Account},{<<"Queue-IDs">>,Ids},{<<"From">>,Now-3600},
-        {<<"To">>,Now},{<<"Msg-ID">>,kz_binary:rand_hex(16)} | kz_api:default_headers(<<"acdc">>,<<"1.0">>)],
+        {<<"To">>,Now},{<<"Include-Calls">>,IncludeCalls},{<<"Msg-ID">>,kz_binary:rand_hex(16)} |
+        kz_api:default_headers(<<"acdc">>,<<"1.0">>)],
     case Expected of
-        [] -> {#{},source(<<"source_unavailable">>,false,false,[])};
+        [] -> {#{},source(<<"source_unavailable">>,false,false,[]),null};
         _ ->
             Until = fun(Rs) -> length(Rs)>=64 orelse
                 lists:usort([val(<<"Source-ID">>,R) || R<-Rs,correlated(R,Req)])=:=Expected end,
             Result = kz_amqp_worker:call_collect(Req,fun kapi_acdc_dashboard:publish_snapshot_req/1,Until,3000),
-            assess(Result,Req,Expected,sources())
+            After=sources(),
+            case IncludeCalls of
+                true -> assess_full(Result,Req,Expected,After);
+                false -> {M,S}=assess(Result,Req,Expected,After),{M,S,null}
+            end
     end.
 
 %% Discovery itself is the existing Kazoo inventory, not a topology guarantee.
@@ -114,12 +121,14 @@ sources() ->
         #kz_node{node=N,kapps=Apps} <- Nodes, is_atom(N),is_list(Apps),proplists:is_defined(<<"acdc">>,Apps)]),
     need(length(Ids)=<32,503,<<"source_inventory_limit">>),Ids.
 
-assess(_,_,Before,After) when Before=/=After -> {#{},source(<<"source_set_changed">>,false,false,[])};
-assess({ok,Rs},Req,Expected,_) when is_list(Rs),length(Rs)<64 -> assess_rows(Rs,Req,Expected,false);
-assess({timeout,Rs},Req,Expected,_) when is_list(Rs),length(Rs)<64 -> assess_rows(Rs,Req,Expected,true);
-assess({Tag,Rs},_,_,_) when (Tag=:=ok orelse Tag=:=timeout),is_list(Rs),length(Rs)>=64 ->
-    {#{},source(<<"response_limit">>,false,false,[])};
-assess(_,_,_,_) -> {#{},source(<<"source_unavailable">>,false,false,[])}.
+assess(Result,Req,Before,After) ->
+    {M,S,_}=assess_full(Result,Req,Before,After),{M,S}.
+assess_full(_,_,Before,After) when Before=/=After -> {#{},source(<<"source_set_changed">>,false,false,[]),null};
+assess_full({ok,Rs},Req,Expected,_) when is_list(Rs),length(Rs)<64 -> assess_rows(Rs,Req,Expected,false);
+assess_full({timeout,Rs},Req,Expected,_) when is_list(Rs),length(Rs)<64 -> assess_rows(Rs,Req,Expected,true);
+assess_full({Tag,Rs},_,_,_) when (Tag=:=ok orelse Tag=:=timeout),is_list(Rs),length(Rs)>=64 ->
+    {#{},source(<<"response_limit">>,false,false,[]),null};
+assess_full(_,_,_,_) -> {#{},source(<<"source_unavailable">>,false,false,[]),null}.
 assess_rows(Rs,Req,Expected,TimedOut) ->
     Valid=lists:all(fun(R)->correlated(R,Req) end,Rs),
     Seen=lists:usort([val(<<"Source-ID">>,R) || R<-Rs]),
@@ -136,11 +145,13 @@ assess_rows(Rs,Req,Expected,TimedOut) ->
             %% Choose one replica, never add replicated counts together.
             [Chosen|_]=lists:sort(fun(A,B)->val(<<"Source-ID">>,A)<val(<<"Source-ID">>,B) end,Rs),
             Queues=val(<<"queues">>,val(<<"Snapshot">>,Chosen)),
-            {maps:from_list([{val(<<"queue_id">>,Q),val(<<"metrics">>,Q)} || Q<-Queues]),source(Reason,true,true,Rs)};
-        _ -> {#{},source(Reason,All,false,case Valid of true -> Rs; false -> [] end)}
+            Calls=kz_json:get_value([<<"Snapshot">>,<<"active_calls">>],Chosen,null),
+            {maps:from_list([{val(<<"queue_id">>,Q),val(<<"metrics">>,Q)} || Q<-Queues]),source(Reason,true,true,Rs),Calls};
+        _ -> {#{},source(Reason,All,false,case Valid of true -> Rs; false -> [] end),null}
     end.
 correlated(R,Req) ->
     try kapi_acdc_dashboard:snapshot_resp_v(R) andalso
+        (val(<<"Include-Calls">>,R)=:=true)=:=(props:get_value(<<"Include-Calls">>,Req)=:=true) andalso
         lists:all(fun(K)->val(K,R)=:=props:get_value(K,Req) end,
             [<<"Account-ID">>,<<"Queue-IDs">>,<<"From">>,<<"To">>,<<"Msg-ID">>])
     catch _:_ -> false end.
@@ -160,7 +171,29 @@ agreement(Rs) ->
     end.
 normalized(R) ->
     S=val(<<"Snapshot">>,R),AsOf=val(<<"as_of">>,S),
-    lists:sort([{val(<<"queue_id">>,Q),normalize_metrics(val(<<"metrics">>,Q),AsOf)} || Q<-val(<<"queues">>,S)]).
+    {lists:sort([{val(<<"queue_id">>,Q),normalize_metrics(val(<<"metrics">>,Q),AsOf)} || Q<-val(<<"queues">>,S)]),
+     normalized_calls(kz_json:get_value(<<"active_calls">>,S,null))}.
+normalized_calls(null) -> null;
+normalized_calls(C) ->
+    {[val(K,C) || K <- [<<"limit">>,<<"observed_count">>,<<"truncated">>,<<"complete">>,<<"order">>]],
+     [[val(K,R) || K <- [<<"call_id">>,<<"queue_id">>,<<"status">>,<<"entered_timestamp">>,<<"handled_timestamp">>]]
+      || R<-val(<<"rows">>,C)]}.
+public_calls(false,_) -> null;
+public_calls(true,null) ->
+    obj([{<<"available">>,false},{<<"complete">>,false},{<<"truncated">>,false},
+        {<<"limit">>,200},{<<"observed_count">>,null},{<<"order">>,<<"queue_id_entered_call_id">>},{<<"rows">>,[]}]);
+public_calls(true,C) ->
+    obj([{<<"available">>,true},{<<"complete">>,val(<<"complete">>,C)},
+        {<<"truncated">>,val(<<"truncated">>,C)},{<<"limit">>,val(<<"limit">>,C)},
+        {<<"observed_count">>,val(<<"observed_count">>,C)},{<<"order">>,val(<<"order">>,C)},
+        {<<"rows">>,[public_call(R) || R<-val(<<"rows">>,C)]}]).
+public_call(R) ->
+    obj([{<<"call_id">>,val(<<"call_id">>,R)},{<<"queue_id">>,val(<<"queue_id">>,R)},
+        {<<"status">>,val(<<"status">>,R)},
+        {<<"entered_at">>,unix(val(<<"entered_timestamp">>,R))},
+        {<<"handled_at">>,unix(val(<<"handled_timestamp">>,R))}]).
+unix(null) -> null;
+unix(N) when is_integer(N) -> N-?EPOCH.
 normalize_metrics(null,_) -> null;
 normalize_metrics(M,AsOf) ->
     lists:sort([{K,case {K,V} of {<<"max_current_wait_seconds">>,N} when is_integer(N)->AsOf-N; _->V end}

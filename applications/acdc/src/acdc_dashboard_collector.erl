@@ -6,12 +6,16 @@
 %%% Source diagnostics (including foreign-key scan counts and node identity) are
 %%% INTERNAL. A future authorized public DTO must not expose them verbatim.
 %%% Bounds are cooperative between ETS BIFs, not a hard scheduler/latency SLA.
+%%% active_calls is a bounded INTERNAL observation, ordered by queue/entry/call,
+%%% not queue position. Complete means this local traversal only, never atomic
+%%% or cluster-complete. Its row cap does not truncate the overview projection.
 -module(acdc_dashboard_collector).
 -export([collect/6]).
 -include("acdc_stats.hrl").
 -define(MAX_SCAN, 10000).
 -define(MAX_BUDGET_MS, 1000).
 -define(MAX_TIMESTAMP, 999999999999).
+-define(MAX_ACTIVE_CALLS, 200).
 
 -spec collect(atom() | ets:tid(), binary(), [binary()], integer(), integer(), map()) ->
     {ok, map()} | {error, atom()}.
@@ -160,8 +164,8 @@ project(Account, Queues, From, To, Start, Rows, Scanned, Exhausted, Reason,
     End = gregorian_seconds(),
     case acdc_dashboard_projection:new(Account, Queues, From, To, End) of
         {ok, P} ->
-            case project_rows(P, Rows, Deadline) of
-                {ok, Next, ProjectedAll} ->
+            case project_rows(P, Rows, Deadline, {0, gb_trees:empty()}) of
+                {ok, Next, ProjectedAll, Active} ->
                     WithinBudget = not expired(Deadline),
                     Complete = Exhausted andalso ProjectedAll andalso WithinBudget,
                     FinalReason = case ProjectedAll andalso WithinBudget of
@@ -171,7 +175,8 @@ project(Account, Queues, From, To, Start, Rows, Scanned, Exhausted, Reason,
                              observation_finished=>End, exhausted=>Complete}) of
                         {ok, Result} ->
                             Source = maps:get(source, Result),
-                            {ok, Result#{source := Source#{kind=>local_ets, node=>node(),
+                            {ok, Result#{active_calls => active_calls(Active, Complete),
+                                source := Source#{kind=>local_ets, node=>node(),
                                 availability=>Availability, coverage=>local_table_only,
                                 cluster_complete=>false, archive_coverage=>unknown,
                                 scan_keys=>Scanned, scan_limit=>Limit, budget_ms=>Budget,
@@ -183,13 +188,36 @@ project(Account, Queues, From, To, Start, Rows, Scanned, Exhausted, Reason,
         Error -> Error
     end.
 
-project_rows(P, [], _) -> {ok, P, true};
-project_rows(P, [Row|Rest], Deadline) ->
+project_rows(P, [], _, Active) -> {ok, P, true, Active};
+project_rows(P, [Row|Rest], Deadline, Active) ->
     case expired(Deadline) of
-        true -> {ok, P, false};
+        true -> {ok, P, false, Active};
         false ->
             case acdc_dashboard_projection:add(P, [Row]) of
-                {ok, Next} -> project_rows(Next, Rest, Deadline);
+                {ok, Next} -> project_rows(Next, Rest, Deadline, active_row(Row, Active));
                 Error -> Error
             end
     end.
+
+%% Only accumulate after the existing projection accepts identity and timeline.
+%% This shares its fold, not another source scan. A bounded ordered tree keeps
+%% the same first 200 identities regardless of ETS traversal order. The table
+%% key and projection validation enforce one call/queue identity per record.
+active_row(#call_stat{status=Status, queue_id=Queue, call_id=Call,
+                      entered_timestamp=Entered, handled_timestamp=Handled}, {N, Tree})
+  when Status =:= <<"waiting">>; Status =:= <<"handled">> ->
+    Value = #{call_id=>Call, queue_id=>Queue, status=>Status,
+              entered_timestamp=>Entered, handled_timestamp=>Handled},
+    Added = gb_trees:insert({Queue, Entered, Call}, Value, Tree),
+    Bounded = case gb_trees:size(Added) > ?MAX_ACTIVE_CALLS of
+                  true -> {_, _, Smaller} = gb_trees:take_largest(Added), Smaller;
+                  false -> Added
+              end,
+    {N+1, Bounded};
+active_row(_, Active) -> Active.
+
+active_calls({N, Tree}, SourceComplete) ->
+    Truncated = N > ?MAX_ACTIVE_CALLS,
+    #{rows=>gb_trees:values(Tree), limit=>?MAX_ACTIVE_CALLS, observed_count=>N,
+      truncated=>Truncated, complete=>SourceComplete andalso not Truncated,
+      order=>queue_id_entered_call_id, coverage=>local_table_only, atomic_snapshot=>false}.

@@ -89,11 +89,19 @@ broker(Req,Publish,Until,3000)->
         consensus->{ok,[R1,R2]}; timeout->{timeout,[R1]};
         conflict->{ok,[R1,reply(Req,?N2,1,3,props:get_value(<<"To">>,Req),100,true)]};
         duplicate->{ok,[R1,R1,R2]};
+        call_conflict->{ok,[R1,kz_json:set_value([<<"Snapshot">>,<<"active_calls">>,<<"rows">>],
+            lists:sublist(kz_json:get_value([<<"Snapshot">>,<<"active_calls">>,<<"rows">>],R2),1) ++
+            [kz_json:set_value(<<"call_id">>,<<"different-active-call">>,Row) || Row <-
+                lists:nthtail(1,kz_json:get_value([<<"Snapshot">>,<<"active_calls">>,<<"rows">>],R2))],R2)]};
+        capped->{ok,[reply(Req,Node,1,201,props:get_value(<<"To">>,Req),100,true) || Node<-[?N1,?N2]]};
+        empty->{ok,[reply(Req,Node,1,0,props:get_value(<<"To">>,Req),null,true) || Node<-[?N1,?N2]]};
+        missing_flag->{ok,[kz_json:delete_key(<<"Include-Calls">>,R1),R2]};
         invalid->{ok,[kz_json:set_value(<<"Msg-ID">>,<<"wrong">>,R1),R2]}
     end.
 
 public_route_test_()->{setup,fun setup/0,fun teardown/1,fun(_)->[
     {"real overview and detail routes, no-store and no replica summation",fun public_success/0},
+    {"detail call rows, bounded truncation and unknown versus empty",fun detail_calls/0},
     {"bounded catalog pagination and lookahead permissions",fun pagination/0},
     {"auth, tenant DB, underlying stats and queue permissions",fun authorization/0},
     {"unsupported queries fail before catalog or broker",fun bad_queries/0},
@@ -118,7 +126,32 @@ public_success()->
     [?assertEqual(nomatch,binary:match(B,X)) || X<-[<<"NEVER-RETURN">>,<<"Source-ID">>,<<"Source-Incarnation">>,<<"scan_keys">>,<<"offline.invalid">>]],
     [ ?assertEqual(false,kz_json:get_value([<<"capabilities">>,K],D)) || K<-[<<"live_call_details">>,<<"agent_runtime">>,<<"websocket_updates">>,<<"historical_reporting">>]],
     reset(),Detail=get(?Q,j([])),?assertEqual(success,cb_context:resp_status(Detail)),no_store(Detail),
-    ?assertEqual(0,state(catalog_calls)),?assertEqual(1,state(open_calls)),?assertEqual(?Q,state(open_id)).
+    ?assertEqual(0,state(catalog_calls)),?assertEqual(1,state(open_calls)),?assertEqual(?Q,state(open_id)),
+    DD=cb_context:resp_data(Detail),
+    ?assertEqual(null,val(<<"calls">>,D)),
+    ?assertEqual(true,kz_json:get_value([<<"capabilities">>,<<"live_call_details">>],DD)),
+    Calls=val(<<"calls">>,DD),?assertEqual(true,val(<<"available">>,Calls)),
+    ?assertEqual(2,val(<<"observed_count">>,Calls)),
+    [First|_]=val(<<"rows">>,Calls),?assertEqual(?Q,val(<<"queue_id">>,First)),
+    ?assertEqual(null,val(<<"handled_at">>,First)),
+    ?assertEqual(5,length(kz_json:to_proplist(First))),
+    ?assert(abs(val(<<"entered_at">>,First)-(now_s()-?EPOCH-100))<5).
+detail_calls()->
+    [begin reset(),put_state(broker_mode,Mode),R=get(?Q,j([])),
+        ?assertEqual(success,cb_context:resp_status(R)),D=cb_context:resp_data(R),
+        C=val(<<"calls">>,D),?assertEqual(false,val(<<"available">>,C)),
+        ?assertEqual(null,val(<<"observed_count">>,C)),?assertEqual([],val(<<"rows">>,C)),
+        [Q]=val(<<"queues">>,D),?assertEqual(null,val(<<"metrics">>,Q)) end ||
+        Mode<-[timeout,call_conflict,missing_flag]],
+    reset(),put_state(broker_mode,capped),Capped=val(<<"calls">>,cb_context:resp_data(get(?Q,j([])))),
+    ?assertEqual(true,val(<<"available">>,Capped)),?assertEqual(true,val(<<"truncated">>,Capped)),
+    ?assertEqual(false,val(<<"complete">>,Capped)),?assertEqual(201,val(<<"observed_count">>,Capped)),
+    ?assertEqual(200,length(val(<<"rows">>,Capped))),
+    reset(),put_state(broker_mode,empty),Empty=val(<<"calls">>,cb_context:resp_data(get(?Q,j([])))),
+    ?assertEqual(true,val(<<"available">>,Empty)),?assertEqual(true,val(<<"complete">>,Empty)),
+    ?assertEqual(0,val(<<"observed_count">>,Empty)),?assertEqual([],val(<<"rows">>,Empty)),
+    reset(),put_state(nodes,[]),Missing=val(<<"calls">>,cb_context:resp_data(get(?Q,j([])))),
+    ?assertEqual(false,val(<<"available">>,Missing)),?assertEqual(null,val(<<"observed_count">>,Missing)).
 pagination()->
     reset(),put_state(docs,[doc(?Q),doc(?Q2)]),
     R=get(undefined,j([{<<"page_size">>,<<"1">>}])),?assertEqual(success,cb_context:resp_status(R)),
@@ -197,7 +230,7 @@ reply(Req,Node,Inc,N,AsOf,Wait,Complete)->
         {<<"average_answered_wait_seconds">>,null},{<<"average_processed_talk_seconds">>,null}]),
     Queues=[j([{<<"queue_id">>,Q},{<<"source_exhausted">>,Complete},{<<"observed">>,Counts},
         {<<"metrics">>,case Complete of true->Counts; false->null end}]) || Q<-props:get_value(<<"Queue-IDs">>,Req)],
-    S=j([{<<"version">>,1},{<<"account_id">>,props:get_value(<<"Account-ID">>,Req)},{<<"as_of">>,AsOf},
+    S0=j([{<<"version">>,1},{<<"account_id">>,props:get_value(<<"Account-ID">>,Req)},{<<"as_of">>,AsOf},
         {<<"timestamp_unit">>,<<"kazoo_gregorian_seconds">>},{<<"identity_semantics">>,<<"call_queue_pair">>},
         {<<"distinct_visit_metrics_available">>,false},{<<"agent_eligibility_available">>,false},{<<"workforce_metrics_available">>,false},
         {<<"window">>,j([{<<"from">>,props:get_value(<<"From">>,Req)},{<<"to">>,props:get_value(<<"To">>,Req)},
@@ -208,6 +241,18 @@ reply(Req,Node,Inc,N,AsOf,Wait,Complete)->
             {<<"completion_reason">>,case Complete of true-> <<"exhausted">>; false-> <<"scan_limit">> end},
             {<<"observation_started">>,props:get_value(<<"To">>,Req)},{<<"observation_finished">>,AsOf}])},
         {<<"queues">>,Queues}]),
+    S=case props:get_value(<<"Include-Calls">>,Req) of
+        true ->
+            [Selected]=props:get_value(<<"Queue-IDs">>,Req),
+            Rows=[j([{<<"call_id">>,<<"active-",(integer_to_binary(100000+I))/binary>>},
+                {<<"queue_id">>,Selected},{<<"status">>,<<"waiting">>},
+                {<<"entered_timestamp">>,AsOf-Wait},{<<"handled_timestamp">>,null}]) || I<-lists:seq(1,min(N,200))],
+            kz_json:set_value(<<"active_calls">>,j([{<<"rows">>,Rows},{<<"limit">>,200},
+                {<<"observed_count">>,N},{<<"truncated">>,N>200},{<<"complete">>,Complete andalso N=<200},
+                {<<"order">>,<<"queue_id_entered_call_id">>},{<<"coverage">>,<<"local_table_only">>},
+                {<<"atomic_snapshot">>,false}]),S0);
+        _ -> S0
+    end,
     Props=[{<<"Status">>,<<"ok">>},{<<"Snapshot">>,S},{<<"Source-ID">>,source_id(Node)},
         {<<"Source-Incarnation">>,incarnation(Inc)},{<<"Event-Category">>,<<"acdc_dashboard">>},
         {<<"Event-Name">>,<<"snapshot_resp">>},{<<"App-Name">>,<<"test">>},{<<"App-Version">>,<<"1">>}|Req],

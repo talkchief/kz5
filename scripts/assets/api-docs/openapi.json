@@ -21490,7 +21490,7 @@
           "ACDC queues"
         ],
         "summary": "Read a page of observed live queue snapshots",
-        "description": "Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. All v1 capability flags are false; do not fabricate call details, ready counts, SLA, historical reports or WebSocket updates. page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.",
+        "description": "Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null and live_call_details=false. Detail has a bounded calls object and live_call_details=true, independently of calls.available. No caller name/number, agent IDs, actual queue positions, ready counts, SLA, historical reports or WebSocket updates are supplied. page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.",
         "parameters": [
           {
             "name": "ACCOUNT_ID",
@@ -21657,7 +21657,7 @@
           "applications/acdc/src/kapi_acdc_dashboard.erl",
           "applications/acdc/src/acdc_stats.erl"
         ],
-        "x-runtime-source-sha256": "50da1cd8f40f28be99934b566571dbeb71c91a54325a23c54e49bd784c3a3cc5"
+        "x-runtime-source-sha256": "0e52ec56ab016cd5b670ec92b6e36ba0984e357bdb2330eaa465075c9289bfa0"
       }
     },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/live": {
@@ -21667,7 +21667,7 @@
           "ACDC queues"
         ],
         "summary": "Read an observed live snapshot for one queue",
-        "description": "Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. All v1 capability flags are false; do not fabricate call details, ready counts, SLA, historical reports or WebSocket updates. This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.",
+        "description": "Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null and live_call_details=false. Detail has a bounded calls object and live_call_details=true, independently of calls.available. No caller name/number, agent IDs, actual queue positions, ready counts, SLA, historical reports or WebSocket updates are supplied. This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.",
         "parameters": [
           {
             "name": "ACCOUNT_ID",
@@ -21824,7 +21824,7 @@
           "applications/acdc/src/kapi_acdc_dashboard.erl",
           "applications/acdc/src/acdc_stats.erl"
         ],
-        "x-runtime-source-sha256": "50da1cd8f40f28be99934b566571dbeb71c91a54325a23c54e49bd784c3a3cc5"
+        "x-runtime-source-sha256": "0e52ec56ab016cd5b670ec92b6e36ba0984e357bdb2330eaa465075c9289bfa0"
       }
     },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks": {
@@ -48349,6 +48349,275 @@
         },
         "type": "object"
       },
+      "QueueLiveCall": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "call_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "x-max-utf8-bytes": 256,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+              },
+              "queue_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "entered_at": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Signed Unix epoch seconds. A retained call can predate the Unix epoch; no positive minimum is imposed. Not Gregorian seconds or milliseconds."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "waiting"
+                ]
+              },
+              "handled_at": {
+                "type": "integer",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            },
+            "required": [
+              "call_id",
+              "queue_id",
+              "entered_at",
+              "status",
+              "handled_at"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "call_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "x-max-utf8-bytes": 256,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+              },
+              "queue_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "entered_at": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Signed Unix epoch seconds. A retained call can predate the Unix epoch; no positive minimum is imposed. Not Gregorian seconds or milliseconds."
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "handled"
+                ]
+              },
+              "handled_at": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Signed Unix epoch seconds. A retained call can predate the Unix epoch; no positive minimum is imposed. Not Gregorian seconds or milliseconds."
+              }
+            },
+            "required": [
+              "call_id",
+              "queue_id",
+              "entered_at",
+              "status",
+              "handled_at"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "description": "Observed active call/queue identity, not a distinct visit or verified telephony channel. Only these five fields are exposed; no caller name/number, agent ID or queue position. Waiting has handled_at=null; handled has an integer handled_at. Runtime validation requires entered_at <= handled_at <= observation time for handled rows and entered_at <= observation time for every row."
+      },
+      "QueueLiveCalls": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": "integer",
+                "enum": [
+                  200
+                ]
+              },
+              "order": {
+                "type": "string",
+                "enum": [
+                  "queue_id_entered_call_id"
+                ]
+              },
+              "available": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "complete": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "truncated": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "observed_count": {
+                "type": "integer",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              },
+              "rows": {
+                "type": "array",
+                "maxItems": 0,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/QueueLiveCall"
+                }
+              }
+            },
+            "required": [
+              "limit",
+              "order",
+              "available",
+              "complete",
+              "truncated",
+              "observed_count",
+              "rows"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": "integer",
+                "enum": [
+                  200
+                ]
+              },
+              "order": {
+                "type": "string",
+                "enum": [
+                  "queue_id_entered_call_id"
+                ]
+              },
+              "available": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "complete": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "truncated": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "observed_count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 200
+              },
+              "rows": {
+                "type": "array",
+                "maxItems": 200,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/QueueLiveCall"
+                }
+              }
+            },
+            "required": [
+              "limit",
+              "order",
+              "available",
+              "complete",
+              "truncated",
+              "observed_count",
+              "rows"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": "integer",
+                "enum": [
+                  200
+                ]
+              },
+              "order": {
+                "type": "string",
+                "enum": [
+                  "queue_id_entered_call_id"
+                ]
+              },
+              "available": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "complete": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "truncated": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "observed_count": {
+                "type": "integer",
+                "minimum": 201,
+                "maximum": 10000
+              },
+              "rows": {
+                "type": "array",
+                "maxItems": 200,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/QueueLiveCall"
+                },
+                "minItems": 200
+              }
+            },
+            "required": [
+              "limit",
+              "order",
+              "available",
+              "complete",
+              "truncated",
+              "observed_count",
+              "rows"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "description": "Selected-queue calls only. Unavailable means empty rows and null observed_count, never an observed zero. Complete available observations may legitimately have no active calls and count zero. A capped observation is available=true, complete=false, truncated=true with 200 rows and observed_count>200. Rows are ordered by queue_id, entered_at, call_id, oldest entered first within the selected queue; this is NOT actual queue position. Runtime invariants: row identities are unique and scoped to the selected queue, rows.length=min(observed_count,200), and observed_count equals the selected queue current_waiting+current_handled when the source is exhausted. OpenAPI does not express these cross-value comparisons. Completeness is local non-atomic observation coverage, not global occupancy proof."
+      },
       "QueueLiveMetrics": {
         "type": "object",
         "properties": {
@@ -48740,10 +49009,7 @@
         "type": "object",
         "properties": {
           "live_call_details": {
-            "type": "boolean",
-            "enum": [
-              false
-            ]
+            "type": "boolean"
           },
           "agent_runtime": {
             "type": "boolean",
@@ -48771,7 +49037,7 @@
           "historical_reporting"
         ],
         "additionalProperties": false,
-        "description": "All four capabilities are false in v1. No caller/agent detail rows, runtime agent readiness, WebSocket update protocol or historical reporting are supplied by this route."
+        "description": "live_call_details is true for selected detail and false for overview; it indicates the route supports call rows, not that current rows are available. agent_runtime, websocket_updates and historical_reporting remain false."
       },
       "QueueLiveSnapshot": {
         "type": "object",
@@ -48802,6 +49068,20 @@
               "$ref": "#/components/schemas/QueueLiveQueue"
             }
           },
+          "calls": {
+            "oneOf": [
+              {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              },
+              {
+                "$ref": "#/components/schemas/QueueLiveCalls"
+              }
+            ]
+          },
           "pagination": {
             "$ref": "#/components/schemas/QueueLivePagination"
           },
@@ -48818,11 +49098,54 @@
           "generated_at",
           "window",
           "queues",
+          "calls",
           "pagination",
           "source",
           "capabilities"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "calls": {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              },
+              "capabilities": {
+                "type": "object",
+                "properties": {
+                  "live_call_details": {
+                    "enum": [
+                      false
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "calls": {
+                "$ref": "#/components/schemas/QueueLiveCalls"
+              },
+              "capabilities": {
+                "type": "object",
+                "properties": {
+                  "live_call_details": {
+                    "enum": [
+                      true
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
       },
       "QueueLiveEnvelope": {
         "type": "object",
@@ -48834,7 +49157,33 @@
             ]
           },
           "data": {
-            "$ref": "#/components/schemas/QueueLiveSnapshot"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/QueueLiveSnapshot"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "calls": {
+                    "type": "object",
+                    "nullable": true,
+                    "enum": [
+                      null
+                    ]
+                  },
+                  "capabilities": {
+                    "type": "object",
+                    "properties": {
+                      "live_call_details": {
+                        "enum": [
+                          false
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            ]
           },
           "request_id": {
             "type": "string"
@@ -48845,14 +49194,41 @@
         ]
       },
       "QueueLiveDetailEnvelope": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/QueueLiveEnvelope"
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "success"
+            ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "data": {
+          "request_id": {
+            "type": "string"
+          },
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/QueueLiveSnapshot"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "calls": {
+                    "$ref": "#/components/schemas/QueueLiveCalls"
+                  },
+                  "capabilities": {
+                    "type": "object",
+                    "properties": {
+                      "live_call_details": {
+                        "enum": [
+                          true
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              {
                 "type": "object",
                 "properties": {
                   "queues": {
@@ -48887,10 +49263,13 @@
                   }
                 }
               }
-            }
+            ]
           }
+        },
+        "required": [
+          "data"
         ],
-        "description": "A successful selected-queue response contains exactly one queue and never another page."
+        "description": "A successful selected-queue response contains exactly one queue, a calls object, live_call_details=true and never another page. Inspect calls.available and calls.complete; the capability alone is not availability."
       },
       "CallbackPublic": {
         "type": "object",

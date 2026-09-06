@@ -19,14 +19,17 @@ handle_req(Request,Props) ->
     end.
 
 respond(Request,Server) ->
-    Correlation=[{K,kz_json:get_value(K,Request)} || K<-[<<"Account-ID">>,<<"Queue-IDs">>,<<"From">>,<<"To">>,<<"Msg-ID">>]],
+    Correlation=[{K,kz_json:get_value(K,Request)} || K<-[<<"Account-ID">>,<<"Queue-IDs">>,<<"From">>,<<"To">>,<<"Msg-ID">>]]
+        ++case kz_json:get_value(<<"Include-Calls">>,Request) of
+              undefined -> []; Include -> [{<<"Include-Calls">>,Include}]
+          end,
     %% Full PID serialization includes the Erlang node creation/incarnation;
     %% pid_to_list alone would collide across VM restarts. Raw names/PIDs never
     %% enter Snapshot. Broker headers/opaque IDs are not public DTO fields.
     Identity=[{<<"Source-ID">>,kz_term:to_hex_binary(crypto:hash(sha256,atom_to_binary(node(),utf8)))},
               {<<"Source-Incarnation">>,digest({acdc_dashboard,node(),Server})}],
     Body=case collect(Request,Server) of
-             {ok,Projection} -> [{<<"Status">>,<<"ok">>},{<<"Snapshot">>,snapshot(Projection)}];
+             {ok,Projection} -> [{<<"Status">>,<<"ok">>},{<<"Snapshot">>,snapshot(Projection,Request)}];
              {error,Code} -> [{<<"Status">>,<<"error">>},{<<"Error-Code">>,Code}]
          end,
     kapi_acdc_dashboard:publish_snapshot_resp(kz_json:get_value(<<"Server-ID">>,Request),
@@ -58,7 +61,7 @@ digest(Term) -> kz_term:to_hex_binary(crypto:hash(sha256,term_to_binary(Term))).
 
 %% Whitelist every object level. In particular never serialize collector node,
 %% foreign-key scan counts, key identities, caller fields, or arbitrary errors.
-snapshot(P) ->
+snapshot(P,Request) ->
     S=maps:get(source,P), W=maps:get(window,P),
     kz_json:from_list(fields(P,[version,account_id,as_of,timestamp_unit,identity_semantics,
                               distinct_visit_metrics_available,agent_eligibility_available,workforce_metrics_available])++
@@ -66,7 +69,17 @@ snapshot(P) ->
          {<<"source">>,kz_json:from_list(fields(S,[availability,coverage,atomic_snapshot,exhausted,
              completion_reason,projection_complete,cluster_complete,archive_coverage,
              observation_started,observation_finished]))},
-         {<<"queues">>,[queue(Q) || Q<-maps:get(queues,P)]}]).
+         {<<"queues">>,[queue(Q) || Q<-maps:get(queues,P)]}]++calls(P,Request)).
+calls(P,Request) ->
+    case kz_json:get_value(<<"Include-Calls">>,Request) of
+        true ->
+            A=maps:get(active_calls,P),
+            [{<<"active_calls">>,kz_json:from_list(fields(A,[limit,observed_count,truncated,
+                complete,order,coverage,atomic_snapshot])++
+                [{<<"rows">>,[kz_json:from_list(fields(Row,[call_id,queue_id,status,
+                    entered_timestamp,handled_timestamp])) || Row<-maps:get(rows,A)]}])}];
+        _ -> []
+    end.
 queue(Q) ->
     kz_json:from_list(fields(Q,[queue_id,source_exhausted])++
         [{<<"observed">>,counts(maps:get(observed,Q))},

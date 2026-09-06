@@ -13,7 +13,7 @@
 -spec snapshot_req(kz_term:api_terms()) -> {ok, iolist()} | {error, string()}.
 snapshot_req(API) ->
     case snapshot_req_v(API) of
-        true -> kz_api:build_message(to_props(API), ?REQ, []);
+        true -> kz_api:build_message(to_props(API), ?REQ, [<<"Include-Calls">>]);
         false -> {error, "Invalid dashboard snapshot request"}
     end.
 -spec snapshot_req_v(kz_term:api_terms()) -> boolean().
@@ -23,7 +23,7 @@ snapshot_req_v(API) ->
 -spec snapshot_resp(kz_term:api_terms()) -> {ok, iolist()} | {error, string()}.
 snapshot_resp(API) ->
     case snapshot_resp_v(API) of
-        true -> kz_api:build_message(to_props(API), ?RESP, [<<"Snapshot">>, <<"Error-Code">>]);
+        true -> kz_api:build_message(to_props(API), ?RESP, [<<"Snapshot">>, <<"Error-Code">>, <<"Include-Calls">>]);
         false -> {error, "Invalid dashboard snapshot response"}
     end.
 -spec snapshot_resp_v(kz_term:api_terms()) -> boolean().
@@ -38,6 +38,7 @@ validate(API, Required, Name) ->
         kz_api:validate(Props, Required, values(Name), []) andalso
             hex(value(<<"Account-ID">>, Props), 32) andalso
             queue_ids(value(<<"Queue-IDs">>, Props), 100, #{}) andalso
+            calls_scope(value(<<"Include-Calls">>, Props), value(<<"Queue-IDs">>, Props)) andalso
             text(value(<<"Msg-ID">>, Props), 128) andalso
             window(value(<<"From">>, Props), value(<<"To">>, Props))
     catch _:_ -> false end.
@@ -49,6 +50,11 @@ queue_ids([], _, Seen) -> map_size(Seen)>0;
 queue_ids([Q|Rest], Left, Seen) when Left>0 ->
     hex(Q,32) andalso not maps:is_key(Q,Seen) andalso queue_ids(Rest,Left-1,maps:put(Q,true,Seen));
 queue_ids(_, _, _) -> false.
+%% Absent is the legacy metrics-only wire contract. Explicit false is echoed.
+calls_scope(undefined, _) -> true;
+calls_scope(false, _) -> true;
+calls_scope(true, [_]) -> true;
+calls_scope(_, _) -> false.
 response_body(API) ->
     case value(<<"Status">>, API) of
         <<"ok">> -> valid_snapshot(value(<<"Snapshot">>,API),API) andalso value(<<"Error-Code">>,API)=:=undefined;
@@ -60,7 +66,7 @@ valid_snapshot(S,API) ->
     try
         exact_object(S,[<<"version">>,<<"account_id">>,<<"as_of">>,<<"timestamp_unit">>,<<"identity_semantics">>,
             <<"distinct_visit_metrics_available">>,<<"agent_eligibility_available">>,<<"workforce_metrics_available">>,
-            <<"window">>,<<"source">>,<<"queues">>]) andalso
+            <<"window">>,<<"source">>,<<"queues">>]++calls_keys(API)) andalso
         value(<<"version">>,S)=:=1 andalso value(<<"account_id">>,S)=:=value(<<"Account-ID">>,API) andalso
         value(<<"timestamp_unit">>,S)=:= <<"kazoo_gregorian_seconds">> andalso
         value(<<"identity_semantics">>,S)=:= <<"call_queue_pair">> andalso
@@ -70,8 +76,54 @@ valid_snapshot(S,API) ->
         valid_window_object(value(<<"window">>,S),API) andalso
         valid_source(value(<<"source">>,S),value(<<"as_of">>,S),value(<<"To">>,API)) andalso
         valid_queues(value(<<"queues">>,S),value(<<"Queue-IDs">>,API),
-                     value(<<"exhausted">>,value(<<"source">>,S)))
+                     value(<<"exhausted">>,value(<<"source">>,S))) andalso valid_calls(S,API)
     catch _:_ -> false end.
+calls_keys(API) ->
+    case value(<<"Include-Calls">>,API) of true -> [<<"active_calls">>]; _ -> [] end.
+
+valid_calls(S,API) ->
+    case value(<<"Include-Calls">>,API) of
+        true ->
+            [Selected]=value(<<"Queue-IDs">>,API),
+            A=value(<<"active_calls">>,S),
+            N=value(<<"observed_count">>,A),
+            Exhausted=value(<<"exhausted">>,value(<<"source">>,S)),
+            exact_object(A,[<<"rows">>,<<"limit">>,<<"observed_count">>,<<"truncated">>,
+                <<"complete">>,<<"order">>,<<"coverage">>,<<"atomic_snapshot">>]) andalso
+            bounded_integer(N,10000) andalso value(<<"limit">>,A)=:=200 andalso
+            value(<<"truncated">>,A)=:=(N>200) andalso
+            value(<<"complete">>,A)=:=(Exhausted andalso N=<200) andalso
+            value(<<"order">>,A)=:= <<"queue_id_entered_call_id">> andalso
+            value(<<"coverage">>,A)=:= <<"local_table_only">> andalso
+            value(<<"atomic_snapshot">>,A)=:=false andalso
+            active_rows(value(<<"rows">>,A),Selected,value(<<"as_of">>,S),
+                        erlang:min(N,200),undefined,#{}) andalso
+            active_count_matches(Exhausted,N,value(<<"queues">>,S));
+        _ -> true
+    end.
+active_count_matches(false,_,_) -> true;
+active_count_matches(true,N,[Queue]) ->
+    C=value(<<"observed">>,Queue),
+    N=:=value(<<"current_waiting">>,C)+value(<<"current_handled">>,C).
+
+%% Recursion is bounded before inspecting the next row. Identity uniqueness is
+%% independent of the entry timestamp: changing entry time cannot hide a dup.
+active_rows([],_,_,0,_,_) -> true;
+active_rows([Row|Rest],Selected,AsOf,Left,Previous,Seen) when Left>0 ->
+    Call=value(<<"call_id">>,Row), Queue=value(<<"queue_id">>,Row),
+    Entered=value(<<"entered_timestamp">>,Row),
+    Key={Queue,Entered,Call}, Identity={Queue,Call},
+    exact_object(Row,[<<"call_id">>,<<"queue_id">>,<<"status">>,
+                      <<"entered_timestamp">>,<<"handled_timestamp">>]) andalso
+    text(Call,256) andalso Queue=:=Selected andalso
+    is_integer(Entered) andalso Entered>0 andalso Entered=<AsOf andalso
+    active_timeline(value(<<"status">>,Row),Entered,value(<<"handled_timestamp">>,Row),AsOf) andalso
+    (Previous=:=undefined orelse Previous<Key) andalso not maps:is_key(Identity,Seen) andalso
+    active_rows(Rest,Selected,AsOf,Left-1,Key,maps:put(Identity,true,Seen));
+active_rows(_,_,_,_,_,_) -> false.
+active_timeline(<<"waiting">>,_,null,_) -> true;
+active_timeline(<<"handled">>,E,H,AsOf) -> is_integer(H) andalso H>=E andalso H=<AsOf;
+active_timeline(_,_,_,_) -> false.
 valid_asof(N,To) when is_integer(N), N>=To ->
     N=<calendar:datetime_to_gregorian_seconds(calendar:universal_time());
 valid_asof(_,_) -> false.

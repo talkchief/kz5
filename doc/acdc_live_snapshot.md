@@ -11,8 +11,8 @@ by `cb_queues.erl`:
 
 - `/v2/accounts/{ACCOUNT_ID}/queues/live`: bounded queue-summary page.
 - `/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/live`: the selected queue's
-  summary in the same envelope. Detailed calls and runtime agents are the next
-  integration slice; this route does **not** yet provide those collections.
+  summary and bounded observed active-call collection in the same envelope.
+  Runtime queue-agent observations remain a separate integration requirement.
 
 Overview accepts only `page_size` (1–100, default 50) and optional inclusive
 `start_queue_id`. Use the returned `next_start_queue_id` unchanged. Detail
@@ -62,12 +62,22 @@ legacy call/queue-pair identity, not a guaranteed distinct queue visit.
 
 ## Remaining delivery requirements
 
-The four capabilities currently report false: `live_call_details`,
-`agent_runtime`, `websocket_updates`, and `historical_reporting`. The first
-three remain required for live delivery; historical reporting is postponed.
-Do not wire this summary-only slice as though it completes queue detail.
+The detail route advertises `live_call_details=true`; overview reports false
+and `calls=null`. Detail returns at most 200 observed waiting/handled calls,
+ordered by queue ID, entry timestamp and call ID. Rows expose only call ID,
+queue ID, status, `entered_at` and nullable `handled_at` (Unix seconds).
+It does not expose caller identity, agent identity or infer queue position.
+Calls are compared across the same replicas as metrics, not concatenated.
+`observed_count` retains the full observed active count even when rows are
+capped; `truncated=true` then implies `complete=false`. Unavailable calls have
+`available=false`, null count and empty rows; this is not complete zero.
+The source's non-atomic, observed-replica limits still apply to complete lists.
 
-Next: bounded active-call and runtime queue-agent data; tenant/queue-authorized
+`agent_runtime`, `websocket_updates`, and `historical_reporting` currently
+report false. The first two remain required for live delivery; historical
+reporting is postponed. This is not yet a completed queue-detail dashboard.
+
+Next: bounded runtime queue-agent data; tenant/queue-authorized
 native Blackhole invalidation events; snapshot recovery after reconnect or
 missed events; matching Monster UI integration; OpenAPI generation; coherent
 build/deployment and actual browser/call-state tests. The existing live UI source
@@ -106,3 +116,27 @@ Root10036 regenerated `scripts/assets/api-docs/{openapi,coverage,manifest}.json`
 and verified all 11 catalog assets. The manifest is byte-identical to the
 private verified catalog above. These repository artifacts describe source
 implementation; the running `/apis` portal has not been republished here.
+
+### Selected active-call extension
+
+The next source checkpoint supersedes the summary-only capability contract:
+
+| Validation | Result and evidence |
+| --- | --- |
+| Collector, root83794 | 42 tests passed, including deterministic top-200 active rows, older calls, truncation and incomplete scans. `/tmp/kazoo-dashboard-collector.EdmiJm/`. |
+| Transport, root52933 | 28 tests passed, including opt-in single-queue rows, strict schema and federated reply routing. `/tmp/kazoo-dashboard-amqp.0Z6cX6/`. |
+| HTTP, root52933 | 12 production modules compiled; 9 production-handler route groups and 2 separate helper tests passed. `/tmp/kazoo-live-snapshot.eiexlE/`. |
+| Private catalog, root62421 | 13 focused groups/214 schema cases; full catalog 358 paths, 653 operations, 498 schemas and 1,585 references passed. `/tmp/kazoo-api-live-catalog.ynOpUx/`. |
+
+Initial extension failures remain retained: the null-field transport fixture
+silently removed its field until corrected (`/tmp/kazoo-dashboard-amqp.XHXQjs`);
+the first public compilation found two new syntax errors, corrected before
+the passing run (`/tmp/kazoo-live-snapshot.CYokzJ`). These are not live incidents.
+No new backend/UI deployment or authenticated browser acceptance is established
+by these isolated tests. Queue-agent runtime and native Blackhole delivery
+remain open.
+
+Root7042 regenerated the repository catalog. Its first verification invocation
+used an unsupported CLI option and exited2; corrected root67333 verified all11
+assets and byte-identical manifest against the private62421 catalog. This
+updates repository artifacts only, not the running `/apis` portal.

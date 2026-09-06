@@ -16,6 +16,29 @@ waiting() -> #call_stat{id = <<"call::",?Q/binary>>,call_id = <<"call">>,account
     queue_id=?Q,entered_timestamp=now_s()-5000,status = <<"waiting">>,
     caller_id_name = <<"NEVER-COPY-CALLER">>,caller_id_number = <<"NEVER-COPY-NUMBER">>,
     misses=[{private,<<"NEVER-COPY-MISSES">>}]}.
+detail_request() -> kz_json:set_value(<<"Include-Calls">>,true,request()).
+detail(R) -> kz_json:get_value([<<"Snapshot">>,<<"active_calls">>],R).
+
+include_calls_request_scope_and_roundtrip_test() ->
+    %% Default set_value/3 treats null as deletion; explicitly retain the bad
+    %% wire value so this is not accidentally a valid absent/legacy request.
+    [begin
+        BadReq=kz_json:set_value(<<"Include-Calls">>,Bad,request(),#{keep_null=>true}),
+        ?assertEqual(Bad,kz_json:get_value(<<"Include-Calls">>,BadReq)),
+        Wire=kz_json:decode(iolist_to_binary(kz_json:encode(BadReq))),
+        ?assertEqual(Bad,kz_json:get_value(<<"Include-Calls">>,Wire)),
+        ?assertNot(kapi_acdc_dashboard:snapshot_req_v(Wire)),
+        ?assertNot(kapi_acdc_dashboard:snapshot_req_v(kz_json:to_proplist(Wire)))
+     end ||
+        Bad<-[null,0,1,<<"true">>,[],kz_json:new()]],
+    ?assertNot(kapi_acdc_dashboard:snapshot_req_v(kz_json:set_value(<<"Queue-IDs">>,[?Q,?Q2],detail_request()))),
+    [?assert(kapi_acdc_dashboard:snapshot_req_v(Req)) || Req<-[detail_request(),
+        kz_json:set_values([{<<"Include-Calls">>,false},{<<"Queue-IDs">>,[?Q,?Q2]}],request())]],
+    [begin {ok,Encoded}=kapi_acdc_dashboard:snapshot_req(kz_json:set_value(<<"Include-Calls">>,Flag,request())),
+     ?assertEqual(Flag,kz_json:get_value(<<"Include-Calls">>,kz_json:decode(iolist_to_binary(Encoded)))) end ||
+     Flag<-[false,true]],
+    {ok,Legacy}=kapi_acdc_dashboard:snapshot_req(request()),
+    ?assertEqual(undefined,kz_json:get_value(<<"Include-Calls">>,kz_json:decode(iolist_to_binary(Legacy)))).
 
 request_roundtrip_and_closed_fields_test() ->
     Req=request(), ?assert(kapi_acdc_dashboard:snapshot_req_v(Req)),
@@ -72,6 +95,8 @@ actual_collector_response_and_strict_schema_test() -> with_source(fun(T)->
     ?assertEqual(kz_term:to_hex_binary(crypto:hash(sha256,atom_to_binary(node(),utf8))),kz_json:get_value(<<"Source-ID">>,R)),
     ?assertEqual(kz_term:to_hex_binary(crypto:hash(sha256,term_to_binary({acdc_dashboard,node(),self()}))),kz_json:get_value(<<"Source-Incarnation">>,R)),
     [Q]=kz_json:get_value(<<"queues">>,S), C=kz_json:get_value(<<"metrics">>,Q),
+    ?assertEqual(undefined,kz_json:get_value(<<"Include-Calls">>,R)),
+    ?assertEqual(undefined,detail(R)),
     ?assertEqual(1,kz_json:get_value(<<"current_waiting">>,C)),
     ?assertEqual(0,kz_json:get_value(<<"records_entered">>,C)),
     ?assertEqual(null,kz_json:get_value(<<"average_answered_wait_seconds">>,C)),
@@ -101,10 +126,101 @@ actual_collector_response_and_strict_schema_test() -> with_source(fun(T)->
     ?assertEqual(false,ets:info(T,safe_fixed))
 end).
 
+actual_detail_response_and_strict_schema_test() -> with_source(fun(T)->
+    E=now_s()-50,
+    H=(waiting())#call_stat{id= <<"handled::",?Q/binary>>,call_id= <<"handled">>,
+        status= <<"handled">>,entered_timestamp=E,handled_timestamp=E+5},
+    ets:insert(T,[waiting(),H]),
+    R=response(detail_request(),self()), A=detail(R),
+    ?assertEqual(true,kz_json:get_value(<<"Include-Calls">>,R)),
+    ?assertEqual(2,kz_json:get_value(<<"observed_count">>,A)),
+    ?assertEqual(true,kz_json:get_value(<<"complete">>,A)),
+    ?assertEqual(false,kz_json:get_value(<<"truncated">>,A)),
+    ?assertEqual(200,kz_json:get_value(<<"limit">>,A)),
+    ?assertEqual(<<"queue_id_entered_call_id">>,kz_json:get_value(<<"order">>,A)),
+    [WRow,HRow]=kz_json:get_value(<<"rows">>,A),
+    ?assertEqual(<<"call">>,kz_json:get_value(<<"call_id">>,WRow)),
+    ?assertEqual(null,kz_json:get_value(<<"handled_timestamp">>,WRow)),
+    ?assert(kz_json:get_value(<<"entered_timestamp">>,WRow)<kz_json:get_value(<<"From">>,R)),
+    ?assertEqual(E+5,kz_json:get_value(<<"handled_timestamp">>,HRow)),
+    ?assertEqual(?Q,kz_json:get_value(<<"queue_id">>,HRow)),
+    ?assertEqual(nomatch,binary:match(iolist_to_binary(kz_json:encode(A)),<<"NEVER-COPY">>)),
+    Prefix=[<<"Snapshot">>,<<"active_calls">>],
+    Mutations=[{<<"limit">>,201},{<<"observed_count">>,-1},{<<"observed_count">>,10001},
+        {<<"observed_count">>,3},{<<"complete">>,false},{<<"truncated">>,true},
+        {<<"order">>,<<"queue_position">>},{<<"coverage">>,<<"cluster">>},
+        {<<"atomic_snapshot">>,true},{<<"caller_id_name">>,<<"private">>}],
+    [?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:set_value(Prefix++[K],V,R))) || {K,V}<-Mutations],
+    BadRows=[[],[WRow],[WRow,WRow],[HRow,WRow],lists:duplicate(201,WRow),
+        [kz_json:set_value(<<"queue_id">>,?Q2,WRow),HRow],
+        [kz_json:set_value(<<"call_id">>,<<>>,WRow),HRow],
+        [kz_json:set_value(<<"call_id">>,binary:copy(<<"x">>,257),WRow),HRow],
+        [kz_json:set_value(<<"call_id">>,<<"bad\ncall">>,WRow),HRow],
+        [kz_json:set_value(<<"status">>,<<"processed">>,WRow),HRow],
+        [kz_json:set_value(<<"entered_timestamp">>,0,WRow),HRow],
+        [kz_json:set_value(<<"entered_timestamp">>,now_s()+100,WRow),HRow],
+        [kz_json:set_value(<<"handled_timestamp">>,E,WRow),HRow],
+        [WRow,kz_json:set_value(<<"handled_timestamp">>,null,HRow)],
+        [WRow,kz_json:set_value(<<"handled_timestamp">>,E-1,HRow)],
+        [WRow,kz_json:set_value(<<"handled_timestamp">>,now_s()+100,HRow)],
+        [WRow,kz_json:set_value(<<"call_id">>,<<"call">>,HRow)],
+        [WRow,kz_json:set_value(<<"agent_id">>,<<"private">>,HRow)]],
+    [?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:set_value(Prefix++[<<"rows">>],Rs,R))) || Rs<-BadRows],
+    ?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:delete_key(Prefix,R))),
+    ?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:delete_key(<<"Include-Calls">>,R))),
+    ?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:set_value(<<"Include-Calls">>,false,R))),
+    %% Row length still matches metadata, but exhausted queue counts do not.
+    [Q]=kz_json:get_value([<<"Snapshot">>,<<"queues">>],R),
+    WrongQ=kz_json:set_values([{[<<"observed">>,<<"current_waiting">>],2},
+                               {[<<"metrics">>,<<"current_waiting">>],2}],Q),
+    ?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:set_value([<<"Snapshot">>,<<"queues">>],[WrongQ],R))),
+    False=response(kz_json:set_value(<<"Include-Calls">>,false,request()),self()),
+    ?assertEqual(false,kz_json:get_value(<<"Include-Calls">>,False)),
+    ?assertEqual(undefined,detail(False)),
+    ?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:set_value(<<"Include-Calls">>,true,False)))
+end).
+
+actual_detail_cap_and_error_echo_test() -> with_source(fun(T)->
+    E=now_s()-500,
+    ets:insert(T,[(waiting())#call_stat{id= <<(integer_to_binary(I))/binary,"::",?Q/binary>>,
+        call_id=integer_to_binary(I),entered_timestamp=E+I} || I<-lists:seq(1,201)]),
+    R=response(detail_request(),self()), A=detail(R), Rows=kz_json:get_value(<<"rows">>,A),
+    ?assertEqual(200,length(Rows)),?assertEqual(201,kz_json:get_value(<<"observed_count">>,A)),
+    ?assertEqual(true,kz_json:get_value(<<"truncated">>,A)),
+    ?assertEqual(false,kz_json:get_value(<<"complete">>,A)),
+    ?assertEqual([integer_to_binary(I) || I<-lists:seq(1,200)],
+                 [kz_json:get_value(<<"call_id">>,Row) || Row<-Rows]),
+    ?assertEqual(true,kz_json:get_value([<<"Snapshot">>,<<"source">>,<<"exhausted">>],R)),
+    ?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:set_value([<<"Snapshot">>,<<"active_calls">>,<<"complete">>],true,R))),
+    meck:expect(acdc_stats_sup,stats_srv,fun()->{error,not_found} end),
+    Err=response(detail_request(),self()),
+    ?assertEqual(true,kz_json:get_value(<<"Include-Calls">>,Err)),
+    ?assertEqual(<<"source_unavailable">>,kz_json:get_value(<<"Error-Code">>,Err)),
+    ?assertEqual(undefined,kz_json:get_value(<<"Snapshot">>,Err))
+end).
+
+actual_empty_and_incomplete_detail_test() -> with_source(fun(T)->
+    Empty=response(detail_request(),self()),
+    ?assertEqual([],kz_json:get_value(<<"rows">>,detail(Empty))),
+    ?assertEqual(true,kz_json:get_value(<<"complete">>,detail(Empty))),
+    E=now_s()-20,
+    ets:insert(T,[(waiting())#call_stat{id= <<(integer_to_binary(I))/binary,"::",?Q2/binary>>,
+        call_id=integer_to_binary(I),queue_id=?Q2,entered_timestamp=E} || I<-lists:seq(1,10001)]),
+    Partial=response(detail_request(),self()), A=detail(Partial),
+    ?assertEqual([],kz_json:get_value(<<"rows">>,A)),
+    ?assertEqual(0,kz_json:get_value(<<"observed_count">>,A)),
+    ?assertEqual(false,kz_json:get_value(<<"truncated">>,A)),
+    ?assertEqual(false,kz_json:get_value(<<"complete">>,A)),
+    ?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:set_value([<<"Snapshot">>,<<"active_calls">>,<<"complete">>],true,Partial)))
+end).
+
 invalid_requests_do_not_discover_or_read_or_publish_test() -> with_source(fun(T)->
     meck:expect(acdc_stats_sup,stats_srv,fun()->error(source_must_not_be_read) end),
     Bad=kz_json:set_value(<<"Queue-IDs">>,[<<"bad">>],request()),
     ?assertEqual({error,invalid_request},acdc_dashboard_snapshot:handle_req(Bad,[{server,self()}])),
+    [?assertEqual({error,invalid_request},acdc_dashboard_snapshot:handle_req(Req,[{server,self()}])) ||
+        Req<-[kz_json:set_value(<<"Queue-IDs">>,[?Q,?Q2],detail_request()),
+              kz_json:set_value(<<"Include-Calls">>,<<"true">>,request())]],
     ?assertEqual({error,invalid_listener},acdc_dashboard_snapshot:handle_req(request(),[])),
     ?assertEqual(0,meck:num_calls(acdc_stats_sup,stats_srv,'_')),
     ?assertEqual(0,meck:num_calls(kz_amqp_util,targeted_publish,'_')),

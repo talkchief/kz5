@@ -16,6 +16,8 @@ const strict = properties => ({type: 'object', properties, required: Object.keys
 const id = {type: 'string', pattern: '^[a-f0-9]{32}$'};
 const time = {type: 'integer', format: 'int64', minimum: 1,
     description: 'Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds.'};
+const callTime = {type: 'integer', format: 'int64', description:
+    'Signed Unix epoch seconds. A retained call can predate the Unix epoch; no positive minimum is imposed. Not Gregorian seconds or milliseconds.'};
 const count = {type: 'integer', minimum: 0};
 const fixedFalse = {type: 'boolean', enum: [false]};
 const nullObject = {type: 'object', nullable: true, enum: [null]};
@@ -29,7 +31,25 @@ function queueLiveContract() {
             : key === 'max_current_wait_seconds' ? {...count, nullable: true} : count]));
     const text = {type: 'string', minLength: 1, maxLength: 256, 'x-max-utf8-bytes': 256};
     const queueFields = {id, name: text, strategy: {...text, nullable: true}};
+    const callFields = {call_id: {...text, pattern: '^[^\\x00-\\x1f\\x7f]+$'}, queue_id: id, entered_at: callTime};
+    const callsFields = {limit: {type: 'integer', enum: [200]},
+        order: {type: 'string', enum: ['queue_id_entered_call_id']}};
+    const callRows = {type: 'array', maxItems: 200, uniqueItems: true, items: ref('QueueLiveCall')};
     const schemas = {
+        QueueLiveCall: {oneOf: [
+            strict({...callFields, status: {type: 'string', enum: ['waiting']},
+                handled_at: {type: 'integer', nullable: true, enum: [null]}}),
+            strict({...callFields, status: {type: 'string', enum: ['handled']}, handled_at: callTime})
+        ], description: 'Observed active call/queue identity, not a distinct visit or verified telephony channel. Only these five fields are exposed; no caller name/number, agent ID or queue position. Waiting has handled_at=null; handled has an integer handled_at. Runtime validation requires entered_at <= handled_at <= observation time for handled rows and entered_at <= observation time for every row.'},
+        QueueLiveCalls: {oneOf: [
+            strict({...callsFields, available: fixedFalse, complete: fixedFalse, truncated: fixedFalse,
+                observed_count: {type: 'integer', nullable: true, enum: [null]}, rows: {...callRows, maxItems: 0}}),
+            strict({...callsFields, available: {type: 'boolean', enum: [true]}, complete: {type: 'boolean', enum: [true]},
+                truncated: fixedFalse, observed_count: {...count, maximum: 200}, rows: callRows}),
+            strict({...callsFields, available: {type: 'boolean', enum: [true]}, complete: fixedFalse,
+                truncated: {type: 'boolean', enum: [true]}, observed_count: {type: 'integer', minimum: 201, maximum: 10000},
+                rows: {...callRows, minItems: 200}})
+        ], description: 'Selected-queue calls only. Unavailable means empty rows and null observed_count, never an observed zero. Complete available observations may legitimately have no active calls and count zero. A capped observation is available=true, complete=false, truncated=true with 200 rows and observed_count>200. Rows are ordered by queue_id, entered_at, call_id, oldest entered first within the selected queue; this is NOT actual queue position. Runtime invariants: row identities are unique and scoped to the selected queue, rows.length=min(observed_count,200), and observed_count equals the selected queue current_waiting+current_handled when the source is exhausted. OpenAPI does not express these cross-value comparisons. Completeness is local non-atomic observation coverage, not global occupancy proof.'},
         QueueLiveMetrics: {...strict(metrics), description:
             'Observed current record states and the last-hour entered-record cohort. current_waiting/current_handled are observed states, not telephony channel verification. The seven count fields are nonnegative integers. Maximum wait and averages are null without an applicable observation or denominator; never replace null with zero. records_entered counts call/queue identities, not distinct queue visits. Service level, abandonment rate and handling-time KPIs are not provided.'},
         QueueLiveQueue: {oneOf: [
@@ -55,27 +75,32 @@ function queueLiveContract() {
                     consistent: {enum: [false]}}}
             ],
             description: 'Consensus/coverage metadata for observed replicas, not an atomic cluster snapshot. available means consensus or an empty configured scope; unavailable means source_unavailable; every other listed reason is partial. consistent is true only for available. Source IDs, node names and internal scan counts are intentionally absent. A response timestamp is not source observation time. Partial/unavailable observations must not be presented as complete occupancy.'},
-        QueueLiveCapabilities: {...strict({live_call_details: fixedFalse, agent_runtime: fixedFalse,
+        QueueLiveCapabilities: {...strict({live_call_details: {type: 'boolean'}, agent_runtime: fixedFalse,
             websocket_updates: fixedFalse, historical_reporting: fixedFalse}),
-            description: 'All four capabilities are false in v1. No caller/agent detail rows, runtime agent readiness, WebSocket update protocol or historical reporting are supplied by this route.'}
+            description: 'live_call_details is true for selected detail and false for overview; it indicates the route supports call rows, not that current rows are available. agent_runtime, websocket_updates and historical_reporting remain false.'}
     };
     schemas.QueueLiveSnapshot = strict({version: {type: 'integer', enum: [1]}, account_id: id,
         generated_at: {...time, description: time.description + ' Response generation time, not proof of source freshness.'},
         window: ref('QueueLiveWindow'), queues: {type: 'array', maxItems: 100, items: ref('QueueLiveQueue')},
+        calls: {oneOf: [nullObject, ref('QueueLiveCalls')]},
         pagination: ref('QueueLivePagination'), source: ref('QueueLiveSource'), capabilities: ref('QueueLiveCapabilities')});
+    const callScope = selected => ({type: 'object', properties: {calls: selected ? ref('QueueLiveCalls') : nullObject,
+        capabilities: {type: 'object', properties: {live_call_details: {enum: [selected]}}}}});
+    schemas.QueueLiveSnapshot.oneOf = [callScope(false), callScope(true)];
     schemas.QueueLiveEnvelope = {type: 'object', properties: {status: {type: 'string', enum: ['success']},
-        data: ref('QueueLiveSnapshot'), request_id: {type: 'string'}}, required: ['data']};
-    schemas.QueueLiveDetailEnvelope = {allOf: [ref('QueueLiveEnvelope'), {type: 'object', properties: {
-        data: {type: 'object', properties: {queues: {type: 'array', items: ref('QueueLiveQueue'), minItems: 1, maxItems: 1},
+        data: {allOf: [ref('QueueLiveSnapshot'), callScope(false)]}, request_id: {type: 'string'}}, required: ['data']};
+    schemas.QueueLiveDetailEnvelope = {type: 'object', properties: {status: {type: 'string', enum: ['success']},
+        request_id: {type: 'string'}, data: {allOf: [ref('QueueLiveSnapshot'), callScope(true),
+        {type: 'object', properties: {queues: {type: 'array', items: ref('QueueLiveQueue'), minItems: 1, maxItems: 1},
             pagination: {type: 'object', properties: {page_size: {enum: [1]}, has_more: {enum: [false]},
-                next_start_queue_id: {type: 'string', nullable: true, enum: [null]}}}}}
-    }}], description: 'A successful selected-queue response contains exactly one queue and never another page.'};
+                next_start_queue_id: {type: 'string', nullable: true, enum: [null]}}}}}]}}, required: ['data'],
+        description: 'A successful selected-queue response contains exactly one queue, a calls object, live_call_details=true and never another page. Inspect calls.available and calls.complete; the capability alone is not availability.'};
     const paths = {};
     for (const [url, selected] of [[OVERVIEW, false], [DETAIL, true]]) {
         paths[url] = {get: {
             operationId: selected ? 'getAccountQueueLiveSnapshot' : 'getAccountQueuesLiveSnapshot', tags: ['ACDC queues'],
             summary: selected ? 'Read an observed live snapshot for one queue' : 'Read a page of observed live queue snapshots',
-            description: 'Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. All v1 capability flags are false; do not fabricate call details, ready counts, SLA, historical reports or WebSocket updates. ' +
+            description: 'Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null and live_call_details=false. Detail has a bounded calls object and live_call_details=true, independently of calls.available. No caller name/number, agent IDs, actual queue positions, ready counts, SLA, historical reports or WebSocket updates are supplied. ' +
                 (selected ? 'This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.'
                     : 'page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.'),
             parameters: [{name: 'ACCOUNT_ID', in: 'path', required: true, schema: id}, ...(selected
@@ -116,9 +141,36 @@ function applyQueueLive({spec, root}) {
         'kz_amqp_worker:call_collect(Req,fun kapi_acdc_dashboard:publish_snapshot_req/1,Until,3000)',
         '<<"consensus">>-> <<"available">>', '<<"empty_scope">>-> <<"available">>',
         '<<"source_unavailable">>-> <<"unavailable">>; _-> <<"partial">>',
-        '[{K,false} || K <- [<<"live_call_details">>,<<"agent_runtime">>',
-        '<<"websocket_updates">>,<<"historical_reporting">>]']) {
+        'IncludeCalls = QueueId =/= undefined', '<<"calls">>,public_calls(IncludeCalls, ActiveCalls)',
+        '<<"live_call_details">>,IncludeCalls',
+        '{<<"agent_runtime">>,false},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}',
+        'public_calls(false,_) -> null', 'public_calls(true,null)',
+        '{<<"limit">>,200},{<<"observed_count">>,null}',
+        '{<<"rows">>,[public_call(R) || R<-val(<<"rows">>,C)]}', 'public_call(R) ->',
+        '{<<"call_id">>,val(<<"call_id">>,R)},{<<"queue_id">>,val(<<"queue_id">>,R)}',
+        '{<<"status">>,val(<<"status">>,R)}',
+        '{<<"observed_count">>,val(<<"observed_count">>,C)},{<<"order">>,val(<<"order">>,C)}',
+        'normalized_calls(kz_json:get_value(<<"active_calls">>,S,null))',
+        '(val(<<"Include-Calls">>,R)=:=true)=:=(props:get_value(<<"Include-Calls">>,Req)=:=true)',
+        '<<"entered_at">>,unix(val(<<"entered_timestamp">>,R))',
+        '<<"handled_at">>,unix(val(<<"handled_timestamp">>,R))',
+        'unix(null) -> null', 'unix(N) when is_integer(N) -> N-?EPOCH']) {
         assert(source.includes(expected), 'Queue-live source contract changed: ' + expected);
+    }
+    for (const [file, needles] of [
+        ['applications/acdc/src/acdc_dashboard_collector.erl', ['-define(MAX_ACTIVE_CALLS, 200).',
+            'gb_trees:insert({Queue, Entered, Call}, Value, Tree)', 'order=>queue_id_entered_call_id']],
+        ['applications/acdc/src/kapi_acdc_dashboard.erl', ['calls_scope(true, [_]) -> true',
+            'bounded_integer(N,10000)', 'value(<<"limit">>,A)=:=200',
+            'active_timeline(<<"waiting">>,_,null,_) -> true',
+            'active_timeline(<<"handled">>,E,H,AsOf)',
+            'active_count_matches(true,N,[Queue])', 'erlang:min(N,200)',
+            'not maps:is_key(Identity,Seen)', 'Previous<Key']],
+        ['applications/acdc/src/acdc_dashboard_snapshot.erl', ['fields(Row,[call_id,queue_id,status,',
+            'entered_timestamp,handled_timestamp])', 'scalar(undefined) -> null']]
+    ]) {
+        for (const needle of needles) assert(bytes[file].toString().includes(needle),
+            'Queue-live source contract changed: ' + file + ': ' + needle);
     }
     for (const reason of REASONS) assert(source.includes('<<"' + reason + '">>'), 'Queue-live reason missing from source: ' + reason);
     const routes = bytes[sourceFiles[0]].toString();

@@ -67,6 +67,7 @@ proof before promotion; the handoff does not waive those safety gates.
 | --- | --- | --- |
 | P0-01 | ACTIVE — API + UI | Queue-specific Login: backend committed `4fc2a2b` with 12 isolated regression groups passing and exact fresh pinned installer-patch replay; explicit-selection UI committed `d263342` with focused/full contract passes. Source-bound OpenAPI overlay/reference committed `22b5f94`, with 9 focused groups / 45 schema cases passing. No silent roster changes or other-agent logout; membership is not readiness. Regenerate/publish `/apis`, deploy and test selected-agent ringing. |
 | P0-02 | OPEN — acceptance | Re-test extension 2000 after the operator selects the intended queue agent. Observed roster Agent 12 logged out; globally ready Agent 19 unassigned; runtime knows no eligible agents. Do not reset all agents to conceal the mismatch. |
+| P0-13 | SOURCE FIX TESTED — deployment open | Live dashboard review found the outbound FSM emits `outbound` in sync replies, but `kapi_acdc_agent` excluded it from the reply status enum. The legitimate state is now accepted. Root38933 passed3 baseline groups reproducing the actual serializer/publisher failure and11 candidate groups, with broker publication substituted; evidence `/tmp/kazoo-agent-sync-status.xBuTWi`. The listener invokes that publisher synchronously, creating a potential restart path before the fix. Real listener/restart, live-call acceptance and deployment remain separate; no confirmed live crash is claimed. |
 | P0-03 | ACTIVE — callback | Key 6: identified queue audio starved behind endless hold. Private immediate-audio candidate passed 58 distinct offline cases, but source review found synchronous native playback behind a five-second RPC timeout and blocked call-control handling. Candidate deployment is held for correction/native boundary proof; offline passes do not close this risk. Handle invalid return caller ID clearly; durable registration before success audio/BYE, position retention and unanswered-first-attempt retry require live acceptance. |
 | P0-04 | ACTIVE — callback | Callback offer at configured 30 seconds: separate enable, initial delay and repeat interval from position/wait/generic announcements; verify saved values, runtime schedule and received audio. Invalid return numbers must not cause silent failure. |
 | P0-11 | ACTIVE — source fixed; deployment open | Announcement worker mailbox starvation: elapsed deadlines now run before another receive; pre-playback event drains stop the temporary worker after 256 handled events plus one overflow probe. Two regressions failed before the fix; all 12 scheduler/worker tests and production-warning compilation pass afterward. No caller hangup, global media flush or worker restart is added. See doc/acdc_announcement_mailbox_fairness.md. This does not resolve audio behind endless hold, native ownership or live 30-second offer acceptance. |
@@ -226,7 +227,16 @@ scope change. Existing Kazoo archives are left intact. Agent rows/state inside
 the selected queue remain in scope. This override takes precedence over the
 older OPEN labels and broad requirements retained below for future reference.
 
-Live integration checkpoint: bounded HTTP summary/selected-summary source is
+Selected-call extension (latest): collector42 tests, transport28 tests,
+production HTTP9 groups plus2 helpers, and private OpenAPI13 groups/214 schema
+cases passed. Detail now returns at most200 observed active calls, with explicit
+unavailable/complete/truncated semantics and full observed count; source and
+replica limits remain explicit. See `doc/acdc_live_snapshot.md` for evidence.
+The repository catalog was regenerated7042 and verified67333 (11 assets,
+byte-identical to private62421); `/apis` was not republished. Native Blackhole,
+queue-agent runtime and matching UI/deployment acceptance remain open.
+
+Earlier live integration checkpoint: bounded HTTP summary/selected-summary source is
 being connected to the collector through a strict internal broker contract;
 see `doc/acdc_live_snapshot.md`. The selected route is not yet full queue detail:
 active-call rows, runtime queue agents, Blackhole updates and UI wiring remain

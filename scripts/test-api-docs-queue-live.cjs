@@ -32,11 +32,18 @@ function snapshot() {
             metrics: {current_waiting: 0, current_handled: 0, max_current_wait_seconds: null, records_entered: 0,
                 waiting_in_cohort: 0, handled_in_cohort: 0, processed_in_cohort: 0, abandoned_in_cohort: 0,
                 average_answered_wait_seconds: null, average_processed_talk_seconds: null}}],
-        pagination: {page_size: 50, next_start_queue_id: null, has_more: false},
+        calls: null, pagination: {page_size: 50, next_start_queue_id: null, has_more: false},
         source: {coverage: 'observed_replicas', all_known_sources_responded: true, consistent: true,
             atomic_snapshot: false, status: 'available', reason: 'consensus',
             observation_started_at: 1700003599, observation_finished_at: 1700003600},
         capabilities: {live_call_details: false, agent_runtime: false, websocket_updates: false, historical_reporting: false}};
+}
+function calls() {
+    return {available: true, complete: true, truncated: false, limit: 200, observed_count: 0,
+        order: 'queue_id_entered_call_id', rows: []};
+}
+function callRow() {
+    return {call_id: 'synthetic-call', queue_id: queue, status: 'waiting', entered_at: 1700000000, handled_at: null};
 }
 async function main() {
     group('two GET routes use account token security, bounded overview cursor and query-free detail', () => {
@@ -92,7 +99,7 @@ async function main() {
         rejects(test, {page_size: 101, next_start_queue_id: null, has_more: false});
         assert(schemas.QueueLivePagination.description.includes('first unreturned'));
     });
-    group('source coverage and all false capabilities exclude node identities, scan counters and invented features', () => {
+    group('source coverage and route-scoped capability exclude node identities, scan counters and invented features', () => {
         const sourceTest = validate('QueueLiveSource'), source = snapshot().source;
         accepts(sourceTest, source);
         for (const reason of REASONS) {
@@ -109,8 +116,11 @@ async function main() {
         rejects(sourceTest, {...source, atomic_snapshot: true}); rejects(sourceTest, {...source, coverage: 'cluster_complete'});
         rejects(sourceTest, {...source, reason: 'invented'});
         const capTest = validate('QueueLiveCapabilities'), caps = snapshot().capabilities; accepts(capTest, caps);
+        accepts(capTest, {...caps, live_call_details: true});
         for (const key of Object.keys(caps)) {
-            rejects(capTest, {...caps, [key]: true}); const missing = {...caps}; delete missing[key]; rejects(capTest, missing);
+            if (key !== 'live_call_details') rejects(capTest, {...caps, [key]: true});
+            rejects(capTest, {...caps, [key]: null});
+            const missing = {...caps}; delete missing[key]; rejects(capTest, missing);
         }
     });
     group('Unix seconds, fixed window, required envelope fields and maximum page are documented and typed', () => {
@@ -127,10 +137,54 @@ async function main() {
     });
     group('selected detail has exactly one queue, page_size one and no cursor', () => {
         const test = validate('QueueLiveDetailEnvelope'), data = snapshot();
-        data.pagination.page_size = 1; accepts(test, {data});
+        data.pagination.page_size = 1; data.calls = calls(); data.capabilities.live_call_details = true;
+        accepts(test, {data});
+        rejects(test, {data: {...data, calls: null}});
+        rejects(test, {data: {...data, capabilities: {...data.capabilities, live_call_details: false}}});
+        rejects(validate('QueueLiveEnvelope'), {data});
+        const overview = snapshot();
+        rejects(validate('QueueLiveEnvelope'), {data: {...overview, calls: calls()}});
+        rejects(validate('QueueLiveEnvelope'), {data: {...overview, capabilities: {...overview.capabilities, live_call_details: true}}});
         rejects(test, {data: {...data, queues: []}}); rejects(test, {data: {...data, queues: [data.queues[0], data.queues[0]]}});
         rejects(test, {data: {...data, pagination: {...data.pagination, page_size: 50}}});
         rejects(test, {data: {...data, pagination: {page_size: 1, next_start_queue_id: queue, has_more: true}}});
+    });
+    group('call rows are exact, status-dependent and signed Unix timestamps are retained', () => {
+        const test = validate('QueueLiveCall'), row = callRow(); accepts(test, row);
+        for (const entered_at of [-62167219199, -1, 0, 1]) accepts(test, {...row, entered_at});
+        accepts(test, {...row, status: 'handled', entered_at: -100, handled_at: -10});
+        accepts(test, {...row, status: 'handled', handled_at: 0});
+        for (const field of ['caller_id_name', 'caller_id_number', 'agent_id', 'position', 'entered_timestamp']) rejects(test, {...row, [field]: 'private'});
+        for (const key of Object.keys(row)) { const missing = {...row}; delete missing[key]; rejects(test, missing); }
+        for (const status of ['processed', 'abandoned', 'ringing', null]) rejects(test, {...row, status});
+        for (const entered_at of [null, 0.5, '1700000000']) rejects(test, {...row, entered_at});
+        rejects(test, {...row, handled_at: 1}); rejects(test, {...row, status: 'handled'});
+        rejects(test, {...row, status: 'handled', handled_at: 1.5});
+        for (const call_id of ['', 'x'.repeat(257), 'bad\ncall', null]) rejects(test, {...row, call_id});
+        rejects(test, {...row, queue_id: 'foreign'});
+    });
+    group('calls availability, null count, complete empty and capped observations cannot be conflated', () => {
+        const test = validate('QueueLiveCalls'), complete = calls(); accepts(test, complete);
+        const unavailable = {...complete, available: false, complete: false, observed_count: null};
+        accepts(test, unavailable);
+        const rows = Array.from({length: 200}, (_, i) => ({...callRow(), call_id: 'synthetic-' + i}));
+        const capped = {...complete, complete: false, truncated: true, observed_count: 201, rows}; accepts(test, capped);
+        accepts(test, {...capped, observed_count: 10000});
+        accepts(test, {...complete, observed_count: 200, rows});
+        for (const limit of [0, 199, 201, null]) rejects(test, {...complete, limit});
+        for (const observed_count of [-1, 0.5, '0', null, 201]) rejects(test, {...complete, observed_count});
+        for (const observed_count of [0, 200, 10001, null]) rejects(test, {...capped, observed_count});
+        rejects(test, {...capped, rows: rows.slice(1)}); rejects(test, {...capped, rows: [...rows, callRow()]});
+        rejects(test, {...capped, rows: Array(200).fill(callRow())});
+        rejects(test, {...complete, complete: false}); rejects(test, {...complete, truncated: true});
+        rejects(test, {...unavailable, observed_count: 0}); rejects(test, {...unavailable, rows: [callRow()]});
+        rejects(test, {...unavailable, truncated: true}); rejects(test, {...unavailable, complete: true});
+        rejects(test, {...complete, order: 'queue_position'}); rejects(test, {...complete, agent_ids: []});
+        for (const key of Object.keys(complete)) { const missing = {...complete}; delete missing[key]; rejects(test, missing); }
+        assert(schemas.QueueLiveCalls.description.includes('Runtime invariants'));
+        assert(schemas.QueueLiveCalls.description.includes('NOT actual queue position'));
+        const data = snapshot(); data.pagination.page_size = 1; data.calls = unavailable; data.capabilities.live_call_details = true;
+        accepts(validate('QueueLiveDetailEnvelope'), {data});
     });
     group('handler cache policy and explicit HTTP errors do not change pre-handler authentication claims', () => {
         for (const url of [OVERVIEW, DETAIL]) {
@@ -153,12 +207,22 @@ async function main() {
     });
     group('source timeout/route drift is refused instead of publishing stale claims', () => {
         const file = path.join(__dirname, 'api-docs-queue-live.cjs');
-        for (const changed of ['cb_acdc_live.erl', 'cb_queues.erl']) {
+        for (const [changed, needle] of [['cb_acdc_live.erl', 'Until,3000)'],
+            ['cb_queues.erl', 'cb_acdc_live:get(Context, Id)'],
+            ['cb_acdc_live.erl', 'public_calls(false,_) -> null'],
+            ['cb_acdc_live.erl', '{<<"agent_runtime">>,false},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}'],
+            ['cb_acdc_live.erl', '{<<"rows">>,[public_call(R) || R<-val(<<"rows">>,C)]}'],
+            ['cb_acdc_live.erl', '{<<"call_id">>,val(<<"call_id">>,R)},{<<"queue_id">>,val(<<"queue_id">>,R)}'],
+            ['cb_acdc_live.erl', 'unix(N) when is_integer(N) -> N-?EPOCH'],
+            ['cb_acdc_live.erl', 'normalized_calls(kz_json:get_value(<<"active_calls">>,S,null))'],
+            ['acdc_dashboard_collector.erl', '-define(MAX_ACTIVE_CALLS, 200).'],
+            ['kapi_acdc_dashboard.erl', 'calls_scope(true, [_]) -> true'],
+            ['acdc_dashboard_snapshot.erl', 'fields(Row,[call_id,queue_id,status,']]) {
             const module = {exports: {}};
             const fakeFs = {...fs, readFileSync(file, ...args) {
                 const value = fs.readFileSync(file, ...args);
                 if (!String(file).endsWith('/' + changed)) return value;
-                return Buffer.from(value.toString().replace(changed === 'cb_acdc_live.erl' ? 'Until,3000)' : 'cb_acdc_live:get(Context, Id)', 'REMOVED_BY_NEGATIVE_FIXTURE'));
+                return Buffer.from(value.toString().replace(needle, 'REMOVED_BY_NEGATIVE_FIXTURE'));
             }};
             vm.runInNewContext(fs.readFileSync(file, 'utf8'), {module, exports: module.exports, __filename: file,
                 require: name => name === 'node:fs' ? fakeFs : require(name)});

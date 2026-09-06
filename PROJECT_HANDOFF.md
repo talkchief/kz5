@@ -15,6 +15,17 @@ reports or ClickHouse integration now. Agent state within queue detail remains
 in scope; a separate agent dashboard is deferred. Neither live screen is yet
 accepted/deployed. See the scope override in `PROJECT_TASKS.md`.
 
+Latest extension: selected-queue active-call rows now pass42 collector tests
+(83794),28 transport tests and9 production-route plus2 helper tests (52933).
+The private OpenAPI catalog passes13 groups/214 schema cases (62421). Detail
+advertises its call collection; overview has `calls=null`. Agent runtime and
+WebSocket capability remain false pending integration. Evidence and explicit
+limits are in `doc/acdc_live_snapshot.md`. The outbound sync-status contract
+fix also passed3 baseline and11 candidate regression groups (38933), source
+only. Current owners: root public API/validation; native agent OpenAPI and
+Blackhole authorization design; media agent Monster socket lifecycle patch;
+browser-harness agent live DTO UI adapter. Historical work remains postponed.
+
 Documentation baseline: local commit **`57b55e1`**, branch
 `fix/acdc-outbound-agent-availability`, September 6, 2026. This section records
 subsequent work in progress, not a new deployment. No backend/UI/native service
