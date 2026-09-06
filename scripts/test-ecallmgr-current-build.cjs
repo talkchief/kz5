@@ -32,7 +32,7 @@ register_configured_freeswitch_nodes(){ :; }
 verify_ecallmgr(){ printf 'runtime-verify\\n'; }
 `;
     function run(prefix='',overrides={}){return cp.spawnSync('/usr/bin/bash',['--noprofile','--norc','-s'],{encoding:'utf8',timeout:10000,
-        env:{PATH:'/usr/bin:/bin',KAZOO_ROOT:temp,KAZOO_MAKE_JOBS:'1',KAZOO_CORE_REF:'fixture',KAZOO_CROSSBAR_REF:'fixture',KAZOO_ECALLMGR_REF:'fixture',KAZOO_STEPSWITCH_REF:'fixture',KAZOO_CDR_REF:'fixture',ACDC_REF:'fixture',DRY_RUN:'false',VERIFY_EXIT:'0',...overrides},
+        env:{PATH:'/usr/bin:/bin',KAZOO_ROOT:temp,KAZOO_MAKE_JOBS:'1',KAZOO_CORE_REF:'fixture',KAZOO_CROSSBAR_REF:'fixture',KAZOO_BLACKHOLE_REF:'fixture',KAZOO_ECALLMGR_REF:'fixture',KAZOO_STEPSWITCH_REF:'fixture',KAZOO_CDR_REF:'fixture',ACDC_REF:'fixture',DRY_RUN:'false',VERIFY_EXIT:'0',...overrides},
         input:stubs+'\n'+init[0]+'\n'+hook('build_kazoo')+'\n'+hook('install_ecallmgr')+'\n'+prefix+'\ninstall_ecallmgr\n'});}
     let result=run('',{KAZOO_BUILD_SUCCEEDED_THIS_RUN:'true'});assert.equal(result.status,0,result.stderr);
     assert.equal(result.stdout.split('build-start').length,2,'Existing app files/environment cannot skip current build');

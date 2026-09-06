@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
-const expected = ['coverage.json', 'index.html', 'openapi.json', 'planned.openapi.json', 'portal.css', 'portal.js', 'vendor/LICENSE', 'vendor/NOTICE', 'vendor/swagger-ui-bundle.js', 'vendor/swagger-ui.css'].sort();
+const expected = ['blackhole.html', 'coverage.json', 'index.html', 'openapi.json', 'planned.openapi.json', 'portal.css', 'portal.js', 'vendor/LICENSE', 'vendor/NOTICE', 'vendor/swagger-ui-bundle.js', 'vendor/swagger-ui.css'].sort();
 function checkTarget(directory) {
     const base = path.resolve(directory);
     for (const relative of ['', 'manifest.json', ...expected]) {

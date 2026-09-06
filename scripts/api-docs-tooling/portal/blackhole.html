@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blackhole WebSocket and Next.js integration — Kazoo 5</title>
+<link rel="icon" href="data:,"><link rel="stylesheet" href="./portal.css"></head>
+<body><main class="portal">
+<nav><a href="./">API reference</a><a href="./openapi.json">OpenAPI JSON</a><a href="./coverage.json">Source provenance</a></nav>
+<h1>Blackhole: native Kazoo WebSocket integration</h1>
+<p><strong>Source-reviewed contract, not deployment certification.</strong> Blackhole already provides Kazoo's AMQP-to-WebSocket event transport. Use it for the future Next.js frontend. Do not deploy a second event server merely to duplicate this transport. ACDC dashboard-specific snapshots, queue permissions and reliable resynchronization remain open implementation tasks.</p>
+<h2>Endpoints and OpenAPI representation</h2>
+<ul>
+<li><code>GET /v2/websockets</code>: configured binding discovery. This exact top-level route is public in the source. Missing/empty data is not proof that no events exist; configuration and running modules must be checked.</li>
+<li><code>GET /v2/accounts/{ACCOUNT_ID}/websockets</code> and <code>/{SOCKET_ID}</code>: session inspection, not subscription endpoints. These retain separate upstream contract/authorization review limitations.</li>
+<li><code>wss://&lt;trusted-kazoo-host&gt;/websocket</code>: the installer reverse-proxy endpoint. It is <strong>not</strong> <code>/v2/websocket</code>. Native Blackhole defaults to port 5555. On a separate UI server configure its proxy upstream to the apps server, or configure a trusted WSS endpoint explicitly. Do not assume the Next.js server itself hosts Blackhole.</li>
+</ul>
+<p>The OpenAPI document includes the HTTP upgrade/discovery operations, reusable <code>Blackhole*</code> message schemas, and the <code>x-blackhole</code> extension linking client/server messages. OpenAPI 3.0 describes HTTP, not a complete WebSocket session: generated HTTP SDKs do not automatically implement these frames. No fictitious POST subscribe endpoint is provided. This page is the companion protocol/lifecycle reference; it is not an AsyncAPI specification.</p>
+<h2>Authentication and connection</h2>
+<p>Obtain an account-scoped <code>auth_token</code> through Crossbar HTTPS authentication. HTTP APIs use <code>X-Auth-Token</code>; browser WebSocket commands use the JSON <code>auth_token</code> field. Browser WebSocket constructors cannot set arbitrary HTTP headers. This source rejects WebSocket subprotocols, so do not pass the token as a second constructor argument. Never put credentials in query strings, examples, logs or committed frontend configuration.</p>
+<p>An anonymous HTTP upgrade can succeed; <code>101 Switching Protocols</code> alone proves neither authentication nor subscription. Send an authenticated command and require its matching successful reply. The recommended client schemas deliberately require a token and a correlation ID on every command, although the server allows some omissions.</p>
+<p><strong>Security acceptance still required:</strong> current source caches authenticated socket context. Sending a new token does not reliably switch identity or prove expiry/revocation has been enforced for existing subscriptions. Close and reconnect on logout, account/user/token changes or expiry. Client cleanup is not a substitute for server-side expiry, revocation, resource-scope and tenant-isolation tests. The generic subscription authorizer checks account hierarchy; queue-specific dashboard permissions are not implemented simply by having that check.</p>
+<h2>JSON command examples</h2>
+<p>These are illustrative frames, not executed by this page. Replace placeholders in your own authenticated client. Send exactly one of <code>binding</code> or <code>bindings</code>. In this checkout a supplied <code>bindings</code> array takes precedence; do not rely on older documentation saying the reverse.</p>
+<pre><code>{
+  "action": "subscribe",
+  "auth_token": "&lt;TOKEN_FROM_YOUR_AUTH_FLOW&gt;",
+  "request_id": "frontend-subscribe-1",
+  "data": {
+    "account_id": "&lt;ACCOUNT_ID&gt;",
+    "bindings": ["call.CHANNEL_CREATE.*", "call.CHANNEL_ANSWER.*", "call.CHANNEL_DESTROY.*"]
+  }
+}</code></pre>
+<p>Account omission defaults to the authenticated account. Request only necessary events and discover supported patterns first. For a single call, replace the final <code>*</code> with its actual call ID. Supported event families depend on loaded modules; a generic call event is not a queue-agent state event.</p>
+<pre><code>{"action":"reply","request_id":"frontend-subscribe-1","status":"success",
+ "data":{"subscribed":["call.CHANNEL_CREATE.*","call.CHANNEL_ANSWER.*","call.CHANNEL_DESTROY.*"],
+         "subscriptions":["call.CHANNEL_CREATE.*","call.CHANNEL_ANSWER.*","call.CHANNEL_DESTROY.*"]}}
+
+{"action":"event","subscribed_key":"call.CHANNEL_ANSWER.*",
+ "subscription_key":"call.&lt;ACCOUNT_ID&gt;.CHANNEL_ANSWER.*",
+ "name":"CHANNEL_ANSWER","routing_key":"call.&lt;ACCOUNT_ID&gt;.CHANNEL_ANSWER.&lt;CALL_ID&gt;",
+ "data":{"call_id":"&lt;CALL_ID&gt;"}}</code></pre>
+<p>The event above illustrates the envelope, not a complete typed call payload. Data is event-specific and normalized. Do not assume every event contains a queue ID, timestamp or globally unique event identifier. Subscription results use arrays; an already present subscription can return an empty <code>subscribed</code> array. Always inspect <code>subscriptions</code> and correlate <code>request_id</code>.</p>
+<pre><code>{"action":"ping","auth_token":"&lt;TOKEN_FROM_YOUR_AUTH_FLOW&gt;","request_id":"frontend-ping-1"}
+{"action":"reply","request_id":"frontend-ping-1","status":"success","data":{"response":"pong"}}
+
+{"action":"unsubscribe","auth_token":"&lt;TOKEN_FROM_YOUR_AUTH_FLOW&gt;","request_id":"frontend-unsubscribe-1",
+ "data":{"account_id":"&lt;ACCOUNT_ID&gt;","bindings":["call.CHANNEL_CREATE.*","call.CHANNEL_ANSWER.*","call.CHANNEL_DESTROY.*"]}}</code></pre>
+<p>Unsubscribe replies contain <code>unsubscribed</code> and <code>subscriptions</code> arrays. Empty unsubscribe is rejected in this source; retain the explicit binding list, or close the connection to release all its subscriptions. An error reply contains <code>status: "error"</code> and <code>data.errors</code>; handle it as failure, not as an acknowledgement. JSON ping/pong is application-level health, distinct from protocol control frames and from call/queue health.</p>
+<h2>Next.js client lifecycle</h2>
+<ol>
+<li>Keep master/API credentials on the backend. If using a browser connection, provide only the authorized user's short-lived token through your approved authentication flow; never use a public build-time secret variable.</li>
+<li>Create the connection in a Client Component effect or a shared client-side connection manager, not during server rendering. Resolve a configured, allowlisted WSS URL. Do not automatically trust a URL supplied by a query parameter.</li>
+<li>On open, send the explicit bindings with a unique correlation ID. Use bounded pending-request timeouts and distinguish connected, subscribing, live and stale/error states.</li>
+<li>Keep a bounded event buffer while obtaining the initial authoritative HTTP snapshot. Native Blackhole has no atomic snapshot boundary or replay cursor. Without a versioned dashboard protocol, do not claim that replaying that buffer yields an exact gap-free view.</li>
+<li>On close, timeout, buffer overflow or ambiguity, mark data stale and reconnect with capped exponential backoff and jitter. Reauthenticate, resubscribe and fetch a fresh authoritative snapshot; never just restore the previous green status.</li>
+<li>Cancel retry/heartbeat/request timers and close the socket in effect cleanup, on logout and on account/user/token changes. React development effects may set up and clean up more than once; avoid duplicate connections and stale callbacks updating the new account's state.</li>
+<li>Keep supervision, queue edits and callback mutations on their documented authorized HTTP APIs. A WebSocket event is not authority to perform a mutation or proof that a supervision request connected.</li>
+</ol>
+<h2>Delivery limits and remaining ACDC work</h2>
+<p>Native subscriptions are socket-local and best effort. The emitter may drop messages when its session mailbox exceeds the configured limit (default 50); even command replies can be dropped. There is no documented durable replay, global sequence, exactly-once delivery or guaranteed loss notification. A successful ping does not prove no events were lost. Authoritative reconciliation remains necessary; WebSockets are still the live transport, not replaced by polling-only screens.</p>
+<p>Queue dashboard snapshot/event schemas, durable ordering/versioning, duplicate/gap detection, multi-node ownership, queue-specific permissions, token expiry/revocation and bounded backpressure acceptance are tracked in DASH-03/04/05. No <code>acdc.*</code> binding or dashboard path on this page is advertised as implemented. Workforce metrics need durable records and explicit metric definitions; they cannot be reconstructed reliably from an unpersisted browser event stream.</p>
+<h2>Sources and deployment</h2>
+<p>Reviewed local sources: <code>cb_websockets.erl</code>, <code>blackhole_socket_handler.erl</code>, <code>blackhole_socket_callback.erl</code>, <code>blackhole_data_emitter.erl</code>, <code>bh_context.erl</code>, <code>bh_events.erl</code>, <code>bh_call.erl</code>, <code>bh_ping.erl</code> and subscription/token authorizers. Exact source hashes are recorded in <a href="./coverage.json">coverage.json</a>. Installer defaults include Blackhole within the Kazoo apps node; it is an Erlang application, not a separate systemd unit.</p>
+<p>General upstream background: <a href="https://docs.2600hz.com/events/websockets/blackhole-web-socket-server/">Blackhole overview</a>. The checked-out code takes precedence where protocol details differ. This static reference performs no login, WebSocket connection or API mutation.</p>
+</main></body></html>

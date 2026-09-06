@@ -39,7 +39,7 @@ readonly KAZOO_PERSISTED_KEYS=(
     KAZOO_TLS_CHAIN_FILE KAZOO_API_UPSTREAM KAZOO_WEBSOCKET_UPSTREAM
     COUCHDB_VERSION RABBITMQ_VERSION ERLANG_VERSION HTMLDOC_VERSION HTMLDOC_REF
     FREESWITCH_VERSION FREESWITCH_REF SPANDSP_REF SOFIA_SIP_REF MOD_KAZOO_REF
-    FREESWITCH_CONFIG_REF KAZOO_CORE_CONFIG_REF KAZOO_CORE_REF KAZOO_CROSSBAR_REF KAZOO_ECALLMGR_REF KAZOO_STEPSWITCH_REF KAZOO_CDR_REF KAZOO_SOUNDS_REF ACDC_REF KAMAILIO_VERSION
+    FREESWITCH_CONFIG_REF KAZOO_CORE_CONFIG_REF KAZOO_CORE_REF KAZOO_CROSSBAR_REF KAZOO_BLACKHOLE_REF KAZOO_ECALLMGR_REF KAZOO_STEPSWITCH_REF KAZOO_CDR_REF KAZOO_SOUNDS_REF ACDC_REF KAMAILIO_VERSION
     KAMAILIO_CONFIG_REF KAMAILIO_CHILDREN KAMAILIO_TCP_CHILDREN
     KAMAILIO_AMQP_CONSUMERS KAMAILIO_AMQP_WORKERS MONSTER_UI_REF
     MONSTER_UI_NODE_MAJOR MONSTER_UI_WEB_ROOT MONSTER_UI_REGISTER_APPS MONSTER_UI_LOCK_SHA256
@@ -171,6 +171,7 @@ FREESWITCH_CONFIG_REF=${FREESWITCH_CONFIG_REF:-62b833c5e19f76f6ec81c9b5efc8e9c0e
 KAZOO_CORE_CONFIG_REF=${KAZOO_CORE_CONFIG_REF:-03263e6c9834658a6cb19b33f690bb4542c52a9d}
 KAZOO_CORE_REF=${KAZOO_CORE_REF:-5defa1df755ea9cf4d0f3f81f8145bd8a0c7dd72}
 KAZOO_CROSSBAR_REF=${KAZOO_CROSSBAR_REF:-2ac862830f9b626d2170d08daf1991b0ca33dba7}
+KAZOO_BLACKHOLE_REF=${KAZOO_BLACKHOLE_REF:-4e3f02a5ab01c09a44c287f4f93b15d2782f5614}
 ACDC_REF=${ACDC_REF:-6f71c85f67ee2228efb0edceb5248b6334ba1998}
 KAMAILIO_VERSION=${KAMAILIO_VERSION:-${KAMAILIO_SERIES:-6.1.4}}
 KAMAILIO_CONFIG_REF=${KAMAILIO_CONFIG_REF:-9d61bded9890325182f1783aeb4bd2182eb2d846}
@@ -1132,6 +1133,7 @@ preflight() {
        $MOD_KAZOO_REF =~ ^[0-9a-f]{40}$ && $FREESWITCH_CONFIG_REF =~ ^[0-9a-f]{40}$ && \
        $KAZOO_CORE_CONFIG_REF =~ ^[0-9a-f]{40}$ && $ACDC_REF =~ ^[0-9a-f]{40}$ && \
        $KAZOO_CORE_REF =~ ^[0-9a-f]{40}$ && $KAZOO_CROSSBAR_REF =~ ^[0-9a-f]{40}$ && \
+       $KAZOO_BLACKHOLE_REF =~ ^[0-9a-f]{40}$ && \
        $KAZOO_SOUNDS_REF =~ ^[0-9a-f]{40}$ && $KAZOO_ECALLMGR_REF =~ ^[0-9a-f]{40}$ && \
        $KAZOO_STEPSWITCH_REF =~ ^[0-9a-f]{40}$ && $KAZOO_CDR_REF =~ ^[0-9a-f]{40}$ && \
        $KAMAILIO_CONFIG_REF =~ ^[0-9a-f]{40}$ && $MONSTER_UI_REF =~ ^[0-9a-f]{40}$ && \
@@ -1558,6 +1560,8 @@ ensure_kazoo_sources() {
             die 'Existing Kazoo core checkout differs from the tested pinned revision'
         [[ $(git -C "$KAZOO_ROOT/applications/crossbar" rev-parse HEAD) == "$KAZOO_CROSSBAR_REF" ]] || \
             die 'Existing Crossbar checkout differs from the tested pinned revision'
+        [[ $(git -C "$KAZOO_ROOT/applications/blackhole" rev-parse HEAD) == "$KAZOO_BLACKHOLE_REF" ]] || \
+            die 'Existing Blackhole checkout differs from the tested pinned revision'
         [[ $(git -C "$KAZOO_ROOT/applications/ecallmgr" rev-parse HEAD) == "$KAZOO_ECALLMGR_REF" ]] || \
             die 'Existing eCallMgr checkout differs from the tested pinned revision'
         [[ $(git -C "$KAZOO_ROOT/applications/stepswitch" rev-parse HEAD) == "$KAZOO_STEPSWITCH_REF" ]] || \
@@ -1592,6 +1596,8 @@ ensure_kazoo_sources() {
     # ACDC is already part of kz5; its historical patches are not applied.
     apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
         "$SCRIPT_DIR/patches/crossbar-kazoo5-integration.patch"
+    apply_required_source_patch "$KAZOO_ROOT/applications/blackhole" \
+        "$SCRIPT_DIR/patches/blackhole-token-redaction.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
@@ -1748,6 +1754,7 @@ build_kazoo() {
         JOBS="$KAZOO_MAKE_JOBS" \
         "dep_core=git https://github.com/2600hz/kazoo-core.git $KAZOO_CORE_REF" \
         "dep_crossbar=git https://github.com/2600hz/kazoo-crossbar.git $KAZOO_CROSSBAR_REF" \
+        "dep_blackhole=git https://github.com/2600hz/kazoo-blackhole.git $KAZOO_BLACKHOLE_REF" \
         "dep_ecallmgr=git https://github.com/2600hz/kazoo-ecallmgr.git $KAZOO_ECALLMGR_REF" \
         "dep_stepswitch=git https://github.com/2600hz/kazoo-stepswitch.git $KAZOO_STEPSWITCH_REF" \
         "dep_cdr=git https://github.com/2600hz/kazoo-cdr.git $KAZOO_CDR_REF" \
@@ -4184,7 +4191,7 @@ install_api_developer_docs() {
     run chmod 0755 "$MONSTER_UI_WEB_ROOT/apis" "$MONSTER_UI_WEB_ROOT/apis/vendor"
     local docs_asset
     for docs_asset in index.html portal.js portal.css openapi.json planned.openapi.json \
-        coverage.json manifest.json vendor/LICENSE vendor/NOTICE \
+        blackhole.html coverage.json manifest.json vendor/LICENSE vendor/NOTICE \
         vendor/swagger-ui-bundle.js vendor/swagger-ui.css; do
         run chmod 0644 "$MONSTER_UI_WEB_ROOT/apis/$docs_asset"
     done

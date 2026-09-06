@@ -32,6 +32,36 @@ async function offline() {
     const validate = name => ajv.compile({components: spec.components, $ref: '#/components/schemas/' + name});
     const start = validate('MonitorStart'), stop = validate('MonitorStop'), callback = validate('CallbackPublic');
     const device_id = '0'.repeat(32), request_id = '1'.repeat(32);
+    const websocket = spec.paths['/websocket'];
+    assert.equal(websocket.servers[0].url, '/');
+    assert(websocket.get.responses['101']);
+    assert.deepEqual(websocket.get.security, []);
+    assert.deepEqual(spec.paths['/websockets'].get.security, []);
+    assert.equal(spec['x-blackhole'].externalDocs.url, '/apis/blackhole.html');
+    assert(spec['x-blackhole'].acdc_dashboard.startsWith('Proposed:'));
+    assert(!Object.keys(spec.paths).some(url => url.includes('/websocket/subscribe')));
+    for (const action of ['subscribe', 'unsubscribe']) {
+        const wsValidate = validate(action === 'subscribe' ? 'BlackholeSubscribe' : 'BlackholeUnsubscribe');
+        const command = {action, auth_token: 'synthetic-only', request_id, data: {account_id: device_id, binding: 'call.CHANNEL_ANSWER.*'}};
+        assert(wsValidate(command));
+        assert(wsValidate({...command, data: {bindings: ['call.CHANNEL_ANSWER.*']}}));
+        for (const data of [{}, {bindings: []}, {binding: ''}, {binding: 'call.*.*', bindings: ['call.*.*']}, {bindings: 'call.*.*'}]) assert.equal(wsValidate({...command, data}), false);
+        for (const key of ['action', 'auth_token', 'request_id', 'data']) {const missing = {...command}; delete missing[key]; assert.equal(wsValidate(missing), false);}
+    }
+    const wsResult = validate('BlackholeSubscriptionResult');
+    assert(wsResult({subscribed: [], subscriptions: ['call.CHANNEL_ANSWER.*']}));
+    assert.equal(wsResult({subscribed: 'call.CHANNEL_ANSWER.*', subscriptions: []}), false);
+    const wsEvent = validate('BlackholeEvent');
+    const event = {action: 'event', subscribed_key: 'call.CHANNEL_ANSWER.*', subscription_key: 'call.fixture.CHANNEL_ANSWER.*', name: 'CHANNEL_ANSWER', routing_key: 'call.fixture.CHANNEL_ANSWER.call', data: {call_id: 'call'}};
+    assert(wsEvent(event));
+    assert.equal(wsEvent({...event, action: 'reply'}), false);
+    assert.equal(wsEvent({...event, data: null}), false);
+    const wsPage = fs.readFileSync(path.join(committed, 'blackhole.html'), 'utf8');
+    assert(wsPage.includes('Next.js client lifecycle'));
+    assert(wsPage.includes('cached') || wsPage.includes('caches authenticated'));
+    assert(wsPage.includes('best effort'));
+    assert(!/<script\b|\son\w+\s*=|javascript:/i.test(wsPage), 'Protocol reference must not execute scripts or open sockets');
+    assert(fs.readFileSync(path.join(committed, 'index.html'), 'utf8').includes('./blackhole.html'));
     for (const action of ['eavesdrop', 'whisper', 'barge', 'join']) assert(start({action, device_id}));
     for (const value of [{action: 'listen', device_id}, {action: 'whisper'}, {action: 'join', device_id, timeout: 4}, {action: 'join', device_id, timeout: 61}, {action: 'join', device_id, route: 'forbidden'}, {action: 'barge', device_id, timeout: '20'}]) assert.equal(start(value), false);
     assert(stop({action: 'stop_monitoring', request_id}));
@@ -127,7 +157,7 @@ install_api_developer_docs
         fs.appendFileSync(path.join(temp, 'portal.js'), '\n// tamper test\n');
         assert.throws(() => verify(temp), /Wrong byte length/);
     } finally {fs.rmSync(temp, {recursive: true, force: true});}
-    console.log(JSON.stringify({offline: 'PASS', ...result, schema_negative_cases: 31, deterministic_rebuild: 'PASS', tamper_detection: 'PASS'}));
+    console.log(JSON.stringify({offline: 'PASS', ...result, schema_negative_cases: 31, blackhole_schema_negative_cases: 21, deterministic_rebuild: 'PASS', tamper_detection: 'PASS'}));
 }
 async function browser() {
     const {chromium} = require(process.env.KAZOO_PLAYWRIGHT_MODULE || 'playwright');
@@ -183,10 +213,19 @@ async function browser() {
         assert.equal(await page.locator('#catalog-status').textContent(), 'PLANNED ONLY — these routes are not implemented or deployed. Do not call them.');
         await page.getByRole('button', {name: 'Current source catalog', exact: true}).click();
         await page.waitForFunction(() => document.querySelector('.swagger-ui .title')?.textContent.includes('source catalog'));
+        await page.locator('.opblock-tag').filter({hasText: 'Blackhole WebSocket'}).click();
+        const upgrade = page.locator('.opblock-get').filter({hasText: 'Upgrade to the native Blackhole WebSocket transport'});
+        await upgrade.locator('.opblock-summary').click();
+        assert((await upgrade.innerText()).includes('101'));
+        await page.getByRole('link', {name: 'Blackhole / Next.js integration', exact: true}).click();
+        await page.waitForURL(origin + '/apis/blackhole.html');
+        assert.equal(await page.getByRole('heading', {name: 'Next.js client lifecycle', exact: true}).count(), 1);
+        assert.equal(await page.locator('script').count(), 0);
+        assert((await page.locator('body').innerText()).includes('best effort'));
         assert.deepEqual(denied, []);
         assert.deepEqual(errors, []);
         assert(requests.every(line => !line.includes('/v2/')));
-        console.log(JSON.stringify({browser: 'PASS', operations_loaded: total, request_count: requests.length, external_requests: denied.length, console_errors: errors.length, try_it_out: 'disabled', authorization_storage: 'disabled', planned_isolation: 'PASS'}));
+        console.log(JSON.stringify({browser: 'PASS', operations_loaded: total, request_count: requests.length, external_requests: denied.length, console_errors: errors.length, try_it_out: 'disabled', authorization_storage: 'disabled', planned_isolation: 'PASS', blackhole_reference: 'PASS'}));
     } finally {await browser.close(); await new Promise(resolve => server.close(resolve));}
 }
 (async () => {await offline(); if (process.argv.includes('--browser')) await browser();})().catch(e => {console.error(e.stack); process.exit(1);});

@@ -24,8 +24,8 @@
     "/accounts/{ACCOUNT_ID}/skels",
     "/accounts/{ACCOUNT_ID}/skels/{THING}"
   ],
-  "path_count": 354,
-  "operation_count": 649,
+  "path_count": 356,
+  "operation_count": 651,
   "source_reviewed_operations": [
     "GET /accounts/{ACCOUNT_ID}/agents",
     "GET /accounts/{ACCOUNT_ID}/agents/stats",
@@ -57,7 +57,9 @@
     "PUT /accounts/{ACCOUNT_ID}/queues/editor",
     "GET /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/editor",
     "PATCH /accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/editor",
-    "GET /accounts/{ACCOUNT_ID}/members/devices"
+    "GET /accounts/{ACCOUNT_ID}/members/devices",
+    "GET /websocket",
+    "GET /websockets"
   ],
   "upstream_operations_not_individually_reviewed": [
     "GET /about",
@@ -1295,10 +1297,11 @@
     "GET /accounts/{ACCOUNT_ID}/whitelabel/{WHITELABEL_DOMAIN}/welcome",
     "GET /accounts/{ACCOUNT_ID}/wordle",
     "GET /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}",
-    "POST /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}"
+    "POST /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}",
+    "GET /websocket"
   ],
-  "schema_count": 477,
-  "internal_reference_count": 1548,
+  "schema_count": 485,
+  "internal_reference_count": 1556,
   "unresolved_reference_count": 0,
   "schema_adjustments": [
     {
@@ -2353,6 +2356,46 @@
       "sha256": "5fa6d863110327116c7be0f8323720441aa850dcee87539c963cd35e09668611"
     },
     {
+      "file": "applications/blackhole/src/bh_context.erl",
+      "sha256": "5881f82b7ad0abb9371b2867b9e8a90851897b0a4a055c5e912000019b294758"
+    },
+    {
+      "file": "applications/blackhole/src/bh_events.erl",
+      "sha256": "7207ec6c6e964526998e3501b0d78585df459fbe8dc8fe420dfce39f3bc4458c"
+    },
+    {
+      "file": "applications/blackhole/src/blackhole_data_emitter.erl",
+      "sha256": "c1f1c300522470ebe2cbefa8cda8652c90d20ac64e2489430e2ac59155e20018"
+    },
+    {
+      "file": "applications/blackhole/src/blackhole_init.erl",
+      "sha256": "cbb4cacd9115d55435049ad1b8b53fc692ece7c47c13c2021131ac1a19fb7a59"
+    },
+    {
+      "file": "applications/blackhole/src/blackhole_socket_callback.erl",
+      "sha256": "a05a4fd1217578ef52aa805bcee1686fea5cdd98cd3fe3c6744fe272f5e76558"
+    },
+    {
+      "file": "applications/blackhole/src/blackhole_socket_handler.erl",
+      "sha256": "264bd78dc8e5dc77a93252437a63891b06f8e43cd9077bab686ece4c9000723c"
+    },
+    {
+      "file": "applications/blackhole/src/modules/bh_authz_subscribe.erl",
+      "sha256": "034b4b39ff4abd985d5718f697853841672415ce2c4ac3843f9d3c93d67b906f"
+    },
+    {
+      "file": "applications/blackhole/src/modules/bh_call.erl",
+      "sha256": "102796c931207d87898a961ab1e271cf4c8f5851b81bb65ab24b12d8480dfb54"
+    },
+    {
+      "file": "applications/blackhole/src/modules/bh_ping.erl",
+      "sha256": "3c26df37e5672ed4b7c79725152ba1d242e20394a74d1c9d46893142b243892c"
+    },
+    {
+      "file": "applications/blackhole/src/modules/bh_token_auth.erl",
+      "sha256": "f9e9c255d076e2881f30f7b7c003d60a31583351dab1d0be7b6e795e6f05d7b8"
+    },
+    {
       "file": "applications/crossbar/priv/couchdb/schemas/queues.json",
       "sha256": "23b3a0765a3849916a6282a876748207ecda86846268314bcadb1d3854c21967"
     },
@@ -2769,8 +2812,16 @@
       "sha256": "4f83a0e8d60d49f1ebe336f035f4e0a1fb7d3c46bd632cfa61be8a20645c8cc0"
     },
     {
+      "file": "applications/crossbar/src/modules/cb_websockets.erl",
+      "sha256": "cc79f4dbe7a754a46667920388e97c2b9a17692a432ed9dcde6e0cf3d799451e"
+    },
+    {
       "file": "scripts/api-docs-agent-queue-login.cjs",
       "sha256": "d0eb9f00621acffcf4782244a06c080e49c90731bbb4eca2b6c62adde8a60803"
+    },
+    {
+      "file": "scripts/api-docs-blackhole.cjs",
+      "sha256": "33d5d87b20f13f5657854bee74ece7cb2cca7789342a5f980704759ebfeb1968"
     },
     {
       "file": "scripts/api-docs-members-devices.cjs",
@@ -2778,7 +2829,7 @@
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "ae7b7553d5222bd0cc27416f7f912e6c53427beeaa846ffb5d1ea87c70adb894"
+      "sha256": "f443e3cf00808f506a3be00435feeccd11ce64362f73c4e020380c7628bf17b3"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",
@@ -2795,6 +2846,10 @@
     {
       "file": "scripts/build-api-docs.cjs",
       "sha256": "bd2c48c5ed1825720a62b95bcc7ac9dbf5953e153832eda931c3429e50223e3c"
+    },
+    {
+      "file": "scripts/install-kazoo5.sh",
+      "sha256": "da4e4c70ddc75f5d484082b74d8623f49deabb8267b6ef5212d81b1fe453732a"
     }
   ]
 }

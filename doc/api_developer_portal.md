@@ -41,6 +41,50 @@ installer. Do not send authentication over the non-TLS installation endpoint.
 
 ## Source-reviewed additions
 
+### Native Blackhole and the future Next.js frontend
+
+The generator now includes native Blackhole discovery (`GET /v2/websockets`)
+and the reverse-proxy HTTP upgrade (`GET /websocket`, with a root server override
+so clients do not generate `/v2/websocket`). The `Blackhole*` component schemas
+and `x-blackhole` extension describe subscribe/unsubscribe/ping commands, reply
+and event envelopes, and subscription/error/pong payloads. The companion
+`/apis/blackhole.html`, linked from the viewer and OpenAPI `externalDocs`, covers
+authentication, trusted separate-host WSS configuration, Next.js client effect
+cleanup, correlation, stale state and reconnect/resubscribe/resnapshot behavior.
+
+OpenAPI is an HTTP specification, not an automatic WebSocket client generator;
+the companion explicitly documents that boundary. The recommended frontend
+command schemas are intentionally stricter than the legacy server: send the
+token and request ID explicitly and only one binding selector. Source inspection
+found `bindings` wins over `binding`, empty unsubscribe is rejected, and
+subscription replies use arrays. These override conflicting historical examples.
+
+This documentation does not promise durable replay, exact snapshot ordering or
+server-side token expiry/revocation for cached socket contexts. Slow-client
+message loss, lifecycle authorization, queue-specific dashboard protocols and
+production event acceptance remain BH-02/03/04/05 and DASH-03/04/05 tasks.
+Blackhole is included in Kazoo apps by the installer; it is not a separate
+replacement event server or standalone systemd service. Publication and test
+evidence for these new assets must be recorded separately from earlier receipts.
+
+The Blackhole catalog checkpoint passed offline build/validation in session
+`12699`. After the installer source pin was added, guarded session `57164`
+regenerated and checked the complete artifact: 356 paths, 651 operations,
+33 source-reviewed operations, 485 schemas, 1,556 resolved references and
+11 manifest-listed assets (plus the manifest). The schema tests include 21
+Blackhole-specific negative cases. Deterministic regeneration, tamper detection
+and the actual installer documentation copy into a private test root passed.
+The current artifact manifest SHA-256 is
+`0f350101477e9ba761bdc84985278fed5563fd1aa4c1e86ee1dab3673921bf3b`.
+
+The same 180-second/384-MiB/reserve-768-MiB network-isolated run used real
+Chromium to load all 651 operations, expand the Blackhole upgrade response and
+navigate to the Next.js companion page. Ten local GET requests, zero external
+requests and zero browser console errors were observed. TryItOut, authorization
+storage and query-selected external catalogs remained disabled. The companion
+contains no scripts. This proves documentation rendering, not a live WSS
+connection, authentication lifetime or ACDC event delivery.
+
 - Queue CRUD, full roster replacement/clear, statistics, and historical ACDC stats.
 - Callback list, read and cancel. There is no public callback-create endpoint;
   a trusted queued caller must explicitly confirm registration. Cancellation of

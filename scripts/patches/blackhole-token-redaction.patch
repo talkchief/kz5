@@ -1,0 +1,46 @@
+diff --git a/src/blackhole_socket_handler.erl b/src/blackhole_socket_handler.erl
+index 85a4bd8..246740f 100644
+--- a/src/blackhole_socket_handler.erl
++++ b/src/blackhole_socket_handler.erl
+@@ -117,8 +117,8 @@ authenticate_token(Req, HandlerOpts, Context, Token) ->
+                       ,fun bh_context:set_authorized/1
+                       ],
+             bh_context:setters(Context, Setters);
+-        {'error', R} ->
+-            lager:debug("failed to authenticate token auth, ~p", [R]),
++        {'error', _Reason} ->
++            lager:debug("failed to authenticate token auth"),
+             {'ok', cowboy_req:reply(403, Req), HandlerOpts}
+     end.
+ 
+@@ -163,7 +163,7 @@ websocket_handle('ping', Context) ->
+ websocket_handle('pong', Context) ->
+     {'ok', Context, 'hibernate'};
+ websocket_handle(_Other, Context) ->
+-    lager:debug("not handling message : ~p", [_Other]),
++    lager:debug("not handling unsupported websocket message"),
+     {'ok', Context, 'hibernate'}.
+ 
+ -spec websocket_info(any(), bh_context:context()) ->
+diff --git a/src/modules/bh_token_auth.erl b/src/modules/bh_token_auth.erl
+index 26b80d0..72f6a61 100644
+--- a/src/modules/bh_token_auth.erl
++++ b/src/modules/bh_token_auth.erl
+@@ -55,13 +55,13 @@ authenticate_token(Context, 'undefined') ->
+     lager:debug("failed to authenticate with undefined token"),
+     bh_context:add_error(Context, <<"authentication token required">>);
+ authenticate_token(Context, <<Token/binary>>) ->
+-    lager:debug("trying to authenticate with token: ~s", [Token]),
++    lager:debug("trying to authenticate with token"),
+     case kz_auth:validate_token(Token) of
+         {'ok', JObj} ->
+             AccountId = kz_json:get_ne_value(<<"account_id">>, JObj),
+             lager:info("token auth is valid, authenticating account is ~s", [AccountId]),
+             bh_context:set_auth_account_id(Context, AccountId);
+-        {'error', R} ->
+-            lager:debug("failed to authenticate token auth, ~p", [R]),
+-            bh_context:add_error(Context, <<"failed to authenticate token ", Token/binary>>)
++        {'error', _Reason} ->
++            lager:debug("failed to authenticate token auth"),
++            bh_context:add_error(Context, <<"failed to authenticate token">>)
+     end.

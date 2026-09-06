@@ -20678,7 +20678,11 @@
           {
             "CrossbarToken": []
           }
-        ]
+        ],
+        "externalDocs": {
+          "url": "/apis/blackhole.html",
+          "description": "Blackhole protocol and Next.js frontend integration"
+        }
       }
     },
     "/accounts/{ACCOUNT_ID}/websockets/{SOCKET_ID}": {
@@ -20708,7 +20712,11 @@
           {
             "CrossbarToken": []
           }
-        ]
+        ],
+        "externalDocs": {
+          "url": "/apis/blackhole.html",
+          "description": "Blackhole protocol and Next.js frontend integration"
+        }
       }
     },
     "/accounts/{ACCOUNT_ID}/whitelabel": {
@@ -22883,6 +22891,91 @@
           "registrar_rows_max": 10000,
           "live_authorization_verified": false
         }
+      }
+    },
+    "/websocket": {
+      "servers": [
+        {
+          "url": "/",
+          "description": "Same-origin proxy path, NOT /v2/websocket. Use wss on HTTPS; a separate frontend needs its explicitly configured trusted WSS endpoint."
+        }
+      ],
+      "get": {
+        "operationId": "get_blackhole_websocket_upgrade",
+        "tags": [
+          "Blackhole WebSocket"
+        ],
+        "summary": "Upgrade to the native Blackhole WebSocket transport",
+        "security": [],
+        "externalDocs": {
+          "url": "/apis/blackhole.html",
+          "description": "Blackhole protocol and Next.js frontend integration"
+        },
+        "description": "HTTP Upgrade handshake only, not a REST subscription operation. A browser WebSocket may connect without an Authorization header; send auth_token in subsequent JSON commands. No Sec-WebSocket-Protocol is supported in this source. HTTP101 does not prove authentication or event delivery. Native listener defaults to 5555; expose the reverse-proxied WSS route, not a new event server.",
+        "responses": {
+          "101": {
+            "description": "Switching Protocols; continue with Blackhole JSON frames"
+          },
+          "400": {
+            "description": "Invalid handshake or unsupported subprotocol"
+          },
+          "403": {
+            "description": "Supplied handshake authentication rejected"
+          },
+          "429": {
+            "description": "Configured connection limit exceeded"
+          }
+        },
+        "x-contract-review": "source-reviewed",
+        "x-source-file": "applications/blackhole/src/blackhole_socket_handler.erl",
+        "x-runtime-verification": "Not live-verified by this catalog"
+      }
+    },
+    "/websockets": {
+      "get": {
+        "operationId": "get_blackhole_available_bindings",
+        "tags": [
+          "Blackhole WebSocket"
+        ],
+        "summary": "Discover configured Blackhole binding patterns",
+        "security": [],
+        "externalDocs": {
+          "url": "/apis/blackhole.html",
+          "description": "Blackhole protocol and Next.js frontend integration"
+        },
+        "description": "Crossbar GET /v2/websockets. The exact top-level GET is public in cb_websockets. data is the configured blackhole.bindings object and may be missing when unavailable. Discovery is not proof that a listener/module is healthy, or that this caller can subscribe. Account-scoped /accounts/{ACCOUNT_ID}/websockets paths describe active sessions instead and retain their separate upstream review status.",
+        "responses": {
+          "200": {
+            "description": "Configured binding families; optional data if configuration is absent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-contract-review": "source-reviewed",
+        "x-source-file": "applications/crossbar/src/modules/cb_websockets.erl",
+        "x-runtime-verification": "Not live-verified by this catalog"
       }
     }
   },
@@ -50757,6 +50850,292 @@
         },
         "additionalProperties": true
       },
+      "BlackholeSubscribe": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "subscribe"
+            ]
+          },
+          "auth_token": {
+            "type": "string",
+            "writeOnly": true,
+            "description": "Secret Crossbar auth_token. Send in the JSON message, never in the URL or a WebSocket subprotocol."
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Client correlation ID; use a fresh ID per command, and match replies."
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "account_id": {
+                "type": "string"
+              },
+              "binding": {
+                "type": "string",
+                "minLength": 1
+              },
+              "bindings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            },
+            "oneOf": [
+              {
+                "required": [
+                  "binding"
+                ],
+                "not": {
+                  "required": [
+                    "bindings"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "bindings"
+                ],
+                "not": {
+                  "required": [
+                    "binding"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "auth_token",
+          "request_id",
+          "data"
+        ],
+        "description": "Recommended frontend command profile: explicitly send token and correlation ID, and exactly one of binding or bindings. Server fields are more permissive. In this checkout a supplied bindings array takes precedence over binding; do not rely on upstream documentation claiming the reverse. Omitted account_id defaults to the authenticated account. Empty unsubscribe is rejected; unsubscribe the explicit tracked bindings or close the socket."
+      },
+      "BlackholeUnsubscribe": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "unsubscribe"
+            ]
+          },
+          "auth_token": {
+            "type": "string",
+            "writeOnly": true,
+            "description": "Secret Crossbar auth_token. Send in the JSON message, never in the URL or a WebSocket subprotocol."
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Client correlation ID; use a fresh ID per command, and match replies."
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "account_id": {
+                "type": "string"
+              },
+              "binding": {
+                "type": "string",
+                "minLength": 1
+              },
+              "bindings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            },
+            "oneOf": [
+              {
+                "required": [
+                  "binding"
+                ],
+                "not": {
+                  "required": [
+                    "bindings"
+                  ]
+                }
+              },
+              {
+                "required": [
+                  "bindings"
+                ],
+                "not": {
+                  "required": [
+                    "binding"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "auth_token",
+          "request_id",
+          "data"
+        ],
+        "description": "Recommended frontend command profile: explicitly send token and correlation ID, and exactly one of binding or bindings. Server fields are more permissive. In this checkout a supplied bindings array takes precedence over binding; do not rely on upstream documentation claiming the reverse. Omitted account_id defaults to the authenticated account. Empty unsubscribe is rejected; unsubscribe the explicit tracked bindings or close the socket."
+      },
+      "BlackholePing": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "ping"
+            ]
+          },
+          "auth_token": {
+            "type": "string",
+            "writeOnly": true,
+            "description": "Secret Crossbar auth_token. Send in the JSON message, never in the URL or a WebSocket subprotocol."
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Client correlation ID; use a fresh ID per command, and match replies."
+          }
+        },
+        "required": [
+          "action",
+          "auth_token",
+          "request_id"
+        ]
+      },
+      "BlackholeReply": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "reply"
+            ]
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
+          },
+          "data": {
+            "type": "object",
+            "description": "Action-specific reply. Do not treat receipt as a delivered call or successful supervision connection."
+          }
+        },
+        "required": [
+          "action",
+          "request_id",
+          "data"
+        ],
+        "description": "General reply envelope. status can be omitted by the generic emitter; subscribe/unsubscribe/ping through the normal command path include success, while errors include error. The frontend should require success before advancing a pending subscription."
+      },
+      "BlackholeSubscriptionResult": {
+        "type": "object",
+        "properties": {
+          "subscribed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unsubscribed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "subscriptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "subscriptions"
+        ],
+        "description": "Subscribe returns subscribed; unsubscribe returns unsubscribed. Both are arrays, including an empty subscribed array for an already present binding. subscriptions is the current client-binding list on this socket, not durable replay state."
+      },
+      "BlackholeErrorData": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "errors"
+        ]
+      },
+      "BlackholePingResult": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "string",
+            "enum": [
+              "pong"
+            ]
+          }
+        },
+        "required": [
+          "response"
+        ]
+      },
+      "BlackholeEvent": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "event"
+            ]
+          },
+          "subscribed_key": {
+            "type": "string"
+          },
+          "subscription_key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "routing_key": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "description": "Event-specific normalized payload. Do not assume every event supplies an ID, timestamp, queue ID or sequence."
+          }
+        },
+        "required": [
+          "action",
+          "subscribed_key",
+          "subscription_key",
+          "name",
+          "routing_key",
+          "data"
+        ],
+        "description": "Native event envelope; no global sequence, durable cursor, delivery acknowledgement or replay guarantee is defined here. routing_key and subscription_key are routing metadata, not account authorization evidence."
+      },
       "skels": {
         "description": "Upstream references this schema but does not provide it. No request/response shape or implementation is verified.",
         "x-contract-review": "missing-upstream-schema"
@@ -51773,5 +52152,54 @@
         "description": "Account-scoped Crossbar auth_token. HTTPS required. Never commit credentials. Permissions are enforced by Crossbar, not by this documentation."
       }
     }
-  }
+  },
+  "x-blackhole": {
+    "protocol": "websocket",
+    "url": "/websocket",
+    "externalDocs": {
+      "url": "/apis/blackhole.html",
+      "description": "Blackhole protocol and Next.js frontend integration"
+    },
+    "x-contract-review": "source-reviewed; not live acceptance",
+    "client_messages": {
+      "subscribe": {
+        "$ref": "#/components/schemas/BlackholeSubscribe"
+      },
+      "unsubscribe": {
+        "$ref": "#/components/schemas/BlackholeUnsubscribe"
+      },
+      "ping": {
+        "$ref": "#/components/schemas/BlackholePing"
+      }
+    },
+    "server_messages": {
+      "reply": {
+        "$ref": "#/components/schemas/BlackholeReply"
+      },
+      "event": {
+        "$ref": "#/components/schemas/BlackholeEvent"
+      }
+    },
+    "subscription_result": {
+      "$ref": "#/components/schemas/BlackholeSubscriptionResult"
+    },
+    "error_data": {
+      "$ref": "#/components/schemas/BlackholeErrorData"
+    },
+    "ping_result": {
+      "$ref": "#/components/schemas/BlackholePingResult"
+    },
+    "delivery": "Best effort, socket-local subscriptions. Native emitter can drop messages under pressure. No durable replay or atomic snapshot/event boundary.",
+    "acdc_dashboard": "Proposed: queue-scoped dashboard snapshots/events, permissions and gap/resync protocol are not yet implemented or published as callable contracts."
+  },
+  "tags": [
+    {
+      "name": "Blackhole WebSocket",
+      "description": "Native event transport; see x-blackhole and Blackhole* schemas for frame contracts. HTTP OpenAPI generators do not generate WebSocket clients.",
+      "externalDocs": {
+        "url": "/apis/blackhole.html",
+        "description": "Blackhole protocol and Next.js frontend integration"
+      }
+    }
+  ]
 }

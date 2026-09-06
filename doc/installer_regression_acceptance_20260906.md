@@ -118,6 +118,17 @@ Monster installer wiring/patch groups. It used the same isolated limits and
 the locally retained pinned framework source. This is focused regression
 coverage, not a rerun of the historical five-phase artifact checkpoint.
 
+The later Blackhole pin/patch and protocol-documentation integration was checked
+in session `29798` under the same 120-second/384-MiB/reserve-768-MiB network
+isolation. The main installer smoke, `test-ecallmgr-current-build.cjs` and
+read-only installer suite all exited zero. The build-reuse fixture now supplies
+the additional Blackhole revision variable in its explicitly isolated shell
+environment. The installer at this checkpoint has SHA-256
+`da4e4c70ddc75f5d484082b74d8623f49deabb8267b6ef5212d81b1fe453732a`.
+These are mocked/offline installer paths, not a Blackhole listener restart or
+fresh multi-server installation. Protocol documentation's actual private
+installer copy and browser checks are recorded in `api_developer_portal.md`.
+
 The initial fast phase (36132) exited 127 because the private runner's PATH
 omitted `/usr/sbin/ip`; its evidence remains at
 `/tmp/kazoo-installer-regressions.suBkGL`. Restoring the guard's standard PATH

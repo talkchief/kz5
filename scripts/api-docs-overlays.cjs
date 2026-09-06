@@ -108,6 +108,7 @@ function applyOverlays(spec, root) {
         if (result?.inputs) inputs.push(...result.inputs);
     }
     inputs.push(...require('./api-docs-members-devices.cjs').applyMembersDevices({spec, root}).inputs);
+    inputs.push(...require('./api-docs-blackhole.cjs').applyBlackhole({spec, root}).inputs);
     return {inputs};
 }
 function plannedSpec() {
