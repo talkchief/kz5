@@ -29,10 +29,28 @@ it is not an all-suite pass. The recovery fixture compiles with `TEST`, and its
 upgrade case calls `code_change` on synthetic state. These checks are not an OTP
 suspend/migrate/resume rehearsal, a downgrade test or live broker/node failure.
 
-Loading code does not convert existing FSM state. The current conversion appends
-a correlation ID placeholder and recovery-timer fields. An old ringing offer
-would retain no matching Connect-ID, so its replies can be ignored. The old FSM
-does not implement the reverse conversion. Listener record layouts are unchanged,
+Loading code does not convert existing FSM state. The preceding conversion
+accepted an old ringing offer without a matching Connect-ID, so its replies
+could be ignored. The source now rejects legacy conversion unless the agent is
+ready/paused with no member call object, member/queue/agent IDs, call start,
+outbound calls or monitoring ownership. Unknown state names and record layouts
+are also rejected. Accepted conversion preserves the full old record prefix and
+adds the recovery timer only after validation; repeating a current-layout change
+does not replace the timer or an active recovery probe.
+
+Direct regression session `45037` reproduced unsafe state/layout acceptance
+(two failed, 23 passed). After the fix, `99730` passed all 25 recovery tests under
+the same 384-MiB, zero-network, 120-second guard. An earlier fixture compile
+failure `70165` was a test syntax error, not a behavior result. These direct tests
+do not supply an admission fence or prove a live rolling upgrade.
+Production compile `68050` then passed all 63 ACDC modules with `-Werror`, no
+`TEST` options/test exports and unchanged source/header hashes. Compilation used
+private temporary output under the 384-MiB, zero-network guard; no running BEAM
+was loaded or replaced.
+Broader source regression `66281` passed all 48 agent, queue FSM, manager and
+member tests against the same source, also isolated from live services.
+
+The old FSM does not implement the reverse conversion. Listener record layouts are unchanged,
 but their actual OTP callback is `gen_listener`, whose code-change callback does
 not delegate to the client module.
 

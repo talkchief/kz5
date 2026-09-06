@@ -1685,15 +1685,47 @@ stop_agent(AccountId, AgentId) ->
 %% @doc Convert process state when code is changed.
 %% @end
 %%------------------------------------------------------------------------------
--spec code_change(any(), atom(), state(), any()) -> {'ok', atom(), state()}.
+-spec code_change(any(), atom(), any(), any()) ->
+          {'ok', atom(), state()} | {'error', atom()}.
 code_change(_OldVsn, StateName, State, _Extra)
-  when is_tuple(State), tuple_size(State) =:= #state.member_connect_id - 1 ->
-    %% Fields are appended so a coordinated sys:change_code upgrade from the
-    %% previous FSM can retain live calls, pauses and queued status changes.
-    Upgraded = list_to_tuple(tuple_to_list(State) ++ ['undefined', start_call_check_timer(), 'undefined']),
-    {'ok', StateName, Upgraded};
-code_change(_OldVsn, StateName, State, _Extra) ->
-    {'ok', StateName, State}.
+  when StateName =:= 'wait'; StateName =:= 'sync'; StateName =:= 'ready';
+       StateName =:= 'ringing'; StateName =:= 'answered'; StateName =:= 'wrapup';
+       StateName =:= 'paused'; StateName =:= 'outbound' ->
+    upgrade_state(StateName, State);
+code_change(_OldVsn, _StateName, _State, _Extra) ->
+    {'error', 'unsupported_agent_state'}.
+
+-spec upgrade_state(atom(), any()) -> {'ok', atom(), state()} | {'error', atom()}.
+upgrade_state(StateName, #state{}=State) ->
+    %% Repeating a current-layout change must not replace a timer or a probe.
+    {'ok', StateName, State};
+upgrade_state(StateName, State)
+  when is_tuple(State), tuple_size(State) =:= #state.member_connect_id - 1,
+       element(1, State) =:= 'state' ->
+    %% Legacy in-flight offers have no Connect-ID. Appending an undefined ID
+    %% cannot preserve their correlation; do not accept such a migration.
+    %% This local check is NOT an admission fence: the deployment must also
+    %% drain all nodes and prevent new work while their state is suspended.
+    Candidate = list_to_tuple(tuple_to_list(State) ++ ['undefined', 'undefined', 'undefined']),
+    upgrade_drained_state(StateName, Candidate);
+upgrade_state(_StateName, _State) ->
+    {'error', 'unsupported_agent_state_layout'}.
+
+-spec upgrade_drained_state(atom(), state()) -> {'ok', atom(), state()} | {'error', atom()}.
+upgrade_drained_state(StateName, #state{member_call='undefined'
+                                       ,member_call_id='undefined'
+                                       ,member_call_queue_id='undefined'
+                                       ,member_call_start='undefined'
+                                       ,agent_call_id='undefined'
+                                       ,outbound_call_ids=[]
+                                       ,monitoring='false'
+                                       }=State)
+  when StateName =:= 'ready'; StateName =:= 'paused' ->
+    %% Preserve the complete old prefix, including pause and pending updates.
+    %% Create the new timer only once conversion has been accepted.
+    {'ok', StateName, State#state{call_check_ref=start_call_check_timer()}};
+upgrade_drained_state(_StateName, _State) ->
+    {'error', 'agent_upgrade_requires_drain'}.
 
 %%%=============================================================================
 %%% Internal functions

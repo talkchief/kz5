@@ -73,6 +73,13 @@ offer correlation fields require a coordinated upgrade; do not leave old and
 new ACDC workers mixed. Prefer draining calls and restarting ACDC processes
 under the existing deployment procedure. A state conversion is included for
 the preceding FSM record, but loading BEAMs alone is not a coordinated upgrade.
+Legacy conversion now requires a drained ready/paused agent with no tracked call
+or monitoring ownership. Active, malformed or unknown legacy states are rejected
+without starting a recovery timer. Current-layout conversions retain the existing
+timer and probe. This does not replace all-node admission control, and does not
+implement a downgrade to the old record. See
+[coherent upgrade readiness](acdc_coherent_upgrade_readiness.md) for the rollout
+gates and current regression evidence.
 
 Before production rollout, validate in staging with the same endpoint and
 cluster configuration:

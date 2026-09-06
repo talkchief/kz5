@@ -33,6 +33,9 @@ agent_recovery_test_() ->
                                ,fun status_checks_are_read_only_and_correlated/0
                                ,fun repeated_calls_remain_available/0
                                ,fun upgrade_preserves_existing_state/0
+                               ,fun upgrade_rejects_active_legacy_state/0
+                               ,fun upgrade_rejects_unknown_layouts/0
+                               ,fun upgrade_current_state_is_idempotent/0
                                ]] end}.
 
 setup() ->
@@ -385,13 +388,67 @@ repeated_calls_remain_available() ->
     ?assertEqual(0, meck:num_calls(acdc_agent_stats, agent_logged_out, '_')).
 
 upgrade_preserves_existing_state() ->
-    Current = state([{pause_ref, infinity}, {outbound_call_ids, [<<"direct">>]}]),
-    Old = list_to_tuple(lists:sublist(tuple_to_list(Current), tuple_size(Current) - 3)),
-    {ok, outbound, Upgraded} = acdc_agent_fsm:code_change(old, outbound, Old, []),
-    ?assertEqual(infinity, field(pause_ref, Upgraded)),
-    ?assertEqual([<<"direct">>], field(outbound_call_ids, Upgraded)),
-    ?assert(is_reference(field(call_check_ref, Upgraded))),
-    erlang:cancel_timer(field(call_check_ref, Upgraded)).
+    lists:foreach(fun(Name) ->
+        Current = drained_upgrade_state([{pause_ref, infinity}
+                                         ,{agent_state_updates, [{pause, 60}]}
+                                         ,{endpoints, [j([{<<"_id">>, <<"endpoint">>}])]}]),
+        Old = legacy_state(Current),
+        {ok, Name, Upgraded} = acdc_agent_fsm:code_change(old, Name, Old, []),
+        try
+            ?assertEqual(Old, legacy_state(Upgraded)),
+            ?assertEqual(undefined, field(member_connect_id, Upgraded)),
+            ?assertEqual(undefined, field(call_check, Upgraded)),
+            ?assert(is_reference(field(call_check_ref, Upgraded))),
+            ?assert(is_integer(erlang:read_timer(field(call_check_ref, Upgraded))))
+        after erlang:cancel_timer(field(call_check_ref, Upgraded))
+        end
+    end, [ready, paused]).
+
+drained_upgrade_state(Extra) ->
+    acdc_agent_fsm:strategy_test_state(Extra ++ [{account_id, ?ACCOUNT}, {agent_id, ?AGENT}]).
+
+legacy_state(Current) ->
+    list_to_tuple(lists:sublist(tuple_to_list(Current), tuple_size(Current) - 3)).
+
+upgrade_rejects_active_legacy_state() ->
+    Old = legacy_state(drained_upgrade_state([])),
+    lists:foreach(fun(Name) ->
+        ?assertEqual({error, agent_upgrade_requires_drain},
+                     acdc_agent_fsm:code_change(old, Name, Old, []))
+    end, [wait, sync, ringing, answered, wrapup, outbound]),
+    lists:foreach(fun(Name) ->
+        lists:foreach(fun(Extra) ->
+            Busy = legacy_state(drained_upgrade_state([Extra])),
+            ?assertEqual({error, agent_upgrade_requires_drain},
+                         acdc_agent_fsm:code_change(old, Name, Busy, []))
+        end, [{member_call, kapps_call:new()}, {member_call_id, ?MEMBER}
+              ,{member_call_queue_id, <<"queue">>}, {member_call_start, 1}
+              ,{agent_call_id, <<"agent-leg">>}, {outbound_call_ids, [<<"direct">>]}
+              ,{outbound_call_ids, undefined}, {monitoring, true}])
+    end, [ready, paused]).
+
+upgrade_rejects_unknown_layouts() ->
+    Current = drained_upgrade_state([]),
+    Old = legacy_state(Current),
+    lists:foreach(fun(Bad) ->
+        ?assertEqual({error, unsupported_agent_state_layout},
+                     acdc_agent_fsm:code_change(old, ready, Bad, []))
+    end, [undefined, #{}, {}, {state}, setelement(1, Old, foreign)
+          ,setelement(1, Current, foreign), erlang:append_element(Old, undefined)
+          ,erlang:append_element(Current, undefined)]),
+    ?assertEqual({error, unsupported_agent_state},
+                 acdc_agent_fsm:code_change(old, unknown, Current, [])).
+
+upgrade_current_state_is_idempotent() ->
+    Ref = erlang:start_timer(30000, self(), upgrade_test),
+    try
+        Current = state([{call_check_ref, Ref}, {call_check, {make_ref(), self(), make_ref(), {snapshot}}}]),
+        lists:foreach(fun(Name) ->
+            ?assertEqual({ok, Name, Current}, acdc_agent_fsm:code_change(old, Name, Current, []))
+        end, [wait, sync, ready, ringing, answered, wrapup, paused, outbound]),
+        ?assert(is_integer(erlang:read_timer(Ref)))
+    after erlang:cancel_timer(Ref)
+    end.
 
 listener_preserves_offer_correlation_test_() ->
     {timeout, 30, fun() ->
