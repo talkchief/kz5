@@ -73,6 +73,37 @@ The runner compiles with actual production warnings, then compiles TEST-only
 exports into a temporary private directory and runs memory-only EUnit. It never
 loads a live Erlang node, changes shared source/ebin, or performs an HTTP request.
 
+The API-02 additions exercise the production-mode token restriction matcher and
+tenant hierarchy authorization, plus real RSA JWT verification, expiry and scope
+matching. The key is generated in memory solely for the test; identity, key
+lookup, account/configuration stores, event dispatch and registration transport
+are explicit offline fixtures. The real Crossbar preauthentication/permission
+functions run, but error responses are captured in memory rather than sent by
+Cowboy. These are not live restricted-principal, TLS or HTTP acceptance tests.
+Per-resource scope callback requirements are fixture bindings; the tests do not
+claim that literal `members:GET`, `users:GET` and `devices:GET` scopes are globally
+configured in every deployment.
+
+The runner compiles the auth path from repository source, without `-DTEST` for
+`cb_token_restrictions` (that flag substitutes restriction and hierarchy lookup).
+It retains its private output directory and source hashes on success or failure,
+plus the EUnit log when that phase is reached, and checks that source inputs
+stayed unchanged. Run under the shared
+validation resource guard; no daemon, token-store or production ebin is written.
+
+New boundary fixtures cover exactly1000 versus1001 account devices (including
+unassigned devices),205 members over100/100/5-item pages, exact view query limits,
+datastore over-return, and10000/10001 distinct registrar rows. The registrar limit
+is still evaluated after collection, not an AMQP transport-memory bound. Each
+denied auth request asserts zero member/device inventory or registrar reads.
+
+Offline checkpoint,2026-09-06: the network-isolated384MiB/reserve768MiB/180-second
+guard completed with exit0. All14 production-mode source compilations and all25
+EUnit groups passed; all18 pinned source/runner/test inputs were unchanged.
+Account-tree, datastore, identity and key lookup remained fixture substitutes;
+the production hierarchy/restriction logic consumed those fixtures. This result
+does not certify live principals, HTTP authentication or transport memory limits.
+
 ## OpenAPI and read-only live acceptance
 
 `openapi-overlay.cjs` re-exports the source-hashed OpenAPI3 contract and standalone
@@ -109,5 +140,7 @@ statuses; a contract PASS does not imply registrar availability. The independent
 live reference is the existing correlated **summary** status API. Exact detailed
 expiry is source/unit-tested and checked for consistency in the new response,
 not independently proven by summary. Restricted-token authorization and SIP call
-reachability remain outside this harness's coverage. No live harness execution
+reachability, unauthorized cross-account principals and expired live tokens
+remain outside this harness's coverage. The new offline fixtures do not remove
+those live acceptance limits. No live harness execution
 is part of the offline tests above.

@@ -70,10 +70,13 @@ integration_test_() -> {foreach,fun setup/0,fun teardown/1,
     [fun(_) -> fun normal_get/0 end,fun(_) -> fun scope_gates/0 end,
      fun(_) -> fun incomplete_registrars/0 end,fun(_) -> fun inventory_overflow/0 end,
      fun(_) -> fun invalid_inventory/0 end,fun(_) -> fun actual_custom_route_parser/0 end,
-     fun(_) -> fun expiry_filtering/0 end]}.
+     fun(_) -> fun expiry_filtering/0 end,fun(_) -> fun exact_inventory_boundary/0 end,
+     fun(_) -> fun unassigned_inventory_overflow/0 end,fun(_) -> fun member_page_boundaries/0 end,
+     fun(_) -> fun registrar_row_boundaries/0 end,fun(_) -> fun datastore_over_return/0 end]}.
 setup() ->
     T = ets:new(members_test,[named_table,public]),
     ets:insert(T,[{auth,allow},{devices,[device()]},{users,[user(?U),user(?V)]},
+        {view_queries,[]},{over_return,false},{user_limit,27},
         {registration,[j([{<<"AOR">>,<<"desk@members-test.invalid">>},{<<"Expires">>,erlang:system_time(second)+120},
             {<<"Contact">>,<<"SECRET_CONTACT">>},{<<"Path">>,<<"SECRET_PATH">>}])]},{queries,0},{custom,true}]),
     lists:foreach(fun(M) -> ok=meck:new(M,[no_link]) end,[kz_datamgr,crossbar_bindings,kz_auth_scope,kapps_config,kzd_accounts,kapi_registration]),
@@ -104,10 +107,13 @@ setup() ->
         ?assertEqual("true",proplists:get_value(include_docs,Parsed#view_query_args.options)),
         ?assertEqual(false,proplists:get_value(reduce,Options)),
         [Type|After]=proplists:get_value(startkey,Options),
-        Limit=proplists:get_value(limit,Options),?assert(Limit=<1001),
+        Limit=proplists:get_value(limit,Options),
+        ?assertEqual(case Type of <<"user">> -> val(user_limit); <<"device">> -> 1001 end,Limit),
+        ets:insert(T,{view_queries,val(view_queries)++[{Type,Limit}]}),
         Docs=case Type of <<"user">> -> val(users); <<"device">> -> val(devices) end,
         Filtered=case After of [] -> Docs; [A] -> [D||D<-Docs,kz_doc:id(D)>=A] end,
-        {ok,[j([{<<"doc">>,D}])||D<-lists:sublist(Filtered,Limit)]}
+        Returned=case val(over_return) of Type -> Filtered; _ -> lists:sublist(Filtered,Limit) end,
+        {ok,[j([{<<"doc">>,D}])||D<-Returned]}
     end),T.
 teardown(T) -> meck:unload(),ets:delete(T).
 val(K) -> [{K,V}]=ets:lookup(members_test,K),V.
@@ -157,6 +163,73 @@ inventory_overflow() ->
     ?assertEqual(2,kz_json:get_value(<<"count">>,D)),?assertEqual(0,val(queries)),
     lists:foreach(fun(U)->?assertEqual(false,kz_json:get_value(<<"devices_complete">>,U)),
         ?assertEqual(null,kz_json:get_value(<<"device_count">>,U)),?assertEqual([],kz_json:get_value(<<"devices">>,U)) end,kz_json:get_value(<<"items">>,D)).
+number_id(N) -> iolist_to_binary(io_lib:format("~32.16.0b",[N])).
+exact_inventory_boundary() ->
+    Many=[kz_doc:set_id(device(),number_id(N))||N<-lists:seq(1,1000)],
+    ets:insert(members_test,{devices,Many}),C=response(),?assertEqual(success,cb_context:resp_status(C)),
+    D=cb_context:resp_data(C),?assertEqual(true,kz_json:get_value([<<"device_inventory">>,<<"complete">>],D)),
+    ?assertEqual(1000,kz_json:get_value([<<"device_inventory">>,<<"count">>],D)),
+    [U,V]=kz_json:get_value(<<"items">>,D),?assertEqual(1000,kz_json:get_value(<<"device_count">>,U)),
+    ?assertEqual(1000,length(kz_json:get_value(<<"devices">>,U))),
+    ?assertEqual(0,kz_json:get_value(<<"device_count">>,V)),?assertEqual(1,val(queries)),
+    ?assertEqual([{<<"user">>,27},{<<"device">>,1001}],val(view_queries)).
+unassigned_inventory_overflow() ->
+    Many=[kz_json:delete_key(<<"owner_id">>,kz_doc:set_id(device(),number_id(N)))||N<-lists:seq(1,1001)],
+    ets:insert(members_test,{devices,Many}),C=response(),?assertEqual(success,cb_context:resp_status(C)),
+    D=cb_context:resp_data(C),?assertEqual(false,kz_json:get_value([<<"device_inventory">>,<<"complete">>],D)),
+    ?assertEqual(<<"limit_exceeded">>,kz_json:get_value([<<"device_inventory">>,<<"reason">>],D)),
+    ?assertEqual(null,kz_json:get_value([<<"device_inventory">>,<<"count">>],D)),
+    lists:foreach(fun(U)->?assertEqual(false,kz_json:get_value(<<"devices_complete">>,U)),
+        ?assertEqual(null,kz_json:get_value(<<"device_count">>,U)),?assertEqual([],kz_json:get_value(<<"devices">>,U)) end,
+        kz_json:get_value(<<"items">>,D)),
+    ?assertEqual(0,val(queries)),?assertEqual([{<<"user">>,27},{<<"device">>,1001}],val(view_queries)).
+member_page_boundaries() ->
+    Users=[user(number_id(N))||N<-lists:seq(1,205)],
+    ets:insert(members_test,[{users,Users},{devices,[]},{user_limit,102}]),
+    {First,Next1}=member_page(undefined,100,true),
+    {Second,Next2}=member_page(Next1,100,true),
+    {Last,null}=member_page(Next2,5,false),
+    ?assertEqual([kz_doc:id(U)||U<-Users],First++Second++Last),
+    ?assertEqual(lists:flatten(lists:duplicate(3,[{<<"user">>,102},{<<"device">>,1001}])),val(view_queries)),
+    ?assertEqual(0,val(queries)).
+member_page(Cursor,Count,More) ->
+    Query=case Cursor of undefined -> j([{<<"page_size">>,100}]);
+        _ -> j([{<<"page_size">>,100},{<<"cursor">>,Cursor}]) end,
+    C=cb_members:validate(cb_context:set_query_string(context(),Query),<<"devices">>),
+    ?assertEqual(success,cb_context:resp_status(C)),D=cb_context:resp_data(C),
+    ?assertEqual(Count,kz_json:get_value(<<"count">>,D)),?assertEqual(More,kz_json:get_value(<<"has_more">>,D)),
+    ?assertEqual(100,kz_json:get_value(<<"page_size">>,D)),
+    Items=kz_json:get_value(<<"items">>,D),
+    lists:foreach(fun(U)->?assertEqual(true,kz_json:get_value(<<"devices_complete">>,U)),
+        ?assertEqual(0,kz_json:get_value(<<"device_count">>,U)) end,Items),
+    {[kz_json:get_value(<<"id">>,U)||U<-Items],kz_json:get_value(<<"next_cursor">>,D)}.
+registrar_row_boundaries() ->
+    [Reg]=val(registration),
+    lists:foreach(fun({Count,Complete,State,Reason})->
+        %% The real collector de-duplicates identical rows. Keep this returned
+        %% inventory distinct, with the actual device binding plus other AORs.
+        Others=[kz_json:set_value(<<"AOR">>,<<(integer_to_binary(N))/binary,"@members-test.invalid">>,Reg)
+            ||N<-lists:seq(2,Count)],
+        ets:insert(members_test,[{registration,[Reg|Others]},{queries,0},{view_queries,[]}]),
+        C=response(),?assertEqual(success,cb_context:resp_status(C)),D=cb_context:resp_data(C),
+        ?assertEqual(Complete,kz_json:get_value([<<"registration_snapshot">>,<<"complete">>],D)),
+        ?assertEqual(Reason,kz_json:get_value([<<"registration_snapshot">>,<<"reason">>],D)),
+        [U|_]=kz_json:get_value(<<"items">>,D),[Device]=kz_json:get_value(<<"devices">>,U),
+        ?assertEqual(State,kz_json:get_value([<<"registration">>,<<"status">>],Device)),
+        ?assertEqual(1,val(queries)),?assertEqual([{<<"user">>,27},{<<"device">>,1001}],val(view_queries))
+    end,[{10000,true,<<"online">>,<<"complete">>},
+         {10001,false,<<"unknown">>,<<"invalid_registration_response">>}]).
+datastore_over_return() ->
+    lists:foreach(fun(Type)->
+        ets:insert(members_test,[{users,[user(number_id(N))||N<-lists:seq(1,28)]},
+            {devices,[kz_doc:set_id(device(),number_id(N))||N<-lists:seq(1,1002)]},
+            {over_return,Type},{queries,0},{view_queries,[]}]),
+        C=response(),?assertEqual(503,cb_context:resp_error_code(C)),?assertEqual(0,val(queries)),
+        ?assertEqual(undefined,kz_json:get_value(<<"items">>,cb_context:resp_data(C))),
+        Expected=case Type of <<"user">> -> [{<<"user">>,27}];
+            <<"device">> -> [{<<"user">>,27},{<<"device">>,1001}] end,
+        ?assertEqual(Expected,val(view_queries))
+    end,[<<"user">>,<<"device">>]).
 invalid_inventory() ->
     ets:insert(members_test,{devices,[kz_json:set_value(<<"pvt_account_id">>,?V,device())]}),
     ?assertEqual(503,cb_context:resp_error_code(response())),?assertEqual(0,val(queries)).
