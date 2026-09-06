@@ -1,0 +1,15 @@
+<div class="acdc-queue-login-dialog">
+	<p><strong>{{agentName}}</strong></p>
+	<p>{{i18n.acdc.agents.chooseQueueHelp}}</p>
+	<label for="acdc_login_queue">{{i18n.acdc.fields.queue}}</label>
+	<select id="acdc_login_queue" class="acdc-login-queue" disabled>
+		<option value="">{{i18n.acdc.agents.chooseQueue}}</option>
+	</select>
+	<p class="acdc-login-message" role="status" aria-live="polite">{{i18n.acdc.agents.loadingQueueChoices}}</p>
+	<p class="acdc-queue-login-help">{{i18n.acdc.agents.queueConfirmationHelp}}</p>
+	<div class="acdc-queue-login-buttons">
+		<button type="button" class="monster-button-secondary acdc-cancel-queue-login">{{i18n.acdc.actions.cancel}}</button>
+		<button type="button" class="monster-button-secondary acdc-check-queue-login" disabled>{{i18n.acdc.agents.checkQueueLogin}}</button>
+		<button type="button" class="monster-button-primary acdc-confirm-queue-login" disabled>{{i18n.acdc.agents.loginToQueue}}</button>
+	</div>
+</div>

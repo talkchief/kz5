@@ -257,6 +257,29 @@
 #acdc_wrapper .acdc-action-pause { color: #a16207; }
 #acdc_wrapper .acdc-action-resume { color: #0369a1; }
 
+#acdc_wrapper .acdc-queue-session-list {
+	list-style: none;
+	margin: 6px 0 0;
+	font-size: 11px;
+	line-height: 1.5;
+}
+
+#acdc_wrapper .acdc-queue-session.confirmed { color: #166534; }
+#acdc_wrapper .acdc-queue-session.pending { color: #92400e; }
+#acdc_wrapper .acdc-queue-session.unconfirmed { color: #64748b; }
+
+#acdc_wrapper .acdc-queue-login-help,
+.acdc-queue-login-dialog .acdc-queue-login-help {
+	color: #64748b;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.acdc-queue-login-dialog { padding: 18px; }
+.acdc-queue-login-dialog select { width: 100%; }
+.acdc-queue-login-dialog .acdc-login-message { min-height: 40px; margin-top: 14px; }
+.acdc-queue-login-dialog .acdc-queue-login-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
 #acdc_wrapper .acdc-pause-group {
 	display: inline-flex;
 	margin-right: 6px;

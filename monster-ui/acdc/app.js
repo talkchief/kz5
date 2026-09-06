@@ -108,6 +108,16 @@ define(function(require) {
 				verb: 'POST',
 				generateError: false
 			},
+			'acdc.agents.queueMemberships': {
+				url: 'accounts/{accountId}/agents/{agentId}/queue_status', verb: 'GET', generateError: false
+			},
+			'acdc.agents.queueLogin': {
+				url: 'accounts/{accountId}/agents/{agentId}/queue_status', verb: 'POST', generateError: false
+			},
+			'acdc.agents.queueLoginStatus': {
+				url: 'accounts/{accountId}/agents/{agentId}/queue_status?runtime_only=true&queue_id={queueId}&action=login',
+				verb: 'GET', generateError: false
+			},
 			'acdc.users.list': {
 				url: 'accounts/{accountId}/users?paginate=false',
 				verb: 'GET',
@@ -187,6 +197,7 @@ define(function(require) {
 				template = self.appFlags.acdc.container,
 				generation = ++self.appFlags.acdc.requestGeneration;
 
+			self.closeAgentQueueLogin();
 			self.appFlags.acdc.currentTab = tab;
 			template.find('.acdc-tab').removeClass('active');
 			template.find('.acdc-tab[data-tab="' + tab + '"]').addClass('active');
@@ -1846,6 +1857,7 @@ define(function(require) {
 				generation = self.newGeneration(pGeneration),
 				accountId = self.accountId;
 
+			self.closeAgentQueueLogin();
 			self.renderLoading(self.i18n.active().acdc.states.loadingAgents);
 			self.requestMany({
 				agents: { resource: 'acdc.agents.list' },
@@ -1877,7 +1889,10 @@ define(function(require) {
 					}
 				}));
 
+				view.data('agent-inventory', results.agents || []);
+				view.data('queue-inventory', results.queues || []);
 				self.bindAgentEvents(view, generation, accountId);
+				self.renderAgentQueueSessions(view);
 				self.getContentContainer().empty().append(view);
 			});
 		},
@@ -1953,11 +1968,216 @@ define(function(require) {
 			return name || agent.username || agent.email || agent.id || agent._id || '-';
 		},
 
+		queueLoginChoices: function(memberships, queues) {
+			var validId = function(id) { return _.isString(id) && /^[a-f0-9]{32}$/.test(id); },
+				queueIds = _.map(queues, function(queue) { return queue && (queue.id || queue._id); });
+
+			if (!_.isArray(memberships) || !_.isArray(queues) || memberships.length > 1000 || queues.length > 1000
+				|| !_.every(memberships, validId) || !_.every(queueIds, validId)
+				|| _.uniq(memberships).length !== memberships.length || _.uniq(queueIds).length !== queueIds.length
+				|| !_.every(memberships, function(id) { return _.includes(queueIds, id); })) {
+				return { valid: false, choices: [] };
+			}
+			return { valid: true, choices: _.map(memberships, function(id) {
+				var queue = queues[_.indexOf(queueIds, id)];
+				return { id: id, name: queue.name || id };
+			}) };
+		},
+
+		queueLoginProof: function(data, agentId, queueId) {
+			if (!_.isPlainObject(data) || data.agent_id !== agentId || data.queue_id !== queueId || data.action !== 'login'
+				|| data.account_id !== this.accountId || data.runtime_only !== true
+				|| !_.isBoolean(data.confirmed) || !_.isBoolean(data.runtime_member) || !_.isBoolean(data.runtime_observed)
+				|| !_.isString(data.agent_status)) {
+				return null;
+			}
+			if (data.state === 'confirmed' && data.confirmed === true && data.runtime_member === true && data.runtime_observed === true) {
+				return { state: 'confirmed', agentStatus: data.agent_status };
+			}
+			if (data.state === 'pending' && data.confirmed === false) {
+				return { state: 'pending', agentStatus: data.agent_status };
+			}
+			return null;
+		},
+
+		agentQueueSession: function(agentId, queueId, value) {
+			var flags = this.appFlags.acdc,
+				key = this.accountId + ':' + agentId + ':' + queueId,
+				entry;
+
+			flags.queueLogins = flags.queueLogins || {};
+			if (value) { flags.queueLogins[key] = _.assign({}, value, { checkedAt: Date.now() }); }
+			entry = flags.queueLogins[key];
+			if (!entry || (entry.state === 'confirmed' && Date.now() - entry.checkedAt > 30000)) {
+				return { state: 'unconfirmed' };
+			}
+			return _.assign({}, entry);
+		},
+
+		renderAgentQueueSessions: function(view) {
+			var self = this,
+				labels = self.i18n.active().acdc.agents,
+				queues = _.keyBy(view.data('queue-inventory') || [], 'id'),
+				generation = self.appFlags.acdc.requestGeneration,
+				accountId = self.accountId,
+				hasConfirmed = false;
+
+			_.each(view.data('agent-inventory') || [], function(agent) {
+				var agentId = agent.id || agent._id,
+					items = _.map(agent.queues || [], function(queueId) {
+						var state = self.agentQueueSession(agentId, queueId).state;
+						hasConfirmed = hasConfirmed || state === 'confirmed';
+						return { name: _.get(queues, [queueId, 'name'], queueId), state: state,
+							label: labels[state === 'confirmed' ? 'queueConfirmed' : state === 'pending' ? 'queuePending' : 'queueUnconfirmed'] };
+					});
+
+				view.find('.acdc-agent-queue-sessions').filter(function() { return $(this).data('agent-id') === agentId; })
+					.html(self.getTemplate({ name: 'agent-queue-sessions', data: { items: items } }));
+			});
+			clearTimeout(self.appFlags.acdc.queueSessionExpiryTimer);
+			if (hasConfirmed) {
+				self.appFlags.acdc.queueSessionExpiryTimer = setTimeout(function() {
+					if (self.isCurrentView(generation, 'agents', accountId)) { self.renderAgentQueueSessions(view); }
+				}, 31000);
+			}
+		},
+
+		checkAgentQueueLogin: function(agentId, queueId, callback) {
+			var self = this,
+				accountId = self.accountId;
+
+			self.request('acdc.agents.queueLoginStatus', { agentId: agentId, queueId: queueId }, function(error, data) {
+				var proof;
+				if (self.accountId !== accountId) { return; }
+				proof = !error && self.queueLoginProof(data, agentId, queueId);
+				if (!proof) { callback(error || self.i18n.active().acdc.agents.queueProofUnavailable); return; }
+				if (proof.state === 'pending' && self.agentQueueSession(agentId, queueId).state !== 'pending') {
+					proof.state = 'unconfirmed';
+				}
+				self.agentQueueSession(agentId, queueId, proof);
+				callback(null, proof);
+			});
+		},
+
+		sendAgentQueueLogin: function(agentId, queueId, callback) {
+			var self = this,
+				accountId = self.accountId;
+
+			// This is the only Login mutation. Never use global setStatus, roster
+			// update, legacy unflagged queue_status, or any other agent's endpoint.
+			self.agentQueueSession(agentId, queueId, { state: 'pending' });
+			self.request('acdc.agents.queueLogin', { agentId: agentId,
+				data: { action: 'login', queue_id: queueId, runtime_only: true }
+			}, function(error, data) {
+				if (self.accountId !== accountId) { return; }
+				if (error) { callback(error); return; }
+				if (!_.isPlainObject(data) || data.agent_id !== agentId || data.queue_id !== queueId || data.action !== 'login'
+					|| data.account_id !== accountId || data.runtime_only !== true || data.state !== 'pending' || data.confirmed !== false) {
+					callback(self.i18n.active().acdc.agents.queueProofUnavailable); return;
+				}
+				// An accepted command is not confirmation. Only the GET runtime
+				// proof can move the selected queue's display to confirmed.
+				callback(null);
+			});
+		},
+
+		closeAgentQueueLogin: function() {
+			var dialog = this.appFlags.acdc.queueLoginDialog;
+			if (dialog) { dialog.dialog('close'); }
+		},
+
+		openAgentQueueLogin: function(view, agentId, generation, accountId) {
+			var self = this,
+				labels = self.i18n.active().acdc.agents,
+				agent = _.find(view.data('agent-inventory') || [], function(item) { return (item.id || item._id) === agentId; }),
+				content,
+				dialog,
+				closed = false,
+				choices = [],
+				busy = true,
+				proofAvailable = false,
+				pollTimer,
+				selection = 0;
+
+			if (!agent || !/^[a-f0-9]{32}$/.test(agentId) || !self.isCurrentView(generation, 'agents', accountId)) { return; }
+			self.closeAgentQueueLogin();
+			content = $(self.getTemplate({ name: 'agent-queue-login', data: { agentName: self.getAgentName(agent) } }));
+			function active() { return !closed && self.isCurrentView(generation, 'agents', accountId); }
+			function selected() { return content.find('.acdc-login-queue').val(); }
+			function display(message) {
+				var queueId = selected(), state = self.agentQueueSession(agentId, queueId).state;
+				content.find('.acdc-login-message').text(message || labels[state === 'confirmed' ? 'queueConfirmed' : state === 'pending' ? 'queuePending' : 'queueUnconfirmed']);
+				content.find('.acdc-confirm-queue-login').prop('disabled', busy || !proofAvailable || !queueId || state === 'pending' || state === 'confirmed');
+				content.find('.acdc-check-queue-login').prop('disabled', busy || !queueId);
+				content.find('.acdc-login-queue').prop('disabled', busy);
+				self.renderAgentQueueSessions(view);
+			}
+			function check(remaining) {
+				var queueId = selected(), token = selection;
+				if (!active() || busy || !_.some(choices, { id: queueId })) { return; }
+				busy = true; display();
+				self.checkAgentQueueLogin(agentId, queueId, function(error, proof) {
+					if (!active() || token !== selection) { return; }
+					busy = false;
+					proofAvailable = !error;
+					if (error) { display(labels.queueProofUnavailable); return; }
+					display();
+					if (proof.state === 'confirmed') {
+						// Even a closed dialog must expire the visible table proof.
+						setTimeout(function() {
+							if (self.isCurrentView(generation, 'agents', accountId)) { self.renderAgentQueueSessions(view); }
+							if (active() && token === selection) { proofAvailable = false; display(); }
+						}, 31000);
+					} else if (remaining > 0) {
+						pollTimer = setTimeout(function() { check(remaining - 1); }, 1000);
+					} else if (proof.state === 'pending') { display(labels.queuePendingCheckAgain); }
+				});
+			}
+			dialog = monster.ui.dialog(content, { title: labels.queueLoginTitle, width: 520, onClose: function() {
+				closed = true; clearTimeout(pollTimer);
+				if (self.appFlags.acdc.queueLoginDialog === dialog) { self.appFlags.acdc.queueLoginDialog = null; }
+			} });
+			self.appFlags.acdc.queueLoginDialog = dialog;
+			content.find('.acdc-cancel-queue-login').on('click', function() { dialog.dialog('close'); });
+			content.find('.acdc-login-queue').on('change', function() {
+				selection++; proofAvailable = false; clearTimeout(pollTimer); display(); check(0);
+			});
+			content.find('.acdc-check-queue-login').on('click', function() { clearTimeout(pollTimer); check(0); });
+			content.find('.acdc-confirm-queue-login').on('click', function() {
+				var queueId = selected();
+				if (!active() || busy || !proofAvailable || !_.some(choices, { id: queueId }) || self.agentQueueSession(agentId, queueId).state !== 'unconfirmed') { return; }
+				busy = true; display(labels.queuePending);
+				self.sendAgentQueueLogin(agentId, queueId, function(error) {
+					if (!active()) { return; }
+					busy = false;
+					display(error ? labels.queueRequestUncertain : labels.queuePending);
+					// Polling only reads; never re-send a login after a timeout.
+					if (!error) { check(5); }
+				});
+			});
+			self.requestCompleteList('acdc.agents.queueMemberships', { agentId: agentId }, function(error, memberships) {
+				if (!active()) { return; }
+				if (error) { display(labels.queueInventoryUnavailable); return; }
+				self.requestCompleteList('acdc.queues.list', {}, function(queueError, queues) {
+					var inventory = !queueError && self.queueLoginChoices(memberships, queues);
+					if (!active()) { return; }
+					if (!inventory || !inventory.valid) { display(labels.queueInventoryUnavailable); return; }
+					choices = inventory.choices;
+					_.each(choices, function(queue) { $('<option>').val(queue.id).text(queue.name).appendTo(content.find('.acdc-login-queue')); });
+					busy = false;
+					display(choices.length ? labels.chooseQueueHelp : labels.noEligibleQueues);
+				});
+			});
+		},
+
 		bindAgentEvents: function(view, generation, accountId) {
 			var self = this;
 
 			view.find('.acdc-refresh').on('click', function() {
 				self.renderAgents();
+			});
+			view.find('.acdc-agent-queue-login').on('click', function() {
+				self.openAgentQueueLogin(view, $(this).data('id'), generation, accountId);
 			});
 			view.find('.acdc-agent-action').on('click', function() {
 				var button = $(this),
@@ -1967,6 +2187,7 @@ define(function(require) {
 					payload = { status: status },
 					timeout;
 
+				if (['logout', 'pause', 'resume'].indexOf(status) < 0) { return; }
 				if (status === 'pause') {
 					timeout = parseInt(row.find('.acdc-pause-timeout').val(), 10);
 					payload.timeout = timeout > 0 ? timeout : 300;

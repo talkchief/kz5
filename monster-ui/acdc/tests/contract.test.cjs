@@ -455,13 +455,46 @@ assert.strictEqual(preservedHebrew.value, 'he-il');
 assert.strictEqual(preservedHebrew.disabled, false, 'Existing unavailable selections must remain serializable');
 assert.strictEqual(preservedHebrew.preserved, true);
 assert.strictEqual(preservedHebrew.ready, false);
-const legacyEnglish = app.requiredLanguagePromptIds().map(id => ({id: 'en-us/' + (
-	id.startsWith('acdc-queue-') && id !== 'acdc-queue-your-current-position-is' ? id.slice(5) : id)}));
+// Legacy capability flags stay false. Incremental English readiness now needs
+//29 immutable, provenance-verified Gemini projections plus15 attached official
+//English prompts, not the obsolete29 name-only aliases in the old fixture.
+const englishMap = [...fs.readFileSync(path.join(projectRoot, 'applications/acdc/src/acdc_gemini_map.hrl'), 'utf8')
+	.matchAll(/\{<<"en-us">>,<<"([^"]+)">>,<<"([^"]+)">>,<<"([a-f0-9]{64})">>/g)];
+assert.strictEqual(englishMap.length, 29);
+assert.deepStrictEqual(englishMap.map(match => match[1]).sort(), Array.from(app.requiredLanguagePromptIds()).sort());
+const geminiEnglish = englishMap.map(match => ({id: 'en-us/' + match[2], language: 'en-us', has_attachments: true,
+	canonical_prompt_id: match[1], prompt_id: match[2], sha256: match[3], import_metadata_verified: true,
+	source_type: 'kazoo5_acdc_gemini_voice_installer', source_map_sha256: '36665a8916e18503ae3214c5fd77748a7739c300b8989e24cc26b3214d2f8aa0'}));
+const officialEnglish = app.requiredLanguagePromptIds().filter(id => id.startsWith('acdc-queue-') && id !== 'acdc-queue-your-current-position-is')
+	.map(id => id.slice(5)).concat(['agent-invalid_choice', 'menu-invalid_entry', 'cf-enter_number'])
+	.map(id => ({id: 'en-us/' + id, language: 'en-us', has_attachments: true}));
+assert.strictEqual(officialEnglish.length, 15);
+const legacyEnglish = geminiEnglish.concat(officialEnglish);
+assert.strictEqual(legacyEnglish.length, 44);
+assert.strictEqual(new Set(legacyEnglish.map(item => item.id)).size, 44);
 const legacyCapabilities = capabilityValidator.legacyLanguageCapabilities();
 assert.strictEqual(app.validLanguageCapabilities(legacyCapabilities), true);
 assert.deepStrictEqual(Array.from(app.languageCapabilityOptions(legacyCapabilities, legacyEnglish).filter(option => option.ready), option => option.value), ['en-us']);
 assert(app.languageCapabilityOptions(legacyCapabilities, legacyEnglish.slice(1)).every(option => option.disabled),
-	'Explicit legacy mode still requires every one of the29 verified English prompts');
+	'Explicit legacy mode still requires every one of the44 verified English prompts');
+for (let missing = 0; missing < legacyEnglish.length; missing++) {
+	assert(app.languageCapabilityOptions(legacyCapabilities, legacyEnglish.filter((_item, index) => index !== missing)).every(option => option.disabled),
+		'Missing any one of the29 Gemini or15 official projections must disable incremental English');
+}
+for (const alter of [item => { delete item.import_metadata_verified; }, item => { item.import_metadata_verified = false; },
+	item => { item.source_type = 'unknown'; }, item => { item.source_map_sha256 = '0'.repeat(64); },
+	item => { item.sha256 = 'bad'; }, item => { item.id = 'en-us/' + item.canonical_prompt_id; },
+	item => { item.prompt_id = item.canonical_prompt_id; }, item => { item.language = 'fr-fr'; },
+	item => { item.has_attachments = false; }, item => { item.canonical_prompt_id = 'not-a-required-purpose'; }]) {
+	const corrupt = JSON.parse(JSON.stringify(legacyEnglish)); alter(corrupt[0]);
+	assert(app.languageCapabilityOptions(legacyCapabilities, corrupt).every(option => option.disabled),
+		'A named Gemini purpose without complete verified provenance is not readiness');
+}
+for (const alter of [item => { item.has_attachments = false; }, item => { item.language = 'fr-fr'; }, item => { item.id = 'en-us/not-required'; }]) {
+	const corrupt = JSON.parse(JSON.stringify(legacyEnglish)); alter(corrupt[29]);
+	assert(app.languageCapabilityOptions(legacyCapabilities, corrupt).every(option => option.disabled),
+		'Official English projection identity, locale and attachment are all required');
+}
 assert(app.languageCapabilityOptions(legacyCapabilities, fixedMedia).every(option => option.disabled),
 	'Localized prompt names are not proof of the legacy English prompt pack');
 assert(app.languageCapabilityOptions(legacyCapabilities, legacyEnglish, 'runtime error').every(option => option.disabled));

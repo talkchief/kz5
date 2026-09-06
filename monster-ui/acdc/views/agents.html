@@ -4,14 +4,15 @@
 		<button type="button" class="monster-button-secondary acdc-refresh"><i class="fa fa-refresh"></i> {{i18n.acdc.actions.refresh}}</button>
 	</div>
 	{{#if statsWarning}}<div class="acdc-warning">{{i18n.acdc.agents.statsUnavailable}}</div>{{/if}}
+	<p class="acdc-queue-login-help">{{i18n.acdc.agents.globalStatusHelp}}</p>
 	<div class="acdc-panel acdc-table-scroll">
 		<table class="acdc-table acdc-agent-table">
-			<thead><tr><th>{{i18n.acdc.fields.agent}}</th><th>{{i18n.acdc.fields.queues}}</th><th>{{i18n.acdc.fields.status}}</th><th>{{i18n.acdc.fields.answered}}</th><th>{{i18n.acdc.fields.missed}}</th><th>{{i18n.acdc.fields.total}}</th><th>{{i18n.acdc.fields.agentControls}}</th></tr></thead>
+			<thead><tr><th>{{i18n.acdc.fields.agent}}</th><th>{{i18n.acdc.agents.configuredQueues}}</th><th>{{i18n.acdc.agents.globalStatus}}</th><th>{{i18n.acdc.fields.answered}}</th><th>{{i18n.acdc.fields.missed}}</th><th>{{i18n.acdc.fields.total}}</th><th>{{i18n.acdc.fields.agentControls}}</th></tr></thead>
 			<tbody>
 				{{#each agents}}
 					<tr>
-						<td><strong>{{name}}</strong></td><td>{{queues}}</td><td><span class="acdc-status {{statusClass}}">{{status}}</span></td><td>{{answered}}</td><td>{{missed}}</td><td>{{total}}</td>
-						<td class="acdc-agent-controls"><button type="button" class="acdc-action-login acdc-agent-action" data-id="{{id}}" data-status="login">{{@root.i18n.acdc.actions.login}}</button><button type="button" class="acdc-action-logout acdc-agent-action" data-id="{{id}}" data-status="logout">{{@root.i18n.acdc.actions.logout}}</button><span class="acdc-pause-group"><input class="acdc-pause-timeout" type="number" min="1" value="300" title="{{@root.i18n.acdc.agents.pauseSeconds}}"><button type="button" class="acdc-action-pause acdc-agent-action" data-id="{{id}}" data-status="pause">{{@root.i18n.acdc.actions.pause}}</button></span><button type="button" class="acdc-action-resume acdc-agent-action" data-id="{{id}}" data-status="resume">{{@root.i18n.acdc.actions.resume}}</button></td>
+						<td><strong>{{name}}</strong></td><td>{{queues}}<div class="acdc-agent-queue-sessions" data-agent-id="{{id}}" aria-live="polite"></div></td><td><span class="acdc-status {{statusClass}}">{{status}}</span></td><td>{{answered}}</td><td>{{missed}}</td><td>{{total}}</td>
+						<td class="acdc-agent-controls"><button type="button" class="acdc-action-login acdc-agent-queue-login" data-id="{{id}}">{{@root.i18n.acdc.actions.login}}</button><button type="button" class="acdc-action-logout acdc-agent-action" data-id="{{id}}" data-status="logout">{{@root.i18n.acdc.actions.logout}}</button><span class="acdc-pause-group"><input class="acdc-pause-timeout" type="number" min="1" value="300" title="{{@root.i18n.acdc.agents.pauseSeconds}}"><button type="button" class="acdc-action-pause acdc-agent-action" data-id="{{id}}" data-status="pause">{{@root.i18n.acdc.actions.pause}}</button></span><button type="button" class="acdc-action-resume acdc-agent-action" data-id="{{id}}" data-status="resume">{{@root.i18n.acdc.actions.resume}}</button></td>
 					</tr>
 				{{else}}
 					<tr><td colspan="7" class="acdc-empty-cell"><i class="fa fa-headphones"></i><strong>{{@root.i18n.acdc.agents.emptyTitle}}</strong><span>{{@root.i18n.acdc.agents.emptyDescription}}</span></td></tr>
