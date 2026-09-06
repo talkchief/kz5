@@ -4,7 +4,9 @@ const fs = require('node:fs'), vm = require('node:vm'), path = require('node:pat
 const assert = require('node:assert/strict');
 const sourcePath = process.argv[2] || '/usr/local/src/kazoo5-installer/monster-ui/src/js/lib/monster.socket.js';
 const source = fs.readFileSync(sourcePath, 'utf8');
-const lodash = require(path.resolve(path.dirname(sourcePath), '../../../node_modules/lodash'));
+// An explicit existing dependency permits private patched-source fixtures without
+// copying node_modules or changing the configured source checkout.
+const lodash = require(process.argv[3] || path.resolve(path.dirname(sourcePath), '../../../node_modules/lodash'));
 
 function setup(uri, protocol = 'https:', supportsSocket = true) {
     let api, nextId = 1;
