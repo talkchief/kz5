@@ -3605,7 +3605,7 @@ install_kamailio() {
 
 verify_kamailio() {
     if [[ $DRY_RUN == true ]]; then log 'Would verify Kazoo Kamailio'; return 0; fi
-    local pid seconds_alive wait_seconds active_since errors dispatcher deadline
+    local pid seconds_alive wait_seconds dispatcher deadline
     assert_service kazoo-kamailio.service
     /usr/sbin/kamailio -v 2>&1 | grep -F "$KAMAILIO_VERSION" >/dev/null || \
         die "Installed Kamailio is not version ${KAMAILIO_VERSION}"
@@ -3658,11 +3658,29 @@ verify_kamailio() {
             die 'Kamailio did not discover a FreeSWITCH media destination through Kazoo'
         verify_kamailio_sbc
     fi
-    active_since=$(systemctl show kazoo-kamailio.service -p ActiveEnterTimestamp --value)
-    errors=$(journalctl -u kazoo-kamailio.service --since "$active_since" --no-pager 2>/dev/null | \
-        grep -E ' ERROR:|empty or invalid JSON|destination pseudo-variable is not writable|\$var\(kz_log_id\)|Header-Value can.t be parsed|no amqp connection available' || true)
-    [[ -z $errors ]] || die "Kamailio logged runtime integration errors after startup: ${errors}"
+    verify_kamailio_journal
+    [[ $(systemctl show kazoo-kamailio.service -p MainPID --value) == "$pid" ]] || \
+        die 'Kamailio restarted during its journal/JWT check'
     log 'PASS Kazoo Kamailio SIP, AMQP, dispatcher, database, RPC, and module checks'
+}
+
+verify_kamailio_journal() {
+    local active_since active_usec boot_id stats query report
+    active_since=$(systemctl show kazoo-kamailio.service -p ActiveEnterTimestamp --value)
+    active_usec=$(systemctl show kazoo-kamailio.service -p ActiveEnterTimestampMonotonic --value)
+    read -r boot_id < /proc/sys/kernel/random/boot_id
+    boot_id=${boot_id//-/}
+    [[ -n $active_since && $active_usec =~ ^[1-9][0-9]*$ ]] || die 'Could not bind Kamailio journal to service activation'
+    stats=$(timeout --signal=KILL 10 /usr/sbin/kamcmd htable.stats) || die 'Could not read Kamailio JWT table statistics'
+    query=$(timeout --signal=KILL 10 /usr/sbin/kamcmd pv.shvGet jwt_keys_query) || die 'Could not read Kamailio JWT retry state'
+    report=$(timeout --signal=KILL 30 journalctl -u kazoo-kamailio.service --boot="$boot_id" \
+        --since "$active_since" --output=json --no-pager 2>/dev/null | \
+        python3 -B -I "$SCRIPT_DIR/verify-kamailio-jwt-journal.py" --boot-id "$boot_id" \
+            --active-usec "$active_usec" --stats "$stats" --query "$query" --config-dir "$KAZOO_CONFIG_DIR") || \
+        die "Kamailio journal/JWT verification failed: ${report}"
+    [[ $(systemctl show kazoo-kamailio.service -p ActiveEnterTimestampMonotonic --value) == "$active_usec" ]] || \
+        die 'Kamailio restarted while journal/JWT evidence was read'
+    log "$report"
 }
 
 monster_app_ref() {
