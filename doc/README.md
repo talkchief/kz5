@@ -1,5 +1,9 @@
 # Getting Started
 
+For this kz5 deployment, start with the [engineering handoff](../PROJECT_HANDOFF.md)
+and [project task register](../PROJECT_TASKS.md). The handoff maps source files,
+test evidence, deployed artifacts, operational precautions and remaining gaps.
+
 ## Welcome!
 
 This page is a work-in-progress as well as our documentation.  As you begin your journey with Kazoo please consider typing out what you learn and submitting it back for others.  If you are unable to create markdown files or don't know proper `git` procedures don't worry!  Just contact us and we will work to incorporate your notes into the docs.

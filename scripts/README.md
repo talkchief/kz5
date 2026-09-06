@@ -1,5 +1,12 @@
 # Scripts
 
+For the kz5 modular installer and current engineering status, read the
+[engineering handoff](../PROJECT_HANDOFF.md) and
+[project task register](../PROJECT_TASKS.md) first. The deployment entry point is
+[`install-kazoo5.sh`](install-kazoo5.sh); `--help` lists its modules and settings.
+Do not infer deployment readiness from an offline test or invoke installation
+as a status check.
+
 This is the scripts directory, where we place scripts of various types to help with various activities. :)
 
 Let's get a little more concrete though.

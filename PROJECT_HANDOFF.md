@@ -4,6 +4,29 @@ Last updated: **2026-09-06**. This is the navigation and current-state guide;
 `PROJECT_TASKS.md` is the detailed requirement/acceptance register. Neither this
 file nor a green unit test means the platform is production-ready.
 
+## Quick checkpoint for the next agent
+
+Read this file first, then [PROJECT_TASKS.md](PROJECT_TASKS.md), then the
+acceptance document for the component you will change. This guide describes the
+checkpoint at committed baseline **`61bf505`**, plus explicitly identified work
+in progress. A later commit containing this documentation is not a new runtime
+release. Recheck Git and live state before acting.
+
+| Area | Achieved | Not yet established |
+| --- | --- | --- |
+| Source ownership | ACDC is tracked directly in kz5; team recovery changes merged | Live failure/recovery acceptance |
+| Queue voices | 210 immutable assets /420 WAVs packaged; actual installer verified all210 installed assets | Full natural position speech, native-speaker approval and matching runtime activation |
+| Callback backend | Current-source81-test checkpoint, later21-test media checkpoint, all63 production modules compile | P0-12 deadline fix under validation; coherent deployment and real callback/retry audio |
+| Queue language UI/editor | Five choices, obsolete-reference deletion,42-entry callback/57-entry transitional readiness checks tested in `61bf505` | Fresh compiled UI publication and real browser/live queue acceptance |
+| Developer reference | Updated static `/apis/` publication verified against all12 HTTP-served files | Documentation is not proof its backend is deployed; proposed dashboards are not callable APIs |
+| Installer/services | Modular installer and offline main smoke pass; `kazoo-applications.service` resolves to active `kazoo-apps.service` | Fresh separate-server/ALL installation, reboot, interoperability and sustained load acceptance |
+| Release | Recent changes committed locally through `61bf505` | Final master integration/push and remote-SHA verification |
+
+For precise test boundaries and failed-before/fixed-after evidence, see
+[canonical callback acceptance](doc/acdc_canonical_callback_acceptance.md).
+Do not add test counts from different source revisions and call the sum a
+single accepted release.
+
 ## 1. Repository and non-negotiable requirements
 
 - Project: `/opt/kz5`; current branch: `fix/acdc-outbound-agent-availability`.
@@ -105,7 +128,9 @@ deploy the canonical backend, restart services, or prove live playback. The
 receipt deliberately reports runtime/full-position readiness as false.
 Canonical callback integration passed81 current-source tests; the subsequently
 found fixed-inventory projection bug was reproduced and corrected, with20
-focused tests passing afterward. All63 production modules compiled afterward.
+focused tests passing afterward. A further42-entry projection correction passed
+21 focused tests; UI30215 and editor71128 cover the matching57-entry transitional
+readiness contract. All63 production modules compiled again in62912.
 See `doc/acdc_canonical_callback_acceptance.md` for exact source identities and
 scope. Do not tell the user the new callbacks
 are ready to test until matching source/media are deployed and verified.
@@ -131,6 +156,11 @@ Actual service names include `kazoo-apps`, `kazoo-ecallmgr`,
 `kazoo-freeswitch`, `kazoo-kamailio`, `couchdb`, `rabbitmq-server`, `nginx`, and
 `haproxy`. The FreeSWITCH service is **not** named `freeswitch` on this host.
 All eight were observed active. Activity alone does not establish readiness.
+`systemctl show kazoo-applications.service` was rechecked for this handoff:
+`Id=kazoo-apps.service`, both names present, `LoadState=loaded`, `ActiveState=active`.
+The installer includes `Alias=kazoo-applications.service`; it is an alias, not
+a second Erlang node. Crossbar, ACDC and Blackhole run as applications within
+the Kazoo apps node, not as three independent systemd services.
 
 ## 4. Recent completed fixes and evidence
 
@@ -153,6 +183,11 @@ All eight were observed active. Activity alone does not establish readiness.
 | Session53629, exit0 | Corrected current-source callback suite:81 tests passed; see canonical callback acceptance for input hash and scope |
 | Sessions78039/15466 | Expanded fixed-media projection regression failed before count correction, then all20 focused media tests passed afterward |
 | Session90582, exit0 | All63 production ACDC modules compiled with-Werror/noTEST and unchanged inputs; pure EN/ES cardinal catalog passed29,344 compositions without provider access |
+| Commit `61bf505` | Five-choice UI adoption/deletion and complete callback prerequisite projection; generated and published updated queue-editor OpenAPI. Backend/UI source not deployed |
+| Sessions28251/30215/71128, exit0 | Respectively21 focused media tests, UI contracts plus20 queue-login groups, and42 editor tests; exact scope and receipt paths in canonical callback acceptance |
+| Session62912, exit0 | API generation/schema/deterministic build validation and fresh63-module production compilation |
+| Session28926, exit0 | Actual static `/apis` publication: all12 files matched loopback HTTP bytes and cache policy; redirect/404 checked. Backup: `/usr/local/src/kazoo5-installer/api-docs-rollback.VafWMp/previous` |
+| Session71503, exit0 | Main installer smoke after `61bf505`: syntax, pins, aliases, modular paths, security gates, ALL path and error handling. Guarded/offline; no installation or service restart |
 
 Temporary receipt paths are local evidence and may not survive a new server.
 The durable test implementations and explanatory documents are in Git/worktree.
@@ -160,25 +195,28 @@ Update this section with final outcomes rather than deleting failed evidence.
 
 ## 5. Immediate next work
 
-1. The installer210 regression passed; run the main installer smoke again after
-   final integration changes. Never restart a still-running job just because an
-   observation timed out.
-   Next callback fix: P0-12. The21-second feedback deadline does not cancel a
-   synchronous metadata lookup before the receive. Cache the three auxiliary
-   paths during configuration and prove no timed branch performs datastore IO.
+1. Finish review and validation of P0-12. The committed21-second feedback deadline
+   does not cancel a synchronous metadata lookup before the receive. An uncommitted
+   candidate caches the three auxiliary paths during configuration; prove no timed
+   branch performs datastore IO. Its results must be recorded separately from the
+   committed81-test checkpoint. Main installer smoke71503 already passed; rerun
+   after further installer integration changes. Never restart a still-running job
+   just because an observation timed out.
 2. Preserve/review the accepted canonical callback changes and rerun
    `scripts/test-acdc-gemini-canonical-callback.sh`, callback feedback/menu,
    caller/announcement regressions and production compilation after further
    coupled changes. The corrected success fixture, built-in success coverage,
    early deadline/manager-monitor regression and input pins passed in53629;
    subsequent fixed-count correction passed focused verification in15466.
-3. Complete the UI adoption/readiness contract. Existing hidden prompt fields
-   preserve overrides despite the simplified display. Delete obsolete prompt
-   references in the persisted queue when adopting built-in defaults, and test
-   the API's merge/deletion behavior: `{}` can recursively preserve old values.
+3. Deploy and browser-test the UI adoption/readiness contract implemented in
+   `61bf505`. Constructor/selection tests and persisted in-memory merge regressions
+   passed; do not redo this as if unimplemented. Adoption deletes obsolete prompt
+   references, including when the current English choice is saved without a
+   change event. The API's merge/deletion behavior matters: `{}` can recursively
+   preserve old values.
    Both the unified editor merge and normal Crossbar queue PATCH remove null
-   keys: null on the wire is a deletion marker, not a value to retain. Add a
-   persisted-document regression when updating this behavior.
+   keys: null on the wire is a deletion marker, not a value to retain. Preserve
+   the existing persisted-document regressions when updating this behavior.
    **Do not blindly persist `callback.return_confirmation_prompt: null` or
    `callback.media.returned_confirmation: null`: current helper code treats
    these as explicit invalid configuration and fails closed.** Either ensure
@@ -198,12 +236,22 @@ Update this section with final outcomes rather than deleting failed evidence.
 6. Continue the remaining task register; voice completion alone does not close
    the original platform goal.
 
-Ownership at this checkpoint: `native_audio_path_audit` handed back canonical
-callback source/tests and now owns the queue-language UI/editor adoption tests;
-root released the serialized validation window to that agent after90582.
-`media_prerequisites` handed back the finite-cardinal design and pure EN/ES
-implementation/tests. Inspect current agent status/messages before overlapping
-edits. Root owns source review, importer/map/installer/docs and release integration.
+Ownership at this checkpoint: `native_audio_path_audit` owns the uncommitted
+P0-12 helper/member and related canonical/feedback/integration tests. Installer
+71503 finished and its validation window was released; focused run6821 exited0
+with22 media/helper/contract tests passing, production/TEST compilation and
+source pins checked. Input digest:
+`5bcd7e76678f42988001ad768c391fd272401d2ec8b6d4b48eab975a73759ea8`.
+The full lifecycle/timer suite was authorized next; its terminal outcome is not
+yet recorded here. This focused pass is not full P0-12 acceptance.
+`media_prerequisites` owns the French
+finite-cardinal addition in `scripts/acdc-cardinal-catalog.cjs`, its test, and
+`doc/acdc_prerecorded_cardinal_design.md`; EN/ES are already committed/tested,
+French is work in progress, Arabic/Hebrew grammar remains open. These agent names
+are coordination hints, not durable jobs: inspect current messages/processes
+before overlapping edits or starting another memory-heavy test. Root owns this
+guide, review and release integration. Never blanket-stage another agent's
+unfinished source changes with a documentation commit.
 
 ### Safe next-agent verification commands
 
@@ -234,6 +282,60 @@ host, use `systemctl is-active` with the service names above,
 call/account data: summarize relevant errors rather than publishing raw dumps.
 
 ## 6. Wider goal: where remaining work is tracked
+
+### Component navigation
+
+Paths below are repository-relative unless explicitly absolute. Follow the
+linked acceptance documents for exact source versions, test commands and gaps;
+the existence of a module is not evidence of successful deployment.
+
+| Workstream | Canonical source / entry point | Guidance / acceptance |
+| --- | --- | --- |
+| Modular deployment | [scripts/install-kazoo5.sh](scripts/install-kazoo5.sh), `scripts/test-install-kazoo5*.sh` | [Installer checkpoint](doc/installer_regression_acceptance_20260906.md), [build identity](doc/installer_build_identity.md) |
+| ACDC agent recovery | `applications/acdc/src/acdc_agent_fsm.erl`, `scripts/test-acdc-agent-recovery.sh` | [Recovery plan](doc/acdc_agent_recovery.md), P0-05/07/08/09 |
+| Unified queue editor and login | `applications/acdc/src/cb_acdc_queue_editor.erl`, `applications/acdc/src/cb_agents.erl`, `monster-ui/acdc/app.js` | [Editor acceptance](doc/queue_editor_acceptance.md), [ACDC UI guide](monster-ui/acdc/README.md), P0-01 / ACDC-01 |
+| Callback/menu/scheduling | Source table in section2; `scripts/test-acdc-gemini-canonical-callback.sh` | [Canonical tests](doc/acdc_canonical_callback_acceptance.md), [callback acceptance](doc/acdc_callback_acceptance.md), P0-03/04/10/11/12 |
+| Native audio and coherent rollout | Installer's Kazoo FreeSWITCH integration; private candidate is NOT the deployed source | [Native link readiness](doc/callback_native_link_readiness.md), [coherent upgrade](doc/acdc_coherent_upgrade_readiness.md) |
+| Company members/device status | `applications/crossbar/src/modules/cb_members.erl`, `scripts/api-docs-members-devices.cjs` | [Members/device evidence and limits](doc/members_devices_acceptance.md) |
+| Listen/whisper/barge/join | `applications/crossbar/src/cb_channel_monitor.erl`, `scripts/test-channel-monitor-live.cjs` | [Monitoring acceptance](doc/channel_monitor_acceptance.md), SUP-01–03 |
+| Native WebSocket transport | `applications/blackhole/src/`, `scripts/api-docs-blackhole.cjs` | [Resilience](doc/blackhole_resilience.md), [authorization results](doc/blackhole_binding_results_acceptance.md), BH-01–05 |
+| Live/history dashboards, workforce | `monster-ui/acdc/`, supplied `dashboards design/` files; required new contracts remain open | [Dashboard/workforce brief](doc/dashboard_delivery_plan.md), DASH-01–09 / WFM-01–04 |
+| OpenAPI and Next.js reference | `scripts/build-api-docs.cjs`, `scripts/api-docs-*.cjs`, generated `scripts/assets/api-docs/` | [Developer portal](doc/api_developer_portal.md); public `/apis/`, `/apis/openapi.json`, `/apis/blackhole.html` |
+| Browser console/build | `monster-ui/acdc/`, `scripts/monster-build-inputs.cjs` | [Console acceptance](doc/monster_console_acceptance.md) |
+
+The served static root is `/var/www/html/monster-ui`; do not treat edits there
+as durable source fixes. Change tracked source/generators first, rebuild and
+validate, then publish with a backup. The latest API-only backup is
+`/usr/local/src/kazoo5-installer/api-docs-rollback.VafWMp/previous`.
+Current-source production compilation is driven by
+`scripts/test-acdc-production-compile.sh`; private compilation is not a hotload.
+
+### Installer usage and scope
+
+The entry point accepts component names, not a separate script for every host:
+`couchdb`, `rabbitmq`, `haproxy`, `kazoo-apps`, `ecallmgr`, `freeswitch`,
+`kamailio`, `monster-ui`, or `all`. Inspect supported flags without deployment:
+
+```bash
+bash scripts/install-kazoo5.sh --help
+bash scripts/install-kazoo5.sh --list
+```
+
+For distributed deployments, the existing flags include `--couchdb-host`,
+`--amqp-host`, `--api-url`, `--api-upstream`, `--public-ip` and
+`--erlang-dist-ip`. TLS uses `--hostname`, `--tls-cert`, `--tls-key` and optional
+`--tls-chain`. Supply credentials through protected configuration, not examples,
+shell history or documentation. Use the **Kazoo** FreeSWITCH/Kamailio builds and
+pinned integration checks; do not substitute a stock package or latest version
+without compatibility validation. Keep `sup` verification in the apps workflow.
+
+`--dry-run` is a planning/fixture check, not proof an installation works.
+`--verify-only` does not install modules, but some checks authenticate to
+Crossbar and may create authentication tokens; inspect the selected verifier
+before describing it as strictly read-only. Normal component/ALL invocation
+can install packages and alter configuration/services: it is not a status probe.
+Fresh-host deployment remains a release requirement, not something established
+by the examples or offline installer smoke.
 
 - `PROJECT_TASKS.md`: P0 call delivery/recovery/callback acceptance; unified queue
   editor; company members/devices/status; supervision audio/security; Blackhole;
@@ -280,3 +382,23 @@ The last TLS audit found certificates without a matching private key under
   Final master push requires the complete requested release and remote-SHA
   verification. Do not mark the active goal complete while any required item is
   missing, only mocked, untested, undeployed or merely documented as planned.
+
+## 8. How to leave a reliable handoff
+
+At the end of each workstream, update this guide and the corresponding task row.
+Keep detailed evidence in its component acceptance document, rather than making
+this navigation file an unbounded execution log. Record:
+
+1. Date, branch, commit and any still-uncommitted files; preserve other owners' work.
+2. What changed and the canonical files, including installer/assets/API implications.
+3. Exact test command, source hash/receipt, terminal exit status and what was mocked.
+   A running, timed-out or missing session is not a successful test.
+4. Whether anything was deployed, the installed artifact identity, backup location,
+   services restarted, and post-deployment checks. Say explicitly if nothing deployed.
+5. Remaining gaps, next executable step and active agent/test ownership.
+6. Commit/push status and verified remote SHA if published. Never include credentials.
+
+Prefer evidence tied to the relevant source hash over an older broad "passed"
+summary. `/tmp` receipts, tool session IDs and private native candidates may
+disappear; retain reproducible harnesses and the scoped result in Git. Never
+assume an old live check certifies a newly rebuilt module or a different host.
