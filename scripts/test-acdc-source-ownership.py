@@ -112,10 +112,10 @@ class AcdcSourceOwnershipTests(unittest.TestCase):
         hook = re.findall(r"^reconstruct_historical_runtime\(\) \{[\s\S]*?^\}", source, re.M)
         self.assertEqual(len(hook), 1)
 
-        def patch(before, after):
-            return "".join("diff --git a/{0}/fixture b/{0}/fixture\n--- a/{0}/fixture\n+++ b/{0}/fixture\n"
-                           "@@ -1 +1 @@\n-{0}-{1}\n+{0}-{2}\n".format(directory, before, after)
-                           for directory in ["src", "test"])
+        def patch(before, after, paths):
+            return "".join("diff --git a/{0} b/{0}\n--- a/{0}\n+++ b/{0}\n"
+                           "@@ -1 +1 @@\n-{1}\n+{2}\n".format(file, before, after)
+                           for file in paths)
 
         for drift in [False, True]:
             with self.subTest(runtime_drift=drift), tempfile.TemporaryDirectory(prefix="acdc-runtime-projection-") as directory:
@@ -123,17 +123,22 @@ class AcdcSourceOwnershipTests(unittest.TestCase):
                 acdc = root / "applications/acdc"
                 for part in ["src", "include", "priv", "test"]:
                     (acdc / part).mkdir(parents=True, exist_ok=True)
-                runtime = acdc / "src/fixture"
-                runtime.write_text("src-foreign\n" if drift else "src-atomic\n")
+                runtime = acdc / "src/acdc_gemini_prompts.erl"
+                runtime.write_text("foreign\n" if drift else "language\n")
+                fsm = acdc / "src/acdc_agent_fsm.erl"
+                fsm.write_text("current-agent-recovery\n")
                 tests = acdc / "test/fixture"
                 tests.write_text("test-unrelated-current-edit\n")
                 patches = root / "scripts/patches"
                 patches.mkdir(parents=True)
-                (patches / "acdc-atomic-answer-runtime.patch").write_text(patch("language", "atomic"))
-                (patches / "acdc-language-runtime.patch").write_text(patch("baseline", "language"))
+                # Uncompiled FSM patches must not constrain the media baseline.
+                (patches / "acdc-atomic-answer-runtime.patch").write_text("must not be read\n")
+                (patches / "acdc-language-runtime.patch").write_text(
+                    patch("baseline", "language", ["src/acdc_gemini_prompts.erl", "test/fixture"]))
                 output = root / "private-replay"
                 (output / "source").mkdir(parents=True)
-                (output / "integration.patch").write_text(patch("upstream", "baseline"))
+                (output / "integration.patch").write_text(
+                    patch("upstream", "baseline", ["src/acdc_gemini_prompts.erl", "test/fixture", "src/acdc_agent_fsm.erl"]))
                 code = "set -euo pipefail\n" + hook[0] + "\nreconstruct_historical_runtime\n"
                 result = run(["bash", "--noprofile", "--norc", "-s"], root, input=code,
                              env={"PATH": os.environ["PATH"], "project_root": str(root),
@@ -142,9 +147,11 @@ class AcdcSourceOwnershipTests(unittest.TestCase):
                     self.assertNotEqual(result.returncode, 0, "Changed runtime source must fail reverse checks")
                 else:
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual((output / "source/src/fixture").read_text(), "src-baseline\n")
+                    self.assertEqual((output / "source/src/acdc_gemini_prompts.erl").read_text(), "baseline\n")
+                    self.assertEqual((output / "source/src/acdc_agent_fsm.erl").read_text(), "current-agent-recovery\n")
                 self.assertFalse((output / "source/test").exists(), "Uncompiled bundled tests must not be copied")
-                self.assertEqual(runtime.read_text(), "src-foreign\n" if drift else "src-atomic\n")
+                self.assertEqual(runtime.read_text(), "foreign\n" if drift else "language\n")
+                self.assertEqual(fsm.read_text(), "current-agent-recovery\n")
                 self.assertEqual(tests.read_text(), "test-unrelated-current-edit\n")
 
     def test_installer_and_patch_generator_do_not_restore_nested_acdc(self):

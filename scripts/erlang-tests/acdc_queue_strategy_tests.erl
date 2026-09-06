@@ -241,14 +241,14 @@ agent_bridge_requires_own_actual_leg_not_shared_caller_test() -> with_mocks(fun(
     try
     meck:expect(acdc_util,caller_id,fun(_) -> {<<"1001">>,<<"Fixture">>} end),
     Call=kapps_call:set_call_id(<<"caller">>,kapps_call:new()),
-    Props=[{member_call_id,<<"caller">>},{member_call,Call},{account_id,<<"account">>},{agent_id,<<"a">>}],
+    Props=[{member_call_id,<<"caller">>},{member_connect_id,<<"offer">>},{member_call,Call},{account_id,<<"account">>},{agent_id,<<"a">>}],
     S=acdc_agent_fsm:strategy_test_state(Props),
     Known=acdc_agent_fsm:strategy_test_state([{agent_call_id,<<"a-leg">>}|Props]),
     ?assertEqual({next_state,ringing,S},acdc_agent_fsm:ringing(cast,{channel_bridge_event,bridge(<<"b-leg">>)},S)),
     ?assertEqual({next_state,ringing,Known},acdc_agent_fsm:ringing(cast,{channel_bridge_event,bridge(<<"b-leg">>)},Known)),
     ?assertEqual({next_state,ringing,S},acdc_agent_fsm:ringing(cast,{channel_bridged,<<"caller">>},S)),
     Own=j([{<<"Call-ID">>,<<"a-leg">>},{<<"Other-Leg-Call-ID">>,<<"caller">>},
-           {<<"Custom-Channel-Vars">>,j([{<<"Account-ID">>,<<"account">>},{<<"Agent-ID">>,<<"a">>},{<<"Member-Call-ID">>,<<"caller">>}])}]),
+           {<<"Custom-Channel-Vars">>,j([{<<"Account-ID">>,<<"account">>},{<<"Agent-ID">>,<<"a">>},{<<"Member-Call-ID">>,<<"caller">>},{<<"Request-ID">>,<<"offer">>}])}]),
     Other=kz_json:set_value([<<"Custom-Channel-Vars">>,<<"Account-ID">>],<<"other">>,Own),
     ?assertEqual({next_state,ringing,S},acdc_agent_fsm:ringing(cast,{channel_bridge_event,Other},S)),
     {next_state,answered,Answered}=acdc_agent_fsm:ringing(cast,{channel_bridge_event,Own},S),
@@ -281,8 +281,8 @@ callback_completion_cancels_only_other_agents_test_() -> {timeout,30,fun() -> wi
 end) end}.
 
 ring_all_loser_is_not_failure_or_unsolicited_logout_test() -> with_mocks(fun() ->
-    S=acdc_agent_fsm:strategy_test_state([{member_call_id,<<"caller">>},{statem_call_id,<<"test">>},{connect_failures,2},{max_connect_failures,3}]),
-    E=j([{<<"Call">>,j([{<<"Call-ID">>,<<"caller">>}])}]),
+    S=acdc_agent_fsm:strategy_test_state([{member_call_id,<<"caller">>},{member_connect_id,<<"offer">>},{statem_call_id,<<"test">>},{connect_failures,2},{max_connect_failures,3}]),
+    E=j([{<<"Connect-ID">>,<<"offer">>},{<<"Call">>,j([{<<"Call-ID">>,<<"caller">>}])}]),
     {next_state,ready,N}=acdc_agent_fsm:ringing(cast,{member_connect_satisfied,E},S),
     ?assertEqual(2,acdc_agent_fsm:strategy_test_field(connect_failures,N)),
     ?assertEqual(0,meck:num_calls(acdc_agent_stats,agent_logged_out,'_')),
@@ -311,8 +311,8 @@ native_callback_losing_acceptance_does_not_preempt_media_winner_test_() -> {time
 end) end}.
 
 ring_all_loser_preserves_explicit_logout_request_test() -> with_mocks(fun() ->
-    S=acdc_agent_fsm:strategy_test_state([{member_call_id,<<"caller">>},{statem_call_id,<<"test">>},{agent_state_updates,[{agent_logout}]}]),
-    E=j([{<<"Call">>,j([{<<"Call-ID">>,<<"caller">>}])}]),
+    S=acdc_agent_fsm:strategy_test_state([{member_call_id,<<"caller">>},{member_connect_id,<<"offer">>},{statem_call_id,<<"test">>},{agent_state_updates,[{agent_logout}]}]),
+    E=j([{<<"Connect-ID">>,<<"offer">>},{<<"Call">>,j([{<<"Call-ID">>,<<"caller">>}])}]),
     {stop,normal,_}=acdc_agent_fsm:ringing(cast,{member_connect_satisfied,E},S),
     ?assertEqual(1,meck:num_calls(acdc_agent_stats,agent_logged_out,'_'))
 end).

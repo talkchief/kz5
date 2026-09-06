@@ -26,16 +26,19 @@ only in disposable Git fixtures, never the current working checkout.
 
 `scripts/refresh-kazoo-integration-patches.cjs` manages only the remaining
 external checkouts. The existing ACDC patch files remain historical fixtures.
-The Gemini compatibility suite reconstructs its historical baseline privately
-from bundled source by reversing the language/atomic layers; it no longer
+The Gemini compatibility suite reconstructs its historical media baseline privately
+from bundled source by reversing the language layer; it no longer
 requires ACDC Git metadata. That suite does not establish acceptance of all
 current bundled behavior.
 
 Only `src/`, `include/` and `priv/` participate in that historical projection.
 Bundled `test/` changes are excluded from patch reversal and the runtime input
 receipt because the suite compiles its separate `scripts/erlang-tests/` fixtures.
-Those actual compiled fixtures remain fingerprinted; runtime source drift still
-fails the historical patch checks.
+Those actual compiled fixtures remain fingerprinted; media runtime source drift
+still fails the historical patch checks. The aggregate reverse check covers the
+eight media source/header paths used by this suite. Uncompiled agent/queue FSM
+changes are preserved, not reversed to historical versions; validate them with
+the direct source, strategy and recovery suites below.
 
 Run source regressions separately to avoid competing Erlang mock compilation:
 
@@ -43,6 +46,7 @@ Run source regressions separately to avoid competing Erlang mock compilation:
 python3 scripts/test-acdc-source-ownership.py
 bash scripts/test-acdc-unit.sh
 bash scripts/test-acdc-strategies.sh
+bash scripts/test-acdc-agent-recovery.sh
 ```
 
 On the resource-capped validation host, run the strategy suite in two sequential
@@ -55,3 +59,6 @@ The outbound-agent regression covers a delayed queue satisfaction event during
 multiple direct calls, readiness after the final hangup, preservation of an
 existing pause and application of a pending logout. These checks run in
 isolated processes and do not deploy or replace live BEAMs.
+
+The agent recovery changes and their production acceptance steps are described
+in [acdc_agent_recovery.md](acdc_agent_recovery.md).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reconstruct the historical pre-language/atomic ACDC baseline privately.
+# Reconstruct the historical pre-language media baseline privately.
 # This is a legacy compatibility suite, not validation of all bundled source.
 set -Eeuo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
@@ -51,15 +51,21 @@ assert.equal(snapshot.patch_sha256,process.argv[4],'Patch changed while snapshot
 NODE
 reconstruct_historical_runtime() {
     # This suite compiles scripts/erlang-tests, never bundled test/. Keep its
-    # unrelated edits outside replay while checking every historical runtime hunk.
-    local layer
+    # unrelated edits outside replay. Only media modules are compiled here;
+    # current agent/queue FSMs are covered by their direct source suites.
+    local layer replay_path
+    local -a replay_paths replay_includes=()
     tar -cf - -C "$acdc_repository" src include priv | tar -xf - -C "$test_dir/source"
-    for layer in acdc-atomic-answer-runtime acdc-language-runtime; do
+    for layer in acdc-language-runtime; do
         cp -- "$project_root/scripts/patches/$layer.patch" "$test_dir/$layer.patch"
         git -C "$test_dir/source" apply --reverse --check --exclude='test/*' "$test_dir/$layer.patch"
         git -C "$test_dir/source" apply --reverse --exclude='test/*' "$test_dir/$layer.patch"
     done
-    git -C "$test_dir/source" apply --reverse --check --exclude='test/*' "$test_dir/integration.patch"
+    replay_paths=(src/acdc_gemini_prompts.erl src/cf_acdc_member.erl src/acdc_announcements.erl
+        src/acdc_callback_caller.erl src/acdc_announcements_sup.erl src/acdc_callback_menu.erl
+        src/kapi_acdc_callback.erl src/acdc_gemini_map.hrl)
+    for replay_path in "${replay_paths[@]}"; do replay_includes+=("--include=$replay_path"); done
+    git -C "$test_dir/source" apply --reverse --check "${replay_includes[@]}" "$test_dir/integration.patch"
 }
 reconstruct_historical_runtime
 [[ ! -e "$test_dir/source/src/acdc_language.erl" ]] || {
@@ -120,4 +126,4 @@ inputs_after=$(node "$script_dir/gemini-runtime-inputs.cjs" "$project_root" "$sc
    $inputs_before == "$inputs_after" ]] || {
     printf '%s\n' 'Actual replay/test inputs changed during verification; this result is not a current-source receipt.' >&2; exit 1;
 }
-printf 'PASS historical ACDC baseline from %s; patch SHA-256 %s; no staged language source or live writes.\n' "$pinned_ref" "$patch_hash"
+printf 'PASS historical ACDC media baseline from %s; patch SHA-256 %s; no staged language source or live writes.\n' "$pinned_ref" "$patch_hash"

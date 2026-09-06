@@ -13,6 +13,7 @@
 -module(acdc_callback_recovery_io).
 
 -export([observe/1
+        ,observe_channels/2
         ,request_cleanup/1
         ,reconcile_originate/2
         ]).
@@ -46,30 +47,45 @@
 observe(Doc) ->
     observe_with(Doc, fun query_channel/2).
 
+%% Also used by the agent FSM's asynchronous lost-hangup check. Keep the same
+%% strict correlation, responder and account checks as callback recovery.
+-spec observe_channels(kz_term:ne_binary(), kz_term:ne_binaries()) ->
+          {'ok', evidence()} | {'unknown', evidence()} | {'error', 'invalid_input'}.
+observe_channels(AccountId, CallIds) ->
+    case is_ne_binary(AccountId) andalso is_list(CallIds)
+        andalso CallIds =/= [] andalso lists:all(fun is_ne_binary/1, CallIds) of
+        'true' -> observe_channels_with(AccountId, lists:usort(CallIds), fun query_channel/2);
+        'false' -> {'error', 'invalid_input'}
+    end.
+
 -spec observe_with(kz_json:object(), fun((kz_term:proplist(), kz_term:ne_binary()) -> any())) ->
           {'ok', evidence()} | {'unknown', evidence()} | {'error', 'invalid_input'}.
 observe_with(Doc, QueryFun) when is_function(QueryFun, 2) ->
     case observation_context(Doc) of
         {'error', _} -> {'error', 'invalid_input'};
-        {AccountId, CallIds} ->
-            {Complete, Observations, Reasons} =
-                observe_call_ids(AccountId, CallIds, QueryFun, [], [], []),
-            StableResponders = matching_responders(Observations),
-            CompleteSnapshot = Complete andalso StableResponders,
-            SnapshotReasons = case StableResponders of
-                'true' -> Reasons;
-                'false' -> ['inconsistent_responder_set' | Reasons]
-            end,
-            Evidence = #{'complete' => CompleteSnapshot
-                        ,'channels' => lists:sort(Observations)
-                        ,'bridge' => bridge_summary(Observations)
-                        ,'reasons' => lists:usort(SnapshotReasons)},
-            case CompleteSnapshot of
-                'true' -> {'ok', Evidence};
-                'false' -> {'unknown', Evidence}
-            end
+        {AccountId, CallIds} -> observe_channels_with(AccountId, CallIds, QueryFun)
     end;
 observe_with(_, _) -> {'error', 'invalid_input'}.
+
+-spec observe_channels_with(kz_term:ne_binary(), kz_term:ne_binaries(), function()) ->
+          {'ok', evidence()} | {'unknown', evidence()}.
+observe_channels_with(AccountId, CallIds, QueryFun) ->
+    {Complete, Observations, Reasons} =
+        observe_call_ids(AccountId, CallIds, QueryFun, [], [], []),
+    StableResponders = matching_responders(Observations),
+    CompleteSnapshot = Complete andalso StableResponders,
+    SnapshotReasons = case StableResponders of
+        'true' -> Reasons;
+        'false' -> ['inconsistent_responder_set' | Reasons]
+    end,
+    Evidence = #{'complete' => CompleteSnapshot
+                ,'channels' => lists:sort(Observations)
+                ,'bridge' => bridge_summary(Observations)
+                ,'reasons' => lists:usort(SnapshotReasons)},
+    case CompleteSnapshot of
+        'true' -> {'ok', Evidence};
+        'false' -> {'unknown', Evidence}
+    end.
 
 -spec matching_responders([observation()]) -> boolean().
 matching_responders([]) -> 'false';

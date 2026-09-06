@@ -280,7 +280,7 @@ member_connect_resp_v(JObj) ->
 %% Member Connect Satisfied
 %%------------------------------------------------------------------------------
 -define(MEMBER_CONNECT_SATISFIED_HEADERS, [<<"Queue-ID">>, <<"Call">>]).
--define(OPTIONAL_MEMBER_CONNECT_SATISFIED_HEADERS, [<<"Process-ID">>, <<"Agent-Process-IDs">>]).
+-define(OPTIONAL_MEMBER_CONNECT_SATISFIED_HEADERS, [<<"Process-ID">>, <<"Agent-Process-IDs">>, <<"Connect-ID">>]).
 -define(MEMBER_CONNECT_SATISFIED_VALUES, [{<<"Event-Category">>, <<"member">>}
                                          ,{<<"Event-Name">>, <<"connect_satisfied">>}
                                          ]).
@@ -307,7 +307,7 @@ member_connect_satisfied_v(JObj) ->
 %% Agent Timeout
 %%------------------------------------------------------------------------------
 -define(AGENT_TIMEOUT_HEADERS, [<<"Queue-ID">>, <<"Call-ID">>]).
--define(OPTIONAL_AGENT_TIMEOUT_HEADERS, [<<"Agent-Process-IDs">>]).
+-define(OPTIONAL_AGENT_TIMEOUT_HEADERS, [<<"Agent-Process-IDs">>, <<"Connect-ID">>]).
 -define(AGENT_TIMEOUT_VALUES, [{<<"Event-Category">>, <<"agent">>}
                               ,{<<"Event-Name">>, <<"connect_timeout">>}
                               ]).
