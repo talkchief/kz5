@@ -56,3 +56,48 @@ Fixture SHA-256:
 and play-say translation units using real configured headers and native flags
 including `-Werror`. This was not a frozen dependency-pinned build proof,
 loader compilation, linking, executable test or deployed callback test.
+
+Subsequent run `e2a605` passes all four complete translation units, including
+the frozen loader candidate. Independent review identified two completion
+issues, now corrected in the private root candidate: dispatch must not return
+native SUCCESS after the final validity/zero-output check downgraded completion;
+and each individual prompt fragment must send audio rather than borrowing a
+positive count from an earlier digit. These corrections compile but still need
+the specific empty-fragment and cancellation regression tests. Loader
+lease/shutdown fault-injection fixtures are being prepared separately.
+
+## Completion regressions and incremental link
+
+Run `6f88de` passes an ASan+UBSan fixture containing the exact private
+`owned_complete` function and the actual play/dispatch completion blocks.
+It covers zero-output PLAY/SAY, positive output, last-moment validity failure,
+preserving native failure, refusing cleanup while SAY scope/output remains
+active, wrong-thread/stale-token cleanup, and a successful fragment followed by
+an empty fragment. Dependencies are doubles: this is not full native playback,
+XML, module shutdown or RTP coverage.
+
+Evidence: `native-say-scope.MfDQMl/completion-proof.3puwUd/receipt.json`.
+SHA-256: `a7c5e0537a2209cd6f0cb75843fb5559a21786b316ae7ac0c44c75a97d1d9cf1`.
+Run `4ab578` additionally passes two negative controls: removing dispatch's
+completion downgrade and permitting an unchanged per-fragment frame count
+each causes its intended assertion to fail. Compilation/sanitizer failures
+are not accepted as a successful negative control.
+Evidence: `native-say-scope.MfDQMl/completion-negative.EyqM4B/receipt.json`.
+SHA-256: `1c901b95940581409643e9ec7f7b55b7ddfb16fd58395db63057089b3797e333`.
+
+Run `5de233` now passes four complete fresh PIC compilations (owned audio,
+resource validation, play-say and loader), three strict incremental core/Sofia/
+Kazoo links, and required new exported-symbol checks. It retains hashed
+unchanged objects/archives from the earlier accepted link checkpoint; linker
+LOAD inputs are checked and neither module may import an old FreeSWITCH core.
+This is not a cold rebuild or native execution.
+
+Evidence: `native-say-scope.MfDQMl/say-link-proof.CR1U3M/receipt.json`.
+SHA-256: `268bc7e22f6d026857053a30d4b5c638ee70f423cbe587281768fd31cd9c9538`.
+The first attempt correctly rejected the changed `/etc/ld.so.cache` after the
+authorized sanitizer installation. The cache was reviewed and explicitly
+re-pinned; no existing source/library pins were relaxed. A subsequent attempt
+stopped at two previously unlisted APR declaration headers newly selected by
+the complete loader TU. Those headers were read and explicitly pinned before
+the successful rerun. All source, cached-object and selected dependency checks
+remain enabled. No live library was replaced, loaded or restarted.

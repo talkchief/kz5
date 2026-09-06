@@ -143,6 +143,13 @@ The user authorized missing test tools; distro `libasan` and `libubsan` were
 installed without service restarts. See
 [typed SAY checkpoint and validation dependencies](doc/callback_typed_say_readiness.md).
 
+The SAY derivative now additionally passes exact completion-block sanitizer
+regressions and two negative controls (`6f88de`, `4ab578`), plus four fresh
+complete PIC compilations and three strict incremental library links (`5de233`).
+These cover source completion behavior and link closure, not loader lifecycle,
+full native playback, prompt/voice acceptance or deployment. Public admission
+remains closed; the installer/real-call acceptance tasks remain open.
+
 The three recovery findings above were added from the operator's 2026-09-06
 review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
 delayed-notification regression verifies recovery after direct calls finish and
