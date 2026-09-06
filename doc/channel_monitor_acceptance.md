@@ -1,5 +1,18 @@
 # Opt-in call monitoring acceptance
 
+## Current offline regression checkpoint
+
+On 2026-09-06, guarded session `94674` passed the fixture ownership/security
+checks, synthetic directional-audio checks for all four modes (including
+keypad-3 escalation and forbidden leakage), and all three SIPp scenario parses
+with zero calls. The run used a private network namespace, a 384 MiB memory
+limit and a 60-second deadline. The parser error check now uses explicit
+`/usr/bin/grep` because `rg` is absent from the validation guard's PATH.
+This checks the acceptance harness; it is not a new live monitoring test and
+does not close SUP-01–03 or the cross-node release gates.
+
+## Live acceptance procedure and previous evidence
+
 `scripts/test-channel-monitor-live.cjs` exercises the account-scoped monitoring
 API using synthetic audio and the separately provisioned acceptance tenant. It
 is never called automatically by the installer. Its default is not a live run;

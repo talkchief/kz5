@@ -19,7 +19,7 @@ for scenario in monitor-customer.xml monitor-agent.xml monitor-supervisor.xml; d
         printf 'FAIL: SIPp parse did not exit successfully for %s\n' "$scenario" >&2
         exit 1
     fi
-    if rg -q 'parse error|Unable to load|Unknown element|Variable .* referenced.*(not declared|[01] times)' "$work/parse.log"; then
+    if /usr/bin/grep -Eq 'parse error|Unable to load|Unknown element|Variable .* referenced.*(not declared|[01] times)' "$work/parse.log"; then
         printf 'FAIL: SIPp scenario parse %s\n' "$scenario" >&2
         exit 1
     fi
