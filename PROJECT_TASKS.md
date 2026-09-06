@@ -133,6 +133,16 @@ The resource guard first refused 384 MiB; the successful run lowered the cap to
 pinned cached unchanged objects, not a cold build or runtime acceptance.
 Nothing was loaded or deployed; public callback-audio admission remains closed.
 
+Private typed-SAY integration is now in progress in `native-say-scope.MfDQMl`:
+bounded numeric WAV leaf/list/path validation passes strict C compilation and
+ASan+UBSan fixtures (run `a81ab7`). The three complete root-owned translation
+units pass preliminary real-header `-Werror` syntax checks (`fcc723`). Loader
+lease/shutdown review, integrated link/runtime tests and packaging remain open;
+these changes do not inherit the earlier fifteen-unit link acceptance.
+The user authorized missing test tools; distro `libasan` and `libubsan` were
+installed without service restarts. See
+[typed SAY checkpoint and validation dependencies](doc/callback_typed_say_readiness.md).
+
 The three recovery findings above were added from the operator's 2026-09-06
 review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
 delayed-notification regression verifies recovery after direct calls finish and
