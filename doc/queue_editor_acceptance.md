@@ -93,4 +93,7 @@ record but explicitly marks the latest revision as not live verified.
 The refreshed repository API catalog passed generation (`43015`) and the full
 offline deterministic-rebuild/tamper/schema suite (`78714`): 354 paths,
 649 operations, 477 schemas and 1,548 internal references. This does not deploy
-the backend or imply that the public portal already serves these new bytes.
+the backend. The subsequent static publication (`83187`) verified all eleven
+public `/apis` files against these repository bytes over loopback HTTP. Its
+rollback and explicit non-TLS/non-backend scope are recorded in
+[the portal publication log](api_developer_portal.md).

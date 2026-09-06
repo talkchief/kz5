@@ -157,3 +157,22 @@ bytes. Loopback HTTP with `Host: kz5.talkchief.io` verified `/apis` redirects
 and an unknown asset returns 404. No nginx reload, daemon restart, backend
 module load, authentication request or call-state change was made.
 This is HTTP static-publication evidence, not TLS or browser/runtime acceptance.
+
+## Queue recovery reference refresh — 2026-09-06
+
+Commit `c40f347` binds the repaired queue-editor source and documents exact
+roster acknowledgement requirements and conservative recovery after lost
+replies. It retains the dated historical live results but marks the latest
+revision as not live verified. Generation `43015` and full offline regression
+`78714` passed (354 paths, 649 operations, deterministic rebuild and tamper tests).
+
+Publication `83187` then used the actual installer function and passed HTTP
+readback for all 11 files, including no-store headers, the 308 redirect and
+unknown-asset 404. Its manifest SHA-256 is
+`b13291d25d97dde463d0bb2a12c5da1984abcd0bb6367842629d2e26ab343bf2`.
+The verified previous catalog is retained at
+`/usr/local/src/kazoo5-installer/api-docs-rollback.BmKTkE/previous` under a
+0700 parent. Source files were unchanged across publication, and no services
+were restarted or backend code loaded. This updates static documentation only;
+HTTPS, real principals, callback audio and the new backend deployment remain
+separate acceptance gates.
