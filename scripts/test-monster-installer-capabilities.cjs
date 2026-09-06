@@ -1,6 +1,6 @@
 'use strict';
-// Execute the installer's actual readiness-file gate without filesystem writes.
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+// Actual readiness-file gate, executable scope check and private plan fixtures.
+const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), os = require('node:os');
 const crypto = require('node:crypto'), assert = require('node:assert/strict');
 const validator = require('./validate-acdc-language-capabilities.cjs');
 const source = fs.readFileSync(path.join(__dirname, 'install-kazoo5.sh'), 'utf8');
@@ -34,10 +34,62 @@ for (const [content, changes] of [['{}', {}], [valid, {uid: 1000}], [valid, {mod
     [valid, {size: 131073}], [valid, {isSymbolicLink: () => true}], [valid, {isFile: () => false}]]) {
     assert.throws(() => run(content, changes));
 }
-assert(source.includes("rsync -a --delete --exclude='/apps/acdc/language-capabilities.json'"), 'Full installer lost runtime artifact preservation');
-const install = source.split('install_monster_ui() {')[1].split('\nverify_monster_ui() {')[0];
-assert(install.indexOf('A Monster UI build must not manufacture runtime language readiness') < install.indexOf('rsync -a --delete'));
-assert(install.includes('$(monster_language_capability_hash) == "$runtime_capability_hash"'), 'Post-copy runtime proof comparison missing');
+function installerGates(text) {
+    const install = text.split('install_monster_ui() {')[1].split('\nverify_monster_ui() {')[0];
+    const steps = ['node "$SCRIPT_DIR/verify-monster-production-artifact.cjs" "$source_dir"',
+        'runtime_capability_hash=$(monster_language_capability_hash)',
+        'deploy_monster_ui_owned "$source_dir"',
+        '[[ $(monster_language_capability_hash) == "$runtime_capability_hash" ]] ||'];
+    let previous = -1;
+    for (const step of steps) {
+        const index = install.indexOf(step);
+        assert(index > previous, 'Missing or misordered artifact/capability gate: ' + step);
+        previous = index;
+    }
+}
+installerGates(source);
+for (const gate of ['node "$SCRIPT_DIR/verify-monster-production-artifact.cjs" "$source_dir"',
+    'runtime_capability_hash=$(monster_language_capability_hash)',
+    '[[ $(monster_language_capability_hash) == "$runtime_capability_hash" ]] ||']) {
+    assert.throws(() => installerGates(source.replace(gate, ':')), /gate/,
+        'Removing an actual installer gate must fail the regression');
+}
+const owned = require('./deploy-owned-monster.cjs');
+const deployment = fs.readFileSync(path.join(__dirname, 'deploy-owned-monster.cjs'), 'utf8');
+const scope = deployment.match(/^function scoped\(file, selected\) \{[\s\S]*?^\}/m);
+assert(scope, 'Actual owned-deployment scope function missing');
+const cap = 'apps/acdc/language-capabilities.json';
+function checkScope(code) {
+    const scoped = vm.runInNewContext(code + '\nscoped', {CAP: cap, CONFIG: 'js/config.js', CORE: ['core']});
+    assert.equal(scoped(cap, ['acdc']), false, 'Runtime capability must never become an owned build file');
+    assert.equal(scoped('apps/acdc/app.js', ['acdc']), true);
+}
+checkScope(scope[0]);
+assert.throws(() => checkScope(scope[0].replace('file === CAP || ', '')),
+    /Runtime capability/, 'Removing capability scope exclusion must fail the regression');
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'monster-capability-plan.'));
+try {
+    const web = path.join(scratch, 'web'), stage = path.join(scratch, 'stage'), state = path.join(scratch, 'state');
+    for (const dir of [web, stage, state]) fs.mkdirSync(dir, {mode: 0o700});
+    function put(root, name, bytes) {
+        const target = path.join(root, name);
+        fs.mkdirSync(path.dirname(target), {recursive: true, mode: 0o700});
+        fs.writeFileSync(target, bytes, {mode: 0o600});
+    }
+    for (const [name, bytes] of Object.entries({'index.html': 'fixture', 'js/main.js': 'fixture',
+        'js/config.js': 'define({});', 'css/style.css': 'fixture',
+        'build-config.json': '{"preloadedApps":["core","acdc"]}', 'apps/acdc/metadata/app.json': '{"name":"acdc"}'})) {
+        put(stage, name, bytes);
+    }
+    put(web, cap, valid);
+    const options = {web, stage, state, selected: ['acdc'], inputs: {fingerprint_sha256: 'a'.repeat(64)}, adopt_existing: true};
+    const before = owned.snapshot(web), plan = owned.plan(options);
+    assert.equal(plan.preserve[cap], before[cap]);
+    assert(!Object.hasOwn(plan.files, cap) && !plan.removes.includes(cap) && !plan.changes.includes(cap));
+    put(stage, cap, valid);
+    assert.throws(() => owned.plan(options), /Build cannot publish runtime capability/);
+    assert.deepEqual(owned.snapshot(web), before, 'Planning must not alter existing runtime proof');
+} finally { fs.rmSync(scratch, {recursive: true, force: true}); }
 const locations = source.match(/location = \/apps\/acdc\/language-capabilities\.json \{[\s\S]*?\n    \}/g);
 assert.equal(locations.length, 2, 'Both HTTPS and HTTP need an exact readiness-file route');
 for (const location of locations) {

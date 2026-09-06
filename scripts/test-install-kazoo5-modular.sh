@@ -41,8 +41,11 @@ grep -Fq 'AMQP mq.example.net:5672' <<<"$host_override_output" || \
     fail '--amqp-host did not clear and rebuild an inherited AMQP URI'
 
 monster_output=$(MONSTER_UI_APPS_LIST=accounts run_dry monster-ui 2>&1)
-grep -Fq 'Would remove unselected Monster UI app source: callflows' <<<"$monster_output" || \
-    fail 'custom Monster UI bundle did not converge away an unselected Callflows source'
+grep -Fq 'existing checkouts and unselected apps remain untouched' <<<"$monster_output" || \
+    fail 'custom Monster UI bundle lacks fresh-stage preservation'
+if grep -Fq 'github.com/2600hz/monster-ui-callflows.git' <<<"$monster_output"; then
+    fail 'custom Monster UI bundle fetched an unselected app'
+fi
 if grep -Fq 'Would apply the Callflows production-CSS compatibility patch' <<<"$monster_output"; then
     fail 'custom Monster UI bundle tried to patch unselected Callflows source'
 fi
@@ -53,8 +56,9 @@ grep -Fq 'Bundled Monster UI ACDC Call Center app: local-sha256:' <<<"$acdc_outp
 if grep -Fq 'github.com/2600hz/monster-ui-acdc.git' <<<"$acdc_output"; then
     fail 'Bundled ACDC app incorrectly tried to download a nonexistent upstream app'
 fi
-grep -Fq 'Would remove unselected Monster UI app source: acdc' <<<"$monster_output" || \
-    fail 'Custom UI bundles cannot deselect the bundled ACDC app'
+if grep -Fq 'Bundled Monster UI ACDC Call Center app:' <<<"$monster_output"; then
+    fail 'custom Monster UI bundle unexpectedly selected ACDC'
+fi
 
 # Simulate the source layout of a fresh project before ignored checkouts exist.
 fresh_root=$(mktemp -d /tmp/kazoo5-fresh-layout.XXXXXX)
@@ -197,10 +201,10 @@ grep -Fq 'cdr-report-timestamp-fallback.patch' "$INSTALLER" || \
     fail 'CDR reports without an optional Timestamp can crash the CDR worker'
 grep -Fq 'ensure_bundled_acdc_source' "$INSTALLER" || \
     fail 'Installer does not validate the ACDC source bundled in kz5'
-grep -Fq 'callback_recover(' "$SCRIPT_DIR/patches/acdc-kazoo5-integration.patch" || \
-    fail 'ACDC integration omits callback recovery'
-grep -Fq 'maybe_announce_before_connect(' "$SCRIPT_DIR/patches/acdc-kazoo5-integration.patch" || \
-    fail 'ACDC queue announce media is configured but never played before agent connection'
+grep -Fq 'callback_recover(' "$SCRIPT_DIR/../applications/acdc/src/acdc_queue_fsm.erl" || \
+    fail 'Bundled ACDC source omits callback recovery'
+grep -Fq 'maybe_announce_before_connect(' "$SCRIPT_DIR/../applications/acdc/src/acdc_queue_fsm.erl" || \
+    fail 'Bundled ACDC queue announce media is configured but never played before agent connection'
 grep -Fq 'start_announcement(Media, Call)' \
     "$SCRIPT_DIR/patches/acdc-queue-preconnect-announcement.patch" || \
     fail 'ACDC queue announcement does not use an asynchronous playback barrier'
@@ -223,8 +227,29 @@ grep -Fq 'FILTER_COMPARE_CONTAINS' "$SCRIPT_DIR/patches/mod-kazoo-prefixes-seria
     fail 'FreeSWITCH mod_kazoo cannot apply Kazoo 5 contains event filters'
 grep -Fq "kazoo_(async_query|publish)\\(.*REGISTRAR_AMQP_FLAGS" "$INSTALLER" || \
     fail 'Kamailio verification does not reject an unconverted registrar header argument'
-grep -Fq 'Header-Value can.t be parsed' "$INSTALLER" || \
-    fail 'Kamailio verification ignores stock-module AMQP-header compatibility errors'
+# The journal classifier lives in its own bounded helper. Bind the actual
+# installer call chain and test rejection behavior, not the old regex location.
+python3 -B -I - "$SCRIPT_DIR" <<'PY'
+import importlib.util
+from pathlib import Path
+import re
+import sys
+import unittest
+
+scripts = Path(sys.argv[1])
+source = (scripts / "install-kazoo5.sh").read_text()
+verify = re.search(r"^verify_kamailio\(\) \{[\s\S]*?^\}", source, re.M)
+assert verify and re.search(r"^\s+verify_kamailio_journal\s*$", verify.group(), re.M), "Kamailio journal helper is not called"
+spec = importlib.util.spec_from_file_location("kamailio_journal_regressions", scripts / "test-kamailio-jwt-journal.py")
+tests = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(tests)
+suite = unittest.TestSuite(tests.JournalTests(name) for name in [
+    "test_wrong_error_body_line_and_other_errors_fail",
+    "test_actual_shell_hook_rejects_failed_journal_rpc_or_helper",
+])
+if not unittest.TextTestRunner(verbosity=1).run(suite).wasSuccessful():
+    raise SystemExit(1)
+PY
 grep -Fq 'cfg.get kazoo registrar_check_amqp_availability' "$INSTALLER" || \
     fail 'Kamailio verification does not enforce the stock-module registrar compatibility setting'
 grep -Fq 'The query itself still fails closed on AMQP' "$INSTALLER" || \

@@ -1,7 +1,36 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-06 01:30 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-06 11:57 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
+
+An externally initiated reboot exposed a Pivot ephemeral-port collision and
+test-phone startup/status-preservation failure. Both have now been repaired:
+Pivot is listening, eCallMgr is connected, all 30 phones are registered, the
+one-agent roster and all 31 reported statuses are unchanged, and systemd reports
+zero failed units. Independent current UI artifact and fresh English-media/cache
+checks also pass. Broader installer and coupled UI/backend acceptance continues.
+See the authoritative
+[post-reboot checkpoint](post_reboot_acceptance_20260906.md) before relying on any
+earlier process-ID or clean-log result below.
+
+The combined tracked-ACDC unit suite now passes all 48 tests under the resource
+guard. Source-ownership fixtures and a private historical production replay
+also pass; see [combined source validation](acdc_combined_source_validation_20260906.md).
+The fresh Monster artifact passed real unauthenticated browser boot and an
+explicitly mocked queue-selection/login flow (no live authentication/API writes).
+The detailed scope and retained failures are in
+[UI preservation and build evidence](monster_ui_preserving_install.md).
+These results do not close callback native-audio, authenticated live queue-login,
+the external team's P0 recovery fixes, clean-server install or production gates.
+
+Recovery handoff `d69cf04` was subsequently merged into kz5 as `8548b98`.
+Root's combined-source recovery suite passed all 22 cases and the ownership
+suite passed six checks; see [recovery integration](acdc_agent_recovery.md).
+Coordinated live deployment and fault/load acceptance remain open. The full
+historical media run exceeded its outer deadline, and separate full-installer
+lint hit its memory cap; neither is reported as a pass. The five completed
+offline installer phases are scoped in
+[installer regression evidence](installer_regression_acceptance_20260906.md).
 
 ## Host memory incident and deployment hold
 
@@ -30,7 +59,7 @@ This changes the optimization tradeoff; it is not byte-equivalent to the default
 optimizer. Its outer benchmark exited one because a freshly generated template
 bundle did not match a prior run's hash. The prior raw bytes were not retained,
 so that historical comparison remains inconclusive. Independent current-artifact
-verification and deployment are still pending. The live UI was not replaced and
+verification now passes; deployment is still pending. The live UI was not replaced and
 no provenance marker is being changed to hide earlier failed build gates.
 
 At 01:22 UTC, a fresh production compile and all 31 current-source editor/path

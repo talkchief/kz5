@@ -1,0 +1,44 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict');
+const {plan,apply,snapshot,hash,canonical,preloadedApps}=require('./deploy-owned-monster.cjs');
+let passed=0;
+function fixture(fn){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'monster-owned-offline-'));try{
+    const web=path.join(dir,'web'),stage=path.join(dir,'stage'),state=path.join(dir,'state');
+    [web,stage,state].forEach(p=>fs.mkdirSync(p,{mode:0o700}));
+    const put=(root,name,bytes)=>{const p=path.join(root,name);fs.mkdirSync(path.dirname(p),{recursive:true,mode:0o755});fs.writeFileSync(p,bytes,{mode:0o644});};
+    for(const root of [web,stage]){put(root,'index.html','fixture');put(root,'css/style.css','fixture CSS');put(root,'build-config.json','{"preloadedApps":["core","acdc"]}');put(root,'js/config.js','define({api:{default:"http://fixture.invalid/v2/"},custom:{preserved:true}})');put(root,'js/main.js',root===web?'old':'new');put(root,'apps/acdc/metadata/app.json','{"name":"acdc"}');put(root,'apps/acdc/app.js',root===web?'old acdc':'new acdc');}
+    put(web,'apps/customer-owned/app.js','operator app');put(web,'apps/callflows/app.js','unselected app');put(web,'apps/acdc/language-capabilities.json','{"legacy":true}');put(web,'apis/index.html','existing documentation');
+    const opts={web,stage,state,selected:['acdc'],inputs:{fingerprint_sha256:'a'.repeat(64)},adopt_existing:true};
+    fn({dir,web,stage,state,put,opts,run:(p,hook)=>apply(p,hash(canonical(p)),path.join(dir,'backup-'+Math.random().toString(16).slice(2)),hook)});passed++;
+}finally{fs.rmSync(dir,{recursive:true,force:true});}}
+fixture(({opts})=>assert.throws(()=>plan({...opts,adopt_existing:false}),/explicit adoption/));
+fixture(({opts,run,web,state})=>{const p=plan(opts),before=snapshot(web),r=run(p);assert.equal(r.status,'complete');for(const file of ['apps/customer-owned/app.js','apps/callflows/app.js','apps/acdc/language-capabilities.json','apis/index.html','js/config.js'])assert.equal(snapshot(web)[file],before[file]);assert.equal(fs.statSync(path.join(state,'owned.json')).mode&0o777,0o600);assert.equal(fs.statSync(path.join(web,'js/main.js')).mode&0o777,0o644);const next=plan({...opts,adopt_existing:false});assert.equal(next.changes.length,0);assert.equal(next.removes.length,0);});
+fixture(({opts,put,web,run})=>{const p=plan(opts);put(web,'apps/customer-owned/added.js','operator late edit');assert.throws(()=>run(p),/inputs changed/);assert.equal(fs.readFileSync(path.join(web,'js/main.js'),'utf8'),'old');});
+fixture(({opts,put,web,run})=>{const p=plan(opts);assert.throws(()=>run(p,phase=>{if(phase==='before_write')put(web,'apps/acdc/language-capabilities.json','concurrent capability');}),/Concurrent web edit/);assert.equal(fs.readFileSync(path.join(web,'js/main.js'),'utf8'),'old');});
+fixture(({opts,stage,put})=>{put(stage,'js/config.js','changed operator config');assert.throws(()=>plan(opts),/operator configuration/);});
+fixture(({opts,stage,put})=>{put(stage,'apps/acdc/language-capabilities.json','manufactured');assert.throws(()=>plan(opts),/cannot publish/);});
+fixture(({opts,stage,put})=>{put(stage,'apps/customer-owned/app.js','bad overwrite');assert.throws(()=>plan(opts),/unselected/);});
+fixture(({opts,stage,dir})=>{fs.symlinkSync(stage,path.join(dir,'alias'));assert.throws(()=>plan({...opts,stage:path.join(dir,'alias')}),/Symlink/);});
+fixture(({opts,web,stage})=>{fs.symlinkSync(path.join(stage,'js/main.js'),path.join(web,'alias.js'));assert.throws(()=>plan(opts),/Symlink/);});
+fixture(({opts,state,run})=>{const p=plan(opts);fs.mkdirSync(path.join(state,'deploy.lock'));assert.throws(()=>run(p),/EEXIST/);});
+fixture(({opts,put,web,stage,run})=>{put(web,'apps/acdc/old.js','obsolete owned');const p=plan(opts);run(p);assert(!fs.existsSync(path.join(web,'apps/acdc/old.js')));assert(fs.existsSync(path.join(web,'apps/callflows/app.js')));put(stage,'js/main.js','third');put(web,'js/main.js','operator override');assert.throws(()=>plan({...opts,adopt_existing:false}),/Managed artifact changed/);});
+fixture(({opts,run,state})=>{const p=plan(opts);assert.throws(()=>run(p,(phase)=>{if(phase==='after_file')throw Error('injected interruption');}),/injected/);assert(!fs.existsSync(path.join(state,'owned.json')));assert(!fs.existsSync(path.join(state,'deploy.lock')));});
+fixture(({opts,dir})=>{const p=plan(opts);assert.throws(()=>apply(p,'b'.repeat(64),path.join(dir,'bad-backup')),/reviewed plan/);});
+fixture(({opts,stage,put,run,web})=>{const p=plan(opts);put(stage,'js/main.js','mutated stage');assert.throws(()=>run(p),/inputs changed/);assert.equal(fs.readFileSync(path.join(web,'js/main.js'),'utf8'),'old');});
+fixture(({opts,web})=>{fs.chmodSync(path.join(web,'apps/customer-owned'),0o777);assert.throws(()=>plan(opts),/Writable/);});
+fixture(({opts,web})=>{fs.chmodSync(path.join(web,'apps/customer-owned/app.js'),0o666);assert.throws(()=>plan(opts),/Writable/);});
+fixture(({opts,web})=>{fs.chownSync(path.join(web,'apps/customer-owned/app.js'),65534,65534);assert.throws(()=>plan(opts),/foreign-owned/);});
+fixture(({opts,dir})=>{fs.chmodSync(dir,0o777);assert.throws(()=>plan(opts),/Writable/);fs.chmodSync(dir,0o700);});
+fixture(({opts,web,put,run,state})=>{const p=plan(opts);assert.throws(()=>run(p,phase=>{if(phase==='after_file')put(web,'apps/customer-owned/app.js','external edit');}),/Content proof failed/);assert(!fs.existsSync(path.join(state,'owned.json')));});
+fixture(({opts,run,state})=>{const p=plan(opts);assert.throws(()=>run(p,phase=>{if(phase==='after_ownership')throw Error('injected after proven activation');}),/injected/);assert.equal(JSON.parse(fs.readFileSync(path.join(state,'owned.json'))).status,'complete');});
+fixture(({opts,web,put})=>{put(web,'build-config.json','{"preloadApps":["core","acdc","customer-owned"]}');assert.throws(()=>plan(opts),/embedded\/preloaded/);});
+fixture(({opts,web,put,run})=>{put(web,'build-config.json','{"preloadApps":["core","acdc"]}');run(plan(opts));assert.deepEqual(JSON.parse(fs.readFileSync(path.join(web,'build-config.json'))),{preloadedApps:['core','acdc']});});
+fixture(({opts,stage,put})=>{put(stage,'build-config.json','{"preloadApps":["core","acdc"]}');assert.throws(()=>plan(opts),/canonical preloadedApps/);});
+fixture(({opts,stage,put})=>{put(stage,'build-config.json','{"preloadedApps":["core"],"preloadApps":["acdc"]}');assert.throws(()=>plan(opts),/Conflicting/);});
+assert.deepEqual(preloadedApps({preloadedApps:['core']}),['core']);
+assert.deepEqual(preloadedApps({preloadApps:['core']},true),['core']);
+assert.deepEqual(preloadedApps({},true),[]);
+assert.deepEqual(preloadedApps({preloadedApps:['core'],preloadApps:['core']},true),['core']);
+for(const config of [{},null,[],{preloadedApps:'core'},{preloadedApps:['core','core']},{preloadedApps:['../core']},{preloadedApps:[null]},{preloadedApps:['core'],preloadApps:['core']}])assert.throws(()=>preloadedApps(config));
+for(const config of [{preloadApps:'core'},{preloadApps:['core','core']},{preloadedApps:['core'],preloadApps:['acdc']}])assert.throws(()=>preloadedApps(config,true));
+console.log('PASS '+passed+' offline ownership, preservation, path, concurrency and partial-failure groups plus preload contract checks; no live writes or calls');

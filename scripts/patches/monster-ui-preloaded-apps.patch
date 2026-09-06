@@ -1,0 +1,12 @@
+diff --git a/gulp/tasks/write-config.js b/gulp/tasks/write-config.js
+--- a/gulp/tasks/write-config.js
++++ b/gulp/tasks/write-config.js
+@@ -29,7 +29,7 @@ const writeFrameworkConfig = buildType => {
+ 		},
+ 		prod: {
+ 			type: 'production',
+-			preloadApps: getAppsToInclude()
++			preloadedApps: getAppsToInclude()
+ 		}
+ 	};
+ 	const config = configsPerBuildType[buildType];

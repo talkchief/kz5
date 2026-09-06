@@ -80,7 +80,10 @@ async function offline() {
     const installer = fs.readFileSync(path.join(__dirname, 'install-kazoo5.sh'), 'utf8');
     assert.equal(installer.split('location = /apis { return 308 /apis/; }').length - 1, 2);
     assert.equal(installer.split('location ^~ /apis/').length - 1, 2);
-    assert(installer.indexOf('    install_api_developer_docs\n') > installer.indexOf('rsync -a --delete'));
+    const monsterInstall = installer.match(/install_monster_ui\(\) \{[\s\S]*?\n\}/)[0];
+    assert(monsterInstall.lastIndexOf('    install_api_developer_docs\n') > monsterInstall.indexOf('deploy_monster_ui_owned'));
+    assert(monsterInstall.includes('deploy_monster_ui_owned'));
+    assert(!monsterInstall.includes('rsync -a --delete'));
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'kazoo-api-docs-test-'));
     try {
         const oldMask = process.umask(0o077);

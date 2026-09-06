@@ -10,6 +10,10 @@
 set -Eeuo pipefail
 shopt -s inherit_errexit
 
+# Invocation-local proof only: never accept an environment value or old .app
+# file as evidence that this invocation applied and compiled current sources.
+KAZOO_BUILD_SUCCEEDED_THIS_RUN=false
+
 readonly SCRIPT_NAME=${0##*/}
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 readonly SCRIPT_DIR
@@ -38,7 +42,7 @@ readonly KAZOO_PERSISTED_KEYS=(
     FREESWITCH_CONFIG_REF KAZOO_CORE_CONFIG_REF KAZOO_CORE_REF KAZOO_CROSSBAR_REF KAZOO_ECALLMGR_REF KAZOO_STEPSWITCH_REF KAZOO_CDR_REF KAZOO_SOUNDS_REF ACDC_REF KAMAILIO_VERSION
     KAMAILIO_CONFIG_REF KAMAILIO_CHILDREN KAMAILIO_TCP_CHILDREN
     KAMAILIO_AMQP_CONSUMERS KAMAILIO_AMQP_WORKERS MONSTER_UI_REF
-    MONSTER_UI_NODE_MAJOR MONSTER_UI_WEB_ROOT MONSTER_UI_REGISTER_APPS
+    MONSTER_UI_NODE_MAJOR MONSTER_UI_WEB_ROOT MONSTER_UI_REGISTER_APPS MONSTER_UI_LOCK_SHA256
     MONSTER_UI_WEBSOCKET_URL MONSTER_UI_REMOTE_BRANDING MONSTER_UI_BRAINTREE
     MONSTER_UI_APPS_LIST MONSTER_UI_ACCOUNTS_REF MONSTER_UI_CALLFLOWS_REF
     MONSTER_UI_CSV_ONBOARDING_REF MONSTER_UI_FAX_REF MONSTER_UI_NUMBERS_REF
@@ -176,6 +180,7 @@ KAMAILIO_AMQP_CONSUMERS=${KAMAILIO_AMQP_CONSUMERS:-2}
 KAMAILIO_AMQP_WORKERS=${KAMAILIO_AMQP_WORKERS:-4}
 MONSTER_UI_REF=${MONSTER_UI_REF:-7ef735eada6fd0e2b96c06f32c0bb868867f7d18}
 MONSTER_UI_NODE_MAJOR=${MONSTER_UI_NODE_MAJOR:-18}
+MONSTER_UI_LOCK_SHA256=${MONSTER_UI_LOCK_SHA256:-da59e0891ebb949b5acdb81663463fcc09362ce7f956f9ed50beeafe7ecd6222}
 MONSTER_UI_WEB_ROOT=${MONSTER_UI_WEB_ROOT:-/var/www/html/monster-ui}
 MONSTER_UI_REGISTER_APPS=${MONSTER_UI_REGISTER_APPS:-auto}
 MONSTER_UI_WEBSOCKET_URL=${MONSTER_UI_WEBSOCKET_URL:-auto}
@@ -362,8 +367,9 @@ validate_safe_value() {
 
 validate_install_directory() {
     local name=$1 value=$2
-    [[ $value == /* && $value != / && ! $value =~ [[:space:]] ]] || \
-        die "${name} must be an absolute, non-root path without whitespace"
+    [[ $value =~ ^/[-a-zA-Z0-9_.]+(/[-a-zA-Z0-9_.]+)*$ && \
+       /$value/ != */../* && /$value/ != */./* ]] || \
+        die "${name} must be a canonical absolute path using only letters, digits, slash, underscore, dot or hyphen"
 }
 
 amqp_uri_from_split_settings() {
@@ -940,8 +946,8 @@ preflight() {
     [[ ${ID:-} == rocky ]] || \
         die "This tested installer supports Rocky Linux 9 only; found ${ID:-unknown}"
     [[ ${VERSION_ID%%.*} == 9 ]] || die "Rocky Linux 9 is required; found ${VERSION_ID:-unknown}"
-    [[ -d $KAZOO_ROOT/.git ]] || die "KAZOO_ROOT is not a Git checkout: ${KAZOO_ROOT}"
     validate_install_directory KAZOO_ROOT "$KAZOO_ROOT"
+    [[ -d $KAZOO_ROOT/.git ]] || die "KAZOO_ROOT is not a Git checkout: ${KAZOO_ROOT}"
     validate_install_directory KAZOO_BUILD_ROOT "$KAZOO_BUILD_ROOT"
     validate_install_directory KAZOO_CACHE_DIR "$KAZOO_CACHE_DIR"
     validate_install_directory KAZOO_CONFIG_DIR "$KAZOO_CONFIG_DIR"
@@ -1019,6 +1025,8 @@ preflight() {
         die 'MONSTER_UI_REGISTER_APPS must be auto, true, or false'
     [[ $MONSTER_UI_NODE_MAJOR == 18 ]] || \
         die 'Monster UI 5.5.13 requires the tested Node.js 18 build toolchain'
+    [[ $MONSTER_UI_LOCK_SHA256 =~ ^[a-f0-9]{64}$ ]] || \
+        die 'MONSTER_UI_LOCK_SHA256 must identify the exact reviewed framework dependency lock'
     validate_install_directory MONSTER_UI_WEB_ROOT "$MONSTER_UI_WEB_ROOT"
     [[ $KAZOO_FREESWITCH_NODES =~ ^[a-zA-Z0-9_.@,-]*$ ]] || \
         die 'KAZOO_FREESWITCH_NODES must contain comma-separated Erlang node names'
@@ -1710,6 +1718,46 @@ build_kazoo() {
     FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT" JOBS="$KAZOO_MAKE_JOBS" build-dev-release
     prepare_kazoo_runtime_artifact_permissions
     verify_kazoo_production_beams
+    KAZOO_BUILD_SUCCEEDED_THIS_RUN=true
+}
+
+install_kazoo_pivot_port_reservation() {
+    local helper=/usr/local/libexec/kazoo5-reserve-pivot-ports parent owner mode
+    [[ $DRY_RUN == true || -f $SCRIPT_DIR/reserve-kazoo-pivot-ports.py ]] || \
+        die 'Required additive Pivot port-reservation helper is missing'
+    if [[ $DRY_RUN != true ]]; then
+        for parent in /usr /usr/local /usr/local/libexec; do
+            [[ -e $parent || -L $parent ]] || continue
+            [[ -d $parent && ! -L $parent ]] || die 'Pivot helper directory must not be a symlink'
+            read -r owner mode < <(stat -c '%u %a' "$parent")
+            [[ $owner == 0 && $mode =~ ^[0-7]+$ && $((8#$mode & 022)) == 0 ]] || \
+                die 'Pivot helper directory must be root-owned and not writable by group/other'
+        done
+        [[ ! -L $helper && ( ! -e $helper || -f $helper ) ]] || \
+            die 'Pivot helper must be a regular non-symlink file'
+    fi
+    run install -D -o root -g root -m 0755 "$SCRIPT_DIR/reserve-kazoo-pivot-ports.py" "$helper"
+    # A static sysctl.d assignment would replace operator reservations. Merge
+    # the current kernel list after systemd-sysctl, before either Kazoo node.
+    write_file 0644 /etc/systemd/system/kazoo-pivot-port-reservation.service <<'EOF'
+[Unit]
+Description=Reserve Kazoo Pivot listeners against ephemeral port assignment
+Wants=systemd-sysctl.service
+After=systemd-sysctl.service
+Before=kazoo-apps.service kazoo-ecallmgr.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+RuntimeDirectory=kazoo5-reserved-ports
+RuntimeDirectoryMode=0700
+ExecStart=/usr/local/libexec/kazoo5-reserve-pivot-ports --apply
+RemainAfterExit=yes
+TimeoutStartSec=15
+NoNewPrivileges=yes
+EOF
 }
 
 install_kazoo_systemd_units() {
@@ -1731,11 +1779,13 @@ install_kazoo_systemd_units() {
     run install -d -m 0750 -o kazoo -g kazoo /var/log/kazoo \
         /var/log/kazoo/kazoo_apps /var/log/kazoo/kazoo_apps/log \
         /var/log/kazoo/ecallmgr /var/log/kazoo/ecallmgr/log
+    install_kazoo_pivot_port_reservation
     write_file 0644 /etc/systemd/system/kazoo-apps.service <<EOF
 [Unit]
 Description=Kazoo 5 Applications Node
 Wants=network-online.target
-After=network-online.target
+Requires=kazoo-pivot-port-reservation.service
+After=network-online.target kazoo-pivot-port-reservation.service
 
 [Service]
 Type=simple
@@ -1743,6 +1793,7 @@ User=kazoo
 Group=kazoo
 UMask=0027
 WorkingDirectory=${KAZOO_ROOT}
+Environment=KAZOO_ROOT=${KAZOO_ROOT}
 Environment=HOME=/var/lib/kazoo
 Environment=KAZOO_CONFIG=${KAZOO_CONFIG_DIR}/core/config.ini
 Environment=KAZOO_ACDC_EDITOR_CAPABILITIES=${KAZOO_CONFIG_DIR}/acdc/language-capabilities.json
@@ -1751,6 +1802,7 @@ Environment="KAZOO_APPS=${KAZOO_APPS_LIST}"
 Environment="KAZOO_NODE_NAME_TYPE=${KAZOO_NODE_NAME_TYPE}"
 Environment="KAZOO_ERLANG_DIST_IP=${KAZOO_ERLANG_DIST_IP}"
 Environment="ERL_FLAGS=-noshell -noinput"
+ExecStartPre=/usr/local/libexec/kazoo5-reserve-pivot-ports --check
 ExecStartPre=/usr/bin/env KAZOO_DEPLOYMENT_CONFIG=/nonexistent /usr/bin/bash -c 'source ${SCRIPT_DIR}/install-kazoo5.sh; verify_kazoo_production_beams'
 ExecStart=${KAZOO_ROOT}/scripts/dev-start-apps.sh kazoo_apps
 Restart=on-failure
@@ -1766,7 +1818,8 @@ EOF
 [Unit]
 Description=Kazoo 5 eCallMgr Node
 Wants=network-online.target
-After=network-online.target
+Requires=kazoo-pivot-port-reservation.service
+After=network-online.target kazoo-pivot-port-reservation.service
 
 [Service]
 Type=simple
@@ -1774,6 +1827,7 @@ User=kazoo
 Group=kazoo
 UMask=0027
 WorkingDirectory=${KAZOO_ROOT}
+Environment=KAZOO_ROOT=${KAZOO_ROOT}
 Environment=HOME=/var/lib/kazoo
 Environment=KAZOO_CONFIG=${KAZOO_CONFIG_DIR}/core/config.ini
 Environment=KAZOO_LOG_ROOT=/var/log/kazoo/ecallmgr
@@ -1781,6 +1835,7 @@ Environment=KAZOO_APPS=ecallmgr
 Environment="KAZOO_NODE_NAME_TYPE=${KAZOO_NODE_NAME_TYPE}"
 Environment="KAZOO_ERLANG_DIST_IP=${KAZOO_ERLANG_DIST_IP}"
 Environment="ERL_FLAGS=-noshell -noinput"
+ExecStartPre=/usr/local/libexec/kazoo5-reserve-pivot-ports --check
 ExecStartPre=/usr/bin/env KAZOO_DEPLOYMENT_CONFIG=/nonexistent /usr/bin/bash -c 'source ${SCRIPT_DIR}/install-kazoo5.sh; verify_kazoo_production_beams'
 ExecStart=${KAZOO_ROOT}/scripts/dev-start-ecallmgr.sh ecallmgr
 Restart=on-failure
@@ -1836,7 +1891,31 @@ declare -a name_args=()
 sup_host=$(hostname -f 2>/dev/null || hostname)
 [[ $sup_host == *.* ]] || name_args=(-s true)
 
-exec "$sup_root/core/sup/sup" "${name_args[@]}" "$@"
+# Compatibility spelling requested by operators. The pinned Kazoo controller
+# exports running_apps/0, not kapps/0. Preserve all SUP options and only map the
+# exact argument-free module/function pair; other commands remain untouched.
+sup_args=("$@")
+sup_command_index=0
+while ((sup_command_index < ${#sup_args[@]})); do
+    case ${sup_args[sup_command_index]} in
+        -n|-c|-t|--node|--cookie|--timeout) ((sup_command_index+=2)) ;;
+        --node=*|--cookie=*|--timeout=*|--use_short=*|--erl_term_args=*|-v|--verbose)
+            ((sup_command_index+=1)) ;;
+        -s|-e|--use_short|--erl_term_args)
+            ((sup_command_index+=1))
+            case ${sup_args[sup_command_index]:-} in
+                true|false) ((sup_command_index+=1)) ;;
+            esac ;;
+        --) ((sup_command_index+=1)); break ;;
+        *) break ;;
+    esac
+done
+if ((sup_command_index + 2 == ${#sup_args[@]})) &&
+   [[ ${sup_args[sup_command_index]} == kapps_controller && ${sup_args[sup_command_index+1]} == kapps ]]; then
+    sup_args[sup_command_index+1]=running_apps
+fi
+
+exec "$sup_root/core/sup/sup" "${name_args[@]}" "${sup_args[@]}"
 EOF
     run install -D -m 0644 "$KAZOO_ROOT/sup.bash" /etc/bash_completion.d/sup
 }
@@ -2252,8 +2331,9 @@ verify_acdc_interfaces() {
 
 install_ecallmgr() {
     log 'Installing Kazoo ecallmgr'
-    [[ -f ${KAZOO_ROOT}/core/kazoo_apps/ebin/kazoo_apps.app && \
-       -f ${KAZOO_ROOT}/applications/ecallmgr/ebin/ecallmgr.app ]] || build_kazoo
+    if [[ ${KAZOO_BUILD_SUCCEEDED_THIS_RUN:-false} != true ]]; then
+        build_kazoo
+    fi
     configure_kazoo
     install_kazoo_systemd_units
     install_sup_cli
@@ -2337,9 +2417,28 @@ verify_erlang_logging() {
     log "PASS isolated ${node_prefix} log root: ${expected_root}"
 }
 
+verify_kazoo_pivot_port_reservation() {
+    local service=$1 property dependencies
+    [[ $service == kazoo-apps.service || $service == kazoo-ecallmgr.service ]] || \
+        die 'Unexpected Kazoo node for Pivot reservation verification'
+    [[ $DRY_RUN != true ]] || return 0
+    python3 -B -I "$SCRIPT_DIR/reserve-kazoo-pivot-ports.py" --check >/dev/null || \
+        die 'Pivot listener ports are not protected against ephemeral assignment'
+    systemctl is-active --quiet kazoo-pivot-port-reservation.service || \
+        die 'The boot-time Pivot port reservation service is not active'
+    for property in Requires After; do
+        dependencies=$(systemctl show "$service" --property="$property" --value) || \
+            die "Cannot read ${service} effective ${property} dependencies"
+        [[ " $dependencies " == *' kazoo-pivot-port-reservation.service '* ]] || \
+            die "${service} lacks its effective ${property} Pivot reservation dependency"
+    done
+    log "PASS reserved Pivot ports and effective boot dependencies: ${service}"
+}
+
 verify_kazoo_apps() {
     if [[ $DRY_RUN == true ]]; then log 'Would verify Kazoo apps'; return 0; fi
     local api_result api_body api_status deadline
+    verify_kazoo_pivot_port_reservation kazoo-apps.service
     verify_kazoo_production_beams
     verify_erlang_node kazoo-apps.service kazoo_apps
     verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
@@ -2372,8 +2471,47 @@ verify_kazoo_apps() {
     verify_acdc_language_packs
 }
 
+verify_sup_beam_export() {
+    local module=$1 function=$2 arity=$3 resolved expected root_real location
+    case "$module:$function:$arity" in
+        kazoo_maintenance:syslog_level:1|kapps_controller:start_app:1) ;;
+        *) die 'Unexpected SUP command export check' ;;
+    esac
+    # code:which reports available code without loading the target module.
+    # Read exports from the exact local runtime BEAM, not function_exported/3,
+    # which returns false for perfectly available but not-yet-loaded modules.
+    location=$(timeout --signal=KILL 30 sup -e code which "$module" </dev/null) || \
+        die "SUP could not locate ${module}"
+    [[ $location == \"/*\" ]] || die "SUP ${module} is not available as a runtime BEAM"
+    location=${location#\"}; location=${location%\"}
+    [[ $location =~ ^/[-a-zA-Z0-9_./]+$ ]] || die "SUP ${module} returned an unsafe code path"
+    root_real=$(readlink -f -- "$KAZOO_ROOT") || die 'Cannot resolve the configured Kazoo runtime root'
+    expected="$root_real/core/kazoo_apps/ebin/$module.beam"
+    resolved=$(readlink -f -- "$location") || die "Cannot resolve SUP ${module} code path"
+    [[ $resolved == "$expected" && -f $expected && $(readlink -f -- "$expected") == "$expected" ]] || \
+        die "SUP ${module} does not resolve to its configured runtime BEAM"
+    KAZOO_VERIFY_BEAM_FILE=$expected KAZOO_VERIFY_BEAM_MODULE=$module \
+        KAZOO_VERIFY_BEAM_FUNCTION=$function KAZOO_VERIFY_BEAM_ARITY=$arity \
+        erl +S 1:1 +A 1 -noshell -eval '
+File = os:getenv("KAZOO_VERIFY_BEAM_FILE"),
+WantedModule = os:getenv("KAZOO_VERIFY_BEAM_MODULE"),
+WantedFunction = os:getenv("KAZOO_VERIFY_BEAM_FUNCTION"),
+WantedArity = list_to_integer(os:getenv("KAZOO_VERIFY_BEAM_ARITY")),
+case beam_lib:chunks(File, [exports]) of
+    {ok, {Module, [{exports, Exports}]}} ->
+        case atom_to_list(Module) =:= WantedModule andalso
+             lists:any(fun({Function, Arity}) -> atom_to_list(Function) =:= WantedFunction
+                          andalso Arity =:= WantedArity end, Exports) of
+            true -> halt(0);
+            false -> halt(1)
+        end;
+    _ -> halt(1)
+end.
+' || die "SUP ${module}:${function}/${arity} is unavailable in its runtime BEAM"
+}
+
 verify_sup_cli() {
-    local configured_apps running_apps exported loaded
+    local configured_apps running_apps
     command -v sup >/dev/null || die 'The SUP command is not installed in PATH'
     [[ -s /etc/bash_completion.d/sup ]] || die 'SUP Bash completion is not installed'
     running_apps=$(timeout --signal=KILL 60 sup kapps_controller running_apps </dev/null) || \
@@ -2383,24 +2521,8 @@ verify_sup_cli() {
         die 'SUP could not read the kapps_controller application configuration'
     [[ $configured_apps == *acdc* ]] || \
         die 'SUP kapps_controller configuration does not include ACDC'
-    loaded=$(timeout --signal=KILL 30 sup -e code is_loaded \
-        kazoo_maintenance </dev/null) || \
-        die 'SUP could not inspect kazoo_maintenance'
-    [[ $loaded == \{file,* ]] || \
-        die 'kazoo_maintenance is not loaded; verification does not load runtime code'
-    exported=$(timeout --signal=KILL 30 sup -e erlang function_exported \
-        kazoo_maintenance syslog_level 1 </dev/null) || \
-        die 'SUP could not inspect kazoo_maintenance:syslog_level/1'
-    [[ $exported == true ]] || die 'SUP syslog_level/1 command is not exported'
-    loaded=$(timeout --signal=KILL 30 sup -e code is_loaded \
-        kapps_controller </dev/null) || \
-        die 'SUP could not inspect kapps_controller'
-    [[ $loaded == \{file,* ]] || \
-        die 'kapps_controller is not loaded; verification does not load runtime code'
-    exported=$(timeout --signal=KILL 30 sup -e erlang function_exported \
-        kapps_controller start_app 1 </dev/null) || \
-        die 'SUP could not inspect kapps_controller:start_app/1'
-    [[ $exported == true ]] || die 'SUP kapps_controller commands are not exported'
+    verify_sup_beam_export kazoo_maintenance syslog_level 1
+    verify_sup_beam_export kapps_controller start_app 1
     log "PASS SUP controller/config command checks (configured kapps: ${configured_apps})"
 }
 
@@ -2507,6 +2629,7 @@ verify_ecallmgr_event_stream_framing() {
 
 verify_ecallmgr() {
     if [[ $DRY_RUN == true ]]; then log 'Would verify eCallMgr'; return 0; fi
+    verify_kazoo_pivot_port_reservation kazoo-ecallmgr.service
     verify_kazoo_production_beams
     verify_erlang_node kazoo-ecallmgr.service ecallmgr
     verify_erlang_applications ecallmgr ecallmgr
@@ -3719,28 +3842,56 @@ monster_local_app_fingerprint() {
 }
 
 monster_ui_build_fingerprint() {
-    local app ref patch
+    local app ref entry digest node_version npm_version hooks
+    local -a inputs=(
+        framework_myaccount_patch:patches/monster-ui-myaccount-transition.patch
+        monster-ui-branding-billing.patch:patches/monster-ui-branding-billing.patch
+        monster-ui-websocket-config.patch:patches/monster-ui-websocket-config.patch
+        monster-ui-optional-integrations.patch:patches/monster-ui-optional-integrations.patch
+        monster-ui-isolated-minify.patch:patches/monster-ui-isolated-minify.patch
+        monster-ui-preloaded-apps.patch:patches/monster-ui-preloaded-apps.patch
+        runtime_configuration:configure-monster-runtime.cjs
+        owned_deployment:deploy-owned-monster.cjs
+        build_boundary:monster-build-inputs.cjs
+        lock_audit_helper:audit-monster-lock.cjs
+        installed_dependency_verifier:verify-monster-build-dependencies.cjs
+        bounded_production_builder:build-monster-production.cjs
+        production_artifact_verifier:verify-monster-production-artifact.cjs
+        production_minifier_profile:assets/monster-ui/minifier-profile.json
+        production_minifier_profile_helper:monster-minifier-profile.cjs
+        build_package_lock:assets/monster-ui/package-lock.npm10.json
+        npm_native_overrides_patch:patches/monster-ui-npm-native-overrides.patch
+    )
+    node_version=$(node --version) || die 'Cannot fingerprint Node version'
+    npm_version=$(npm --version) || die 'Cannot fingerprint npm version'
     printf '%s\n' \
         "monster_ui=${MONSTER_UI_REF}" \
         "node=${MONSTER_UI_NODE_MAJOR}" \
+        "node_actual=$node_version" \
+        "npm_actual=$npm_version" \
+        "source_package_lock=${MONSTER_UI_LOCK_SHA256}" \
         "api=${KAZOO_API_URL}" \
         "socket=${MONSTER_UI_WEBSOCKET_URL}" \
         "remote_branding=${MONSTER_UI_REMOTE_BRANDING}" \
         "braintree=${MONSTER_UI_BRAINTREE}"
-    printf 'framework_myaccount_patch=%s\n' \
-        "$(sha256sum "$SCRIPT_DIR/patches/monster-ui-myaccount-transition.patch" | awk '{print $1}')"
-    for patch in monster-ui-branding-billing.patch monster-ui-websocket-config.patch monster-ui-optional-integrations.patch; do
-        printf '%s=%s\n' "$patch" "$(sha256sum "$SCRIPT_DIR/patches/$patch" | awk '{print $1}')"
+    if [[ ",${MONSTER_UI_APPS_LIST}," == *',callflows,'* ]]; then
+        inputs+=(callflows_acdc_queue_patch:patches/monster-ui-callflows-acdc-queue.patch
+                 callflows_css_nesting_patch:patches/monster-ui-callflows-css-nesting.patch)
+    fi
+    for entry in "${inputs[@]}"; do
+        digest=$(sha256sum "$SCRIPT_DIR/${entry#*:}") || die "Cannot fingerprint ${entry%%:*}"
+        digest=${digest%% *}
+        [[ $digest =~ ^[a-f0-9]{64}$ ]] || die "Invalid fingerprint for ${entry%%:*}"
+        printf '%s=%s\n' "${entry%%:*}" "$digest"
     done
-    printf 'runtime_configuration=%s\n' "$(sha256sum "$SCRIPT_DIR/configure-monster-runtime.cjs" | awk '{print $1}')"
+    hooks=$(node "$SCRIPT_DIR/monster-build-inputs.cjs" --hook-hash "$SCRIPT_DIR/install-kazoo5.sh") || \
+        die 'Cannot fingerprint installer build hooks'
+    [[ $hooks =~ ^[a-f0-9]{64}$ ]] || die 'Invalid installer build hook fingerprint'
+    printf 'installer_build_hooks=%s\n' "$hooks"
     for app in ${MONSTER_UI_APPS_LIST//,/ }; do
-        ref=$(monster_app_ref "$app")
+        ref=$(monster_app_ref "$app") || die "Cannot fingerprint selected app ${app}"
         printf 'app_%s=%s\n' "$app" "$ref"
     done
-    if [[ ",${MONSTER_UI_APPS_LIST}," == *',callflows,'* ]]; then
-        printf 'callflows_acdc_queue_patch=%s\n' \
-            "$(sha256sum "$SCRIPT_DIR/patches/monster-ui-callflows-acdc-queue.patch" | awk '{print $1}')"
-    fi
 }
 
 install_nodejs_toolchain() {
@@ -3768,12 +3919,18 @@ install_monster_nodejs() {
 
 sync_monster_ui_sources() {
     local source_dir=$1
-    local app ref app_dir callflows_patch myaccount_patch supported_app
-    local -a supported_apps=(acdc accounts callflows csv-onboarding fax numbers pbxs voicemails webhooks voip)
-    if [[ $DRY_RUN != true && -d $source_dir/.git ]]; then
-        git -C "$source_dir" checkout -- package.json package-lock.json
+    local app ref app_dir callflows_patch myaccount_patch
+    # This function accepts only an absent target inside an installer-created
+    # protected stage. Never discard changes in an old source checkout.
+    if [[ $DRY_RUN != true ]]; then
+        node "$SCRIPT_DIR/monster-build-inputs.cjs" --absent-source "$source_dir"
     fi
     sync_git https://github.com/2600hz/monster-ui.git "$source_dir" "$MONSTER_UI_REF"
+    if [[ $DRY_RUN != true ]]; then
+        [[ $(git -C "$source_dir" rev-parse HEAD) == "$MONSTER_UI_REF" ]] || die 'Framework source pin mismatch'
+        [[ $(sha256sum "$source_dir/package-lock.json" | awk '{print $1}') == "$MONSTER_UI_LOCK_SHA256" ]] || \
+            die 'Framework dependency lock differs from its reviewed source hash'
+    fi
     myaccount_patch="$SCRIPT_DIR/patches/monster-ui-myaccount-transition.patch"
     [[ -s $myaccount_patch ]] || die 'Required Monster UI MyAccount transition patch is missing'
     if [[ $DRY_RUN == true ]]; then
@@ -3786,28 +3943,24 @@ sync_monster_ui_sources() {
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-branding-billing.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-websocket-config.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-optional-integrations.patch"
-    for supported_app in "${supported_apps[@]}"; do
-        if [[ ",${MONSTER_UI_APPS_LIST}," != *",${supported_app},"* ]]; then
-            if [[ $DRY_RUN == true ]]; then
-                log "Would remove unselected Monster UI app source: ${supported_app}"
-            else
-                rm -rf -- "$source_dir/src/apps/$supported_app"
-                log "Removed unselected Monster UI app source: ${supported_app}"
-            fi
-        fi
-    done
+    apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-isolated-minify.patch"
+    apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-preloaded-apps.patch"
+    apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-npm-native-overrides.patch"
+    if [[ $DRY_RUN != true ]]; then
+        node "$SCRIPT_DIR/monster-build-inputs.cjs" --prepare-lock "$source_dir" \
+            "$SCRIPT_DIR/assets/monster-ui/package-lock.npm10.json"
+    fi
     for app in ${MONSTER_UI_APPS_LIST//,/ }; do
         ref=$(monster_app_ref "$app")
         app_dir="$source_dir/src/apps/$app"
+        if [[ $DRY_RUN != true ]]; then
+            node "$SCRIPT_DIR/monster-build-inputs.cjs" --absent-source "$app_dir"
+        fi
         if [[ $app == acdc ]]; then
             run mkdir -p "$app_dir"
-            run rsync -a --delete "$SCRIPT_DIR/../monster-ui/acdc/" "$app_dir/"
+            run cp -a "$SCRIPT_DIR/../monster-ui/acdc/." "$app_dir/"
             log "Bundled Monster UI ACDC Call Center app: ${ref}"
             continue
-        fi
-        if [[ $app == callflows && $DRY_RUN != true && -d $app_dir/.git ]]; then
-            git -C "$app_dir" checkout -- \
-                submodules/device/device.css submodules/user/user.css 2>/dev/null || true
         fi
         sync_git "https://github.com/2600hz/monster-ui-${app}.git" "$app_dir" "$ref"
         if [[ $DRY_RUN != true ]]; then
@@ -3840,6 +3993,8 @@ sync_monster_ui_sources() {
 configure_monster_ui_api() {
     local source_dir=$1
     [[ $DRY_RUN != true ]] || return 0
+    node "$SCRIPT_DIR/monster-build-inputs.cjs" --configure "$MONSTER_UI_WEB_ROOT" "$source_dir" \
+        "$KAZOO_API_URL" "$MONSTER_UI_WEBSOCKET_URL" "$MONSTER_UI_REMOTE_BRANDING" "$MONSTER_UI_BRAINTREE"
     node "$SCRIPT_DIR/configure-monster-runtime.cjs" "$source_dir/src/js/config.js" \
         "$KAZOO_API_URL" "$MONSTER_UI_WEBSOCKET_URL" "$MONSTER_UI_REMOTE_BRANDING" "$MONSTER_UI_BRAINTREE"
     if [[ ",${MONSTER_UI_APPS_LIST}," == *',acdc,'* ]]; then
@@ -3870,15 +4025,15 @@ verify_monster_app_registration() {
         "http://${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}/${account_db}/_design/apps_store/_view/crossbar_listing") || \
         die 'Could not read the existing Monster UI app catalog view'
     for app in ${MONSTER_UI_APPS_LIST//,/ }; do
-        jq -e --arg app "$app" '(.rows | type == "array") and any(.rows[]; .key == $app)' \
+        jq -e --arg app "$app" '(.rows | type == "array") and ([.rows[] | select(.key == $app)] | length == 1)' \
             <<<"$registered" >/dev/null || \
-            die "Monster UI app ${app} is not registered in the Kazoo master account"
+            die "Monster UI app ${app} must have exactly one registration in the Kazoo master account"
     done
     log "PASS Monster UI app catalog registration: ${MONSTER_UI_APPS_LIST}"
 }
 
 register_monster_apps() {
-    local output
+    local output app
     [[ $DRY_RUN != true ]] || return 0
     if ! monster_registration_available; then
         [[ $MONSTER_UI_REGISTER_APPS != true ]] || \
@@ -3892,10 +4047,17 @@ register_monster_apps() {
     }
     ensure_master_account
     configure_kazoo_api_modules
-    if ! output=$(timeout --signal=KILL 600 sup crossbar_maintenance init_apps \
-        "$MONSTER_UI_WEB_ROOT/apps" "$KAZOO_API_URL" </dev/null 2>&1); then
-        die "Could not register Monster UI apps through SUP: ${output}"
-    fi
+    # The packaged module preserves every existing document and image. No
+    # fallback to init_apps/init_app: those replace existing image attachments.
+    for app in ${MONSTER_UI_APPS_LIST//,/ }; do
+        if ! output=$(timeout --signal=KILL 60 sup kazoo_monster_catalog init_app \
+            "$app" "$MONSTER_UI_WEB_ROOT/apps/$app" "$KAZOO_API_URL" </dev/null 2>&1); then
+            die "App registration interrupted for ${app}; inspect its exact target before retrying"
+        fi
+        [[ $output == created || $output == preserved ]] || \
+            die "App registration not verified for ${app}; no automatic update, rollback or retry"
+        log "PASS selected catalog ${app}: ${output}"
+    done
     verify_monster_app_registration
 }
 
@@ -4116,39 +4278,56 @@ EOF
 verify_monster_ui_transport() {
     local redirect capability_url capability_status expected_capability_status=404
     local api_proxy_url api_proxy_result api_proxy_status api_proxy_body
+    local ui_url asset asset_url expected_asset_hash served_asset_hash
     local -a capability_resolve=()
     if [[ -n $KAZOO_PUBLIC_HOSTNAME ]]; then
+        ui_url="https://${KAZOO_PUBLIC_HOSTNAME}"
         capability_url="https://${KAZOO_PUBLIC_HOSTNAME}/apps/acdc/language-capabilities.json"
         api_proxy_url="https://${KAZOO_PUBLIC_HOSTNAME}/v2/"
-        capability_resolve=(--resolve "${KAZOO_PUBLIC_HOSTNAME}:443:127.0.0.1")
-        curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
-            --resolve "${KAZOO_PUBLIC_HOSTNAME}:443:127.0.0.1" \
-            "https://${KAZOO_PUBLIC_HOSTNAME}/" | grep -i '<html' >/dev/null || \
-            die 'Monster UI HTTPS certificate/content check failed'
-        redirect=$(curl --silent --show-error --output /dev/null --write-out '%{http_code} %{redirect_url}' \
+        capability_resolve=(--noproxy '*' --resolve "${KAZOO_PUBLIC_HOSTNAME}:443:127.0.0.1")
+        redirect=$(curl --disable --noproxy '*' --silent --show-error --output /dev/null --write-out '%{http_code} %{redirect_url}' \
             --connect-timeout 10 --max-time 30 --resolve "${KAZOO_PUBLIC_HOSTNAME}:80:127.0.0.1" \
             "http://${KAZOO_PUBLIC_HOSTNAME}/") || die 'Monster UI HTTP redirect check failed'
         [[ $redirect == "308 https://${KAZOO_PUBLIC_HOSTNAME}/" ]] || \
             die 'Monster UI HTTP does not redirect to the configured HTTPS hostname'
         [[ $(stat -c '%a:%U' /etc/nginx/kazoo-tls/privkey.pem) == 600:root ]] || \
             die 'nginx TLS private key must be root-owned with mode 0600'
-        log "PASS HTTPS certificate, hostname, content, and HTTP redirect: ${KAZOO_PUBLIC_HOSTNAME}"
     else
+        ui_url=http://127.0.0.1
         capability_url=http://127.0.0.1/apps/acdc/language-capabilities.json
         api_proxy_url=http://127.0.0.1/v2/
-        curl --fail --silent --show-error --connect-timeout 10 --max-time 30 \
-            http://127.0.0.1/ | grep -i '<html' >/dev/null || die 'Monster UI HTTP content check failed'
+        capability_resolve=(--noproxy '*' --header "Host: ${KAZOO_PUBLIC_IP}")
+    fi
+    # verify_monster_ui_owned has already bound this configured root and its
+    # exact files/configuration to the ownership receipt. Include HTTP 200 in
+    # the hash input so a redirect body cannot pass as an installed asset.
+    # Keep the bytes in pipelines; shell variables would strip trailing LFs.
+    for asset in index.html js/main.js js/config.js; do
+        asset_url="${ui_url}/${asset}"
+        [[ $asset != index.html ]] || asset_url="${ui_url}/"
+        expected_asset_hash=$({ cat -- "$MONSTER_UI_WEB_ROOT/$asset" && printf '\n200'; } | \
+            sha256sum | awk '{print $1}') || die "Cannot hash installed Monster UI asset ${asset}"
+        served_asset_hash=$(curl --disable --fail --silent --show-error --connect-timeout 10 --max-time 30 \
+            --max-filesize 20971520 --header 'Accept-Encoding: identity' "${capability_resolve[@]}" \
+            --write-out $'\n%{http_code}' "$asset_url" | sha256sum | awk '{print $1}') || \
+            die "Cannot retrieve served Monster UI asset ${asset}"
+        [[ $served_asset_hash == "$expected_asset_hash" ]] || \
+            die "Served Monster UI asset ${asset} does not match the verified configured web root with HTTP 200"
+    done
+    log 'PASS served Monster UI index, main bundle and configuration match the verified owned deployment'
+    if [[ -n $KAZOO_PUBLIC_HOSTNAME ]]; then
+        log "PASS HTTPS certificate, hostname, content, and HTTP redirect: ${KAZOO_PUBLIC_HOSTNAME}"
     fi
     if [[ -e $MONSTER_UI_WEB_ROOT/apps/acdc/language-capabilities.json ]]; then
         monster_language_capability_hash >/dev/null || die 'Invalid installed language capability file'
         expected_capability_status=200
     fi
-    capability_status=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+    capability_status=$(curl --disable --silent --show-error --connect-timeout 10 --max-time 30 \
         "${capability_resolve[@]}" --output /dev/null --write-out '%{http_code}' "$capability_url") || \
         die 'Monster UI language capability route is unreachable'
     [[ $capability_status == "$expected_capability_status" ]] || \
         die 'Language capability route must return its actual file or HTTP 404, never the HTML application fallback'
-    api_proxy_result=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+    api_proxy_result=$(curl --disable --silent --show-error --connect-timeout 10 --max-time 30 \
         "${capability_resolve[@]}" --write-out $'\n%{http_code}' "$api_proxy_url") || \
         die 'Same-origin Crossbar proxy is unreachable'
     api_proxy_status=${api_proxy_result##*$'\n'}
@@ -4174,55 +4353,111 @@ console.log(crypto.createHash('sha256').update(bytes).digest('hex'));
 JS
 }
 
+deploy_monster_ui_owned() {
+    local source_dir=$1 state=/usr/local/share/kazoo5-installer/monster-ui-owned
+    local plan_dir approval configuration_change=null build_inputs build_fingerprint
+    build_inputs=$(monster_ui_build_fingerprint) || die 'Cannot fingerprint build before deployment planning'
+    build_fingerprint=$(printf '%s\n' "$build_inputs" | sha256sum | awk '{print $1}') || \
+        die 'Cannot hash build inputs before deployment planning'
+    plan_dir=$(mktemp -d "$KAZOO_BUILD_ROOT/monster-owned-plan.XXXXXX")
+    if [[ -f $source_dir/.kazoo-configuration-plan.json ]]; then
+        configuration_change=$(jq -c . "$source_dir/.kazoo-configuration-plan.json")
+    fi
+    jq -n --arg web "$MONSTER_UI_WEB_ROOT" --arg stage "$source_dir/dist" --arg state "$state" \
+        --arg selected "$MONSTER_UI_APPS_LIST" \
+        --argjson configuration_change "$configuration_change" \
+        --arg fingerprint "$build_fingerprint" \
+        '{web:$web,stage:$stage,state:$state,selected:($selected|split(",")),inputs:{fingerprint_sha256:$fingerprint},adopt_existing:false,configuration_change:$configuration_change}' \
+        | write_file 0600 "$plan_dir/options.json"
+    # Legacy nonempty deployments without an ownership receipt fail closed.
+    # Retain this stage, then separately review a fresh explicit adoption plan;
+    # never infer ownership from a legacy marker, name, URL or directory alone.
+    node "$SCRIPT_DIR/deploy-owned-monster.cjs" --plan "$plan_dir/options.json" \
+        | write_file 0600 "$plan_dir/result.json"
+    jq '.plan' "$plan_dir/result.json" | write_file 0600 "$plan_dir/plan.json"
+    approval=$(jq -er '.approval_sha256' "$plan_dir/result.json")
+    node "$SCRIPT_DIR/deploy-owned-monster.cjs" --apply "$plan_dir/plan.json" "$approval" "$plan_dir/rollback"
+    build_inputs=$(monster_ui_build_fingerprint) || die 'Cannot recheck build fingerprint after deployment'
+    verify_monster_ui_owned "$build_inputs"
+}
+
+verify_monster_ui_owned() {
+    local expected_build=$1 result
+    result=$(node "$SCRIPT_DIR/deploy-owned-monster.cjs" --verify \
+        /usr/local/share/kazoo5-installer/monster-ui-owned/owned.json) || die 'Owned Monster UI output verification failed'
+    jq -e --arg web "$MONSTER_UI_WEB_ROOT" --arg fingerprint "$(printf '%s\n' "$expected_build" | sha256sum | awk '{print $1}')" \
+        '.status == "complete" and .web == $web and .fingerprint_sha256 == $fingerprint' <<<"$result" >/dev/null || \
+        die 'Owned Monster UI output does not match its requested source/lock/patch fingerprint'
+}
+
 install_monster_ui() {
-    local source_dir="$KAZOO_BUILD_ROOT/monster-ui"
+    (
+    local source_dir stage_dir workflow_lock build_lock_sha
+    local state=/usr/local/share/kazoo5-installer/monster-ui-owned
     local marker=/usr/local/share/kazoo5-installer/monster-ui-build
     local expected_build installed_build='' runtime_capability_hash
-    log 'Installing and building Monster UI source tag 5.5.13 with the pinned Kazoo app bundle'
+    log 'Installing pinned Monster UI and selected apps with owned-asset preservation'
     install_monster_nodejs
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would create a fresh protected Monster UI source stage; existing checkouts and unselected apps remain untouched'
+        sync_monster_ui_sources "$KAZOO_BUILD_ROOT/monster-owned-dry-run/source"
+        log 'Would build selected apps using the verified lock, plan bounded owned deployment, verify content, then register missing selected catalog apps only'
+        install_api_developer_docs
+        configure_monster_ui_nginx
+        return 0
+    fi
+    node "$SCRIPT_DIR/monster-build-inputs.cjs" --prepare-roots "$MONSTER_UI_WEB_ROOT" "$state" "$KAZOO_BUILD_ROOT"
+    workflow_lock="$state/workflow.lock"
+    mkdir -m 0700 "$workflow_lock" || die 'Monster UI workflow is locked; inspect any previous incomplete installation before retrying'
+    trap 'rmdir -- "$workflow_lock" 2>/dev/null || true' EXIT
     expected_build=$(monster_ui_build_fingerprint)
     [[ -r $marker ]] && installed_build=$(<"$marker")
-    if [[ $installed_build != "$expected_build" || ! -s $MONSTER_UI_WEB_ROOT/index.html ]]; then
-        sync_monster_ui_sources "$source_dir"
-        if [[ $DRY_RUN != true ]]; then
-            configure_monster_ui_api "$source_dir"
-            (
-                cd "$source_dir"
-                NPM_CONFIG_YES=true npm install --no-audit --no-fund
-                npm rebuild node-sass
-                ./node_modules/.bin/gulp build-prod
-            )
-            [[ -s $source_dir/dist/index.html ]] || \
-                die 'Monster UI production build did not create dist/index.html'
-            for app in ${MONSTER_UI_APPS_LIST//,/ }; do
-                [[ -s $source_dir/dist/apps/$app/metadata/app.json ]] || \
-                    die "Monster UI production build omitted ${app} metadata"
-            done
-            [[ ! -e $source_dir/dist/apps/acdc/language-capabilities.json && \
-               ! -L $source_dir/dist/apps/acdc/language-capabilities.json ]] || \
-                die 'A Monster UI build must not manufacture runtime language readiness'
-            runtime_capability_hash=$(monster_language_capability_hash) || \
-                die 'Existing runtime language capability is invalid; refusing web replacement'
-            mkdir -p "$MONSTER_UI_WEB_ROOT"
-            rsync -a --delete --exclude='/apps/acdc/language-capabilities.json' \
-                "$source_dir/dist/" "$MONSTER_UI_WEB_ROOT/"
-            [[ $(monster_language_capability_hash) == "$runtime_capability_hash" ]] || \
-                die 'Runtime language capability changed during the web deployment; reverify before activation'
-            if command -v restorecon >/dev/null; then
-                restorecon -RF "$MONSTER_UI_WEB_ROOT" || true
-            fi
-            monster_ui_build_fingerprint | write_file 0644 "$marker"
-        else
-            log "Would configure Monster UI API as ${KAZOO_API_URL} and run gulp build-prod"
-        fi
+    if [[ -e $state/owned.json ]]; then
+        # Refuse changed managed files/config even if a rebuild was requested.
+        node "$SCRIPT_DIR/deploy-owned-monster.cjs" --verify "$state/owned.json" \
+            | jq -e --arg web "$MONSTER_UI_WEB_ROOT" '.status == "complete" and .web == $web' >/dev/null \
+            || die 'Owned Monster UI web root/content verification failed'
     fi
-    if [[ $DRY_RUN != true && ",${MONSTER_UI_APPS_LIST}," == *',acdc,'* ]]; then
+    if [[ $installed_build != "$expected_build" || ! -s $MONSTER_UI_WEB_ROOT/index.html || ! -e $state/owned.json ]]; then
+        stage_dir=$(node "$SCRIPT_DIR/monster-build-inputs.cjs" --new-stage "$KAZOO_BUILD_ROOT")
+        source_dir="$stage_dir/source"
+        log "Retaining private build and recovery evidence in ${stage_dir}"
+        sync_monster_ui_sources "$source_dir"
+        configure_monster_ui_api "$source_dir"
+        build_lock_sha=$(sha256sum "$SCRIPT_DIR/assets/monster-ui/package-lock.npm10.json" | awk '{print $1}')
+        (
+            cd "$source_dir"
+            [[ $(sha256sum package-lock.json | awk '{print $1}') == "$build_lock_sha" ]] || die 'Dependency lock changed before npm ci'
+            # No unpinned root preinstall resolver; run only the explicitly
+            # required, pinned native Sass/RE2 lifecycles after a consistent ci.
+            npm ci --ignore-scripts --no-audit --no-fund
+            node "$SCRIPT_DIR/verify-monster-build-dependencies.cjs" "$source_dir"
+            npm_config_jobs=1 MAKEFLAGS=-j1 npm rebuild node-sass re2
+            node -e 'require("node-sass").renderSync({data:".fixture { color: red; }"}); if (!new (require("re2"))("^fixture$").test("fixture")) process.exit(1)'
+            [[ $(sha256sum package-lock.json | awk '{print $1}') == "$build_lock_sha" ]] || die 'Dependency lock changed during npm ci'
+            node "$SCRIPT_DIR/build-monster-production.cjs" "$source_dir"
+            node "$SCRIPT_DIR/verify-monster-production-artifact.cjs" "$source_dir"
+        )
+        [[ $(monster_ui_build_fingerprint) == "$expected_build" ]] || die 'Build inputs changed during compilation; refusing deployment'
+        runtime_capability_hash=$(monster_language_capability_hash) || die 'Existing runtime language capability is invalid'
+        deploy_monster_ui_owned "$source_dir"
+        [[ $(monster_language_capability_hash) == "$runtime_capability_hash" ]] || \
+            die 'Runtime language capability changed during deployment; inspect evidence before proceeding'
+        if command -v restorecon >/dev/null; then restorecon -RF "$MONSTER_UI_WEB_ROOT" || true; fi
+        # The compatibility marker is not proof: actual owned output and config
+        # are verified first; any partial activation retains its backup receipt.
+        verify_monster_ui_owned "$expected_build"
+        printf '%s\n' "$expected_build" | write_file 0644 "$marker"
+    else
+        verify_monster_ui_owned "$expected_build"
+    fi
+    if [[ ",${MONSTER_UI_APPS_LIST}," == *',acdc,'* ]]; then
         node "$SCRIPT_DIR/ensure-acdc-language-capabilities.cjs" --web-root "$MONSTER_UI_WEB_ROOT"
     fi
-    # Re-copy after every Monster UI rsync (which may remove the old /apis directory).
+    # /apis is preserved by owned deployment and refreshed by its own verifier.
     install_api_developer_docs
     configure_monster_ui_nginx
-    if [[ -f /etc/nginx/nginx.conf && $DRY_RUN != true ]]; then
+    if [[ -f /etc/nginx/nginx.conf ]]; then
         sed -i '/^[[:space:]]*server[[:space:]]*{/,/^[[:space:]]*}/ { /listen[[:space:]]\+80 default_server/d; /listen[[:space:]]\+\[::\]:80 default_server/d; }' /etc/nginx/nginx.conf
     fi
     run nginx -t
@@ -4230,6 +4465,7 @@ install_monster_ui() {
     wait_for_port 127.0.0.1 80 30 || die 'nginx did not open port 80'
     register_monster_apps
     verify_monster_ui
+    )
 }
 
 verify_monster_ui() {
@@ -4242,6 +4478,7 @@ verify_monster_ui() {
     installed_build=$(</usr/local/share/kazoo5-installer/monster-ui-build)
     [[ $installed_build == "$expected_build" ]] || \
         die 'Deployed Monster UI does not match the requested pinned build and app bundle'
+    verify_monster_ui_owned "$expected_build"
     [[ $(node -p 'process.versions.node.split(".")[0]') == "$MONSTER_UI_NODE_MAJOR" ]] || \
         die "Monster UI build toolchain is not Node.js ${MONSTER_UI_NODE_MAJOR}"
     verify_monster_ui_transport

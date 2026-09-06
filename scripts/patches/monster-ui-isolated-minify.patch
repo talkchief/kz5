@@ -1,0 +1,18 @@
+diff --git a/gulpfile.babel.js b/gulpfile.babel.js
+--- a/gulpfile.babel.js
++++ b/gulpfile.babel.js
+@@ -66,6 +66,14 @@ const buildApp = gulp.series(
+ 	cleanFolders
+ );
+ 
++// KAZOO_BOUNDED_PRODUCTION_PHASES_V1
++// The installer exits between these exact production task segments. The two
++// original inputs use the explicit pinned no-compressor profile in fresh processes.
++gulp.task('build-prod-prepare', gulp.series(
++	moveFilesToTmp, compileSass, templates, require
++));
++gulp.task('build-prod-finalize', gulp.series(css, writeConfigProd, writeVersion, cleanFolders));
++
+ gulp.task('lint', lint);
+ gulp.task('build-app', buildApp);
+ gulp.task('build-dev', buildDev);

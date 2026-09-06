@@ -1,3 +1,18 @@
+diff --git a/priv/couchdb/schemas/queue_update.json b/priv/couchdb/schemas/queue_update.json
+index 5c1749df..40a6e9f3 100644
+--- a/priv/couchdb/schemas/queue_update.json
++++ b/priv/couchdb/schemas/queue_update.json
+@@ -3,6 +3,10 @@
+     "_id": "queue_update",
+     "description": "Schema for queue update request",
+     "properties": {
++        "runtime_only": {
++            "description": "Opt-in login for an already enrolled queue without changing the saved roster; requires runtime confirmation",
++            "type": "boolean"
++        },
+         "action": {
+             "description": "Action to perform",
+             "enum": [
 diff --git a/priv/couchdb/schemas/queues.json b/priv/couchdb/schemas/queues.json
 index 52be2769..4cbcdc3b 100644
 --- a/priv/couchdb/schemas/queues.json
@@ -693,6 +708,135 @@ index 00000000..075e60c0
 +-spec matches(any(), binary()) -> boolean().
 +matches(V, Regex) when is_binary(V) -> re:run(V, Regex, [{'capture', 'none'}]) =:= 'match';
 +matches(_, _) -> 'false'.
+diff --git a/src/kazoo_monster_catalog.erl b/src/kazoo_monster_catalog.erl
+new file mode 100644
+--- /dev/null
++++ b/src/kazoo_monster_catalog.erl
+@@ -0,0 +1,124 @@
++%%% MPL-2.0. Private candidate: absent-only installer app registration.
++-module(kazoo_monster_catalog).
++-export([init_app/3]).
++-ifdef(TEST).
++-export([create_only/4, read_regular/2, read_regular/3, master_db/1]).
++-endif.
++-include_lib("kernel/include/file.hrl").
++
++-spec init_app(binary(), binary() | string(), binary()) -> created | preserved | {error, atom()}.
++init_app(Name, Path0, Api) ->
++    try
++        true = lists:member(Name, [<<"acdc">>,<<"accounts">>,<<"callflows">>,<<"csv-onboarding">>,<<"fax">>
++                                  ,<<"numbers">>,<<"pbxs">>,<<"voicemails">>,<<"webhooks">>,<<"voip">>]),
++        Path = binary_to_list(iolist_to_binary(Path0)),
++        true = filename:pathtype(Path) =:= absolute,
++        Uri = uri_string:parse(Api),
++        true = lists:member(maps:get(scheme,Uri),[<<"http">>,<<"https">>]),
++        false = maps:is_key(userinfo,Uri), false = maps:is_key(query,Uri), false = maps:is_key(fragment,Uri),
++        true = byte_size(maps:get(host,Uri)) > 0,
++        true = lists:suffix("/v2/",binary_to_list(maps:get(path,Uri))),
++        Metadata0 = kz_json:decode(read_regular(filename:join([Path,"metadata","app.json"]),262144)),
++        Name = kz_json:get_value(<<"name">>,Metadata0),
++        Metadata = kz_json:set_value(<<"api_url">>,Api,kz_doc:public_fields(Metadata0)),
++        {ok,_} = kz_json_schema:validate(<<"app">>,Metadata),
++        Images = images(Path, Metadata),
++        %% No oldest-account discovery or implicit configuration writes here.
++        %% Bootstrap remains the installer's explicit ensure_master_account step.
++        Db = master_db(kapps_config:get_ne_binary(<<"accounts">>, <<"master_account_id">>)),
++        create_only(Db,Metadata,Images,fun storage/2)
++    catch _:_ -> {error, invalid_source_or_unavailable} end.
++
++-spec read_regular(string(), non_neg_integer()) -> binary().
++read_regular(Path, Limit) ->
++    read_regular(Path, Limit, fun() -> ok end).
++
++-spec master_db(term()) -> binary().
++master_db(Id) when is_binary(Id), byte_size(Id) =:= 32 ->
++    match = re:run(Id, <<"^[0-9a-f]{32}$">>, [{capture, none}]),
++    kzs_util:format_account_db(Id).
++
++-spec read_regular(string(), non_neg_integer(), fun(() -> term())) -> binary().
++read_regular(Path, Limit, AfterRead) ->
++    safe_ancestors(filename:split(filename:absname(Path)), ""),
++    {ok,Before=#file_info{type=regular,uid=0,links=1,mode=Mode,size=Size}}=file:read_link_info(Path),
++    true = (Mode band 8#022) =:= 0 andalso Size =< Limit,
++    {ok,Bytes}=file:read_file(Path), true = byte_size(Bytes) =:= Size,
++    _ = AfterRead(),
++    %% Ignore only access time, which our own read may legitimately change.
++    %% Two byte reads also reject equal-size in-place changes on filesystems
++    %% whose modification timestamp resolution is coarser than the operation.
++    {ok,After}=file:read_link_info(Path),
++    true = Before#file_info{atime=undefined} =:= After#file_info{atime=undefined},
++    {ok,Bytes}=file:read_file(Path),
++    {ok,Final}=file:read_link_info(Path),
++    true = After#file_info{atime=undefined} =:= Final#file_info{atime=undefined},
++    safe_ancestors(filename:split(filename:absname(Path)), ""),
++    Bytes.
++
++-spec safe_ancestors([string()], string()) -> ok.
++safe_ancestors([],_) -> ok;
++safe_ancestors([Part|Rest],Prefix) ->
++    true = Part =/= ".." andalso Part =/= ".",
++    Next=case Prefix of "" -> Part; _ -> filename:join(Prefix,Part) end,
++    {ok,#file_info{type=Type,uid=0,mode=Mode}}=file:read_link_info(Next),
++    true = Type =/= symlink,
++    true = (Mode band 8#022) =:= 0 orelse (Type =:= directory andalso (Mode band 8#1000) =/= 0 andalso Rest =/= []),
++    safe_ancestors(Rest,Next).
++
++-spec images(string(), term()) -> [{binary(), binary(), binary()}].
++images(Path,Meta) ->
++    Icon=kz_json:get_value(<<"icon">>,Meta), Shots=kz_json:get_value(<<"screenshots">>,Meta,[]),
++    true=is_list(Shots) andalso length(Shots)=<10,
++    Specs=case Icon of undefined -> []; _ -> [{Icon,"icon"}] end ++ [{I,"screenshots"} || I<-Shots],
++    true=length(Specs)=:=length(lists:usort([I || {I,_}<-Specs])),
++    Values=[begin
++        true=is_binary(Name) andalso byte_size(Name)>0 andalso byte_size(Name)=<192,
++        true=filename:basename(Name)=:=Name,
++        nomatch=binary:match(Name,[<<"/">>,<<"\\">>,<<0>>]),
++        Mime=kz_mime:from_filename(Name),
++        true=lists:member(Mime,[<<"image/png">>,<<"image/jpeg">>,<<"image/gif">>,<<"image/svg+xml">>]),
++        Bytes=read_regular(filename:join([Path,"metadata",Kind,binary_to_list(Name)]),5242880),
++        {Name,Mime,Bytes}
++    end || {Name,Kind}<-Specs],
++    true=lists:sum([byte_size(B) || {_,_,B}<-Values])=<16777216, Values.
++
++-spec create_only(binary(), term(), [{binary(),binary(),binary()}], fun((atom(),term())->term())) -> created | preserved | {error,atom()}.
++create_only(Db,Metadata,Images,IO) ->
++    Name=kz_json:get_value(<<"name">>,Metadata),
++    case IO(find,{Db,Name}) of
++        {ok,[_]} -> preserved;
++        {ok,[]} -> create_absent(Db,Metadata,Images,IO);
++        {ok,_} -> {error,ambiguous_existing_apps};
++        _ -> {error,catalog_unavailable}
++    end.
++
++-spec create_absent(binary(), term(), [{binary(),binary(),binary()}], fun((atom(),term())->term())) -> created | {error,atom()}.
++create_absent(Db,Meta,Images,IO) ->
++    Name=kz_json:get_value(<<"name">>,Meta),
++    Id=binary:part(binary:encode_hex(crypto:hash(sha256,term_to_binary({monster_app_v1,Db,Name})),lowercase),0,32),
++    case IO(read,{Db,Id}) of
++        {error,not_found} ->
++            Attachments=kz_json:from_list([{N,kz_json:from_list([{<<"content_type">>,M},{<<"data">>,base64:encode(B)}])} || {N,M,B}<-Images]),
++            Doc=kz_json:set_values([{<<"_id">>,Id},{<<"_attachments">>,Attachments}],kz_doc:public_fields(Meta)),
++            case IO(create,{Db,Doc}) of
++                {ok,_} ->
++                    case IO(verify,{Db,Id,Meta,Images}) of true -> created; _ -> {error,created_unverified} end;
++                {error,conflict} -> {error,concurrent_create};
++                _ -> {error,create_outcome_unknown}
++            end;
++        _ -> {error,target_not_proven_absent}
++    end.
++
++-spec storage(atom(),term()) -> term().
++storage(find,{Db,Name}) ->
++    kz_datamgr:get_results(Db,<<"apps_store/crossbar_listing">>,[{key,Name},{limit,2}]);
++storage(read,{Db,Id}) -> kz_datamgr:open_doc(Db,Id);
++storage(create,{Db,Doc}) -> kzd_app:save(Db,Doc);
++storage(verify,{Db,Id,Meta,Images}) ->
++    case kz_datamgr:open_doc(Db,Id) of
++        {ok,Saved} ->
++            lists:all(fun(K)->kz_json:get_value(K,Meta)=:=kz_json:get_value(K,Saved) end,kz_json:get_keys(Meta))
++            andalso lists:all(fun({N,_,Bytes})->kz_datamgr:fetch_attachment(Db,Id,N)=:={ok,Bytes} end,Images);
++        _ -> false
++    end.
 diff --git a/src/modules/cb_members.erl b/src/modules/cb_members.erl
 new file mode 100644
 index 00000000..5121def6

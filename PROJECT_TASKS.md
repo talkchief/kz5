@@ -55,9 +55,16 @@ cases. The first two resource-capped unit runs stopped in mock setup; a subseque
 run passed all 48 tests using EUnit's supported slow-host timeout scaling and a
 narrow configuration mock. The same 384 MiB / 50% CPU cap and 120-second outer
 limit remained enforced; production timers and assertions were unchanged.
-The operator assigned P0-07, P0-08 and P0-09 to their external team, which is
-actively working on them and will provide a branch for integration. These remain
-open release gates: do not duplicate or overwrite their agent-recovery work.
+The external team's recovery commit `d69cf04` is now integrated by kz5 merge
+`8548b98`, with its six production-module changes preserved. Root independently
+passed all 22 recovery regressions and six source-ownership checks. The team's
+reported 174 tests and 63-module compilation are handoff evidence, not a fresh
+combined-source result. The merged historical media run passed map/production
+checks but exceeded its outer deadline during EUnit; bounded full-suite
+revalidation remains open. See `doc/acdc_agent_recovery.md` for exact evidence.
+P0-07/08/09 remain release gates for coordinated staging, broker/node failures,
+real calls and load/soak testing. Genuine `max_connect_failures` protection is
+preserved; policy UI/API documentation is not closed by the FSM fix alone.
 Each new P0 requires a
 reproducer, code and installer integration, focused fault-injection regression,
 and relevant live call/state/log evidence before closure.
@@ -95,7 +102,7 @@ historical screens. Exact references and API/data requirements are in
 | VOICE-04 | BLOCKED — operator | Agree supplemental generation scope/budget and native-language acceptance; no extra provider calls have been made under an assumed approval. |
 | API-01 | VERIFIED — single-server scope | Supervision eavesdrop/whisper/barge/join and stop have prior isolated audio/auth tests and OpenAPI entries. Cross-node/failover/real-traffic acceptance remains OPEN. |
 | API-02 | OPEN — API | Company members with owned devices/types/fresh registration state. Existing implementation has scoped tests; complete restricted-token, cross-account, expiry and large-inventory coverage. Keep SIP online distinct from queue eligibility. |
-| API-03 | ACTIVE — documentation | Updated repository catalog validates 354 paths / 649 operations; full deterministic-regeneration/tamper suite and 9 queue-login groups / 45 schema cases pass. Target ancestor/hardlink protection committed `2316f27`. Publish reviewed assets at `/apis` and browser-test; keep proposals/gaps explicit. Portal presence alone is not endpoint acceptance. |
+| API-03 | ACTIVE — documentation | Updated repository catalog validates 354 paths / 649 operations; full deterministic-regeneration/tamper suite and 9 queue-login groups / 45 schema cases pass. Queue-login generated assets committed `860ce46`; target ancestor/hardlink protection committed `2316f27`. Publish reviewed assets at `/apis` and browser-test; keep proposals/gaps explicit. Portal presence alone is not endpoint acceptance. |
 
 ## Installer, deployment and release
 
@@ -104,7 +111,7 @@ historical screens. Exact references and API/data requirements are in
 | INST-01 | OPEN — installer | One modular install entry point: CouchDB, RabbitMQ, HAProxy, Kazoo apps, eCallMgr, Kazoo FreeSWITCH, Kazoo Kamailio, Monster UI and ALL; automatic pinned dependencies, configuration validation and enabled/running named services. |
 | INST-02 | VERIFIED — current-host scope | Named services and `kazoo-applications` compatibility alias exist; Pivot port reservation, test-phone startup preservation and requested SUP alias repaired. Reboot/custom-root/clean-server regression tests still required. |
 | INST-03 | ACTIVE — installer | Kamailio verifier repair committed `aff66d3`: 11 regression groups and live `--verify-only kamailio` pass; recovered startup JWT failure remains an explicit warning, later/unrelated errors fail, service identity unchanged. Finish combined all-module verification after remaining deployment; verify source/export availability and configuration/transport readiness. |
-| INST-04 | ACTIVE — browser acceptance | Monster production `preloadApps`/`preloadedApps` mismatch corrected. Fresh guarded build and independent readback passed: 1,931 files, 465 compiled templates, 16 canonical preloads; receipts in `doc/post_reboot_acceptance_20260906.md`. Actual writer/reader contract and offline preservation suites pass. Isolated browser acceptance, fresh adoption/provenance plan and matched backend integration are still required before publishing; clean-server dependencies remain unverified. |
+| INST-04 | ACTIVE — deployment acceptance | Monster production `preloadApps`/`preloadedApps` mismatch corrected. Fresh guarded build/readback passed: 1,931 files, 465 templates, 16 canonical preloads. Actual unauthenticated artifact boot and explicitly mocked queue-login browser flow passed; this is not authenticated live API proof. All five combined installer phases passed (24 suite invocations, 129 unchanged inputs); see `doc/installer_regression_acceptance_20260906.md`. Fresh adoption/provenance plan and matched backend integration are still required before publishing; clean-server dependencies remain unverified. |
 | INST-05 | ACTIVE — build | Post-build artifact verification is wired before activation and included in the fingerprint; modular fixtures with/without ACDC pass. eCallMgr no longer trusts stale `.app` files: current-invocation build reuse, environment reset and failure-before-activation fixtures pass. Full real repeat deployment remains required. |
 | INST-06 | OPEN — deployment | Publish reviewed matching source/backend/UI with exact backups, preserve unselected apps/config/customer data and record rollback. Two media/editor backend modules updated; compiled UI publication remains held. |
 | INST-07 | OPEN — acceptance | Clean Rocky Linux 9 install, each module alone, all-in-one and separated hosts; hostname/address/configuration variations, reboot, repeat install, upgrades and failure recovery. No clean-server success is claimed yet. |

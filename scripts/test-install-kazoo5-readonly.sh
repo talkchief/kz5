@@ -46,10 +46,12 @@ master_reply=undefined
 if (verify_monster_app_registration >"$test_dir/no-master" 2>&1); then fail 'Catalog accepted missing master'; fi
 [[ $(wc -l <"$test_dir/couch-reads") == 1 ]] || fail 'Missing master still reached a catalog query'
 master_reply='<<"0123456789abcdef0123456789abcdef">>'
-for catalog_reply in '{"rows":[]}' '{"rows":[{"key":"acdc"}]}' '{"rows":"invalid"}' 'not-json'; do
-    if (verify_monster_app_registration >"$test_dir/bad-catalog" 2>&1); then fail 'Malformed/incomplete catalog accepted'; fi
+for catalog_reply in '{"rows":[]}' '{"rows":[{"key":"acdc"}]}' '{"rows":"invalid"}' 'not-json' \
+    '{"rows":[{"key":"acdc"},{"key":"acdc"},{"key":"callflows"}]}' \
+    '{"rows":[{"key":"acdc"},{"key":"callflows"},{"key":"callflows"}]}'; do
+    if (verify_monster_app_registration >"$test_dir/bad-catalog" 2>&1); then fail 'Malformed/incomplete/duplicate catalog accepted'; fi
 done
-printf 'PASS existing app-catalog GET, missing prerequisites and incomplete collections fail without repair\n'
+printf 'PASS existing app-catalog GET, missing prerequisites, incomplete collections and duplicate selected names fail without repair\n'
 
 if sqlite3 -readonly "$test_dir/missing-kamailio.db" 'PRAGMA integrity_check;' >"$test_dir/sqlite" 2>&1; then
     fail 'Readonly SQLite unexpectedly accepted an absent DB'
@@ -59,8 +61,10 @@ node - "$SCRIPT_DIR/install-kazoo5.sh" <<'JS'
 const fs=require('node:fs'), assert=require('node:assert/strict');
 const source=fs.readFileSync(process.argv[2],'utf8');
 const section=(name,next)=>source.slice(source.indexOf(name+'() {'),source.indexOf('\n'+next+'()'));
-const sup=section('verify_sup_cli','configure_ecallmgr_dialplan_applications');
-assert.equal((sup.match(/sup -e code is_loaded/g)||[]).length,2);
+const sup=section('verify_sup_beam_export','configure_ecallmgr_dialplan_applications');
+assert(sup.includes('sup -e code which'));
+assert(sup.includes('beam_lib:chunks(File, [exports])'));
+assert(!sup.includes('sup -e code is_loaded'));
 assert(!sup.includes('ensure_loaded'), 'SUP verification must not load code');
 assert(section('verify_kazoo_apps','verify_sup_cli').includes('configured_master_account_id >/dev/null'));
 const catalog=section('verify_monster_app_registration','register_monster_apps');

@@ -68,12 +68,21 @@ test('New settings are persisted, fingerprinted and passed through the real sour
 test('Legacy initializer runs after artifact preservation, outside rebuild-only path, before nginx verification', () => {
     const install = functionSource('install_monster_ui');
     const call = install.indexOf('node "$SCRIPT_DIR/ensure-acdc-language-capabilities.cjs" --web-root "$MONSTER_UI_WEB_ROOT"');
-    assert(call > install.indexOf('Runtime language capability changed during the web deployment'));
-    assert(call > install.indexOf('\n    fi\n'), 'Initializer must run on already-built installs too');
-    assert(call < install.indexOf('\n    configure_monster_ui_nginx'));
-    assert(install.slice(0, call).endsWith('if [[ $DRY_RUN != true && ",${MONSTER_UI_APPS_LIST}," == *\',acdc,\'* ]]; then\n        '),
-        'Default state must require a real install with ACDC selected');
-    assert(install.indexOf('configure_monster_ui_nginx') < install.indexOf('run nginx -t'));
+    const preserved = install.indexOf('Runtime language capability changed during deployment');
+    const ownedRepeat = install.indexOf('\n    else\n        verify_monster_ui_owned "$expected_build"\n    fi\n');
+    assert(preserved >= 0 && call > preserved);
+    assert(ownedRepeat >= 0 && call > ownedRepeat, 'Initializer must run on already-built installs too');
+    assert(call < install.lastIndexOf('\n    configure_monster_ui_nginx'));
+    assert(install.slice(0, call).endsWith('if [[ ",${MONSTER_UI_APPS_LIST}," == *\',acdc,\'* ]]; then\n        '),
+        'Default state must require ACDC selected');
+    const dryRun = cp.spawnSync('bash', ['--noprofile', '--norc', '-s'], {encoding: 'utf8', timeout: 10000,
+        input: 'set -euo pipefail\nlog(){ :; }\ninstall_monster_nodejs(){ :; }\nsync_monster_ui_sources(){ :; }\n'
+            + 'install_api_developer_docs(){ :; }\nconfigure_monster_ui_nginx(){ :; }\n'
+            + 'node(){ printf "Unexpected Node action during dry run\\n" >&2; exit 42; }\n'
+            + install + '\ninstall_monster_ui\n',
+        env: {PATH: '/usr/bin:/bin', DRY_RUN: 'true', KAZOO_BUILD_ROOT: '/unused-fixture-build', MONSTER_UI_APPS_LIST: 'acdc'}});
+    assert.equal(dryRun.status, 0, 'Actual dry-run branch must return before initialization or build: ' + dryRun.stderr);
+    assert(install.lastIndexOf('configure_monster_ui_nginx') < install.indexOf('run nginx -t'));
     assert(install.indexOf('run nginx -t') < install.indexOf('service_enable_restart nginx.service'));
 });
 
@@ -179,8 +188,12 @@ test('Only the inferred fresh HTTP endpoint changes; saved or explicitly configu
     }
 });
 function verifyTransport(host, apiResult) {
+    const web = fs.mkdtempSync('/tmp/monster-transport-wiring.');
+    fs.mkdirSync(path.join(web, 'js'));
+    for (const [file, bytes] of Object.entries({'index.html': '<html>fixture</html>', 'js/main.js': 'main', 'js/config.js': 'config'}))
+        fs.writeFileSync(path.join(web, file), bytes);
     const stubs = `
-set -eu
+set -euo pipefail
 die() { printf 'REJECT %s\\n' "$*" >&2; exit 42; }
 log() { :; }
 stat() { printf '600:root\\n'; }
@@ -188,16 +201,22 @@ curl() {
     case "\${@: -1}" in
         */apps/acdc/language-capabilities.json) printf '404' ;;
         */v2/) printf '%s' "$FAKE_API_RESULT" ;;
-        https://*) printf '<html>fixture</html>' ;;
+        */index.html|*/js/main.js|*/js/config.js)
+            local asset="\${@: -1}"; asset="\${asset#*://}"; asset="\${asset#*/}"
+            cat -- "$MONSTER_UI_WEB_ROOT/$asset"; printf '\\n200' ;;
+        https://ui.fixture.invalid/|http://127.0.0.1/)
+            cat -- "$MONSTER_UI_WEB_ROOT/index.html"; printf '\\n200' ;;
         http://ui.fixture.invalid/) printf '308 https://ui.fixture.invalid/' ;;
-        http://127.0.0.1/) printf '<html>fixture</html>' ;;
         *) return 99 ;;
     esac
 }
 `;
-    return cp.spawnSync('bash', ['--noprofile', '--norc', '-s'], {encoding: 'utf8', timeout: 10000,
-        input: stubs + functionSource('verify_monster_ui_transport') + '\nverify_monster_ui_transport\n',
-        env: {PATH: '/usr/bin:/bin', KAZOO_PUBLIC_HOSTNAME: host, MONSTER_UI_WEB_ROOT: '/nonexistent-kazoo-test-web-root', FAKE_API_RESULT: apiResult}});
+    try {
+        return cp.spawnSync('bash', ['--noprofile', '--norc', '-s'], {encoding: 'utf8', timeout: 10000,
+            input: stubs + functionSource('verify_monster_ui_transport') + '\nverify_monster_ui_transport\n',
+            env: {PATH: '/usr/bin:/bin', KAZOO_PUBLIC_HOSTNAME: host, KAZOO_PUBLIC_IP: '192.0.2.10',
+                MONSTER_UI_WEB_ROOT: web, FAKE_API_RESULT: apiResult}});
+    } finally { fs.rmSync(web, {recursive: true, force: true}); }
 }
 test('Real transport verification rejects HTML200 and upstream5xx while allowing an unauthenticated Crossbar JSON error', () => {
     for (const host of ['', 'ui.fixture.invalid']) {
