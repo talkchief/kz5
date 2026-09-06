@@ -21,6 +21,7 @@ readonly CARRIER_PORT=16060
 readonly FIXTURE_MARKER=kazoo-acdc-callback-local-v1
 
 ACTION=verify
+FIXTURE_STAGE=initialization
 CANCEL_ORIGINAL_CALL_ID=
 MASTER_TOKEN=
 MASTER_ACCOUNT_ID=
@@ -35,7 +36,7 @@ FIXTURE_ORIGINAL_QUEUE=
 
 fixture_usage() {
     cat <<'EOF'
-Usage: sudo ./scripts/test-acdc-callback-fixture.sh setup|setup-retry|verify|evidence|cleanup
+Usage: sudo ./scripts/test-acdc-callback-fixture.sh preflight|setup|setup-retry|verify|evidence|cleanup
        sudo ./scripts/test-acdc-callback-fixture.sh cancel-original CALL_ID
 
 setup    Create an exact-prefix, account-local SIP resource on 127.0.0.30:16060,
@@ -43,6 +44,7 @@ setup    Create an exact-prefix, account-local SIP resource on 127.0.0.30:16060,
          settings on the isolated acceptance queue.
 setup-retry Same owned fixture with two attempts, 15-second ring timeout and
             15-second retry delay for the busy-agent/unanswered-retry test.
+preflight Read-only SUP connectivity/module check before setup or agent writes.
 verify   Read-only validation of the saved fixture and its ownership markers.
 evidence Read-only, secret-free durable callback projection for acceptance gates.
 cleanup Restore the exact queue snapshot and delete only marked fixture objects.
@@ -56,7 +58,7 @@ is base64 data (not shell syntax), root:root 0600, and contains no credentials.
 EOF
 }
 
-fixture_die() { printf '[kazoo-callback-fixture] ERROR: %s\n' "$*" >&2; exit 1; }
+fixture_die() { printf '[kazoo-callback-fixture] ERROR stage=%s: %s\n' "${FIXTURE_STAGE:-initialization}" "$*" >&2; exit 1; }
 fixture_log() { printf '[kazoo-callback-fixture] %s\n' "$*"; }
 
 parse_fixture_args() {
@@ -68,7 +70,7 @@ parse_fixture_args() {
     fi
     (($# == 1)) || { fixture_usage; fixture_die 'Choose exactly setup, verify, evidence, or cleanup'; }
     case $1 in
-        setup|setup-retry|verify|evidence|cleanup) ACTION=$1 ;;
+        preflight|setup|setup-retry|verify|evidence|cleanup) ACTION=$1 ;;
         -h|--help) fixture_usage; exit 0 ;;
         *) fixture_usage; fixture_die "Unknown action: $1" ;;
     esac
@@ -265,8 +267,31 @@ reload_local_resources() {
     local account_arg output
     printf -v account_arg '<<"%s">>' "$ACCEPTANCE_ACCOUNT_ID"
     output=$(timeout 20 sup -e stepswitch_maintenance reload_resources "$account_arg" </dev/null 2>&1) || \
-        fixture_die 'stepswitch local resource reload failed'
-    [[ $output != *exception* && $output != *error* ]] || fixture_die 'stepswitch local resource reload returned an error'
+        fixture_die 'reason=sup-reload-failed; local fixture may be partially configured; inspect protected state and SUP connectivity before retry; no automatic rollback'
+    [[ $output == ok ]] || fixture_die 'reason=sup-reload-unexpected-reply; local fixture may be partially configured; retained for review'
+}
+
+fixture_sup_preflight() {
+    local output beam_path resolved_path
+    FIXTURE_STAGE=sup-preflight
+    # Erlang/SUP needs its ordinary execution environment. Do not invent or
+    # change HOME, expose a cookie, or run a resource reload as a health probe.
+    [[ -n ${HOME:-} ]] || fixture_die 'reason=missing-home; validation environment must preserve the configured HOME; no fixture or agent writes started'
+    # SUP treats non-ok results from *_maintenance modules as exit 2, even
+    # successful module_info replies. code:which/1 avoids that exit convention
+    # while still proving the required stepswitch module is available.
+    output=$(timeout 15 sup -e code which stepswitch_maintenance </dev/null 2>&1) || \
+        fixture_die 'reason=sup-connectivity; verify protected SUP configuration, node health and guard environment; no fixture or agent writes started'
+    [[ $output =~ ^\"(/[A-Za-z0-9._/-]+/stepswitch_maintenance\.beam)\"$ ]] || \
+        fixture_die 'reason=sup-unexpected-reply; expected quoted absolute stepswitch BEAM path; no fixture or agent writes started'
+    beam_path=${BASH_REMATCH[1]}
+    # Kazoo's real code path can contain scripts/../applications. Resolve that
+    # authenticated metadata path without evaluating or executing its contents.
+    resolved_path=$(timeout 5 readlink -e -- "$beam_path" 2>/dev/null) || \
+        fixture_die 'reason=sup-unexpected-reply; stepswitch BEAM path cannot be resolved; no fixture or agent writes started'
+    [[ $resolved_path =~ ^/[A-Za-z0-9._/-]+/stepswitch_maintenance\.beam$ && -f $resolved_path && ! -L $resolved_path ]] || \
+        fixture_die 'reason=sup-unexpected-reply; expected regular stepswitch BEAM file; no fixture or agent writes started'
+    # Never print raw SUP output: errors may contain configuration or credentials.
 }
 
 verify_fixture() {
@@ -487,6 +512,8 @@ cancel_original_callback() {
 
 setup_fixture() {
     local response
+    fixture_sup_preflight
+    FIXTURE_STAGE=setup-scope
     if [[ -n $FIXTURE_ACCOUNT_ID && $FIXTURE_ACCOUNT_ID != "$ACCEPTANCE_ACCOUNT_ID" ]]; then
         fixture_die 'Existing callback fixture belongs to another tenant; clean it with the matching acceptance state'
     fi
@@ -499,14 +526,22 @@ setup_fixture() {
             fixture_die 'Refusing unexpected queue document during fixture setup'
         FIXTURE_ORIGINAL_QUEUE=$(jq -c '.data' <<<"$response")
     fi
+    FIXTURE_STAGE=setup-snapshot
     save_fixture_state
+    FIXTURE_STAGE=setup-outbound-number
     create_owned_number "$ENCODED_OUTBOUND_CALLER_ID" "$OUTBOUND_CALLER_ID"
+    FIXTURE_STAGE=setup-callback-number
     create_owned_number "$ENCODED_CALLBACK_NUMBER" "$CALLBACK_NUMBER"
+    FIXTURE_STAGE=setup-local-resource
     create_local_resource
+    FIXTURE_STAGE=setup-queue-policy
     configure_acceptance_queue
+    FIXTURE_STAGE=setup-resource-reload
     reload_local_resources
+    FIXTURE_STAGE=setup-verification
     verify_fixture
     if [[ $ACTION == setup-retry ]]; then
+        FIXTURE_STAGE=setup-retry-policy-readback
         response=$(api_request GET "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID")
         jq -e '.data.callback.max_attempts==2 and .data.callback.originate_timeout==15 and
                .data.callback.retry_delay==15' <<<"$response" >/dev/null || \
@@ -560,9 +595,11 @@ main_fixture() {
     umask 077
     ((EUID == 0)) || fixture_die 'Run as root'
     parse_fixture_args "$@"
+    if [[ $ACTION == preflight ]]; then fixture_sup_preflight; fixture_log 'PASS: read-only SUP prerequisite; no API, fixture or agent writes'; return; fi
     load_acceptance_state
     load_fixture_state
     if [[ $ACTION == evidence ]]; then callback_evidence; return; fi
+    FIXTURE_STAGE=authentication
     authenticate_master
     case $ACTION in
         setup|setup-retry) setup_fixture ;;

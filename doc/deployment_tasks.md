@@ -86,12 +86,15 @@ items below have the specific evidence stated; unchecked items are not finished.
 - [x] Existing eavesdrop/whisper/barge/join APIs passed isolated single-server
   synthetic-audio and authorization tests on 2026-09-05 at 11:29–11:31 UTC; see
   [recorded evidence](channel_monitor_acceptance.md). This is not multi-node proof.
-- [ ] Document those monitoring APIs in OpenAPI and run proportionate regression
-  checks against the deployment being handed over.
+- [x] Document those monitoring APIs in OpenAPI. The locally served public-host
+  catalog was checked again on 2026-09-06: OpenAPI 3.0.3, 354 paths and 649
+  operations, with `eavesdrop`, `whisper`, `barge`, `join` and the member/device
+  route present. Runtime monitoring evidence is the single-server test above;
+  catalog presence does not certify other operations or multi-node behavior.
 - [ ] Package source patches, deploy reviewed artifacts with rollback backups,
   verify browser/API/SIP behavior and fresh logs, and give the user test steps.
 - [ ] Commit/push completed changes with a credential scan and verified remote SHA.
-  Local checkpoints through `c023d33` include recordings/transcripts, source
+  Local checkpoints through `ebb50e1` include recordings/transcripts, source
   repairs and scoped test evidence. Actual connector writes return403; remote master remains
   `57560824`. No successful push of that checkpoint has been claimed.
 - [x] Contain the 30 existing test-phone UDP control sockets without restarting

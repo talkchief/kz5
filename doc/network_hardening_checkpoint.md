@@ -48,6 +48,16 @@ chain/rule before deleting that exact table. Never flush the ruleset or remove
 unrelated rules. Removing it before the phones restart with loopback controls
 would restore the observed host-level exposure.
 
+## Post-incident fixture recovery — 2026-09-06
+
+The separately reviewed zero-call fixture recovery at 00:12–00:14 restarted only
+the stalled test-phone supervisor. All 30 phones now have verified loopback SIP,
+RTP and control listeners; their one-agent roster and statuses were preserved.
+At 01:30 UTC the same supervisor PID still reported 30/30 registered phones.
+The narrow runtime rule remains in place. The process-identity signal hardening
+committed in `ebb50e1` has not been activated inside that already-running shell;
+its owned-child acceptance is not a supervisor-renewal claim.
+
 ## Still open
 
 Other public listeners require an explicit deployment network policy, not an

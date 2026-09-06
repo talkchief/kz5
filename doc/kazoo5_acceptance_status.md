@@ -1,6 +1,6 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-06 00:50 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-06 01:30 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
 
 ## Host memory incident and deployment hold
@@ -21,9 +21,24 @@ native Sass/RE2 rebuild and native smoke, but Gulp then failed on incorrectly
 resolved dependencies. A corrected private lock passed clean CI with 1,130
 required dependency nodes, native rebuild and smoke. Full Gulp progressed to
 JavaScript minification but failed V8 heap limits at both 192 and 256 MiB. Neither
-failure was a cgroup OOM. A separate-process minification build is being tested
-within the unchanged hard resource cap. The live UI was not replaced. A usable clean build remains required;
-no provenance marker is being changed to hide these failed build gates.
+failure was a cgroup OOM. The subsequent isolated default optimizer also exceeded
+its V8 heap. A supported low-memory profile now disables Uglify compression while
+retaining its pinned parser, mangler and output generator. One complete production
+build using that explicit profile exited zero under the unchanged hard resource
+cap and preserved all 73 scoped AMD module registrations/dependency lists/order.
+This changes the optimization tradeoff; it is not byte-equivalent to the default
+optimizer. Its outer benchmark exited one because a freshly generated template
+bundle did not match a prior run's hash. The prior raw bytes were not retained,
+so that historical comparison remains inconclusive. Independent current-artifact
+verification and deployment are still pending. The live UI was not replaced and
+no provenance marker is being changed to hide earlier failed build gates.
+
+At 01:22 UTC, a fresh production compile and all 31 current-source editor/path
+backend tests passed under the guard (144.489 seconds, 142,401,536-byte peak,
+zero cgroup OOM events, no live RPC/API writes). At 01:25 UTC, the fixed-two-module
+deployment bridge passed an actual old/new/old BEAM roundtrip in a disposable,
+non-distributed VM and refused loading through an occupied-old-code gate.
+These are deployment prerequisites, not production activation or new UI proof.
 
 ## Post-incident callback retry — 2026-09-06 00:43–00:49 UTC
 
@@ -54,6 +69,19 @@ by Erlang/SUP. That failure and its possible setup writes are retained. The
 [guard repair and read-only verification](validation_resource_guard.md) are
 committed in `c023d33`; the callback pass is the subsequent run, not a relabeling
 of the failed attempt.
+
+The callback runners now execute a bounded read-only SUP/module preflight before
+agent or fixture setup writes. Its first implementation incorrectly used a
+`*_maintenance:module_info` probe: SUP intentionally returns exit 2 for non-`ok`
+maintenance replies. The corrected `code:which` probe validates the quoted path
+and canonical regular BEAM target, including this installation's `scripts/../`
+layout. All 25 mock cases, scoped ShellCheck and one actual guarded preflight
+passed; the earlier failed preflight is retained separately. The resource reload
+still requires its real `ok` return and reports its exact failure stage without
+printing raw SUP output. This preflight does not itself make or verify a call.
+Transcript-backed receipts are under
+`/usr/local/src/kazoo5-installer/callback-preflight-private.uQaMq0/`; they are
+post-execution records of tool output, not original streamed log files.
 
 ## Queue editor and standalone-apps checkpoint
 

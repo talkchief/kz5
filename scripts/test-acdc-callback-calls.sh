@@ -301,6 +301,7 @@ assert_callback_rtp() {
 
 run_callback_acceptance() {
     local cores_before since
+    callback_fixture preflight || die 'Callback SUP prerequisite failed before fixture or agent writes'
     STATUS_AGENT_MAX=${STATE[ACCEPTANCE_AGENT_COUNT]}
     agent_status logout 1 "$STATUS_AGENT_MAX"
     FIXTURE_CREATED=true

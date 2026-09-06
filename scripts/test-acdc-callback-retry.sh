@@ -301,6 +301,7 @@ retry_wait_checked() {
 
 retry_run() {
     local since cores before snapshot
+    callback_fixture preflight || die 'Callback SUP prerequisite failed before fixture or agent writes'
     snapshot=$(retry_snapshot) || die 'Native channel inventory unavailable'
     jq -e '.row_count==0' <<<"$snapshot" >/dev/null || die 'Live retry requires zero active calls at entry'
     before=$(systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p ActiveState -p MainPID -p NRestarts)
