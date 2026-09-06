@@ -103,8 +103,11 @@ guard (256 MiB cap, 768 MiB reserve, 300-second deadline).
 This step did **not** activate runtime media mappings, change queue configuration,
 deploy the canonical backend, restart services, or prove live playback. The
 receipt deliberately reports runtime/full-position readiness as false.
-Canonical callback integration remains uncommitted in the worktree and needs
-its corrected current-source test rerun. Do not tell the user the new callbacks
+Canonical callback integration passed81 current-source tests; the subsequently
+found fixed-inventory projection bug was reproduced and corrected, with20
+focused tests passing afterward. All63 production modules compiled afterward.
+See `doc/acdc_canonical_callback_acceptance.md` for exact source identities and
+scope. Do not tell the user the new callbacks
 are ready to test until matching source/media are deployed and verified.
 
 A fresh earlier live probe found a critical discrepancy: the loaded
@@ -115,12 +118,13 @@ queue paths used it. A forced rebuild before source reconciliation could regress
 the live behavior. **Do not blindly reverse old aggregate patches**: preserve
 the newer scheduler, ownership and agent-recovery fixes.
 
-Canonical work now in progress covers strict exact system-media paths for the
+Canonical work now implemented covers strict exact system-media paths for the
 three auxiliary responses; bounded 20-second playback/21-second feedback;
 correlated completion/terminal events; callback fixed-message and telephone
 readback integration for all five languages; returned-call language; and
-pre-resolved callback offer selection. It must pass the new **current-source**
-harness before deployment. The historical `test-acdc-gemini-runtime.sh`
+pre-resolved callback offer selection. The new **current-source** harness has
+passed; coherent native/backend/UI deployment and live acceptance remain open.
+The historical `test-acdc-gemini-runtime.sh`
 reconstructs an older patched baseline and is not proof of this new code.
 
 Actual service names include `kazoo-apps`, `kazoo-ecallmgr`,
@@ -136,6 +140,7 @@ All eight were observed active. Activity alone does not establish readiness.
 | Commit `6bddf71` | Installer forced Erlang rebuild, targeted number/MIME regeneration and same-invocation content-drift refusal. `doc/installer_build_identity.md` |
 | Commit `08bf317` | Initial central handoff, immutable voice contract and navigation links |
 | Commit `0904240` | 45 supplemental recordings, provenance, 210-asset lookup/import/receipt/mapping support and installer regressions; local, not pushed |
+| Commit `81b7c15` | Canonical five-language callback integration, bounded auxiliary feedback, initial-deadline preservation, fixed-projection correction and tests; not deployed |
 | `/tmp/kazoo-force-recompile.8X2lwo/receipt.json` | 12 private real Make/compiler/readback commands |
 | `/tmp/kazoo-generated-rebuild.a46KIZ/receipt.json` | Seven groups /17 real private generator/compiler commands; no downloads |
 | Session 46576, exit 0 | Build snapshot + ecallmgr reuse + complete installer dry-run smoke |
@@ -144,7 +149,10 @@ All eight were observed active. Activity alone does not establish readiness.
 | Session 84007, partial pass then exit 1 | Actual 45-WAV verification, deterministic210 map and210-asset import tests passed; installer fixture still supplied old asset arguments and failed |
 | Session 60775, exit 0 | Rerun after fixing fixture supplemental arguments: all13 installer scenarios passed, including missing assets, no-effect dry run, create-only import, verify-only and failure-before-deployment. Traces: `/tmp/kazoo-gemini-installer-tests.b2nWlC` |
 | Session 19674, exit 0 | Actual installer media import and byte verification of210 assets on this host; receipt path above. No backend/mapping activation |
-| Agent session 30693, exit 1 | Current production/TEST compilation passed;64 tests passed and16 success tests failed on a legacy `get_prompt/2` mock mismatch. This run was not externally resource-guarded. Fixture and additional regressions were changed afterward; a fresh guarded run is still required |
+| Agent session 30693, exit 1 | Current production/TEST compilation passed;64 tests passed and16 success tests failed on a legacy `get_prompt/2` mock mismatch. This run was not externally resource-guarded. Corrected guarded rerun53629 passed; do not count30693 as a pass |
+| Session53629, exit0 | Corrected current-source callback suite:81 tests passed; see canonical callback acceptance for input hash and scope |
+| Sessions78039/15466 | Expanded fixed-media projection regression failed before count correction, then all20 focused media tests passed afterward |
+| Session90582, exit0 | All63 production ACDC modules compiled with-Werror/noTEST and unchanged inputs; pure EN/ES cardinal catalog passed29,344 compositions without provider access |
 
 Temporary receipt paths are local evidence and may not survive a new server.
 The durable test implementations and explanatory documents are in Git/worktree.
@@ -155,16 +163,19 @@ Update this section with final outcomes rather than deleting failed evidence.
 1. The installer210 regression passed; run the main installer smoke again after
    final integration changes. Never restart a still-running job just because an
    observation timed out.
-2. Finish/review the canonical callback changes and run
+2. Preserve/review the accepted canonical callback changes and rerun
    `scripts/test-acdc-gemini-canonical-callback.sh`, callback feedback/menu,
-   caller/announcement regressions and production compilation. The agent has
-   finished its edits; no test job remains running. Unverified amendments fix
-   the success mock, add built-in success coverage, capture the initial deadline
-   and manager monitor before media preflight, and pin harness/header inputs.
+   caller/announcement regressions and production compilation after further
+   coupled changes. The corrected success fixture, built-in success coverage,
+   early deadline/manager-monitor regression and input pins passed in53629;
+   subsequent fixed-count correction passed focused verification in15466.
 3. Complete the UI adoption/readiness contract. Existing hidden prompt fields
    preserve overrides despite the simplified display. Delete obsolete prompt
    references in the persisted queue when adopting built-in defaults, and test
    the API's merge/deletion behavior: `{}` can recursively preserve old values.
+   Both the unified editor merge and normal Crossbar queue PATCH remove null
+   keys: null on the wire is a deletion marker, not a value to retain. Add a
+   persisted-document regression when updating this behavior.
    **Do not blindly persist `callback.return_confirmation_prompt: null` or
    `callback.media.returned_confirmation: null`: current helper code treats
    these as explicit invalid configuration and fails closed.** Either ensure
@@ -172,7 +183,11 @@ Update this section with final outcomes rather than deleting failed evidence.
    null-as-deletion semantics at that boundary. Do not delete media documents.
 4. Finish the prerecorded position-number catalog/compositor for all five
    languages, generate missing release artifacts once, and verify natural
-   playback. Do not enable a full-language capability based on native SAY.
+   playback. `doc/acdc_prerecorded_cardinal_design.md` records the finite catalog
+   design and unresolved linguistic gates. `scripts/acdc-cardinal-catalog.cjs`
+   is a tested pure EN/ES full-range building block, not runtime integration or
+   recorded assets; FR/HE/AR remain required. Do not enable a full-language
+   capability based on native SAY.
 5. Verify the imported receipt and activate the targeted mappings with validated
    node/hostname settings; deploy the coherent backend/UI
    and native media fixes, and run the actual key-6/30-second-offer/confirmation/
@@ -180,11 +195,12 @@ Update this section with final outcomes rather than deleting failed evidence.
 6. Continue the remaining task register; voice completion alone does not close
    the original platform goal.
 
-Ownership at this checkpoint: `native_audio_path_audit` has handed back canonical
-callback source/tests and stopped editing; root owns their review, guarded rerun
-and integration. `media_prerequisites` is examining the full-range cardinal
-composition design. Inspect current agent status/messages before overlapping
-edits. Root owns importer/map/installer/docs and release integration.
+Ownership at this checkpoint: `native_audio_path_audit` handed back canonical
+callback source/tests and now owns the queue-language UI/editor adoption tests;
+root released the serialized validation window to that agent after90582.
+`media_prerequisites` handed back the finite-cardinal design and pure EN/ES
+implementation/tests. Inspect current agent status/messages before overlapping
+edits. Root owns source review, importer/map/installer/docs and release integration.
 
 ### Safe next-agent verification commands
 
