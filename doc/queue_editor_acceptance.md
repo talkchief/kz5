@@ -1,5 +1,8 @@
 # Unified queue editor acceptance — 2026-09-05
 
+This is a historical live checkpoint, not acceptance of the latest source.
+The source-only 2026-09-06 acknowledgement repair is recorded below.
+
 The English selection repair is deployed and the isolated live API sequence
 passed at 22:50–22:51 UTC. This is not complete platform certification.
 
@@ -52,3 +55,42 @@ and tamper detection pass. The initial HTTP byte-check wrapper hit its default
 the served schema, coverage and manifest exactly, without another deployment.
 The local browser regression loaded all 649 operations with eight requests,
 zero external requests/errors, disabled API execution and no token persistence.
+
+## 2026-09-06 — bulk acknowledgement repair, source only
+
+The previous completion classifier ignored extra malformed/foreign result rows
+and accepted empty revision strings. Three regression cases failed before the
+fix (session `39639`); seven duplicate/missing-result and lost-reply/receipt
+controls already passed. The fix now requires exactly one successful result
+with a nonempty revision for every planned user before advancing to the route
+phase. Ambiguous outcomes retain the existing partial receipt and require a
+fresh read; they do not trigger automatic retries or rollback.
+
+Session `68783` passed all 41 editor/manifest tests after the fix, including
+all ten new cases. The fixture datastore really applies its in-memory user
+changes before simulating lost replies. Tests compare persisted/public
+`committed`, `in_flight` and `remaining`, then verify the fresh roster/revisions,
+unchanged route and absence of a second bulk write. All three production
+modules compiled with `-Werror`; the eight recorded direct inputs were
+unchanged during the run. Existing dependency BEAMs were not freshly rebuilt.
+
+Both runs used network isolation, a 180-second guard, 384 MiB memory and 768 MiB
+reserve. Retained private evidence:
+
+- Before: `/tmp/kazoo-queue-editor-test.7PWgis/eunit.log`, SHA-256
+  `29e392604a8b34d8774f2d86c5bd746a69be44ee22a6f29d2987ac860ac63b92`.
+- After: `/tmp/kazoo-queue-editor-test.lLqc7w/eunit.log`, SHA-256
+  `6adcaa7b80e5589b7d44efdfa77962f017033ee1efac602ec27a6f0eb9d642f9`.
+- Fixed editor source SHA-256:
+  `590570cb7c99a286ecdb74c68545dce784a6bcadc5ed2fb2f30e8b19026c6767`.
+
+Run `scripts/test-acdc-queue-editor.sh` for the full suite or `--bulk-only` for
+the ten-case matrix, through the resource guard. No service was reloaded or
+restarted for this checkpoint. Authorization providers remain doubles in this
+suite; real restricted-token coverage, deployment and live failure injection
+are separate acceptance gates. OpenAPI retains the dated historical live
+record but explicitly marks the latest revision as not live verified.
+The refreshed repository API catalog passed generation (`43015`) and the full
+offline deterministic-rebuild/tamper/schema suite (`78714`): 354 paths,
+649 operations, 477 schemas and 1,548 internal references. This does not deploy
+the backend or imply that the public portal already serves these new bytes.

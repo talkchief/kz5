@@ -115,7 +115,7 @@ historical screens. Exact references and API/data requirements are in
 
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
-| ACDC-01 | OPEN — API + UI | Unified queue create/edit/read: complete bounded catalogs, revision/conflict handling, authorization, safe replay and explicit partial-write recovery. Prior isolated tests passed; restricted-token/roster-failure coverage remains. |
+| ACDC-01 | ACTIVE — auth/deployment acceptance | Unified queue create/edit/read. Queue recovery UI `8c11030` passes 15 source-browser cases. Backend malformed/foreign-extra/empty-revision acknowledgement bugs reproduced, fixed, then all 41 editor/manifest tests passed (`68783`), including partial/lost replies, persisted receipts, fresh roster/revisions and no automatic resend. Real restricted-token controls and current-revision live/deployment acceptance remain required. |
 | ACDC-02 | OPEN — UI | Reliable Callflows ACDC action and internal extension routing; dropdowns instead of technical free-text fields; default prompt selection must not trigger required-field errors. Preserve existing customer recordings. |
 | ACDC-03 | OPEN — ACDC | Verify/build supported ring strategies: ring-all, ordered, round-robin and existing alternatives. Resolve simultaneous-answer/DTMF exit ownership candidates; test fairness, single winner and cleanup. |
 | VOICE-01 | OPEN — media + UI | Finalize EN/HE/AR/FR/ES prompt-language override, queue/call/account defaults and reseller/sub-account inheritance; report incomplete packs rather than enabling unverified choices. |

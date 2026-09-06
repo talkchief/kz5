@@ -98,13 +98,32 @@ pipeline_test_() -> {foreach, fun setup/0, fun teardown/1,
      fun(_T) -> fun language_readiness_batch/0 end,
      fun(_T) -> fun legacy_language_readiness_batch/0 end]}.
 
+%% One setup for this bounded failure matrix. Each case resets the in-memory
+%% documents/counters; no production node or token participates.
+bulk_outcomes_test_() -> {setup, fun setup/0, fun teardown/1, fun(_T) ->
+    [{"bulk acknowledgement: malformed extra row", fun() -> bulk_ack_case(malformed_extra) end},
+     {"bulk acknowledgement: foreign error row", fun() -> bulk_ack_case(foreign_extra) end},
+     {"bulk acknowledgement: duplicate selected row", fun() -> bulk_ack_case(duplicate_ack) end},
+     {"bulk acknowledgement: missing selected row", fun() -> bulk_ack_case(missing_ack) end},
+     {"bulk acknowledgement: empty revision", fun() -> bulk_ack_case(empty_revision) end},
+     {"lost bulk reply after actual roster commits", fun lost_bulk_reply_after_commit/0},
+     {"bulk error before any roster commits", fun bulk_error_before_commit/0},
+     {"partial roster commits then receipt persistence failure", fun partial_receipt_failure/0},
+     {"all roster commits then receipt persistence failure", fun completed_roster_receipt_failure/0},
+     {"partial receipt persisted but its reply was lost", fun partial_receipt_lost_reply/0}]
+end}.
+
+reset_documents(T) ->
+    ets:delete_all_objects(T),
+    ets:insert(T, [{kz_doc:id(D), D} || D <- [queue(), user(?U, [?Q, ?R]), user(?V, [?R]), route()]]),
+    ets:insert(T, [{writes, []}, {bulk_mode, success}, {auth_mode, allow}, {limit_mode, false}, {save_mode, success}]).
+
 setup() ->
     T = ets:new(editor_test, [named_table, public]),
     lists:foreach(fun(M) -> ok = meck:new(M, [no_link]) end,
                   [kz_datamgr, crossbar_bindings, kz_auth_scope, kapps_config, cb_queues, cb_callflows,
                    crossbar_doc, knm_converters, cb_modules_util]),
-    ets:insert(T, [{kz_doc:id(D), D} || D <- [queue(), user(?U, [?Q, ?R]), user(?V, [?R]), route()]]),
-    ets:insert(T, [{writes, []}, {bulk_mode, success}, {auth_mode, allow}, {limit_mode, false}, {save_mode, success}]),
+    reset_documents(T),
     meck:expect(crossbar_bindings, pmap, fun(Event, Payload) ->
         case {binary:match(Event, <<"allowed_scopes">>), binary:match(Event, <<"authorize.">>)} of
             {{_, _}, _} -> [[<<"editor-test-scope">>]];
@@ -139,14 +158,7 @@ setup() ->
         end
     end),
     meck:expect(kz_datamgr, save_doc, fun(_, D) -> save(D) end),
-    meck:expect(kz_datamgr, save_docs, fun(_, Docs) ->
-        Results = lists:map(fun(D) ->
-            case lookup(bulk_mode) =:= partial andalso kz_doc:id(D) =:= ?V of
-                true -> j([{<<"id">>, ?V}, {<<"error">>, <<"conflict">>}]);
-                false -> {ok, Saved} = save(D), Saved
-            end
-        end, Docs), {ok, Results}
-    end),
+    meck:expect(kz_datamgr, save_docs, fun bulk_save/2),
     meck:expect(cb_queues, validate, fun(C) -> validate_queue(C, undefined) end),
     meck:expect(cb_queues, validate, fun(C, Id) -> validate_queue(C, Id) end),
     meck:expect(cb_queues, put, fun save_context/1),
@@ -168,6 +180,28 @@ setup() ->
 teardown(T) -> lists:foreach(fun meck:unload/1, [kz_datamgr, crossbar_bindings, kz_auth_scope, kapps_config, cb_queues, cb_callflows,
                                                crossbar_doc, knm_converters, cb_modules_util]), ets:delete(T).
 lookup(K) -> [{_, V}] = ets:lookup(editor_test, K), V.
+bulk_save(_, Docs) ->
+    case lookup(bulk_mode) of
+        error_before_commit -> {error, timeout};
+        Mode ->
+            Results = lists:map(fun(D) ->
+                case Mode =:= partial andalso kz_doc:id(D) =:= ?V of
+                    true -> j([{<<"id">>, ?V}, {<<"error">>, <<"conflict">>}]);
+                    false ->
+                        {ok, Saved} = save(D),
+                        j([{<<"id">>, kz_doc:id(Saved)}, {<<"rev">>, kz_doc:revision(Saved)}])
+                end
+            end, Docs),
+            case Mode of
+                lost_after_commit -> {error, timeout};
+                malformed_extra -> {ok, Results ++ [j([{<<"unexpected">>, true}])]};
+                foreign_extra -> {ok, Results ++ [j([{<<"id">>, ?R}, {<<"error">>, <<"conflict">>}])]};
+                duplicate_ack -> {ok, Results ++ [hd(Results)]};
+                missing_ack -> {ok, [R || R <- Results, kz_doc:id(R) =/= ?V]};
+                empty_revision -> {ok, [case kz_doc:id(R) of ?V -> kz_json:set_value(<<"rev">>, <<>>, R); _ -> R end || R <- Results]};
+                _ -> {ok, Results}
+            end
+    end.
 save(D) ->
     Id = kz_doc:id(D), Existing = case ets:lookup(editor_test, Id) of [] -> undefined; [{_, X}] -> X end,
     case Existing =:= undefined orelse kz_doc:revision(Existing) =:= kz_doc:revision(D) of
@@ -255,6 +289,130 @@ partial_bulk_and_safe_retry() ->
     ?assertEqual([?R], kz_json:get_value(<<"queues">>, lookup(?V))),
     Writes = lookup(writes), Retry = prepared(B, ?Q),
     ?assertEqual(409, cb_context:resp_error_code(Retry)), ?assertEqual(Writes, lookup(writes)).
+
+reset_bulk_case() ->
+    reset_documents(editor_test),
+    meck:reset(kz_datamgr), meck:reset(cb_callflows),
+    meck:expect(kz_datamgr, save_doc, fun(_, D) -> save(D) end).
+
+%% These cases deliberately assert rejection against the production public
+%% execute path. A malformed success acknowledgement must not reach the route
+%% write, even when the fixture datastore already committed both user docs.
+bulk_ack_case(Mode) ->
+    reset_bulk_case(),
+    B = kz_json:set_value(<<"route">>, j([{<<"extension">>, <<"2098">>}]), body(?Q)),
+    P = prepared(B, ?Q), ?assertEqual(success, cb_context:resp_status(P)),
+    ets:insert(editor_test, {bulk_mode, Mode}),
+    Result = cb_acdc_queue_editor:execute(P),
+    ?assertEqual(409, cb_context:resp_error_code(Result)),
+    Data = cb_context:resp_data(Result),
+    ?assertEqual(<<"roster">>, kz_json:get_value(<<"phase">>, Data)),
+    ?assertEqual(false, kz_json:get_value(<<"atomic">>, Data)),
+    ?assertEqual(true, kz_json:get_value(<<"reload_required">>, Data)),
+    ?assertEqual([?U, ?V], lists:sort(kz_json:get_list_value(<<"in_flight">>, Data))),
+    ?assertEqual([<<"roster">>, <<"route">>, <<"finalize_extensions">>], kz_json:get_value(<<"remaining">>, Data)),
+    ?assertNot(lists:any(fun(E) -> lists:member(kz_json:get_value(<<"phase">>, E), [<<"roster">>, <<"route">>]) end,
+                        kz_json:get_list_value(<<"committed">>, Data))),
+    ?assertEqual(route(), lookup(?R)),
+    ?assertEqual(2, length(extension_docs())),
+    ?assert(lists:all(fun(D) -> kz_json:get_value(<<"state">>, D) =:= <<"reserved">> end, extension_docs())),
+    assert_actual_roster_and_fresh_get([?V], [?U, ?V]),
+    assert_retry_read_only(B).
+
+lost_bulk_reply_after_commit() ->
+    reset_bulk_case(), B = body(?Q), ets:insert(editor_test, {bulk_mode, lost_after_commit}),
+    Result = cb_acdc_queue_editor:execute(prepared(B, ?Q)),
+    assert_roster_receipt(Result, <<"running">>, []),
+    assert_actual_roster_and_fresh_get([?V], [?U, ?V]), assert_retry_read_only(B).
+
+bulk_error_before_commit() ->
+    reset_bulk_case(), B = body(?Q), ets:insert(editor_test, {bulk_mode, error_before_commit}),
+    Result = cb_acdc_queue_editor:execute(prepared(B, ?Q)),
+    assert_roster_receipt(Result, <<"running">>, []),
+    assert_actual_roster_and_fresh_get([?U], []), assert_retry_read_only(B).
+
+partial_receipt_failure() ->
+    reset_bulk_case(), B = body(?Q), ets:insert(editor_test, {bulk_mode, partial}),
+    meck:expect(kz_datamgr, save_doc, fun(_, D) ->
+        case {kz_doc:type(D), kz_json:get_value(<<"state">>, D)} of
+            {<<"acdc_queue_editor_operation">>, <<"partial">>} -> {error, timeout};
+            _ -> save(D)
+        end
+    end),
+    Result = cb_acdc_queue_editor:execute(prepared(B, ?Q)),
+    assert_roster_receipt(Result, <<"running">>, []),
+    assert_actual_roster_and_fresh_get([], [?U]), assert_retry_read_only(B).
+
+completed_roster_receipt_failure() ->
+    reset_bulk_case(), B = body(?Q),
+    meck:expect(kz_datamgr, save_doc, fun(_, D) ->
+        case {kz_doc:type(D), kz_json:get_value(<<"phase">>, D), kz_json:get_value(<<"in_flight">>, D)} of
+            {<<"acdc_queue_editor_operation">>, <<"roster">>, []} -> {error, timeout};
+            _ -> save(D)
+        end
+    end),
+    Result = cb_acdc_queue_editor:execute(prepared(B, ?Q)),
+    assert_roster_receipt(Result, <<"running">>, []),
+    assert_actual_roster_and_fresh_get([?V], [?U, ?V]), assert_retry_read_only(B).
+
+partial_receipt_lost_reply() ->
+    reset_bulk_case(), B = body(?Q), ets:insert(editor_test, {bulk_mode, partial}),
+    meck:expect(kz_datamgr, save_doc, fun(_, D) ->
+        Saved = save(D),
+        case {kz_doc:type(D), kz_json:get_value(<<"state">>, D)} of
+            {<<"acdc_queue_editor_operation">>, <<"partial">>} -> {error, timeout};
+            _ -> Saved
+        end
+    end),
+    Result = cb_acdc_queue_editor:execute(prepared(B, ?Q)),
+    assert_roster_receipt(Result, <<"partial">>, [?U]),
+    assert_actual_roster_and_fresh_get([], [?U]), assert_retry_read_only(B).
+
+assert_roster_receipt(Result, State, PartialIds) ->
+    ?assertEqual(409, cb_context:resp_error_code(Result)), Data = cb_context:resp_data(Result),
+    ?assertEqual(<<"roster">>, kz_json:get_value(<<"phase">>, Data)),
+    ?assertEqual(State, kz_json:get_value(<<"state">>, Data)),
+    ?assertEqual(?Q, kz_json:get_value(<<"queue_id">>, Data)),
+    ?assertEqual(false, kz_json:get_value(<<"atomic">>, Data)),
+    ?assertEqual(true, kz_json:get_value(<<"reload_required">>, Data)),
+    ?assertEqual([?U, ?V], lists:sort(kz_json:get_list_value(<<"in_flight">>, Data))),
+    ?assertEqual([<<"roster">>, <<"route">>], kz_json:get_value(<<"remaining">>, Data)),
+    QueueCommit = j([{<<"phase">>, <<"queue">>}, {<<"ids">>, [?Q]}]),
+    Expected = case State of
+        <<"partial">> -> [QueueCommit, j([{<<"phase">>, <<"roster_partial">>}, {<<"ids">>, PartialIds}])];
+        <<"running">> -> [QueueCommit]
+    end,
+    ?assertEqual(Expected, kz_json:get_value(<<"committed">>, Data)),
+    Receipt = lookup(kz_json:get_value(<<"operation_id">>, Data)),
+    lists:foreach(fun(Key) -> ?assertEqual(kz_json:get_value(Key, Receipt), kz_json:get_value(Key, Data)) end,
+        [<<"queue_id">>, <<"state">>, <<"phase">>, <<"committed">>, <<"in_flight">>, <<"remaining">>]),
+    ?assertEqual(route(), lookup(?R)).
+
+assert_actual_roster_and_fresh_get(ExpectedRoster, ChangedUsers) ->
+    ?assertEqual(<<"Edited">>, kz_json:get_value(<<"name">>, lookup(?Q))),
+    ?assertNotEqual(?REV, kz_doc:revision(lookup(?Q))),
+    lists:foreach(fun(Id) ->
+        ExpectedQueues = case lists:member(Id, ExpectedRoster) of true -> [?Q, ?R]; false -> [?R] end,
+        ?assertEqual(ExpectedQueues, kz_json:get_value(<<"queues">>, lookup(Id))),
+        ?assertEqual(lists:member(Id, ChangedUsers), kz_doc:revision(lookup(Id)) =/= ?REV)
+    end, [?U, ?V]),
+    Writes = lookup(writes),
+    Fresh = cb_acdc_queue_editor:get(cb_context:set_req_verb(context(), <<"GET">>), ?Q),
+    ?assertEqual(success, cb_context:resp_status(Fresh)), Data = cb_context:resp_data(Fresh),
+    ?assertEqual(lists:sort(ExpectedRoster), lists:sort(kz_json:get_value(<<"roster">>, Data))),
+    ?assertEqual(kz_doc:revision(lookup(?Q)), kz_json:get_value([<<"revisions">>, <<"queue">>], Data)),
+    lists:foreach(fun(Id) ->
+        ?assertEqual(kz_doc:revision(lookup(Id)), kz_json:get_value([<<"revisions">>, <<"users">>, Id], Data))
+    end, [?U, ?V]),
+    ?assertEqual(kz_doc:revision(lookup(?R)), kz_json:get_value([<<"revisions">>, <<"callflows">>, ?R], Data)),
+    ?assertEqual(Writes, lookup(writes)),
+    ?assertNot(meck:called(cb_callflows, put, '_')), ?assertNot(meck:called(cb_callflows, post, '_')).
+
+assert_retry_read_only(B) ->
+    Writes = lookup(writes), BulkCalls = meck:num_calls(kz_datamgr, save_docs, '_'),
+    ?assertEqual(1, BulkCalls), Retry = prepared(B, ?Q),
+    ?assertEqual(409, cb_context:resp_error_code(Retry)),
+    ?assertEqual(Writes, lookup(writes)), ?assertEqual(BulkCalls, meck:num_calls(kz_datamgr, save_docs, '_')).
 
 lost_queue_reply() ->
     B = body(?Q), ets:insert(editor_test, {save_mode, lost_queue}), Result = cb_acdc_queue_editor:execute(prepared(B, ?Q)),

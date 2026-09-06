@@ -63,9 +63,12 @@ async function offline() {
     for (const [url, method] of [['/accounts/{ACCOUNT_ID}/queues/editor', 'put'], ['/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/editor', 'patch']]) {
         assert(spec.paths[url].get.responses['200']);
         assert(spec.paths[url][method].responses['409']);
-        assert.equal(spec.paths[url][method]['x-implementation-status'], 'implemented-in-source; isolated-live-verified-2026-09-05');
+        assert.equal(spec.paths[url][method]['x-implementation-status'], 'implemented-in-source; latest-revision-not-live-verified');
+        assert.equal(spec.paths[url].get['x-implementation-status'], 'implemented-in-source; latest-revision-not-live-verified');
+        assert(spec.paths[url][method]['x-live-verification'].coverage.includes('Historical checkpoint'));
         assert.equal(spec.paths[url][method]['x-live-verification'].host, 'kz5.talkchief.io');
     }
+    assert(spec.components.schemas.QueueEditorRecovery.description.includes('nonempty revision'));
     assert(spec.paths['/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks']);
     assert(spec.paths['/accounts/{ACCOUNT_ID}/queues/editor'].put.responses['201']);
     assert.equal(spec.components.schemas.QueueEditorSnapshot.required.includes('language_capabilities'), false);

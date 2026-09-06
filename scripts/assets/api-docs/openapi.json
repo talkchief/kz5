@@ -22264,11 +22264,11 @@
         "x-source-file": "applications/acdc/src/cb_acdc_queue_editor.erl",
         "x-runtime-verification": "Source review only unless explicitly noted in the operation description.",
         "description": "The queue editor rechecks authorization and token scope for each embedded queues/users/media/phone_numbers/callflows operation. Access to queues alone does not grant access to those other resources. Roster writes use the existing queues/{QUEUE_ID}/roster POST authority. GET returns safe bounded catalogs for dropdowns and a revision snapshot. Never clear selections because a catalog is incomplete. Writes coordinate separate CouchDB documents using an operation receipt; they are explicitly NON-ATOMIC. Managed route operations CAS-reserve at most the old and target extensions before settings writes, and finalize reservations only after a confirmed route write. These reservations prevent two aggregate writers claiming one extension; direct legacy callflow writers do not participate and remain outside that guarantee. Reservations never expire or permit automatic takeover. There is no automatic rollback or automatic resume. After a partial or ambiguous failure, reload with GET editor and inspect committed/in_flight/remaining/extension_claims; do not blindly retry or generate a new request_id. An identical completed request replays its recorded result; an incomplete replay returns 409, and changed content under the same key returns 409. A create queue ID is deterministic from tenant, authenticated owner and request_id. After success reload the editor. This contract exists in the current source; deployment and live end-to-end acceptance must be checked separately.",
-        "x-implementation-status": "implemented-in-source; isolated-live-verified-2026-09-05",
+        "x-implementation-status": "implemented-in-source; latest-revision-not-live-verified",
         "x-live-verification": {
           "host": "kz5.talkchief.io",
           "date": "2026-09-05",
-          "coverage": "Authenticated live browser: one editor GET, zero catalog fanout, zero JS/HTTP errors. This records one host/date, not every deployment."
+          "coverage": "Historical checkpoint, not certification of the latest source revision. Authenticated live browser: one editor GET, zero catalog fanout, zero JS/HTTP errors. This records one host/date, not every deployment."
         }
       },
       "put": {
@@ -22450,11 +22450,11 @@
             }
           }
         },
-        "x-implementation-status": "implemented-in-source; isolated-live-verified-2026-09-05",
+        "x-implementation-status": "implemented-in-source; latest-revision-not-live-verified",
         "x-live-verification": {
           "host": "kz5.talkchief.io",
           "date": "2026-09-05",
-          "coverage": "Isolated test tenant: create/edit including explicit English selection, exact replay, changed-request-ID conflict, stale revision rejection, managed route removal and exact-CAS fixture cleanup. No agent changes. Restricted-token, cross-node and partial-write recovery coverage remain separate."
+          "coverage": "Historical checkpoint, not certification of the latest source revision or the later bulk-acknowledgement repair. Isolated test tenant: create/edit including explicit English selection, exact replay, changed-request-ID conflict, stale revision rejection, managed route removal and exact-CAS fixture cleanup. No agent changes. Restricted-token, cross-node and partial-write recovery coverage remain separate."
         }
       }
     },
@@ -22560,11 +22560,11 @@
         "x-source-file": "applications/acdc/src/cb_acdc_queue_editor.erl",
         "x-runtime-verification": "Source review only unless explicitly noted in the operation description.",
         "description": "The queue editor rechecks authorization and token scope for each embedded queues/users/media/phone_numbers/callflows operation. Access to queues alone does not grant access to those other resources. Roster writes use the existing queues/{QUEUE_ID}/roster POST authority. GET returns safe bounded catalogs for dropdowns and a revision snapshot. Never clear selections because a catalog is incomplete. Writes coordinate separate CouchDB documents using an operation receipt; they are explicitly NON-ATOMIC. Managed route operations CAS-reserve at most the old and target extensions before settings writes, and finalize reservations only after a confirmed route write. These reservations prevent two aggregate writers claiming one extension; direct legacy callflow writers do not participate and remain outside that guarantee. Reservations never expire or permit automatic takeover. There is no automatic rollback or automatic resume. After a partial or ambiguous failure, reload with GET editor and inspect committed/in_flight/remaining/extension_claims; do not blindly retry or generate a new request_id. An identical completed request replays its recorded result; an incomplete replay returns 409, and changed content under the same key returns 409. A create queue ID is deterministic from tenant, authenticated owner and request_id. After success reload the editor. This contract exists in the current source; deployment and live end-to-end acceptance must be checked separately.",
-        "x-implementation-status": "implemented-in-source; isolated-live-verified-2026-09-05",
+        "x-implementation-status": "implemented-in-source; latest-revision-not-live-verified",
         "x-live-verification": {
           "host": "kz5.talkchief.io",
           "date": "2026-09-05",
-          "coverage": "Authenticated live browser: one editor GET, zero catalog fanout, zero JS/HTTP errors. This records one host/date, not every deployment."
+          "coverage": "Historical checkpoint, not certification of the latest source revision. Authenticated live browser: one editor GET, zero catalog fanout, zero JS/HTTP errors. This records one host/date, not every deployment."
         }
       },
       "patch": {
@@ -22731,11 +22731,11 @@
             }
           }
         },
-        "x-implementation-status": "implemented-in-source; isolated-live-verified-2026-09-05",
+        "x-implementation-status": "implemented-in-source; latest-revision-not-live-verified",
         "x-live-verification": {
           "host": "kz5.talkchief.io",
           "date": "2026-09-05",
-          "coverage": "Isolated test tenant: create/edit including explicit English selection, exact replay, changed-request-ID conflict, stale revision rejection, managed route removal and exact-CAS fixture cleanup. No agent changes. Restricted-token, cross-node and partial-write recovery coverage remain separate."
+          "coverage": "Historical checkpoint, not certification of the latest source revision or the later bulk-acknowledgement repair. Isolated test tenant: create/edit including explicit English selection, exact replay, changed-request-ID conflict, stale revision rejection, managed route removal and exact-CAS fixture cleanup. No agent changes. Restricted-token, cross-node and partial-write recovery coverage remain separate."
         }
       }
     },
@@ -50008,7 +50008,7 @@
           "reload_required"
         ],
         "additionalProperties": false,
-        "description": "A lost final receipt-write reply can produce HTTP409 with a reread state/phase of complete; inspect the exact operation before deciding whether to retry. Missing acknowledgements do not prove a write failed. Extension claims may remain reserved after partial or ambiguous failures and require explicit recovery, without expiry or automatic takeover."
+        "description": "A lost final receipt-write reply can produce HTTP409 with a reread state/phase of complete; inspect the exact operation before deciding whether to retry. Missing acknowledgements do not prove a write failed. Roster completion requires exactly one successful acknowledgement with a nonempty revision for every planned user; malformed, extra, duplicate or incomplete acknowledgements cannot advance to the route phase. After an ambiguous outcome, in_flight may contain users whose changes actually committed; reload the editor to obtain current roster and revisions, without automatically resending the operation. Extension claims may remain reserved after partial or ambiguous failures and require explicit recovery, without expiry or automatic takeover."
       },
       "MemberDeviceRegistration": {
         "type": "object",

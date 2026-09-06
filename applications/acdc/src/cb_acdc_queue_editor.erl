@@ -729,9 +729,11 @@ execute_claimed(Context, Plan, Receipt0) ->
             Updated = [kz_doc:update_pvt_parameters(U, cb_context:db_name(Context), [{account_id, cb_context:account_id(Context)}]) || U <- Users],
             case kz_datamgr:save_docs(cb_context:db_name(Context), Updated) of
                 {ok, Results} ->
-                    Good = [kz_doc:id(R) || R <- Results, kz_json:get_value(<<"error">>, R) =:= undefined,
-                             is_binary(kz_doc:revision(R)), lists:member(kz_doc:id(R), UserIds)],
-                    case lists:sort(Good) =:= lists:sort(UserIds) of
+                    Good = [kz_doc:id(R) || R <- Results, kz_json:is_json_object(R),
+                             kz_json:get_value(<<"error">>, R) =:= undefined,
+                             is_binary(kz_doc:revision(R)), byte_size(kz_doc:revision(R)) > 0,
+                             lists:member(kz_doc:id(R), UserIds)],
+                    case length(Results) =:= length(UserIds) andalso lists:sort(Good) =:= lists:sort(UserIds) of
                         true -> ok;
                         false ->
                             _ = record_partial(Context, Receipt3, Good),
