@@ -12,16 +12,20 @@ This repository checkpoint is not a production-ready certification. Consult
 some packaged source fixes have passed isolated tests but still await live
 rollout/acceptance, and the additional announcement languages are unfinished.
 
-The parent repository deliberately ignores downloaded upstream component
-trees. Their modifications are shipped as installer-applied patches, including
-complete `acdc-kazoo5-integration.patch`, `crossbar-kazoo5-integration.patch` and
-`ecallmgr-kazoo5-integration.patch`; the installer applies one aggregate per
-overlapping source stack so reinstallation does not fail on superseded hunks.
-Feature patches alongside them are historical review/test provenance, not an
-additional stack to apply manually. After developing in those component trees,
-run `node scripts/refresh-kazoo-integration-patches.cjs --write`, then `--check`
-and the relevant tests before committing the parent repository. This makes the
-changes available from a fresh clone instead of only on the current server.
+ACDC is directly tracked in this repository under `applications/acdc`. Commit
+its source and tests to **kz5**, never to a nested ACDC repository. Installation
+uses that bundled source; `acdc-kazoo5-integration.patch` and retained ACDC feature
+patches are historical compatibility/test fixtures, not patches to reapply to
+the installed ACDC tree.
+
+Other downloaded upstream component trees remain ignored by the parent
+repository. Their modifications ship as installer-applied patches, including
+`crossbar-kazoo5-integration.patch` and `ecallmgr-kazoo5-integration.patch`, with
+one aggregate per overlapping source stack. After developing in those downloaded
+trees, run `node scripts/refresh-kazoo-integration-patches.cjs --write`, then
+`--check` and relevant tests before committing kz5. This command does not replace
+direct ACDC source commits. Final reviewed delivery targets the `master` branch;
+local commits alone are not proof that a fresh remote clone contains the fixes.
 
 After a successful installation, the script saves deployment inputs in
 `/etc/kazoo/deployment.env`, owned by root with mode `0600`. This includes
@@ -291,7 +295,9 @@ sudo KAZOO_PUBLIC_IP=10.20.0.14 \
   ./scripts/install-kazoo5.sh kamailio
 
 # ui1.example.net
-sudo KAZOO_API_URL=http://apps1.example.net:8000/v2/ \
+sudo KAZOO_API_URL=http://ui1.example.net/v2/ \
+  KAZOO_API_UPSTREAM=http://apps1.example.net:8000/v2/ \
+  KAZOO_WEBSOCKET_UPSTREAM=http://apps1.example.net:5555/websocket \
   ./scripts/install-kazoo5.sh monster-ui
 ```
 
@@ -409,12 +415,14 @@ compatibility set and re-run all acceptance checks.
 
 ### Optional browser integrations
 
-The installer preserves existing static public source `src/js/config.js` settings,
-including custom integrations, instead of resetting them to upstream defaults.
-Keep persistent custom settings in that source file under the Monster UI build
-directory; edits made only to generated live `js/config.js` are not imported
-automatically and will be replaced by a rebuild. Executable
-configuration hooks that cannot be preserved as static settings fail explicitly.
+The ownership-preserving installer uses existing public live configuration as
+an input and preserves operator settings outside its explicit API/socket/branding
+changes. Builds occur in a private source stage, not by resetting the live tree.
+Do not edit an old build directory expecting that to change the live deployment.
+Executable configuration hooks that cannot be safely preserved as static
+settings fail explicitly; an existing installation without ownership evidence
+requires the reviewed adoption workflow, not an unconditional overwrite. See
+[ownership and configuration migration](monster_ui_preserving_install.md).
 The generated same-origin socket URL chooses `ws` on HTTP and `wss` on HTTPS;
 nginx forwards the exact `/websocket` path to Blackhole. A standalone UI host
 must set `KAZOO_WEBSOCKET_UPSTREAM` to its reachable Kazoo apps server. HTTPS
