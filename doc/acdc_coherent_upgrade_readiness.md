@@ -75,9 +75,67 @@ Evidence is retained at `/tmp/kazoo-acdc-otp-upgrade-run.pwSAjQ`. The same fixtu
 first passed privately in `95322`, retained at
 `/tmp/kazoo-acdc-otp-upgrade-run.S82T4S`.
 
-This closes the isolated OTP callback-lifecycle test gap, **not** installed-code
+This closes the isolated OTP callback-lifecycle test gap, **not** live installed-code
 replacement, listener upgrades, startup, downgrade, admission control or a
 coordinated multi-module live deployment. Those remain release gates.
+
+## Isolated actual two-version replacement
+
+Private session `66980` additionally passed four fresh-VM cases using actual
+legacy and current production BEAMs, compiled without `TEST`. The exact legacy
+source came from local Git commit
+`83194e7252f84ce72ce07c72f03c3956acdeb9d4` (FSM SHA-256
+`2424cf2f392edbde02bbdd3bceeccf436630f98ed1ded129813ba7125fdebf30`);
+that run's current source came from `6639f367f5ad13284f3997e085d89dfb7827a2a2`
+(FSM SHA-256 `6fbe5f6e000d93ef6324c432592ec1bf667cbe380e7ee88b8453d5b9cbecb23c`).
+Evidence remains at `/tmp/kazoo-acdc-two-version-run.bDglRT`: terminal exit zero,
+explicit completion, four case results and unchanged source/dependency inputs.
+
+Each VM runs a real legacy ready/paused status callback, suspends the process,
+replaces the actual module using non-purging `code:atomic_load/1`, and verifies
+both version paths/MD5s. The old-code slot must be absent before replacement;
+there is no third load or purge. Loading alone must leave the legacy tuple
+unchanged. Successful `sys:change_code` preserves the complete old prefix and
+pause timer, creates the new timer in the correct process, and remains
+idempotent before actual current-code resume/status checks. Residual-work and
+wrong-tag cases are refused with unchanged suspended state and no new timer;
+they are never resumed or reverse-loaded, only cleaned up as private fixtures.
+
+The same four-case proof is now available through a repository-relative retaining
+runner:
+
+```sh
+bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 \
+  --runtime-sec 180 -- /usr/bin/unshare --net -- \
+  bash scripts/test-acdc-agent-two-version-upgrade.sh
+```
+
+The historical Git objects must already be available locally; a shallow checkout
+or source export without them fails closed. The runner never fetches them.
+Prepared local Erlang/Lager libraries and generated ACDC includes are required,
+but an installed/live FSM BEAM is not. If an installed BEAM exists, it is only a
+preservation input. Each run snapshots and pins the **current working-tree** FSM
+and header; its recorded HEAD is context, not a substitute for source hashes.
+Both versions use the current pinned compiler/common dependencies, so this is
+not a recreation of the historical production build environment. The only
+fixture portability change from the accepted private version is an informational
+current-version tag; the four assertions and loading sequence are unchanged.
+The promoted runner's separate guarded session `41876` passed all four cases,
+with terminal exit zero, explicit completion and unchanged inputs. Evidence is
+retained at `/tmp/kazoo-acdc-two-version-run.uf5Yzq`. Its final source SHA-256 is
+`0671f0715751cd547ded4d309532f9cdfcf66637f67b1f32fbe4c2c02bb20994`;
+the fixture SHA-256 is
+`3a3f99574dfa953c75823a06eaf438a69b7a3f77987c60c8db88747998c37f4b`.
+Both the initial current-source snapshot and aggregate input hashes are checked
+on exit, preventing a change between those captures from being accepted.
+
+This closes the isolated actual old-to-new module replacement gap. The bootstrap
+still injects explicit state instead of running production initialization. It
+does **not** establish live installed-code replacement, listener upgrades,
+admission fencing, active-call migration, multi-node/coherent-module rollout, or
+a production rollback procedure.
+
+## Remaining activation gates
 
 The old FSM does not implement the reverse conversion. Listener record layouts are unchanged,
 but their actual OTP callback is `gen_listener`, whose code-change callback does
