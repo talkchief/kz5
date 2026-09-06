@@ -14,6 +14,7 @@ cd "$blackhole_test_root"
 blackhole_test_sources=(
     applications/blackhole/src/modules/bh_token_auth.erl
     applications/blackhole/src/bh_context.erl
+    applications/blackhole/src/bh_events.erl
     applications/blackhole/src/blackhole_bindings.erl
     applications/blackhole/src/blackhole_socket_callback.erl
     applications/blackhole/src/blackhole_data_emitter.erl
@@ -151,7 +152,7 @@ export KAZOO_BLACKHOLE_TEST_ROOT="$blackhole_test_root" KAZOO_BLACKHOLE_TEST_OUT
 erlc -Werror +debug_info -I "$blackhole_test_replay/src" -pa deps/lager/ebin \
     +'{parse_transform,lager_transform}' -o "$blackhole_test_production" \
     "${blackhole_test_replayed_sources[@]}" 2>&1 | tee "$blackhole_test_output/production-compile.log"
-printf 'PASS six production Blackhole modules compiled with -Werror and Lager transform\n' \
+printf 'PASS seven production Blackhole modules compiled with -Werror and Lager transform\n' \
     | tee -a "$blackhole_test_output/production-compile.log"
 # No Lager transform: the mock must observe raw format strings and arguments,
 # regardless of backend configuration/log level. No TEST or export_all defines.

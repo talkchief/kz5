@@ -1628,7 +1628,7 @@ apply_kazoo_integration_patch() (
     done
     local transition_app=$1 transition_new transition_old transition_delta
     local transition_source transition_relative transition_path
-    local transition_state transition_stage transition_intercept=''
+    local transition_state transition_stage transition_intercept='' transition_cleanup=''
     local transition_apply=()
     local transition_files=() transition_old_files=() transition_delta_files=()
     local transition_created_files=()
@@ -1637,9 +1637,11 @@ apply_kazoo_integration_patch() (
             transition_new=blackhole-kazoo5-integration.patch
             transition_old=blackhole-token-redaction.patch
             transition_delta=blackhole-redaction-to-integration.patch
-            transition_files=(src/blackhole_bindings.erl src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl)
+            transition_files=(src/blackhole_bindings.erl src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl
+                              src/bh_context.erl src/bh_events.erl)
             transition_old_files=(src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl)
             transition_delta_files=(src/blackhole_bindings.erl src/blackhole_socket_handler.erl)
+            transition_cleanup=blackhole-binding-cleanup.patch
             ;;
         crossbar)
             transition_new=crossbar-kazoo5-integration.patch
@@ -1682,11 +1684,13 @@ apply_kazoo_integration_patch() (
     transition_old="$SCRIPT_DIR/patches/$transition_old"
     transition_delta="$SCRIPT_DIR/patches/$transition_delta"
     [[ ! $transition_intercept ]] || transition_intercept="$SCRIPT_DIR/patches/$transition_intercept"
+    [[ ! $transition_cleanup ]] || transition_cleanup="$SCRIPT_DIR/patches/$transition_cleanup"
     if [[ $DRY_RUN == true ]]; then
         transition_safe_file "$transition_new"
         transition_safe_file "$transition_old"
         transition_safe_file "$transition_delta"
         [[ ! $transition_intercept ]] || transition_safe_file "$transition_intercept"
+        [[ ! $transition_cleanup ]] || transition_safe_file "$transition_cleanup"
         log "Would ensure $transition_app integration with private preflight; source state and preflight are unverified"
         return 0
     fi
@@ -1731,6 +1735,9 @@ apply_kazoo_integration_patch() (
     transition_check_inventory "$transition_new" "${transition_files[@]}"
     transition_check_inventory "$transition_old" "${transition_old_files[@]}"
     transition_check_inventory "$transition_delta" "${transition_delta_files[@]}"
+    if [[ $transition_cleanup ]]; then
+        transition_check_inventory "$transition_cleanup" src/bh_context.erl src/bh_events.erl
+    fi
     if [[ $transition_intercept ]]; then
         transition_check_inventory "$transition_intercept" kazoo_intercept.h kazoo_dptools.c mod_kazoo.h mod_kazoo.c
     fi
@@ -1759,6 +1766,20 @@ apply_kazoo_integration_patch() (
     elif git -C "$transition_source" apply --reverse --check "$transition_new" 2>/dev/null; then
         log "Required $transition_app integration is already current"
         return 0
+    elif [[ $transition_app == blackhole ]]; then
+        # The historical redaction->frame delta and callback cleanup affect
+        # disjoint files. Accept only whole reviewed deltas; private full-series
+        # reverse verification below still proves the token/base source state.
+        for transition_path in "$transition_delta" "$transition_cleanup"; do
+            if git -C "$transition_source" apply --check "$transition_path" 2>/dev/null; then
+                transition_apply+=("$transition_path")
+            elif ! git -C "$transition_source" apply --reverse --check "$transition_path" 2>/dev/null; then
+                die 'Source is neither the clean, current nor explicitly supported previous integration'
+            fi
+        done
+        [[ ${#transition_apply[@]} -gt 0 ]] ||
+            die 'Source is neither the clean, current nor explicitly supported previous integration'
+        transition_state=previous
     elif [[ $transition_app == mod_kazoo ]]; then
         # Namespace and atomic interception touch disjoint file sets. Existing
         # installations can have neither, either, or both reviewed additions.
@@ -1819,6 +1840,10 @@ apply_kazoo_integration_patch() (
     done
     sha256sum "$transition_new" "$transition_old" "$transition_delta" >"$transition_stage/patch-pins.sha256" ||
         die 'Cannot retain integration patch hashes'
+    if [[ $transition_cleanup ]]; then
+        sha256sum "$transition_cleanup" >>"$transition_stage/patch-pins.sha256" ||
+            die 'Cannot retain Blackhole cleanup patch hash'
+    fi
     if [[ $transition_intercept ]]; then
         sha256sum "$transition_intercept" >>"$transition_stage/patch-pins.sha256" ||
             die 'Cannot retain intercept patch hash'

@@ -21,6 +21,7 @@ transition_fixture_inputs=(
     "$transition_fixture_patches/crossbar-kazoo5-integration.patch"
     "$transition_fixture_patches/crossbar-kazoo5-before-frame.patch"
     "$transition_fixture_patches/crossbar-blackhole-frame-schema.patch"
+    "$transition_fixture_patches/blackhole-binding-cleanup.patch"
 )
 finish() {
     local status=$?
@@ -133,7 +134,8 @@ prepare_baseline() {
 
 select_app blackhole
 prepare_baseline "$transition_fixture_blackhole_ref" \
-    src/blackhole_bindings.erl src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl
+    src/blackhole_bindings.erl src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl \
+    src/bh_context.erl src/bh_events.erl
 select_app crossbar
 # The other four permitted Crossbar paths are genuinely absent in this commit;
 # the integration adds them. Do not manufacture placeholder files in baseline.
@@ -419,6 +421,24 @@ for app in blackhole crossbar; do
     expect_rejection wrong-transition-content
 done
 
-[[ $transition_fixture_count == 42 ]] || fail "unexpected case count: $transition_fixture_count"
+select_app blackhole
+new_case previous-frame-integration legacy
+git -C "$source_dir" apply "$script_dir/patches/$step_patch"
+expect_success previous-frame-integration
+
+new_case cleanup-before-frame legacy
+git -C "$source_dir" apply "$script_dir/patches/blackhole-binding-cleanup.patch"
+expect_success cleanup-before-frame
+
+new_case partial-binding-cleanup legacy
+git -C "$source_dir" apply "$script_dir/patches/$step_patch"
+git -C "$source_dir" apply --include=src/bh_context.erl "$script_dir/patches/blackhole-binding-cleanup.patch"
+expect_rejection partial-binding-cleanup
+
+new_case missing-binding-cleanup legacy
+mv -- "$script_dir/patches/blackhole-binding-cleanup.patch" "$work/withheld-cleanup.patch"
+expect_rejection missing-binding-cleanup
+
+[[ $transition_fixture_count == 46 ]] || fail "unexpected case count: $transition_fixture_count"
 printf 'PASS all %s bounded source-transition cases (no builds, services or network)\n' "$transition_fixture_count" \
     | tee -a "$transition_fixture_output/results.log"

@@ -179,3 +179,137 @@ index 26b80d0..72f6a61 100644
 +            lager:debug("failed to authenticate token auth"),
 +            bh_context:add_error(Context, <<"failed to authenticate token">>)
      end.
+diff --git a/src/bh_context.erl b/src/bh_context.erl
+index 69beaa8..71cef85 100644
+--- a/src/bh_context.erl
++++ b/src/bh_context.erl
+@@ -39,6 +39,7 @@
+         ,source/1, set_source/2
+         ,req_id/1, set_req_id/2
+         ,listeners/1, add_listeners/2, remove_listeners/2
++        ,binding_resources/1, set_binding_resources/2
+         ,set_resp_data/2, set_resp_status/2
+         ,resp_data/1, resp_status/1
+         ]).
+@@ -77,6 +78,8 @@
+                     ,resp_data :: kz_term:api_object() | '_'
+                     ,async_reply = 'false' :: boolean() | '_'
+                     ,authorized = 'false' :: boolean() | '_'
++                    %% Server-only ownership. Never read from or emitted to JSON.
++                    ,binding_resources = #{} :: map() | '_'
+                     }).
+ 
+ -type context() :: #bh_context{}.
+@@ -211,6 +214,13 @@ set_authorized(#bh_context{}=Context) ->
+ -spec bindings(context()) -> bindings().
+ bindings(#bh_context{bindings=Bds}) -> Bds.
+ 
++-spec binding_resources(context()) -> map().
++binding_resources(#bh_context{binding_resources=Resources}) -> Resources.
++
++-spec set_binding_resources(context(), map()) -> context().
++set_binding_resources(Context, Resources) when is_map(Resources) ->
++    Context#bh_context{binding_resources=Resources}.
++
+ -spec bindings_from_json(kz_json:object()) -> kz_term:ne_binaries().
+ bindings_from_json(JObj) ->
+     case kz_json:get_value(<<"binding">>, JObj) of
+diff --git a/src/bh_events.erl b/src/bh_events.erl
+index 8ea309f..64fd034 100644
+--- a/src/bh_events.erl
++++ b/src/bh_events.erl
+@@ -185,12 +185,17 @@ add_event_bindings_fold(#{requested := ClientBinding
+     Module = maps:get('module', Bindings, ?MODULE),
+     SessionBindings = bh_context:bindings(Context),
+     Subscribe = [{ClientBinding, AMQPBindings}] -- SessionBindings,
+-    NewListeners = Listeners -- bh_context:listeners(Context),
+-
+-    lists:foreach(fun(S) -> bh_bind(Context, Module, S) end, Subscribe),
+-    blackhole_listener:add_bindings(NewListeners),
+-    Ctx = bh_context:add_listeners(Context, NewListeners),
+-    {bh_context:set_bindings(Ctx, SessionBindings ++ Subscribe), Subs ++ Subscribe}.
++    case Subscribe of
++        [] -> {Context, Subs};
++        [Key] ->
++            OwnedListeners = lists:usort(Listeners),
++            NewListeners = OwnedListeners -- bh_context:listeners(Context),
++            bh_bind(Context, Module, Key),
++            blackhole_listener:add_bindings(NewListeners),
++            Resources = maps:put(Key, {Module, OwnedListeners}, bh_context:binding_resources(Context)),
++            Ctx = bh_context:set_binding_resources(bh_context:add_listeners(Context, NewListeners), Resources),
++            {bh_context:set_bindings(Ctx, SessionBindings ++ Subscribe), Subs ++ Subscribe}
++    end.
+ 
+ bh_bind(Context, Module, ClientBinding, AMQPBinding) ->
+     SessionPid = bh_context:websocket_pid(Context),
+@@ -227,15 +232,35 @@ remove_event_bindings_fold(#{requested := ClientBinding
+                           ,{Context, Subs}
+                           ) ->
+     SessionBindings = bh_context:bindings(Context),
+-    Removed = [{ClientBinding, AMQPBindings}],
+-
+-    bh_unbind(Context, {ClientBinding, AMQPBindings}),
+-    blackhole_listener:remove_bindings(Listeners),
+-    Ctx = bh_context:remove_listeners(Context, Listeners),
++    Key = {ClientBinding, AMQPBindings},
++    case lists:member(Key, SessionBindings) of
++        'false' -> {Context, Subs};
++        'true' ->
++            Resources = bh_context:binding_resources(Context),
++            {Module, OwnedListeners} = maps:get(Key, Resources, {?MODULE, Listeners}),
++            Remaining = lists:delete(Key, SessionBindings),
++            RemainingResources = maps:remove(Key, Resources),
++            %% Legacy manually constructed contexts may lack ownership entries.
++            %% Retain their listeners until close rather than remove a shared one.
++            Keep = remaining_listeners(Remaining, RemainingResources, bh_context:listeners(Context)),
++            Remove = [L || L <- lists:usort(OwnedListeners),
++                           lists:member(L, bh_context:listeners(Context)),
++                           not lists:member(L, Keep)],
++            bh_unbind(Context, Module, Key),
++            blackhole_listener:remove_bindings(Remove),
++            Ctx = bh_context:set_binding_resources(bh_context:remove_listeners(Context, Remove), RemainingResources),
++            {bh_context:set_bindings(Ctx, Remaining), Subs ++ [Key]}
++    end.
+ 
+-    {bh_context:set_bindings(Ctx, SessionBindings -- Removed), Subs ++ Removed}.
++remaining_listeners(Bindings, Resources, LegacyListeners) ->
++    lists:usort(lists:flatmap(fun(Key) ->
++        case maps:find(Key, Resources) of
++            {ok, {_, Owned}} -> Owned;
++            error -> LegacyListeners
++        end
++    end, Bindings)).
+ 
+-bh_unbind(Context, ClientBinding, AMQPBinding) ->
++bh_unbind(Context, Module, ClientBinding, AMQPBinding) ->
+     BHBinding = <<"blackhole.event.", AMQPBinding/binary>>,
+     SessionPid = bh_context:websocket_pid(Context),
+     SessionId = bh_context:websocket_session_id(Context),
+@@ -244,18 +269,23 @@ bh_unbind(Context, ClientBinding, AMQPBinding) ->
+                 ,session_pid => SessionPid
+                 ,session_id => SessionId
+                 },
+-    blackhole_bindings:unbind(BHBinding, ?MODULE, 'event', Binding).
++    blackhole_bindings:unbind(BHBinding, Module, 'event', Binding).
+ 
+-bh_unbind(Context, {ClientBinding, AMQPBindings}) ->
+-    lists:foreach(fun(B) -> bh_unbind(Context, ClientBinding, B) end, AMQPBindings).
++bh_unbind(Context, Module, {ClientBinding, AMQPBindings}) ->
++    lists:foreach(fun(B) -> bh_unbind(Context, Module, ClientBinding, B) end, AMQPBindings).
+ 
+ -spec close(bh_context:context()) -> bh_context:context().
+ close(Context) ->
+     Listeners = bh_context:listeners(Context),
+     blackhole_listener:remove_bindings(Listeners),
+     Bindings = bh_context:bindings(Context),
+-    lists:foreach(fun(B) -> bh_unbind(Context, B) end, Bindings),
++    Resources = bh_context:binding_resources(Context),
++    lists:foreach(fun(B) ->
++        {Module, _} = maps:get(B, Resources, {?MODULE, []}),
++        bh_unbind(Context, Module, B)
++    end, Bindings),
+     Routines = [{fun bh_context:remove_listeners/2, Listeners}
+                ,{fun bh_context:remove_bindings/2, Bindings}
++               ,{fun bh_context:set_binding_resources/2, #{}}
+                ],
+     bh_context:setters(Context, Routines).
