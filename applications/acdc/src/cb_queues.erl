@@ -75,6 +75,7 @@
 -define(EAVESDROP_PATH_TOKEN, <<"eavesdrop">>).
 -define(CALLBACKS_PATH_TOKEN, <<"callbacks">>).
 -define(EDITOR_PATH_TOKEN, <<"editor">>).
+-define(LIVE_PATH_TOKEN, <<"live">>).
 -define(MAX_CALLBACK_PAGE_SIZE, 100).
 
 -define(STAT_TIMESTAMP_PROCESSED, <<"finished_with_agent">>).
@@ -135,6 +136,8 @@ allowed_methods() ->
 -spec allowed_methods(path_token()) -> http_methods().
 allowed_methods(?STATS_PATH_TOKEN) ->
     [?HTTP_GET];
+allowed_methods(?LIVE_PATH_TOKEN) ->
+    [?HTTP_GET];
 allowed_methods(?EDITOR_PATH_TOKEN) ->
     [?HTTP_GET, ?HTTP_PUT];
 allowed_methods(?EAVESDROP_PATH_TOKEN) ->
@@ -145,6 +148,8 @@ allowed_methods(_QueueId) ->
 -spec allowed_methods(path_token(), path_token()) -> http_methods().
 allowed_methods(_QueueId, ?ROSTER_PATH_TOKEN) ->
     [?HTTP_GET, ?HTTP_POST, ?HTTP_DELETE];
+allowed_methods(_QueueId, ?LIVE_PATH_TOKEN) ->
+    [?HTTP_GET];
 allowed_methods(_QueueId, ?EDITOR_PATH_TOKEN) ->
     [?HTTP_GET, ?HTTP_PATCH];
 allowed_methods(_QueueId, ?CALLBACKS_PATH_TOKEN) ->
@@ -176,6 +181,7 @@ resource_exists(_) -> 'true'.
 
 -spec resource_exists(path_token(), path_token()) -> 'true'.
 resource_exists(_, ?ROSTER_PATH_TOKEN) -> 'true';
+resource_exists(_, ?LIVE_PATH_TOKEN) -> 'true';
 resource_exists(_, ?EDITOR_PATH_TOKEN) -> 'true';
 resource_exists(_, ?CALLBACKS_PATH_TOKEN) -> 'true';
 resource_exists(_, ?EAVESDROP_PATH_TOKEN) -> 'true'.
@@ -225,6 +231,8 @@ validate(Context, PathToken) ->
 
 validate_queue(Context, ?STATS_PATH_TOKEN, ?HTTP_GET) ->
     fetch_all_queue_stats(Context);
+validate_queue(Context, ?LIVE_PATH_TOKEN, ?HTTP_GET) ->
+    cb_acdc_live:get(Context, 'undefined');
 validate_queue(Context, ?EDITOR_PATH_TOKEN, ?HTTP_GET) ->
     cb_acdc_queue_editor:get(Context, 'undefined');
 validate_queue(Context, ?EDITOR_PATH_TOKEN, ?HTTP_PUT) ->
@@ -247,6 +255,8 @@ validate(Context, Id, Token) ->
 
 validate_queue_operation(Context, Id, ?ROSTER_PATH_TOKEN, ?HTTP_GET) ->
     load_agent_roster(Id, Context);
+validate_queue_operation(Context, Id, ?LIVE_PATH_TOKEN, ?HTTP_GET) ->
+    cb_acdc_live:get(Context, Id);
 validate_queue_operation(Context, Id, ?EDITOR_PATH_TOKEN, ?HTTP_GET) ->
     cb_acdc_queue_editor:get(Context, Id);
 validate_queue_operation(Context, Id, ?EDITOR_PATH_TOKEN, ?HTTP_PATCH) ->

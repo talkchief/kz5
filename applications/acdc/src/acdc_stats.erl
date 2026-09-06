@@ -152,6 +152,7 @@ call_table_opts() ->
 
 -define(BINDINGS, [{'self', []}
                   ,{?MODULE, []}
+                  ,{'acdc_dashboard', ['federate']}
                   ]).
 -define(RESPONDERS, [{{?MODULE, 'handle_call_stat'}
                      ,[{<<"acdc_call_stat">>, <<"waiting">>}
@@ -178,6 +179,9 @@ call_table_opts() ->
                      }
                     ,{{?MODULE, 'handle_average_wait_time_req'}
                      ,[{<<"acdc_stat">>, <<"average_wait_time_req">>}]
+                     }
+                    ,{{'acdc_dashboard_snapshot', 'handle_req'}
+                     ,[{<<"acdc_dashboard">>, <<"snapshot_req">>}]
                      }
                     ,{{'acdc_agent_stats', 'handle_status_query'}
                      ,[{<<"acdc_stat">>, <<"status_req">>}]
