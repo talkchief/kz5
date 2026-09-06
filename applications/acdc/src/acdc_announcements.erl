@@ -27,12 +27,15 @@
         ,schedule_wait_ms/2
         ,schedule_advance/4
         ,announcement_event/3
+        ,loop/1
+        ,drain_announcement_events/1
         ]).
 -endif.
 
 -include("acdc.hrl").
 
 -define(POSITION_LOOKUP_TIMEOUT_MS, 500).
+-define(MAX_PRE_PLAYBACK_EVENTS, 256).
 -ifdef(TEST).
 -define(PLAYBACK_WAIT_TIMEOUT_MS, 500).
 -else.
@@ -171,8 +174,18 @@ init_state(Manager, Call, Config) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec loop(map()) -> 'no_return'.
-loop(#{manager_monitor := Monitor}=State) ->
-    Wait = next_wait_ms(State),
+loop(State) ->
+    %% A receive with after 0 still consumes matching queued messages first.
+    %% Service an elapsed deadline explicitly, even when call events continue
+    %% arriving. In particular, stale events must not postpone fail-quiet
+    %% cleanup after a lost playback completion.
+    case next_wait_ms(State) of
+        0 -> loop(emit_announcements(State));
+        Wait -> wait_for_announcement_event(State, Wait)
+    end.
+
+-spec wait_for_announcement_event(map(), timeout()) -> 'no_return'.
+wait_for_announcement_event(#{manager_monitor := Monitor}=State, Wait) ->
     receive
         {'DOWN', Monitor, 'process', _, _} -> exit('normal');
         {'kapi', {_, _, JObj}} -> loop(handle_announcement_event(JObj, State));
@@ -214,10 +227,26 @@ emit_announcements(#{schedule := Schedule}=State) ->
     State2#{schedule := Next, pending_playback := Pending}.
 
 -spec drain_announcement_events(map()) -> map().
-drain_announcement_events(#{manager_monitor := Monitor}=State) ->
+drain_announcement_events(State) ->
+    drain_announcement_events(State, ?MAX_PRE_PLAYBACK_EVENTS).
+
+-spec drain_announcement_events(map(), non_neg_integer()) -> map().
+drain_announcement_events(#{manager_monitor := Monitor}=State, 0) ->
     receive
         {'DOWN', Monitor, 'process', _, _} -> exit('normal');
-        {'kapi', {_, _, JObj}} -> drain_announcement_events(handle_announcement_event(JObj, State))
+        {'kapi', {_, _, _}} ->
+            %% Do not play past an unchecked bridge/usurp/hangup buried in a
+            %% backlog. Stop only this temporary announcement worker, without
+            %% flushing media, hanging up the caller or restarting the worker.
+            lager:warning("queue announcements stopped after call event backlog limit"),
+            exit('normal')
+    after 0 -> State
+    end;
+drain_announcement_events(#{manager_monitor := Monitor}=State, Remaining) ->
+    receive
+        {'DOWN', Monitor, 'process', _, _} -> exit('normal');
+        {'kapi', {_, _, JObj}} ->
+            drain_announcement_events(handle_announcement_event(JObj, State), Remaining - 1)
     after 0 -> State
     end.
 

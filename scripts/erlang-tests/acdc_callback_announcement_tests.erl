@@ -221,3 +221,60 @@ worker_failure_lifecycle() ->
 stop(Pid, Ref) ->
     exit(Pid, shutdown),
     receive {'DOWN', Ref, process, Pid, shutdown} -> ok after 500 -> ?assert(false) end.
+
+expired_playback_does_not_drain_unrelated_backlog_test() ->
+    Parent = self(), Tag = make_ref(),
+    {Pid, Ref} = spawn_monitor(fun() ->
+        [self() ! unrelated_event || _ <- lists:seq(1, 128)],
+        State = #{manager_monitor => make_ref(),
+                  pending_playback => {<<"expired">>, erlang:monotonic_time(millisecond) - 1}},
+        try acdc_announcements:loop(State)
+        catch exit:Reason ->
+            Parent ! {Tag, Reason, process_info(self(), message_queue_len)}
+        end
+    end),
+    receive
+        {Tag, Reason, QueueLength} ->
+            ?assertEqual(normal, Reason),
+            ?assertEqual({message_queue_len, 128}, QueueLength)
+    after 1000 -> exit(Pid, kill), ?assert(false)
+    end,
+    receive {'DOWN', Ref, process, Pid, normal} -> ok after 1000 -> ?assert(false) end.
+
+pre_playback_event_drain_is_bounded_test() ->
+    Parent = self(), Tag = make_ref(), Call = call(),
+    {Pid, Ref} = spawn_monitor(fun() ->
+        %% Correctly scoped, nonterminal events: processing all of these is
+        %% unnecessary, and an endless producer must not trap the worker here.
+        [self() ! event(Call, <<"play">>, <<"irrelevant">>) || _ <- lists:seq(1, 1024)],
+        State = #{manager_monitor => make_ref(), call => Call, pending_playback => undefined},
+        Result = try acdc_announcements:drain_announcement_events(State) of
+                     _ -> returned
+                 catch exit:Reason -> Reason
+                 end,
+        Parent ! {Tag, Result, process_info(self(), message_queue_len)}
+    end),
+    receive
+        {Tag, Result, {message_queue_len, Remaining}} ->
+            ?assertEqual(normal, Result),
+            ?assert(Remaining >= 767)
+    after 1000 -> exit(Pid, kill), ?assert(false)
+    end,
+    receive {'DOWN', Ref, process, Pid, normal} -> ok after 1000 -> ?assert(false) end.
+
+pre_playback_event_drain_boundary_and_completion_test() ->
+    Parent = self(), Tag = make_ref(), Call = call(),
+    {Pid, Ref} = spawn_monitor(fun() ->
+        %% Exactly the budget is allowed; a correlated completion is applied.
+        [self() ! event(Call, <<"play">>, <<"irrelevant">>) || _ <- lists:seq(1, 255)],
+        self() ! event(Call, <<"noop">>, <<"ours">>),
+        State = #{manager_monitor => make_ref(), call => Call, pending_playback => {<<"ours">>, 42}},
+        Result = acdc_announcements:drain_announcement_events(State),
+        Parent ! {Tag, Result, process_info(self(), message_queue_len)}
+    end),
+    receive
+        {Tag, Result, {message_queue_len, 0}} ->
+            ?assertEqual(undefined, maps:get(pending_playback, Result))
+    after 1000 -> exit(Pid, kill), ?assert(false)
+    end,
+    receive {'DOWN', Ref, process, Pid, normal} -> ok after 1000 -> ?assert(false) end.
