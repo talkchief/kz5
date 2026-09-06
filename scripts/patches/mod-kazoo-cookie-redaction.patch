@@ -2,10 +2,7 @@ diff --git a/kazoo_api.c b/kazoo_api.c
 index 06039c3..ed99782 100644
 --- a/kazoo_api.c
 +++ b/kazoo_api.c
-@@ -137,7 +137,7 @@ static switch_status_t api_erlang_status(switch_stream_handle_t *stream) {
- 	ip_addr = switch_get_addr(ipbuf, sizeof (ipbuf), sa);
- 
- 	stream->write_function(stream, "Running %s\n", VERSION);
+@@ -140,4 +140,4 @@ static switch_status_t api_erlang_status(switch_stream_handle_t *stream) {
 -	stream->write_function(stream, "Listening for new Erlang connections on %s:%u with cookie %s\n", ip_addr, port, kazoo_globals.ei_cookie);
 +	stream->write_function(stream, "Listening for new Erlang connections on %s:%u\n", ip_addr, port);
  	stream->write_function(stream, "Registered as Erlang node %s, visible as %s\n", kazoo_globals.ei_cnode.thisnodename, kazoo_globals.ei_cnode.thisalivename);

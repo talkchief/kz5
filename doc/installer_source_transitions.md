@@ -5,12 +5,19 @@ previous integration patches as well as accepting clean and already-current
 sources. No extra deployment entry point or nested Git commit is required.
 ACDC remains directly tracked in kz5 and is not handled by these transitions.
 
-`apply_kazoo_integration_patch` accepts only `blackhole` or `crossbar`:
+`apply_kazoo_integration_patch` accepts `blackhole` or `crossbar`, plus
+`mod_kazoo` with an explicit canonical source-directory argument:
 
 | Family | Supported previous integration | Transition to current |
 | --- | --- | --- |
 | Blackhole | `blackhole-token-redaction.patch` | `blackhole-redaction-to-integration.patch` |
 | Crossbar | `crossbar-kazoo5-before-frame.patch` | `crossbar-blackhole-frame-schema.patch` |
+| mod_kazoo | `mod-kazoo-before-version.patch` | `mod-kazoo-version-namespace.patch` |
+
+The mod_kazoo extension and its aggregate-versus-individual-series verification
+are documented in [the version namespace correction](mod_kazoo_version_namespace.md).
+Session `33997` reran all 42 Blackhole/Crossbar cases successfully after that
+extension; evidence: `/tmp/kazoo-source-transition-tests.RhuupY`.
 
 The retained Crossbar previous patch is byte-identical to the aggregate at
 `63e6bf7` (SHA-256 `5ec8f080b30054404c2fe181f46ea6bfa5ccb98ec9f4cec49b73ef0ff32b05a3`).

@@ -1,0 +1,1410 @@
+diff --git a/kazoo_api.c b/kazoo_api.c
+index 96f9ff7..cff6bec 100644
+--- a/kazoo_api.c
++++ b/kazoo_api.c
+@@ -137,7 +137,7 @@ static switch_status_t api_erlang_status(switch_stream_handle_t *stream) {
+ 	ip_addr = switch_get_addr(ipbuf, sizeof (ipbuf), sa);
+ 
+ 	stream->write_function(stream, "Running %s\n", VERSION);
+-	stream->write_function(stream, "Listening for new Erlang connections on %s:%u with cookie %s\n", ip_addr, port, kazoo_globals.ei_cookie);
++	stream->write_function(stream, "Listening for new Erlang connections on %s:%u\n", ip_addr, port);
+ 	stream->write_function(stream, "Registered as Erlang node %s, visible as %s\n", kazoo_globals.ei_cnode.thisnodename, kazoo_globals.ei_cnode.thisalivename);
+ 
+ 	if (kazoo_globals.ei_compat_rel) {
+diff --git a/kazoo_commands.c b/kazoo_commands.c
+index 16f00ad..a2835c5 100644
+--- a/kazoo_commands.c
++++ b/kazoo_commands.c
+@@ -31,6 +31,8 @@
+  *
+  */
+ #include "mod_kazoo.h"
++#include <ctype.h>
++#include <errno.h>
+ #include <curl/curl.h>
+ #include <switch_curl.h>
+ 
+@@ -48,6 +50,383 @@
+ 
+ #define MAX_FIRST_OF 25
+ 
++#define KZ_ORIGINATE_DESC "Originate a call without reparsing quoted channel variables"
++#define KZ_ORIGINATE_SYNTAX "<request_uuid> <call url> <exten>|&<application_name>(<app_args>) [<dialplan>] [<context>] [<cid_name>] [<cid_num>] [<timeout_sec>]"
++#define KZ_ORIGINATE_CANCEL_DESC "Cancel an in-progress Kazoo originate"
++#define KZ_ORIGINATE_CANCEL_SYNTAX "<request_uuid>"
++#define KZ_ORIGINATE_RECONCILE_DESC "Query or cancel an exactly correlated Kazoo originate"
++#define KZ_ORIGINATE_RECONCILE_SYNTAX "<status|cancel> <request_uuid> <request_id> <caller_uuid>"
++#define KZ_ORIGINATE_REGISTRY_MAX 4096
++#define KZ_ORIGINATE_TOKEN_MAX 512
++#define KZ_ORIGINATE_TOMBSTONE_TTL_US (15LL * 60LL * 1000000LL)
++
++typedef enum {
++	KZ_ORIGINATE_PENDING = 0,
++	KZ_ORIGINATE_SETTLED_SUCCESS,
++	KZ_ORIGINATE_SETTLED_FAILURE
++} kz_originate_state_t;
++
++typedef struct kz_originate_entry_s {
++	char *request_uuid;
++	char *request_id;
++	char *caller_uuid;
++	char result_uuid[SWITCH_UUID_FORMATTED_LENGTH + 1];
++	switch_call_cause_t cancel_cause;
++	switch_call_cause_t result_cause;
++	kz_originate_state_t state;
++	switch_time_t completed_at;
++	struct kz_originate_entry_s *previous;
++	struct kz_originate_entry_s *next;
++} kz_originate_entry_t;
++
++static switch_hash_t *kz_originate_hash = NULL;
++static switch_mutex_t *kz_originate_mutex = NULL;
++static kz_originate_entry_t *kz_originate_entries = NULL;
++static size_t kz_originate_entry_count = 0;
++static char kz_originate_epoch[SWITCH_UUID_FORMATTED_LENGTH + 1] = { 0 };
++
++static switch_bool_t kz_originate_token_valid(const char *value)
++{
++	const unsigned char *cursor = (const unsigned char *)value;
++	size_t length = 0;
++
++	if (zstr(value)) return SWITCH_FALSE;
++	while (*cursor) {
++		if (*cursor <= 32 || *cursor == 127 || ++length > KZ_ORIGINATE_TOKEN_MAX) {
++			return SWITCH_FALSE;
++		}
++		cursor++;
++	}
++	return SWITCH_TRUE;
++}
++
++/* Preserve the quotes which protect spaces in Kazoo channel variables. */
++static char *kz_originate_action(char *dialstring)
++{
++	char quote = '\0';
++	int escaped = 0;
++	int square = 0, curly = 0, angle = 0;
++	char *p;
++
++	for (p = dialstring; p && *p; p++) {
++		if (escaped) {
++			escaped = 0;
++			continue;
++		}
++		if (*p == '\\') {
++			escaped = 1;
++			continue;
++		}
++		if (quote) {
++			if (*p == quote) quote = '\0';
++			continue;
++		}
++		if (*p == '\'' || *p == '"') {
++			quote = *p;
++			continue;
++		}
++
++		switch (*p) {
++		case '[': square++; break;
++		case ']': if (square) square--; break;
++		case '{': curly++; break;
++		case '}': if (curly) curly--; break;
++		case '<': angle++; break;
++		case '>': if (angle) angle--; break;
++		default: break;
++		}
++
++		if (!square && !curly && !angle && isspace((unsigned char)*p)) {
++			*p++ = '\0';
++			while (*p && isspace((unsigned char)*p)) p++;
++			return p;
++		}
++	}
++
++	return NULL;
++}
++
++static void kz_originate_entry_free(kz_originate_entry_t *entry)
++{
++	if (!entry) return;
++	switch_safe_free(entry->request_uuid);
++	switch_safe_free(entry->request_id);
++	switch_safe_free(entry->caller_uuid);
++	free(entry);
++}
++
++static void kz_originate_entry_delete(kz_originate_entry_t *entry)
++{
++	if (!entry) return;
++	switch_core_hash_delete(kz_originate_hash, entry->request_uuid);
++	if (entry->previous) entry->previous->next = entry->next;
++	else kz_originate_entries = entry->next;
++	if (entry->next) entry->next->previous = entry->previous;
++	if (kz_originate_entry_count) kz_originate_entry_count--;
++	kz_originate_entry_free(entry);
++}
++
++/* Called only with kz_originate_mutex held. Pending entries never expire. */
++static void kz_originate_expire_tombstones(void)
++{
++	kz_originate_entry_t *entry = kz_originate_entries;
++	switch_time_t now = switch_micro_time_now();
++
++	while (entry) {
++		kz_originate_entry_t *next = entry->next;
++		if (entry->state != KZ_ORIGINATE_PENDING && entry->completed_at > 0
++			&& now - entry->completed_at >= KZ_ORIGINATE_TOMBSTONE_TTL_US) {
++			kz_originate_entry_delete(entry);
++		}
++		entry = next;
++	}
++}
++
++static kz_originate_entry_t *kz_originate_register(const char *request_uuid,
++													 const char *request_id, const char *caller_uuid)
++{
++	kz_originate_entry_t *entry = NULL;
++
++	switch_mutex_lock(kz_originate_mutex);
++	kz_originate_expire_tombstones();
++	if (!switch_core_hash_find(kz_originate_hash, request_uuid)
++		&& kz_originate_entry_count < KZ_ORIGINATE_REGISTRY_MAX
++		&& (entry = calloc(1, sizeof(*entry))) != NULL) {
++		entry->request_uuid = strdup(request_uuid);
++		entry->request_id = request_id ? strdup(request_id) : NULL;
++		entry->caller_uuid = caller_uuid ? strdup(caller_uuid) : NULL;
++		if (!entry->request_uuid || (request_id && !entry->request_id)
++			|| (caller_uuid && !entry->caller_uuid)) {
++			kz_originate_entry_free(entry);
++			entry = NULL;
++		} else {
++			entry->state = KZ_ORIGINATE_PENDING;
++			entry->next = kz_originate_entries;
++			if (kz_originate_entries) kz_originate_entries->previous = entry;
++			kz_originate_entries = entry;
++			switch_core_hash_insert(kz_originate_hash, entry->request_uuid, entry);
++			kz_originate_entry_count++;
++		}
++	}
++	switch_mutex_unlock(kz_originate_mutex);
++
++	return entry;
++}
++
++static void kz_originate_settle(const char *request_uuid, kz_originate_state_t state,
++								const char *result_uuid, switch_call_cause_t result_cause)
++{
++	kz_originate_entry_t *entry;
++
++	switch_mutex_lock(kz_originate_mutex);
++	entry = switch_core_hash_find(kz_originate_hash, request_uuid);
++	if (entry && entry->state == KZ_ORIGINATE_PENDING) {
++		entry->state = state;
++		entry->result_cause = result_cause;
++		entry->completed_at = switch_micro_time_now();
++		if (result_uuid) switch_copy_string(entry->result_uuid, result_uuid, sizeof(entry->result_uuid));
++	}
++	switch_mutex_unlock(kz_originate_mutex);
++}
++
++SWITCH_STANDARD_API(kz_originate_cancel)
++{
++	kz_originate_entry_t *entry = NULL;
++	switch_bool_t cancel_requested = SWITCH_FALSE;
++
++	if (zstr(cmd)) {
++		stream->write_function(stream, "-USAGE: %s\n", KZ_ORIGINATE_CANCEL_SYNTAX);
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	switch_mutex_lock(kz_originate_mutex);
++	entry = switch_core_hash_find(kz_originate_hash, cmd);
++	if (entry && entry->state == KZ_ORIGINATE_PENDING) {
++		entry->cancel_cause = SWITCH_CAUSE_ORIGINATOR_CANCEL;
++		cancel_requested = SWITCH_TRUE;
++	}
++	switch_mutex_unlock(kz_originate_mutex);
++
++	if (cancel_requested) {
++		stream->write_function(stream, "+OK\n");
++	} else {
++		stream->write_function(stream, "-ERR No pending originate request\n");
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++SWITCH_STANDARD_API(kz_originate_reconcile)
++{
++	char *copy = NULL;
++	char *argv[5] = { 0 };
++	int argc;
++	kz_originate_entry_t *entry;
++	const char *operation;
++
++	if (zstr(cmd) || !(copy = strdup(cmd))) goto usage;
++	argc = switch_separate_string(copy, ' ', argv, 5);
++	if (argc != 4 || zstr(argv[0])
++		|| !kz_originate_token_valid(argv[1])
++		|| !kz_originate_token_valid(argv[2])
++		|| !kz_originate_token_valid(argv[3])) goto usage;
++	operation = argv[0];
++	if (strcasecmp(operation, "status") && strcasecmp(operation, "cancel")) goto usage;
++
++	switch_mutex_lock(kz_originate_mutex);
++	kz_originate_expire_tombstones();
++	entry = switch_core_hash_find(kz_originate_hash, argv[1]);
++	if (!entry) {
++		stream->write_function(stream, "-ERR UNKNOWN %s\n", kz_originate_epoch);
++	} else if (zstr(entry->request_id) || zstr(entry->caller_uuid)
++			   || strcmp(entry->request_id, argv[2]) || strcmp(entry->caller_uuid, argv[3])) {
++		stream->write_function(stream, "-ERR CORRELATION_MISMATCH %s\n", kz_originate_epoch);
++	} else if (entry->state == KZ_ORIGINATE_PENDING) {
++		if (!strcasecmp(operation, "cancel")) entry->cancel_cause = SWITCH_CAUSE_ORIGINATOR_CANCEL;
++		stream->write_function(stream, "+OK PENDING %s\n", kz_originate_epoch);
++	} else if (entry->state == KZ_ORIGINATE_SETTLED_SUCCESS && !zstr(entry->result_uuid)) {
++		stream->write_function(stream, "+OK SETTLED success %s %s\n",
++						   kz_originate_epoch, entry->result_uuid);
++	} else {
++		stream->write_function(stream, "+OK SETTLED failure %s %s\n",
++						   kz_originate_epoch, switch_channel_cause2str(entry->result_cause));
++	}
++	switch_mutex_unlock(kz_originate_mutex);
++	switch_safe_free(copy);
++	return SWITCH_STATUS_SUCCESS;
++
++usage:
++	stream->write_function(stream, "-USAGE: %s\n", KZ_ORIGINATE_RECONCILE_SYNTAX);
++	switch_safe_free(copy);
++	return SWITCH_STATUS_SUCCESS;
++}
++
++SWITCH_STANDARD_API(kz_originate)
++{
++	switch_core_session_t *caller_session = NULL;
++	switch_channel_t *caller_channel;
++	switch_call_cause_t cause = SWITCH_CAUSE_NORMAL_CLEARING;
++	kz_originate_entry_t *originate_entry = NULL;
++	switch_status_t status = SWITCH_STATUS_SUCCESS;
++	char *mycmd = NULL, *request_uuid, *request_id = NULL, *caller_uuid = NULL, *dialstring, *action;
++	char *argv[8] = { 0 };
++	char *exten, *dp, *context, *cid_name, *cid_num;
++	uint32_t timeout = 60;
++	unsigned long parsed_timeout;
++	char *timeout_end = NULL;
++	int argc, x;
++
++	if (zstr(cmd) || !(mycmd = strdup(cmd))) {
++		stream->write_function(stream, "-USAGE: %s\n", KZ_ORIGINATE_SYNTAX);
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	request_uuid = mycmd;
++	dialstring = strchr(mycmd, ' ');
++	if (!dialstring) goto usage;
++	*dialstring++ = '\0';
++	while (*dialstring && isspace((unsigned char)*dialstring)) dialstring++;
++	if (!strcmp(request_uuid, "v2")) {
++		request_uuid = dialstring;
++		dialstring = strchr(dialstring, ' ');
++		if (!dialstring) goto usage;
++		*dialstring++ = '\0';
++		while (*dialstring && isspace((unsigned char)*dialstring)) dialstring++;
++		request_id = dialstring;
++		dialstring = strchr(dialstring, ' ');
++		if (!dialstring) goto usage;
++		*dialstring++ = '\0';
++		while (*dialstring && isspace((unsigned char)*dialstring)) dialstring++;
++		caller_uuid = dialstring;
++		dialstring = strchr(dialstring, ' ');
++		if (!dialstring) goto usage;
++		*dialstring++ = '\0';
++		while (*dialstring && isspace((unsigned char)*dialstring)) dialstring++;
++	}
++	if (!kz_originate_token_valid(request_uuid) || zstr(dialstring)) goto usage;
++	if ((request_id && !kz_originate_token_valid(request_id))
++		|| (caller_uuid && !kz_originate_token_valid(caller_uuid))) goto usage;
++
++	action = kz_originate_action(dialstring);
++	if (zstr(dialstring) || zstr(action)) goto usage;
++	argc = switch_separate_string(action, ' ', argv, (sizeof(argv) / sizeof(argv[0])));
++	if (argc < 1 || argc > 6) goto usage;
++
++	for (x = 0; x < argc && argv[x]; x++) {
++		if (!strcasecmp(argv[x], "undef")) argv[x] = NULL;
++	}
++
++	exten = argv[0];
++	dp = argv[1] ? argv[1] : "XML";
++	context = argv[2] ? argv[2] : "default";
++	cid_name = argv[3];
++	cid_num = argv[4];
++	if (argv[5]) {
++		errno = 0;
++		parsed_timeout = strtoul(argv[5], &timeout_end, 10);
++		if (errno || !timeout_end || *timeout_end || !parsed_timeout || parsed_timeout > UINT32_MAX) goto usage;
++		timeout = (uint32_t) parsed_timeout;
++	}
++
++	if (!(originate_entry = kz_originate_register(request_uuid, request_id, caller_uuid))) {
++		stream->write_function(stream, "-ERR Originate registry unavailable or request already exists\n");
++		goto done;
++	}
++
++	if (switch_ivr_originate(NULL, &caller_session, &cause, dialstring, timeout,
++						 NULL, cid_name, cid_num, NULL, NULL, SOF_NONE,
++						 &originate_entry->cancel_cause, NULL) != SWITCH_STATUS_SUCCESS || !caller_session) {
++		stream->write_function(stream, "-ERR %s\n", switch_channel_cause2str(cause));
++		kz_originate_settle(request_uuid, KZ_ORIGINATE_SETTLED_FAILURE, NULL, cause);
++		goto done;
++	}
++
++	caller_channel = switch_core_session_get_channel(caller_session);
++	if (*exten == '&' && *(exten + 1)) {
++		switch_caller_extension_t *extension = NULL;
++		char *app_name = switch_core_session_strdup(caller_session, exten + 1);
++		char *arg = NULL, *end;
++
++		if ((end = strchr(app_name, ')'))) *end = '\0';
++		if ((arg = strchr(app_name, '('))) *arg++ = '\0';
++		extension = switch_caller_extension_new(caller_session, app_name, arg);
++		if (!extension) {
++			switch_channel_hangup(caller_channel, SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
++			switch_core_session_rwunlock(caller_session);
++			kz_originate_settle(request_uuid, KZ_ORIGINATE_SETTLED_FAILURE, NULL,
++								SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
++			stream->write_function(stream, "-ERR Could not create caller extension\n");
++			goto done;
++		}
++		switch_caller_extension_add_application(caller_session, extension, app_name, arg);
++		switch_channel_set_caller_extension(caller_channel, extension);
++		switch_channel_set_state(caller_channel, CS_EXECUTE);
++	} else {
++		if (switch_ivr_session_transfer(caller_session, exten, dp, context) != SWITCH_STATUS_SUCCESS) {
++			if (switch_channel_ready(caller_channel)) {
++				switch_channel_hangup(caller_channel, SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
++			}
++			switch_core_session_rwunlock(caller_session);
++			kz_originate_settle(request_uuid, KZ_ORIGINATE_SETTLED_FAILURE, NULL,
++								SWITCH_CAUSE_DESTINATION_OUT_OF_ORDER);
++			stream->write_function(stream, "-ERR DESTINATION_OUT_OF_ORDER\n");
++			goto done;
++		}
++	}
++
++	kz_originate_settle(request_uuid, KZ_ORIGINATE_SETTLED_SUCCESS,
++						 switch_core_session_get_uuid(caller_session), SWITCH_CAUSE_SUCCESS);
++	stream->write_function(stream, "+OK %s\n", switch_core_session_get_uuid(caller_session));
++	switch_core_session_rwunlock(caller_session);
++	goto done;
++
++usage:
++	stream->write_function(stream, "-USAGE: %s\n", KZ_ORIGINATE_SYNTAX);
++done:
++	switch_safe_free(mycmd);
++	return status;
++}
++
+ SWITCH_STANDARD_API(kz_first_of)
+ {
+ 	char delim = '|';
+@@ -575,6 +954,13 @@ SWITCH_STANDARD_API(kz_contact_fun)
+ 
+ void add_kz_commands(switch_loadable_module_interface_t **module_interface) {
+ 	switch_api_interface_t *api_interface = NULL;
++	switch_core_hash_init(&kz_originate_hash);
++	switch_mutex_init(&kz_originate_mutex, SWITCH_MUTEX_NESTED, kazoo_globals.pool);
++	switch_uuid_str(kz_originate_epoch, sizeof(kz_originate_epoch));
++	SWITCH_ADD_API(api_interface, "kz_originate", KZ_ORIGINATE_DESC, kz_originate, KZ_ORIGINATE_SYNTAX);
++	SWITCH_ADD_API(api_interface, "kz_originate_cancel", KZ_ORIGINATE_CANCEL_DESC, kz_originate_cancel, KZ_ORIGINATE_CANCEL_SYNTAX);
++	SWITCH_ADD_API(api_interface, "kz_originate_reconcile", KZ_ORIGINATE_RECONCILE_DESC,
++				   kz_originate_reconcile, KZ_ORIGINATE_RECONCILE_SYNTAX);
+ 	SWITCH_ADD_API(api_interface, "kz_uuid_setvar_multi", UUID_SET_DESC, uuid_setvar_multi_function, UUID_MULTISET_SYNTAX);
+ 	SWITCH_ADD_API(api_interface, "kz_uuid_setvar_multi_encoded", UUID_SET_DESC, uuid_setvar_multi_encoded_function, UUID_MULTISET_SYNTAX);
+ 	switch_console_set_complete("add kz_uuid_setvar_multi ::console::list_uuid");
+@@ -590,3 +976,12 @@ void add_kz_commands(switch_loadable_module_interface_t **module_interface) {
+ 	SWITCH_ADD_API(api_interface, "kz_contact", KZ_CONTACT_DESC, kz_contact_fun, KZ_CONTACT_SYNTAX);
+ }
+ 
++void remove_kz_commands(void) {
++	if (kz_originate_hash) {
++		kz_originate_entry_t *entry;
++		switch_mutex_lock(kz_originate_mutex);
++		while ((entry = kz_originate_entries) != NULL) kz_originate_entry_delete(entry);
++		switch_core_hash_destroy(&kz_originate_hash);
++		switch_mutex_unlock(kz_originate_mutex);
++	}
++}
+diff --git a/kazoo_config.c b/kazoo_config.c
+index a646770..7387856 100644
+--- a/kazoo_config.c
++++ b/kazoo_config.c
+@@ -221,8 +221,12 @@ switch_status_t kazoo_config_filters(switch_memory_pool_t *pool, switch_xml_t cf
+ 			if(compare) {
+ 				if (!strncmp(compare, "value", 7)) {
+ 					cur->compare = FILTER_COMPARE_VALUE;
+-				} else if (!strncmp(compare, "prefix", 6)) {
++				} else if (!strcmp(compare, "prefixes")) {
++						cur->compare = FILTER_COMPARE_PREFIXES;
++				} else if (!strcmp(compare, "prefix")) {
+ 						cur->compare = FILTER_COMPARE_PREFIX;
++				} else if (!strcmp(compare, "contains")) {
++						cur->compare = FILTER_COMPARE_CONTAINS;
+ 				} else if (!strncmp(compare, "list", 4)) {
+ 						cur->compare = FILTER_COMPARE_LIST;
+ 				} else if (!strncmp(compare, "exists", 6)) {
+@@ -237,7 +241,7 @@ switch_status_t kazoo_config_filters(switch_memory_pool_t *pool, switch_xml_t cf
+ 			if(cur->value == NULL)
+ 				cur->compare = FILTER_COMPARE_EXISTS;
+ 
+-			if(cur->compare == FILTER_COMPARE_LIST) {
++			if(cur->compare == FILTER_COMPARE_LIST || cur->compare == FILTER_COMPARE_PREFIXES) {
+ 				cur->list.size = switch_separate_string(cur->value, '|', cur->list.value, MAX_LIST_FIELDS);
+ 			}
+ 
+@@ -282,7 +286,9 @@ switch_status_t kazoo_config_field(kazoo_config_ptr definitions, switch_memory_p
+ 			cur->in_type = FIELD_FIRST_OF;
+ 		} else if (!strncmp(type, "expand", 6)) {
+ 			cur->in_type = FIELD_EXPAND;
+-		} else if (!strncmp(type, "prefix", 10)) {
++		} else if (!strcmp(type, "prefixes")) {
++			cur->in_type = FIELD_PREFIXES;
++		} else if (!strcmp(type, "prefix")) {
+ 			cur->in_type = FIELD_PREFIX;
+ 		} else if (!strncmp(type, "group", 5)) {
+ 			cur->in_type = FIELD_GROUP;
+@@ -329,7 +335,7 @@ switch_status_t kazoo_config_field(kazoo_config_ptr definitions, switch_memory_p
+ 		cur->out_type = JSON_STRING;
+ 	}
+ 
+-	if(cur->in_type == FIELD_FIRST_OF) {
++	if(cur->in_type == FIELD_FIRST_OF || cur->in_type == FIELD_PREFIXES) {
+ 		cur->list.size = switch_separate_string(cur->value, '|', cur->list.value, MAX_LIST_FIELDS);
+ 	}
+ 
+diff --git a/kazoo_dptools.c b/kazoo_dptools.c
+index 5a01650..0e7042d 100644
+--- a/kazoo_dptools.c
++++ b/kazoo_dptools.c
+@@ -411,15 +411,36 @@ SWITCH_STANDARD_APP(export_encoded_function)
+ 	kz_export(session, data, 1);
+ }
+ 
++/* Dequeuing input emits FreeSWITCH's DTMF event. Without input arguments,
++ * endless playback leaves digits queued until hangup, so Kazoo cannot react
++ * to a queue exit key or callback request while music is playing. Keep the
++ * playback running; the owning Kazoo controller decides when to interrupt it.
++ */
++static switch_status_t kz_endless_playback_input(switch_core_session_t *session,
++                                                void *input,
++                                                switch_input_type_t input_type,
++                                                void *buffer,
++                                                unsigned int buffer_length)
++{
++    (void) session;
++    (void) input;
++    (void) input_type;
++    (void) buffer;
++    (void) buffer_length;
++    return SWITCH_STATUS_SUCCESS;
++}
++
+ // copied from mod_dptools with allow SWITCH_STATUS_BREAK
+ SWITCH_STANDARD_APP(kz_endless_playback_function)
+ {
+ 	switch_channel_t *channel = switch_core_session_get_channel(session);
+ 	switch_status_t status = SWITCH_STATUS_SUCCESS;
+ 	const char *file = data;
++	switch_input_args_t args = { 0 };
++	args.input_callback = kz_endless_playback_input;
+ 
+ 	while (switch_channel_ready(channel)) {
+-		status = switch_ivr_play_file(session, NULL, file, NULL);
++		status = switch_ivr_play_file(session, NULL, file, &args);
+ 
+ 		if (status != SWITCH_STATUS_SUCCESS) {
+ 			break;
+diff --git a/kazoo_ei.h b/kazoo_ei.h
+index 5f617b5..b80524c 100644
+--- a/kazoo_ei.h
++++ b/kazoo_ei.h
+@@ -91,6 +91,7 @@ struct ei_node_s {
+ 	int nodefd;
+ 	switch_atomic_t pending_bgapi;
+ 	switch_atomic_t receive_handlers;
++	switch_atomic_t event_stream_threads;
+ 	switch_memory_pool_t *pool;
+ 	ei_event_stream_t *event_streams;
+ 	switch_mutex_t *event_streams_mutex;
+diff --git a/kazoo_ei_config.c b/kazoo_ei_config.c
+index 3c626c1..26f4039 100644
+--- a/kazoo_ei_config.c
++++ b/kazoo_ei_config.c
+@@ -84,7 +84,7 @@ static int read_cookie_from_file(char *filename) {
+ 			*end = '\0';
+ 		}
+ 
+-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set cookie from file %s: %s\n", filename, cookie);
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set cookie from file %s\n", filename);
+ 
+ 		set_pref_ei_cookie(cookie);
+ 		return 0;
+@@ -162,7 +162,7 @@ switch_status_t kazoo_ei_config(switch_xml_t cfg) {
+ 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set bind port: %s\n", val);
+ 				kazoo_globals.port = atoi(val);
+ 			} else if (!strcmp(var, "cookie")) {
+-				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set cookie: %s\n", val);
++				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set cookie from configuration\n");
+ 				set_pref_ei_cookie(val);
+ 			} else if (!strcmp(var, "cookie-file")) {
+ 				if (read_cookie_from_file(val) == 1) {
+diff --git a/kazoo_ei_utils.c b/kazoo_ei_utils.c
+index ef45af0..8ccadaa 100644
+--- a/kazoo_ei_utils.c
++++ b/kazoo_ei_utils.c
+@@ -916,10 +916,21 @@ static void *SWITCH_THREAD_FUNC fetch_config_exec(switch_thread_t *thread, void
+ 	switch_memory_pool_t *pool = (switch_memory_pool_t *) obj;
+ 	ei_node_t *node;
+ 	int fetch_filters = 0, fetch_handlers = 0;
++	switch_interval_time_t remaining = kazoo_globals.delay_before_initial_fetch;
++
++	/* Give the node time to initialize, but do not strand this detached worker
++	 * in module text for the entire delay after shutdown has started. */
++	while (remaining > 0 && switch_test_flag(&kazoo_globals, LFLAG_RUNNING)) {
++		switch_interval_time_t interval = remaining > 100000 ? 100000 : remaining;
++		switch_sleep(interval);
++		remaining -= interval;
++	}
+ 
+-	// give some time for node initialization
+-	switch_sleep(kazoo_globals.delay_before_initial_fetch);
++	if (!switch_test_flag(&kazoo_globals, LFLAG_RUNNING)) {
++		goto done;
++	}
+ 
++	switch_thread_rwlock_rdlock(kazoo_globals.ei_nodes_lock);
+ 	for (node = kazoo_globals.ei_nodes; node != NULL; node = node->next) {
+ 		if (node->legacy ) {
+ 			fetch_filters++;
+@@ -927,6 +938,7 @@ static void *SWITCH_THREAD_FUNC fetch_config_exec(switch_thread_t *thread, void
+ 			fetch_handlers++;
+ 		}
+ 	}
++	switch_thread_rwlock_unlock(kazoo_globals.ei_nodes_lock);
+ 
+ 	if (fetch_filters) {
+ 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "fetching filters for kazoo\n");
+@@ -940,6 +952,10 @@ static void *SWITCH_THREAD_FUNC fetch_config_exec(switch_thread_t *thread, void
+ 
+ 	kazoo_globals.config_fetched = 1;
+ 
++	done:
++	switch_core_destroy_memory_pool(&pool);
++	switch_atomic_dec(&kazoo_globals.threads);
++
+ 	return NULL;
+ }
+ 
+@@ -959,7 +975,15 @@ void fetch_config()
+ 	switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
+ 
+ 	switch_uuid_get(&uuid);
+-	switch_thread_create(&thread, thd_attr, fetch_config_exec, pool, pool);
++
++	/* Account for the worker before creating it. Otherwise shutdown can see
++	 * zero workers and unload mod_kazoo before this detached thread starts. */
++	switch_atomic_inc(&kazoo_globals.threads);
++	if (switch_thread_create(&thread, thd_attr, fetch_config_exec, pool, pool) != SWITCH_STATUS_SUCCESS) {
++		switch_atomic_dec(&kazoo_globals.threads);
++		switch_core_destroy_memory_pool(&pool);
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to create kazoo config fetch thread\n");
++	}
+ 
+ }
+ 
+@@ -1049,7 +1073,7 @@ SWITCH_MODULE_RUNTIME_FUNCTION(mod_kazoo_runtime)
+ 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Erlang connection acceptor socket error %d %d\n", erl_errno, errno);
+ 			} else {
+ 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING,
+-				                  "Erlang node connection failed - ensure your cookie matches '%s' and you are using a good nodename\n", kazoo_globals.ei_cookie);
++				                  "Erlang node connection failed - ensure the configured cookie matches and you are using a good nodename\n");
+ 			}
+ 			continue;
+ 		}
+diff --git a/kazoo_event_stream.c b/kazoo_event_stream.c
+index 3d1f183..e90a609 100644
+--- a/kazoo_event_stream.c
++++ b/kazoo_event_stream.c
+@@ -234,7 +234,8 @@ static void event_handler(switch_event_t *event) {
+ }
+ 
+ static void *SWITCH_THREAD_FUNC event_stream_loop(switch_thread_t *thread, void *obj) {
+-    ei_event_stream_t *event_stream = (ei_event_stream_t *) obj;
++	ei_event_stream_t *event_stream = (ei_event_stream_t *) obj;
++	ei_node_t *ei_node;
+ 	ei_event_binding_t *event_binding;
+ 	switch_sockaddr_t *sa;
+ 	uint16_t port;
+@@ -245,9 +246,8 @@ static void *SWITCH_THREAD_FUNC event_stream_loop(switch_thread_t *thread, void
+ 	short event_stream_keepalive;
+ 	short ok = 1;
+ 
+-	switch_atomic_inc(&kazoo_globals.threads);
+-
+ 	switch_assert(event_stream != NULL);
++	ei_node = event_stream->node;
+ 
+ 	event_stream_framing = event_stream->event_stream_framing;
+ 	event_stream_keepalive = event_stream->event_stream_keepalive;
+@@ -352,6 +352,22 @@ static void *SWITCH_THREAD_FUNC event_stream_loop(switch_thread_t *thread, void
+ 
+ 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutting down erlang event stream %p\n", (void *)event_stream);
+ 
++	/* Serialize with request handlers, then remove this stream by identity.
++	 * Once it is unlinked, no new request can obtain the stream while its
++	 * bindings and pool are being destroyed. */
++	switch_mutex_lock(ei_node->event_streams_mutex);
++	{
++		ei_event_stream_t **link = &ei_node->event_streams;
++		while (*link && *link != event_stream) {
++			link = &(*link)->next;
++		}
++		if (*link == event_stream) {
++			*link = event_stream->next;
++		}
++	}
++	switch_clear_flag(event_stream, LFLAG_RUNNING);
++	switch_mutex_unlock(ei_node->event_streams_mutex);
++
+ 	/* unbind from the system events */
+ 	event_binding = event_stream->bindings;
+ 	while(event_binding != NULL) {
+@@ -383,6 +399,7 @@ static void *SWITCH_THREAD_FUNC event_stream_loop(switch_thread_t *thread, void
+ 	/* clean up the memory */
+ 	switch_core_destroy_memory_pool(&event_stream->pool);
+ 
++	switch_atomic_dec(&ei_node->event_stream_threads);
+ 	switch_atomic_dec(&kazoo_globals.threads);
+ 
+ 	return NULL;
+@@ -461,7 +478,18 @@ ei_event_stream_t *new_event_stream(ei_node_t *ei_node, const erlang_pid *from)
+ 	switch_threadattr_create(&thd_attr, event_stream->pool);
+ 	switch_threadattr_detach_set(thd_attr, 1);
+ 	switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
+-	switch_thread_create(&thread, thd_attr, event_stream_loop, event_stream, event_stream->pool);
++
++	/* Account for the detached worker before it can run.  The node owner waits
++	 * for this per-node count before destroying event_streams_mutex and pool. */
++	switch_atomic_inc(&ei_node->event_stream_threads);
++	switch_atomic_inc(&kazoo_globals.threads);
++	if (switch_thread_create(&thread, thd_attr, event_stream_loop, event_stream, event_stream->pool) != SWITCH_STATUS_SUCCESS) {
++		*event_streams = event_stream->next;
++		switch_atomic_dec(&kazoo_globals.threads);
++		switch_atomic_dec(&ei_node->event_stream_threads);
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to create erlang event stream thread\n");
++		goto cleanup;
++	}
+ 
+ 	return event_stream;
+ 
+@@ -581,9 +609,15 @@ void bind_event_profile(ei_event_binding_t *event_binding, kazoo_event_ptr event
+ 
+ void bind_event_profiles(kazoo_event_ptr event)
+ {
+-	ei_node_t *ei_node = kazoo_globals.ei_nodes;
++	ei_node_t *ei_node;
++
++	switch_thread_rwlock_rdlock(kazoo_globals.ei_nodes_lock);
++	ei_node = kazoo_globals.ei_nodes;
+ 	while(ei_node) {
+-		ei_event_stream_t *event_streams = ei_node->event_streams;
++		ei_event_stream_t *event_streams;
++
++		switch_mutex_lock(ei_node->event_streams_mutex);
++		event_streams = ei_node->event_streams;
+ 		while(event_streams) {
+ 			ei_event_binding_t *bindings = event_streams->bindings;
+ 			while(bindings) {
+@@ -592,8 +626,10 @@ void bind_event_profiles(kazoo_event_ptr event)
+ 			}
+ 			event_streams = event_streams->next;
+ 		}
++		switch_mutex_unlock(ei_node->event_streams_mutex);
+ 		ei_node = ei_node->next;
+ 	}
++	switch_thread_rwlock_unlock(kazoo_globals.ei_nodes_lock);
+ }
+ 
+ switch_status_t add_event_binding(ei_event_stream_t *event_stream, const char *event_name) {
+diff --git a/kazoo_fetch_agent.c b/kazoo_fetch_agent.c
+index 5023e39..e367bd4 100644
+--- a/kazoo_fetch_agent.c
++++ b/kazoo_fetch_agent.c
+@@ -34,6 +34,7 @@
+ 
+ static const char *fetch_uuid_sources[] = {
+ 		"Fetch-Call-UUID",
++		"Unique-ID",
+ 		"refer-from-channel-id",
+ 		"sip_call_id",
+ 		NULL
+@@ -84,7 +85,7 @@ static char *expand_vars(char *xml_str) {
+ 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "trying to expand %s \n", var);
+ 				if ((val = switch_core_get_variable_dup(var))) {
+ 					char *p;
+-					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "expanded %s to %s\n", var, val);
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "expanded variable %s\n", var);
+ 					for (p = val; p && *p && wp <= ep; p++) {
+ 						*wp++ = *p;
+ 					}
+@@ -170,7 +171,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
+ 	reply.next = NULL;
+ 	reply.xml_str = NULL;
+ 
+-	if(switch_event_get_header(event, "Unique-ID") == NULL) {
++	{
+ 		int i;
+ 		for(i = 0; fetch_uuid_sources[i] != NULL; i++) {
+ 			if((fetch_call_id = switch_event_get_header(event, fetch_uuid_sources[i])) != NULL) {
+@@ -314,11 +315,10 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
+ 		if (kazoo_globals.expand_headers_on_fetch) {
+ 			reply.xml_str = expand_vars(reply.xml_str);
+ 		}
+-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Received %s XML (%s) after %dms: %s\n"
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Received %s XML (%s) after %dms\n"
+ 						  ,section
+ 						  ,reply.uuid_str
+-						  ,(unsigned int) (switch_micro_time_now() - now) / 1000
+-						  ,reply.xml_str);
++						  ,(unsigned int) (switch_micro_time_now() - now) / 1000);
+ 		if ((xml = switch_xml_parse_str_dynamic(reply.xml_str, SWITCH_FALSE)) == NULL) {
+ 			switch_safe_free(reply.xml_str);
+ 		}
+diff --git a/kazoo_fields.h b/kazoo_fields.h
+index 8d17378..f99b312 100644
+--- a/kazoo_fields.h
++++ b/kazoo_fields.h
+@@ -82,6 +82,8 @@ typedef enum {
+ 	FILTER_COMPARE_LIST,
+ 	FILTER_COMPARE_VALUE,
+ 	FILTER_COMPARE_PREFIX,
++	FILTER_COMPARE_PREFIXES,
++	FILTER_COMPARE_CONTAINS,
+ 	FILTER_COMPARE_EXISTS,
+ 	FILTER_COMPARE_FIELD
+ 
+@@ -119,6 +121,7 @@ typedef enum {
+ 	FIELD_FIRST_OF,
+ 	FIELD_EXPAND,
+ 	FIELD_PREFIX,
++	FIELD_PREFIXES,
+ 	FIELD_OBJECT,
+ 	FIELD_GROUP,
+ 	FIELD_REFERENCE
+diff --git a/kazoo_message.c b/kazoo_message.c
+index 43716a8..a229c10 100644
+--- a/kazoo_message.c
++++ b/kazoo_message.c
+@@ -87,6 +87,26 @@ static int inline filter_compare(switch_event_t* evt, kazoo_filter_ptr filter, k
+ 		}
+ 		break;
+ 
++	case FILTER_COMPARE_PREFIXES:
++		for (header = evt->headers; header && !hasValue; header = header->next) {
++			for (n = 0; n < filter->list.size; n++) {
++				if (!strncmp(header->name, filter->list.value[n], strlen(filter->list.value[n]))) {
++					hasValue = 1;
++					break;
++				}
++			}
++		}
++		break;
++
++	case FILTER_COMPARE_CONTAINS:
++		if (*filter->name == '$') {
++			value = expr = kz_event_expand_headers(evt, filter->name);
++		} else {
++			value = switch_event_get_header(evt, filter->name);
++		}
++		hasValue = value && strstr(value, filter->value) ? 1 : 0;
++		break;
++
+ 	case FILTER_COMPARE_LIST:
+ 		if (*filter->name == '$') {
+ 			value = expr = kz_event_expand_headers(evt, filter->name);
+@@ -309,6 +329,34 @@ cJSON * kazoo_event_add_field_to_json(cJSON *dst, switch_event_t *src, kazoo_fie
+ 
+ 			break;
+ 
++		case FIELD_PREFIXES:
++
++			for (header = src->headers; header; header = header->next) {
++				for (n = 0; n < field->list.size; n++) {
++					const char *prefix = field->list.value[n];
++					size_t prefix_len = strlen(prefix);
++
++					if (!strncmp(header->name, prefix, prefix_len)) {
++						const char *name = field->exclude_prefix ? header->name + prefix_len : header->name;
++
++						if (header->idx) {
++							cJSON *array = cJSON_CreateArray();
++
++							for (i = 0; i < header->idx; i++) {
++								cJSON_AddItemToArray(array, kazoo_event_json_value(field->out_type, header->array[i]));
++							}
++
++							kazoo_cJSON_AddItemToObject(dst, name, array);
++						} else {
++							kazoo_event_add_json_value(dst, field, name, header->value);
++						}
++						break;
++					}
++				}
++			}
++
++			break;
++
+ 		case FIELD_STATIC:
+ 			item = kazoo_event_add_json_value(dst, field, field->name, field->value);
+ 			break;
+diff --git a/kazoo_node.c b/kazoo_node.c
+index f75c327..e350efa 100644
+--- a/kazoo_node.c
++++ b/kazoo_node.c
+@@ -126,6 +126,13 @@ static void destroy_node_handler(ei_node_t *ei_node) {
+ 	remove_event_streams(&ei_node->event_streams);
+ 	switch_mutex_unlock(ei_node->event_streams_mutex);
+ 
++	/* Event-stream workers use the node mutex while unlinking themselves.
++	 * Keep the node pool and mutex alive until every worker has completed. */
++	while ((pending = switch_atomic_read(&ei_node->event_stream_threads))) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Waiting for %d event stream handlers to complete\n", pending);
++		switch_yield(100000);
++	}
++
+ 	remove_xml_clients(ei_node);
+ 
+ 	while (switch_queue_trypop(ei_node->received_msgs, &pop) == SWITCH_STATUS_SUCCESS) {
+@@ -320,8 +327,7 @@ static void *SWITCH_THREAD_FUNC bgapi3_exec(switch_thread_t *thread, void *obj)
+ 
+ 	if(!switch_test_flag(ei_node, LFLAG_RUNNING) || !switch_test_flag(&kazoo_globals, LFLAG_RUNNING)) {
+ 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring command while shuting down\n");
+-		switch_atomic_dec(&ei_node->pending_bgapi);
+-		return NULL;
++		goto done;
+ 	}
+ 
+ 	switch_malloc(send_msg, sizeof(*send_msg));
+@@ -351,11 +357,12 @@ static void *SWITCH_THREAD_FUNC bgapi3_exec(switch_thread_t *thread, void *obj)
+ 		switch_safe_free(send_msg);
+ 	}
+ 
+-	switch_atomic_dec(&ei_node->pending_bgapi);
+-
++	done:
+ 	switch_safe_free(reply);
+ 	switch_safe_free(acs->arg);
++	switch_atomic_dec(&ei_node->pending_bgapi);
+ 	switch_core_destroy_memory_pool(&pool);
++	switch_atomic_dec(&kazoo_globals.threads);
+ 
+ 	return NULL;
+ }
+@@ -373,8 +380,7 @@ static void *SWITCH_THREAD_FUNC bgapi4_exec(switch_thread_t *thread, void *obj)
+ 
+ 	if(!switch_test_flag(ei_node, LFLAG_RUNNING) || !switch_test_flag(&kazoo_globals, LFLAG_RUNNING)) {
+ 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring command while shuting down\n");
+-		switch_atomic_dec(&ei_node->pending_bgapi);
+-		return NULL;
++		goto done;
+ 	}
+ 
+ 	SWITCH_STANDARD_STREAM(stream);
+@@ -410,15 +416,16 @@ static void *SWITCH_THREAD_FUNC bgapi4_exec(switch_thread_t *thread, void *obj)
+ 		switch_safe_free(send_msg);
+ 	}
+ 
+-	switch_atomic_dec(&ei_node->pending_bgapi);
+-
+ 	if (stream.param_event) {
+ 		switch_event_fire(&stream.param_event);
+ 	}
+ 
++	done:
+ 	switch_safe_free(reply);
+ 	switch_safe_free(acs->arg);
++	switch_atomic_dec(&ei_node->pending_bgapi);
+ 	switch_core_destroy_memory_pool(&pool);
++	switch_atomic_dec(&kazoo_globals.threads);
+ 	switch_safe_free(stream.data);
+ 
+ 	return NULL;
+@@ -471,8 +478,8 @@ static void log_sendmsg_request(char *uuid, switch_event_t *event)
+ }
+ 
+ static switch_status_t build_event(switch_event_t *event, ei_x_buff * buf) {
+-	int propslist_length, arity;
+-	int n=0;
++	int propslist_length, tail_length, arity;
++	int n;
+ 
+ 	if(!event) {
+ 		return SWITCH_STATUS_FALSE;
+@@ -482,11 +489,11 @@ static switch_status_t build_event(switch_event_t *event, ei_x_buff * buf) {
+ 		return SWITCH_STATUS_FALSE;
+ 	}
+ 
+-	while (!ei_decode_tuple_header(buf->buff, &buf->index, &arity) && n < propslist_length) {
++	for (n = 0; n < propslist_length; n++) {
+ 		char key[1024];
+ 		char *value;
+ 
+-		if (arity != 2) {
++		if (ei_decode_tuple_header(buf->buff, &buf->index, &arity) || arity != 2) {
+ 			return SWITCH_STATUS_FALSE;
+ 		}
+ 
+@@ -514,9 +521,12 @@ static switch_status_t build_event(switch_event_t *event, ei_x_buff * buf) {
+ 			}
+ 			switch_event_add_header_string_nodup(event, SWITCH_STACK_BOTTOM, key, value);
+ 		}
+-		n++;
+ 	}
+-	ei_skip_term(buf->buff, &buf->index);
++
++	if (propslist_length > 0 &&
++		(ei_decode_list_header(buf->buff, &buf->index, &tail_length) || tail_length != 0)) {
++		return SWITCH_STATUS_FALSE;
++	}
+ 
+ 	return SWITCH_STATUS_SUCCESS;
+ }
+@@ -681,9 +691,41 @@ static switch_status_t handle_request_sendevent(ei_node_t *ei_node, erlang_pid *
+ 	return erlang_response_badarg(rbuf);
+ }
+ 
+-static switch_status_t handle_request_command(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++static switch_status_t decode_command_sync(ei_x_buff *buf, int arity, switch_bool_t *sync) {
++	int sync_value = 0;
++
++	*sync = SWITCH_FALSE;
++	if (arity == 3) {
++		return SWITCH_STATUS_SUCCESS;
++	}
++	if (arity != 4 || ei_decode_boolean(buf->buff, &buf->index, &sync_value)) {
++		return SWITCH_STATUS_FALSE;
++	}
++
++	*sync = sync_value ? SWITCH_TRUE : SWITCH_FALSE;
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t execute_or_queue_command(switch_core_session_t *session, switch_event_t **event, switch_bool_t sync) {
++	switch_status_t status;
++
++	if (!sync) {
++		status = switch_core_session_queue_private_event(session, event, SWITCH_FALSE);
++		if (status != SWITCH_STATUS_SUCCESS) {
++			switch_event_destroy(event);
++		}
++		return status;
++	}
++
++	status = switch_ivr_parse_event(session, *event);
++	switch_event_destroy(event);
++	return status == SWITCH_STATUS_BREAK ? SWITCH_STATUS_SUCCESS : status;
++}
++
++static switch_status_t handle_request_command(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf, int arity) {
+ 	switch_core_session_t *session;
+ 	switch_event_t *event = NULL;
++	switch_bool_t sync;
+ 	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+ 	switch_uuid_t cmd_uuid;
+ 	char cmd_uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+@@ -696,11 +738,17 @@ static switch_status_t handle_request_command(ei_node_t *ei_node, erlang_pid *pi
+ 		return erlang_response_baduuid(rbuf);
+ 	}
+ 
++	if (decode_command_sync(buf, arity, &sync) != SWITCH_STATUS_SUCCESS) {
++		switch_core_session_rwunlock(session);
++		return erlang_response_badarg(rbuf);
++	}
++
+ 	switch_uuid_get(&cmd_uuid);
+ 	switch_uuid_format(cmd_uuid_str, &cmd_uuid);
+ 
+ 	switch_event_create(&event, SWITCH_EVENT_COMMAND);
+ 	if (build_event(event, buf) != SWITCH_STATUS_SUCCESS) {
++		switch_event_destroy(&event);
+ 		switch_core_session_rwunlock(session);
+ 		return erlang_response_badarg(rbuf);
+ 	}
+@@ -708,16 +756,21 @@ static switch_status_t handle_request_command(ei_node_t *ei_node, erlang_pid *pi
+ 	log_sendmsg_request(uuid_str, event);
+ 	switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "event-uuid", cmd_uuid_str);
+ 
+-	switch_core_session_queue_private_event(session, &event, SWITCH_FALSE);
++	if (execute_or_queue_command(session, &event, sync) != SWITCH_STATUS_SUCCESS) {
++		switch_core_session_rwunlock(session);
++		return erlang_response_badarg(rbuf);
++	}
+ 	switch_core_session_rwunlock(session);
+ 
+ 	return erlang_response_ok_uuid(rbuf, cmd_uuid_str);
+ }
+ 
+-static switch_status_t handle_request_commands(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++static switch_status_t handle_request_commands(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf, int arity) {
+ 	switch_core_session_t *session;
++	switch_event_t **events = NULL;
+ 	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+-	int propslist_length, n;
++	int propslist_length, tail_length, n;
++	switch_bool_t sync;
+ 	switch_uuid_t cmd_uuid;
+ 	char cmd_uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+ 
+@@ -729,31 +782,66 @@ static switch_status_t handle_request_commands(ei_node_t *ei_node, erlang_pid *p
+ 		return erlang_response_baduuid(rbuf);
+ 	}
+ 
++	if (decode_command_sync(buf, arity, &sync) != SWITCH_STATUS_SUCCESS) {
++		switch_core_session_rwunlock(session);
++		return erlang_response_badarg(rbuf);
++	}
++
+ 	switch_uuid_get(&cmd_uuid);
+ 	switch_uuid_format(cmd_uuid_str, &cmd_uuid);
+ 
+-	if (ei_decode_list_header(buf->buff, &buf->index, &propslist_length)) {
++	if (ei_decode_list_header(buf->buff, &buf->index, &propslist_length) ||
++		propslist_length < 0 || propslist_length > 1024) {
+ 		switch_core_session_rwunlock(session);
+-		return SWITCH_STATUS_FALSE;
++		return erlang_response_badarg(rbuf);
++	}
++
++	if (propslist_length > 0 && !(events = calloc((size_t)propslist_length, sizeof(*events)))) {
++		switch_core_session_rwunlock(session);
++		return erlang_response_badarg(rbuf);
+ 	}
+ 
+ 	for(n = 0; n < propslist_length; n++) {
+-		switch_event_t *event = NULL;
+-		switch_event_create(&event, SWITCH_EVENT_COMMAND);
+-		if (build_event(event, buf) != SWITCH_STATUS_SUCCESS) {
++		switch_event_create(&events[n], SWITCH_EVENT_COMMAND);
++		if (build_event(events[n], buf) != SWITCH_STATUS_SUCCESS) {
++			for (; n >= 0; n--) {
++				switch_event_destroy(&events[n]);
++			}
++			free(events);
+ 			switch_core_session_rwunlock(session);
+ 			return erlang_response_badarg(rbuf);
+ 		}
+-		log_sendmsg_request(uuid_str, event);
++	}
++
++	if (propslist_length > 0 &&
++		(ei_decode_list_header(buf->buff, &buf->index, &tail_length) || tail_length != 0)) {
++		for (n = 0; n < propslist_length; n++) {
++			switch_event_destroy(&events[n]);
++		}
++		free(events);
++		switch_core_session_rwunlock(session);
++		return erlang_response_badarg(rbuf);
++	}
++
++	for(n = 0; n < propslist_length; n++) {
++		log_sendmsg_request(uuid_str, events[n]);
+ 		if(n == (propslist_length - 1)) {
+-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "event-uuid", cmd_uuid_str);
++			switch_event_add_header_string(events[n], SWITCH_STACK_BOTTOM, "event-uuid", cmd_uuid_str);
+ 		} else {
+-			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "event-uuid", "null");
++			switch_event_add_header_string(events[n], SWITCH_STACK_BOTTOM, "event-uuid", "null");
+ //			switch_event_del_header_val(event, "event-uuid-name", NULL);
+ 		}
+-		switch_core_session_queue_private_event(session, &event, SWITCH_FALSE);
++		if (execute_or_queue_command(session, &events[n], sync) != SWITCH_STATUS_SUCCESS) {
++			for (n++; n < propslist_length; n++) {
++				switch_event_destroy(&events[n]);
++			}
++			free(events);
++			switch_core_session_rwunlock(session);
++			return erlang_response_badarg(rbuf);
++		}
+ 	}
+ 
++	free(events);
+ 	switch_core_session_rwunlock(session);
+ 
+ 	return erlang_response_ok_uuid(rbuf, cmd_uuid_str);
+@@ -775,6 +863,7 @@ static switch_status_t handle_request_sendmsg(ei_node_t *ei_node, erlang_pid *pi
+ 
+ 	switch_event_create(&event, SWITCH_EVENT_SEND_MESSAGE);
+ 	if (build_event(event, buf) != SWITCH_STATUS_SUCCESS) {
++		switch_event_destroy(&event);
+ 		switch_core_session_rwunlock(session);
+ 		return erlang_response_badarg(rbuf);
+ 	}
+@@ -858,6 +947,7 @@ static switch_status_t handle_request_bgapi(switch_thread_start_t func, ei_node_
+ 	switch_thread_t *thread;
+ 	switch_threadattr_t *thd_attr = NULL;
+ 	switch_uuid_t uuid;
++	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+ 	char cmd[MAXATOMLEN + 1];
+ 
+ 	if (ei_decode_atom_safe(buf->buff, &buf->index, cmd)) {
+@@ -884,15 +974,24 @@ static switch_status_t handle_request_bgapi(switch_thread_start_t func, ei_node_
+ 	switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
+ 
+ 	switch_uuid_get(&uuid);
+-	switch_uuid_format(acs->uuid_str, &uuid);
+-	switch_thread_create(&thread, thd_attr, func, acs, acs->pool);
+-
++	switch_uuid_format(uuid_str, &uuid);
++	switch_set_string(acs->uuid_str, uuid_str);
++	/* Pre-account detached work so node and module shutdown cannot pass it. */
+ 	switch_atomic_inc(&ei_node->pending_bgapi);
++	switch_atomic_inc(&kazoo_globals.threads);
++	if (switch_thread_create(&thread, thd_attr, func, acs, acs->pool) != SWITCH_STATUS_SUCCESS) {
++		switch_atomic_dec(&kazoo_globals.threads);
++		switch_atomic_dec(&ei_node->pending_bgapi);
++		switch_safe_free(acs->arg);
++		switch_core_destroy_memory_pool(&pool);
++		return SWITCH_STATUS_FALSE;
++	}
+ 
+ 	if (rbuf) {
+ 		ei_x_encode_tuple_header(rbuf, 2);
+ 		ei_x_encode_atom(rbuf, "ok");
+-		_ei_x_encode_string(rbuf, acs->uuid_str);
++		/* The detached worker may already have destroyed acs->pool. */
++		_ei_x_encode_string(rbuf, uuid_str);
+ 	}
+ 
+ 	return SWITCH_STATUS_SUCCESS;
+@@ -1052,6 +1151,7 @@ static switch_status_t handle_request_api(ei_node_t *ei_node, erlang_pid *pid, e
+ static switch_status_t handle_request_event(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
+ 	char event_name[MAXATOMLEN + 1];
+ 	ei_event_stream_t *event_stream;
++	unsigned long stream_port;
+ 	int length = 0;
+ 	int i;
+ 
+@@ -1060,8 +1160,16 @@ static switch_status_t handle_request_event(ei_node_t *ei_node, erlang_pid *pid,
+ 	}
+ 
+ 	switch_mutex_lock(ei_node->event_streams_mutex);
++	if (!switch_test_flag(ei_node, LFLAG_RUNNING) || !switch_test_flag(&kazoo_globals, LFLAG_RUNNING)) {
++		switch_mutex_unlock(ei_node->event_streams_mutex);
++		return SWITCH_STATUS_FALSE;
++	}
+ 	if (!(event_stream = find_event_stream(ei_node->event_streams, pid))) {
+ 		event_stream = new_event_stream(ei_node, pid);
++		if (!event_stream) {
++			switch_mutex_unlock(ei_node->event_streams_mutex);
++			return SWITCH_STATUS_FALSE;
++		}
+ 		/* ensure we are notified if the requesting processes dies so we can clean up */
+ 		ei_link(ei_node, ei_self(&kazoo_globals.ei_cnode), pid);
+ 	}
+@@ -1073,6 +1181,7 @@ static switch_status_t handle_request_event(ei_node_t *ei_node, erlang_pid *pid,
+ 		}
+ 		add_event_binding(event_stream, event_name);
+ 	}
++	stream_port = get_stream_port(event_stream);
+ 	switch_mutex_unlock(ei_node->event_streams_mutex);
+ 
+ 	if (rbuf) {
+@@ -1081,7 +1190,7 @@ static switch_status_t handle_request_event(ei_node_t *ei_node, erlang_pid *pid,
+ 
+ 		ei_x_encode_tuple_header(rbuf, 2);
+ 		ei_x_encode_string(rbuf, ei_node->local_ip);
+-		ei_x_encode_ulong(rbuf, get_stream_port(event_stream));
++		ei_x_encode_ulong(rbuf, stream_port);
+ 	}
+ 
+ 	return SWITCH_STATUS_SUCCESS;
+@@ -1148,8 +1257,9 @@ static switch_status_t handle_request_fetch_reply(ei_node_t *ei_node, erlang_pid
+ 	}
+ 
+ 	if (result == SWITCH_STATUS_SUCCESS) {
+-		switch_safe_free(xml_str);
+-
++		/* fetch_reply transfers ownership to the waiting fetch handler. It
++		 * either attaches the buffer to the parsed XML tree or frees it when
++		 * parsing fails. Freeing it here is a use-after-free/double-free. */
+ 		return erlang_response_ok(rbuf);
+ 	} else {
+ 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Received fetch reply %s is unknown or has expired : %s\n", uuid_str, xml_str);
+@@ -1196,9 +1306,9 @@ static switch_status_t handle_kazoo_request(ei_node_t *ei_node, erlang_pid *pid,
+ 	case REQUEST_SENDMSG:
+ 		return handle_request_sendmsg(ei_node, pid, buf, rbuf);
+ 	case REQUEST_COMMAND:
+-		return handle_request_command(ei_node, pid, buf, rbuf);
++		return handle_request_command(ei_node, pid, buf, rbuf, arity);
+ 	case REQUEST_COMMANDS:
+-		return handle_request_commands(ei_node, pid, buf, rbuf);
++		return handle_request_commands(ei_node, pid, buf, rbuf, arity);
+ 	case REQUEST_BIND:
+ 		return handle_request_bind(ei_node, pid, buf, rbuf);
+ 	case REQUEST_GETPID:
+@@ -1255,6 +1365,7 @@ static switch_status_t handle_mod_kazoo_request(ei_node_t *ei_node, erlang_msg *
+ 		switch_status_t status;
+ 		ei_send_msg_t *send_msg = NULL;
+ 		erlang_ref ref;
++		int reply_prefix_index;
+ 
+ 		switch_malloc(send_msg, sizeof(*send_msg));
+ 		ei_x_new_with_version(&send_msg->buf);
+@@ -1292,8 +1403,14 @@ static switch_status_t handle_mod_kazoo_request(ei_node_t *ei_node, erlang_msg *
+ 		/* send_msg->buf = {ref(), ... */
+ 		ei_x_encode_tuple_header(&send_msg->buf, 2);
+ 		ei_x_encode_ref(&send_msg->buf, &ref);
++		reply_prefix_index = send_msg->buf.index;
+ 
+ 		status = handle_kazoo_request(ei_node, &msg->from, buf, &send_msg->buf);
++		if (send_msg->buf.index == reply_prefix_index) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,
++						  "mod_kazoo request %s did not encode a reply; returning badarg\n", atom);
++			erlang_response_badarg(&send_msg->buf);
++		}
+ 
+ 		if (switch_queue_trypush(ei_node->send_msgs, send_msg) != SWITCH_STATUS_SUCCESS) {
+ 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "error queuing reply\n");
+@@ -1450,9 +1567,6 @@ static switch_status_t handle_erl_msg(ei_node_t *ei_node, erlang_msg *msg, ei_x_
+ static void *SWITCH_THREAD_FUNC receive_handler(switch_thread_t *thread, void *obj) {
+ 	ei_node_t *ei_node = (ei_node_t *) obj;
+ 
+-	switch_atomic_inc(&kazoo_globals.threads);
+-	switch_atomic_inc(&ei_node->receive_handlers);
+-
+ 	switch_assert(ei_node != NULL);
+ 
+ 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Starting erlang receive handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
+@@ -1481,8 +1595,6 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj)
+ 	ei_received_msg_t *received_msg = NULL;
+ 	int fault_count = 0;
+ 
+-	switch_atomic_inc(&kazoo_globals.threads);
+-
+ 	switch_assert(ei_node != NULL);
+ 
+ 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Starting node request handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
+@@ -1600,12 +1712,14 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj)
+ 
+ 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutdown erlang node handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
+ 
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutdown Complete for erlang node handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
++
++	/* No code after destroy_node_handler may dereference ei_node: that call
++	 * destroys the memory pool which owns the node and its strings. */
+ 	destroy_node_handler(ei_node);
+ 
+ 	switch_atomic_dec(&kazoo_globals.threads);
+ 
+-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutdown Complete for erlang node handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
+-
+ 	return NULL;
+ }
+ 
+@@ -1671,13 +1785,40 @@ switch_status_t new_kazoo_node(int nodefd, ErlConnect *conn) {
+ 		switch_threadattr_create(&thd_attr, ei_node->pool);
+ 		switch_threadattr_detach_set(thd_attr, 1);
+ 		switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
+-		switch_thread_create(&thread, thd_attr, receive_handler, ei_node, ei_node->pool);
++		switch_atomic_inc(&ei_node->receive_handlers);
++		switch_atomic_inc(&kazoo_globals.threads);
++		if (!switch_test_flag(&kazoo_globals, LFLAG_RUNNING)) {
++			switch_atomic_dec(&kazoo_globals.threads);
++			switch_atomic_dec(&ei_node->receive_handlers);
++			switch_clear_flag(ei_node, LFLAG_RUNNING);
++			destroy_node_handler(ei_node);
++			return SWITCH_STATUS_FALSE;
++		}
++		if (switch_thread_create(&thread, thd_attr, receive_handler, ei_node, ei_node->pool) != SWITCH_STATUS_SUCCESS) {
++			switch_atomic_dec(&kazoo_globals.threads);
++			switch_atomic_dec(&ei_node->receive_handlers);
++			switch_clear_flag(ei_node, LFLAG_RUNNING);
++			destroy_node_handler(ei_node);
++			return SWITCH_STATUS_FALSE;
++		}
+ 	}
+ 
+ 	switch_threadattr_create(&thd_attr, ei_node->pool);
+ 	switch_threadattr_detach_set(thd_attr, 1);
+ 	switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
+-	switch_thread_create(&thread, thd_attr, handle_node, ei_node, ei_node->pool);
++	switch_atomic_inc(&kazoo_globals.threads);
++	if (!switch_test_flag(&kazoo_globals, LFLAG_RUNNING)) {
++		switch_atomic_dec(&kazoo_globals.threads);
++		switch_clear_flag(ei_node, LFLAG_RUNNING);
++		destroy_node_handler(ei_node);
++		return SWITCH_STATUS_FALSE;
++	}
++	if (switch_thread_create(&thread, thd_attr, handle_node, ei_node, ei_node->pool) != SWITCH_STATUS_SUCCESS) {
++		switch_atomic_dec(&kazoo_globals.threads);
++		switch_clear_flag(ei_node, LFLAG_RUNNING);
++		destroy_node_handler(ei_node);
++		return SWITCH_STATUS_FALSE;
++	}
+ 
+ 	return SWITCH_STATUS_SUCCESS;
+ }
+diff --git a/mod_kazoo.c b/mod_kazoo.c
+index 15b8fb4..9cd3119 100644
+--- a/mod_kazoo.c
++++ b/mod_kazoo.c
+@@ -44,6 +44,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_kazoo_load)
+ 
+ 	memset(&kazoo_globals, 0, sizeof(kazoo_globals));
+ 	kazoo_globals.pool = pool;
++	switch_thread_rwlock_create(&kazoo_globals.ei_nodes_lock, pool);
+ 	kz_set_hostname();
+ 	if(kazoo_load_config() != SWITCH_STATUS_SUCCESS) {
+ 		// TODO: what would we need to clean up here?
+@@ -54,8 +55,6 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_kazoo_load)
+ 	/* connect my internal structure to the blank pointer passed to me */
+ 	*module_interface = switch_loadable_module_create_module_interface(pool, modname);
+ 
+-	switch_thread_rwlock_create(&kazoo_globals.ei_nodes_lock, pool);
+-
+ 	switch_set_flag(&kazoo_globals, LFLAG_RUNNING);
+ 
+ 	/* create all XML fetch agents */
+@@ -90,6 +89,7 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_kazoo_shutdown) {
+ 	int sanity = 0;
+ 
+ 	remove_cli_api();
++	remove_kz_commands();
+ 
+ 	kz_cdr_stop();
+ 
+@@ -102,8 +102,10 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_kazoo_shutdown) {
+ 	while (switch_atomic_read(&kazoo_globals.threads)) {
+ 		switch_yield(100000);
+ 		if (++sanity >= 200) {
+-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to kill all threads, continuing. This probably wont end well.....good luck!\n");
+-			break;
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT,
++						  "Still waiting for %d mod_kazoo thread(s) before safe shutdown.\n",
++						  switch_atomic_read(&kazoo_globals.threads));
++			sanity = 0;
+ 		}
+ 	}
+ 
+diff --git a/mod_kazoo.h b/mod_kazoo.h
+index 37fdd86..030182a 100644
+--- a/mod_kazoo.h
++++ b/mod_kazoo.h
+@@ -30,6 +30,7 @@ typedef enum {
+ 
+ /* kazoo_commands.c */
+ void add_kz_commands(switch_loadable_module_interface_t **module_interface);
++void remove_kz_commands(void);
+ 
+ /* kazoo_dptools.c */
+ void add_kz_dptools(switch_loadable_module_interface_t **module_interface);

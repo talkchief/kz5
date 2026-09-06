@@ -103,6 +103,15 @@ This uses reduced native dependency fixtures, not real ABI/link/transport or
 sanitizer acceptance. Earlier SDP/recovery payload changes and broader RTP/bridge
 lifecycle protection remain unresolved; native admission remains closed.
 
+Full-translation-unit real-header compilation `13867` now passes all fifteen
+private C units with configured flags and `-Werror`, including mod_kazoo's three
+version consumers. A pre-existing generic `VERSION` collision was reproduced and
+fixed by a four-identifier module namespace patch, now wired into the installer.
+All 464 compiler-selected dependencies and source/path identities were stable.
+See [native compilation and installer evidence](doc/mod_kazoo_version_namespace.md).
+This is compilation only: no native linking, module loading or live playback,
+and it does not close the resource, RTP, bridge or callback acceptance gates.
+
 The three recovery findings above were added from the operator's 2026-09-06
 review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
 delayed-notification regression verifies recovery after direct calls finish and
@@ -187,6 +196,7 @@ historical screens. Exact references and API/data requirements are in
 | INST-07 | OPEN — acceptance | Clean Rocky Linux 9 install, each module alone, all-in-one and separated hosts; hostname/address/configuration variations, reboot, repeat install, upgrades and failure recovery. No clean-server success is claimed yet. |
 | INST-08 | ACTIVE — staging acceptance | False-success checks fixed in code: RabbitMQ selected-vhost permissions/exact AMQP bind (65 runtime + 32 password cases pass); external UI API envelope and early API/WebSocket validation (71 cases + main ALL smoke pass). No-route fallback fixed; dry-run no longer claims live validation. Read-only/modular/runtime-config/12 UI wiring groups pass. Actual separated-server connection/install acceptance remains required. |
 | INST-09 | VERIFIED — source transition scope | Main installer now handles clean/current/known-previous Blackhole and Crossbar integrations with explicit old-to-new patches, protected private preflight and final full-patch checks. Session 36178 passed all 42 tests against the extracted actual installer helper, then the main installer smoke: partial/unsafe states and staging failures stop without target changes, unrelated edits survive, repeat install is unchanged, inherited Git redirects are isolated. See doc/installer_source_transitions.md. No live checkout upgrade, clean-server deployment or crash-atomic filesystem guarantee; those remain INST-06/07. |
+| INST-10 | VERIFIED — mod_kazoo source transition scope | Fixed repeated-install failure from overlapping individual patches by validating the complete integration, preserving unrelated edits and refusing partial/unknown source. Added module-only version namespace fix and rebuild fingerprint. Run 46313 passes 15 actual-helper cases, including independent all-13-patches/aggregate equivalence and linked/missing/out-of-inventory rejection; 33997 reruns all 42 Blackhole/Crossbar cases successfully. See doc/mod_kazoo_version_namespace.md. Real fetch/checkout, native linking and clean/distributed install remain INST-01/06/07, not certified by these fixtures. |
 | SEC-01 | BLOCKED — operator | HTTPS `kz5.talkchief.io`: supplied certificates have no matching private key in `/root/ssl`; provide protected matching key or explicitly authorize replacement issuance. Validate WSS and TLS renewal afterward. |
 | SEC-02 | OPEN — operations | Network exposure, least privilege, secrets, SELinux policy, auth/tenant isolation, audit logs, backups, retention, monitoring/alerts and resource/disk limits. Do not equate active services with enterprise certification. |
 | LOAD-01 | OPEN — acceptance | Resolve prior memory/AMQP incident; rerun sustained 30 concurrent calls and full drain, then establish measured capacity. Distinguish concurrent calls from calls/second; 80 CPS is not certified. |

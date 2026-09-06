@@ -1606,7 +1606,9 @@ ensure_kazoo_sources() {
 
 apply_kazoo_integration_patch() (
     set -euo pipefail
-    [[ $# == 1 ]] || die 'Expected one Kazoo integration family'
+    [[ $# == 1 || ( $# == 2 && $1 == mod_kazoo ) ]] ||
+        die 'Expected a Kazoo integration family, with an explicit source only for mod_kazoo'
+    [[ $1 != mod_kazoo || $# == 2 ]] || die 'mod_kazoo requires its explicit source directory'
     # Scope every Git command to this function's explicit working directory.
     # Inherited repository/worktree/config/trace overrides must not redirect
     # the private preflight or the eventual source write. This is a subshell:
@@ -1643,6 +1645,17 @@ apply_kazoo_integration_patch() (
             transition_created_files=(priv/couchdb/schemas/channel_monitoring.json src/cb_channel_monitor.erl
                 src/kazoo_monster_catalog.erl src/modules/cb_members.erl)
             ;;
+        mod_kazoo)
+            transition_new=mod-kazoo-kz5-integration.patch
+            transition_old=mod-kazoo-before-version.patch
+            transition_delta=mod-kazoo-version-namespace.patch
+            transition_source=$2
+            transition_files=(kazoo_api.c kazoo_commands.c kazoo_config.c kazoo_dptools.c
+                kazoo_ei.h kazoo_ei_config.c kazoo_ei_utils.c kazoo_event_stream.c
+                kazoo_fetch_agent.c kazoo_fields.h kazoo_message.c kazoo_node.c mod_kazoo.c mod_kazoo.h)
+            transition_old_files=("${transition_files[@]}")
+            transition_delta_files=(kazoo_api.c kazoo_ei.h kazoo_fetch_agent.c kazoo_node.c)
+            ;;
         *) die 'Unknown Kazoo integration family' ;;
     esac
     transition_safe_file() {
@@ -1663,11 +1676,14 @@ apply_kazoo_integration_patch() (
         return 0
     fi
     # Reject traversal and symlinked ancestors, including above the source root.
-    [[ $KAZOO_ROOT == /* && $KAZOO_ROOT != / &&
-       $(realpath -e -- "$KAZOO_ROOT") == "$KAZOO_ROOT" ]] ||
-        die 'Kazoo source root must be an existing canonical absolute directory'
-    transition_source="$KAZOO_ROOT/applications/$transition_app"
-    [[ -d $transition_source && ! -L $transition_source &&
+    if [[ $transition_app != mod_kazoo ]]; then
+        [[ $KAZOO_ROOT == /* && $KAZOO_ROOT != / &&
+           $(realpath -e -- "$KAZOO_ROOT") == "$KAZOO_ROOT" ]] ||
+            die 'Kazoo source root must be an existing canonical absolute directory'
+        transition_source="$KAZOO_ROOT/applications/$transition_app"
+    fi
+    [[ $transition_source == /* && $transition_source != / &&
+       -d $transition_source && ! -L $transition_source &&
        $(realpath -e -- "$transition_source") == "$transition_source" ]] ||
         die 'Unsafe Kazoo integration source directory'
     # Match the complete, literal file inventory of each reviewed patch.
@@ -1686,7 +1702,8 @@ apply_kazoo_integration_patch() (
             die 'Cannot parse integration patch inventory'
         while IFS=$'\t' read -r transition_inventory_add transition_inventory_remove transition_inventory_path; do
             [[ $transition_inventory_add =~ ^[0-9]+$ && $transition_inventory_remove =~ ^[0-9]+$ &&
-               $transition_inventory_path =~ ^(src|priv)/[a-zA-Z0-9_./-]+$ &&
+               ( $transition_inventory_path =~ ^(src|priv)/[a-zA-Z0-9_./-]+$ ||
+                 ( $transition_app == mod_kazoo && $transition_inventory_path =~ ^[a-z_]+\.[ch]$ ) ) &&
                ${transition_inventory[$transition_inventory_path]:-} == 1 ]] ||
                 die 'Integration patch has an unexpected source path'
             unset 'transition_inventory[$transition_inventory_path]'
@@ -3050,21 +3067,20 @@ prepare_mod_kazoo_source() {
         "$SCRIPT_DIR/patches/mod-kazoo-sync-command-protocol.patch"
         "$SCRIPT_DIR/patches/mod-kazoo-originate-reconcile.patch"
         "$SCRIPT_DIR/patches/mod-kazoo-hold-dtmf-events.patch"
+        "$SCRIPT_DIR/patches/mod-kazoo-version-namespace.patch"
     )
     sync_git https://github.com/freeswitch/mod_kazoo.git "$module_dir" "$MOD_KAZOO_REF"
     for patch_file in "${patch_files[@]}"; do
         [[ -f $patch_file ]] || die "Required mod_kazoo patch is missing: ${patch_file}"
         if [[ $DRY_RUN == true ]]; then
-            log "Would apply required mod_kazoo patch $(basename "$patch_file")"
-        elif git -C "$module_dir" apply --check "$patch_file" 2>/dev/null; then
-            git -C "$module_dir" apply "$patch_file"
-            log "Applied required mod_kazoo patch $(basename "$patch_file")"
-        elif git -C "$module_dir" apply --reverse --check "$patch_file" 2>/dev/null; then
-            log "Required mod_kazoo patch is already applied: $(basename "$patch_file")"
-        else
-            die "mod_kazoo source does not match required patch: ${patch_file}"
+            log "Required mod_kazoo integration input: $(basename "$patch_file")"
         fi
     done
+    # Later patches modify code introduced by earlier patches. Checking each
+    # earlier patch in reverse therefore cannot recognize the combined result.
+    # Use reviewed whole-series snapshots and the explicit previous-to-current
+    # delta, retaining private preflight and source-change checks.
+    apply_kazoo_integration_patch mod_kazoo "$module_dir"
 }
 
 freeswitch_build_fingerprint() {
@@ -3073,7 +3089,7 @@ freeswitch_build_fingerprint() {
         "freeswitch_core=module-load-shutdown-v1" \
         "speech_modules=en-es-fr-v1" \
         "mod_sofia=profile-thread-lifecycle-v1+kazoo-proxy-uri-v1" \
-        "mod_kazoo=${MOD_KAZOO_REF}+fetch-reply-ownership-v1+thread-lifecycle-v1+worker-shutdown-v3+cookie-redaction-v1+prefixes-serialization-v2+fetch-channel-data-v1+fetch-log-redaction-v1+originate-compatibility-v1+reply-completeness-v1+sync-command-protocol-v1+originate-reconcile-v1+hold-dtmf-events-v1" \
+        "mod_kazoo=${MOD_KAZOO_REF}+fetch-reply-ownership-v1+thread-lifecycle-v1+worker-shutdown-v3+cookie-redaction-v1+prefixes-serialization-v2+fetch-channel-data-v1+fetch-log-redaction-v1+originate-compatibility-v1+reply-completeness-v1+sync-command-protocol-v1+originate-reconcile-v1+hold-dtmf-events-v1+version-namespace-v1" \
         "sofia_sip=${SOFIA_SIP_REF}" \
         "spandsp=${SPANDSP_REF}"
 }

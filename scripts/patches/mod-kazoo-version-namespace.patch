@@ -1,0 +1,48 @@
+diff --git a/kazoo_ei.h b/kazoo_ei.h
+--- a/kazoo_ei.h
++++ b/kazoo_ei.h
+@@ -7,7 +7,7 @@
+ #define MODNAME "mod_kazoo"
+ #define BUNDLE "community"
+ #define RELEASE "v1.5.0-1"
+-#define VERSION "mod_kazoo v1.5.0-1 community"
++#define KAZOO_MODULE_VERSION "mod_kazoo v1.5.0-1 community"
+ 
+ #define KZ_MAX_SEPARATE_STRINGS 10
+ #define HOSTNAME_MAX 1024
+diff --git a/kazoo_api.c b/kazoo_api.c
+--- a/kazoo_api.c
++++ b/kazoo_api.c
+@@ -136,7 +136,7 @@
+ 	port = switch_sockaddr_get_port(sa);
+ 	ip_addr = switch_get_addr(ipbuf, sizeof (ipbuf), sa);
+ 
+-	stream->write_function(stream, "Running %s\n", VERSION);
++	stream->write_function(stream, "Running %s\n", KAZOO_MODULE_VERSION);
+ 	stream->write_function(stream, "Listening for new Erlang connections on %s:%u\n", ip_addr, port);
+ 	stream->write_function(stream, "Registered as Erlang node %s, visible as %s\n", kazoo_globals.ei_cnode.thisnodename, kazoo_globals.ei_cnode.thisalivename);
+ 
+diff --git a/kazoo_fetch_agent.c b/kazoo_fetch_agent.c
+--- a/kazoo_fetch_agent.c
++++ b/kazoo_fetch_agent.c
+@@ -196,7 +196,7 @@
+ 	switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Fetch-Key-Value", key_value);
+ 	switch_event_add_header(event, SWITCH_STACK_BOTTOM, "Fetch-Timeout", "%u", profile->fetch_timeout);
+ 	switch_event_add_header(event, SWITCH_STACK_BOTTOM, "Fetch-Timestamp-Micro", "%" SWITCH_UINT64_T_FMT, (uint64_t)now);
+-	switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Kazoo-Version", VERSION);
++	switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Kazoo-Version", KAZOO_MODULE_VERSION);
+ 	switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Kazoo-Bundle", BUNDLE);
+ 	switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Kazoo-Release", RELEASE);
+ 
+diff --git a/kazoo_node.c b/kazoo_node.c
+--- a/kazoo_node.c
++++ b/kazoo_node.c
+@@ -935,7 +935,7 @@
+ 	if (rbuf) {
+ 		ei_x_encode_tuple_header(rbuf, 2);
+ 		ei_x_encode_atom(rbuf, "ok");
+-		_ei_x_encode_string(rbuf, VERSION);
++		_ei_x_encode_string(rbuf, KAZOO_MODULE_VERSION);
+ 	}
+ 
+ 	return SWITCH_STATUS_SUCCESS;
