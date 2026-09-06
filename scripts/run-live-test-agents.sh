@@ -22,6 +22,9 @@ RUN_STARTED=false
 RUN_READY=false
 PRESERVE_AGENT_STATUS=false
 OWNERSHIP_VERIFIED=true
+PHONE_OWNERSHIP_DIAGNOSTIC=not_checked
+PHONE_HEALTH_STATUS=
+REGISTERED_PHONES=0
 CLEANING=false
 declare -a PHONE_PIDS=()
 declare -a STAT_COLUMNS=()
@@ -75,9 +78,23 @@ prepare_runtime() {
 }
 
 owned_helper() {
-    local operation=$1
+    local operation=$1 output code
     [[ -f $HELPER && ! -L $HELPER ]] || return 1
-    if [[ $operation == verify ]]; then
+    if [[ $operation == verify_phones ]]; then
+        if output=$(timeout 90 node "$HELPER" --verify-phones-only 2>&1); then
+            PHONE_OWNERSHIP_DIAGNOSTIC=verified
+            return 0
+        fi
+        PHONE_OWNERSHIP_DIAGNOSTIC=api_or_state_verification_failed
+        # Only fixed diagnostic codes can reach journal/systemd status. Never
+        # echo arbitrary helper output, API bodies, credentials or shell state.
+        for code in missing_or_duplicate_identity owned_user_mismatch owned_device_mismatch protected_microsip_mismatch; do
+            if [[ $output == *"PHONE_OWNERSHIP: $code"* ]]; then PHONE_OWNERSHIP_DIAGNOSTIC=$code; break; fi
+        done
+        return 1
+    elif [[ $operation == verify ]]; then
+        # Cleanup retains its original complete queue/route/roster gate.
+        # Phone-registration authority must never widen cleanup authority.
         timeout 90 node "$HELPER" --verify-only >/dev/null 2>&1
     else
         timeout 90 node "$HELPER" --agent-status "$operation" >/dev/null 2>&1
@@ -157,14 +174,20 @@ start_phone() {
 no_active_calls() {
     local channels
     channels=$(timeout 5 "$FS_CLI" -x 'show channels as json' 2>/dev/null) || return 1
-    jq -e '.rows | type == "array" and length == 0' <<<"$channels" >/dev/null 2>&1
+    valid_zero_channels <<<"$channels" >/dev/null 2>&1
+}
+
+valid_zero_channels() {
+    jq -e 'type == "object" and .row_count == 0 and ((keys - ["row_count","rows"]) | length == 0) and
+      ((has("rows") | not) or (.rows | type == "array" and length == 0))'
 }
 
 monitor_phones() {
-    local index pid
+    local index pid healthy=0
     for ((index=1; index<=COUNT; index++)); do
         pid=${PHONE_PIDS[index-1]}
         if kill -0 "$pid" 2>/dev/null && contact_present "$index"; then
+            healthy=$((healthy + 1))
             if [[ ${PHONE_WARNED[index]:-false} == true ]]; then
                 log "Phone $index registration recovered; existing agent status preserved"
                 PHONE_WARNED[index]=false
@@ -185,7 +208,25 @@ monitor_phones() {
             log "Restarted only phone $index after zero-call proof; agent statuses unchanged"
         fi
     done
+    REGISTERED_PHONES=$healthy
+    report_phone_health
     return 0
+}
+
+report_phone_health() {
+    local status
+    if ((REGISTERED_PHONES == COUNT)) && [[ $OWNERSHIP_VERIFIED == true ]]; then
+        status="$COUNT/$COUNT owned test phones registered; agent statuses preserved"
+    elif [[ $OWNERSHIP_VERIFIED != true ]]; then
+        status="DEGRADED: $REGISTERED_PHONES/$COUNT phones registered; recovery blocked: $PHONE_OWNERSHIP_DIAGNOSTIC; agent statuses preserved"
+    else
+        status="DEGRADED: $REGISTERED_PHONES/$COUNT phones registered; recovery limited to dead owned phones after zero-call proof; agent statuses preserved"
+    fi
+    if [[ $PHONE_HEALTH_STATUS != "$status" ]]; then
+        PHONE_HEALTH_STATUS=$status
+        log "$status"
+        if command -v systemd-notify >/dev/null; then systemd-notify --status="$status" || true; fi
+    fi
 }
 
 stop_phones() {
@@ -208,7 +249,13 @@ clear_fixture_calls() {
     local channels uuid account authorizing peer
     [[ -x $FS_CLI ]] || return 1
     channels=$(timeout 10 "$FS_CLI" -x 'show channels as json' 2>/dev/null) || return 1
-    jq -e '.rows | type == "array"' <<<"$channels" >/dev/null 2>&1 || return 1
+    # A complete zero response authorizes no call action and needs no row list.
+    if valid_zero_channels <<<"$channels" >/dev/null 2>&1; then return 0; fi
+    # Malformed/error/contradictory envelopes must not reach per-channel logic.
+    # The existing account, device and source-IP guards below are unchanged.
+    jq -e 'type == "object" and ((keys - ["row_count","rows"]) | length == 0) and
+      (.row_count | type == "number" and . > 0) and (.rows | type == "array") and
+      .row_count == (.rows | length)' <<<"$channels" >/dev/null 2>&1 || return 1
     while IFS= read -r uuid; do
         [[ $uuid =~ ^[A-Za-z0-9@._:+-]{1,192}$ ]] || continue
         account=$(timeout 3 "$FS_CLI" -x "uuid_getvar $uuid ecallmgr_Account-ID" 2>/dev/null) || continue
@@ -293,7 +340,7 @@ run_service() {
     [[ $version == *'SIPp v3.7.7-TLS-PCAP-SHA256'* ]] || die 'Pinned SIPp 3.7.7 is required'
     load_state
     prepare_runtime
-    owned_helper verify || die 'Owned fixture verification failed before start'
+    owned_helper verify_phones || die "Phone ownership verification failed before start: $PHONE_OWNERSHIP_DIAGNOSTIC"
     if [[ -f $RUNTIME_DIR/preserve-agent-status && ! -L $RUNTIME_DIR/preserve-agent-status &&
           $(<"$RUNTIME_DIR/preserve-agent-status") == "$(jq -r '.deployment_id' <<<"$STATE")" ]]; then
         PRESERVE_AGENT_STATUS=true
@@ -315,11 +362,13 @@ run_service() {
     done
     if [[ $PRESERVE_AGENT_STATUS == false ]]; then owned_helper login || die 'Owned agent login failed'; fi
     RUN_READY=true
+    REGISTERED_PHONES=$COUNT
     # Keep this marker for a SIGKILL/power-loss restart too. Explicit stop is
     # the only path which clears it and intentionally logs out all fixtures.
     printf '%s\n' "$(jq -r '.deployment_id' <<<"$STATE")" >"$RUNTIME_DIR/preserve-agent-status"
     log '30 owned MASTER phones registered; initial login verified or existing statuses preserved (RTP echo)'
-    command -v systemd-notify >/dev/null && systemd-notify --ready --status='30 owned test phones registered; existing agent statuses preserved'
+    command -v systemd-notify >/dev/null && systemd-notify --ready
+    report_phone_health
     next_check=$((SECONDS + 30))
     while :; do
         if ((SECONDS >= next_check)); then
@@ -332,12 +381,13 @@ run_service() {
                 if ((size > 524288)) && [[ -n ${STAT_COLUMNS[$index]:-} ]]; then truncate -s 0 "$file"; fi
             done
             if ((SECONDS - last_owned_check >= 300)); then
-                if owned_helper verify; then
+                if owned_helper verify_phones; then
                     OWNERSHIP_VERIFIED=true
                 else
                     OWNERSHIP_VERIFIED=false
-                    log 'Ownership check failed; repairs paused, running phones and agent statuses unchanged' >&2
+                    log "Phone ownership check failed: $PHONE_OWNERSHIP_DIAGNOSTIC; repairs paused, agent statuses unchanged" >&2
                 fi
+                report_phone_health
                 last_owned_check=$SECONDS
             fi
             next_check=$((SECONDS + 30))

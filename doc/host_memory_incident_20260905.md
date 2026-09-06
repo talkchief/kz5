@@ -31,6 +31,21 @@ compared with 30 online before the incident. That is not a healthy-registration
 acceptance result. Registration recovery remains under investigation. The
 API correctly exposing an offline state is separate from repairing that state.
 
+The subsequent investigation found all 30 SIPp children had exited with eleven
+major watchdog delays between 23:22:27 and 23:23:22, before the final OOM.
+Recovery was incorrectly blocked by the operator's legitimate one-agent queue
+roster and by rejection of FreeSWITCH's valid missing-`rows` zero response.
+Both code paths are repaired. At 2026-09-06 00:12–00:14, a narrowly verified
+failure restart of only the stalled fixture supervisor recovered all 30 phones.
+Actual contacts and the member/device API again show 30 online / 1 offline;
+the exact one-agent roster and 31 reported agent statuses/memberships stayed
+unchanged. No core platform service restarted. See
+[the recovery scope and protected receipts](kazoo_test_phone_recovery.md).
+
+At midnight the normal log rotation retained the exact prior crash records as
+`crash.log.0`; the new crash logs were empty during the recovery checks. No
+manual truncation or deletion removed the incident evidence.
+
 Heavy builds, browser runs and live acceptance work were paused. One exact
 owned private EUnit runner was terminated with TERM; its incomplete rerun is
 not a test pass. No platform service restart, queue-roster change, broad call
@@ -41,6 +56,10 @@ hangup, cache flush or log truncation was used for recovery.
 - Serialize resource-intensive validation/build commands; use hard memory,
   CPU, process-count and runtime limits plus a host-memory reserve. A per-job
   cap alone does not reserve memory against unrelated host processes.
+  The tested [validation guard](validation_resource_guard.md) now enforces
+  serialization and verifies its actual cgroup limits before trusted payloads.
+  The complete current-source 62-test callback/Gemini suite passed under it at
+  00:05–00:09:46, using 181 MiB peak memory without a cgroup OOM.
 - Keep source review parallel, but do not run several private Erlang/browser
   builds alongside live call acceptance on this host.
 - Repeat the bounded platform health and isolated callback/browser gates after

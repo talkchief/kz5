@@ -31,3 +31,24 @@ The map generator uses repository-relative source assets and the existing strict
 These tests establish source-level/offline regression coverage, not complete production or native-speaker approval. English default numbers and legacy custom playback still depend on native numeric speech; newly generated non-English callback defaults remain gated until auxiliary/numeric completion. Real SIP/audio/log/cleanup acceptance is a separate deployment gate.
 
 Do not copy `scripts/test-fixtures/gemini-runtime/kz_datamgr.erl` into any application source or runtime directory. It is intentionally confined to this suite.
+
+## Resource-capped current-source receipt — 2026-09-06
+
+On the live small host, run the offline suite only through the serialized
+guard after checking the maintenance/workload window:
+
+```sh
+bash scripts/run-kazoo-validation.sh --runtime-sec 900 -- /usr/bin/bash /opt/kz5/scripts/test-acdc-gemini-runtime.sh
+```
+
+The 00:05–00:09:46 run passed all 62 tests, production compilation/export/import
+checks, exact 165-asset map and final input freshness. Default patch SHA256 was
+`0d1b87addc16ca631069a1da5b535fdb7240577c314856cd4c166d6412d5d3e3`.
+Systemd recorded 181 MiB peak and 2m10.071s CPU under a 384 MiB memory cap,
+zero swap and a half-core quota. Observed cgroup OOM counters were zero.
+
+The preceding capped rerun was cancelled by one test's ten-second outer EUnit
+budget during mock compilation. That test now allows thirty seconds for setup
+and execution; its inner playback deadlines, timing assertions and production
+timeouts are unchanged. The failed run is not counted as a pass. This remains
+offline source evidence, not post-incident live callback or capacity acceptance.

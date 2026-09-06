@@ -18,7 +18,11 @@ feedback_cases_test_() ->
         fun bounded_command_preserves_prompt_provenance_case/0]].
 
 invalid_number_plays_truthful_feedback_then_resumes_same_member_test_() ->
-    {timeout, 10, fun() -> with_mocks(fun() ->
+    %% The outer budget includes meck's compilation of the real command module.
+    %% Under the validation guard's half-core quota, that setup takes about
+    %% 12 seconds; it is not callback playback time. Keep all inner timing and
+    %% ownership assertions unchanged, but do not cancel during mock setup.
+    {timeout, 30, fun() -> with_mocks(fun() ->
         Started = now_ms(),
         put(play_action, fun() -> later(40, complete(?NOOP)) end),
         put(resume_action, fun(Props) ->

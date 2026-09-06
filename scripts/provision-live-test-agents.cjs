@@ -231,6 +231,33 @@ async function verify(state, token, requireDefaults = false) {
     const protectedDevice = (await request('GET', accountPath('devices', PROTECTED_DEVICE), undefined, token)).data;
     check(protectedDevice.owner_id === PROTECTED_USER, 'Protected MicroSIP owner changed');
 }
+// Registration recovery owns phones, not the operator's current queue roster.
+// Keep verify() unchanged for full provisioning and explicit agent operations.
+// This path performs only exact account-scoped user/device GETs; it must never
+// read/converge queue membership or log any agent in/out.
+async function verifyPhones(state, token, apiRequest = request) {
+    validateState(state);
+    for (const key of ['user_id', 'device_id', 'sip_username']) {
+        const values = state.agents.map(agent => agent[key]);
+        check(values.every(value => key === 'sip_username' || ID.test(value)) && new Set(values).size === 30,
+            'PHONE_OWNERSHIP: missing_or_duplicate_identity');
+    }
+    for (const target of targets(state).filter(item => ['users', 'devices'].includes(item.collection))) {
+        const actual = (await apiRequest('GET', accountPath(target.collection, target.holder[target.key]), undefined, token)).data;
+        check(runtimeTargetMatches(actual, target), target.collection === 'users' ?
+            'PHONE_OWNERSHIP: owned_user_mismatch' : 'PHONE_OWNERSHIP: owned_device_mismatch');
+        // An explicit per-device realm must match the authenticated account;
+        // absent realm inherits that account as it does during provisioning.
+        if (target.collection === 'devices') check(actual.sip?.realm === undefined || actual.sip.realm === state.realm,
+            'PHONE_OWNERSHIP: owned_device_mismatch');
+    }
+    const protectedDevice = (await apiRequest('GET', accountPath('devices', PROTECTED_DEVICE), undefined, token)).data;
+    const protectedUser = (await apiRequest('GET', accountPath('users', PROTECTED_USER), undefined, token)).data;
+    check(protectedDevice?.id === PROTECTED_DEVICE && protectedDevice.owner_id === PROTECTED_USER &&
+        protectedUser?.id === PROTECTED_USER &&
+        [protectedDevice, protectedUser].every(doc => (!doc.pvt_account_id || doc.pvt_account_id === ACCOUNT) &&
+            (!doc.account_id || doc.account_id === ACCOUNT)), 'PHONE_OWNERSHIP: protected_microsip_mismatch');
+}
 async function setAgentStatus(state, token, action) {
     await verify(state, token);
     for (const agent of state.agents)
@@ -250,11 +277,11 @@ async function setAgentStatus(state, token, action) {
 }
 async function main(args) {
     if (args.length === 1 && ['--help', '-h'].includes(args[0])) {
-        console.log('Usage: sudo node scripts/provision-live-test-agents.cjs --provision|--verify-only|--agent-status login|logout\nPinned master account only; fixed 30 agents 1002-1031 and queue 2000. Credentials: /etc/kazoo/live-test-agents.json (0600). No agent login occurs during provisioning.');
+        console.log('Usage: sudo node scripts/provision-live-test-agents.cjs --provision|--verify-only|--verify-phones-only|--agent-status login|logout\nPinned master account only; fixed 30 agents 1002-1031 and queue 2000. --verify-phones-only checks phone ownership, not queue roster or agent status. Credentials: /etc/kazoo/live-test-agents.json (0600). No agent login occurs during provisioning.');
         return;
     }
     const mode = args[0];
-    check((args.length === 1 && ['--provision', '--verify-only'].includes(mode)) ||
+    check((args.length === 1 && ['--provision', '--verify-only', '--verify-phones-only'].includes(mode)) ||
         (args.length === 2 && mode === '--agent-status' && ['login', 'logout'].includes(args[1])), 'Invalid arguments; use --help');
     check(process.getuid() === 0, 'Run as root');
     secureParent();
@@ -277,7 +304,8 @@ async function main(args) {
         (mode === '--provision' ? createState(realm) : fail('No protected fixture state exists'));
     check(state.realm === realm, 'Saved SIP realm does not match the master account');
     if (mode !== '--provision') {
-        if (mode === '--verify-only') { await verify(state, token); console.log('PASS 30 owned agents/devices/routes and exact queue roster'); }
+        if (mode === '--verify-phones-only') { await verifyPhones(state, token); console.log('PASS 30 exact owned phones; queue roster and agent statuses are not changed or required'); }
+        else if (mode === '--verify-only') { await verify(state, token); console.log('PASS 30 owned agents/devices/routes and exact queue roster'); }
         else await setAgentStatus(state, token, args[1]);
         return;
     }
@@ -327,4 +355,4 @@ if (require.main === module) main(process.argv.slice(2)).catch(error => {
     process.exitCode = 1;
 });
 module.exports = {validateState, collisionCheck, targets, marker, sameMarker, subset, merged, ACCOUNT,
-    OWNER, PROTECTED_DEVICE, PROTECTED_USER, runtimeTargetMatches};
+    OWNER, PROTECTED_DEVICE, PROTECTED_USER, runtimeTargetMatches, verifyPhones};

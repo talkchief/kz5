@@ -1,20 +1,25 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-05 23:35 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-06 00:14 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
 
 ## Host memory incident and deployment hold
 
 The 23:27 global OOM event killed a Codex worker, and both Kazoo nodes recorded
 new AMQP timeouts. The broker alarm cleared and read-only checks observed
-reconnected clients without platform restarts. Heavy validation is paused until
-serialized resource controls are in place; recovery is not a call-test pass.
+reconnected clients without platform restarts. Serialized, verified cgroup
+controls are now in place and the current-source 62-test Gemini/callback suite
+passes under them. The thirty test phones are registered again; actual contacts,
+30-online/1-offline directory results and unchanged one-agent roster/statuses
+passed after the isolated test-supervisor recovery. Recovery is not a call-test pass.
 See [the incident evidence and remaining gates](host_memory_incident_20260905.md).
 
-A real resource-capped private Monster UI `npm ci` also failed on the pinned
-upstream dependency lock's inconsistency. The live UI was not replaced.
-A reviewed package/lock compatibility repair and actual clean build remain
-required; no provenance marker is being changed to hide this failure.
+A real resource-capped private Monster UI `npm ci` failed on the pinned upstream
+lock's inconsistency. The initial narrow repair subsequently passed clean CI,
+native Sass/RE2 rebuild and native smoke, but Gulp then failed on incorrectly
+resolved dependencies. Lock ordering and forced-package metadata are under
+review. The live UI was not replaced. A usable clean build remains required;
+no provenance marker is being changed to hide these failed build gates.
 
 ## Queue editor and standalone-apps checkpoint
 
@@ -29,9 +34,12 @@ are now integrated in installer source. All 31 editor/path backend tests and
 11 memory-only initializer groups pass, as do order/unit-wiring checks.
 No live manifest or service was changed by this portability integration.
 A fresh-source audit identified 17 generated legacy WAVs incorrectly included
-alongside 175 pinned official recordings by the old broad scan. Correcting
-source selection and making editor prerequisites follow the actual immutable
-runtime mappings remains in progress; existing recordings will be preserved.
+alongside 175 pinned official recordings by the old broad scan. Committed source
+now reads the exact official Git-pin blobs and preserves existing recordings.
+Editor prerequisites validate the actual 44 English runtime media documents,
+including immutable Gemini IDs, rather than fabricated legacy aliases. Source,
+31 backend tests and private UI tests pass; this newer media-prerequisite
+mapper/editor/UI combination is not deployed yet.
 
 The private simultaneous-answer repair also uncovered a DTMF queue-exit race:
 the callflow can continue before the queue confirms media ownership closure.
