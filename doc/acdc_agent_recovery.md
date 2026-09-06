@@ -45,6 +45,20 @@ bash scripts/test-acdc-callback-recovery-io.sh
 python3 scripts/test-acdc-source-ownership.py
 ```
 
+For the isolated real-OTP state conversion test, use the required resource and
+network guards:
+
+```sh
+bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 \
+  --runtime-sec 120 -- /usr/bin/unshare --net -- \
+  bash scripts/test-acdc-agent-otp-upgrade.sh
+```
+
+This compiles the actual production FSM without `TEST` and runs 27 suspended
+process conversion cases. It does not initialize a production agent, load code
+into a live node, or test a deployment rollback. Logs and input hashes remain in
+the protected temporary directory reported by the runner.
+
 The recovery suite compiles the changed modules into a temporary directory and
 mocks external I/O. It exercises actual FSM callbacks, a running `gen_statem`,
 wire serialization, repeated offers, loss/duplication/reordering of messages,

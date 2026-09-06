@@ -50,6 +50,33 @@ was loaded or replaced.
 Broader source regression `66281` passed all 48 agent, queue FSM, manager and
 member tests against the same source, also isolated from live services.
 
+The repository now includes a real OTP lifecycle fixture:
+
+```sh
+bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 \
+  --runtime-sec 120 -- /usr/bin/unshare --net -- \
+  bash scripts/test-acdc-agent-otp-upgrade.sh
+```
+
+Session `17426` passed all 27 cases using the actual production FSM compiled
+without `TEST`, real `gen_statem` and `sys:suspend/change_code/resume`. The fixture
+injects explicit initial state through a local `proc_lib` bootstrap, bypassing
+production initialization. It proves old-prefix and finite/infinite pause
+preservation, exact timer destination, repeated-conversion idempotence, and
+unchanged suspended state with no timer allocation on rejected conversions.
+After a rejection, an explicitly test-only replacement with valid current state
+precedes resume; malformed/old state is never dispatched into new handlers.
+
+The portable runner checks production/test module paths, loaded OTP/provider
+BEAM identities, source/header/compiler hashes and completion/signal status.
+Evidence is retained at `/tmp/kazoo-acdc-otp-upgrade-run.pwSAjQ`. The same fixture
+first passed privately in `95322`, retained at
+`/tmp/kazoo-acdc-otp-upgrade-run.S82T4S`.
+
+This closes the isolated OTP callback-lifecycle test gap, **not** installed-code
+replacement, listener upgrades, startup, downgrade, admission control or a
+coordinated multi-module live deployment. Those remain release gates.
+
 The old FSM does not implement the reverse conversion. Listener record layouts are unchanged,
 but their actual OTP callback is `gen_listener`, whose code-change callback does
 not delegate to the client module.
