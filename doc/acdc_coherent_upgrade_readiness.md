@@ -11,12 +11,14 @@ The agent FSM still uses its preceding 25-element state tuple; current source
 uses 28 elements. The editor is also an older installed revision. Existing old
 code slots for the editor and Gemini mapper must not be force-purged.
 
-The coherent candidate boundary is ten production modules:
+The coherent candidate boundary now includes eleven production modules:
 
 - `cb_acdc_agent_queue`, `cb_agents`, `cb_acdc_queue_editor`;
 - `acdc_agent_handler`, `acdc_agent_listener`, `kapi_acdc_agent`;
 - `acdc_agent_fsm`, `acdc_callback_recovery_io`, `acdc_queue_listener`,
-  `kapi_acdc_queue`.
+  `kapi_acdc_queue`;
+- `cf_acdc_member`, including the subsequently reproduced and fixed
+  [callback feedback Request-field crash](callback_feedback_request_crash.md).
 
 This list is not complete all-node dependency verification. Compile production
 BEAMs without `TEST`, independently of fixture BEAMs. Verify all participating
@@ -92,7 +94,7 @@ new work from arriving between inspection and activation.
 A drained restart must explicitly preserve runtime queue membership and pause
 state; saved rosters and supervisor startup arguments can be stale. A suspended
 state-preserving migration needs actual OTP migration and rollback rehearsal,
-including queued messages and recovery timers. No generic tested ten-module
+including queued messages and recovery timers. No generic tested multi-module
 migration/admission executor currently exists. Never restore pre-upgrade state
 snapshots after processing has resumed, and never load the old FSM over the new
 tuple as an assumed rollback.

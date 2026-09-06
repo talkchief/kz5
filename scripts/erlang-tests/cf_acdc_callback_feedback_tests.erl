@@ -17,6 +17,59 @@ feedback_cases_test_() ->
         fun lookup_failure_case/0, fun late_completion_case/0,
         fun bounded_command_preserves_prompt_provenance_case/0]].
 
+request_metadata_regression_test_() ->
+    [{timeout, 30, Fun} || Fun <- [fun sip_request_feedback_case/0,
+                                  fun non_object_request_metadata_case/0,
+                                  fun request_call_identity_precedence_case/0]].
+
+sip_request_feedback_case() ->
+    with_mocks(fun() ->
+        %% Ordinary call-event Request is a SIP URI, not a nested error object.
+        put(play_action, fun() ->
+            deliver(kz_json:set_value(<<"Request">>, <<"sip:queue@example.invalid">>, complete(?NOOP)))
+        end),
+        ?assertEqual(resume, feedback(200)),
+        ?assertEqual([prompt_lookup, play], actions())
+    end).
+
+non_object_request_metadata_case() ->
+    with_mocks(fun() ->
+        lists:foreach(fun(RequestValue) ->
+            put(actions, []),
+            put(play_action, fun() ->
+                %% Neither missing call IDs nor stale media errors may crash
+                %% or complete feedback because Request has another JSON type.
+                Unknown = kz_json:delete_key(<<"Call-ID">>,
+                    kz_json:set_value(<<"Request">>, RequestValue, complete(?NOOP))),
+                Stale = kz_json:set_value(<<"Request">>, RequestValue,
+                    event(<<"CHANNEL_EXECUTE_ERROR">>, [{<<"Msg-ID">>, <<"stale">>}])),
+                deliver(Unknown), deliver(Stale),
+                later(30, complete(?NOOP))
+            end),
+            Started = now_ms(),
+            ?assertEqual(resume, feedback(200)),
+            ?assert(now_ms() - Started >= 25),
+            ?assertEqual([prompt_lookup, play], actions())
+        end, [<<"sip:queue@example.invalid">>, <<>>, null, true, 42, [<<"not-an-object">>]])
+    end).
+
+request_call_identity_precedence_case() ->
+    with_mocks(fun() ->
+        put(play_action, fun() ->
+            Nested = kz_json:from_list([{<<"Call-ID">>, ?CALL}, {<<"Msg-ID">>, ?NOOP}]),
+            Foreign = kz_json:set_values([{<<"Call-ID">>, <<"another-call">>},
+                {<<"Request">>, Nested}], event(<<"CHANNEL_EXECUTE_ERROR">>, [])),
+            deliver(Foreign),
+            %% A genuine nested error envelope still completes the matching
+            %% feedback when there is no authoritative top-level Call-ID.
+            later(30, error_event(?NOOP))
+        end),
+        Started = now_ms(),
+        ?assertEqual(resume, feedback(200)),
+        ?assert(now_ms() - Started >= 25),
+        ?assertEqual([prompt_lookup, play], actions())
+    end).
+
 invalid_number_plays_truthful_feedback_then_resumes_same_member_test_() ->
     %% The outer budget includes meck's compilation of the real command module.
     %% Under the validation guard's half-core quota, that setup takes about
@@ -24,7 +77,8 @@ invalid_number_plays_truthful_feedback_then_resumes_same_member_test_() ->
     %% ownership assertions unchanged, but do not cancel during mock setup.
     {timeout, 30, fun() -> with_mocks(fun() ->
         Started = now_ms(),
-        put(play_action, fun() -> later(40, complete(?NOOP)) end),
+        put(play_action, fun() -> later(40, kz_json:set_value(<<"Request">>,
+            <<"sip:queue@example.invalid">>, complete(?NOOP))) end),
         put(resume_action, fun(Props) ->
             ?assert(now_ms() - Started >= 35),
             ?assertEqual(?ACCOUNT, proplists:get_value(<<"Account-ID">>, Props)),

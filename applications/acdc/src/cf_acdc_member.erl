@@ -473,8 +473,10 @@ wait_callback_unavailable(MC, Context, NoopId, Deadline) ->
 
 callback_unavailable_event(#member_call{call=Call}=MC, Context, NoopId, JObj) ->
     CallId = kapps_call:call_id(Call),
-    EventCallId = kz_json:get_ne_binary_value(<<"Call-ID">>, JObj,
-                    kz_json:get_ne_binary_value([<<"Request">>, <<"Call-ID">>], JObj)),
+    EventCallId = case kz_json:get_ne_binary_value(<<"Call-ID">>, JObj) of
+                      'undefined' -> callback_error_request_value(<<"Call-ID">>, JObj);
+                      Id -> Id
+                  end,
     case {EventCallId =:= CallId, kz_api:event_type(JObj)} of
         {'true', {<<"call_event">>, Name}}
           when Name =:= <<"CHANNEL_DESTROY">>; Name =:= <<"CHANNEL_DISCONNECTED">> ->
@@ -512,9 +514,20 @@ callback_unavailable_event(#member_call{call=Call}=MC, Context, NoopId, JObj) ->
 callback_unavailable_media_error(NoopId, JObj) ->
     case kz_call_event:application_response(JObj) =:= NoopId
         orelse kz_json:get_ne_binary_value(<<"Msg-ID">>, JObj) =:= NoopId
-        orelse kz_json:get_ne_binary_value([<<"Request">>, <<"Msg-ID">>], JObj) =:= NoopId of
+        orelse callback_error_request_value(<<"Msg-ID">>, JObj) =:= NoopId of
         'true' -> 'resume';
         'false' -> 'continue'
+    end.
+
+%% Call events use Request for a SIP URI; dialplan errors may instead carry
+%% the original command object there. Never traverse the URI (or other JSON
+%% scalar) as an object, including while evaluating an unused default value.
+-spec callback_error_request_value(kz_term:ne_binary(), kz_json:object()) -> kz_term:api_ne_binary().
+callback_error_request_value(Key, JObj) ->
+    Request = kz_json:get_value(<<"Request">>, JObj),
+    case kz_json:is_json_object(Request) of
+        'true' -> kz_json:get_ne_binary_value(Key, Request);
+        'false' -> 'undefined'
     end.
 
 run_callback_actions(MC, Context, State, []) ->
