@@ -1,5 +1,9 @@
 ## Kazoo [![TravisCI build status](https://travis-ci.org/2600hz/kazoo.svg?branch=master)](https://travis-ci.org/2600hz/kazoo) [![CircleCI](https://circleci.com/gh/2600hz/kazoo/tree/master.svg?style=svg)](https://circleci.com/gh/2600hz/kazoo/tree/master) [![2600Hz IRC](https://img.shields.io/badge/irc-%232600hz-orange.svg)](https://webchat.freenode.net/?channels=2600hz) [![Project Stats](https://www.openhub.net/p/KazooPlatform/widgets/project_thin_badge.gif)](https://www.openhub.net/p/KazooPlatform)
 
+For this kz5 deployment, start with the [engineering handoff](PROJECT_HANDOFF.md)
+and [project task register](PROJECT_TASKS.md). They distinguish implemented,
+tested and deployed work and identify the remaining release requirements.
+
 **[Periodically check our announcements for important developer updates!](https://github.com/2600hz/kazoo/tree/master/doc/announcements.md)**
 
 ````
@@ -172,4 +176,3 @@ See the [installation](./doc/installation.md) page to build.
 * Find out about [JSON web tokens](https://jwt.io/)
 * We cover a lot of topics in our [blog](http://blog.2600hz.com/) as well
 * Watch our past [presentations](https://www.youtube.com/user/2600hzOfficial/videos)
-
