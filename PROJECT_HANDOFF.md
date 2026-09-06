@@ -6,6 +6,15 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Scope update — September 6, 2026:** the user postponed historical dashboards
+and workforce reporting because ClickHouse is available for that future work.
+The immediate dashboard delivery is ONLY the live queue summary and the clicked
+queue's live detail, using the two supplied live designs, scoped HTTP snapshots
+and native Blackhole updates. Do not build historical storage, ingestion,
+reports or ClickHouse integration now. Agent state within queue detail remains
+in scope; a separate agent dashboard is deferred. Neither live screen is yet
+accepted/deployed. See the scope override in `PROJECT_TASKS.md`.
+
 Documentation baseline: local commit **`57b55e1`**, branch
 `fix/acdc-outbound-agent-availability`, September 6, 2026. This section records
 subsequent work in progress, not a new deployment. No backend/UI/native service

@@ -214,26 +214,38 @@ The supplied folder contains four designs, covering two live screens and two
 historical screens. Exact references and API/data requirements are in
 [the dashboard implementation brief](doc/dashboard_delivery_plan.md).
 
+**Scope override — September 6, 2026 (user request):** prioritize only the live
+queue summary (DASH-01) and clicked queue detail (DASH-02), with their required
+snapshot, Blackhole and OpenAPI work (DASH-03/04/05 and queue-related DASH-08).
+Historical queue/agent dashboards (DASH-06/07), separate agent dashboard
+(DASH-09), and workforce reports/storage (WFM-01–04) are **POSTPONED**, not
+completed and not acceptance blockers for this live-dashboard delivery.
+ClickHouse is the user-selected future historical platform; no new historical
+store, ingestion, migration or ClickHouse integration is authorized by this
+scope change. Existing Kazoo archives are left intact. Agent rows/state inside
+the selected queue remain in scope. This override takes precedence over the
+older OPEN labels and broad requirements retained below for future reference.
+
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
-| DASH-01 | OPEN — UI | Live queue overview using `Queues Live Dashboard Main.png`: sortable queue cards, SLA, waiting/handled/abandoned counts, wait/handle durations, queue administration actions. |
-| DASH-02 | OPEN — UI | Clicking a queue opens its live detail using `Queues Live Dashboard.png`: KPI cards, queue-scoped agent/call states, search/filter/sort, performance and authorized spy/whisper/barge/join controls. |
+| DASH-01 | ACTIVE — UI source work; not deployed | Live queue overview using `Queues Live Dashboard Main.png`: sortable queue cards, SLA, waiting/handled/abandoned counts, wait/handle durations, queue administration actions. |
+| DASH-02 | ACTIVE — UI source work; not deployed | Clicking a queue opens its live detail using `Queues Live Dashboard.png`: KPI cards, queue-scoped agent/call states, search/filter/sort, performance and authorized spy/whisper/barge/join controls. |
 | DASH-03 | ACTIVE — pure projection tested; collector/API open | Bounded account/queue dashboard snapshots with source timestamps, completeness, pagination and authorization. acdc_dashboard_projection now consumes actual call_stat records with bounded queues/rows, separate occupancy/cohort counts, conflict/scope/timeline rejection and explicit incomplete/identity limits;38 tests passed60072. See doc/acdc_dashboard_projection.md. Bounded source collection, unique visit identity, cluster coverage, authorization, HTTP/OpenAPI and live UI still required. Existing stats ignores Limit and its recent-entry filter can omit older active calls; wrapping that API is not a complete snapshot. |
 | DASH-04 | OPEN — events | Reuse native Blackhole for authenticated account/queue-scoped WebSocket updates, not a duplicate transport server. Snapshot/event ordering, duplicate/gap handling, reconnect/resubscribe/resync, server-side token expiry/revocation, stale indicators, bounded buffers and multi-node ownership. Native delivery is best effort and has no durable replay cursor; account-hierarchy checks are not queue permissions. No silent polling-only substitution. |
 | DASH-05 | OPEN — API + docs | Define/version dashboard request, response and event schemas. Publish HTTP contracts in OpenAPI at `/apis`, link WebSocket message/subscription/lifecycle documentation; distinguish proposals from deployed endpoints. Test schema conformance and tenant isolation. |
-| DASH-06 | OPEN — UI + reporting | Queue historical dashboard using `Queue Historical Dashboard.png`: time/queue filters, call outcomes, SLA, wait/handle/talk metrics, details and export. Reconcile counts, timezone boundaries and late events. |
-| DASH-07 | OPEN — UI + reporting | Agent historical dashboard using `Agent Historical Dashboard.png`: agent/queue/date filters, last activity, outcomes, talk/break/idle durations, details and export. Define attribution for transfers/multiple queues. |
+| DASH-06 | POSTPONED — UI + reporting | Queue historical dashboard using `Queue Historical Dashboard.png`: time/queue filters, call outcomes, SLA, wait/handle/talk metrics, details and export. Reconcile counts, timezone boundaries and late events. |
+| DASH-07 | POSTPONED — UI + reporting | Agent historical dashboard using `Agent Historical Dashboard.png`: agent/queue/date filters, last activity, outcomes, talk/break/idle durations, details and export. Define attribution for transfers/multiple queues. |
 | DASH-08 | OPEN — API + Next.js acceptance | Explicit company/account, queue and agent filtering contracts for snapshots and native Blackhole subscriptions. Company means Kazoo ACCOUNT_ID, not a free-text company name; enforce tenant and queue/agent permissions on the server, including wildcards and reseller/sub-account access. Document selected-queue and selected-agent examples, supported filters, unauthorized/unknown IDs and switching scope without leaking old events. Existing generic call bindings are not queue dashboard bindings. Test isolation, reconnect/resnapshot and filter changes with a real Next.js integration before marking ready. |
-| DASH-09 | OPEN — API + docs | Add live agent dashboard contracts alongside company queue overview, selected-queue live detail and queue/agent history. Publish versioned HTTP request/response/error schemas at /apis and linked WebSocket bindings/event schemas, with copyable Next.js examples. Clearly label planned versus implemented versus deployment-tested contracts; do not advertise invented dashboard routes as callable. Test actual responses/events against schemas and exercise examples against the matching deployment. |
+| DASH-09 | POSTPONED — API + docs | Add live agent dashboard contracts alongside company queue overview, selected-queue live detail and queue/agent history. Publish versioned HTTP request/response/error schemas at /apis and linked WebSocket bindings/event schemas, with copyable Next.js examples. Clearly label planned versus implemented versus deployment-tested contracts; do not advertise invented dashboard routes as callable. Test actual responses/events against schemas and exercise examples against the matching deployment. |
 | BH-01 | ACTIVE — deployment acceptance | Token/reason/unsupported-frame redaction is packaged as a pinned installer patch; session `86439` passed eight public-entry tests, six production compiles and exact source replay. No live deployment yet. Malformed JSON and generic application-payload logging, authentication lifetime and full protocol security remain separate gaps; see `doc/blackhole_resilience.md`. |
 | BH-02 | ACTIVE — security | Context result classification bug reproduced (five failures/one control), corrected in source (six groups pass, 18786); combined replay and ten public-handler tests including mixed-denial dispatch prevention pass (69993). See doc/blackhole_binding_results_acceptance.md. Enforce and test socket authentication lifetime, token/account changes, expiry/revocation and missing/failed auth modules; existing cached authenticated context is not sufficient. Preserve tenant isolation and add queue/resource permissions for dashboard bindings. |
 | BH-03 | ACTIVE — deployment/security acceptance | Finite inbound frame/reassembled-message limits, malformed/non-object rejection and close-reason redaction implemented in installer patch. Session 62506 passes 13 real private-Cowboy wire groups, eight production compiles, exact schema/source replay and cleanup checks. Initial 38610 exit99 rejected because runner changed; clean rerun required and passed. Connection limits/trusted proxy identity, live deployment, load and unrelated-session stress remain open; no total-memory or whole-log-safety guarantee. |
 | BH-04 | OPEN — resilience | Slow-client/backpressure policy and observable loss/resync: current emitter can silently drop events and replies over its mailbox threshold. Do not claim replay/exactly-once semantics. Add bounded buffers, load/failure tests and frontend stale/reconnect handling without a duplicate transport service. |
 | BH-05 | ACTIVE — deployment acceptance | Native Blackhole reference extended in ab9d78a with company/call versus planned queue/agent filtering, supervision audio matrix and source frame limits. Offline/browser checks pass (24389/95890); /apis publication 51631 verifies all 12 assets, HTTP hashes/no-store/redirect/404 and rollback. Proposed dashboard contracts remain distinct. Native app/listener and reverse proxy, separate-node configuration, reconnect/failover, TLS and real authenticated event delivery still require production acceptance. |
-| WFM-01 | OPEN — product + UI | Workforce report in the same design language: agent/date/queue filters, login/logout times, sessions, working hours, total breaks and breakdown by break type; drilldown and export. |
-| WFM-02 | OPEN — API + storage | Durable agent session/state-transition and break-reason records with identifiers, timestamps, provenance and runtime confirmation. Handle missing logout, restart, duplicate/late events, overnight shifts, timezone/DST and multi-queue sessions without double counting. |
-| WFM-03 | OPEN — API + docs | Workforce summary, session details, break-type catalog and export APIs; access control, bounded ranges/pagination and OpenAPI schemas/examples/errors. Separate break configuration changes from reporting reads. |
-| WFM-04 | OPEN — acceptance | Define paid/unpaid break policies and working/available/talk/wrap-up/idle time explicitly. Report unknown/incomplete intervals; never infer payroll hours from SIP registration. Reconcile totals and test exports, corrections/audit trail, retention and sensitive-data access. |
+| WFM-01 | POSTPONED — product + UI | Workforce report in the same design language: agent/date/queue filters, login/logout times, sessions, working hours, total breaks and breakdown by break type; drilldown and export. |
+| WFM-02 | POSTPONED — API + storage | Durable agent session/state-transition and break-reason records with identifiers, timestamps, provenance and runtime confirmation. Handle missing logout, restart, duplicate/late events, overnight shifts, timezone/DST and multi-queue sessions without double counting. |
+| WFM-03 | POSTPONED — API + docs | Workforce summary, session details, break-type catalog and export APIs; access control, bounded ranges/pagination and OpenAPI schemas/examples/errors. Separate break configuration changes from reporting reads. |
+| WFM-04 | POSTPONED — acceptance | Define paid/unpaid break policies and working/available/talk/wrap-up/idle time explicitly. Report unknown/incomplete intervals; never infer payroll hours from SIP registration. Reconcile totals and test exports, corrections/audit trail, retention and sensitive-data access. |
 
 ## Queue features, voices and APIs
 
@@ -288,7 +300,9 @@ historical screens. Exact references and API/data requirements are in
    without an explicit selection; queue-login API and UI ship together.
 3. Correct production UI build and installer gates; matching deployment/browser
    checks; complete language handling without recurring TTS calls.
-4. DASH-03/04/05 establish trustworthy data/events, then DASH-01/02; historical
-   and workforce designs follow with validated interval/metric definitions.
+4. Immediate dashboard priority: DASH-03/04/05 establish trustworthy live
+   data/events alongside DASH-01/02 UI work. Historical dashboards, separate
+   agent dashboard and workforce reporting are postponed for future ClickHouse
+   work; do not implement them or block live delivery on them.
 5. Clean/distributed installation, security, sustained load, restore/failover and
    authenticated remote release. Document external blockers, not fictitious passes.

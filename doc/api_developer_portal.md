@@ -92,8 +92,11 @@ it does not establish dashboard queue/agent permissions. Do not put a queue ID
 in the call-ID position or assume adding an arbitrary `queue_id` field filters
 events. Client-side filtering is not a tenant or queue authorization boundary.
 
-Company queue overview, selected-queue detail, live agent dashboard and
-queue/agent history require the dedicated contracts tracked in DASH-03–09.
+Company queue overview and selected-queue live detail are the immediate
+delivery, with dedicated contracts tracked in DASH-03/04/05/08. On September 6,
+2026 the user postponed separate agent dashboards, queue/agent history and
+workforce reporting for later ClickHouse work. No ClickHouse integration is
+being built in this live-dashboard slice.
 Their HTTP and WebSocket schemas, scope examples and executable Next.js examples
 must be published and tested together. They are not currently ready-to-use
 dashboard APIs; the existing `/apis` Blackhole reference describes transport,

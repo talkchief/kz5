@@ -7,6 +7,21 @@ Destination is the existing Monster UI ACDC application, not a separate hosted
 analytics product. Audience: account-authorized supervisors and workforce staff.
 The supplied screenshots define appearance and navigation, not production data.
 
+## Current delivery scope — user override, September 6, 2026
+
+Build only the live queue overview and selected queue live detail. Include
+current queue/agent/call state, account/queue authorization, source freshness,
+native Blackhole subscriptions and reconnect/resnapshot behavior, and the
+matching HTTP/OpenAPI and WebSocket contracts for later Next.js reuse.
+
+Queue/agent historical screens, separate agent dashboard, workforce reports,
+historical ingestion/storage and exports are postponed. The user already has
+ClickHouse for future history; do not add a competing store or configure
+ClickHouse now. Existing archive behavior is unchanged. Historical requirements
+below are retained as deferred reference, not current implementation tasks or
+live-dashboard acceptance gates. Do not present a limited in-memory window as
+complete daily/historical totals; show unavailable metrics explicitly.
+
 ## Supplied designs and navigation
 
 | Reference | Required behavior |
