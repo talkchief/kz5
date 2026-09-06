@@ -57,7 +57,8 @@ narrow configuration mock. The same 384 MiB / 50% CPU cap and 120-second outer
 limit remained enforced; production timers and assertions were unchanged.
 The external team's recovery commit `d69cf04` is now integrated by kz5 merge
 `8548b98`, with its six production-module changes preserved. Root independently
-passed all 22 recovery regressions and six source-ownership checks. The team's
+passed all 22 recovery regressions, all 48 combined unit tests, and six
+source-ownership checks. The team's
 reported 174 tests and 63-module compilation are handoff evidence, not a fresh
 combined-source result. The merged historical media run passed map/production
 checks but exceeded its outer deadline during EUnit; bounded full-suite

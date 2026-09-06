@@ -112,6 +112,10 @@ Against the combined source, root independently observed:
 - Source-ownership suite: all six tests passed, including real disposable Git
   cleanup and the combined replay projection. ACDC remains directly tracked
   inside kz5, with no nested Git metadata.
+- Combined unit session `57090`: exit zero, all 48 tests passed after the
+  recovery merge and installer commit `5184dbc`, under the same 120-second
+  resource guard. This includes the earlier delayed-notification recovery
+  cases and preserves the team's source changes.
 - Historical media session `83435`: deterministic 165-asset map and four
   production-module compilation/export/import checks passed, but the complete
   EUnit run exceeded the 120-second outer guard and exited 143. This is a
