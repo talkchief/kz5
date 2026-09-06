@@ -66,6 +66,18 @@ bridge-ticket release. The core native dispatcher and actual bridge/end caller
 hooks are still being implemented; these private proofs do not certify deployed
 callback behavior or constitute an installer-ready patch.
 
+Private correction session `47373` passed 14 extracted native cleanup fragments
+in four lifecycle modes, a pure C resource classifier/cache-extension check and
+56 local Erlang renderer/coordinator tests. Five private production modules
+compiled; 20 source and 311 dependency inputs remained unchanged. Receipt:
+`/usr/local/src/kazoo5-installer/callback-owned-audio.EeqmMW/owned-resource.ZG05KT/scoped-resource-proof.OeKZXh/receipt.json`,
+SHA-256 `91759d38b0c7700e75756130cc47d9965669ce4d3257476f359d8b91f8cd027f`.
+This tests scoped cleanup and unsupported-versus-quiescent outcomes, **not**
+full native playback, accepted output, transport or callback completion. Native
+admission remains closed in that private proposal. Actual atomic media output,
+Sofia/RTP failure propagation, bridge callers and live audio remain required;
+the next private implementation targets accepted owned G.711 output.
+
 The three recovery findings above were added from the operator's 2026-09-06
 review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
 delayed-notification regression verifies recovery after direct calls finish and
