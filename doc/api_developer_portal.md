@@ -146,3 +146,14 @@ tamper checks. These checks neither authenticate live principals nor execute
 telephony calls. Restricted-token/cross-account/expiry live acceptance is open.
 OpenAPI SHA-256: `aaba0a3d9f75ca54ce498a139a86e1d31468b09fe1879e0289eaa45c1322e4b2`.
 Manifest SHA-256: `fb90e2a7e392c68eb2987c75ca3526f8957f0b69a22e47a8d62450dd25413307`.
+
+The committed static catalog was then published using the installer's actual
+`install_api_developer_docs` function (session `8585`, exit zero). The previous
+verified portal is retained at
+`/usr/local/src/kazoo5-installer/api-docs-rollback.eXNs97/previous` (protected
+parent). All eleven deployed files, including the manifest, match repository
+bytes. Loopback HTTP with `Host: kz5.talkchief.io` verified `/apis` redirects
+308, every asset returns 200 with exact bytes and `Cache-Control: no-store`,
+and an unknown asset returns 404. No nginx reload, daemon restart, backend
+module load, authentication request or call-state change was made.
+This is HTTP static-publication evidence, not TLS or browser/runtime acceptance.
