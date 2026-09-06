@@ -112,6 +112,27 @@ See [native compilation and installer evidence](doc/mod_kazoo_version_namespace.
 This is compilation only: no native linking, module loading or live playback,
 and it does not close the resource, RTP, bridge or callback acceptance gates.
 
+Actual PIC/link run `90804` subsequently compiled all fifteen units and linked
+the private core and Sofia libraries, then failed the Kazoo link because the
+test's explicit command omitted normal libtool dependency-library expansion
+(first missing direct dependency: libcurl). All 853 input hashes and 913 path
+identities were stable. This is a failed overall proof; the test-command
+correction must be revalidated without weakening undefined-symbol checks.
+See [native link readiness](doc/callback_native_link_readiness.md), including
+the concrete unopened SAY, media-lifetime and bridge-caller gates.
+
+The complete corrected private build checkpoint `22624` now passes all fifteen
+fresh PIC compilations, three strict links and core/Sofia/Kazoo ELF checks, with
+865 input hashes and 925 path identities stable. Native library-dependency
+expansion and the test's incorrect public-export expectation for an internal
+classifier were corrected; no C/header/visibility or warning checks were changed.
+Receipt SHA-256:
+`c4c563de93afc3686cafec076b7d48bed69b3047e69fb2ad2698c723dc684912`.
+The resource guard first refused 384 MiB; the successful run lowered the cap to
+320 MiB while preserving the 768-MiB reserve. This is incremental linking with
+pinned cached unchanged objects, not a cold build or runtime acceptance.
+Nothing was loaded or deployed; public callback-audio admission remains closed.
+
 The three recovery findings above were added from the operator's 2026-09-06
 review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
 delayed-notification regression verifies recovery after direct calls finish and
