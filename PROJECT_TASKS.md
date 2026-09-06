@@ -91,6 +91,18 @@ Admission is still closed: early codec destruction, RTP mutation/teardown
 reservation, every bridge entry/end (including arranged bridge resume), real
 native build/link, hold/SAY continuity and live audio acceptance remain open.
 
+Private codec-entry/read-retry session `11226` subsequently passed seven source
+fixture groups: all eleven setter exits, recursive/foreign-thread conflicts,
+full-playback completion versus revoke/frame acknowledgements, admission fencing,
+exact ticket release and all four direct setter call sites. Read-reset retries
+retain the pending request and use the existing paced 20-ms CNG path. Receipt:
+`/usr/local/src/kazoo5-installer/callback-owned-audio.EeqmMW/native-codec-fence.E48ZvD/codec-proof.Fi7LWs/receipt.json`,
+SHA-256 `cde65bf202404b402fff4dea4a67c7ddb3aba49e72bfb38e2fad55cf62466849`.
+The receipt is explicitly complete with stable source/native/dependency inputs.
+This uses reduced native dependency fixtures, not real ABI/link/transport or
+sanitizer acceptance. Earlier SDP/recovery payload changes and broader RTP/bridge
+lifecycle protection remain unresolved; native admission remains closed.
+
 The three recovery findings above were added from the operator's 2026-09-06
 review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
 delayed-notification regression verifies recovery after direct calls finish and
