@@ -144,8 +144,17 @@ regenerated and passed offline checks; `95890` repeated those checks and passed
 actual Chromium rendering, including both new reference headings: 651 operations,
 10 local GETs, zero external requests and zero console errors. Its manifest is
 `024aac0c3a9563e3d46140c7527e104313f6bec00ed505f1a320e319b242aa0e`.
-This newer artifact has **not** been published by the earlier `73763` operation;
-that served checkpoint and rollback receipt remain distinct.
+This newer artifact was not published by the earlier `73763` operation;
+that checkpoint and rollback receipt remain distinct. Publication `51631`
+subsequently deployed the new artifact from source commit
+`ab9d78afced08fe9567b9033e3e49d25f9caceba` using the actual installer documentation
+copy function. All twelve files matched HTTP readback with `no-store`, `/apis`
+redirected with 308 and an unknown asset returned 404. The previous deployment
+was verified and retained at
+`/usr/local/src/kazoo5-installer/api-docs-rollback.AP83ll/previous` (manifest
+`0f350101477e9ba761bdc84985278fed5563fd1aa4c1e86ee1dab3673921bf3b`).
+This was a static-documentation update only: no backend deployment, service
+restart/reload, TLS test or authenticated WebSocket acceptance.
 
 - Queue CRUD, full roster replacement/clear, statistics, and historical ACDC stats.
 - Callback list, read and cancel. There is no public callback-create endpoint;
