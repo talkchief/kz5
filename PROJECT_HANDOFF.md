@@ -85,17 +85,27 @@ spell positions digit-by-digit, or use robotic native SAY as a completed fix.
 | Independent announcement scheduling | `applications/acdc/src/acdc_announcements.erl` |
 | Returned callback / caller confirmation | `applications/acdc/src/acdc_callback_caller.erl` |
 
-The installer has been updated in the worktree to require/import/verify the 210
+Commit `0904240` packages the new WAVs and updates the installer to require/import/verify the 210
 assets using files only. Its mapping/receipt helpers still accept the explicit
 older 165 inventory for legacy verification; the new installer requires 210.
 
 ## 3. What is actually deployed versus only prepared
 
-**No new supplemental media import, backend deployment or restart has occurred
-in this checkpoint.** The 45 WAVs are generated locally. The 210 map and
-installer integration are prepared; canonical callback integration is being
-finished/tested in the worktree. Do not tell the user the new callbacks are
-ready to test until matching source/media are deployed and verified.
+**The real installer media-import step passed on September 6 (session 19674,
+exit 0): all 210 immutable assets were verified, with existing audio preserved.**
+The receipt records **0 created, 210 preserved, 210 verified**; this run verified
+existing installed assets rather than adding new documents. Its nonsecret receipt is
+`/usr/local/share/kazoo5-installer/acdc-gemini-media.json`. This was the actual
+`install_acdc_language_packs` function using the protected deployment settings,
+not a fixture. Node/npm were already installed. The run used the validation
+guard (256 MiB cap, 768 MiB reserve, 300-second deadline).
+
+This step did **not** activate runtime media mappings, change queue configuration,
+deploy the canonical backend, restart services, or prove live playback. The
+receipt deliberately reports runtime/full-position readiness as false.
+Canonical callback integration remains uncommitted in the worktree and needs
+its corrected current-source test rerun. Do not tell the user the new callbacks
+are ready to test until matching source/media are deployed and verified.
 
 A fresh earlier live probe found a critical discrepancy: the loaded
 `acdc_announcements` BEAM imported Gemini helpers, but tracked canonical source
@@ -124,6 +134,8 @@ All eight were observed active. Activity alone does not establish readiness.
 | --- | --- |
 | Commit `e4c20e8` | ACDC expired-deadline priority and bounded event drains; 12 scheduler/worker tests. `doc/acdc_announcement_mailbox_fairness.md` |
 | Commit `6bddf71` | Installer forced Erlang rebuild, targeted number/MIME regeneration and same-invocation content-drift refusal. `doc/installer_build_identity.md` |
+| Commit `08bf317` | Initial central handoff, immutable voice contract and navigation links |
+| Commit `0904240` | 45 supplemental recordings, provenance, 210-asset lookup/import/receipt/mapping support and installer regressions; local, not pushed |
 | `/tmp/kazoo-force-recompile.8X2lwo/receipt.json` | 12 private real Make/compiler/readback commands |
 | `/tmp/kazoo-generated-rebuild.a46KIZ/receipt.json` | Seven groups /17 real private generator/compiler commands; no downloads |
 | Session 46576, exit 0 | Build snapshot + ecallmgr reuse + complete installer dry-run smoke |
@@ -131,6 +143,8 @@ All eight were observed active. Activity alone does not establish readiness.
 | Session 6695, exit 0 | Existing voice import and six mapping tests, including private real Erlang template execution |
 | Session 84007, partial pass then exit 1 | Actual 45-WAV verification, deterministic210 map and210-asset import tests passed; installer fixture still supplied old asset arguments and failed |
 | Session 60775, exit 0 | Rerun after fixing fixture supplemental arguments: all13 installer scenarios passed, including missing assets, no-effect dry run, create-only import, verify-only and failure-before-deployment. Traces: `/tmp/kazoo-gemini-installer-tests.b2nWlC` |
+| Session 19674, exit 0 | Actual installer media import and byte verification of210 assets on this host; receipt path above. No backend/mapping activation |
+| Agent session 30693, exit 1 | Current production/TEST compilation passed;64 tests passed and16 success tests failed on a legacy `get_prompt/2` mock mismatch. This run was not externally resource-guarded. Fixture and additional regressions were changed afterward; a fresh guarded run is still required |
 
 Temporary receipt paths are local evidence and may not survive a new server.
 The durable test implementations and explanatory documents are in Git/worktree.
@@ -143,26 +157,62 @@ Update this section with final outcomes rather than deleting failed evidence.
    observation timed out.
 2. Finish/review the canonical callback changes and run
    `scripts/test-acdc-gemini-canonical-callback.sh`, callback feedback/menu,
-   caller/announcement regressions and production compilation. Some new harness
-   files are currently being prepared; inspect before invoking.
+   caller/announcement regressions and production compilation. The agent has
+   finished its edits; no test job remains running. Unverified amendments fix
+   the success mock, add built-in success coverage, capture the initial deadline
+   and manager monitor before media preflight, and pin harness/header inputs.
 3. Complete the UI adoption/readiness contract. Existing hidden prompt fields
-   preserve overrides despite the simplified display. Editor PATCH needs
-   `announcements.media: null`, `callback.media: null`, and
-   `callback.return_confirmation_prompt: null` when adopting built-in defaults;
-   `{}` recursively preserves old values. Do not delete media documents.
+   preserve overrides despite the simplified display. Delete obsolete prompt
+   references in the persisted queue when adopting built-in defaults, and test
+   the API's merge/deletion behavior: `{}` can recursively preserve old values.
+   **Do not blindly persist `callback.return_confirmation_prompt: null` or
+   `callback.media.returned_confirmation: null`: current helper code treats
+   these as explicit invalid configuration and fails closed.** Either ensure
+   the fields are absent after the update, or deliberately implement and test
+   null-as-deletion semantics at that boundary. Do not delete media documents.
 4. Finish the prerecorded position-number catalog/compositor for all five
    languages, generate missing release artifacts once, and verify natural
    playback. Do not enable a full-language capability based on native SAY.
-5. Import verified assets through the installer, deploy the coherent backend/UI
+5. Verify the imported receipt and activate the targeted mappings with validated
+   node/hostname settings; deploy the coherent backend/UI
    and native media fixes, and run the actual key-6/30-second-offer/confirmation/
    unanswered-first-attempt retry scenario. Inspect logs and queue/agent state.
 6. Continue the remaining task register; voice completion alone does not close
    the original platform goal.
 
-Parallel owners at this checkpoint: `native_audio_path_audit` owns canonical
-callback source/test changes; `media_prerequisites` is examining the full-range
-cardinal composition design. Inspect their status/messages before overlapping
-their edits. Root owns importer/map/installer/docs and release integration.
+Ownership at this checkpoint: `native_audio_path_audit` has handed back canonical
+callback source/tests and stopped editing; root owns their review, guarded rerun
+and integration. `media_prerequisites` is examining the full-range cardinal
+composition design. Inspect current agent status/messages before overlapping
+edits. Root owns importer/map/installer/docs and release integration.
+
+### Safe next-agent verification commands
+
+Run from `/opt/kz5`. These validate current files without deploying or calling
+Gemini; the receipt check validates inventory identity, not fresh database bytes.
+
+```bash
+git status --short
+git log -5 --oneline
+node scripts/generate-acdc-gemini-map.cjs --check
+node scripts/validate-acdc-gemini-receipt.cjs \
+  --fixed-pack /opt/kz5/scripts/assets/acdc-gemini-fixed-20260905 \
+  --completion-pack /opt/kz5/scripts/assets/acdc-gemini-completion-20260905 \
+  --supplemental-pack /opt/kz5/scripts/assets/acdc-gemini-supplemental-20260906 \
+  < /usr/local/share/kazoo5-installer/acdc-gemini-media.json
+bash scripts/run-kazoo-validation.sh \
+  --memory-mib 256 --reserve-mib 768 --runtime-sec 600 -- \
+  /usr/bin/unshare --net /usr/bin/bash \
+  /opt/kz5/scripts/test-acdc-gemini-canonical-callback.sh
+```
+
+Do not run the heavy test alongside another guarded job. A missing temporary
+session/receipt is not a passing test; rerun the checked-in harness and record
+the source identity, terminal exit status and limitations. To inspect the live
+host, use `systemctl is-active` with the service names above,
+`journalctl -u kazoo-apps -u kazoo-ecallmgr --since '10 minutes ago'`, and
+`/usr/local/freeswitch/bin/fs_cli -x 'show calls count'`. Logs can contain private
+call/account data: summarize relevant errors rather than publishing raw dumps.
 
 ## 6. Wider goal: where remaining work is tracked
 
