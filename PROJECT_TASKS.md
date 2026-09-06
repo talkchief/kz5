@@ -11,6 +11,19 @@ explicitly stated test scope. An item is complete only when its source,
 installer integration, API documentation and relevant tests agree. Changes must
 be committed and pushed before the delivery is reproducible from the remote.
 
+## Active team coordination — 2026-09-06
+
+The operator reports that their team is actively fixing ACDC agents not accepting
+calls while registered. Preserve their changes; do not overwrite unrelated
+worktree edits. Our overlapping ACDC/eCallMgr call-delivery, bridge and callback
+changes remain private or held from build/deployment until a coordinated handoff.
+The ACDC integration patch has changed from our prior `149fe664…` baseline to
+`f162644e583f0caa6a32edda7ae4e6ddae0c1bd5ad331b764a45035cf4541bb0`;
+this is observed drift to preserve, not an instruction to restore an old version.
+Continue non-overlapping installer/UI work against explicit input pins. Obtain
+the team's changed files/commit, review integration, regenerate affected API
+coverage, then run combined call-delivery and callback regressions before release.
+
 ## P0 — call delivery and callback correctness
 
 | ID | Status / owner | Work and acceptance requirement |
