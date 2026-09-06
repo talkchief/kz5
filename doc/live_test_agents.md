@@ -27,9 +27,11 @@ systemctl start kazoo-live-test-agents.service
 systemctl status kazoo-live-test-agents.service
 ```
 
-Installation enables the service but deliberately does not start it. Startup
-reports ready only after all exact SIP contacts are present and all 30 marked
-agents have logged in on the first start. The supervisor checks child processes,
+Installation enables the service but deliberately does not start it. Every start,
+restart and reboot preserves the operator's current queue roster and agent
+login/pause statuses. Startup waits up to 240 seconds on local unauthenticated
+read probes, checks phone ownership once, and reports ready only after all exact
+SIP contacts are present. The supervisor checks child processes,
 registration failures, contact loss, and ownership drift. During live operation
 a dead phone is restarted individually only after zero-active-call proof;
 healthy phones and agent login/pause states are preserved. A running phone keeps
@@ -37,9 +39,9 @@ its registration-refresh loop even after a transient refresh failure. Ownership
 uncertainty pauses repairs rather than logging everybody out.
 
 A fatal supervisor failure preserves agent statuses across automatic restart;
-systemd has a bounded restart policy. Explicit operator stop is the operation
-that logs out the complete owned fixture set. Thus neither a single phone
-failure nor routine registration renewal resets healthy agents' selected state.
+systemd has a bounded restart policy. Service start and stop manage registrations
+only. The runtime preservation marker is diagnostic evidence; losing `/run`
+across reboot never authorizes login, logout or roster changes.
 The unit uses `Wants` and startup ordering, not `Requires`/`BindsTo` lifecycle
 coupling. Restarting FreeSWITCH does not implicitly stop all test phones or
 reset their agent statuses.
@@ -50,12 +52,27 @@ Stop the test phones with:
 systemctl stop kazoo-live-test-agents.service
 ```
 
-Cleanup logs out only the 30 owned agents, deregisters only their exact loopback
-contacts, and may hang up only channel legs whose account, owned device ID, and
-SIP peer `127.0.0.40` all match. It does not delete users, devices, queue, or
-callflows. Uncertain ownership causes cleanup to refuse mutation. A post-stop
-hook retries after an unclean supervisor exit. Lost contacts expire in at most
-600 seconds if the SIP proxy cannot be reached during cleanup.
+Routine stop stops only owned phone children and, after fresh phone ownership
+verification, deregisters their exact loopback contacts. It does not log agents
+out or issue native call hangup commands. Stopping a phone process can still
+interrupt that phone's active SIP dialog or media; drain its calls before an
+operator stop. If ownership or the API is unavailable,
+deregistration is refused; remaining contacts expire in at most 600 seconds.
+The post-stop hook retries only this phone cleanup for a deployment that started
+phones. An early dependency failure on a cold start without a started-phone
+marker does not trigger authentication or cleanup. If a matching marker survives
+an earlier incomplete cleanup, the post-stop hook retries ownership verification
+and exact deregistration for those prior contacts, even when the new start fails
+its dependency check. It still never changes agent statuses or the queue roster.
+
+Initial provisioning, all-fixture login/logout and full fixture teardown remain
+separate explicit operations. `provision-live-test-agents.cjs --agent-status
+login|logout` and `run-live-test-agents.sh --cleanup` retain their complete
+ownership and 30-agent roster gates. They are not invoked by the service and
+will refuse an operator-selected partial roster. Full explicit cleanup can log
+out owned agents and clear strictly identified fixture call legs; it never
+deletes users, devices, queues or callflows. Do not run provisioning to reset an
+operator's roster as a way to make phone startup succeed.
 
 SIP passwords remain in private runtime injection files, never process
 arguments or service logs. Runtime statistics are private and bounded; SIP

@@ -41,7 +41,7 @@ function checkpoint(state) {
         '-p','RuntimeDirectoryPreserve','-p','KillMode']).trim().split('\n').map(line => [line.slice(0,line.indexOf('=')),line.slice(line.indexOf('=')+1)]));
     check(/^\d+$/.test(unit.MainPID) && Number(unit.MainPID)>1, 'Missing supervisor main PID');
     check(unit.Restart === 'on-failure' && unit.RuntimeDirectoryPreserve === 'restart' && unit.KillMode === 'mixed' &&
-        /argv\[\]=\/usr\/bin\/bash \/opt\/kz5\/scripts\/run-live-test-agents\.sh --cleanup ;/.test(unit.ExecStopPost), 'Unit restart/cleanup contract changed');
+        /argv\[\]=\/usr\/bin\/bash \/opt\/kz5\/scripts\/run-live-test-agents\.sh --cleanup-phones ;/.test(unit.ExecStopPost), 'Unit restart/phone-only cleanup contract changed');
     let children = [];
     try {children = run('ps',['--ppid',unit.MainPID,'-o','pid=,comm=']).trim().split('\n').filter(Boolean).map(line => {
         const [pid,name] = line.trim().split(/\s+/); check(/^\d+$/.test(pid) && /^[A-Za-z0-9_.-]+$/.test(name), 'Invalid child inventory');return {pid:Number(pid),name};});}
@@ -64,6 +64,14 @@ function checkpoint(state) {
         runtime_mode:'0700',marker_mode:'0600',restart_contract_verified:true,
         zero_child_restart_preconditions:sipp.length === 0 && sockets.length === 0};
 }
+function snapshotRuntime(mode, state, observe = checkpoint, readMarker = privateText) {
+    check(['--snapshot', '--snapshot-state'].includes(mode) && ID.test(state.queue_id), 'Invalid snapshot mode or queue');
+    if (mode === '--snapshot-state') return {runtime:{scope:'not_observed'},preserve_marker_matches:null};
+    const runtime = observe(state);
+    const markerMatches = readMarker('/run/kazoo-live-test-agents/preserve-agent-status').trim() === state.deployment_id;
+    check(markerMatches, 'Missing matching preserve-agent-status marker or queue');
+    return {runtime,preserve_marker_matches:markerMatches};
+}
 async function main(args) {
     if (args.length === 1 && args[0] === '--dry-run') {
         console.log('Read-only plan: authenticate pinned MASTER account; snapshot exact queue roster plus latest reported status and queue memberships for30 owned agents and protected MicroSIP owner. No SIP/service/roster/status writes.'); return;
@@ -81,15 +89,14 @@ async function main(args) {
             JSON.stringify(stable(before))===JSON.stringify(stable(after)), 'Roster or reported agent state/membership changed; do not restore automatically');
         console.log('PASS exact roster and31 reported agent statuses/memberships unchanged; no restore performed');return;
     }
-    check(process.getuid() === 0 && args.length === 2 && args[0] === '--snapshot', 'Use --snapshot /root-owned-0700-directory/phone-snapshot-NAME.json');
+    check(process.getuid() === 0 && args.length === 2 && ['--snapshot', '--snapshot-state'].includes(args[0]),
+        'Use --snapshot|--snapshot-state /root-owned-0700-directory/phone-snapshot-NAME.json');
     const output = path.resolve(args[1]), parent = path.dirname(output), st = fs.lstatSync(parent);
     check(st.isDirectory() && !st.isSymbolicLink() && st.uid === 0 && (st.mode & 0o777) === 0o700 &&
         fs.realpathSync(parent) === parent && /^phone-snapshot-[A-Za-z0-9-]+\.json$/.test(path.basename(output)), 'Snapshot output must be in a canonical root-only0700 directory');
     check(!fs.existsSync(output), 'Snapshot output already exists');
     const state = validateState(JSON.parse(privateText('/etc/kazoo/live-test-agents.json')));
-    const runtime = checkpoint(state);
-    const markerMatches = privateText('/run/kazoo-live-test-agents/preserve-agent-status').trim() === state.deployment_id;
-    check(markerMatches && ID.test(state.queue_id), 'Missing matching preserve-agent-status marker or queue');
+    const {runtime,preserve_marker_matches:markerMatches} = snapshotRuntime(args[0], state);
     const credentials = new Map(privateText('/etc/kazoo/installer-secrets.env').split('\n').filter(l => l && !l.startsWith('#')).map(l => {
         const n = l.indexOf('='); check(n > 0, 'Malformed protected credentials'); return [l.slice(0,n),l.slice(n+1)];}));
     const user = credentials.get('KAZOO_MASTER_ADMIN_USER'), password = credentials.get('KAZOO_MASTER_ADMIN_PASSWORD'), realm = credentials.get('KAZOO_MASTER_ACCOUNT_REALM');
@@ -125,13 +132,13 @@ async function main(args) {
             ...projectMembership(agent,membership,protectedDoc)});
     }
     const snapshot = {schema_version:1,observed_at:new Date().toISOString(),account_id:ACCOUNT,queue_id:state.queue_id,
-        deployment_id:state.deployment_id,preserve_marker_matches:true,roster:[...roster].sort(),agents,runtime,
+        deployment_id:state.deployment_id,preserve_marker_matches:markerMatches,roster:[...roster].sort(),agents,runtime,
         status_source:'GET agents/{id}/status: latest reported status; not SIP registration or guaranteed transport-independent runtime state',
         mutation_policy:'No roster, agent status, registration or service writes. Evidence only; never automatically restore this snapshot.'};
     const fd = fs.openSync(output, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW,0o600);
     try {fs.writeFileSync(fd,JSON.stringify(snapshot,null,2)+'\n');fs.fsyncSync(fd);} finally {fs.closeSync(fd);}
     console.log(JSON.stringify({snapshot:output,roster_count:roster.length,roster_owned_indices:roster.map(id=>state.agents.find(a=>a.user_id===id)?.index??'other'),
-        agents:agents.length,status_counts:agents.reduce((m,a)=>(m[a.reported_status]=(m[a.reported_status]||0)+1,m),{}),preserve_marker_matches:true,mutations:false}));
+        agents:agents.length,status_counts:agents.reduce((m,a)=>(m[a.reported_status]=(m[a.reported_status]||0)+1,m),{}),preserve_marker_matches:markerMatches,mutations:false}));
 }
 if (require.main===module) main(process.argv.slice(2)).catch(error => {console.error(`Snapshot failed: ${error instanceof SyntaxError ? 'invalid protected JSON' : error.message}`);process.exitCode=1;});
-module.exports={projectMembership};
+module.exports={projectMembership,snapshotRuntime};

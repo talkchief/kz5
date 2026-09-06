@@ -27,11 +27,11 @@ unit_text() {
         'RuntimeDirectoryPreserve=restart' \
         'WorkingDirectory=/run/kazoo-live-test-agents' \
         "ExecStart=/usr/bin/bash $SCRIPT_DIR/run-live-test-agents.sh --run" \
-        "ExecStopPost=/usr/bin/bash $SCRIPT_DIR/run-live-test-agents.sh --cleanup" \
+        "ExecStopPost=/usr/bin/bash $SCRIPT_DIR/run-live-test-agents.sh --cleanup-phones" \
         'Restart=on-failure' \
         'RestartSec=15' \
         'KillMode=mixed' \
-        'TimeoutStartSec=300' \
+        'TimeoutStartSec=450' \
         'TimeoutStopSec=300' \
         'NoNewPrivileges=true' \
         'PrivateTmp=true' \

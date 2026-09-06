@@ -21,8 +21,6 @@ readonly SUPERVISOR_PID=$BASHPID
 MODE=dry-run
 STATE=
 RUN_STARTED=false
-RUN_READY=false
-PRESERVE_AGENT_STATUS=false
 OWNERSHIP_VERIFIED=true
 PHONE_OWNERSHIP_DIAGNOSTIC=not_checked
 PHONE_HEALTH_STATUS=
@@ -103,6 +101,34 @@ owned_helper() {
     else
         timeout 90 node "$HELPER" --agent-status "$operation" >/dev/null 2>&1
     fi
+}
+
+dependencies_ready() {
+    local response
+    # GET cannot execute user_auth's PUT handler. Its exact method rejection
+    # proves Crossbar has registered this route; it does not authenticate.
+    response=$(curl -q --noproxy '*' --proto '=http' --connect-timeout 2 --max-time 3 \
+        --silent --output /dev/null --write-out '%{http_code}' --request GET \
+        http://127.0.0.1:8000/v2/user_auth 2>/dev/null) || return 1
+    [[ $response == 405 ]] || return 1
+    response=$(timeout 3 kamcmd core.version 2>/dev/null) || return 1
+    [[ $response == *kamailio* ]] || return 1
+    response=$(timeout 3 "$FS_CLI" -x 'module_exists mod_kazoo' 2>/dev/null) || return 1
+    [[ $response == true ]]
+}
+
+wait_for_dependencies() {
+    local deadline=$((SECONDS + 240))
+    log 'Waiting up to 240 seconds for local Crossbar, registrar and FreeSWITCH read probes'
+    # The loop contains no authentication, ownership helper, SIP REGISTER,
+    # provisioner/status operation or cleanup. Ownership is checked once later.
+    while ((SECONDS + 9 <= deadline)); do
+        if dependencies_ready; then return 0; fi
+        ((SECONDS + 5 < deadline)) || break
+        sleep 5
+    done
+    log 'Local dependencies did not become ready within the bounded read-only startup wait' >&2
+    return 1
 }
 
 write_input() {
@@ -359,9 +385,44 @@ cleanup_resources() {
         rm -f -- "$RUNTIME_DIR/preserve-agent-status"
         log 'Owned test agents logged out, exact contacts deregistered, and fixture legs cleared'
     else
-        log 'Cleanup incomplete; systemd post-stop will retry; registrations expire within 600 seconds' >&2
+        log 'Explicit cleanup incomplete; registrations expire within 600 seconds' >&2
     fi
     return "$failed"
+}
+
+phone_run_marker_matches() {
+    local marker="$RUNTIME_DIR/phones-started"
+    [[ -f $marker && ! -L $marker && $(stat -Lc '%u:%g:%a' -- "$marker") == 0:0:600 &&
+       $(<"$marker") == "$(jq -r '.deployment_id' <<<"$STATE")" ]]
+}
+
+mark_phone_run() {
+    local name
+    for name in phones-started preserve-agent-status; do
+        [[ ! -L $RUNTIME_DIR/$name ]] || die 'Runtime marker cannot be a symlink'
+        printf '%s\n' "$(jq -r '.deployment_id' <<<"$STATE")" >"$RUNTIME_DIR/$name"
+        chmod 600 "$RUNTIME_DIR/$name"
+    done
+}
+
+cleanup_phones() {
+    local index
+    # This marker records that this deployment may have registered contacts.
+    # It never grants authority over agent status, queue roster or call legs.
+    phone_run_marker_matches || return 0
+    if ! owned_helper verify_phones; then
+        log 'Phone cleanup ownership unavailable; no deregistration attempted; agent statuses unchanged, contacts expire within 600 seconds' >&2
+        return 1
+    fi
+    if ! deregister_phones; then
+        log 'Exact phone deregistration incomplete; agent statuses unchanged, remaining contacts expire within 600 seconds' >&2
+        return 1
+    fi
+    for ((index=1; index<=COUNT; index++)); do
+        rm -f -- "$RUNTIME_DIR/agent-$index-input.csv" "$RUNTIME_DIR/agent-$index-deregister.csv"
+    done
+    rm -f -- "$RUNTIME_DIR/phones-started"
+    log 'Exact owned phone contacts deregistered; agent statuses and queue roster unchanged; no native hangup command issued'
 }
 
 on_exit() {
@@ -370,20 +431,15 @@ on_exit() {
     CLEANING=true
     trap - EXIT TERM INT
     set +e
-    if ((status != 0)) && [[ $RUN_READY == true || $PRESERVE_AGENT_STATUS == true ]]; then
-        printf '%s\n' "$(jq -r '.deployment_id' <<<"$STATE")" >"$RUNTIME_DIR/preserve-agent-status"
-        stop_phones
-        log 'Supervisor failure: preserving all agent login/pause statuses for automatic restart' >&2
-        exit "$status"
-    fi
     stop_phones
-    if [[ $RUN_STARTED == true ]]; then cleanup_resources; fi
+    if [[ $RUN_STARTED == true ]]; then cleanup_phones; fi
+    log 'Supervisor exit preserves all agent login/pause statuses and the operator queue roster'
     exit "$status"
 }
 
 run_service() {
     local index deadline next_check last_owned_check=0 file size version
-    for command in sipp jq node kamcmd flock timeout python3; do command -v "$command" >/dev/null || die "Missing dependency: $command"; done
+    for command in sipp jq node kamcmd flock timeout python3 curl; do command -v "$command" >/dev/null || die "Missing dependency: $command"; done
     if [[ ! -f $PHONE_PROCESS_HELPER || -L $PHONE_PROCESS_HELPER ]] ||
        ! python3 -I "$PHONE_PROCESS_HELPER" --probe >/dev/null 2>&1; then
         die 'Python/kernel pidfd support is required; no PID-only fallback'
@@ -392,33 +448,33 @@ run_service() {
     [[ $version == *'SIPp v3.7.7-TLS-PCAP-SHA256'* ]] || die 'Pinned SIPp 3.7.7 is required'
     load_state
     prepare_runtime
+    wait_for_dependencies || die 'Dependency readiness failed before phone registration'
     owned_helper verify_phones || die "Phone ownership verification failed before start: $PHONE_OWNERSHIP_DIAGNOSTIC"
-    if [[ -f $RUNTIME_DIR/preserve-agent-status && ! -L $RUNTIME_DIR/preserve-agent-status &&
-          $(<"$RUNTIME_DIR/preserve-agent-status") == "$(jq -r '.deployment_id' <<<"$STATE")" ]]; then
-        PRESERVE_AGENT_STATUS=true
-    else
-        owned_helper logout || die 'Could not initially log out owned test agents'
-    fi
     rm -f -- "$RUNTIME_DIR/cleanup-done"
     trap on_exit EXIT
     trap 'exit 0' TERM INT
+    mark_phone_run
     RUN_STARTED=true
     start_phones
     deadline=$((SECONDS + 60))
     for ((index=1; index<=COUNT; index++)); do
-        until contact_present "$index"; do
+        while true; do
+            # Successful lookups can also consume the full five-second RPC
+            # timeout. Reserve that budget before every probe, not just retries.
+            ((SECONDS + 5 <= deadline)) || die 'Exact SIP contacts did not register before startup deadline'
+            if contact_present "$index"; then
+                ((SECONDS <= deadline)) || die 'Exact SIP contact proof arrived after startup deadline'
+                break
+            fi
             check_children
             ((SECONDS < deadline)) || die 'Exact SIP contacts did not register before startup deadline'
             sleep 1
         done
     done
-    if [[ $PRESERVE_AGENT_STATUS == false ]]; then owned_helper login || die 'Owned agent login failed'; fi
-    RUN_READY=true
     REGISTERED_PHONES=$COUNT
-    # Keep this marker for a SIGKILL/power-loss restart too. Explicit stop is
-    # the only path which clears it and intentionally logs out all fixtures.
-    printf '%s\n' "$(jq -r '.deployment_id' <<<"$STATE")" >"$RUNTIME_DIR/preserve-agent-status"
-    log '30 owned MASTER phones registered; initial login verified or existing statuses preserved (RTP echo)'
+    # Preservation is unconditional, including after reboot clears /run.
+    # The marker is evidence for existing read-only snapshot tooling only.
+    log '30 owned MASTER phones registered; all existing agent statuses and queue roster preserved (RTP echo)'
     command -v systemd-notify >/dev/null && systemd-notify --ready
     report_phone_health
     next_check=$((SECONDS + 30))
@@ -449,29 +505,28 @@ run_service() {
 }
 
 main() {
-    [[ $# -le 1 ]] || die 'Use --dry-run, --run, or --cleanup'
+    [[ $# -le 1 ]] || die 'Use --dry-run, --run, --cleanup-phones, or explicit --cleanup'
     MODE=${1:---dry-run}
     case $MODE in
         --dry-run)
             log 'DRY RUN: receive-only 30 MASTER owned test phones; no SIP/API/service mutations'
             log "Manifest: $STATE_FILE; SIP: $PHONE_IP:17100–17129; RTP: 46000–46119"
-            log 'REGISTER expiry 600 s, refresh 240 s; exact owned agent login; supervised stop cleanup'
+            log 'REGISTER expiry 600 s, refresh 240 s; service starts/stops preserve agent statuses and roster; explicit --cleanup is separate'
             ;;
         --run) [[ $EUID == 0 ]] || die 'Root is required'; run_service ;;
+        --cleanup-phones)
+            [[ $EUID == 0 ]] || die 'Root is required'
+            load_state; prepare_runtime
+            cleanup_phones
+            ;;
         --cleanup)
             [[ $EUID == 0 ]] || die 'Root is required'
             load_state; prepare_runtime
-            if [[ ${SERVICE_RESULT:-success} != success && -f $RUNTIME_DIR/preserve-agent-status &&
-                  ! -L $RUNTIME_DIR/preserve-agent-status &&
-                  $(<"$RUNTIME_DIR/preserve-agent-status") == "$(jq -r '.deployment_id' <<<"$STATE")" ]]; then
-                log 'Automatic failure cleanup skipped to preserve existing agent login/pause statuses'
-                exit 0
-            fi
             if [[ -f $RUNTIME_DIR/cleanup-done && ! -L $RUNTIME_DIR/cleanup-done &&
                   $(<"$RUNTIME_DIR/cleanup-done") == "$(jq -r '.deployment_id' <<<"$STATE")" ]]; then exit 0; fi
             cleanup_resources
             ;;
-        *) die 'Use --dry-run, --run, or --cleanup' ;;
+        *) die 'Use --dry-run, --run, --cleanup-phones, or explicit --cleanup' ;;
     esac
 }
 
