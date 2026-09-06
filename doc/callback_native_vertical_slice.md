@@ -117,7 +117,7 @@ publication is not an atomic ownership transaction. Matching channel fields and
 actual distribution sender is necessary, not sufficient. Do not infer worker
 delegation from a shared node. Scoped zero-wait revoke is not producer quiescence.
 
-### Normal-codec writer: initial compile passed; later fixes untested
+### Normal-codec writer: reviewed fixes compiled; behavior acceptance pending
 
 Directory: `native-normal-codec.nZYBwT/` under the same private root.
 Files: `switch_core_media.c`, `check.cjs`,
@@ -137,40 +137,131 @@ Session71186 exited0: actual full-TU compilation and source comparison passed,
 353 pinned inputs,256MiB cap/768MiB reserve/150s/offline. **That receipt predates
 two subsequent edits:** preserving non-success status instead of flattening
 NOTIMPL/BREAK to FALSE, and suppressing first-transcode synchronous notification
-plus its marker mutation only in the owned path. Both edits are currently
-private and **not yet retested**. Do not cite71186 for current-file correctness.
+plus its marker mutation only in the owned path. Do not cite71186 for later
+source correctness.
 
-Read-only review left these exact next fixes/tests:
+The subsequent correction also restores outer nonblocking codec trylocks with
+captured-mutex cleanup, refuses encoder RESAMPLE, preserves endpoint error
+statuses and checks sent-counter overflow before acquiring/sending a frame.
+Session27998 exited0 with full native translation-unit compilation and unchanged
+ordinary-body comparison,353 stable inputs. Receipt:
+`native-normal-codec.nZYBwT/compile-proof.Cp4Y6Q/receipt.json`.
+Source SHA256:
+`0963843b9da2c21dfbb3dcac8363517d02ad81d026a0a409045e1a9c4bf293bd`.
+The run used224MiB with the same768MiB reserve/150s/offline. Earlier21632 exited1
+because its128MiB cgroup was OOM-killed; journal evidence identifies unit
+`kazoo-validation-214e2afd-3d15-4c0d-93a9-199911568ebd.service` and confirms the
+test group terminated. Its partial `compile-proof.Q6HVPS` has no passing receipt.
+This was a test cap failure, not evidence of a platform service crash.
 
-1. Restore bounded codec-mutex admission: the earlier owned entry trylocked the
+Session93022 then exited0 with62 extracted helper/wrapper cases under strict
+GCC/UBSan, including actual pthread recursive-lock contention and foreign-thread
+cleanup probes. Receipt:
+`native-normal-codec.nZYBwT/owned-write-context-proof.JMUsPt/receipt.json`.
+This covers source `0963843b...` above, with inner normal writer, registry and
+endpoint doubles; it is not whole native encoding or cancellation acceptance.
+
+The separate passive-readiness candidate passed23159: complete queue translation
+unit compilation plus182 checks each plain and ASan/UBSan using actual APR
+queue/mutex operations and controlled channel accessors. Receipt:
+`native-passive-ready.jpGiQK/proof.TO8WUM/receipt.json`;259-input digest
+`ed78f186541defd11b35d051bc8a19bae96bc0b037c145c1264009f1bcb87b38`.
+It explicitly tests that pending signals are not consumed, contention fails
+closed, and enqueue after a successful snapshot remains possible. Earlier
+source-whitespace normalization failures were fixture failures, not passes.
+
+Root integrated that helper at wrapper admission, normal owned readiness and
+before the final derived-frame lease. Session17639 exited0: full native TU,
+355 stable inputs, ordinary-body comparison, normalized exact equality to the
+tested helper and selection of the real-header overlay (`switch.h` plus updated
+`switch_apr.h`) all passed. Receipt:
+`native-normal-codec.nZYBwT/compile-proof.ae3biy/receipt.json`.
+Integrated source SHA256:
+`9c0a94afac58b6ef225ac0b1c21dd0b97698c9ff054f5acd251ca8f83fa51fed`.
+The queue TU must be linked with this writer; a header-only deployment is not
+complete. The updated wrapper fixture then passed session64711: all62 prior
+cases plus2 controlled-readiness transition cases, strict GCC/UBSan, six stable
+input identities. Receipt:
+`native-normal-codec.nZYBwT/owned-write-context-proof.vp4cUN/receipt.json`, SHA256
+`6f7077501d97a618a1f77c3c5da8d74417f47d59bb0118906c41bf2afb14b0d3`.
+Pending-before-entry produces no writer/lease/send; readiness lost before the
+derived lease returns BREAK, sends nothing and releases all outer locks. This
+uses a controlled readiness double: actual passive queue/accessor behavior is
+the separate23159 evidence, not silently included in these64 cases.
+Neither successful check opens admission.
+
+Review left these exact next fixes/tests:
+
+1. Preserve tested bounded codec-mutex admission: the earlier owned entry trylocked the
    negotiated/output codec and input-frame codec. The shared normal writer now
-   blocks on those mutexes while holding outer owned-path locks. Retain captured
-   codec pointers for cleanup and test foreign contention gives immediate INUSE,
+   blocked on those mutexes while holding outer owned-path locks. The correction
+   retains captured mutexes for cleanup;93022 verified foreign contention gives INUSE before release,
    no encode/send and complete outer-lock release. This is a boundedness
    regression, not a demonstrated live deadlock.
-2. Reject owned encoder RESAMPLE before fallthrough/derived-frame mutation,
-   matching the decoder rejection. Test injected statuses; no configured live
+2. Behavior-test owned encoder RESAMPLE rejection before fallthrough/derived-frame
+   mutation, matching the decoder rejection. No configured live
    encoder was observed producing this case during the review.
 3. `switch_channel_ready`/`switch_channel_media_ready` process queued signal data;
    they are not passive reads. The concrete path can enter Sofia dispatch under
    outer codec/control/bug locks and alter SIP/media state. Use a reviewed
-   owned-only no-signal readiness boundary and test poisoned signal processing,
-   preserving ordinary semantics. Correction to the preliminary review:
+   owned-only no-signal readiness boundary (now compiled/tested as scoped above),
+   preserving ordinary semantics. Atomic enqueue/mutation fencing is still open.
+   Correction to the preliminary review:
    SIGNAL_DATA uses the direct endpoint branch, so a generic receive-hook
    deadlock is **not proven** by this call chain.
-4. Add context regression tests: exact derived-frame identity, lease refusal,
+4. Preserve context regression tests: exact derived-frame identity, lease refusal,
    endpoint failure, unsupported/no-send, SUCCESS without send, stale/revoked
    ownership, sticky failure and counter overflow; then recompile current source.
-   Helper fixtures remain narrower than whole native execution.
+   The updated64-case fixture passed in64711. Helper fixtures remain narrower
+   than whole native execution; actual encoder branch execution remains open.
 5. Existing private RTP code still advances `timestamp_send` by160 and rejects
    secure output. Codec/ptime widening needs normal timestamp/sample accounting,
    SRTP and full producer/media/session lifetime work, not merely removal of
    these guards. Bridge helpers still need actual bridge-entry/end integration.
 
-No jobs remained running after the transport window was released and agent
-edits were frozen for this handoff. Recheck processes before resuming; serialize
-resource-capped compilation. Neither derivative was deployed, linked into a
-running service, or committed as a release patch at this checkpoint.
+Work resumed after the documentation freeze: the root owns normal-writer source,
+the browser-harness reviewer is preparing helper/wrapper behavior tests, and the
+native reviewer completed the separate passive-readiness/queue-observation
+candidate at `native-passive-ready.jpGiQK/`. Its `INTEGRATION.md` explicitly
+distinguishes a non-dequeuing observation from an atomic enqueue/output fence.
+That helper is now integrated as described above; the reviewer is auditing the
+remaining actual producer/dispatch lifetime boundaries. Recheck agent messages
+and actual process handles before resuming; serialize resource-capped validation.
+Neither derivative was deployed, linked into a running service, or committed as
+a release patch at this checkpoint.
+
+### Next implementation: signal-processing lifetime
+
+The native reviewer is implementing a separate derivative, not changing this
+writer. The current proposal checks pending signal work under the queue mutex,
+then reserves mutation **before dequeue**. Verified empty observations must not
+allocate/revoke ACTIVE or PENDING audio; contention/error processes nothing.
+If actual work conflicts with ACTIVE playback, revoke that group but leave its
+producer ACTIVE until full unwind. Valid queued SIP data stays untouched.
+The eventual exact serial/thread ticket spans the full endpoint callback.
+
+Do not reject signal enqueue: Sofia callers at `sofia.c:2528,2620,2628` ignore
+enqueue return values and could orphan saved event/handle references. The
+reattach resets near2525–2527 already mutate endpoint state before enqueue and
+must move into reserved processing using an internal reattach marker. The
+processing chain is `switch_ivr_parse_signal_data` near869 →
+`mod_sofia.c` SIGNAL_DATA handler near1363 → `sofia_process_dispatch_event` near2233;
+saved references must be freed exactly once after the entire callback.
+
+Allocation/registry initialization failure must defer/error before dequeue with
+no unguarded fallback; retry may process once allocation succeeds. Persistent
+allocation failure would stall signaling and is an explicit unclosed recovery
+case, not unchanged failure behavior. A separate nonallocating quarantine field
+is not part of this bounded proposal.
+
+Legitimate nested codec and bridge work must be compatible with the same exact
+processing scope. Merely reusing `codec_active` rejects legitimate nested setup.
+Allowing A's scope must never bypass B's ACTIVE/foreign reservation. Existing
+Sofia UUID-bridge callers can ignore failure after already mutating A; correct
+cross-leg deferral/continuation is still unaccepted, not permission to report
+success, drop events, hang the agent or replay the entire partially applied event.
+No global all-call blocking is an acceptable substitute. These are proposed
+changes/tests, not implemented or passing evidence at this checkpoint.
 
 ## Acceptance that advances deployment
 

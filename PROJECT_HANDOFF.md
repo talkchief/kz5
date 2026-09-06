@@ -9,7 +9,7 @@ file nor a green unit test means the platform is production-ready.
 Read this file first, then [PROJECT_TASKS.md](PROJECT_TASKS.md), then the
 acceptance document for the component you will change. This guide describes the
 checkpoint through callback fix **`a75806c`**, French catalog **`2325d9b`** and
-Hebrew catalog **`98f62cf`**,
+Hebrew catalog **`98f62cf`** and Arabic catalog **`9773c35`**,
 following the UI/API baseline `61bf505`, plus explicitly identified work in
 progress. A later commit containing this documentation is not a new runtime
 release. Recheck Git and live state before acting.
@@ -22,9 +22,9 @@ release. Recheck Git and live state before acting.
 | Queue language UI/editor | Five choices, obsolete-reference deletion,42-entry callback/57-entry transitional readiness checks tested in `61bf505` | Fresh compiled UI publication and real browser/live queue acceptance |
 | Developer reference | Updated static `/apis/` publication verified against all12 HTTP-served files | Documentation is not proof its backend is deployed; proposed dashboards are not callable APIs |
 | Installer/services | Modular installer and offline main smoke pass; `kazoo-applications.service` resolves to active `kazoo-apps.service` | Fresh separate-server/ALL installation, reboot, interoperability and sustained load acceptance |
-| Cardinal authoring | Pure EN/ES/FR/HE catalog tested through `98f62cf`; Hebrew run passed61,747 total checks | Arabic implementation, reviewed contextual transcripts, missing recordings and runtime integration |
+| Cardinal authoring | Pure EN/ES/FR/HE/AR catalog tested through `9773c35`;79,465 checks,584 roles | Reviewed contextual transcripts, missing recordings and runtime integration |
 | Native callback transport | Private typed decoder/handler integration compiled;7,962 checks each plain and sanitized | Hard-closed admission; no distributed EI, full module execution or audible media acceptance |
-| Release | Recent source changes committed locally through `98f62cf` | Final master integration/push and remote-SHA verification |
+| Release | Recent source changes committed locally through `9773c35` | Final master integration/push and remote-SHA verification |
 
 For precise test boundaries and failed-before/fixed-after evidence, see
 [canonical callback acceptance](doc/acdc_canonical_callback_acceptance.md).
@@ -196,6 +196,9 @@ the Kazoo apps node, not as three independent systemd services.
 | Session19058, exit0 | Pure EN/ES/FR cardinal catalog: nine groups /44,040 composition checks;161 French recording roles, full range and8-token bound. No new audio generated or runtime integration |
 | Session7787, exit0 | Root combined-source production compile after P0-12: all63 ACDC modules,-Werror/noTEST and stable inputs. No installed BEAM changes |
 | Commit `98f62cf`; session50243, exit0 | Pure EN/ES/FR/HE catalog:12 groups /61,747 checks;131 reachable Hebrew roles,11-token bound. No recordings generated or runtime changes. Hebrew number-label context remains subject to intro/transcript review |
+| Commit `9773c35`; session20652, exit0 | All five pure cardinal grammars:15 groups /79,465 checks;208 Arabic roles reachable,9-token bound. Arabic transcripts and pausal/intro context remain provisional. No generation or runtime activation |
+| Session27998, exit0 | Private normal-writer corrections compiled against real headers with353 stable inputs and ordinary-body comparison. Earlier128MiB attempt21632 was cgroup OOM-killed;224MiB retry kept768MiB reserve. See native continuation guide for exact source/receipt and unclosed behavior/lifetime gates |
+| Sessions23159/17639/64711, exit0 | Passive queue/readiness helper:182 plain +182 sanitized cases; integrated full writer TU with355 pinned inputs;64 extracted wrapper/helper cases. Explicit doubles and no real RTP/SRTP/bridge execution; detailed source/receipts in native continuation guide |
 
 Temporary receipt paths are local evidence and may not survive a new server.
 The durable test implementations and explanatory documents are in Git/worktree.
@@ -233,8 +236,9 @@ Update this section with final outcomes rather than deleting failed evidence.
    languages, generate missing release artifacts once, and verify natural
    playback. `doc/acdc_prerecorded_cardinal_design.md` records the finite catalog
    design and unresolved linguistic gates. `scripts/acdc-cardinal-catalog.cjs`
-   is now a tested pure EN/ES/FR/HE full-range building block, not runtime integration
-   or recorded assets; AR remains unimplemented. Hebrew is an abstract feminine
+   is now a tested pure EN/ES/FR/HE/AR full-range building block, not runtime integration
+   or recorded assets. Arabic has208 provisional contextual recording roles,
+   with pausal delivery/intro compatibility still requiring review. Hebrew is an abstract feminine
    number-label context with masculine scale coefficients, not approval of the
    existing intro's grammatical fit. Do not enable a full-language
    capability based on native SAY.
@@ -255,24 +259,30 @@ source pins checked. Input digest:
 The full lifecycle/timer suite75590 subsequently exited0 with all87 tests and
 the same digest. The serialized test window was released for French validation,
 then root's production compile. These are source checks, not live acceptance.
-`media_prerequisites` completed French and Hebrew pure catalog work in
+`media_prerequisites` completed French, Hebrew and Arabic pure catalog work in
 `scripts/acdc-cardinal-catalog.cjs`, its test and
-`doc/acdc_prerecorded_cardinal_design.md`; commits `2325d9b` and `98f62cf`.
-Arabic research is read-only and frozen for this documentation checkpoint:
-proposed208 context-specific roles/max9 tokens are **unproven**, not implemented,
-approved transcripts or an authoring manifest. Existing Arabic intro
+`doc/acdc_prerecorded_cardinal_design.md`; commits `2325d9b`, `98f62cf` and
+`9773c35`. Arabic20652 passed all79,465 combined checks:208 context-specific
+roles are reachable and the9-token bound is tested. This is **not approved
+authoring text or recorded audio**. Existing Arabic intro
 `مَوْقِعُكَ الحالي هُوَ.` does not explicitly introduce a number; preserve current
 position semantics and review compatibility before choosing new recordings.
-No generation or runtime edits have been made for this proposal.
+No generation or runtime edits have been made for this catalog. The next media
+slice implements a provider-free cardinal manifest/WAV verifier and tests,
+before one-time authoring and create-only import. Approval is separate from
+technical waveform QA. The584-role map must stay separate from the210 callback
+rows so callback-completeness checks do not accidentally include cardinal roles.
 
 `native_audio_path_audit` handed back the private typed transport candidate and
 its terminal7634 proof; root owns the private normal-codec derivative. Their
 exact locations, review defects and next steps are in
 [native callback implementation handoff](doc/callback_native_vertical_slice.md).
-All agent edits were frozen for this documentation checkpoint; no validation
-jobs remained running when the transport window was released. These names and
-job observations are coordination hints, not persistent services: inspect
-current messages/processes before resuming. Never blanket-stage another agent's
+Work resumed after the documentation freeze: native passive-readiness and
+normal-writer behavior fixtures passed in23159/64711; the next native slice
+addresses pending SIP signal processing vs full PLAY lifetime, with cross-leg
+continuation explicitly still open. No root validation job remains running.
+These names and job observations are coordination hints, not persistent services:
+inspect current messages/processes before resuming. Never blanket-stage another agent's
 unfinished source changes with a documentation commit.
 
 ### Safe next-agent verification commands

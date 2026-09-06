@@ -4,8 +4,9 @@ New or returning contributors: read [the engineering handoff](PROJECT_HANDOFF.md
 first for achieved work, deployment status, source locations and next steps.
 
 Latest continuation checkpoint: callback source `a75806c`, French catalog
-`2325d9b`, Hebrew catalog `98f62cf`. Hebrew is source-tested, not recorded or
-deployed; Arabic remains read-only research. Private native transport and
+`2325d9b`, Hebrew catalog `98f62cf`, Arabic catalog `9773c35`. All five pure
+grammars passed79,465 checks in20652; contextual transcript review, missing
+recordings and runtime integration remain open. Private native transport and
 normal-codec work, exact receipts and unresolved review findings are indexed in
 [the native continuation guide](doc/callback_native_vertical_slice.md).
 Those private files are not yet reproducible from a fresh kz5 clone and their
