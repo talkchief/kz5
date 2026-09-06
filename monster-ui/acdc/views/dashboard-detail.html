@@ -1,0 +1,41 @@
+<section class="acdc-section acdc-dashboard acdc-live-dashboard" aria-busy="{{updating}}">
+	<button type="button" class="acdc-live-link acdc-live-back"><i class="fa fa-angle-left" aria-hidden="true"></i> {{i18n.acdc.dashboard.backToSummary}}</button>
+	{{#if queueMissing}}
+		<div class="acdc-live-empty" role="status"><h2>{{i18n.acdc.dashboard.queueMissing}}</h2><p>{{i18n.acdc.dashboard.queueMissingHelp}}</p></div>
+	{{else}}
+		<div class="acdc-section-header">
+			<div><p class="acdc-live-eyebrow">{{i18n.acdc.dashboard.queueDetail}}</p><h2>{{queue.name}}</h2></div>
+			<div class="acdc-header-actions"><button type="button" class="monster-button-secondary acdc-refresh" {{#if updating}}disabled{{/if}}><i class="fa fa-refresh" aria-hidden="true"></i> {{i18n.acdc.actions.refresh}}</button><button type="button" class="monster-button-secondary acdc-live-edit"><i class="fa fa-pencil" aria-hidden="true"></i> {{i18n.acdc.queues.edit}}</button></div>
+		</div>
+		<div class="acdc-live-source" role="status">
+			<div class="acdc-live-source-heading"><span class="acdc-live-freshness {{#if stale}}is-stale{{/if}}">{{freshness}}</span><span>{{i18n.acdc.dashboard.retrieved}} {{retrievedAt}}</span></div>
+			<p>{{i18n.acdc.dashboard.coverage}}</p><p class="acdc-live-stale-note" {{#unless stale}}hidden{{/unless}}>{{i18n.acdc.dashboard.staleHelp}}</p>
+			{{#if refreshFailed}}<p class="acdc-live-refresh-error">{{i18n.acdc.dashboard.refreshFailed}}</p>{{/if}}
+		</div>
+		{{#if hasWarnings}}<div class="acdc-warning" role="status"><ul>{{#each warnings}}<li>{{this}}</li>{{/each}}</ul></div>{{/if}}
+		<div class="acdc-summary-grid acdc-live-detail-metrics">
+			<div class="acdc-live-metric acdc-live-waiting"><span>{{i18n.acdc.dashboard.observedWaiting}}</span><strong>{{selectedCard.waiting}}</strong><small>{{i18n.acdc.dashboard.recentSubset}}</small></div>
+			<div class="acdc-live-metric acdc-live-handling"><span>{{i18n.acdc.dashboard.observedHandling}}</span><strong>{{selectedCard.handling}}</strong><small>{{i18n.acdc.dashboard.recentSubset}}</small></div>
+			<div class="acdc-live-metric"><span>{{i18n.acdc.dashboard.configuredMembers}}</span><strong>{{rosterCount}}</strong><small>{{i18n.acdc.dashboard.rosterNotReady}}</small></div>
+		</div>
+		<div class="acdc-live-detail-grid">
+			<div class="acdc-panel acdc-live-calls-panel">
+				<h3>{{i18n.acdc.dashboard.observedCalls}}</h3><p class="acdc-panel-context">{{i18n.acdc.dashboard.callsContext}} {{i18n.acdc.dashboard.responseTime}} {{responseTime}}</p>
+				{{#if callsTruncated}}<p class="acdc-warning" role="status">{{i18n.acdc.dashboard.callsTruncated}}</p>{{/if}}
+				<div class="acdc-table-scroll"><table class="acdc-table"><thead><tr><th scope="col">{{i18n.acdc.fields.status}}</th><th scope="col">{{i18n.acdc.fields.caller}}</th><th scope="col">{{i18n.acdc.fields.agent}}</th><th scope="col">{{i18n.acdc.fields.wait}}</th><th scope="col">{{i18n.acdc.dashboard.elapsedHandling}}</th></tr></thead><tbody>
+					{{#each calls}}<tr><td><span class="acdc-status acdc-live-status-{{statusClass}}">{{status}}</span></td><td>{{caller}}</td><td>{{agent}}</td><td class="acdc-live-duration">{{wait}}</td><td class="acdc-live-duration">{{talk}}</td></tr>
+					{{else}}<tr><td colspan="5" class="acdc-empty-cell">{{#if available}}{{i18n.acdc.dashboard.noObservedCalls}}{{else}}{{i18n.acdc.dashboard.statsUnavailable}}{{/if}}</td></tr>{{/each}}
+				</tbody></table></div>
+			</div>
+			<aside class="acdc-panel acdc-live-members-panel">
+				<h3>{{i18n.acdc.dashboard.configuredMembers}}</h3><p class="acdc-panel-context">{{i18n.acdc.dashboard.memberContext}}</p>
+				{{#if membersTruncated}}<p class="acdc-warning" role="status">{{i18n.acdc.dashboard.membersTruncated}}</p>{{/if}}
+				<div class="acdc-table-scroll"><table class="acdc-table"><thead><tr><th scope="col">{{i18n.acdc.fields.agent}}</th><th scope="col">{{i18n.acdc.dashboard.observedGlobalStatus}}</th></tr></thead><tbody>
+					{{#each members}}<tr><td>{{name}}</td><td><span class="acdc-status neutral">{{status}}</span></td></tr>
+					{{else}}<tr><td colspan="2" class="acdc-empty-cell">{{#if rosterAvailable}}{{i18n.acdc.dashboard.noMembers}}{{else}}{{i18n.acdc.dashboard.rosterUnavailable}}{{/if}}</td></tr>{{/each}}
+				</tbody></table></div>
+				<button type="button" class="acdc-live-link acdc-live-agents">{{i18n.acdc.dashboard.openAgentControls}} <i class="fa fa-arrow-right" aria-hidden="true"></i></button>
+			</aside>
+		</div>
+	{{/if}}
+</section>

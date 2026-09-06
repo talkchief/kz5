@@ -1,53 +1,27 @@
-<section class="acdc-section acdc-dashboard">
+<section class="acdc-section acdc-dashboard acdc-live-dashboard" aria-busy="{{updating}}">
 	<div class="acdc-section-header">
-		<div>
-			<h2>{{i18n.acdc.dashboard.title}}</h2>
-			<p>{{i18n.acdc.dashboard.description}}</p>
-		</div>
-		<button type="button" class="monster-button-secondary acdc-refresh"><i class="fa fa-refresh"></i> {{i18n.acdc.actions.refresh}}</button>
+		<div><p class="acdc-live-eyebrow">{{i18n.acdc.dashboard.eyebrow}}</p><h2>{{i18n.acdc.dashboard.title}}</h2><p>{{i18n.acdc.dashboard.description}}</p></div>
+		<div class="acdc-header-actions"><button type="button" class="monster-button-secondary acdc-refresh" {{#if updating}}disabled{{/if}}><i class="fa fa-refresh" aria-hidden="true"></i> {{i18n.acdc.actions.refresh}}</button><button type="button" class="monster-button-primary acdc-live-add"><i class="fa fa-plus" aria-hidden="true"></i> {{i18n.acdc.queues.add}}</button></div>
 	</div>
-	{{#if hasWarnings}}
-		<div class="acdc-warning" role="status">
-			<strong>{{i18n.acdc.dashboard.partialTitle}}</strong>
-			<ul>{{#each warnings}}<li>{{this}}</li>{{/each}}</ul>
+	<div class="acdc-live-source" role="status">
+		<div class="acdc-live-source-heading"><span class="acdc-live-freshness {{#if stale}}is-stale{{/if}}">{{freshness}}</span><span>{{i18n.acdc.dashboard.retrieved}} {{retrievedAt}}</span></div>
+		<p>{{i18n.acdc.dashboard.coverage}}</p><p class="acdc-live-stale-note" {{#unless stale}}hidden{{/unless}}>{{i18n.acdc.dashboard.staleHelp}}</p>
+		{{#if refreshFailed}}<p class="acdc-live-refresh-error">{{i18n.acdc.dashboard.refreshFailed}}</p>{{/if}}
+	</div>
+	{{#if hasWarnings}}<div class="acdc-warning" role="status"><ul>{{#each warnings}}<li>{{this}}</li>{{/each}}</ul></div>{{/if}}
+	{{#if hasQueues}}
+		<div class="acdc-live-toolbar"><p><strong>{{queueCount}}</strong> {{i18n.acdc.dashboard.configuredQueues}} · {{i18n.acdc.dashboard.sortedByName}}</p><label class="acdc-live-search-label"><i class="fa fa-search" aria-hidden="true"></i><span class="acdc-live-sr-only">{{i18n.acdc.dashboard.searchQueues}}</span><input type="search" class="acdc-live-search" placeholder="{{i18n.acdc.dashboard.searchQueues}}"></label></div>
+		<div class="acdc-live-queue-grid">
+			{{#each queueRows}}
+				<article class="acdc-live-queue-card">
+					<button type="button" class="acdc-open-live-queue" data-queue-id="{{id}}"><span class="acdc-live-queue-icon"><i class="fa fa-list" aria-hidden="true"></i></span><span class="acdc-live-queue-name">{{name}}</span><i class="fa fa-angle-right" aria-hidden="true"></i></button>
+					<div class="acdc-summary-grid acdc-live-card-metrics"><div class="acdc-live-metric acdc-live-waiting"><span>{{@root.i18n.acdc.dashboard.observedWaiting}}</span><strong>{{waiting}}</strong></div><div class="acdc-live-metric acdc-live-handling"><span>{{@root.i18n.acdc.dashboard.observedHandling}}</span><strong>{{handling}}</strong></div></div>
+					<div class="acdc-live-card-footer"><span>{{@root.i18n.acdc.dashboard.recentSubset}}</span><button type="button" class="acdc-live-link acdc-open-live-queue" data-queue-id="{{id}}">{{@root.i18n.acdc.dashboard.openQueue}}<span class="acdc-live-sr-only">: {{name}}</span> <i class="fa fa-arrow-right" aria-hidden="true"></i></button></div>
+				</article>
+			{{/each}}
 		</div>
+		<p class="acdc-live-empty acdc-live-no-match" role="status" hidden>{{i18n.acdc.dashboard.noMatchingQueues}}</p>
+	{{else}}
+		<div class="acdc-live-empty"><i class="fa fa-list" aria-hidden="true"></i><h3>{{i18n.acdc.dashboard.noQueues}}</h3><p>{{i18n.acdc.queues.emptyDescription}}</p><button type="button" class="monster-button-primary acdc-live-add">{{i18n.acdc.queues.add}}</button></div>
 	{{/if}}
-	<div class="acdc-summary-grid">
-		<div class="acdc-summary-card"><span>{{summary.queues}}</span><small>{{i18n.acdc.dashboard.queues}}</small></div>
-		<div class="acdc-summary-card"><span>{{summary.agents}}</span><small>{{i18n.acdc.dashboard.agents}}</small></div>
-		<div class="acdc-summary-card acdc-summary-online"><span>{{summary.online}}</span><small>{{i18n.acdc.dashboard.online}}</small></div>
-		<div class="acdc-summary-card acdc-summary-waiting"><span>{{summary.waiting}}</span><small>{{i18n.acdc.dashboard.waiting}}</small></div>
-		<div class="acdc-summary-card acdc-summary-handling"><span>{{summary.handling}}</span><small>{{i18n.acdc.dashboard.handling}}</small></div>
-	</div>
-	<div class="acdc-panel">
-		<h3>{{i18n.acdc.dashboard.queueActivity}}</h3>
-		<div class="acdc-table-scroll">
-			<table class="acdc-table">
-				<thead><tr><th>{{i18n.acdc.fields.queue}}</th><th>{{i18n.acdc.dashboard.waiting}}</th><th>{{i18n.acdc.dashboard.handling}}</th><th>{{i18n.acdc.dashboard.processed}}</th><th>{{i18n.acdc.dashboard.abandoned}}</th></tr></thead>
-				<tbody>
-					{{#each queueRows}}
-						<tr><td>{{name}}</td><td>{{waiting}}</td><td>{{handling}}</td><td>{{processed}}</td><td>{{abandoned}}</td></tr>
-					{{else}}
-						<tr><td colspan="5" class="acdc-empty-cell">{{@root.i18n.acdc.dashboard.noQueues}}</td></tr>
-					{{/each}}
-				</tbody>
-			</table>
-		</div>
-	</div>
-	<div class="acdc-panel">
-		<h3>{{i18n.acdc.dashboard.recentCalls}}</h3>
-		<p class="acdc-panel-context">{{i18n.acdc.dashboard.recentCallsWindow}}</p>
-		<div class="acdc-table-scroll">
-			<table class="acdc-table">
-				<thead><tr><th>{{i18n.acdc.fields.caller}}</th><th>{{i18n.acdc.fields.queue}}</th><th>{{i18n.acdc.fields.agent}}</th><th>{{i18n.acdc.fields.status}}</th><th>{{i18n.acdc.fields.wait}}</th><th>{{i18n.acdc.fields.talk}}</th></tr></thead>
-				<tbody>
-					{{#each calls}}
-						<tr><td>{{caller_id_name}} {{caller_id_number}}</td><td>{{queue_name}}</td><td>{{agent_name}}</td><td><span class="acdc-status neutral">{{status}}</span></td><td>{{wait_time}}</td><td>{{talk_time}}</td></tr>
-					{{else}}
-						<tr><td colspan="6" class="acdc-empty-cell">{{@root.i18n.acdc.dashboard.noCalls}}</td></tr>
-					{{/each}}
-				</tbody>
-			</table>
-		</div>
-	</div>
 </section>

@@ -22,6 +22,48 @@ below are retained as deferred reference, not current implementation tasks or
 live-dashboard acceptance gates. Do not present a limited in-memory window as
 complete daily/historical totals; show unavailable metrics explicitly.
 
+## Next live integration slice
+
+The local collector is implemented and tested (see
+[collector evidence](acdc_dashboard_projection.md)); it is not yet exposed by
+Crossbar or connected to the UI. Use one authorized snapshot contract for both
+screens. Keep saved roster, observed runtime membership, global agent status
+and queue eligibility distinct. `cb_acdc_agent_queue` already performs
+correlated runtime sync reads; the queue editor demonstrates authorization of
+each embedded resource. Do not call a handler just because an old comment or
+binding names it: the queue manager's `stats_req` binding currently references
+an absent `acdc_queue_handler:handle_stats_req/2` implementation.
+
+Retain native Blackhole. Existing observation routing includes
+`acdc_stats.call.ACCOUNT.QUEUE`, `acdc_stats.status.ACCOUNT.AGENT`,
+`acdc.queue.position.ACCOUNT.QUEUE` and
+`acdc.queue.agent_change.ACCOUNT.QUEUE` in `kapi_acdc_stats`/`kapi_acdc_queue`.
+These are internal broker routes, NOT callable frontend subscription strings.
+There is no implemented ACDC Blackhole subscription module yet. A reviewed
+module should emit sanitized account/queue invalidation hints and refresh the
+same authorized snapshot, not expose raw call objects, callback leases or
+unreviewed counter deltas. Queue/resource token checks must supplement the
+existing account-hierarchy check; token expiry/revocation must be enforced.
+
+Before adding a custom event callback, fix and test `bh_events.erl` cleanup:
+binding accepts a custom module, while unsubscribe/close currently hardcode
+`bh_events`. Preserve the actual callback identity through unbinding. Also
+handle shared listener ownership and account/queue changes explicitly.
+
+Per-node ETS tables and replicated queue-manager membership cannot simply be
+summed. Correlate responses by account/queue/request and source identity;
+deduplicate replicas and mark missing/conflicting observations incomplete.
+Blackhole can drop events under overload and has no replay guarantee. A hint
+during an outstanding snapshot must schedule another refresh; reconnect,
+suspected loss and bounded reconciliation must resnapshot. Polling alone does
+not satisfy the user's live WebSocket requirement.
+
+Acceptance: actual subscribe → snapshot → queue/agent change → screen update;
+old long-waiting calls; callback physical-leg replacement without double count;
+denied/expired/cross-account scopes; duplicate/conflicting responses; bounded
+partial-source behavior; reconnect and navigation/unsubscribe cleanup. Publish
+only implemented/tested HTTP and WebSocket contracts as callable in `/apis`.
+
 ## Supplied designs and navigation
 
 | Reference | Required behavior |

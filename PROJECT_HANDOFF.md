@@ -43,6 +43,14 @@ local observations from zero. Evidence is in
 HTTP/AMQP authorization, cluster coverage and Blackhole/UI integration remain
 open. No source was deployed; all eight core services were active afterward.
 
+The live summary/detail UI source now passes 22 dashboard and 20 existing
+queue-login groups in session 11055, following a corrected syntax failure in
+16433. It removes history requests, adds clicked-queue navigation and explicit
+unknown/stale/subset states. See [live UI checkpoint](doc/acdc_live_dashboard_ui.md).
+It still uses legacy observed stats: the new collector, authenticated snapshot
+endpoint and native Blackhole are not wired into the UI. No UI build/deployment
+or real-browser acceptance is claimed.
+
 | Current owner / work | Where to resume | Verified state / next step |
 | --- | --- | --- |
 | `media_prerequisites`: cardinal audio authoring | `scripts/acdc-cardinal-pack.cjs`, `scripts/test-acdc-cardinal-pack.cjs`; [verifier evidence](doc/acdc_cardinal_pack_verification.md) | Verifier passed52469:13 groups/2,542 assertions, actual deterministic SoX PCM replay. No new recordings generated. Next: bounded one-time generator with explicit approval/request ledger; no provider calls yet. |

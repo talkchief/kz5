@@ -197,6 +197,7 @@ define(function(require) {
 				template = self.appFlags.acdc.container,
 				generation = ++self.appFlags.acdc.requestGeneration;
 
+			self.clearLiveDashboardTimer();
 			self.closeAgentQueueLogin();
 			self.appFlags.acdc.currentTab = tab;
 			template.find('.acdc-tab').removeClass('active');
@@ -812,48 +813,199 @@ define(function(require) {
 		},
 
 		renderDashboard: function(pGeneration) {
-			var self = this,
-				generation = self.newGeneration(pGeneration),
-				accountId = self.accountId,
-				now = Math.floor(Date.now() / 1000) + self.kazooEpochOffsetSeconds;
+			this.renderLiveDashboard(null, pGeneration);
+		},
 
-			self.renderLoading(self.i18n.active().acdc.states.loadingDashboard);
-			self.requestMany({
-				queues: { resource: 'acdc.queues.list' },
-				agents: { resource: 'acdc.agents.list' },
-				statuses: { resource: 'acdc.agents.statuses' },
-				queueStats: { resource: 'acdc.queues.stats' },
-				agentStats: { resource: 'acdc.agents.stats' },
-				callStats: {
-					resource: 'acdc.callStats.list',
-					data: {
-						createdFrom: now - self.callStatsWindowSeconds,
-						createdTo: now
+		clearLiveDashboardTimer: function() {
+			if (this.appFlags.acdc.liveDashboardTimer) {
+				clearTimeout(this.appFlags.acdc.liveDashboardTimer);
+				delete this.appFlags.acdc.liveDashboardTimer;
+			}
+		},
+
+		// Isolated read seam. The current API is a recent, single-responder subset,
+		// NOT the complete live collector. No history/performance or write requests.
+		requestLiveDashboard: function(queueId, callback) {
+			var self = this, results = {}, errors = {},
+				requests = [{ key: 'queues', resource: 'acdc.queues.list', complete: true },
+					{ key: 'queueStats', resource: 'acdc.queues.stats', envelope: true }], pending;
+
+			if (queueId) {
+				requests = requests.concat([{ key: 'roster', resource: 'acdc.queues.roster', complete: true, data: { queueId: encodeURIComponent(queueId) } },
+					{ key: 'agents', resource: 'acdc.agents.list', complete: true },
+					{ key: 'statuses', resource: 'acdc.agents.statuses' }]);
+			}
+			pending = requests.length;
+			_.each(requests, function(item) {
+				var request = item.complete ? self.requestCompleteList : (item.envelope ? self.requestEnvelope : self.request);
+				request.call(self, item.resource, item.data || {}, function(error, data) {
+					if (item.envelope && !error) {
+						if (!data || (data.status && data.status !== 'success')
+							|| _.some(['next_start_key', 'next_cursor'], function(key) {
+								return data[key] !== undefined && data[key] !== null && data[key] !== '';
+							})) { error = true; }
+						data = _.get(data, 'data');
 					}
-				}
-			}, function(errors, results) {
-				var view;
-
-				if (!self.isCurrentView(generation, 'dashboard', accountId)) {
-					return;
-				}
-
-				if (errors.queues || errors.agents) {
-					self.renderError(errors.queues || errors.agents, function() {
-						self.renderDashboard();
-					});
-					return;
-				}
-
-				view = $(self.getTemplate({
-					name: 'dashboard',
-					data: self.formatDashboard(results, errors)
-				}));
-				view.find('.acdc-refresh').on('click', function() {
-					self.renderDashboard();
+					if (error) { errors[item.key] = true; } else { results[item.key] = data; }
+					if (--pending === 0) { callback(errors, results); }
 				});
-				self.getContentContainer().empty().append(view);
 			});
+		},
+
+		liveQueueInventoryValid: function(queues) {
+			return _.isArray(queues) && queues.length <= 1000
+				&& _.every(queues, function(queue) {
+					return _.isPlainObject(queue) && typeof queue.id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(queue.id);
+				}) && _.uniq(_.map(queues, 'id')).length === queues.length;
+		},
+
+		liveQueueName: function(queue) {
+			return typeof queue.name === 'string' && queue.name.trim() && queue.name.length <= 256 ? queue.name : queue.id;
+		},
+
+		liveStatsSnapshot: function(raw, failed) {
+			var self = this, seen = {}, valid = !failed && _.isPlainObject(raw)
+				&& _.isArray(raw.stats) && raw.stats.length <= 10000
+				&& typeof raw.current_timestamp === 'number' && isFinite(raw.current_timestamp)
+				&& Math.floor(raw.current_timestamp) === raw.current_timestamp
+				&& raw.current_timestamp >= self.kazooEpochOffsetSeconds
+				&& raw.current_timestamp <= Math.floor(Date.now() / 1000) + self.kazooEpochOffsetSeconds + 60;
+
+			valid = valid && _.every(raw.stats, function(row) {
+				var key;
+				if (!_.isPlainObject(row) || typeof row.queue_id !== 'string' || typeof row.call_id !== 'string'
+					|| !row.call_id || !row.queue_id || row.call_id.length > 256 || row.queue_id.length > 128
+					|| ['waiting', 'handled', 'processed', 'abandoned'].indexOf(row.status) < 0) { return false; }
+				key = JSON.stringify([row.queue_id, row.call_id]);
+				if (Object.prototype.hasOwnProperty.call(seen, key)) { return false; }
+				seen[key] = true;
+				return true;
+			});
+			return { available: Boolean(valid), rows: valid ? raw.stats : [], asOf: valid ? raw.current_timestamp : null };
+		},
+
+		liveDuration: function(start, end) {
+			if (typeof start !== 'number' || typeof end !== 'number' || !isFinite(start) || !isFinite(end)
+				|| Math.floor(start) !== start || Math.floor(end) !== end || start < this.kazooEpochOffsetSeconds || end < start) { return '—'; }
+			var seconds = end - start, minutes = Math.floor(seconds / 60);
+			return (minutes < 60 ? minutes : Math.floor(minutes / 60) + ':' + ('0' + minutes % 60).slice(-2))
+				+ ':' + ('0' + seconds % 60).slice(-2);
+		},
+
+		formatLiveDashboard: function(results, errors, meta) {
+			var self = this, labels = self.i18n.active().acdc.dashboard, queueId = meta.queueId,
+				stats = self.liveStatsSnapshot(results.queueStats, errors.queueStats),
+				queues = _.sortBy(_.map(results.queues, function(queue) {
+					return { id: queue.id, name: self.liveQueueName(queue) };
+				}), function(queue) { return queue.name.toLowerCase(); }),
+				selected = _.find(queues, { id: queueId }), statuses = !errors.statuses && _.isPlainObject(results.statuses)
+					? self.normalizeStatuses(results.statuses) : {},
+				agents = !errors.agents && _.isArray(results.agents) ? results.agents : [],
+				rosterValid = !errors.roster && _.isArray(results.roster) && results.roster.length <= 1000
+					&& _.every(results.roster, function(id) { return typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id); })
+					&& _.uniq(results.roster).length === results.roster.length,
+				rows = _.filter(stats.rows, function(row) { return row.queue_id === queueId && ['waiting', 'handled'].indexOf(row.status) >= 0; }),
+				cards = _.map(queues, function(queue) {
+					var own = _.filter(stats.rows, { queue_id: queue.id });
+					return { id: queue.id, name: queue.name || queue.id,
+						waiting: stats.available ? _.filter(own, { status: 'waiting' }).length : '—',
+						handling: stats.available ? _.filter(own, { status: 'handled' }).length : '—' };
+				}), age = Math.max(Date.now() - meta.receivedAt, stats.asOf === null ? 0
+					: Date.now() - (stats.asOf - self.kazooEpochOffsetSeconds) * 1000),
+				stale = Boolean(meta.refreshFailed || age >= 30000),
+				warnings = [];
+
+			if (!stats.available) { warnings.push(labels.statsUnavailable); }
+			if (queueId && !rosterValid) { warnings.push(labels.rosterUnavailable); }
+			if (queueId && (errors.agents || !_.isArray(results.agents))) { warnings.push(labels.namesUnavailable); }
+			if (queueId && (errors.statuses || !_.isPlainObject(results.statuses))) { warnings.push(labels.statusUnavailable); }
+			return {
+				queueRows: cards, queueCount: queues.length, hasQueues: queues.length > 0,
+				queue: selected, detail: Boolean(queueId), queueMissing: Boolean(queueId && !selected),
+				selectedCard: _.find(cards, { id: queueId }), available: stats.available,
+				updating: Boolean(meta.updating), stale: stale, refreshFailed: Boolean(meta.refreshFailed),
+				freshness: meta.updating ? labels.refreshing : (stale ? labels.stale : labels.snapshot),
+				retrievedAt: new Date(meta.receivedAt).toLocaleTimeString(),
+				responseTime: stats.asOf === null ? '—' : new Date((stats.asOf - self.kazooEpochOffsetSeconds) * 1000).toLocaleTimeString(),
+				staleAfter: Math.max(1, 30000 - age),
+				warnings: warnings, hasWarnings: warnings.length > 0, rosterAvailable: rosterValid,
+				rosterCount: rosterValid ? results.roster.length : '—',
+				callsTruncated: rows.length > 200, membersTruncated: rosterValid && results.roster.length > 200,
+				members: rosterValid ? _.map(results.roster.slice(0, 200), function(id) {
+					var agent = _.find(agents, function(item) { return item && (item.id || item._id) === id; }),
+						status = statuses[id];
+					return { id: id, name: agent ? self.getAgentName(agent) : id,
+						status: typeof status === 'string' && Object.prototype.hasOwnProperty.call(labels.statuses, status)
+							? labels.statuses[status] : labels.statuses.unknown };
+				}) : [],
+				calls: _.map(_.sortBy(rows, 'entered_timestamp').slice(0, 200), function(row) {
+					var agent = _.find(agents, function(item) { return item && (item.id || item._id) === row.agent_id; });
+					return { status: labels.callStatuses[row.status], statusClass: row.status === 'waiting' ? 'waiting' : 'handling',
+						caller: [row.caller_id_name, row.caller_id_number].filter(function(value) { return typeof value === 'string' && value; }).join(' · ') || '—',
+						agent: agent ? self.getAgentName(agent) : (row.agent_id || '—'),
+						wait: self.liveDuration(row.entered_timestamp, row.status === 'waiting' ? stats.asOf : row.handled_timestamp),
+						talk: row.status === 'handled' ? self.liveDuration(row.handled_timestamp, stats.asOf) : '—' };
+				})
+			};
+		},
+
+		renderLiveDashboard: function(queueId, pGeneration) {
+			var self = this, generation = self.newGeneration(pGeneration), accountId = self.accountId,
+				cache = self.appFlags.acdc.liveDashboardSnapshot,
+				previous = cache && cache.accountId === accountId && cache.queueId === queueId ? cache : null;
+
+			self.clearLiveDashboardTimer();
+			if (previous) { self.mountLiveDashboard(previous, generation, { updating: true }); }
+			else { self.renderLoading(self.i18n.active().acdc.states.loadingDashboard); }
+			self.requestLiveDashboard(queueId, function(errors, results) {
+				if (!self.isCurrentView(generation, 'dashboard', accountId)) { return; }
+				if (errors.queues || !self.liveQueueInventoryValid(results.queues)) {
+					if (previous) { self.mountLiveDashboard(previous, generation, { refreshFailed: true }); }
+					else { self.renderError(self.i18n.active().acdc.dashboard.inventoryUnavailable, function() { self.renderLiveDashboard(queueId); }); }
+					return;
+				}
+				var snapshot = { accountId: accountId, queueId: queueId, receivedAt: Date.now(), results: results, errors: errors };
+				self.appFlags.acdc.liveDashboardSnapshot = snapshot;
+				self.mountLiveDashboard(snapshot, generation, {});
+			});
+		},
+
+		mountLiveDashboard: function(snapshot, generation, state) {
+			var self = this, labels = self.i18n.active().acdc.dashboard,
+				model = self.formatLiveDashboard(snapshot.results, snapshot.errors, _.assign({}, snapshot, state)),
+				view = $(self.getTemplate({ name: snapshot.queueId ? 'dashboard-detail' : 'dashboard', data: model }));
+
+			self.clearLiveDashboardTimer();
+			view.find('.acdc-refresh').on('click', function() { self.renderLiveDashboard(snapshot.queueId); });
+			view.find('.acdc-live-back').on('click', function() { self.renderDashboard(); });
+			view.find('.acdc-open-live-queue').on('click', function() {
+				var id = $(this).attr('data-queue-id');
+				if (_.some(snapshot.results.queues, { id: id })) { self.renderLiveDashboard(id); }
+			});
+			view.find('.acdc-live-edit, .acdc-live-add').on('click', function() {
+				self.clearLiveDashboardTimer();
+				self.appFlags.acdc.currentTab = 'queues';
+				self.appFlags.acdc.container.find('.acdc-tab').removeClass('active');
+				self.appFlags.acdc.container.find('.acdc-tab[data-tab="queues"]').addClass('active');
+				self.renderQueueForm($(this).hasClass('acdc-live-add') ? undefined : snapshot.queueId);
+			});
+			view.find('.acdc-live-agents').on('click', function() { self.renderSection('agents'); });
+			view.find('.acdc-live-search').on('input', function() {
+				var query = $(this).val().toLowerCase().trim(), visible = 0;
+				view.find('.acdc-live-queue-card').each(function() {
+					var show = $(this).find('.acdc-live-queue-name').text().toLowerCase().indexOf(query) >= 0;
+					$(this).prop('hidden', !show); if (show) { visible++; }
+				});
+				view.find('.acdc-live-no-match').prop('hidden', visible > 0 || !model.hasQueues);
+			});
+			self.getContentContainer().empty().append(view);
+			if (!model.stale) {
+				self.appFlags.acdc.liveDashboardTimer = setTimeout(function() {
+					if (!self.isCurrentView(generation, 'dashboard', snapshot.accountId)) { return; }
+					view.find('.acdc-live-freshness').addClass('is-stale').text(labels.stale);
+					view.find('.acdc-live-stale-note').prop('hidden', false);
+				}, model.staleAfter);
+			}
 		},
 
 		formatDashboard: function(results, errors) {
