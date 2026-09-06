@@ -45,6 +45,7 @@ function applyOverlays(spec, root) {
     operation(qi + '/roster', 'post', 'Replace the complete agent roster', queueSource, {requestBody: request(roster), description: 'The data array is the desired complete roster. Agents omitted from this list are removed. This is not an additive operation. Membership, agent availability, and SIP registration are separate states.'});
     operation(qi + '/roster', 'delete', 'Clear the entire queue roster', queueSource, {description: 'Removes all roster membership. A selective list in the body does not make this selective.'});
     operation(q + '/stats', 'get', 'Read queue statistics', queueSource, {description: 'Statistics payload depends on selected format and available ACDC statistics. A complete typed statistics response is not yet verified.'});
+    inputs.push(...require('./api-docs-queue-live.cjs').applyQueueLive({spec, root}).inputs);
     for (const url of [q + '/eavesdrop', qi + '/eavesdrop']) operation(url, 'put', 'Legacy queue eavesdrop — unavailable', queueSource, {deprecated: true, description: 'Deliberately fails closed with HTTP 503. Use POST /accounts/{ACCOUNT_ID}/channels/{UUID} with an authorized supervision action.', responses: {503: response('Legacy monitoring unavailable', ref('CrossbarError'))}});
     schemas.CallbackPublic = {...object({id: {type: 'string', pattern: '^acdc-callback-[a-f0-9]{64}$'}, queue_id: hex,
         status: {type: 'string', enum: ['registering', 'queued', 'dialing', 'confirming', 'connecting', 'retry_wait', 'cancelling', 'completed', 'cancelled', 'failed', 'expired']},

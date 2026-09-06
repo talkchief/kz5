@@ -41,6 +41,51 @@ installer. Do not send authentication over the non-TLS installation endpoint.
 
 ## Source-reviewed additions
 
+### Live queue overview and selected-queue snapshot (v1, not deployed)
+
+The source catalog adds `GET /v2/accounts/{ACCOUNT_ID}/queues/live` and
+`GET /v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/live`. These are read-only
+source contracts, **not live-deployed or broker/HTTP/browser acceptance**.
+They do not replace the current Monster UI's explicitly labeled recent-subset
+read seam until that integration is independently verified.
+
+Overview accepts only `page_size` (1–100, default50) and optional
+`start_queue_id` (32 lowercase hexadecimal characters). The cursor is inclusive:
+send the returned `pagination.next_start_queue_id` unchanged to begin the next
+page at its first unreturned queue. The handler authorizes every returned queue
+and the lookahead queue, as well as the underlying `/queues/stats` scope.
+Selected detail accepts no query parameters and returns exactly one queue,
+`page_size=1`, `next_start_queue_id=null` and `has_more=false`. Handler responses
+carry `Cache-Control: no-store`; ordinary pre-handler authentication behavior
+remains separate.
+
+The Crossbar `data` envelope contains version1, account identity, generation
+time, a fixed last-hour window, queue rows, pagination, source evidence and
+capabilities. All public timestamps use **Unix seconds**, not the native
+Gregorian epoch. Generation time is not an observation timestamp. Source
+coverage is `observed_replicas`, with `atomic_snapshot=false`; replicas are
+compared rather than summed. `available` means consensus or an empty configured
+scope, `unavailable` means no source availability, and other reasons are
+`partial`. An available response still does not establish atomic global
+occupancy. The public object excludes source IDs, node names and scan counters.
+
+Each queue exposes configuration identity/name/strategy and `metrics_available`.
+When false, `metrics` is null, not a fabricated zero object. Available metrics
+distinguish observed current waiting/handled records from the last-hour
+entered-record cohort, and include conditional averages and maximum waiting
+time. Null maximum/average values mean no applicable observation or denominator.
+The underlying identity is a call/queue pair, not a distinct queue visit; these
+are not service-level, abandonment-rate or average-handle-time KPIs.
+
+All four v1 capabilities remain explicitly false: `live_call_details`,
+`agent_runtime`, `websocket_updates`, and `historical_reporting`. No caller rows,
+queue-ready agent count, inferred endpoint reachability or WebSocket protocol
+may be synthesized from this contract. Historical dashboards, WFM and ClickHouse
+remain postponed; no such integration is introduced here. The focused overlay
+and tests are `scripts/api-docs-queue-live.cjs` and
+`scripts/test-api-docs-queue-live.cjs`; generated portal assets and live
+publication require separate reviewed steps.
+
 ### Native Blackhole and the future Next.js frontend
 
 The generator now includes native Blackhole discovery (`GET /v2/websockets`)

@@ -51,6 +51,36 @@ It still uses legacy observed stats: the new collector, authenticated snapshot
 endpoint and native Blackhole are not wired into the UI. No UI build/deployment
 or real-browser acceptance is claimed.
 
+Current live-only work supersedes the older agent assignments in the table
+below. Root owns `cb_acdc_live.erl` and live `cb_queues` routes;
+`native_audio_path_audit` owns the internal snapshot transport and its tests;
+`media_prerequisites` owns the live OpenAPI fragment; the browser-harness agent
+owns Blackhole subscription-resource cleanup. No one is generating voices or
+working on historical storage in this live-only step. See
+[snapshot implementation boundaries](doc/acdc_live_snapshot.md).
+
+Final source checkpoint for this slice: federated snapshot transport passed24
+in4405 (`/tmp/kazoo-dashboard-amqp.FvM34k`). Handler run70142 passed8 public-route
+tests using the production no-TEST handler and2 separate pure helper tests
+(`/tmp/kazoo-live-snapshot.1bZKPw`). Catalog run92359 passed11 groups/135 schema
+cases, full build/11 asset verification and250 current source inputs
+(`/tmp/kazoo-api-live-catalog.u6yT2M`). Blackhole cleanup passed10 in8279
+(`/tmp/kazoo-blackhole-cleanup.K1n4Qf`), and all46 installer source-transition
+cases passed73181 (`/tmp/kazoo-source-transition-tests.HCJE0a`); redaction
+compatibility passed10 in83107 (`/tmp/kazoo-blackhole-redaction.y0qhRf`). See
+`doc/blackhole_binding_cleanup.md` for the required coherent tuple-ABI restart.
+Earlier fixture
+failures were retained, not counted as passes. Root restored development
+ecallmgr after every memory-limited test window. No new application, UI or
+Blackhole source was deployed; no final master push occurred.
+
+The source catalog assets in `scripts/assets/api-docs` were regenerated and
+verified in10036; their manifest matches the private92359 proof exactly. The
+live portal was not republished. Next resume with bounded selected-queue call
+rows/runtime agents and account/queue-authorized Blackhole invalidation, then
+wire the UI and perform coherent live acceptance. Do not mistake the new
+selected-summary route's false detail/WebSocket capabilities for completion.
+
 | Current owner / work | Where to resume | Verified state / next step |
 | --- | --- | --- |
 | `media_prerequisites`: cardinal audio authoring | `scripts/acdc-cardinal-pack.cjs`, `scripts/test-acdc-cardinal-pack.cjs`; [verifier evidence](doc/acdc_cardinal_pack_verification.md) | Verifier passed52469:13 groups/2,542 assertions, actual deterministic SoX PCM replay. No new recordings generated. Next: bounded one-time generator with explicit approval/request ledger; no provider calls yet. |

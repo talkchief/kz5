@@ -21483,6 +21483,350 @@
         ]
       }
     },
+    "/accounts/{ACCOUNT_ID}/queues/live": {
+      "get": {
+        "operationId": "getAccountQueuesLiveSnapshot",
+        "tags": [
+          "ACDC queues"
+        ],
+        "summary": "Read a page of observed live queue snapshots",
+        "description": "Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. All v1 capability flags are false; do not fabricate call details, ready counts, SLA, historical reports or WebSocket updates. page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.",
+        "parameters": [
+          {
+            "name": "ACCOUNT_ID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "start_queue_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            },
+            "description": "Inclusive first queue ID. Use the preceding page’s next_start_queue_id; omit for the first page."
+          }
+        ],
+        "security": [
+          {
+            "CrossbarToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Version 1 observation envelope; inspect source status and metrics_available before displaying metrics",
+            "headers": {
+              "Cache-Control": {
+                "description": "Queue-live handler responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueLiveEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid page size, start_queue_id cursor, duplicate or unexpected query parameter",
+            "headers": {
+              "Cache-Control": {
+                "description": "Queue-live handler responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication; pre-handler authentication behavior is unchanged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account, queues/stats scope, selected queue or lookahead authorization denied",
+            "headers": {
+              "Cache-Control": {
+                "description": "Queue-live handler responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Selected queue identifier invalid, absent, deleted, wrong type or wrong account",
+            "headers": {
+              "Cache-Control": {
+                "description": "Queue-live handler responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Queue inventory or snapshot dependency unavailable; no fabricated empty inventory",
+            "headers": {
+              "Cache-Control": {
+                "description": "Queue-live handler responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          }
+        },
+        "x-reject-unknown-query-parameters": true,
+        "x-contract-review": "source-reviewed",
+        "x-implementation-status": "implemented-in-source; not-live-deployed",
+        "x-runtime-verification": "Offline source/schema contract only. No broker, HTTP, browser, authorization or deployment acceptance is asserted by this catalog.",
+        "x-source-file": "applications/acdc/src/cb_acdc_live.erl",
+        "x-source-files": [
+          "applications/acdc/src/cb_queues.erl",
+          "applications/acdc/src/cb_acdc_live.erl",
+          "applications/acdc/src/acdc_dashboard_collector.erl",
+          "applications/acdc/src/acdc_dashboard_projection.erl",
+          "applications/acdc/src/acdc_dashboard_snapshot.erl",
+          "applications/acdc/src/kapi_acdc_dashboard.erl",
+          "applications/acdc/src/acdc_stats.erl"
+        ],
+        "x-runtime-source-sha256": "50da1cd8f40f28be99934b566571dbeb71c91a54325a23c54e49bd784c3a3cc5"
+      }
+    },
+    "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/live": {
+      "get": {
+        "operationId": "getAccountQueueLiveSnapshot",
+        "tags": [
+          "ACDC queues"
+        ],
+        "summary": "Read an observed live snapshot for one queue",
+        "description": "Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. All v1 capability flags are false; do not fabricate call details, ready counts, SLA, historical reports or WebSocket updates. This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.",
+        "parameters": [
+          {
+            "name": "ACCOUNT_ID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          },
+          {
+            "name": "QUEUE_ID",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            }
+          }
+        ],
+        "security": [
+          {
+            "CrossbarToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Version 1 observation envelope; inspect source status and metrics_available before displaying metrics",
+            "headers": {
+              "Cache-Control": {
+                "description": "Queue-live handler responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueLiveDetailEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid page size, start_queue_id cursor, duplicate or unexpected query parameter",
+            "headers": {
+              "Cache-Control": {
+                "description": "Queue-live handler responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication; pre-handler authentication behavior is unchanged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Account, queues/stats scope, selected queue or lookahead authorization denied",
+            "headers": {
+              "Cache-Control": {
+                "description": "Queue-live handler responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Selected queue identifier invalid, absent, deleted, wrong type or wrong account",
+            "headers": {
+              "Cache-Control": {
+                "description": "Queue-live handler responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Queue inventory or snapshot dependency unavailable; no fabricated empty inventory",
+            "headers": {
+              "Cache-Control": {
+                "description": "Queue-live handler responses must not be cached.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          }
+        },
+        "x-reject-unknown-query-parameters": true,
+        "x-contract-review": "source-reviewed",
+        "x-implementation-status": "implemented-in-source; not-live-deployed",
+        "x-runtime-verification": "Offline source/schema contract only. No broker, HTTP, browser, authorization or deployment acceptance is asserted by this catalog.",
+        "x-source-file": "applications/acdc/src/cb_acdc_live.erl",
+        "x-source-files": [
+          "applications/acdc/src/cb_queues.erl",
+          "applications/acdc/src/cb_acdc_live.erl",
+          "applications/acdc/src/acdc_dashboard_collector.erl",
+          "applications/acdc/src/acdc_dashboard_projection.erl",
+          "applications/acdc/src/acdc_dashboard_snapshot.erl",
+          "applications/acdc/src/kapi_acdc_dashboard.erl",
+          "applications/acdc/src/acdc_stats.erl"
+        ],
+        "x-runtime-source-sha256": "50da1cd8f40f28be99934b566571dbeb71c91a54325a23c54e49bd784c3a3cc5"
+      }
+    },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks": {
       "get": {
         "operationId": "get__accounts_ACCOUNT_ID_queues_QUEUE_ID_callbacks",
@@ -48004,6 +48348,549 @@
           }
         },
         "type": "object"
+      },
+      "QueueLiveMetrics": {
+        "type": "object",
+        "properties": {
+          "current_waiting": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "current_handled": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "max_current_wait_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "nullable": true
+          },
+          "records_entered": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "waiting_in_cohort": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "handled_in_cohort": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "processed_in_cohort": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "abandoned_in_cohort": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "average_answered_wait_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "nullable": true
+          },
+          "average_processed_talk_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "nullable": true
+          }
+        },
+        "required": [
+          "current_waiting",
+          "current_handled",
+          "max_current_wait_seconds",
+          "records_entered",
+          "waiting_in_cohort",
+          "handled_in_cohort",
+          "processed_in_cohort",
+          "abandoned_in_cohort",
+          "average_answered_wait_seconds",
+          "average_processed_talk_seconds"
+        ],
+        "additionalProperties": false,
+        "description": "Observed current record states and the last-hour entered-record cohort. current_waiting/current_handled are observed states, not telephony channel verification. The seven count fields are nonnegative integers. Maximum wait and averages are null without an applicable observation or denominator; never replace null with zero. records_entered counts call/queue identities, not distinct queue visits. Service level, abandonment rate and handling-time KPIs are not provided."
+      },
+      "QueueLiveQueue": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "x-max-utf8-bytes": 256
+              },
+              "strategy": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "x-max-utf8-bytes": 256,
+                "nullable": true
+              },
+              "metrics_available": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "metrics": {
+                "$ref": "#/components/schemas/QueueLiveMetrics"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "strategy",
+              "metrics_available",
+              "metrics"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "x-max-utf8-bytes": 256
+              },
+              "strategy": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "x-max-utf8-bytes": 256,
+                "nullable": true
+              },
+              "metrics_available": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "metrics": {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "strategy",
+              "metrics_available",
+              "metrics"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "description": "An authorized configured queue. Unavailable metrics are an explicit null object, not a zero-valued queue. The name and strategy describe configuration, not staffing or readiness."
+      },
+      "QueueLiveWindow": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds."
+          },
+          "to": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds."
+          },
+          "seconds": {
+            "type": "integer",
+            "enum": [
+              3600
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "seconds"
+        ],
+        "additionalProperties": false,
+        "description": "Last-hour cohort window in Unix seconds. Current observations and entered-record cohort measures have different meanings; this is not historical reporting."
+      },
+      "QueueLivePagination": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "page_size": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "next_start_queue_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "has_more": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              }
+            },
+            "required": [
+              "page_size",
+              "next_start_queue_id",
+              "has_more"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "page_size": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "next_start_queue_id": {
+                "type": "string",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              },
+              "has_more": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              }
+            },
+            "required": [
+              "page_size",
+              "next_start_queue_id",
+              "has_more"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "description": "next_start_queue_id is the first unreturned queue, not the last returned queue. Send it unchanged as the next inclusive start_queue_id. Null means no further page, not a partial-source error."
+      },
+      "QueueLiveSource": {
+        "type": "object",
+        "properties": {
+          "coverage": {
+            "type": "string",
+            "enum": [
+              "observed_replicas"
+            ]
+          },
+          "all_known_sources_responded": {
+            "type": "boolean"
+          },
+          "consistent": {
+            "type": "boolean"
+          },
+          "atomic_snapshot": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "partial",
+              "unavailable"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "consensus",
+              "empty_scope",
+              "source_unavailable",
+              "source_timeout",
+              "source_error",
+              "incomplete_source",
+              "inconsistent_sources",
+              "source_set_changed",
+              "invalid_response",
+              "response_limit"
+            ]
+          },
+          "observation_started_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds.",
+            "nullable": true
+          },
+          "observation_finished_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds.",
+            "nullable": true
+          }
+        },
+        "required": [
+          "coverage",
+          "all_known_sources_responded",
+          "consistent",
+          "atomic_snapshot",
+          "status",
+          "reason",
+          "observation_started_at",
+          "observation_finished_at"
+        ],
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": {
+              "status": {
+                "enum": [
+                  "available"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "consensus",
+                  "empty_scope"
+                ]
+              },
+              "all_known_sources_responded": {
+                "enum": [
+                  true
+                ]
+              },
+              "consistent": {
+                "enum": [
+                  true
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "enum": [
+                  "unavailable"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "source_unavailable"
+                ]
+              },
+              "all_known_sources_responded": {
+                "enum": [
+                  false
+                ]
+              },
+              "consistent": {
+                "enum": [
+                  false
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "status": {
+                "enum": [
+                  "partial"
+                ]
+              },
+              "reason": {
+                "enum": [
+                  "source_timeout",
+                  "source_error",
+                  "incomplete_source",
+                  "inconsistent_sources",
+                  "source_set_changed",
+                  "invalid_response",
+                  "response_limit"
+                ]
+              },
+              "consistent": {
+                "enum": [
+                  false
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Consensus/coverage metadata for observed replicas, not an atomic cluster snapshot. available means consensus or an empty configured scope; unavailable means source_unavailable; every other listed reason is partial. consistent is true only for available. Source IDs, node names and internal scan counts are intentionally absent. A response timestamp is not source observation time. Partial/unavailable observations must not be presented as complete occupancy."
+      },
+      "QueueLiveCapabilities": {
+        "type": "object",
+        "properties": {
+          "live_call_details": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "agent_runtime": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "websocket_updates": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "historical_reporting": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          }
+        },
+        "required": [
+          "live_call_details",
+          "agent_runtime",
+          "websocket_updates",
+          "historical_reporting"
+        ],
+        "additionalProperties": false,
+        "description": "All four capabilities are false in v1. No caller/agent detail rows, runtime agent readiness, WebSocket update protocol or historical reporting are supplied by this route."
+      },
+      "QueueLiveSnapshot": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "account_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "generated_at": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds. Response generation time, not proof of source freshness."
+          },
+          "window": {
+            "$ref": "#/components/schemas/QueueLiveWindow"
+          },
+          "queues": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/QueueLiveQueue"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/QueueLivePagination"
+          },
+          "source": {
+            "$ref": "#/components/schemas/QueueLiveSource"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/QueueLiveCapabilities"
+          }
+        },
+        "required": [
+          "version",
+          "account_id",
+          "generated_at",
+          "window",
+          "queues",
+          "pagination",
+          "source",
+          "capabilities"
+        ],
+        "additionalProperties": false
+      },
+      "QueueLiveEnvelope": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "success"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/QueueLiveSnapshot"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "QueueLiveDetailEnvelope": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/QueueLiveEnvelope"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "queues": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/QueueLiveQueue"
+                    },
+                    "minItems": 1,
+                    "maxItems": 1
+                  },
+                  "pagination": {
+                    "type": "object",
+                    "properties": {
+                      "page_size": {
+                        "enum": [
+                          1
+                        ]
+                      },
+                      "has_more": {
+                        "enum": [
+                          false
+                        ]
+                      },
+                      "next_start_queue_id": {
+                        "type": "string",
+                        "nullable": true,
+                        "enum": [
+                          null
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "description": "A successful selected-queue response contains exactly one queue and never another page."
       },
       "CallbackPublic": {
         "type": "object",

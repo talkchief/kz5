@@ -226,6 +226,20 @@ scope change. Existing Kazoo archives are left intact. Agent rows/state inside
 the selected queue remain in scope. This override takes precedence over the
 older OPEN labels and broad requirements retained below for future reference.
 
+Live integration checkpoint: bounded HTTP summary/selected-summary source is
+being connected to the collector through a strict internal broker contract;
+see `doc/acdc_live_snapshot.md`. The selected route is not yet full queue detail:
+active-call rows, runtime queue agents, Blackhole updates and UI wiring remain
+required. The corrected federated transport passed24 cases in4405. The HTTP
+handler passed8 public-route production-build tests and2 pure helper tests in
+70142; real HTTP/token/broker acceptance remains open. The complete private
+OpenAPI catalog passed11 groups/135 schema cases and all11 asset verifications
+in92359, with250 unique current source inputs checked. Runtime publication is
+pending.
+Blackhole callback ownership/listener cleanup passed10 tests and its installer
+transition passed46 cases. None of these passes closes DASH-01–05 or establishes
+a new deployed dashboard. Historical/WFM work remains postponed.
+
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
 | DASH-01 | ACTIVE — UI source tested; not deployed | Live queue overview using `Queues Live Dashboard Main.png`: sortable queue cards, SLA, waiting/handled/abandoned counts, wait/handle durations, queue administration actions. Source summary/detail navigation passes22 dashboard groups and20 queue-login groups in11055; see doc/acdc_live_dashboard_ui.md. Still legacy observed-stat subset; bounded snapshot/Blackhole wiring and full design/live acceptance open. |
