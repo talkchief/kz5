@@ -30,6 +30,9 @@ define(function(require) {
 		},
 
 		requests: {
+			'acdc.live.overview': { url: 'accounts/{accountId}/queues/live?page_size={pageSize}', verb: 'GET', generateError: false },
+			'acdc.live.page': { url: 'accounts/{accountId}/queues/live?page_size={pageSize}&start_queue_id={startQueueId}', verb: 'GET', generateError: false },
+			'acdc.live.detail': { url: 'accounts/{accountId}/queues/{queueId}/live', verb: 'GET', generateError: false },
 			'acdc.editor.new': { url: 'accounts/{accountId}/queues/editor', verb: 'GET', generateError: false },
 			'acdc.editor.get': { url: 'accounts/{accountId}/queues/{queueId}/editor', verb: 'GET', generateError: false },
 			'acdc.editor.create': { url: 'accounts/{accountId}/queues/editor', verb: 'PUT', generateError: false },
@@ -823,70 +826,120 @@ define(function(require) {
 			}
 		},
 
-		// Isolated read seam. The current API is a recent, single-responder subset,
-		// NOT the complete live collector. No history/performance or write requests.
-		requestLiveDashboard: function(queueId, callback) {
-			var self = this, results = {}, errors = {},
-				requests = [{ key: 'queues', resource: 'acdc.queues.list', complete: true },
-					{ key: 'queueStats', resource: 'acdc.queues.stats', envelope: true }], pending;
+		// One bounded observation page, never a recursive all-pages inventory read.
+		// Supplementary roster/global status are not runtime queue eligibility.
+		requestLiveDashboard: function(queueId, callback, page) {
+			var self = this, accountId = self.accountId, generation = self.appFlags.acdc.requestGeneration,
+				paging = page || { cursor: null, size: 50, history: [] }, results = {}, errors = {},
+				data = { accountId: accountId, pageSize: paging.size },
+				resource = queueId ? 'acdc.live.detail' : (paging.cursor ? 'acdc.live.page' : 'acdc.live.overview');
 
-			if (queueId) {
-				requests = requests.concat([{ key: 'roster', resource: 'acdc.queues.roster', complete: true, data: { queueId: encodeURIComponent(queueId) } },
-					{ key: 'agents', resource: 'acdc.agents.list', complete: true },
-					{ key: 'statuses', resource: 'acdc.agents.statuses' }]);
-			}
-			pending = requests.length;
-			_.each(requests, function(item) {
-				var request = item.complete ? self.requestCompleteList : (item.envelope ? self.requestEnvelope : self.request);
-				request.call(self, item.resource, item.data || {}, function(error, data) {
-					if (item.envelope && !error) {
-						if (!data || (data.status && data.status !== 'success')
-							|| _.some(['next_start_key', 'next_cursor'], function(key) {
-								return data[key] !== undefined && data[key] !== null && data[key] !== '';
-							})) { error = true; }
-						data = _.get(data, 'data');
+			if (queueId) { data.queueId = encodeURIComponent(queueId); }
+			if (paging.cursor) { data.startQueueId = encodeURIComponent(paging.cursor); }
+			monster.request({ resource: resource, data: data,
+				error: function(error) {
+					var codes = [_.get(error, 'status'), _.get(error, 'statusCode'), _.get(error, 'error'), _.get(error, 'data.error')];
+					callback({ live: true, denied: _.some(codes, function(code) { return ['401', '403', '404'].indexOf(String(code)) >= 0; }) }, {});
+				},
+				success: function(envelope) {
+					if (!self.isCurrentView(generation, 'dashboard', accountId)) { return; }
+					if (!envelope || (envelope.status && envelope.status !== 'success')
+						|| !self.liveSnapshotValid(envelope.data, accountId, queueId, paging)) {
+						callback({ live: true }, {}); return;
 					}
-					if (error) { errors[item.key] = true; } else { results[item.key] = data; }
-					if (--pending === 0) { callback(errors, results); }
-				});
+					results.live = envelope.data; results.queues = envelope.data.queues;
+					if (!queueId) { callback(errors, results); return; }
+					var pending = 3;
+					_.each([{ key: 'roster', resource: 'acdc.queues.roster', complete: true },
+						{ key: 'agents', resource: 'acdc.agents.list', complete: true },
+						{ key: 'statuses', resource: 'acdc.agents.statuses' }], function(item) {
+						var request = item.complete ? self.requestCompleteList : self.request;
+						request.call(self, item.resource, { accountId: accountId, queueId: encodeURIComponent(queueId) }, function(error, value) {
+							if (error) { errors[item.key] = true; } else { results[item.key] = value; }
+							if (--pending === 0) { callback(errors, results); }
+						});
+					});
+				}
 			});
 		},
 
-		liveQueueInventoryValid: function(queues) {
-			return _.isArray(queues) && queues.length <= 1000
-				&& _.every(queues, function(queue) {
-					return _.isPlainObject(queue) && typeof queue.id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(queue.id);
-				}) && _.uniq(_.map(queues, 'id')).length === queues.length;
+		liveSnapshotValid: function(raw, accountId, queueId, page) {
+			var integer = function(n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && Math.abs(n) <= 9007199254740991; },
+				count = function(n) { return integer(n) && n >= 0 && n <= 10000; },
+				id = function(s) { return typeof s === 'string' && /^[a-f0-9]{32}$/.test(s); },
+				text = function(s) { return typeof s === 'string' && s.length > 0 && encodeURIComponent(s).replace(/%[A-F0-9]{2}/g, 'x').length <= 256; },
+				utf8 = function(s) { return encodeURIComponent(s).replace(/%([A-F0-9]{2})/g, function(match, hex) { return String.fromCharCode(parseInt(hex, 16)); }); },
+				metricCounts = ['current_waiting', 'current_handled', 'records_entered', 'waiting_in_cohort', 'handled_in_cohort', 'processed_in_cohort', 'abandoned_in_cohort'],
+				reasons = ['consensus', 'empty_scope', 'source_unavailable', 'source_timeout', 'source_error', 'incomplete_source', 'inconsistent_sources', 'source_set_changed', 'invalid_response', 'response_limit'];
+			try {
+				if (!_.isPlainObject(raw) || raw.version !== 1 || raw.account_id !== accountId || !id(accountId)
+					|| !integer(raw.generated_at) || raw.generated_at <= 0 || raw.generated_at > Math.floor(Date.now() / 1000) + 60
+					|| !_.isPlainObject(raw.window) || raw.window.seconds !== 3600 || !integer(raw.window.from) || raw.window.from <= 0
+					|| !integer(raw.window.to) || raw.window.to - raw.window.from !== 3600 || raw.window.to > raw.generated_at
+					|| !_.isPlainObject(raw.source) || !_.isPlainObject(raw.pagination) || !_.isPlainObject(raw.capabilities)
+					|| !_.isArray(raw.queues) || raw.queues.length > 100) { return false; }
+				var source = raw.source, pagination = raw.pagination, caps = raw.capabilities,
+					available = source.status === 'available', empty = source.reason === 'empty_scope', previous = null;
+				if (source.coverage !== 'observed_replicas' || source.atomic_snapshot !== false
+					|| !_.isBoolean(source.all_known_sources_responded) || !_.isBoolean(source.consistent)
+					|| reasons.indexOf(source.reason) < 0 || ['available', 'partial', 'unavailable'].indexOf(source.status) < 0
+					|| available !== (source.reason === 'consensus' || empty) || source.consistent !== available
+					|| (available && !source.all_known_sources_responded)
+					|| ((source.status === 'unavailable') !== (source.reason === 'source_unavailable'))
+					|| (source.status === 'unavailable' && source.all_known_sources_responded)
+					|| caps.live_call_details !== Boolean(queueId) || caps.agent_runtime !== false
+					|| caps.websocket_updates !== false || caps.historical_reporting !== false) { return false; }
+				if (source.observation_started_at === null || source.observation_finished_at === null) {
+					if (source.observation_started_at !== null || source.observation_finished_at !== null || (available && !empty)) { return false; }
+				} else if (!integer(source.observation_started_at) || !integer(source.observation_finished_at)
+					|| source.observation_started_at < raw.window.to || source.observation_finished_at < source.observation_started_at
+					|| source.observation_finished_at > raw.generated_at) { return false; }
+				if (empty !== (raw.queues.length === 0) || (empty && source.observation_finished_at !== null) || !_.isBoolean(pagination.has_more)
+					|| pagination.page_size !== (queueId ? 1 : page.size) || raw.queues.length > pagination.page_size
+					|| pagination.page_size < 1 || pagination.page_size > 100
+					|| (pagination.has_more ? !id(pagination.next_start_queue_id) || raw.queues.length !== pagination.page_size : pagination.next_start_queue_id !== null)
+					|| (queueId && (raw.queues.length !== 1 || raw.queues[0].id !== queueId || pagination.has_more))) { return false; }
+				if (!_.every(raw.queues, function(queue) {
+					if (!_.isPlainObject(queue) || !id(queue.id) || !text(queue.name) || !(queue.strategy === null || text(queue.strategy))
+						|| (previous !== null && queue.id <= previous) || (!queueId && page.cursor && queue.id < page.cursor)
+						|| queue.metrics_available !== available) { return false; }
+					previous = queue.id;
+					if (!available) { return queue.metrics === null; }
+					var metrics = queue.metrics;
+					return _.isPlainObject(metrics) && _.every(metricCounts, function(key) { return count(metrics[key]); })
+						&& _.every(['max_current_wait_seconds', 'average_answered_wait_seconds', 'average_processed_talk_seconds'], function(key) {
+							var n = metrics[key]; return n === null || (typeof n === 'number' && isFinite(n) && n >= 0 && n <= 999999999999
+								&& (key !== 'max_current_wait_seconds' || integer(n)));
+						});
+				}) || (pagination.has_more && pagination.next_start_queue_id <= previous)) { return false; }
+				if (!queueId) { return raw.calls === null; }
+				var calls = raw.calls, last = null, seen = Object.create(null);
+				if (!_.isPlainObject(calls) || !_.isBoolean(calls.available) || !_.isBoolean(calls.complete) || !_.isBoolean(calls.truncated)
+					|| calls.limit !== 200 || calls.order !== 'queue_id_entered_call_id' || !_.isArray(calls.rows) || calls.rows.length > 200
+					|| calls.available !== available) { return false; }
+				if (!calls.available) { return calls.complete === false && calls.truncated === false && calls.observed_count === null && calls.rows.length === 0; }
+				if (!count(calls.observed_count) || calls.rows.length !== Math.min(calls.observed_count, 200)
+					|| calls.observed_count !== raw.queues[0].metrics.current_waiting + raw.queues[0].metrics.current_handled
+					|| calls.truncated !== (calls.observed_count > 200) || calls.complete !== !calls.truncated) { return false; }
+				return _.every(calls.rows, function(row) {
+					if (!_.isPlainObject(row) || row.queue_id !== queueId || !text(row.call_id) || /[\x00-\x1f\x7f]/.test(row.call_id)
+						|| seen[row.call_id] || ['waiting', 'handled'].indexOf(row.status) < 0 || !integer(row.entered_at)
+						|| row.entered_at > source.observation_finished_at || (row.status === 'waiting' ? row.handled_at !== null
+							: !integer(row.handled_at) || row.handled_at < row.entered_at || row.handled_at > source.observation_finished_at)
+						|| (last && (row.entered_at < last.entered_at || (row.entered_at === last.entered_at && utf8(row.call_id) <= utf8(last.call_id))))) { return false; }
+					seen[row.call_id] = true; last = row; return true;
+				});
+			} catch (error) { return false; }
 		},
 
 		liveQueueName: function(queue) {
 			return typeof queue.name === 'string' && queue.name.trim() && queue.name.length <= 256 ? queue.name : queue.id;
 		},
 
-		liveStatsSnapshot: function(raw, failed) {
-			var self = this, seen = {}, valid = !failed && _.isPlainObject(raw)
-				&& _.isArray(raw.stats) && raw.stats.length <= 10000
-				&& typeof raw.current_timestamp === 'number' && isFinite(raw.current_timestamp)
-				&& Math.floor(raw.current_timestamp) === raw.current_timestamp
-				&& raw.current_timestamp >= self.kazooEpochOffsetSeconds
-				&& raw.current_timestamp <= Math.floor(Date.now() / 1000) + self.kazooEpochOffsetSeconds + 60;
-
-			valid = valid && _.every(raw.stats, function(row) {
-				var key;
-				if (!_.isPlainObject(row) || typeof row.queue_id !== 'string' || typeof row.call_id !== 'string'
-					|| !row.call_id || !row.queue_id || row.call_id.length > 256 || row.queue_id.length > 128
-					|| ['waiting', 'handled', 'processed', 'abandoned'].indexOf(row.status) < 0) { return false; }
-				key = JSON.stringify([row.queue_id, row.call_id]);
-				if (Object.prototype.hasOwnProperty.call(seen, key)) { return false; }
-				seen[key] = true;
-				return true;
-			});
-			return { available: Boolean(valid), rows: valid ? raw.stats : [], asOf: valid ? raw.current_timestamp : null };
-		},
-
+		// Dashboard DTO times are signed Unix seconds, not Kazoo Gregorian seconds.
 		liveDuration: function(start, end) {
 			if (typeof start !== 'number' || typeof end !== 'number' || !isFinite(start) || !isFinite(end)
-				|| Math.floor(start) !== start || Math.floor(end) !== end || start < this.kazooEpochOffsetSeconds || end < start) { return '—'; }
+				|| Math.floor(start) !== start || Math.floor(end) !== end || end < start) { return '—'; }
 			var seconds = end - start, minutes = Math.floor(seconds / 60);
 			return (minutes < 60 ? minutes : Math.floor(minutes / 60) + ':' + ('0' + minutes % 60).slice(-2))
 				+ ':' + ('0' + seconds % 60).slice(-2);
@@ -894,7 +947,8 @@ define(function(require) {
 
 		formatLiveDashboard: function(results, errors, meta) {
 			var self = this, labels = self.i18n.active().acdc.dashboard, queueId = meta.queueId,
-				stats = self.liveStatsSnapshot(results.queueStats, errors.queueStats),
+				live = results.live, source = live.source, active = live.calls,
+				asOf = source.observation_finished_at,
 				queues = _.sortBy(_.map(results.queues, function(queue) {
 					return { id: queue.id, name: self.liveQueueName(queue) };
 				}), function(queue) { return queue.name.toLowerCase(); }),
@@ -904,33 +958,36 @@ define(function(require) {
 				rosterValid = !errors.roster && _.isArray(results.roster) && results.roster.length <= 1000
 					&& _.every(results.roster, function(id) { return typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id); })
 					&& _.uniq(results.roster).length === results.roster.length,
-				rows = _.filter(stats.rows, function(row) { return row.queue_id === queueId && ['waiting', 'handled'].indexOf(row.status) >= 0; }),
+				rows = active && active.available ? active.rows : [],
 				cards = _.map(queues, function(queue) {
-					var own = _.filter(stats.rows, { queue_id: queue.id });
+					var observed = _.find(live.queues, { id: queue.id });
 					return { id: queue.id, name: queue.name || queue.id,
-						waiting: stats.available ? _.filter(own, { status: 'waiting' }).length : '—',
-						handling: stats.available ? _.filter(own, { status: 'handled' }).length : '—' };
-				}), age = Math.max(Date.now() - meta.receivedAt, stats.asOf === null ? 0
-					: Date.now() - (stats.asOf - self.kazooEpochOffsetSeconds) * 1000),
+						waiting: observed.metrics_available ? observed.metrics.current_waiting : '—',
+						handling: observed.metrics_available ? observed.metrics.current_handled : '—' };
+				}), age = Math.max(Date.now() - meta.receivedAt, asOf === null ? 0 : Date.now() - asOf * 1000),
 				stale = Boolean(meta.refreshFailed || age >= 30000),
 				warnings = [];
 
-			if (!stats.available) { warnings.push(labels.statsUnavailable); }
+			if (source.status !== 'available') { warnings.push(labels.statsUnavailable); }
 			if (queueId && !rosterValid) { warnings.push(labels.rosterUnavailable); }
 			if (queueId && (errors.agents || !_.isArray(results.agents))) { warnings.push(labels.namesUnavailable); }
 			if (queueId && (errors.statuses || !_.isPlainObject(results.statuses))) { warnings.push(labels.statusUnavailable); }
 			return {
 				queueRows: cards, queueCount: queues.length, hasQueues: queues.length > 0,
+				hasNextPage: live.pagination.has_more, hasPreviousPage: meta.page.history.length > 0,
+				pageNumber: meta.page.history.length + 1, pageSize: meta.page.size,
 				queue: selected, detail: Boolean(queueId), queueMissing: Boolean(queueId && !selected),
-				selectedCard: _.find(cards, { id: queueId }), available: stats.available,
+				selectedCard: _.find(cards, { id: queueId }), available: Boolean(active && active.available),
+				sourceStatus: labels.sourceStatuses[source.status], sourceReason: labels.sourceReasons[source.reason],
 				updating: Boolean(meta.updating), stale: stale, refreshFailed: Boolean(meta.refreshFailed),
 				freshness: meta.updating ? labels.refreshing : (stale ? labels.stale : labels.snapshot),
 				retrievedAt: new Date(meta.receivedAt).toLocaleTimeString(),
-				responseTime: stats.asOf === null ? '—' : new Date((stats.asOf - self.kazooEpochOffsetSeconds) * 1000).toLocaleTimeString(),
+				responseTime: asOf === null ? '—' : new Date(asOf * 1000).toLocaleTimeString(),
 				staleAfter: Math.max(1, 30000 - age),
 				warnings: warnings, hasWarnings: warnings.length > 0, rosterAvailable: rosterValid,
 				rosterCount: rosterValid ? results.roster.length : '—',
-				callsTruncated: rows.length > 200, membersTruncated: rosterValid && results.roster.length > 200,
+				callsTruncated: Boolean(active && active.truncated), observedCallCount: active && active.available ? active.observed_count : '—',
+				membersTruncated: rosterValid && results.roster.length > 200,
 				members: rosterValid ? _.map(results.roster.slice(0, 200), function(id) {
 					var agent = _.find(agents, function(item) { return item && (item.id || item._id) === id; }),
 						status = statuses[id];
@@ -938,36 +995,36 @@ define(function(require) {
 						status: typeof status === 'string' && Object.prototype.hasOwnProperty.call(labels.statuses, status)
 							? labels.statuses[status] : labels.statuses.unknown };
 				}) : [],
-				calls: _.map(_.sortBy(rows, 'entered_timestamp').slice(0, 200), function(row) {
-					var agent = _.find(agents, function(item) { return item && (item.id || item._id) === row.agent_id; });
+				calls: _.map(rows, function(row) {
 					return { status: labels.callStatuses[row.status], statusClass: row.status === 'waiting' ? 'waiting' : 'handling',
-						caller: [row.caller_id_name, row.caller_id_number].filter(function(value) { return typeof value === 'string' && value; }).join(' · ') || '—',
-						agent: agent ? self.getAgentName(agent) : (row.agent_id || '—'),
-						wait: self.liveDuration(row.entered_timestamp, row.status === 'waiting' ? stats.asOf : row.handled_timestamp),
-						talk: row.status === 'handled' ? self.liveDuration(row.handled_timestamp, stats.asOf) : '—' };
+						callId: row.call_id,
+						wait: self.liveDuration(row.entered_at, row.status === 'waiting' ? asOf : row.handled_at),
+						talk: row.status === 'handled' ? self.liveDuration(row.handled_at, asOf) : '—' };
 				})
 			};
 		},
 
-		renderLiveDashboard: function(queueId, pGeneration) {
+		renderLiveDashboard: function(queueId, pGeneration, page) {
 			var self = this, generation = self.newGeneration(pGeneration), accountId = self.accountId,
+				paging = page || { cursor: null, size: 50, history: [] },
 				cache = self.appFlags.acdc.liveDashboardSnapshot,
-				previous = cache && cache.accountId === accountId && cache.queueId === queueId ? cache : null;
+				previous = cache && cache.accountId === accountId && cache.queueId === queueId && _.isEqual(cache.page, paging) ? cache : null;
 
 			self.clearLiveDashboardTimer();
 			if (previous) { self.mountLiveDashboard(previous, generation, { updating: true }); }
 			else { self.renderLoading(self.i18n.active().acdc.states.loadingDashboard); }
 			self.requestLiveDashboard(queueId, function(errors, results) {
 				if (!self.isCurrentView(generation, 'dashboard', accountId)) { return; }
-				if (errors.queues || !self.liveQueueInventoryValid(results.queues)) {
-					if (previous) { self.mountLiveDashboard(previous, generation, { refreshFailed: true }); }
-					else { self.renderError(self.i18n.active().acdc.dashboard.inventoryUnavailable, function() { self.renderLiveDashboard(queueId); }); }
+				if (errors.live || !self.liveSnapshotValid(results.live, accountId, queueId, paging)) {
+					if (errors.denied) { delete self.appFlags.acdc.liveDashboardSnapshot; }
+					if (previous && !errors.denied) { self.mountLiveDashboard(previous, generation, { refreshFailed: true }); }
+					else { self.renderError(self.i18n.active().acdc.dashboard.inventoryUnavailable, function() { self.renderLiveDashboard(queueId, undefined, paging); }); }
 					return;
 				}
-				var snapshot = { accountId: accountId, queueId: queueId, receivedAt: Date.now(), results: results, errors: errors };
+				var snapshot = { accountId: accountId, queueId: queueId, page: paging, receivedAt: Date.now(), results: results, errors: errors };
 				self.appFlags.acdc.liveDashboardSnapshot = snapshot;
 				self.mountLiveDashboard(snapshot, generation, {});
-			});
+			}, paging);
 		},
 
 		mountLiveDashboard: function(snapshot, generation, state) {
@@ -976,7 +1033,17 @@ define(function(require) {
 				view = $(self.getTemplate({ name: snapshot.queueId ? 'dashboard-detail' : 'dashboard', data: model }));
 
 			self.clearLiveDashboardTimer();
-			view.find('.acdc-refresh').on('click', function() { self.renderLiveDashboard(snapshot.queueId); });
+			view.find('.acdc-refresh').on('click', function() { self.renderLiveDashboard(snapshot.queueId, undefined, snapshot.page); });
+			view.find('.acdc-live-next').on('click', function() {
+				if (model.updating || !model.hasNextPage) { return; }
+				self.renderLiveDashboard(null, undefined, { size: snapshot.page.size, cursor: snapshot.results.live.pagination.next_start_queue_id,
+					history: snapshot.page.history.concat([snapshot.page.cursor]) });
+			});
+			view.find('.acdc-live-previous').on('click', function() {
+				if (model.updating || !model.hasPreviousPage) { return; }
+				self.renderLiveDashboard(null, undefined, { size: snapshot.page.size, cursor: _.last(snapshot.page.history),
+					history: snapshot.page.history.slice(0, -1) });
+			});
 			view.find('.acdc-live-back').on('click', function() { self.renderDashboard(); });
 			view.find('.acdc-open-live-queue').on('click', function() {
 				var id = $(this).attr('data-queue-id');

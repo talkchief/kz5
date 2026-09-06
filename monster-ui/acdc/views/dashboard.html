@@ -5,7 +5,7 @@
 	</div>
 	<div class="acdc-live-source" role="status">
 		<div class="acdc-live-source-heading"><span class="acdc-live-freshness {{#if stale}}is-stale{{/if}}">{{freshness}}</span><span>{{i18n.acdc.dashboard.retrieved}} {{retrievedAt}}</span></div>
-		<p>{{i18n.acdc.dashboard.coverage}}</p><p class="acdc-live-stale-note" {{#unless stale}}hidden{{/unless}}>{{i18n.acdc.dashboard.staleHelp}}</p>
+		<p class="acdc-live-source-state">{{sourceStatus}} · {{sourceReason}}</p><p>{{i18n.acdc.dashboard.coverage}}</p><p class="acdc-live-stale-note" {{#unless stale}}hidden{{/unless}}>{{i18n.acdc.dashboard.staleHelp}}</p>
 		{{#if refreshFailed}}<p class="acdc-live-refresh-error">{{i18n.acdc.dashboard.refreshFailed}}</p>{{/if}}
 	</div>
 	{{#if hasWarnings}}<div class="acdc-warning" role="status"><ul>{{#each warnings}}<li>{{this}}</li>{{/each}}</ul></div>{{/if}}
@@ -24,4 +24,9 @@
 	{{else}}
 		<div class="acdc-live-empty"><i class="fa fa-list" aria-hidden="true"></i><h3>{{i18n.acdc.dashboard.noQueues}}</h3><p>{{i18n.acdc.queues.emptyDescription}}</p><button type="button" class="monster-button-primary acdc-live-add">{{i18n.acdc.queues.add}}</button></div>
 	{{/if}}
+	<nav class="acdc-live-toolbar" aria-label="{{i18n.acdc.dashboard.pageNavigation}}">
+		<button type="button" class="monster-button-secondary acdc-live-previous" {{#unless hasPreviousPage}}disabled{{/unless}} {{#if updating}}disabled{{/if}}>{{i18n.acdc.dashboard.previousPage}}</button>
+		<span>{{i18n.acdc.dashboard.page}} {{pageNumber}} · {{i18n.acdc.dashboard.pageLimit}} {{pageSize}}</span>
+		<button type="button" class="monster-button-secondary acdc-live-next" {{#unless hasNextPage}}disabled{{/unless}} {{#if updating}}disabled{{/if}}>{{i18n.acdc.dashboard.nextPage}}</button>
+	</nav>
 </section>

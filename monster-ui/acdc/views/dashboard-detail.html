@@ -9,7 +9,7 @@
 		</div>
 		<div class="acdc-live-source" role="status">
 			<div class="acdc-live-source-heading"><span class="acdc-live-freshness {{#if stale}}is-stale{{/if}}">{{freshness}}</span><span>{{i18n.acdc.dashboard.retrieved}} {{retrievedAt}}</span></div>
-			<p>{{i18n.acdc.dashboard.coverage}}</p><p class="acdc-live-stale-note" {{#unless stale}}hidden{{/unless}}>{{i18n.acdc.dashboard.staleHelp}}</p>
+			<p class="acdc-live-source-state">{{sourceStatus}} · {{sourceReason}}</p><p>{{i18n.acdc.dashboard.coverage}}</p><p class="acdc-live-stale-note" {{#unless stale}}hidden{{/unless}}>{{i18n.acdc.dashboard.staleHelp}}</p>
 			{{#if refreshFailed}}<p class="acdc-live-refresh-error">{{i18n.acdc.dashboard.refreshFailed}}</p>{{/if}}
 		</div>
 		{{#if hasWarnings}}<div class="acdc-warning" role="status"><ul>{{#each warnings}}<li>{{this}}</li>{{/each}}</ul></div>{{/if}}
@@ -21,10 +21,10 @@
 		<div class="acdc-live-detail-grid">
 			<div class="acdc-panel acdc-live-calls-panel">
 				<h3>{{i18n.acdc.dashboard.observedCalls}}</h3><p class="acdc-panel-context">{{i18n.acdc.dashboard.callsContext}} {{i18n.acdc.dashboard.responseTime}} {{responseTime}}</p>
-				{{#if callsTruncated}}<p class="acdc-warning" role="status">{{i18n.acdc.dashboard.callsTruncated}}</p>{{/if}}
-				<div class="acdc-table-scroll"><table class="acdc-table"><thead><tr><th scope="col">{{i18n.acdc.fields.status}}</th><th scope="col">{{i18n.acdc.fields.caller}}</th><th scope="col">{{i18n.acdc.fields.agent}}</th><th scope="col">{{i18n.acdc.fields.wait}}</th><th scope="col">{{i18n.acdc.dashboard.elapsedHandling}}</th></tr></thead><tbody>
-					{{#each calls}}<tr><td><span class="acdc-status acdc-live-status-{{statusClass}}">{{status}}</span></td><td>{{caller}}</td><td>{{agent}}</td><td class="acdc-live-duration">{{wait}}</td><td class="acdc-live-duration">{{talk}}</td></tr>
-					{{else}}<tr><td colspan="5" class="acdc-empty-cell">{{#if available}}{{i18n.acdc.dashboard.noObservedCalls}}{{else}}{{i18n.acdc.dashboard.statsUnavailable}}{{/if}}</td></tr>{{/each}}
+				{{#if callsTruncated}}<p class="acdc-warning acdc-live-calls-truncated" role="status">{{i18n.acdc.dashboard.callsTruncated}} {{i18n.acdc.dashboard.observedCount}} {{observedCallCount}}</p>{{/if}}
+				<div class="acdc-table-scroll"><table class="acdc-table"><thead><tr><th scope="col">{{i18n.acdc.fields.status}}</th><th scope="col">{{i18n.acdc.dashboard.callIdentifier}}</th><th scope="col">{{i18n.acdc.fields.wait}}</th><th scope="col">{{i18n.acdc.dashboard.elapsedHandling}}</th></tr></thead><tbody>
+					{{#each calls}}<tr><td><span class="acdc-status acdc-live-status-{{statusClass}}">{{status}}</span></td><td>{{callId}}</td><td class="acdc-live-duration">{{wait}}</td><td class="acdc-live-duration">{{talk}}</td></tr>
+					{{else}}<tr><td colspan="4" class="acdc-empty-cell">{{#if available}}{{i18n.acdc.dashboard.noObservedCalls}}{{else}}{{i18n.acdc.dashboard.statsUnavailable}}{{/if}}</td></tr>{{/each}}
 				</tbody></table></div>
 			</div>
 			<aside class="acdc-panel acdc-live-members-panel">
