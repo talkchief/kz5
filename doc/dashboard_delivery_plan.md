@@ -55,6 +55,37 @@ unimplemented proposals belong in the clearly marked planned catalog.
 
 ## HTTP and WebSocket contract requirements
 
+### Source audit checkpoint — September 6, 2026
+
+The next dashboard backend must not simply combine the existing browser calls
+and advertise the result as a complete live snapshot. Inspection of the current
+tracked source established these concrete constraints:
+
+| Source | Observed behavior | Required implementation consequence |
+| --- | --- | --- |
+| `acdc_stats:query_calls/4` | The argument is `_Limit`; `ets:select/2` materializes all matching records and the entire result is published. | A `Limit` request alone does not bound scanning, allocation or response size. Implement bounded collection/aggregation and explicit coverage before introducing a dashboard snapshot route. Do not silently truncate legacy responses and label them complete. |
+| `cb_queues:fetch_all_current_queue_stats/1` | Default query filters entered timestamps to the cleanup window. | An older call still waiting/handled can be excluded. Current occupancy and completed/cohort metrics require separate predicates, not one recent-entry list reused for every tile. |
+| `cb_queues:format_stats/2` | Returns a fresh `current_timestamp` instead of propagating the responder's `Query-Time`. | Response construction time is not source freshness or an atomic snapshot timestamp. Preserve source observation time and snapshot coverage separately. |
+| `acdc_stats:call_stat_id/2`, `handle_waiting_stat/2` | Identity is `call_id::queue_id`; another waiting event for an existing identity updates caller metadata, not a distinct visit identity. | These rows cannot prove unique re-entry counts. Introduce/version durable visit identity where necessary; do not describe deduplication by this key as complete queue-visit accounting. |
+| `monster-ui/acdc/app.js` `formatDashboard` | Missing status/stats responses become empty objects/lists; counts can show zero alongside warnings. Its online count is based on global status, not queue membership/readiness. | New UI must distinguish unavailable from zero, and global agent state from selected-queue eligibility. Keep the requested queue-scoped server authorization and roster/runtime checks. |
+| `acdc_stats` serialized records | Entered/handled/processed/abandoned timestamps and wait/talk durations exist; they do not establish all hold/wrap-up/break/attendance intervals. | Do not label talk duration as handle duration or infer working hours from registration/status snapshots. Workforce transitions require their own durable source. |
+
+This is source evidence, not a live-data extract, endpoint implementation or
+dashboard acceptance. No sample figures were rendered as production data.
+The chosen delivery remains the existing Monster UI ACDC app plus reusable
+HTTP/Blackhole contracts for Next.js, not a separate static dashboard or a new
+analytics service. The dashboard skill's source/metric QA informed this audit;
+its portable-HTML export workflow is not the user-selected delivery surface.
+
+Next executable backend slice: add a bounded account/selected-queue projection
+with source timestamps and explicit incomplete/unknown states, separating
+current occupancy from windowed outcomes. Validate source records and authorize
+scope before aggregation. Add source-bound regression cases for a long-waiting
+call, absent stats, repeated queue entry, out-of-scope rows, duplicate events and
+bounded overload. Then wire versioned snapshots and Blackhole updates to the
+supplied overview/detail designs; history and workforce remain separate required
+workstreams, not fields to invent in the first projection.
+
 The developer-facing delivery also includes a live agent dashboard, not only
 agent history. All overview/detail/live/history contracts must distinguish the
 company (`ACCOUNT_ID`), selected queue and selected agent. Native
