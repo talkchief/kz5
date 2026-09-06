@@ -127,3 +127,37 @@ The root source/test snapshot is recorded in private `say-root-inputs.sha256`
 and was rechecked unchanged afterward. Full native session/module teardown,
 language-module fragment playback, real callback retries/DTMF and installer
 packaging remain open. No readiness/admission switch was enabled.
+
+## Follow-up loader race and scope review
+
+Review found a window not covered by the first fixture: removing a leased
+module before returning busy allowed a concurrent same-name load to replace
+its interface mapping. The private derivative
+`native-say-loader-busy.XKamzX` checks the owned lease count under the loader
+mutex before removing the module. The original frozen source/evidence remains
+unchanged. This correction is not yet packaged in the repository installer.
+
+On 2026-09-06 at 18:50 UTC, the derivative passed all eight fixture groups in
+both plain and ASan+UBSan modes, including no hash mutation on leased unload
+and a competing same-name lookup. Source and 108 selected dependency pins
+remained stable. Evidence:
+`native-say-loader-busy.XKamzX/loader-lease-proof.yDiF4Y/receipt.json`.
+These are extracted-function tests with dependency doubles, not native DSO
+load/unload or real-call acceptance. The earlier native relink does not cover
+this derivative. All eight selected live services remained active; none was
+restarted for the tests.
+
+An independent source audit also identified an architectural release blocker:
+the private owned RTP path currently admits only unsecured PCMU/PCMA. It must
+not be promoted as general codec/SRTP support. Existing FreeSWITCH asynchronous
+private events retain the standard media path but are not a drop-in fix:
+nested event draining can reverse playback and run completion before audio;
+event-lock can starve behind endless hold; queued media can survive into a
+bridge; and global `uuid_break all` is not owner-scoped cancellation.
+
+The next design decision must preserve normal codec/SRTP processing while
+providing a single ordered finite playback operation, exact owner/epoch
+validation, durable cancellation, correlated completion and hold-state
+restoration. Neither an asynchronous flag change nor the existing private
+G.711-only path closes callback readiness. No new architecture was deployed
+or enabled by this review.
