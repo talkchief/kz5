@@ -436,3 +436,147 @@ same-locale catalog IDs; preflight missing audio without partial speech or fallb
 Listening must cover consonant joins, stress, conjunctions, cadence and complete
 long numbers. Native owned playback cancellation, completion and bridge safety
 remain separate open release gates. No source-level test closes those gates.
+
+## Cardinal artifact verification and one-time authoring
+
+The separate `scripts/acdc-cardinal-pack.cjs` verifier now binds all584 role
+records, transcripts and locale contexts to their exact catalog hashes. Its
+manifest always contains all584 identities: absent work is represented by
+`PENDING`, not by silently omitting a locale. Each identity retains an ordered
+history of at most two attempts. `REQUESTING` is indeterminate, not permission
+to bill again; an earlier successful attempt cannot be retried. Immutable WAV
+filenames include locale, cardinal-v1 role, attempt number and sample rate.
+The existing210 callback/fixed/digit assets and their historical manifests are
+not changed by these tools.
+
+Technical QA does not establish correct spoken words or contextual acceptance.
+The verifier separately binds declared transcript, introduction, delivery and
+listening reviews. Accepting those reviews requires an independently supplied
+approval-set hash. Introduction WAV bytes are outside this584-role pack and
+remain explicitly unverified here. Hebrew/Arabic framing, vocalization, pausal
+delivery and actual introduction agreement still require the reviews described
+above. No tool invents those approvals or claims reviewer authentication.
+
+The verifier now actually replays the master-to-telephony conversion, rather
+than accepting matching duration and independent hashes as proof. Its exported
+recipe is `sox-14.4.2-rate-v-8000-pcm16le-no-dither-v1`: fixed `/usr/bin/sox`,
+master WAV on stdin, PCM16LE mono8000 on stdout, `--no-dither`, and `rate -v
+8000`. The child has a clean allowlisted environment, bounded output and time.
+There is no trim, gain, normalization, inserted silence or other gap policy.
+Leading/trailing silence is measured, not transformed or declared linguistically
+acceptable. Verification compares the derived PCM bytes with the saved WAV's
+actual PCM payload. SoX is a local authoring/verification dependency, never a
+runtime synthesis service.
+
+Guard52469 exited0 under128MiB/768MiB reserve/60seconds/network isolation:
+all13 groups and2,542 assertions passed, including all584 identities/1,168
+synthetic WAVs, exact resampling, and rejection of independently rehashed900Hz
+telephony audio against a500Hz master with the same duration. Receipt:
+`/tmp/acdc-cardinal-pack-proof.lZXrt9/receipt.json`, SHA-256
+`0d9f02f7749c43894bda2283bb2cd985728c8672f7d5a14289b68643a34c9740`.
+Verifier/test hashes were respectively
+`a53f1ff78c55ab941a5bf3a7ba9a5525161a580e03573e42cde18287ffe20328` and
+`20d557bb9895405c801ab5bd103ea05b6d37658ba6bd47c060697fd415e46456`.
+Catalog and SoX executable pins also remained stable. This was synthetic
+technical evidence: no provider requests, actual language review or native
+acceptance occurred.
+
+### Authoring CLI (offline-tested; no real generation)
+
+`scripts/generate-acdc-gemini-cardinal-pack.cjs` is a separate one-time authoring
+entry point. Neither installer nor backend invokes it. Default `--plan` imports
+no provider helper, reads no key and writes nothing. The generator uses the
+verifier's exact `requestBody` and `resampleMaster` APIs; only after all authoring
+gates pass does it load the existing Gemini helper, with its protected-key,
+bounded-request, audio-response and WAV conventions. Sulafat and the existing
+model remain fixed.
+
+An approval file has exactly these fields:
+
+```json
+{
+  "schema_version": 1,
+  "catalog_sha256": "<pack.CATALOG_HASH>",
+  "approvals": ["<the five explicitly reviewed locale records>"],
+  "approvals_sha256": "<pack.digest(approvals)>"
+}
+```
+
+The array shown is schematic: actual records must match `pendingApproval()`'s
+strict schema, with real evidence hashes and exact introduction identity/text/
+WAV hashes wherever a review is approved. `--plan` supplies pending records,
+not approvals. The caller must independently review/pin the approval-set hash;
+the generator never chooses a hash from the file on the caller's behalf.
+Transcript/intro/delivery must be approved for every selected locale with work.
+The generator cannot change an attempted locale's approval record. Previously
+untouched locales can gain separately reviewed approvals on a later resume.
+It never changes listening approval or existing introduction recordings.
+
+Example shapes only; no real generation has been authorized or run by this
+implementation task:
+
+```bash
+node scripts/generate-acdc-gemini-cardinal-pack.cjs --plan --locales en-us
+
+node scripts/generate-acdc-gemini-cardinal-pack.cjs --generate \
+  --output /usr/local/src/kazoo5-installer/cardinal-authoring.REVIEWED \
+  --locales en-us --request-limit 31 --concurrency 1 \
+  --approval-file /usr/local/src/kazoo5-installer/cardinal-approvals.json \
+  --approval-sha256 <independently-reviewed-approval-set-sha256> \
+  --key-file <protected-provider-key-file>
+```
+
+Outputs are restricted to new protected authoring directories below `/tmp/`
+or `/usr/local/src/kazoo5-installer/`; they cannot target the repository,
+installation or runtime media roots. After creation, `--resume` is mandatory.
+An explicit `--request-limit` bounds each invocation; it may checkpoint a
+partial batch without pretending the selected locale or entire pack is complete.
+The initial ledger capacity is584, not an automatic request to spend that budget.
+Concurrency is one or two; every request is durably reserved with file and
+parent-directory fsync before transport. An exclusive lock is never stolen;
+stale lock/request reconciliation remains explicit operator work.
+
+`--resume --retry-failed --retry-budget N` additionally authorizes a bounded
+total retry budget (at most584) and only retries already-failed first attempts.
+Existing failed-attempt provenance and files remain intact. A failure created
+in the current invocation never schedules its own retry. Incomplete audio
+responses may allow unrelated initial jobs to continue; HTTP/auth/rate/transport
+and other technical failures stop new scheduling. Both workers settle before
+lock release. No selected `REQUESTING` row is automatically retried.
+
+Already-successful identities are always reverified and never regenerated.
+A fully completed selection can be resumed with `--generate --resume --output
+... --locales ... --request-limit 1` without any key, approval file or provider
+load; it performs zero requests and leaves the manifest/WAV bytes unchanged.
+Cross-pack or telephone-digit reuse is not admitted by this version: it must
+not be inferred from equal transcript text. Durable per-run journals preserve
+request limits, selected identities, safe outcomes and allowlisted returned
+model versions, without keys or provider response prose. Manifest/receipt drift
+and preexisting attempt output files cause failure rather than overwrite.
+
+The new generator's offline tests use explicit provider doubles and real SoX
+replay. Their source covers approval failures, reservations, request
+limits, resume, no implicit retry, explicit retry history, concurrent failures,
+output ownership/drift, complete584 no-provider resume and credential-free
+receipts. Initial128MiB/768MiB-reserve admission exited69 without running a
+payload because available memory was insufficient; no lower-cap or reserve
+bypass was used. Root subsequently ran the frozen generator under the same
+128MiB cap,768MiB reserve,60-second deadline and network isolation during a
+controlled dev maintenance window. Root verified all eight services active and
+FreeSWITCH zero calls, stopped only dev `kazoo-ecallmgr` with trapped restoration,
+ran projection37 tests and the generator sequentially, then verified all eight
+services active and FreeSWITCH zero calls again. Root handle39271 ended0.
+
+The generator passed all12 groups/173 checks with11 mock requests, zero actual
+provider calls and zero actual key reads. Complete584 resume reused the verified
+synthetic assets with zero requests; neither real transcript/intro approval nor
+native acceptance was asserted. Receipt:
+`/tmp/acdc-cardinal-generator-proof.26KPU5/receipt.json`, SHA-256
+`84959c931d07367ada0cdb26a808e9ee3a7452722625fcc9675e7eeae7601d59`.
+Generator/test source hashes remained respectively
+`370d0f2997e6f920d8ec947f8799e29e6145dcebcbeb5de7ab3603d0b62c651e` and
+`4e65be730d75686c3bdf6069ef2649cafb7ad596ea328584970c55af801c0608`.
+Verifier, catalog, reused helper/catalog and SoX executable pins also remained
+unchanged. Audio authoring, final listening approval, create-only import,
+distributed local FreeSWITCH provisioning and native playback remain separate
+open steps. No generator or verifier source changed during this evidence update.
