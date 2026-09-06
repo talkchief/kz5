@@ -2284,7 +2284,7 @@
     },
     {
       "file": "applications/acdc/src/cb_acdc_live.erl",
-      "sha256": "0e52ec56ab016cd5b670ec92b6e36ba0984e357bdb2330eaa465075c9289bfa0",
+      "sha256": "e9c3a26e14cad61845af49ff79707aeecb09378c761764680a2899a792a7d464",
       "literal_binding_nouns": []
     },
     {
@@ -2351,6 +2351,10 @@
       "sha256": "d50efa852e6953ebd96118106722a710b4369d058eebacbc6613aa3ab1e94ba9"
     },
     {
+      "file": "applications/acdc/src/acdc_live_auth.erl",
+      "sha256": "7f78b0543c7154410071b3f7178f47e856525d0be0c4a03f4a8349f6df77d1a8"
+    },
+    {
       "file": "applications/acdc/src/acdc_stats.erl",
       "sha256": "c9621d1e4056c7efaea2f8aaf2258c5744750d079ca15f0c5f7ac0ef8231675f"
     },
@@ -2360,7 +2364,7 @@
     },
     {
       "file": "applications/acdc/src/cb_acdc_live.erl",
-      "sha256": "0e52ec56ab016cd5b670ec92b6e36ba0984e357bdb2330eaa465075c9289bfa0"
+      "sha256": "e9c3a26e14cad61845af49ff79707aeecb09378c761764680a2899a792a7d464"
     },
     {
       "file": "applications/acdc/src/cb_acdc_queue_editor.erl",
@@ -2880,7 +2884,7 @@
     },
     {
       "file": "scripts/api-docs-queue-live.cjs",
-      "sha256": "e4c00fff333894680a67bfcc0c9683dad0375d26b8accb64354e9210ddba19b4"
+      "sha256": "ba2b3e037bd5c9aee2a7fa7188033c765fe67c876f4214bf2605599e78234868"
     },
     {
       "file": "scripts/api-docs-tooling/package-lock.json",

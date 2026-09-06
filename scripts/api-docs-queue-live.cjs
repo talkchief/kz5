@@ -126,6 +126,7 @@ function queueLiveContract() {
 function applyQueueLive({spec, root}) {
     const handler = 'applications/acdc/src/cb_acdc_live.erl';
     const sourceFiles = ['applications/acdc/src/cb_queues.erl', handler,
+        'applications/acdc/src/acdc_live_auth.erl',
         'applications/acdc/src/acdc_dashboard_collector.erl', 'applications/acdc/src/acdc_dashboard_projection.erl',
         'applications/acdc/src/acdc_dashboard_snapshot.erl', 'applications/acdc/src/kapi_acdc_dashboard.erl',
         'applications/acdc/src/acdc_stats.erl'];
@@ -133,6 +134,7 @@ function applyQueueLive({spec, root}) {
     const source = bytes[handler].toString();
     for (const expected of ['-define(EPOCH, 62167219200).', '<<"cache-control">>, <<"no-store">>',
         'permit(Context, [<<"stats">>])', 'lists:foreach(fun(D) -> permit(Context, [kz_doc:id(D)]) end, Docs)',
+        'acdc_live_auth:permit(C,Params)', 'acdc_live_auth:authorize(C)',
         'Size = size_value(kz_json:get_value(<<"page_size">>,Query,50))', '{1,undefined}',
         'N>=1,N=<100', 'case QueueId of undefined -> [<<"page_size">>,<<"start_queue_id">>]; _ -> [] end',
         'kz_doc:id(lists:nth(Size+1, Docs))', '{startkey,Cursor}', 'Now-?EPOCH-3600',
@@ -158,6 +160,12 @@ function applyQueueLive({spec, root}) {
         assert(source.includes(expected), 'Queue-live source contract changed: ' + expected);
     }
     for (const [file, needles] of [
+        ['applications/acdc/src/acdc_live_auth.erl', [
+            'crossbar_bindings:pmap(api_util:create_event_name(C,<<"authorize">>),C)',
+            '<<"authorize.",Resource/binary>>', 'lists:any(fun(true)->true;', 'andalso scopes(C,Resource).',
+            '<<"allowed_scopes.",Resource/binary>>', 'kz_auth_scope:all(cb_context:auth_token(C),Required)',
+            '{fun cb_context:set_req_verb/2,?HTTP_GET},{fun cb_context:set_query_string/2,kz_json:new()}',
+            'throw({live_error,403,<<"queue_live_resource_forbidden">>})']],
         ['applications/acdc/src/acdc_dashboard_collector.erl', ['-define(MAX_ACTIVE_CALLS, 200).',
             'gb_trees:insert({Queue, Entered, Call}, Value, Tree)', 'order=>queue_id_entered_call_id']],
         ['applications/acdc/src/kapi_acdc_dashboard.erl', ['calls_scope(true, [_]) -> true',

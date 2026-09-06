@@ -33,7 +33,16 @@ context(Queue,Query)->
         {fun cb_context:set_resp_etag/2,<<"old-cache-tag">>}]).
 get(Queue,Query)->
     C=context(Queue,Query),
-    case Queue of undefined->cb_queues:validate(C,<<"live">>); _->cb_queues:validate(C,Queue,<<"live">>) end.
+    Result=case Queue of undefined->cb_queues:validate(C,<<"live">>); _->cb_queues:validate(C,Queue,<<"live">>) end,
+    capture_response(Queue,Result),Result.
+capture_response(Queue,C)->
+    case {os:getenv("LIVE_SNAPSHOT_DIR"),cb_context:resp_status(C)} of
+        {Dir,success} when is_list(Dir)->
+            Row=j([{<<"route">>,case Queue of undefined-> <<"overview">>; _-> <<"detail">> end},
+                {<<"data">>,cb_context:resp_data(C)}]),
+            ok=file:write_file(filename:join(Dir,"public-responses.ndjson"),[kz_json:encode(Row),<<"\n">>],[append]);
+        _ -> ok
+    end.
 no_store(C)->
     ?assertEqual(<<"no-store">>,maps:get(<<"cache-control">>,cb_context:resp_headers(C))),
     ?assertEqual(undefined,cb_context:resp_etag(C)).
@@ -141,8 +150,10 @@ detail_calls()->
         ?assertEqual(success,cb_context:resp_status(R)),D=cb_context:resp_data(R),
         C=val(<<"calls">>,D),?assertEqual(false,val(<<"available">>,C)),
         ?assertEqual(null,val(<<"observed_count">>,C)),?assertEqual([],val(<<"rows">>,C)),
-        [Q]=val(<<"queues">>,D),?assertEqual(null,val(<<"metrics">>,Q)) end ||
-        Mode<-[timeout,call_conflict,missing_flag]],
+        [Q]=val(<<"queues">>,D),?assertEqual(null,val(<<"metrics">>,Q)),
+        ?assertEqual(Reason,kz_json:get_value([<<"source">>,<<"reason">>],D)) end ||
+        {Mode,Reason}<-[{timeout,<<"source_timeout">>},{call_conflict,<<"inconsistent_sources">>},
+            {missing_flag,<<"invalid_response">>}]],
     reset(),put_state(broker_mode,capped),Capped=val(<<"calls">>,cb_context:resp_data(get(?Q,j([])))),
     ?assertEqual(true,val(<<"available">>,Capped)),?assertEqual(true,val(<<"truncated">>,Capped)),
     ?assertEqual(false,val(<<"complete">>,Capped)),?assertEqual(201,val(<<"observed_count">>,Capped)),

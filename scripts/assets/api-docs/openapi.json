@@ -21651,13 +21651,14 @@
         "x-source-files": [
           "applications/acdc/src/cb_queues.erl",
           "applications/acdc/src/cb_acdc_live.erl",
+          "applications/acdc/src/acdc_live_auth.erl",
           "applications/acdc/src/acdc_dashboard_collector.erl",
           "applications/acdc/src/acdc_dashboard_projection.erl",
           "applications/acdc/src/acdc_dashboard_snapshot.erl",
           "applications/acdc/src/kapi_acdc_dashboard.erl",
           "applications/acdc/src/acdc_stats.erl"
         ],
-        "x-runtime-source-sha256": "0e52ec56ab016cd5b670ec92b6e36ba0984e357bdb2330eaa465075c9289bfa0"
+        "x-runtime-source-sha256": "e9c3a26e14cad61845af49ff79707aeecb09378c761764680a2899a792a7d464"
       }
     },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/live": {
@@ -21818,13 +21819,14 @@
         "x-source-files": [
           "applications/acdc/src/cb_queues.erl",
           "applications/acdc/src/cb_acdc_live.erl",
+          "applications/acdc/src/acdc_live_auth.erl",
           "applications/acdc/src/acdc_dashboard_collector.erl",
           "applications/acdc/src/acdc_dashboard_projection.erl",
           "applications/acdc/src/acdc_dashboard_snapshot.erl",
           "applications/acdc/src/kapi_acdc_dashboard.erl",
           "applications/acdc/src/acdc_stats.erl"
         ],
-        "x-runtime-source-sha256": "0e52ec56ab016cd5b670ec92b6e36ba0984e357bdb2330eaa465075c9289bfa0"
+        "x-runtime-source-sha256": "e9c3a26e14cad61845af49ff79707aeecb09378c761764680a2899a792a7d464"
       }
     },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks": {

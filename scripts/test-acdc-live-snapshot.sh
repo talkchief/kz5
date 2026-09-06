@@ -22,14 +22,16 @@ live_exit() {
 }
 trap live_exit EXIT
 mkdir "$live_test_dir/production" "$live_test_dir/test" "$live_test_dir/fixture"
-live_sources=(applications/acdc/src/cb_acdc_live.erl applications/acdc/src/cb_queues.erl
+live_sources=(applications/acdc/src/cb_acdc_live.erl applications/acdc/src/acdc_live_auth.erl applications/acdc/src/cb_queues.erl
     applications/acdc/src/kapi_acdc_dashboard.erl applications/crossbar/src/cb_context.erl
     applications/crossbar/src/api_util.erl applications/crossbar/src/crossbar_util.erl
     core/kazoo_documents/src/kz_doc.erl core/kazoo_data/src/kzs_util.erl
     core/kazoo_stdlib/src/kz_json.erl core/kazoo_stdlib/src/kz_term.erl
     core/kazoo_stdlib/src/props.erl core/kazoo_amqp/src/api/kz_api.erl)
-live_inputs=("${live_sources[@]}" scripts/erlang-tests/acdc_live_tests.erl scripts/test-acdc-live-snapshot.sh)
-/usr/bin/find applications/acdc/src applications/crossbar/src \
+live_inputs=("${live_sources[@]}" scripts/erlang-tests/acdc_live_tests.erl scripts/test-acdc-live-snapshot.sh
+    scripts/test-acdc-live-response-contract.cjs scripts/api-docs-queue-live.cjs
+    scripts/api-docs-tooling/package-lock.json /usr/bin/node)
+/usr/bin/find applications/acdc/src applications/acdc/include applications/crossbar/src \
     core/kazoo_stdlib/include core/kazoo_amqp/include core/kazoo_documents/include core/kazoo_data/src \
     -type f -name '*.hrl' > "$live_test_dir/headers.list"
 LC_ALL=C /usr/bin/sort -o "$live_test_dir/headers.list" "$live_test_dir/headers.list"
@@ -53,7 +55,7 @@ erlc -DTEST -Werror +debug_info \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' \
     -o "$live_test_dir/test" applications/acdc/src/cb_acdc_live.erl
 erlc -Werror +debug_info -o "$live_test_dir/fixture" scripts/erlang-tests/acdc_live_tests.erl
-# Exercise all eight real public-route cases with the production beam only.
+# Exercise the real public-route cases with the production beam only.
 erl -noshell -pa "$live_test_dir/production" -pa "$live_test_dir/fixture" \
     -eval '
         {module, cb_acdc_live} = code:ensure_loaded(cb_acdc_live),
@@ -67,6 +69,8 @@ erl -noshell -pa "$live_test_dir/production" -pa "$live_test_dir/fixture" \
             ok -> halt(0); _ -> halt(1)
         end.' \
     | tee "$live_test_dir/eunit-public-production.log"
+/usr/bin/node scripts/test-acdc-live-response-contract.cjs "$live_test_dir/public-responses.ndjson" \
+    | tee "$live_test_dir/response-contract.log"
 # A separate VM loads TEST exports solely for the two pure helper cases.
 erl -noshell -pa "$live_test_dir/production" -pa "$live_test_dir/test" -pa "$live_test_dir/fixture" \
     -eval '

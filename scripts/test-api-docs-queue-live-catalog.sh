@@ -22,6 +22,7 @@ catalog_inputs=(
     scripts/api-docs-members-devices.cjs scripts/api-docs-blackhole.cjs
     scripts/api-docs-tooling/package.json scripts/api-docs-tooling/package-lock.json
     applications/acdc/src/cb_acdc_live.erl applications/acdc/src/cb_queues.erl
+    applications/acdc/src/acdc_live_auth.erl
     applications/acdc/src/acdc_dashboard_collector.erl
     applications/acdc/src/acdc_dashboard_projection.erl
     applications/acdc/src/acdc_dashboard_snapshot.erl

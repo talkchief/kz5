@@ -210,26 +210,9 @@ source(Reason,All,Consistent,Rs) ->
 
 %% Match the queue editor's fail-closed authorization for embedded resources.
 permit(C,Params) ->
-    Account=cb_context:account_id(C),
-    Sub=cb_context:setters(C,[{fun cb_context:set_req_nouns/2,[{<<"queues">>,Params},{<<"accounts">>,[Account]}]},
-        {fun cb_context:set_raw_path/2,iolist_to_binary([<<"/">>,cb_context:api_version(C),<<"/accounts/">>,Account,<<"/queues">>,[[<<"/">>,P] || P<-Params]])},
-        {fun cb_context:set_req_verb/2,?HTTP_GET},{fun cb_context:set_query_string/2,kz_json:new()},
-        {fun cb_context:set_resp_status/2,success},{fun cb_context:set_doc/2,kz_json:new()},
-        {fun cb_context:set_req_data/2,kz_json:new()}]),
-    need(authorized(Sub),403,<<"queue_live_resource_forbidden">>).
+    acdc_live_auth:permit(C,Params).
 authorized(C) ->
-    [{Resource,Params}|_]=cb_context:req_nouns(C),
-    Results=crossbar_bindings:pmap(api_util:create_event_name(C,<<"authorize">>),C) ++
-        crossbar_bindings:pmap(api_util:create_event_name(C,<<"authorize.",Resource/binary>>),[C|Params]),
-    lists:all(fun(true)->true;(false)->true;({true,_})->true;({false,_})->true;(_)->false end,Results) andalso
-        lists:any(fun(true)->true;({true,_})->true;(_)->false end,Results) andalso scopes(C,Resource).
-scopes(C,Resource) ->
-    case {cb_context:auth_token_type(C),kz_json:get_ne_binary_value(<<"method">>,cb_context:auth_doc(C))} of
-        {'x-auth-token',Method} when is_binary(Method) ->
-            lists:all(fun(Required) when is_list(Required)->kz_auth_scope:all(cb_context:auth_token(C),Required);(_)->false end,
-                crossbar_bindings:pmap(api_util:create_event_name(C,<<"allowed_scopes.",Resource/binary>>),Method));
-        _ -> true
-    end.
+    acdc_live_auth:authorize(C).
 id(B) when is_binary(B),byte_size(B)=:=32 -> re:run(B,<<"^[0-9a-f]{32}$">>,[{capture,none}])=:=match;
 id(_) -> false.
 need(true,_,_) -> ok;

@@ -227,7 +227,17 @@ scope change. Existing Kazoo archives are left intact. Agent rows/state inside
 the selected queue remain in scope. This override takes precedence over the
 older OPEN labels and broad requirements retained below for future reference.
 
-Selected-call extension (latest): collector42 tests, transport28 tests,
+Latest live integration: UI `900efa8` now consumes the new bounded DTOs with
+explicit summary paging and clicked detail. Offline dashboard 22 groups and
+queue-login 20 groups passed (37074); Chromium 12 interaction groups passed
+(5608, synthetic API only). Shared auth passed 10 cases (93576). Public handler
+passed 9 route groups, 2 helpers and 17 actual-response/OpenAPI checks (23014).
+Repository catalog regenerated and verified 93576; live `/apis` not published.
+See `doc/acdc_live_dashboard_ui.md`, `doc/acdc_live_auth.md` and
+`doc/monster_socket_lifecycle.md`. Native queue event publication/delivery,
+runtime queue-agent state and coherent deployment/live acceptance remain OPEN.
+
+Earlier selected-call extension: collector42 tests, transport28 tests,
 production HTTP9 groups plus2 helpers, and private OpenAPI13 groups/214 schema
 cases passed. Detail now returns at most200 observed active calls, with explicit
 unavailable/complete/truncated semantics and full observed count; source and

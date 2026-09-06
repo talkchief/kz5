@@ -15,9 +15,28 @@ reports or ClickHouse integration now. Agent state within queue detail remains
 in scope; a separate agent dashboard is deferred. Neither live screen is yet
 accepted/deployed. See the scope override in `PROJECT_TASKS.md`.
 
-Latest extension: selected-queue active-call rows now pass42 collector tests
-(83794),28 transport tests and9 production-route plus2 helper tests (52933).
-The private OpenAPI catalog passes13 groups/214 schema cases (62421). Detail
+**Latest tested integration:** UI commit `900efa8` uses the new bounded summary
+and selected-call DTOs. It passed 22 offline dashboard groups, 20 queue-login
+groups and 12 Chromium interaction groups with synthetic API responses. The
+shared authorization helper passed 10 cases (93576); public routes passed
+9 groups plus 2 helpers and 17 actual-handler/OpenAPI DTO checks (23014).
+The refreshed catalog verified all 11 assets and 251 current source inputs;
+repository assets were regenerated in 93576. See `doc/acdc_live_dashboard_ui.md`
+and `doc/acdc_live_auth.md`. No new source/UI or `/apis` deployment occurred.
+All temporary development service stops were restored by EXIT traps.
+
+Next required work: implement the server `queue_live.changed.QUEUE_ID` binding
+with account/queue authorization, sanitized post-mutation invalidation, bounded
+delivery and token/subscription rechecks; connect the tested client lifecycle
+with coalesced snapshot refresh and periodic gap reconciliation. Add bounded
+runtime queue-agent observations, then coherently build/deploy and test actual
+call transitions, permissions and reconnects. The shared auth helper requires
+active Crossbar bindings locally and retains native token-cache policy; it is
+not a standalone remote authorization service or instant revocation guarantee.
+
+Earlier extension: selected-queue active-call rows passed 42 collector tests
+(83794), 28 transport tests and 9 production-route plus 2 helper tests (52933).
+The private OpenAPI catalog passed 13 groups/214 schema cases (62421). Detail
 advertises its call collection; overview has `calls=null`. Agent runtime and
 WebSocket capability remain false pending integration. Evidence and explicit
 limits are in `doc/acdc_live_snapshot.md`. The outbound sync-status contract
@@ -25,6 +44,12 @@ fix also passed3 baseline and11 candidate regression groups (38933), source
 only. Current owners: root public API/validation; native agent OpenAPI and
 Blackhole authorization design; media agent Monster socket lifecycle patch;
 browser-harness agent live DTO UI adapter. Historical work remains postponed.
+
+The opt-in Monster socket lifecycle patch passed 26 offline groups, 12 installer
+wiring groups and 11 preservation groups (27665). It supports account-scoped
+native bindings and bounded ACK/cancellation/reconnect handling. See
+`doc/monster_socket_lifecycle.md`. This client patch is not deployed and does
+not itself implement the backend queue event binding or prove broker readiness.
 
 Documentation baseline: local commit **`57b55e1`**, branch
 `fix/acdc-outbound-agent-availability`, September 6, 2026. This section records

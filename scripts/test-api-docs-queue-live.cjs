@@ -201,7 +201,8 @@ async function main() {
         assert.deepEqual(target.components.schemas.Preserved, {type: 'string'});
         for (const input of result.inputs) assert.equal(input.sha256, hash(fs.readFileSync(path.join(root, input.file))));
         assert(result.inputs.some(input => input.file === 'scripts/api-docs-queue-live.cjs'));
-        assert.equal(result.inputs.length, 8);
+        assert.equal(result.inputs.length, 9);
+        assert(result.inputs.some(input => input.file === 'applications/acdc/src/acdc_live_auth.erl'));
         assert.equal(target.paths[DETAIL].get['x-runtime-source-sha256'], hash(fs.readFileSync(path.join(root, 'applications/acdc/src/cb_acdc_live.erl'))));
         assert.throws(() => applyQueueLive({spec: target, root}), /already exists/);
     });
@@ -210,6 +211,9 @@ async function main() {
         for (const [changed, needle] of [['cb_acdc_live.erl', 'Until,3000)'],
             ['cb_queues.erl', 'cb_acdc_live:get(Context, Id)'],
             ['cb_acdc_live.erl', 'public_calls(false,_) -> null'],
+            ['cb_acdc_live.erl', 'acdc_live_auth:authorize(C)'],
+            ['acdc_live_auth.erl', 'andalso scopes(C,Resource).'],
+            ['acdc_live_auth.erl', 'kz_auth_scope:all(cb_context:auth_token(C),Required)'],
             ['cb_acdc_live.erl', '{<<"agent_runtime">>,false},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}'],
             ['cb_acdc_live.erl', '{<<"rows">>,[public_call(R) || R<-val(<<"rows">>,C)]}'],
             ['cb_acdc_live.erl', '{<<"call_id">>,val(<<"call_id">>,R)},{<<"queue_id">>,val(<<"queue_id">>,R)}'],
