@@ -65,8 +65,8 @@ other nodes and branches: preserve them when editing.
 | GET | `/agents/status` | Read agent status information. |
 | GET | `/agents/{agent_id}/status` | Read one agent's status information. |
 | POST | `/agents/{agent_id}/status` | Change availability. |
-| GET | `/agents/{agent_id}/queue_status` | Read queue membership. |
-| POST | `/agents/{agent_id}/queue_status` | Log into or out of a queue. |
+| GET | `/agents/{agent_id}/queue_status` | Read saved enrollment; opt-in runtime query checks one selected queue. |
+| POST | `/agents/{agent_id}/queue_status` | Legacy enrollment change, or opt-in runtime-only queue login. |
 | POST | `/agents/{agent_id}/restart` | Request a scoped agent restart; platform/superduper-admin only. |
 | GET | `/agents/stats` | Read agent statistics. |
 | GET | `/acdc_call_stats` | Read historical call statistics in JSON or supported CSV representation. |
@@ -82,7 +82,7 @@ Supported status actions include `login`, `logout`, `pause`, `resume`, and
 update acknowledgment means the command was sent; verify the resulting state.
 Changes requested during a call can take effect after that call finishes.
 
-Queue-membership body:
+Legacy queue-enrollment body (intentionally changes saved enrollment):
 
 ```json
 {"data":{"action":"login","queue_id":"QUEUE_ID"}}
@@ -98,6 +98,71 @@ fix described in the acceptance status.
 To remove selected roster members, POST the complete intended remaining roster
 or use each agent's `queue_status` logout. Do not issue a roster DELETE expecting
 only the IDs in its body to be removed.
+
+### Runtime-only login to an already-enrolled queue — source candidate
+
+This opt-in contract and its Monster UI dialog are source changes under review,
+not a claim that a live deployment has been updated. The route retains normal
+Crossbar authentication and account-scoped authorization. The selected user must
+be enabled, not deleted, owned by the account, and already enrolled in the selected
+existing account-owned queue. Login never adds a saved roster membership.
+
+First probe the runtime-only GET, including all three query parameters:
+
+```text
+GET /accounts/{account_id}/agents/{agent_id}/queue_status?runtime_only=true&action=login&queue_id={queue_id}
+```
+
+A legacy array reply reports saved enrollment only: it does not prove support
+for runtime-only mode or confirm runtime membership. Do not submit the new login
+body to an older server based on that array. With the new handler, request one
+selected queue explicitly:
+
+```json
+{"data":{"runtime_only":true,"action":"login","queue_id":"00000000000000000000000000000000"}}
+```
+
+POST responds **202 Accepted**, with `state:"pending"`, `confirmed:false`,
+`runtime_member:false`, `runtime_observed:false` and `agent_status:"unknown"`.
+This means the command was published, not that the agent joined the queue.
+The response also echoes `account_id`, `agent_id`, `queue_id`, `action:"login"`
+and `runtime_only:true`. Poll the same runtime-only GET to check membership.
+GET responds 200 with those same fields and either:
+
+- `state:"confirmed"`, `confirmed:true`, `runtime_member:true`,
+  `runtime_observed:true`: a fresh correlated reply from the exact agent/account
+  listener includes the selected queue. The separate `agent_status` can still be
+  paused, ringing or another state; membership is not readiness or ringing proof.
+- `state:"pending"`, `confirmed:false`, `runtime_member:false`: no selected-queue
+  membership confirmation. `runtime_observed:true` means the fresh listener reply
+  omitted the selected queue; false means no usable reply arrived.
+
+Each runtime check is bounded to a two-second AMQP wait. Missing, old, malformed,
+stale or foreign replies remain pending; a global Ready event is insufficient.
+The runtime-only handler sends `Cache-Control: no-store`, including its own error
+responses. Pre-handler authentication/resource-loading errors retain their normal
+Crossbar behavior. Do not automatically repeat a POST after an ambiguous timeout.
+
+Runtime-only accepts `login` only; omit `runtime_only` entirely for the legacy
+enrollment-changing contract. An explicit false/malformed flag, non-login action
+or missing/invalid queue ID returns 400. Disabled/deleted/foreign users or absent
+enrollment return 403; missing, deleted, wrong-type or foreign queues return 404;
+datastore/publication failures return 503. Existing authentication and resource-load
+errors remain unchanged. Queue IDs are nonempty strings of at most 128 bytes.
+Enrollment is rechecked during validation, POST execution and AMQP consumption.
+
+An existing agent process keeps its status and other runtime queues. A newly
+started process initially receives only the selected queue. No other agent is
+started or logged out, and no user/queue document is saved by runtime-only mode.
+Later ordinary platform configuration refreshes retain their existing semantics.
+Confirmation does not prove queue-manager acknowledgement, SIP registration,
+endpoint reachability, audio, or that the next call will ring.
+
+The candidate UI requires an explicit configured-queue selection, probes support
+before enabling submission, and makes at most six post-command GET checks. It
+shows pending on uncertainty and offers a read-only Check status action; it never
+reposts automatically. “Queue membership confirmed” is separate from global agent
+status and expires after 30 seconds unless checked again.
 
 ## Announcements
 

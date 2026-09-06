@@ -15,7 +15,13 @@ The app provides:
   queue position and estimated wait-time announcements, with validated prompt
   names and an optional prompt language override.
 - Optional internal-extension routing through strictly app-owned `acdc_member` callflows.
-- Agent login, logout, timed pause, and resume controls.
+- Explicit queue-selection Login, with separate pending and confirmed runtime
+  queue membership. This source candidate requires the matching runtime-only
+  backend; it is not yet a live-deployment claim. Login only uses an existing
+  configured enrollment and does not assign rosters or log out other agents.
+- Existing global logout, timed pause, and resume controls remain separate from
+  selected-queue membership. Global Ready and confirmed membership do not prove
+  SIP registration, endpoint ringing, or immediate queue availability.
 - Current agent status and answered, missed, and total call counters.
 - Current queue activity and recent ACDC call-stat records.
 - Staged queue-level callback configuration plus account/queue-scoped,
@@ -36,7 +42,9 @@ but only enables verified installed packs. The installer imports multilingual
 media; backend activation and publication of `apps/acdc/language-capabilities.json`
 are not yet wired in. That artifact must only be published
 after runtime verification; builds must never manufacture it. The UI checks the version 1 capability proof
-and all 29 fixed prompt attachments. Internal `acdc-number-*` audio chunks are
+and the required fixed prompt attachments. In legacy capability mode, incremental
+English readiness requires 29 provenance-verified immutable Gemini projections
+plus 15 attached official English prompts, not 29 name-only aliases. Internal `acdc-number-*` audio chunks are
 excluded from editable media choices and per-prompt browser requests. Missing
 capabilities allow only the existing verified English fallback; corrupt or
 unreachable capability data disables language editing. Synthetic packs lacking
