@@ -85,6 +85,17 @@ storage and query-selected external catalogs remained disabled. The companion
 contains no scripts. This proves documentation rendering, not a live WSS
 connection, authentication lifetime or ACDC event delivery.
 
+Static publication `73763` then used the actual installer copy function for
+source commit `63e6bf738f5c7654afc6054f32b0888f9569fd94`. All twelve served files
+(eleven manifest entries plus the manifest) matched repository bytes over
+loopback HTTP with `Host: kz5.talkchief.io`, with `Cache-Control: no-store`.
+`/apis` returned 308 to `/apis/`; a missing asset returned 404. The previous
+eleven-file deployment was hash-verified before and after backup at
+`/usr/local/src/kazoo5-installer/api-docs-rollback.0sQoYx/previous`.
+The published manifest remains `0f350101477e9ba761bdc84985278fed5563fd1aa4c1e86ee1dab3673921bf3b`.
+No service was restarted or reloaded, no backend BEAM was activated, and this
+publication does not certify TLS or live authenticated WebSocket behavior.
+
 - Queue CRUD, full roster replacement/clear, statistics, and historical ACDC stats.
 - Callback list, read and cancel. There is no public callback-create endpoint;
   a trusted queued caller must explicitly confirm registration. Cancellation of
