@@ -16,6 +16,16 @@ register, and the component documents linked below as the detailed evidence.
 In particular, do not confuse these four states: **committed source**, **passing
 tests**, **installed artifacts**, and **accepted live behavior**.
 
+Later checkpoints: `470337e` commits the offline cardinal verifier; `cdd9329`
+fixes installer atomic-intercept reconciliation; `b86979f` adds the one-time
+cardinal generator (12 groups/173 checks, no real provider calls). Root's
+dashboard projection now passes38 pure record-model tests in60072; see
+[projection scope and next integration](doc/acdc_dashboard_projection.md).
+The requested dashboards remain unfinished: no new snapshot endpoint or live
+dashboard UI is deployed. Development ecallmgr was briefly paused with trapped
+restoration to provide test memory; it was active afterward. This is a service
+restart for validation capacity, not deployment of the new source.
+
 | Current owner / work | Where to resume | Verified state / next step |
 | --- | --- | --- |
 | `media_prerequisites`: cardinal audio authoring | `scripts/acdc-cardinal-pack.cjs`, `scripts/test-acdc-cardinal-pack.cjs`; [verifier evidence](doc/acdc_cardinal_pack_verification.md) | Verifier passed52469:13 groups/2,542 assertions, actual deterministic SoX PCM replay. No new recordings generated. Next: bounded one-time generator with explicit approval/request ledger; no provider calls yet. |
