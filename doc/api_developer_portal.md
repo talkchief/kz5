@@ -67,6 +67,46 @@ Blackhole is included in Kazoo apps by the installer; it is not a separate
 replacement event server or standalone systemd service. Publication and test
 evidence for these new assets must be recorded separately from earlier receipts.
 
+#### Company, queue and agent filtering
+
+In the current native protocol, a company is a Kazoo account. Select it with
+`data.account_id` in a subscribe message; omission selects the authenticated
+account. For example (replace placeholders; never embed a real token in source):
+
+```json
+{
+  "action": "subscribe",
+  "auth_token": "<runtime token>",
+  "request_id": "company-call-answers-1",
+  "data": {
+    "account_id": "<ACCOUNT_ID>",
+    "binding": "call.CHANNEL_ANSWER.*"
+  }
+}
+```
+
+`call.CHANNEL_ANSWER.<CALL_ID>` narrows this to one call. These are call-event
+selectors from `bh_call.erl`, not queue filters or complete dashboard metrics.
+The current account authorization uses the authenticated account hierarchy;
+it does not establish dashboard queue/agent permissions. Do not put a queue ID
+in the call-ID position or assume adding an arbitrary `queue_id` field filters
+events. Client-side filtering is not a tenant or queue authorization boundary.
+
+Company queue overview, selected-queue detail, live agent dashboard and
+queue/agent history require the dedicated contracts tracked in DASH-03–09.
+Their HTTP and WebSocket schemas, scope examples and executable Next.js examples
+must be published and tested together. They are not currently ready-to-use
+dashboard APIs; the existing `/apis` Blackhole reference describes transport,
+not a completed dashboard backend. See `doc/dashboard_delivery_plan.md`.
+
+Monitoring is a separate command API, not a subscription filter:
+`POST /v2/accounts/{ACCOUNT_ID}/channels/{UUID}`. `eavesdrop` is silent listen,
+`whisper` coaches only the selected agent leg, and `barge`/`join` provide
+full three-party audio. There is no `listen` or `spy` action name in this
+contract. HTTP 202 is acceptance, not proof of audio connection. The existing
+OpenAPI entries document these actions; SUP-01–03 explicitly track directional
+audio, cluster, security, installer and frontend-example release acceptance.
+
 The Blackhole catalog checkpoint passed offline build/validation in session
 `12699`. After the installer source pin was added, guarded session `57164`
 regenerated and checked the complete artifact: 356 paths, 651 operations,

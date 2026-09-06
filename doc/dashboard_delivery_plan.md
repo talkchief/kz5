@@ -1,7 +1,8 @@
 # Call-center dashboards and workforce report
 
 Status: implementation brief / open backlog, not deployed functionality.
-Parent register: [PROJECT_TASKS.md](../PROJECT_TASKS.md), DASH-01–07 and WFM-01–04.
+Parent register: [PROJECT_TASKS.md](../PROJECT_TASKS.md), DASH-01–09,
+SUP-01–03 and WFM-01–04.
 Destination is the existing Monster UI ACDC application, not a separate hosted
 analytics product. Audience: account-authorized supervisors and workforce staff.
 The supplied screenshots define appearance and navigation, not production data.
@@ -53,6 +54,17 @@ them. Record exact implemented routes in OpenAPI only after source review;
 unimplemented proposals belong in the clearly marked planned catalog.
 
 ## HTTP and WebSocket contract requirements
+
+The developer-facing delivery also includes a live agent dashboard, not only
+agent history. All overview/detail/live/history contracts must distinguish the
+company (`ACCOUNT_ID`), selected queue and selected agent. Native
+`call.<EVENT>.<CALL_ID>` subscriptions cannot substitute for queue/agent scoped
+dashboard contracts. Backend permission checks must precede publication or
+snapshot reads; filtering an account-wide stream in Next.js is insufficient.
+Publish supported filters and executable Next.js examples with the matching
+HTTP schemas and WebSocket message contracts, and verify them against the
+deployment. Planned endpoints must remain explicitly non-callable proposals
+until implementation, schema tests and deployment acceptance are recorded.
 
 - Initial account overview and selected-queue snapshot: stable entity IDs,
   account/queue scope, generated/observed timestamps, data window, snapshot/event
