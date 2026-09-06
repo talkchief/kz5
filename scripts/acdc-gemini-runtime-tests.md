@@ -1,6 +1,6 @@
 # Gemini runtime regression suite
 
-Run from a prepared Kazoo checkout containing its pinned ACDC Git history, compiled Erlang dependencies and the checked-in Gemini voice assets:
+Run from a prepared Kazoo checkout containing the directly tracked ACDC source, compiled Erlang dependencies and the checked-in Gemini voice assets:
 
 ```sh
 bash scripts/test-acdc-gemini-runtime.sh
@@ -18,7 +18,7 @@ For a quick replay/map/production-compilation check without the longer EUnit cas
 bash scripts/test-acdc-gemini-runtime.sh --replay-only
 ```
 
-An optional `--project-root /path/to/kz5` supports packaging and testing from another working directory. The runner does not clone or fetch missing dependencies; it fails with a clear preparation message if the pinned ACDC commit is not available locally. It snapshots the default patch and rejects a result if the parsed ACDC pin, aggregate patch, verified asset map, runner or compiled test source changes during the run. Asset manifest/audio QA runs again at the final check. Unrelated installer settings do not change those actual replay inputs. Small offline freshness tests cover changed pin/patch/map/test inputs, malformed pins and missing files. Temporary archives and test BEAMs are removed on exit.
+An optional `--project-root /path/to/kz5` supports packaging and testing from another working directory. The runner does not clone or fetch missing dependencies; it requires the bundled source and retained compatibility patches, not a separate ACDC Git checkout or locally resolvable upstream commit. It snapshots the default patch and rejects a result if the parsed ACDC provenance pin, aggregate patch, verified asset map, runner or compiled test source changes during the run. Asset manifest/audio QA runs again at the final check. Unrelated installer settings do not change those actual replay inputs. Small offline freshness tests cover changed pin/patch/map/test inputs, malformed pins and missing files. Temporary archives and test BEAMs are removed on exit.
 
 ## Deterministic map
 
@@ -31,6 +31,14 @@ The map generator uses repository-relative source assets and the existing strict
 These tests establish source-level/offline regression coverage, not complete production or native-speaker approval. English default numbers and legacy custom playback still depend on native numeric speech; newly generated non-English callback defaults remain gated until auxiliary/numeric completion. Real SIP/audio/log/cleanup acceptance is a separate deployment gate.
 
 Do not copy `scripts/test-fixtures/gemini-runtime/kz_datamgr.erl` into any application source or runtime directory. It is intentionally confined to this suite.
+
+After recovery merge `8548b98`, session `93794` independently passed all 62
+historical tests, map, production checks and final freshness on 2026-09-06
+12:40:29–12:44:54 UTC. It used the documented 900-second allowance with
+384 MiB memory, zero swap and 50% CPU; systemd recorded 174.1 MiB peak.
+This supersedes the incomplete 120-second invocation for full-suite acceptance,
+not its retained failure record. See `doc/acdc_agent_recovery.md` for the input
+hash and the distinction between historical projection and live native media.
 
 ## Resource-capped current-source receipt — 2026-09-06
 

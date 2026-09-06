@@ -120,15 +120,48 @@ Against the combined source, root independently observed:
   combined collector refactor. Correlation/account checks, incomplete/unknown
   observations, exact cleanup targets and unresolved publication outcomes
   retain their fail-closed behavior in these isolated tests.
+- Combined strategy sessions `2398` and `38626`: both exited zero, with 13
+  disjoint tests each and all 26 inventory entries covered after the recovery
+  merge. Each retained the 384 MiB / zero-swap / 50%-CPU / 120-second guard.
 - Historical media session `83435`: deterministic 165-asset map and four
   production-module compilation/export/import checks passed, but the complete
   EUnit run exceeded the 120-second outer guard and exited 143. This is a
   failed full-suite run, not an independent confirmation of the team's 62-test
   pass. No assertion failure was reported before termination. Full combined
-  historical-suite acceptance requires bounded test phases and remains open.
+  historical-suite acceptance remains open. The existing media-suite guide
+  documents a 900-second guarded allowance (its earlier complete run took
+  nearly five minutes); the 120-second invocation used the wrong outer budget.
+  Revalidation must retain the same memory/CPU caps, not increase host limits.
+- Historical media session `93794`: the corrected 900-second invocation
+  exited zero with all 62 tests, all 165 immutable mappings, four historical
+  production-module checks and final input freshness passing. Runner SHA-256:
+  `6a33546a97899074c366d4d262a9019addae60cb85d1349f1c3eb4b5ffc51e20`.
+  Systemd unit `kazoo-validation-07713215-5e9d-4dfa-9a01-029382bb94df.service`
+  ran 12:40:29–12:44:54 UTC, recorded successful deactivation, 174.1 MiB peak
+  memory and 1m59.062s CPU. No production timeout, assertion, CPU or memory
+  limit was increased. The failed 120-second run above remains recorded.
+- Production compile session `81936`: exit zero, all 63 top-level production
+  modules compiled with `-Werror` in a temporary directory. BEAM metadata
+  contains no TEST macro/export-all build options, and the FSM/listener's
+  test-only exports are absent. Bundled input hashes/inventory stayed equal.
+  The reusable `scripts/test-acdc-production-compile.sh` performs no BEAM
+  loading or installation. Its first guarded invocation exited 127 before
+  compilation because `rg` was outside the guard's fixed PATH; file inventory
+  now uses standard `find`, with no resource-limit or production-code change.
+  Runner SHA-256:
+  `83a7d6e8c8b8e17c26e6b4d8e89f574532b7182592b3e35f02f41e48c7ee5119`.
 
-The team's 174-test and 63-module results above describe its own handoff.
-Do not present them as a fresh root run against every combined installer change.
+Reproduce that offline production compile on the prepared host with:
+
+```sh
+bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 --runtime-sec 60 -- /usr/bin/bash /opt/kz5/scripts/test-acdc-production-compile.sh
+```
+
+The independent combined-source total is now 174 Erlang tests (22 recovery,
+48 unit, 26 strategy, 16 recovery I/O and 62 historical media), plus six
+source-ownership checks. Historical media projection remains distinct from
+current native playback or all-language acceptance. Root has also independently
+confirmed the 63-module production compile, as scoped above.
 No installed BEAM, service, queue, agent, call or live configuration was changed
 by this integration. Coordinated deployment, staging failures and load/soak
 acceptance remain mandatory.

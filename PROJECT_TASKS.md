@@ -57,12 +57,15 @@ narrow configuration mock. The same 384 MiB / 50% CPU cap and 120-second outer
 limit remained enforced; production timers and assertions were unchanged.
 The external team's recovery commit `d69cf04` is now integrated by kz5 merge
 `8548b98`, with its six production-module changes preserved. Root independently
-passed all 22 recovery regressions, all 48 combined unit tests, and six
-source-ownership checks. The team's
-reported 174 tests and 63-module compilation are handoff evidence, not a fresh
-combined-source result. The merged historical media run passed map/production
-checks but exceeded its outer deadline during EUnit; bounded full-suite
-revalidation remains open. See `doc/acdc_agent_recovery.md` for exact evidence.
+passed all 174 combined Erlang tests: 22 recovery, 48 unit, 26 strategy,
+16 recovery I/O and 62 historical media, plus six source-ownership checks.
+The first merged historical media run exceeded an incorrectly selected
+120-second outer deadline; the documented 900-second allowance passed with
+unchanged memory/CPU caps. This does not certify current native playback or
+all-language behavior. Root also independently compiled all 63 top-level
+production modules with `-Werror`, with input freshness and no TEST build
+options or agent test exports; no running BEAM was replaced or loaded.
+See `doc/acdc_agent_recovery.md` for exact evidence.
 P0-07/08/09 remain release gates for coordinated staging, broker/node failures,
 real calls and load/soak testing. Genuine `max_connect_failures` protection is
 preserved; policy UI/API documentation is not closed by the FSM fix alone.
