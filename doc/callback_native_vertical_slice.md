@@ -325,6 +325,51 @@ installer owners. Preserve strict rejection rather than opening a deployment
 gate to make a test pass. Before running `check.cjs`, inspect its resource/input
 requirements and acquire the serialized validation window.
 
+### Single-attempt socket output — subsequent checkpoint
+
+The RTP candidate above has a later derivative at
+`/usr/local/src/kazoo5-installer/callback-owned-audio.EeqmMW/native-nowait.HICDXv`.
+It contains `switch_apr.c`, the additive `switch_apr.h` declaration, the updated
+`switch_rtp.c`, `test_nowait.c` and `proof.cjs`. `switch.h` is an unchanged
+include-routing copy. These private files remain outside the release tree.
+
+Source inspection confirmed that `fspr_socket_sendto` retries EINTR and, with a
+positive socket timeout, waits/retries on EAGAIN even with MSG_DONTWAIT. The new
+`switch_socket_sendto_nowait` obtains the native descriptor and performs exactly
+one per-call nonblocking datagram attempt, without changing shared socket flags
+or timeouts. It reports accepted bytes only, does not retry EINTR and rejects
+unsupported platforms rather than falling back to a blocking call. The caller
+must still retain socket/address lifetime. Owned RTP uses this helper; ordinary
+RTP and the existing APR wrapper are unchanged.
+
+Guarded offline session **48223 exited0**,128MiB cap,768MiB reserve,180-second
+deadline. Both complete production APR/RTP translation units compiled against
+real headers with-O2/-fPIC/-Werror and explicit-g0 proof flags. The actual full
+APR object was linked with real APR into plain and ASan/UBSan executables.
+Four groups passed in each: actual IPv4 UDP bytes, unchanged flags/timeouts;
+wrapped syscall errors EAGAIN/EWOULDBLOCK/EINTR/ENOBUFS/EBADF with one attempt;
+wrapped short-send byte reporting; and invalid inputs with no send syscall.
+All380 selected source/dependency pins remained stable. Loopback was enabled
+only inside the isolated test network namespace.
+
+Receipt: `native-nowait.HICDXv/proof.2CRkLx/receipt.json` under the private root.
+SHA-256: `701a5d1af0f46b7f074e79819527dc3cfa1209cc297d13b069534273c1aeec03`.
+
+| Source | SHA-256 |
+| --- | --- |
+| `switch_apr.c` | `c6c7b57efc0b36e24d3ae6ffc3387c694ba50bf228c5e5c84fa02e6e1211ffac` |
+| `switch_apr.h` | `37129b5bae887f7b777d0e4d7091b76cd4e205194e78d5e982471bf45525b335` |
+| `switch_rtp.c` | `ded97736f8137ed76c9e5cee014f146be006286de56d97bd47a5e48ddc58a7d5` |
+
+This removes the observed wrapper's user-space retry/wait behavior; it is not
+a hard realtime guarantee for a kernel syscall or proof of complete native
+lifetime. The RTP send/protect branches themselves were compiled, not executed
+by these wrapper tests. Full SRTP, owned-frame reporting, producer/bridge races,
+canonical linking, module loading and live callback acceptance remain open.
+The browser-harness agent next owns a separate RTP/libSRTP boundary fixture;
+root's successful source/proof is frozen. Admission remains closed and nothing
+was deployed.
+
 ## Acceptance that advances deployment
 
 After reviewed native compilation/linking, run an actual isolated native call,
