@@ -218,6 +218,238 @@ async function queueFixture(page, receipt, state, checkpoint, output) {
     assert.equal(receipt.mock_mutations.length,1); checkpoint('membership_confirmation_is_not_availability',finalState);
     await page.screenshot({path:path.join(output,'mock-queue-membership-confirmed.png'),fullPage:true});
 }
+async function queueEditorRecoveryFixture(page, receipt, checkpoint, output) {
+    // PRIVATE CANDIDATE: real preloaded app, helpers and compiled templates;
+    // only monster.request is replaced. This is not backend/auth acceptance.
+    const selected = ['e'.repeat(32),'f'.repeat(32)], networkStart = receipt.requests.length;
+    receipt.queue_editor_recovery = {status:'running',scope:'actual bundled queue editor with in-memory API mock',cases:[],requests:[],request_restored:false};
+    let installed = false;
+    try {
+        const loaded = await page.evaluate(ids => {
+            const m = require('monster'), $ = require('jquery'), app = m.apps.acdc;
+            const check = (value,message) => { if (!value) throw Error(message); };
+            const clone = value => JSON.parse(JSON.stringify(value));
+            check(!window.__acdcArtifactRecovery,'Recovery fixture already installed');
+            check(app && app.accountId === ids.account && !m.apps.auth.appFlags.isAuthentified && !m.util.getAuthToken(),'Unexpected recovery identity/auth context');
+            const templates = m.cache.templates.acdc._main;
+            for (const name of ['state','queue-form','queues']) check(typeof templates[name] === 'function','Missing bundled editor template: ' + name);
+            const methods = Object.fromEntries(['getTemplate','renderQueueForm','bindQueueForm','saveQueue','request','requestQueueEditor','renderQueues'].map(name => [name,app[name]]));
+            app.closeAgentQueueLogin();
+            $('#isolated-acdc-fixture > h1').text('ISOLATED EDITOR FIXTURE — in-memory API mock, no authentication or backend');
+            const f = {originalRequest:m.request,originalAccount:app.accountId,originalTab:app.appFlags.acdc.currentTab,
+                app,templates:{state:templates.state,'queue-form':templates['queue-form'],queues:templates.queues},methods,
+                requests:[],deferred:[],label:null,allowWriteSuccess:false,holdNextRead:false};
+            f.snapshot = () => {
+                const users = [ids.agent,'e'.repeat(32),'f'.repeat(32)].map((id,n) => ({id,first_name:'Synthetic',last_name:'Editor Agent ' + (n + 1),enabled:true}));
+                const queue = app.defaultQueue(); queue.name = 'Synthetic queue before recovery'; queue.announcements.language = 'en-us';
+                queue.announcements.media.you_are_at_position = 'legacy-position'; queue.callback.media.offer = 'legacy-callback';
+                const required = app.requiredLanguagePromptIds();
+                const language_capabilities = {schema_version:1,generated_at:'2026-09-05T19:00:00Z',languages:{}};
+                for (const locale of app.announcementLocales) language_capabilities.languages[locale] = {
+                    ready:locale === 'en-us',position:locale === 'en-us',wait_time:locale === 'en-us',callback:locale === 'en-us',
+                    native_speaker_review:false,numbers:'native_say',number_range:[0,999999999],numeric_prompt_count:0,
+                    required_prompt_ids:required,source_catalog_sha256:'1'.repeat(64),installed_media_sha256:'2'.repeat(64)};
+                return {queue,users,roster:users.map(u => u.id),media:[],numbers:[],
+                    system_media:required.map(id => ({id:'en-us/' + id,name:id,language:'en-us',has_attachments:true})),
+                    language_capabilities,callflows:{summaries:[],routes:[]},
+                    catalogs:Object.fromEntries(['users','media','numbers','system_media','callflows'].map(name => [name,{complete:true,reason:'complete',
+                        count:name === 'users' ? users.length : name === 'system_media' ? required.length : 0,limit:500}])),
+                    revisions:{queue:'1-initial',users:Object.fromEntries(users.map(u => [u.id,'1-user'])),callflows:{}}};
+            };
+            f.partial = () => ({message:'operation_incomplete_reload_before_recovery',data:{queue_id:ids.queue,
+                operation_id:'acdc_queue_editor_' + '0'.repeat(64),state:'partial',phase:'roster',
+                committed:[{phase:'queue',ids:[ids.queue]}],in_flight:[],remaining:['roster','route','finalize_extensions'],
+                extension_claims:[],atomic:false,reload_required:true}});
+            f.submit = () => {
+                const form = app.getContentContainer().find('.acdc-queue-form')[0];
+                check(form,'Expected actual bundled editor form');
+                const valid = form.checkValidity();
+                if (valid) form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));
+                return valid;
+            };
+            f.open = label => {
+                check(f.deferred.length === 0,'Unresolved read from preceding case');
+                f.label = label; f.start = f.requests.length; f.allowWriteSuccess = false; f.holdNextRead = false;
+                f.next = f.snapshot(); app.accountId = ids.account; app.appFlags.acdc.currentTab = 'queues';
+                app.renderQueueForm(ids.queue);
+                check(f.submit(),'Synthetic editor form is invalid');
+                f.view = app.getContentContainer().find('.acdc-queue-editor');
+                f.pending = f.view.data('editor-pending'); f.pendingJson = JSON.stringify(f.pending);
+                check(f.view.length === 1 && f.pending && f.pending.body,'Partial write did not retain the editor/pending receipt');
+                f.holdNextRead = true;
+            };
+            f.resolve = error => {
+                check(f.deferred.length === 1,'Expected exactly one deferred recovery GET');
+                const options = f.deferred.shift();
+                if (error) options.error({message:'Synthetic recovery GET unavailable'});
+                else options.success({status:'success',data:clone(f.next)});
+            };
+            f.observe = () => ({requests:clone(f.requests.slice(f.start)),deferred:f.deferred.length,
+                samePending:f.view.data('editor-pending') === f.pending,
+                unchangedPending:JSON.stringify(f.view.data('editor-pending')) === f.pendingJson,
+                sameView:app.getContentContainer().find('.acdc-queue-editor')[0] === f.view[0],
+                recoveryPending:Boolean(f.view.data('editor-recovery-pending'))});
+            m.request = options => {
+                check(options && typeof options.success === 'function' && typeof options.error === 'function','Invalid in-memory API callback contract');
+                const resource = options.resource, data = clone(options.data);
+                check(data.accountId === ids.account,'In-memory editor request escaped synthetic account');
+                check(['acdc.editor.get','acdc.editor.update','acdc.queues.list','acdc.queues.stats'].includes(resource),'Unapproved in-memory resource: ' + resource);
+                const allowedKeys = resource === 'acdc.editor.get' ? ['accountId','queueId']
+                    : resource === 'acdc.editor.update' ? ['accountId','data','queueId'] : ['accountId'];
+                check(JSON.stringify(Object.keys(data).sort()) === JSON.stringify(allowedKeys.sort()),'Unexpected synthetic request fields');
+                f.requests.push({case:f.label,resource,data,kind:'in_memory_editor_api_mock',live:false});
+                if (resource === 'acdc.editor.get') {
+                    check(data.queueId === ids.queue,'Unexpected editor queue');
+                    if (f.holdNextRead) {
+                        check(f.deferred.length === 0,'Overlapping recovery GET');
+                        f.holdNextRead = false; f.deferred.push(options); return;
+                    }
+                    return options.success({status:'success',data:clone(f.next)});
+                }
+                if (resource === 'acdc.editor.update') {
+                    check(data.queueId === ids.queue && /^[a-f0-9]{32}$/.test(data.data.request_id),'Invalid synthetic editor write');
+                    if (!f.allowWriteSuccess) return options.error(f.partial());
+                    return options.success({status:'success',data:{state:'complete',queue_id:ids.queue,atomic:false,reload_required:true}});
+                }
+                check(f.allowWriteSuccess,'Queue navigation occurred before explicit successful save');
+                options.success({status:'success',data:resource === 'acdc.queues.list' ? [{id:ids.queue,name:f.next.queue.name}] : {stats:[]}});
+            };
+            window.__acdcArtifactRecovery = f;
+            return {appName:app.name,templates:Object.keys(f.templates),mock:'monster.request only',authenticated:false};
+        },IDS);
+        installed = true; checkpoint('actual_bundled_queue_editor_mock_installed',loaded);
+        const host = page.locator('#isolated-acdc-fixture');
+        const observe = () => page.evaluate(() => window.__acdcArtifactRecovery.observe());
+        const begin = async label => {
+            await page.evaluate(label => window.__acdcArtifactRecovery.open(label),label);
+            assert.equal(await host.locator('.acdc-queue-form').count(),1);
+            assert.match(await host.locator('.acdc-form-error').textContent(),/Some changes may already be saved/);
+            await host.locator('.acdc-editor-recovery').click();
+            const held = await observe();
+            assert.deepEqual(held.requests.map(r => r.resource),['acdc.editor.get','acdc.editor.update','acdc.editor.get']);
+            assert.equal(held.deferred,1); assert(held.sameView && held.samePending && held.unchangedPending && held.recoveryPending);
+            assert(await host.locator('[type="submit"]').isDisabled()); assert(await host.locator('.acdc-editor-recovery').isDisabled());
+            for (const selector of ['[name="name"]','.acdc-roster','[name="route_extension"]']) assert.equal(await host.locator(selector).isDisabled(),false);
+            const valid = await page.evaluate(() => {
+                const f = window.__acdcArtifactRecovery, valid = f.submit();
+                require('jquery')('.acdc-editor-recovery').triggerHandler('click');
+                return valid;
+            });
+            assert(valid); assert.deepEqual(await observe(),held,'Identical Save or duplicate recovery overlapped the held GET');
+        };
+        const edit = async (name,extension) => {
+            await host.locator('[name="name"]').fill(name);
+            // Keep the real Chosen widget. Set its underlying native select and
+            // dispatch the normal change event; no widget/template replacement.
+            await host.locator('.acdc-roster').selectOption(selected,{force:true});
+            await host.locator('[name="route_extension"]').fill(extension);
+        };
+        const assertDraft = async (name,extension) => {
+            assert.equal(await host.locator('[name="name"]').inputValue(),name);
+            assert.deepEqual(await host.locator('.acdc-roster').evaluate(e => [...e.selectedOptions].map(o => o.value)),selected);
+            assert.equal(await host.locator('[name="route_extension"]').inputValue(),extension);
+        };
+        const passed = name => { receipt.queue_editor_recovery.cases.push(name); checkpoint('bundled_editor_' + name); };
+
+        await begin('deferred-success');
+        await edit('Latest edits while bundled recovery GET is pending','2096');
+        assert(await page.evaluate(() => window.__acdcArtifactRecovery.submit()));
+        assert.equal((await observe()).requests.length,3,'Changed Save must also wait for the held read');
+        await page.evaluate(() => {
+            const f = window.__acdcArtifactRecovery;
+            f.next.queue.name = 'Server state before latest draft'; f.next.roster = [f.next.users[0].id];
+            f.next.revisions.queue = '2-reloaded';
+            f.next.revisions.users = Object.fromEntries(f.next.users.map(u => [u.id,'2-reloaded-user']));
+            f.allowWriteSuccess = true; f.resolve(false);
+        });
+        await assertDraft('Latest edits while bundled recovery GET is pending','2096');
+        assert.equal((await observe()).requests.length,3,'Recovery GET must not implicitly write or navigate');
+        assert.equal(await host.locator('[type="submit"]').isDisabled(),false);
+        await page.screenshot({path:path.join(output,'mock-editor-recovered-latest-draft.png'),fullPage:true});
+        await host.locator('[type="submit"]').click();
+        const saved = await observe(), writes = saved.requests.filter(r => r.resource === 'acdc.editor.update');
+        assert.equal(writes.length,2);
+        assert.equal(writes[1].data.data.queue.name,'Latest edits while bundled recovery GET is pending');
+        assert.deepEqual(writes[1].data.data.roster,selected); assert.deepEqual(writes[1].data.data.route,{extension:'2096'});
+        assert.equal(writes[1].data.data.revisions.queue,'2-reloaded');
+        assert.deepEqual(writes[1].data.data.revisions.users,Object.fromEntries([IDS.agent,...selected].map(id => [id,'2-reloaded-user'])));
+        assert.notEqual(writes[1].data.data.request_id,writes[0].data.data.request_id);
+        assert.deepEqual(saved.requests.map(r => r.resource),['acdc.editor.get','acdc.editor.update','acdc.editor.get','acdc.editor.update','acdc.queues.list','acdc.queues.stats']);
+        passed('deferred_success_latest_draft_fresh_revisions_explicit_save');
+
+        await begin('deferred-failure');
+        await edit('Latest draft before bundled recovery failure','2098');
+        await page.evaluate(() => window.__acdcArtifactRecovery.resolve(true));
+        await assertDraft('Latest draft before bundled recovery failure','2098');
+        assert.match(await host.locator('.acdc-form-error').textContent(),/Saved state could not be verified/);
+        const failed = await observe();
+        assert(failed.sameView && failed.samePending && failed.unchangedPending && !failed.recoveryPending);
+        assert.equal(failed.requests.length,3); assert.equal(failed.deferred,0);
+        assert.equal(await host.locator('[type="submit"]').isDisabled(),false);
+        assert.equal(await host.locator('.acdc-editor-recovery').isDisabled(),false);
+        assert(await page.evaluate(() => window.__acdcArtifactRecovery.submit()));
+        assert.equal((await observe()).requests.length,3,'Changed draft must not reuse the pending partial-write receipt');
+        await page.evaluate(() => { window.__acdcArtifactRecovery.holdNextRead = true; });
+        await host.locator('.acdc-editor-recovery').click();
+        const retried = await observe();
+        assert.equal(retried.deferred,1); assert.equal(retried.requests.length,4);
+        assert.equal(retried.requests.filter(r => r.resource === 'acdc.editor.update').length,1);
+        await page.evaluate(() => window.__acdcArtifactRecovery.resolve(false));
+        await assertDraft('Latest draft before bundled recovery failure','2098');
+        assert.equal((await observe()).requests.length,4);
+        passed('failed_get_preserves_draft_pending_receipt_and_explicit_retry');
+
+        for (const departure of ['replacement','account','detached']) {
+            await begin('stale-' + departure);
+            await edit('Latest draft before ' + departure,'2099');
+            const late = await page.evaluate(({departure,queue}) => {
+                const f = window.__acdcArtifactRecovery, app = f.app, $ = require('jquery');
+                if (departure === 'replacement') {
+                    app.renderQueueForm(queue);
+                    app.getContentContainer().find('[name="name"]').val('Replacement editor stays visible');
+                } else if (departure === 'account') app.accountId = '9'.repeat(32);
+                else { f.view.detach(); app.getContentContainer().text('Original bundled editor was detached'); }
+                const content = app.getContentContainer()[0], html = content.innerHTML;
+                const currentView = $(content).find('.acdc-queue-editor')[0], generation = app.appFlags.acdc.requestGeneration;
+                // A real replacement may clean jQuery data from the removed
+                // form. The late reply must preserve that post-departure state.
+                const previousPending = f.view.data('editor-pending'), previousPendingJson = JSON.stringify(previousPending);
+                f.resolve(false);
+                return {unchanged:content.innerHTML === html && $(content).find('.acdc-queue-editor')[0] === currentView,
+                    generationUnchanged:app.appFlags.acdc.requestGeneration === generation,
+                    stalePendingUnchanged:f.view.data('editor-pending') === previousPending && JSON.stringify(f.view.data('editor-pending')) === previousPendingJson,
+                    ...f.observe()};
+            },{departure,queue:IDS.queue});
+            assert(late.unchanged && late.generationUnchanged && late.stalePendingUnchanged);
+            assert.equal(late.deferred,0); assert.equal(late.requests.length,departure === 'replacement' ? 4 : 3);
+            assert.equal(late.requests.filter(r => r.resource === 'acdc.editor.update').length,1);
+            passed('late_get_ignored_after_' + departure);
+        }
+        assert.equal(receipt.queue_editor_recovery.cases.length,5);
+        assert(!receipt.requests.slice(networkStart).some(r => r.kind === 'synthetic_backend_mock'),'Editor mock escaped into browser API transport');
+    } catch (error) {
+        receipt.queue_editor_recovery.status = 'failed'; throw error;
+    } finally {
+        if (installed) {
+            const cleanup = await page.evaluate(() => {
+                const f = window.__acdcArtifactRecovery, m = require('monster'), app = f.app;
+                m.request = f.originalRequest;
+                app.accountId = f.originalAccount; app.appFlags.acdc.currentTab = f.originalTab;
+                ++app.appFlags.acdc.requestGeneration; f.deferred.length = 0;
+                const result = {requests:f.requests,request_restored:m.request === f.originalRequest,
+                    bundled_methods_unchanged:Object.entries(f.methods).every(([name,method]) => app[name] === method),
+                    bundled_templates_unchanged:Object.entries(f.templates).every(([name,template]) => m.cache.templates.acdc._main[name] === template),
+                    authenticated:!!m.apps.auth.appFlags.isAuthentified,token_present:!!m.util.getAuthToken()};
+                delete window.__acdcArtifactRecovery; return result;
+            });
+            Object.assign(receipt.queue_editor_recovery,cleanup);
+            assert(cleanup.request_restored && cleanup.bundled_methods_unchanged && cleanup.bundled_templates_unchanged);
+            assert(!cleanup.authenticated && !cleanup.token_present);
+            checkpoint('bundled_editor_mock_restored');
+        }
+    }
+    receipt.queue_editor_recovery.status = 'passed';
+}
 async function main(argv) {
     assert(argv.length === 2 && argv[0] === '--inputs','Usage: test-monster-artifact-browser.cjs --inputs /absolute/private/inputs.json');
     assert(process.getuid() === 0,'Root-owned artifact evidence required'); process.umask(0o077);
@@ -290,7 +522,10 @@ async function main(argv) {
         assert.equal(receipt.mock_mutations.length,0); assert(!receipt.requests.some(r => r.kind === 'synthetic_backend_mock'),'Boot unexpectedly used backend fixture');
         receipt.actual_boot = true; checkpoint('actual_unauthenticated_boot_and_canonical_preloads',{...boot,api:api.href});
         await page.screenshot({path:path.join(output,'actual-unauthenticated-boot.png'),fullPage:true});
-        if (evidence.acdc_selected) { state = mockState(api.href,version); await queueFixture(page,receipt,state,checkpoint,output); receipt.acdc_fixture = 'passed'; }
+        if (evidence.acdc_selected) {
+            state = mockState(api.href,version); await queueFixture(page,receipt,state,checkpoint,output);
+            await queueEditorRecoveryFixture(page,receipt,checkpoint,output); receipt.acdc_fixture = 'passed';
+        }
         else { receipt.acdc_fixture = 'not_selected'; checkpoint('acdc_fixture_not_selected'); }
         for (const file of ['index.html','js/main.js','js/templates.js','js/config.js','build-config.json','css/style.css']) assert(receipt.requests.some(r => r.file === file && r.sha256 === before[file]),'Required artifact not consumed');
         cleanRun(receipt); receipt.status = 'passed';

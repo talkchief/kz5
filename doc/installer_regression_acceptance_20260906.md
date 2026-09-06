@@ -155,3 +155,69 @@ reinstallation/reboot, legacy UI ownership adoption, authenticated browser
 behavior, coupled callback native/eCallMgr integration and the external team's
 P0 recovery fixes remain release gates. Passing these fixtures does not make
 the currently combined ACDC runtime safe to deploy on its own.
+
+## Fresh queue-recovery production bundle — 15:55–16:04 UTC
+
+The current ACDC UI source, including `8c11030`, was freshly exported with the
+pinned framework/apps into `monster-owned-build.xRMiDU/source`. This supersedes
+the older artifact for source coverage, not for live deployment. Installer SHA
+`84a140d6553c501b7d5b96f0b37b4382c6b0d6f8237e3f83710b1a67f333a20d`
+and prospective build fingerprint
+`bfea054efe952a71cf7c344088f61c40e72628cd239891b93547740b8a34c867`
+were frozen before compilation and remained unchanged.
+
+The preceding fresh attempt `14583` in `monster-owned-build.PH938c` was killed
+by the cgroup memory limit during `buildRequire` at 15:31:17 UTC. Its unfinished
+`running` receipt and partial outputs are retained and are not a build pass.
+An earlier preflight there also exposed that host-mounted `/sys/class/net` can
+show host interfaces after `unshare --net`; the corrected private runner checks
+the actual namespace through netlink and separately compares namespace identity.
+
+The new runner separates dependency inventory/copy/graph validation and native
+Sass/RE2 smoke into a process that exits before compilation. Subsequent full
+dependency inventories also run in disposable processes, keeping their large
+objects out of the compiling parent. No memory limit was raised and no failed
+build output was reused. Dependency verification `95907`, actual build `72306`
+and readback `15995` all exited zero. Compilation retained the normal production
+prepare, per-file minification/AMD verification, and finalize phases. Build
+peak reached 384 MiB with zero OOM events/kills. Existing legacy build-tool
+warnings remain; this is not a warning-free build claim.
+
+Readback verified 1,931 files, 465 compiled templates, 16 canonical preloads,
+10 selected-app metadata documents and unchanged runtime configuration. It
+reported actual artifact SHA-256
+`5910add4beff42042b9ffb8f412676dec0b82d4110df5dbc182b8e2515c5117a`.
+Protected receipts in `/usr/local/src/kazoo5-installer/monster-owned-build.xRMiDU/`:
+
+- `dependencies-receipt.json`: `d6303cfddaad1b52baa7ae02f19ca8b5cafafeb521b98ac55521a0dc39c3117b`.
+- `build-receipt.json`: `9b812eae9584b869fc6d26179cdc210c8a9a68f2638de67671145323dc6780b5`.
+- `readback-receipt.json`: `6bfc7b8598a63d612db901703abf553ed8b1893c1c50506419c4ef16d92e0fc0`.
+
+The actual-artifact browser harness now includes five editor recovery cases:
+pending recovery blocks duplicate writes while retaining edits, failed GET
+preserves the draft/pending request and requires explicit retry, and late GET
+responses are ignored after view replacement, account change or detachment.
+It uses the real bundled application, compiled templates, handlers and Chosen
+widget; only the fixed in-memory API responses are substituted. No token,
+successful authentication or live endpoint is used.
+
+Before-fix run `17814` booted the historical `pfUGAT` bundle and failed the
+expected pending-recovery assertion after its GET/update/deferred-GET sequence.
+It did not reach all later recovery cases. The first proposal failed earlier
+because its Node executable had two hard links; that retained preflight failure
+is not a UI regression. The corrected run used the already accepted single-link
+copy with identical executable bytes.
+
+Current-bundle run `63918` passed. After promoting the byte-identical harness to
+the repository, run `88551` also passed actual unauthenticated boot, queue-specific
+login and all five recovery cases, with zero page/console/route/request errors.
+The API mock was restored and artifact, application methods, templates and input
+hashes remained unchanged. Repository harness receipt:
+`/tmp/kazoo-monster-repo-output.tbhz2o/monster-artifact-browser.CiY2Nx/receipt.json`,
+SHA-256 `a2e5514c416a01725de86940efdda46a83d5dfddbb726db708a23f1c1995d1cf`.
+
+No UI files were published. The read-only runtime probe confirms that the
+matching backend is not yet deployed. See
+[coherent upgrade readiness](acdc_coherent_upgrade_readiness.md) for the required
+ACDC state migration/work gate. Clean-server dependency installation, all-node
+activation, authenticated browser behavior and live calls remain unverified.

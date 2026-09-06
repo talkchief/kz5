@@ -157,3 +157,11 @@ cases. It passed under the 384-MiB, network-isolated validation guard at
 proof, not another Erlang, authorization or live-platform acceptance run.
 Run longer suites in separate bounded invocations so one suite's runtime does
 not consume the next suite's allowance.
+
+The subsequent standalone authorization run `5127` exited zero with the corrected
+completion handling: all nine groups passed, all 15 production module paths and
+no-`TEST` checks passed before/after, and source/dependency hashes were unchanged.
+Evidence is `/tmp/kazoo-queue-editor-auth.LSTTw9/eunit.log`, SHA-256
+`1d067517670b1d2aca608f8f604775e16de927ab1aa9412a588c557ccfcf6fc2`. This retains the
+offline provider/substitute boundaries described above; it is not a live-token
+or deployment test.
