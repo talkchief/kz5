@@ -13,16 +13,22 @@ be committed and pushed before the delivery is reproducible from the remote.
 
 ## Active team coordination — 2026-09-06
 
-The operator reports that their team is actively fixing ACDC agents not accepting
-calls while registered. Preserve their changes; do not overwrite unrelated
-worktree edits. Our overlapping ACDC/eCallMgr call-delivery, bridge and callback
-changes remain private or held from build/deployment until a coordinated handoff.
-The ACDC integration patch has changed from our prior `149fe664…` baseline to
-`f162644e583f0caa6a32edda7ae4e6ddae0c1bd5ad331b764a45035cf4541bb0`;
-this is observed drift to preserve, not an instruction to restore an old version.
-Continue non-overlapping installer/UI work against explicit input pins. Obtain
-the team's changed files/commit, review integration, regenerate affected API
-coverage, then run combined call-delivery and callback regressions before release.
+The operator's team handed off commits `1634524` (directly tracked ACDC source)
+and `83194e7` (delayed queue-satisfaction/outbound-agent recovery) on branch
+`fix/acdc-outbound-agent-availability`. The operator explicitly authorized merging
+the combined work and continuing. Both commits are already ancestors of the
+current checkout; do not reapply their exported patches or recreate nested Git
+metadata. ACDC source in `applications/acdc` is now canonical; historical ACDC
+patches are compatibility fixtures, not the installation source of truth.
+Our phone-service commit `49ccb98` is also on this branch. Preserve all changes
+and reconcile the pending installer/UI work against this combined source.
+
+The handoff reports 48 unit, 26 strategy and five migration checks passing,
+with no deployment or restart. Independent combined checks are in progress;
+this is not live-call acceptance. Regenerate affected API coverage and run
+combined call-delivery/callback regressions before release. The private callback
+audio adapter still needs native completion, cancellation and owner-handoff
+proof before promotion; the handoff does not waive those safety gates.
 
 ## P0 — call delivery and callback correctness
 
@@ -34,6 +40,18 @@ coverage, then run combined call-delivery and callback regressions before releas
 | P0-04 | ACTIVE — callback | Callback offer at configured 30 seconds: separate enable, initial delay and repeat interval from position/wait/generic announcements; verify saved values, runtime schedule and received audio. Invalid return numbers must not cause silent failure. |
 | P0-05 | OPEN — ACDC | Agent stability: one answered call must not log unrelated agents out. Test failed ringing, reconnect, queue-specific logout, pause/resume and reboot recovery. |
 | P0-06 | OPEN — ACDC | Resolve retained ambiguous callback cleanup/reconciliation ticket without losing evidence or falsely marking a live leg settled. |
+| P0-07 | OPEN — ACDC recovery | Missed hangup events can leave an agent incorrectly busy (operator review finding). Add bounded reconciliation against authoritative current call state, with exact call/account/owner identity. Prove recovery after lost, duplicate and late hangup events, including multiple direct calls and node reconnect. Never mark an agent available while another tracked call is active; preserve explicit pause/logout and queue membership. SIP registration alone is not recovery proof. |
+| P0-08 | OPEN — ACDC + AMQP | Failed AMQP delivery can prevent recovery from ringing (operator review finding). Identify affected publish/ack/recovery paths and make recovery bounded, observable and safe to retry. Test publish failure, broker interruption, lost acknowledgements and redelivery: no permanently stuck ringing state, duplicate bridge, stolen call or unrelated agent/roster mutation. Broker acceptance alone must not count as completed state recovery. |
+| P0-09 | OPEN — ACDC policy + UI/API | Repeated connection failures can automatically log agents out (operator review finding). Distinguish intentional configured protection from unintended logout; define configurable thresholds and recovery behavior, expose the reason/current state through API/UI and document it in OpenAPI. Test threshold boundaries, transient failure, successful-call counter reset, reconnect and explicit operator logout. Do not silently disable unreachable-agent safeguards or automatically override an intentional logout. |
+
+The three recovery findings above were added from the operator's 2026-09-06
+review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
+delayed-notification regression verifies recovery after direct calls finish and
+preserves pause/pending logout. Independent testing also passed those three
+cases; the wider unit run stopped later on an older mock-setup timeout and has
+not yet passed in full under the current resource cap. Each new P0 requires a
+reproducer, code and installer integration, focused fault-injection regression,
+and relevant live call/state/log evidence before closure.
 
 ## Dashboard and workforce delivery
 
@@ -77,7 +95,7 @@ historical screens. Exact references and API/data requirements are in
 | INST-01 | OPEN — installer | One modular install entry point: CouchDB, RabbitMQ, HAProxy, Kazoo apps, eCallMgr, Kazoo FreeSWITCH, Kazoo Kamailio, Monster UI and ALL; automatic pinned dependencies, configuration validation and enabled/running named services. |
 | INST-02 | VERIFIED — current-host scope | Named services and `kazoo-applications` compatibility alias exist; Pivot port reservation, test-phone startup preservation and requested SUP alias repaired. Reboot/custom-root/clean-server regression tests still required. |
 | INST-03 | ACTIVE — installer | Kamailio verifier repair committed `aff66d3`: 11 regression groups and live `--verify-only kamailio` pass; recovered startup JWT failure remains an explicit warning, later/unrelated errors fail, service identity unchanged. Finish combined all-module verification after remaining deployment; verify source/export availability and configuration/transport readiness. |
-| INST-04 | ACTIVE — build | Monster production `preloadApps`/`preloadedApps` mismatch found by browser preview. Source writer fix and compatible preservation gates implemented; actual writer/reader contract and five offline deployment suites pass. Corrected artifact/provenance and browser acceptance still required before publishing. |
+| INST-04 | ACTIVE — browser acceptance | Monster production `preloadApps`/`preloadedApps` mismatch corrected. Fresh guarded build and independent readback passed: 1,931 files, 465 compiled templates, 16 canonical preloads; receipts in `doc/post_reboot_acceptance_20260906.md`. Actual writer/reader contract and offline preservation suites pass. Isolated browser acceptance, fresh adoption/provenance plan and matched backend integration are still required before publishing; clean-server dependencies remain unverified. |
 | INST-05 | ACTIVE — build | Post-build artifact verification is wired before activation and included in the fingerprint; modular fixtures with/without ACDC pass. eCallMgr no longer trusts stale `.app` files: current-invocation build reuse, environment reset and failure-before-activation fixtures pass. Full real repeat deployment remains required. |
 | INST-06 | OPEN — deployment | Publish reviewed matching source/backend/UI with exact backups, preserve unselected apps/config/customer data and record rollback. Two media/editor backend modules updated; compiled UI publication remains held. |
 | INST-07 | OPEN — acceptance | Clean Rocky Linux 9 install, each module alone, all-in-one and separated hosts; hostname/address/configuration variations, reboot, repeat install, upgrades and failure recovery. No clean-server success is claimed yet. |

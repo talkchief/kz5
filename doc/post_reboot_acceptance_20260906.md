@@ -200,8 +200,44 @@ and rejects legacy or incomplete output preload lists. The patch applies
 cleanly to the pinned framework source. Shell syntax and tracked whitespace
 checks pass. These tests make no live service, API or web-root writes.
 
-The old UI artifact has not been altered or published. A corrected artifact,
-fresh derivation/ownership plan and real browser acceptance remain required.
+The old UI artifact has not been altered or published. A fresh corrected build
+subsequently passed at 11:12 UTC, followed by independent artifact readback at
+11:13 UTC. Both ran under the 384 MiB / zero-swap / 50% CPU / 128-task guard;
+all recorded commands exited zero and no OOM was reported. The current artifact
+contains 1,931 files, 19 app directories, 16 canonical `preloadedApps` entries,
+10 metadata documents and 465 compiled templates. Its 73 main-bundle AMD
+registrations and two ACDC state-template render fixtures passed. Source,
+helpers and build fingerprint were unchanged across the run; live configuration
+and language capability files were preserved. Dependencies came from a verified
+local cache with native-module smoke checks, so this is not evidence of a
+clean-server dependency download/install.
+
+Private stage: `/usr/local/src/kazoo5-installer/monster-owned-build.pfUGAT`.
+Build receipt SHA256:
+`8c7ba35d106638759bf0849c67159bc5850bcc79ced11bfa9a32c8a7923dc0a3`.
+Readback receipt SHA256:
+`56d1745e5180212471b3127a2d954d654f4794752bf89b9d6af13a798cde2c7d`.
+Artifact inventory SHA256:
+`6cb494731de21b2d49b08856a7187825b3ce9a5330a01e765e011edd4c0de4cf`.
+This supersedes the earlier artifact only as current static build evidence.
+No browser, authenticated live GET or live call proof is implied. Fresh
+ownership/adoption planning and browser acceptance are still required before
+publication; matching backend integration remains coordinated with the external
+team fixing ACDC call acceptance. No live UI or `/apis` publication occurred.
+
+The phone-service preservation source was rechecked independently after this
+build: all 20 lifecycle/state-snapshot mock cases and the existing phone-recovery
+suite passed again. These offline tests made no SIP, API or service changes and
+do not replace the earlier runtime snapshot evidence or a new reboot test.
+Subsequent review found successful-but-slow registration lookups could bypass
+the shared startup deadline. The source now reserves each probe's five-second
+budget and rejects late success before READY. The expanded 23-case suite passes,
+including delayed-success and retained-cleanup-marker scenarios. The first
+expanded run failed two test diagnostics because its logger mock suppressed the
+expected messages; after correcting those fixtures, all precise error, no-READY
+and scoped-cleanup assertions passed. Cleanup documentation now distinguishes
+preserving roster/status from possible interruption of a stopped phone's dialog.
+This additional deadline fix has not been verified through a live service restart.
 
 The eCallMgr-only installer previously treated two existing `.app` files as
 proof of compilation. It now builds unless this same invocation already
