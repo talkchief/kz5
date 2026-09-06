@@ -1,6 +1,6 @@
 # Prerecorded queue cardinal numbers: finite-catalog design
 
-Status: design and isolated EN/ES/FR source building block, **not runtime readiness**.
+Status: design and isolated EN/ES/FR/HE source building block, **not runtime readiness**.
 The release requirement remains EN/HE/FR/ES/AR, each covering every integer
 0..999999999 using one built-in female Gemini voice and recordings authored in
 this release. No native SAY, digit-spelling substitute for cardinals, runtime TTS,
@@ -13,12 +13,12 @@ separate digit-by-digit operation. Existing manifests/assets must not be rewritt
 ## Source contract and next action
 
 `scripts/acdc-cardinal-catalog.cjs` is a pure versioned authoring-time building
-block. Version `acdc-cardinal-v1` contains 31 EN, 53 ES and 161 FR logical recordings.
+block. Version `acdc-cardinal-v1` contains31 EN,53 ES,161 FR and131 HE logical recordings.
 `compose(number, locale)` returns `{catalog_version, locale, number, token_ids}`;
 `tokens`, `transcript` and `plan` expose playback IDs, review text and the catalog.
 The module has no imports, I/O, provider, playback or account integration.
-Only exact `en-us`, `es-es` and `fr-fr` currently compose. Required but
-unimplemented `he-il`, `ar-sa` fail explicitly. This is not a reduced release scope.
+Only exact `en-us`, `es-es`, `fr-fr` and `he-il` currently compose. Required but
+unimplemented `ar-sa` fails explicitly. This is not a reduced release scope.
 
 IDs are `acdc-cardinal-v1-<role>` with locale forming part of the media identity.
 They are distinct from historical `acdc-number-*` IDs; do not overwrite the
@@ -27,7 +27,7 @@ transcripts, context, request/response provenance and exact audio bytes. Existin
 digits may be reused only after their precise form and cadence are qualified;
 counts below do not silently assume reuse.
 
-Next: finish AR/HE transcript gates below, implement the remaining pure grammars,
+Next: finish AR/HE transcript gates below, implement the remaining Arabic grammar,
 freeze the reachable token catalog, author/verify every required WAV now, then
 integrate the catalog into canonical ACDC and the system-media importer. All
 existing/future accounts and subaccounts use these same shared recordings. The
@@ -140,30 +140,109 @@ Primary references checked during implementation on2026-09-06:
 This161-role bank needs authoring review before payment and listening review after
 generation; it is a practical bounded bank, not a proven minimum or artifact pack.
 
-## HE draft: 133 roles, explicit unresolved transcript gates
+## Implemented pure HE catalog: 131 roles, no WAVs generated
 
-Provisional role accounting (not an approved generation manifest):
+The explicit source context is `abstract-number-label-feminine`, exported as
+`HEBREW_CONTEXT` and present on every HE catalog entry. Terminal numbers use
+feminine forms; coefficients of thousand/million use masculine forms. Hundreds
+are complete feminine construct phrases in either context. This is neither
+ordinal grammar nor masculine counting of places, callers or people.
 
-- Masculine0..19:20; decades20..90:8; complete hundreds100..900:9;
-  complete1000..10000 in thousand steps:10; million/two-million:2. Base49.
-- Attached-conjunction versions of masculine1..19:19, decades:8, hundreds:9,
-  and those ten whole-thousand phrases:10. Additional46.
-- Terminal feminine1..19 and their attached-conjunction versions:38.
+| Roles | Contents | Count |
+| --- | --- | ---: |
+| `number-0` | אֶפֶס | 1 |
+| `masculine-N`, N=3..19 | Complete masculine units/teens for scale coefficients | 17 |
+| `joined-masculine-N`, N=1..19 | Complete masculine units/teens with pronounced attached vav | 19 |
+| `feminine-N`, `joined-feminine-N`, N=1..19 | Complete terminal units/teens, plain and attached-vav | 38 |
+| `tens-N`, `joined-tens-N`, N=20,30,...90 | Eight complete decades in each form | 16 |
+| `hundreds-N`, `joined-hundreds-N`, N=100,200,...900 | Nine complete hundred phrases in each form | 18 |
+| `thousands-N`, `joined-thousands-N`, N=1..10 | Whole1..10thousand phrases in each form | 20 |
+| `million`, `two-million` | מִילְיוֹן; שְׁנֵי מִילְיוֹן | 2 |
 
-Total49+46+38=133. Reuse the one-thousand elef form as the scale after larger
-coefficients. Number labels are feminine; masculine scale coefficients, construct
-3..10thousand and the special2000 form must not be confused with terminal digits.
-Examples requiring goldens: 1000 אלף; 2000 אלפיים; 3000 שלושת אלפים;
-11000 אחד עשר אלף; terminal21 עשרים ואחת, versus a masculine scale coefficient.
+Total131:66 unjoined and65 joined. This corrects the earlier133-role draft:
+unjoined masculine1/2 are unreachable. One/two thousand and million already have
+whole phrases, while larger scale coefficients ending1/2 require their joined
+forms. No recordings are silently reused or overwritten. The complete vocalized
+transcripts are in `plan('he-il')`; this is an authored review table, not paid
+transcript or pronunciation acceptance.
 
-Remaining gates: freeze the complete vocalized table, correct attached vav
-pronunciation, and the final-conjunction syntax across nested groups. Do not
-reuse one generic ve clip or the existing synthetic phoneme helper as linguistic
-approval. Check the existing queue introduction against the selected abstract
-number-label meaning before any additional intro recording is proposed.
-[Hebrew Academy number-label guidance](https://hebrew-academy.org.il/meeting/%D7%A6%D7%91/)
-and [Unicode Hebrew rule source](https://raw.githubusercontent.com/unicode-org/cldr/main/common/rbnf/he.xml)
-provide references, not an automatic transcript/audio approval.
+Each three-digit group decomposes into additive terms: hundreds, decade, then
+unit, or hundreds plus one whole teen. Attach vav to the last term when there is
+more than one. A scaled coefficient is its own additive expression followed by
+the scale. The top-level expression contains each entire scaled group and the
+unscaled additive terms. Conjoin its final term, not every scale boundary or
+every recording. A final compound thousand term may therefore have both an outer
+conjunction and its coefficient's internal conjunction; earlier conjunctions
+are permitted. Examples below make this selected style explicit.
+
+Exact1..10thousand uses אֶלֶף, אַלְפַּיִם, שְׁלוֹשֶׁת אֲלָפִים through
+עֲשֶׂרֶת אֲלָפִים. Larger coefficients precede singular אֶלֶף; million uses the
+singular loanword after its coefficient. The `whole-scale` metadata stores
+coefficient `value` and `scale`. After a preceding numeric coefficient, only a
+singular `value:1` scale record is valid; it closes that coefficient, without
+adding another one. Otherwise the complete scale phrase supplies its own value.
+
+Record each conjunction-bearing word/phrase whole. The explicit table includes
+וְ, וּ before an initial sheva or labial, and וַ before hataf-patah forms. Examples:
+וְחָמֵשׁ versus וַחֲמִשָּׁה; וּשְׁתַּיִם; וּשְׁמוֹנֶה; וּמֵאָה; וַחֲמִשִּׁים.
+Begadkefat pointing after vav is included in the authored text. There is no
+standalone conjunction clip, phoneme splicing or playback-time vowel rewrite.
+`transcript()` joins the exact vocalized recording texts without changing them.
+
+Full-number examples, in ordinary unpointed spelling for readability:
+
+- 21: עשרים ואחת;21000: עשרים ואחד אלף;12000: שנים עשר אלף.
+- 120: מאה ועשרים;121: מאה עשרים ואחת;2500: אלפיים וחמש מאות.
+- 200356: מאתיים אלף שלוש מאות חמישים ושש.
+- 1001000: מיליון ואלף;1001001: מיליון אלף ואחת.
+- 1021000: מיליון ועשרים ואחד אלף;1101001: מיליון מאה ואחד אלף ואחת.
+- 121121121: מאה עשרים ואחד מיליון מאה עשרים ואחד אלף מאה עשרים ואחת.
+
+The maximum999999999 needs11 tokens. The new tests enumerate every0..999 group
+at three scales and additional leading/trailing group contexts, independently
+decode numeric meaning, check plain full text and selected exact vocalization,
+require all131 roles reachable, and check mixed/full-range boundaries. Prepared
+tests do not constitute a claimed pass before the guarded run.
+
+### Hebrew phrase-context and authoring gates
+
+The existing immutable introduction is
+`מְקוֹמְכֶם הַנּוֹכְחִי בַּתּוֹר הוּא.` (“your current place in the queue is”).
+Its noun is masculine and it does not explicitly say “number.” This pure catalog
+does **not** certify that simply appending a feminine cardinal to that recording
+is natural. Runtime integration must preserve **current queue position**, not
+change it to a ticket number or a count of callers ahead. Before authoring or
+switching playlists, approve either that existing phrase as an implicit numeric
+label or a separately identified, NEW versioned introduction explicitly naming
+the current position's number. A candidate wording for review is
+`מִסְפַּר מְקוֹמְכֶם הַנּוֹכְחִי בַּתּוֹר הוּא` (“the number of your current place
+in the queue is”). It is not a catalog entry or an approved replacement. Never
+rewrite the historical WAV, transcript or provenance.
+
+Primary evidence checked on2026-09-06:
+
+- [CET language-team original usage lesson](https://www.lib.cet.ac.il/PAGES/item.asp?item=13674):
+  retrievable prose explaining feminine abstract labels, the insertable word
+  “number,” vav vowel classes and the gender of hundreds/thousands.
+- [CET original number tables lesson](https://www.lib.cet.ac.il/PAGES/item.asp?item=13671):
+  retrievable prose with mixed-group examples and scale agreement. Its linked
+  table images redirect to an inactive-site page; they were **not** read.
+- [Academy meeting314, pages263 and267](https://hebrew-academy.ussl.co.il/wp-content/uploads/2024/11/meeting314.pdf):
+  retrievable full Academy-authored minutes distinguish technical feminine
+  numbers and masculine thousand coefficients. The current canonical-domain
+  mirror and meeting309 links returned403 during this audit.
+- [Academy-authored Ministry slideshow](https://meyda.education.gov.il/files/Pop/0files/ivrit_habaah_lashon/pedagogia/shem-mispar.pdf):
+  search-index text specifies the final additive conjunction and permits
+  earlier ones, including the200356 example. Direct retrieval returned404/403;
+  **this indexed source remains provisional**, not a fully retrieved transcript
+  authority for paid generation.
+
+The vocalized table, constructed join forms, complex-scale cadence and final
+introduction require qualified Hebrew review before freezing paid text; listening
+then qualifies actual speech. Unicode's Hebrew RBNF source is a useful structural
+cross-check, not a normative text oracle: its current conjunction helper omits
+vav for120, so it must not replace the explicit tests or Academy rules. These
+gates do not reduce the required full range or authorize fallback/native SAY.
 
 ## AR draft: 103 roles, explicit unresolved transcript gates
 
@@ -222,6 +301,21 @@ test SHA-256:
 `246884834f2c88514ceaadf302c1aa7ba385c74601bd73848eb25e41f3fbe595`.
 Both remained stable. This is a tested pure EN/ES/FR compositor, not a WAV pack
 or a deployed runtime. Hebrew/Arabic and listening acceptance remain open.
+
+Hebrew extension run50243 exited0 on September6: all12 groups passed with61,747
+semantic composition checks, including the preceding44,040 EN/ES/FR checks,
+25 vocalized and34 full-number Hebrew goldens,6,000 group/scale/join cases,
+all131-role reachability and the11-token maximum. Catalog SHA-256:
+`1bf013bd7aecfefdf0a01f3541831782b5a1a10000a4a7e8716a22773b476edf`;
+test SHA-256:
+`2407caf32f361511f4ece6dd8c702261228f59c974e75e069a3891337dca027f`.
+The initial256-MiB admission attempt exited69 without running tests because
+available memory was insufficient. The successful run used a tighter128-MiB
+cap, the same768-MiB reserve,60-second deadline and network isolation, without
+removing checks. Source/test pins remained stable. Exact vocalization and the
+current-position introduction/context still require review before paid WAV
+generation; the existing immutable introduction was not changed. Arabic remains
+unimplemented; this does not establish four-language runtime or audio readiness.
 
 Reproduce from a prepared host with Node18 or later:
 

@@ -39,6 +39,11 @@ function entries(number, locale) {
       assert(entry.value < priorScale); priorScale = entry.value;
       if (!subtotal) assert(['es-es', 'fr-fr'].includes(locale) && entry.value === 1000);
       total += (subtotal || 1) * entry.value; subtotal = 0;
+    } else if (entry.kind === 'whole-scale') {
+      assert.equal(locale, 'he-il'); assert([1000, 1000000].includes(entry.scale));
+      assert(entry.scale < priorScale); priorScale = entry.scale;
+      if (subtotal) assert.equal(entry.value, 1, 'only singular scale recording can close a preceding coefficient');
+      total += (subtotal || entry.value) * entry.scale; subtotal = 0;
     } else assert.equal(entry.kind, 'conjunction');
   }
   assert.equal(total + subtotal, number, 'token semantics must preserve the entire integer');
@@ -56,19 +61,20 @@ function entries(number, locale) {
 }
 try {
   assert.equal(c.VERSION, 'acdc-cardinal-v1'); assert.equal(c.MAX_NUMBER, 999999999);
-  assert.equal(c.PROMPTS.length, 245); assert.equal(c.plan('en-us').length, 31); assert.equal(c.plan('es-es').length, 53);
+  assert.equal(c.PROMPTS.length, 376); assert.equal(c.plan('en-us').length, 31); assert.equal(c.plan('es-es').length, 53);
   assert.equal(c.plan('fr-fr').length, 161);
-  assert.equal(byKey.size, 245); assert(Object.isFrozen(c)); assert(Object.isFrozen(c.PROMPTS));
+  assert.equal(c.plan('he-il').length, 131);
+  assert.equal(byKey.size, 376); assert(Object.isFrozen(c)); assert(Object.isFrozen(c.PROMPTS));
   assert.deepEqual(c.REQUIRED_LOCALES, ['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa']);
-  assert.deepEqual(c.IMPLEMENTED_LOCALES, ['en-us', 'es-es', 'fr-fr']);
-  assert.deepEqual(c.MAX_TOKENS_BY_LOCALE, {'en-us': 14, 'es-es': 14, 'fr-fr': 8});
+  assert.deepEqual(c.IMPLEMENTED_LOCALES, ['en-us', 'es-es', 'fr-fr', 'he-il']);
+  assert.deepEqual(c.MAX_TOKENS_BY_LOCALE, {'en-us': 14, 'es-es': 14, 'fr-fr': 8, 'he-il': 11});
   assert(Object.isFrozen(c.MAX_TOKENS_BY_LOCALE));
   for (const entry of c.PROMPTS) {
     assert(Object.isFrozen(entry)); assert.equal(entry.catalog_version, c.VERSION);
     assert.equal(entry.id, c.VERSION + '-' + entry.role); assert(!/[0-9]/.test(entry.transcript));
-    assert(['number', 'hundred-multiplier', 'scale', 'conjunction', 'scaled-tail'].includes(entry.kind));
+    assert(['number', 'hundred-multiplier', 'scale', 'conjunction', 'scaled-tail', 'whole-scale'].includes(entry.kind));
   }
-  report('versioned immutable exact31 EN +53 ES +161 FR inventory; all five locales remain required');
+  report('versioned immutable exact31 EN +53 ES +161 FR +131 HE inventory; all five locales remain required');
   const golden = {
     'en-us': [[0, 'zero'], [1, 'one'], [19, 'nineteen'], [21, 'twenty one'], [40, 'forty'],
       [100, 'one hundred'], [101, 'one hundred one'], [110, 'one hundred ten'], [121, 'one hundred twenty one'],
@@ -201,17 +207,129 @@ try {
   }
   assert.equal(c.tokens(999999999, 'fr-fr').length, 8);
   report('10648 French boundary cross-products +1000 mixed cases; no cross-group plural damage and strict8-token bound');
+  // Separately authored plain consonantal reference, not imported word tables.
+  // Stripping niqqud is for assertions only; it is NOT modern full spelling or
+  // an authoring transform. Production preserves each vocalized transcript.
+  const bare = text => text.replace(/[\u0591-\u05bd\u05bf-\u05c2\u05c4-\u05c5\u05c7]/g, '');
+  const heF = ['אפס', 'אחת', 'שתים', 'שלוש', 'ארבע', 'חמש', 'שש', 'שבע', 'שמונה', 'תשע',
+    'עשר', 'אחת עשרה', 'שתים עשרה', 'שלוש עשרה', 'ארבע עשרה', 'חמש עשרה', 'שש עשרה',
+    'שבע עשרה', 'שמונה עשרה', 'תשע עשרה'];
+  const heM = ['אפס', 'אחד', 'שנים', 'שלושה', 'ארבעה', 'חמשה', 'ששה', 'שבעה', 'שמונה', 'תשעה',
+    'עשרה', 'אחד עשר', 'שנים עשר', 'שלושה עשר', 'ארבעה עשר', 'חמשה עשר', 'ששה עשר',
+    'שבעה עשר', 'שמונה עשר', 'תשעה עשר'];
+  const heDecades = ['עשרים', 'שלושים', 'ארבעים', 'חמשים', 'ששים', 'שבעים', 'שמונים', 'תשעים'];
+  const heCenturies = ['מאה', 'מאתים', 'שלוש מאות', 'ארבע מאות', 'חמש מאות', 'שש מאות',
+    'שבע מאות', 'שמונה מאות', 'תשע מאות'];
+  const heK = ['אלף', 'אלפים', 'שלושת אלפים', 'ארבעת אלפים', 'חמשת אלפים', 'ששת אלפים',
+    'שבעת אלפים', 'שמונת אלפים', 'תשעת אלפים', 'עשרת אלפים'];
+  const hePlan = c.plan('he-il');
+  assert.equal(c.HEBREW_CONTEXT, 'abstract-number-label-feminine');
+  assert.equal(hePlan.filter(entry => entry.joined).length, 65);
+  assert.equal(hePlan.filter(entry => entry.role.startsWith('masculine-')).length, 17);
+  assert.equal(hePlan.filter(entry => entry.role.startsWith('feminine-')).length, 19);
+  assert.equal(hePlan.filter(entry => entry.kind === 'whole-scale').length, 22);
+  for (const entry of hePlan) {
+    assert.equal(entry.grammatical_context, c.HEBREW_CONTEXT);
+    assert.equal(typeof entry.joined, 'boolean');
+    assert.equal(entry.role.startsWith('joined-'), entry.joined);
+    assert(/[\u05b0-\u05bc]/.test(entry.transcript), 'exact vocalized authoring text');
+    assert(!['and', 'masculine-1', 'masculine-2', 'joined-number-0'].includes(entry.role));
+    if (entry.joined) assert(/^(?:וְ|וּ|וַ)/.test(entry.transcript), 'attached full-word ve/u/va, not a generic phoneme clip');
+  }
+  for (let number = 0; number < 20; number++) assert.equal(bare(c.transcript(number, 'he-il')), heF[number]);
+  const heVocalized = [
+    [1, 'אַחַת'], [2, 'שְׁתַּיִם'], [8, 'שְׁמוֹנֶה'], [12, 'שְׁתֵּים עֶשְׂרֵה'],
+    [21, 'עֶשְׂרִים וְאַחַת'], [22, 'עֶשְׂרִים וּשְׁתַּיִם'], [25, 'עֶשְׂרִים וְחָמֵשׁ'],
+    [28, 'עֶשְׂרִים וּשְׁמוֹנֶה'], [29, 'עֶשְׂרִים וְתֵשַׁע'],
+    [115, 'מֵאָה וַחֲמֵשׁ עֶשְׂרֵה'], [117, 'מֵאָה וּשְׁבַע עֶשְׂרֵה'],
+    [119, 'מֵאָה וּתְשַׁע עֶשְׂרֵה'], [120, 'מֵאָה וְעֶשְׂרִים'],
+    [130, 'מֵאָה וּשְׁלוֹשִׁים'], [150, 'מֵאָה וַחֲמִשִּׁים'],
+    [10000, 'עֲשֶׂרֶת אֲלָפִים'], [11000, 'אַחַד עָשָׂר אֶלֶף'],
+    [12000, 'שְׁנֵים עָשָׂר אֶלֶף'], [22000, 'עֶשְׂרִים וּשְׁנַיִם אֶלֶף'],
+    [25000, 'עֶשְׂרִים וַחֲמִשָּׁה אֶלֶף'], [8000, 'שְׁמוֹנַת אֲלָפִים'],
+    [8000000, 'שְׁמוֹנָה מִילְיוֹן'], [2000000, 'שְׁנֵי מִילְיוֹן'],
+    [1000700, 'מִילְיוֹן וּשְׁבַע מֵאוֹת'], [1010000, 'מִילְיוֹן וַעֲשֶׂרֶת אֲלָפִים']
+  ];
+  for (const [number, text] of heVocalized) { entries(number, 'he-il'); assert.equal(c.transcript(number, 'he-il'), text); }
+  const heGolden = [
+    [0, 'אפס'], [101, 'מאה ואחת'], [121, 'מאה עשרים ואחת'], [1000, 'אלף'],
+    [1001, 'אלף ואחת'], [1002, 'אלף ושתים'], [1010, 'אלף ועשר'], [1011, 'אלף ואחת עשרה'],
+    [1100, 'אלף ומאה'], [1120, 'אלף מאה ועשרים'], [1121, 'אלף מאה עשרים ואחת'],
+    [2000, 'אלפים'], [2500, 'אלפים וחמש מאות'], [3000, 'שלושת אלפים'],
+    [101000, 'מאה ואחד אלף'], [102000, 'מאה ושנים אלף'], [103000, 'מאה ושלושה אלף'],
+    [111000, 'מאה ואחד עשר אלף'], [120000, 'מאה ועשרים אלף'], [121000, 'מאה עשרים ואחד אלף'],
+    [200356, 'מאתים אלף שלוש מאות חמשים ושש'], [1000000, 'מיליון'],
+    [1001000, 'מיליון ואלף'], [1002000, 'מיליון ואלפים'], [1003000, 'מיליון ושלושת אלפים'],
+    [1001001, 'מיליון אלף ואחת'], [1020000, 'מיליון ועשרים אלף'],
+    [1021000, 'מיליון ועשרים ואחד אלף'], [1101000, 'מיליון ומאה ואחד אלף'],
+    [1101001, 'מיליון מאה ואחד אלף ואחת'], [21000000, 'עשרים ואחד מיליון'],
+    [101000000, 'מאה ואחד מיליון'], [121121121, 'מאה עשרים ואחד מיליון מאה עשרים ואחד אלף מאה עשרים ואחת'],
+    [999999999, 'תשע מאות תשעים ותשעה מיליון תשע מאות תשעים ותשעה אלף תשע מאות תשעים ותשע']
+  ];
+  for (const [number, text] of heGolden) { entries(number, 'he-il'); assert.equal(bare(c.transcript(number, 'he-il')), text); }
+  report(`${heVocalized.length} Hebrew vocalized +${heGolden.length} full-number goldens; exact131 roles, gender and attached-vav forms`);
+  function heReferenceParts(number, words) {
+    const parts = [];
+    if (number >= 100) parts.push(heCenturies[Math.floor(number / 100) - 1]);
+    const remainder = number % 100;
+    if (remainder >= 20) {
+      parts.push(heDecades[Math.floor(remainder / 10) - 2]);
+      if (remainder % 10) parts.push(words[remainder % 10]);
+    } else if (remainder) parts.push(words[remainder]);
+    return parts;
+  }
+  const heReferenceJoin = parts => parts.map((part, index) => index && index === parts.length - 1 ? 'ו' + part : part).join(' ');
+  function heReference(number) {
+    const parts = [];
+    for (const [scale, scaleWord] of [[1000000, 'מיליון'], [1000, 'אלף']]) {
+      const count = Math.floor(number / scale) % 1000;
+      if (!count) continue;
+      if (scale === 1000 && count <= 10) parts.push(heK[count - 1]);
+      else if (scale === 1000000 && count <= 2) parts.push(count === 1 ? 'מיליון' : 'שני מיליון');
+      else parts.push(heReferenceJoin(heReferenceParts(count, heM)) + ' ' + scaleWord);
+    }
+    parts.push(...heReferenceParts(number % 1000, heF));
+    return heReferenceJoin(parts) || 'אפס';
+  }
+  const reachableHebrew = new Set();
+  function heCheck(number) {
+    const result = entries(number, 'he-il'); result.forEach(entry => reachableHebrew.add(entry.id));
+    assert.equal(bare(c.transcript(number, 'he-il')), heReference(number), 'independent full-group Hebrew reference');
+    assert(!result[0].joined, 'number cannot start with conjunction');
+    // Gender is contextual: masculine belongs to a not-yet-closed scale;
+    // feminine belongs to the terminal group, never an earlier coefficient.
+    for (let index = 0; index < result.length; index++) {
+      const entry = result[index], followingScale = result.slice(index + 1).find(token => token.kind === 'whole-scale');
+      if (entry.role.includes('masculine-')) assert(followingScale);
+      if (entry.role.includes('feminine-')) assert.equal(followingScale, undefined);
+    }
+  }
+  for (let number = 0; number <= 999; number++) {
+    for (const scale of [1, 1000, 1000000]) heCheck(number * scale);
+    // Force outer conjunction on standalone terminal forms and on every
+    // thousand coefficient; also test a following terminal suppresses it.
+    heCheck(1000000 + number); heCheck(1000000 + number * 1000); heCheck(1000001 + number * 1000);
+  }
+  assert.deepEqual([...reachableHebrew].sort(), hePlan.map(entry => entry.id).sort(), 'all131 recordings reachable; no speculative extra clips');
+  report('6000 exhaustive Hebrew group/scale/outer-join cases; independent semantics/text, exact gender and all131-role reachability');
+  const heBoundaries = [0, 1, 2, 3, 8, 10, 11, 12, 19, 20, 21, 22, 99, 100, 101, 102, 111, 120, 121, 200, 900, 999];
+  for (const million of heBoundaries) for (const thousand of heBoundaries) for (const unit of heBoundaries) {
+    heCheck(million * 1000000 + thousand * 1000 + unit);
+  }
+  for (let group = 0; group <= 999; group++) heCheck(group * 1000000 + ((group * 37) % 1000) * 1000 + ((group * 91) % 1000));
+  assert.equal(c.tokens(999999999, 'he-il').length, 11);
+  report('10648 Hebrew boundary cross-products +1000 mixed cases; nested conjunctions and strict11-token bound');
   for (const number of [-1, 1000000000, 1.5, NaN, Infinity, -Infinity, '1', null, undefined, true, 1n, {}, []]) {
     for (const locale of c.IMPLEMENTED_LOCALES) assert.throws(() => c.compose(number, locale), expectedCode('CARDINAL_NUMBER_OUT_OF_RANGE'));
   }
-  for (const locale of ['ar-sa', 'he-il']) {
+  for (const locale of ['ar-sa']) {
     assert.throws(() => c.compose(1, locale), expectedCode('CARDINAL_LANGUAGE_NOT_IMPLEMENTED'));
     assert.throws(() => c.plan(locale), expectedCode('CARDINAL_LANGUAGE_NOT_IMPLEMENTED'));
   }
   for (const locale of [undefined, null, 'en', 'EN-US', 'en_us', 'es', 'de-de', {}, ['en-us']]) {
     assert.throws(() => c.compose(1, locale), expectedCode('CARDINAL_LANGUAGE_UNSUPPORTED'));
   }
-  const copy = c.plan(); copy[0].transcript = 'not retained'; copy.pop(); assert.equal(c.plan().length, 245);
+  const copy = c.plan(); copy[0].transcript = 'not retained'; copy.pop(); assert.equal(c.plan().length, 376);
   assert.equal(c.transcript(0, 'en-us'), 'zero');
   assert.throws(() => c.tokens(1, 'en-us').push('unknown'), TypeError);
   report('invalid ranges/locales fail closed; no aliases/defaults or caller mutation');
@@ -219,12 +337,13 @@ try {
   vm.runInNewContext(fs.readFileSync(sourcePath, 'utf8'), isolated, {timeout: 1000, filename: sourcePath});
   assert.equal(isolated.module.exports.transcript(999999999, 'es-es'), c.transcript(999999999, 'es-es'));
   assert.equal(isolated.module.exports.transcript(999999999, 'fr-fr'), c.transcript(999999999, 'fr-fr'));
-  assert.equal(isolated.module.exports.plan().length, 245);
+  assert.equal(isolated.module.exports.transcript(999999999, 'he-il'), c.transcript(999999999, 'he-il'));
+  assert.equal(isolated.module.exports.plan().length, 376);
   report('entire module imports/composes in VM without require/process/files/network/provider globals');
 } finally {
   const after = Object.fromEntries(pinned.map(file => [file, hash(file)]));
   assert.deepEqual(after, before, 'source pins stable, including on failure');
-  console.log(JSON.stringify({schema_version: 1, stage: groups.length === 9 ? 'complete' : 'incomplete',
+  console.log(JSON.stringify({schema_version: 1, stage: groups.length === 12 ? 'complete' : 'incomplete',
     passed_groups: groups, compositions_checked: compositions, sources_sha256: after,
     artifact_generation: false, native_acceptance: false, full_five_locale_ready: false}));
 }

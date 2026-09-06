@@ -1,13 +1,46 @@
 'use strict';
 
 // Pure authoring-time building block. No files, provider, native SAY, playback,
-// account lookup or runtime fallback. HE/AR remain required, not implemented.
+// account lookup or runtime fallback. AR remains required, not implemented.
 const VERSION = 'acdc-cardinal-v1';
 const MAX_NUMBER = 999999999;
 const MAX_TOKENS = 14;
-const MAX_TOKENS_BY_LOCALE = Object.freeze({'en-us': 14, 'es-es': 14, 'fr-fr': 8});
+const MAX_TOKENS_BY_LOCALE = Object.freeze({'en-us': 14, 'es-es': 14, 'fr-fr': 8, 'he-il': 11});
 const REQUIRED_LOCALES = Object.freeze(['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa']);
-const IMPLEMENTED_LOCALES = Object.freeze(['en-us', 'es-es', 'fr-fr']);
+const IMPLEMENTED_LOCALES = Object.freeze(['en-us', 'es-es', 'fr-fr', 'he-il']);
+// This is NOT a masculine counted-place or ordinal grammar. Existing queue
+// introductions require a separate context review; this module changes none.
+const HEBREW_CONTEXT = 'abstract-number-label-feminine';
+const heMasculine = [null, 'אֶחָד', 'שְׁנַיִם', 'שְׁלוֹשָׁה', 'אַרְבָּעָה', 'חֲמִשָּׁה',
+  'שִׁשָּׁה', 'שִׁבְעָה', 'שְׁמוֹנָה', 'תִּשְׁעָה', 'עֲשָׂרָה', 'אַחַד עָשָׂר',
+  'שְׁנֵים עָשָׂר', 'שְׁלוֹשָׁה עָשָׂר', 'אַרְבָּעָה עָשָׂר', 'חֲמִשָּׁה עָשָׂר',
+  'שִׁשָּׁה עָשָׂר', 'שִׁבְעָה עָשָׂר', 'שְׁמוֹנָה עָשָׂר', 'תִּשְׁעָה עָשָׂר'];
+const heJoinedMasculine = [null, 'וְאֶחָד', 'וּשְׁנַיִם', 'וּשְׁלוֹשָׁה', 'וְאַרְבָּעָה',
+  'וַחֲמִשָּׁה', 'וְשִׁשָּׁה', 'וְשִׁבְעָה', 'וּשְׁמוֹנָה', 'וְתִשְׁעָה', 'וַעֲשָׂרָה',
+  'וְאַחַד עָשָׂר', 'וּשְׁנֵים עָשָׂר', 'וּשְׁלוֹשָׁה עָשָׂר', 'וְאַרְבָּעָה עָשָׂר',
+  'וַחֲמִשָּׁה עָשָׂר', 'וְשִׁשָּׁה עָשָׂר', 'וְשִׁבְעָה עָשָׂר', 'וּשְׁמוֹנָה עָשָׂר', 'וְתִשְׁעָה עָשָׂר'];
+const heFeminine = [null, 'אַחַת', 'שְׁתַּיִם', 'שָׁלוֹשׁ', 'אַרְבַּע', 'חָמֵשׁ', 'שֵׁשׁ',
+  'שֶׁבַע', 'שְׁמוֹנֶה', 'תֵּשַׁע', 'עֶשֶׂר', 'אַחַת עֶשְׂרֵה', 'שְׁתֵּים עֶשְׂרֵה',
+  'שְׁלוֹשׁ עֶשְׂרֵה', 'אַרְבַּע עֶשְׂרֵה', 'חֲמֵשׁ עֶשְׂרֵה', 'שֵׁשׁ עֶשְׂרֵה',
+  'שְׁבַע עֶשְׂרֵה', 'שְׁמוֹנֶה עֶשְׂרֵה', 'תְּשַׁע עֶשְׂרֵה'];
+const heJoinedFeminine = [null, 'וְאַחַת', 'וּשְׁתַּיִם', 'וְשָׁלוֹשׁ', 'וְאַרְבַּע', 'וְחָמֵשׁ',
+  'וְשֵׁשׁ', 'וְשֶׁבַע', 'וּשְׁמוֹנֶה', 'וְתֵשַׁע', 'וְעֶשֶׂר', 'וְאַחַת עֶשְׂרֵה',
+  'וּשְׁתֵּים עֶשְׂרֵה', 'וּשְׁלוֹשׁ עֶשְׂרֵה', 'וְאַרְבַּע עֶשְׂרֵה', 'וַחֲמֵשׁ עֶשְׂרֵה',
+  'וְשֵׁשׁ עֶשְׂרֵה', 'וּשְׁבַע עֶשְׂרֵה', 'וּשְׁמוֹנֶה עֶשְׂרֵה', 'וּתְשַׁע עֶשְׂרֵה'];
+const heTens = ['עֶשְׂרִים', 'שְׁלוֹשִׁים', 'אַרְבָּעִים', 'חֲמִשִּׁים', 'שִׁשִּׁים',
+  'שִׁבְעִים', 'שְׁמוֹנִים', 'תִּשְׁעִים'];
+const heJoinedTens = ['וְעֶשְׂרִים', 'וּשְׁלוֹשִׁים', 'וְאַרְבָּעִים', 'וַחֲמִשִּׁים',
+  'וְשִׁשִּׁים', 'וְשִׁבְעִים', 'וּשְׁמוֹנִים', 'וְתִשְׁעִים'];
+const heHundreds = ['מֵאָה', 'מָאתַיִם', 'שְׁלוֹשׁ מֵאוֹת', 'אַרְבַּע מֵאוֹת',
+  'חֲמֵשׁ מֵאוֹת', 'שֵׁשׁ מֵאוֹת', 'שְׁבַע מֵאוֹת', 'שְׁמוֹנֶה מֵאוֹת', 'תְּשַׁע מֵאוֹת'];
+const heJoinedHundreds = ['וּמֵאָה', 'וּמָאתַיִם', 'וּשְׁלוֹשׁ מֵאוֹת', 'וְאַרְבַּע מֵאוֹת',
+  'וַחֲמֵשׁ מֵאוֹת', 'וְשֵׁשׁ מֵאוֹת', 'וּשְׁבַע מֵאוֹת', 'וּשְׁמוֹנֶה מֵאוֹת', 'וּתְשַׁע מֵאוֹת'];
+const heThousands = ['אֶלֶף', 'אַלְפַּיִם', 'שְׁלוֹשֶׁת אֲלָפִים', 'אַרְבַּעַת אֲלָפִים',
+  'חֲמֵשֶׁת אֲלָפִים', 'שֵׁשֶׁת אֲלָפִים', 'שִׁבְעַת אֲלָפִים', 'שְׁמוֹנַת אֲלָפִים',
+  'תִּשְׁעַת אֲלָפִים', 'עֲשֶׂרֶת אֲלָפִים'];
+const heJoinedThousands = ['וְאֶלֶף', 'וְאַלְפַּיִם', 'וּשְׁלוֹשֶׁת אֲלָפִים',
+  'וְאַרְבַּעַת אֲלָפִים', 'וַחֲמֵשֶׁת אֲלָפִים', 'וְשֵׁשֶׁת אֲלָפִים',
+  'וְשִׁבְעַת אֲלָפִים', 'וּשְׁמוֹנַת אֲלָפִים', 'וְתִשְׁעַת אֲלָפִים', 'וַעֲשֶׂרֶת אֲלָפִים'];
 const enSmall = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
   'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
 const enTens = ['twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
@@ -66,6 +99,31 @@ for (const scale of [1000, 1000000]) for (const number of FRENCH_SCALED_TAILS) {
 add('fr-fr', 'thousand', 'mille', 'scale', 1000);
 add('fr-fr', 'million', 'million', 'scale', 1000000);
 add('fr-fr', 'millions', 'millions', 'scale', 1000000);
+function hebrewRecord(role, text, kind, value, scale, joined = false) {
+  records.push(Object.freeze({catalog_version: VERSION, locale: 'he-il', id: `${VERSION}-${role}`,
+    role, transcript: text, kind, value, ...(scale === undefined ? {} : {scale}),
+    grammatical_context: HEBREW_CONTEXT, joined}));
+}
+hebrewRecord('number-0', 'אֶפֶס', 'number', 0);
+for (let number = 1; number <= 19; number++) {
+  // Unjoined masculine1/2 are unreachable: scales have exact singular/dual
+  // phrases; larger coefficients use the attached-conjunction forms.
+  if (number >= 3) hebrewRecord(`masculine-${number}`, heMasculine[number], 'number', number);
+  hebrewRecord(`joined-masculine-${number}`, heJoinedMasculine[number], 'number', number, undefined, true);
+  hebrewRecord(`feminine-${number}`, heFeminine[number], 'number', number);
+  hebrewRecord(`joined-feminine-${number}`, heJoinedFeminine[number], 'number', number, undefined, true);
+}
+for (const [role, base, joined, multiplier, kind, scale] of [
+  ['tens', heTens, heJoinedTens, 10, 'number', undefined],
+  ['hundreds', heHundreds, heJoinedHundreds, 100, 'number', undefined],
+  ['thousands', heThousands, heJoinedThousands, 1, 'whole-scale', 1000]
+]) base.forEach((word, index) => {
+  const value = (index + (role === 'tens' ? 2 : 1)) * multiplier;
+  hebrewRecord(`${role}-${value}`, word, kind, value, scale);
+  hebrewRecord(`joined-${role}-${value}`, joined[index], kind, value, scale, true);
+});
+hebrewRecord('million', 'מִילְיוֹן', 'whole-scale', 1, 1000000);
+hebrewRecord('two-million', 'שְׁנֵי מִילְיוֹן', 'whole-scale', 2, 1000000);
 const PROMPTS = Object.freeze(records);
 const lookup = new Map(PROMPTS.map(entry => [`${entry.locale}/${entry.id}`, entry]));
 
@@ -119,10 +177,42 @@ function frenchGroup(number, scale) {
   if (scale !== 1) roles.push(scale === 1000 ? 'thousand' : number === 1 ? 'million' : 'millions');
   return roles;
 }
+function hebrewAtoms(number, gender) {
+  const atoms = [], hundreds = Math.floor(number / 100), rest = number % 100;
+  if (hundreds) atoms.push([`hundreds-${hundreds * 100}`]);
+  if (rest >= 20) {
+    atoms.push([`tens-${Math.floor(rest / 10) * 10}`]);
+    if (rest % 10) atoms.push([`${gender}-${rest % 10}`]);
+  } else if (rest) atoms.push([`${gender}-${rest}`]);
+  return atoms;
+}
+function hebrewAdd(atoms) {
+  // Conjoin the last additive term, not every token or every scale word.
+  // Scale coefficients are separate additive expressions. If a compound
+  // scale is the final outer term its first recording also carries vav.
+  return atoms.flatMap((atom, index) => index && index === atoms.length - 1
+    ? [`joined-${atom[0]}`, ...atom.slice(1)] : atom);
+}
+function hebrewScale(coefficient, scale) {
+  if (scale === 1000 && coefficient <= 10) return [`thousands-${coefficient}`];
+  if (scale === 1000000 && coefficient <= 2) return [coefficient === 1 ? 'million' : 'two-million'];
+  return [...hebrewAdd(hebrewAtoms(coefficient, 'masculine')), scale === 1000 ? 'thousands-1' : 'million'];
+}
+function hebrewNumber(number) {
+  if (!number) return ['number-0'];
+  const atoms = [];
+  for (const scale of [1000000, 1000]) {
+    const coefficient = Math.floor(number / scale) % 1000;
+    if (coefficient) atoms.push(hebrewScale(coefficient, scale));
+  }
+  atoms.push(...hebrewAtoms(number % 1000, 'feminine'));
+  return hebrewAdd(atoms);
+}
 function compose(number, locale) {
   assertLocale(locale); assertNumber(number);
   const roles = [];
-  if (number === 0) roles.push(locale === 'fr-fr' ? 'terminal-0' : 'number-0');
+  if (locale === 'he-il') roles.push(...hebrewNumber(number));
+  else if (number === 0) roles.push(locale === 'fr-fr' ? 'terminal-0' : 'number-0');
   for (const scale of [1000000, 1000, 1]) {
     const coefficient = Math.floor(number / scale) % 1000;
     if (!coefficient) continue;
@@ -168,4 +258,4 @@ function plan(locale) {
   return PROMPTS.filter(entry => locale === undefined || entry.locale === locale).map(entry => ({...entry}));
 }
 module.exports = Object.freeze({VERSION, MAX_NUMBER, MAX_TOKENS, MAX_TOKENS_BY_LOCALE, REQUIRED_LOCALES,
-  IMPLEMENTED_LOCALES, FRENCH_SCALED_TAILS, PROMPTS, CardinalError, compose, tokens, transcript, plan});
+  IMPLEMENTED_LOCALES, FRENCH_SCALED_TAILS, HEBREW_CONTEXT, PROMPTS, CardinalError, compose, tokens, transcript, plan});
