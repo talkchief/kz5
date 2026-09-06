@@ -5,6 +5,7 @@ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),asse
 const installer=fs.readFileSync(path.join(__dirname,'install-kazoo5.sh'),'utf8');
 function hook(name){const match=installer.match(new RegExp('^'+name+'\\(\\) \\{[\\s\\S]*?^\\}', 'm'));assert(match);return match[0];}
 const init=installer.match(/^KAZOO_BUILD_SUCCEEDED_THIS_RUN=false$/m);assert(init);
+const snapshotInit=installer.match(/^KAZOO_BUILD_SNAPSHOT_THIS_RUN=''$/m);assert(snapshotInit);
 assert(!installer.slice(installer.indexOf('readonly KAZOO_PERSISTED_KEYS=('),installer.indexOf('KAZOO_AMQP_SPLIT_OVERRIDE=false')).includes('KAZOO_BUILD_SUCCEEDED_THIS_RUN'));
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'kazoo-current-build.'));
 try {
@@ -12,8 +13,9 @@ try {
     const stubs=`
 set -euo pipefail
 log(){ :; }
+die(){ printf '%s\\n' "$*" >&2; exit 1; }
 run(){ :; }
-make(){ printf 'make\\n'; }
+make(){ printf 'make %s\\n' "$*"; }
 rm(){ :; }
 sleep(){ :; }
 install_kazoo_build_dependencies(){ printf 'build-start\\n'; }
@@ -22,6 +24,7 @@ configure_kazoo(){ :; }
 remove_test_compiled_kazoo_beams(){ :; }
 prepare_kazoo_runtime_artifact_permissions(){ :; }
 verify_kazoo_production_beams(){ printf 'production-verify\\n'; return "$VERIFY_EXIT"; }
+kazoo_build_snapshot(){ printf '%s\\n' "\${SNAPSHOT_DIGEST:-${'1'.repeat(64)}}"; }
 install_kazoo_systemd_units(){ printf 'units\\n'; }
 install_sup_cli(){ :; }
 service_enable_restart(){ printf 'service\\n'; }
@@ -33,13 +36,24 @@ verify_ecallmgr(){ printf 'runtime-verify\\n'; }
 `;
     function run(prefix='',overrides={}){return cp.spawnSync('/usr/bin/bash',['--noprofile','--norc','-s'],{encoding:'utf8',timeout:10000,
         env:{PATH:'/usr/bin:/bin',KAZOO_ROOT:temp,KAZOO_MAKE_JOBS:'1',KAZOO_CORE_REF:'fixture',KAZOO_CROSSBAR_REF:'fixture',KAZOO_BLACKHOLE_REF:'fixture',KAZOO_ECALLMGR_REF:'fixture',KAZOO_STEPSWITCH_REF:'fixture',KAZOO_CDR_REF:'fixture',ACDC_REF:'fixture',DRY_RUN:'false',VERIFY_EXIT:'0',...overrides},
-        input:stubs+'\n'+init[0]+'\n'+hook('build_kazoo')+'\n'+hook('install_ecallmgr')+'\n'+prefix+'\ninstall_ecallmgr\n'});}
+        input:stubs+'\n'+init[0]+'\n'+snapshotInit[0]+'\n'+hook('verify_kazoo_current_build')+'\n'+hook('build_kazoo')+'\n'+hook('install_ecallmgr')+'\n'+prefix+'\ninstall_ecallmgr\n'});}
     let result=run('',{KAZOO_BUILD_SUCCEEDED_THIS_RUN:'true'});assert.equal(result.status,0,result.stderr);
     assert.equal(result.stdout.split('build-start').length,2,'Existing app files/environment cannot skip current build');
     assert(result.stdout.indexOf('source-patches')<result.stdout.indexOf('production-verify'));
     assert(result.stdout.indexOf('production-verify')<result.stdout.indexOf('service'));
+    const builds=result.stdout.split('\n').filter(line=>line.startsWith('make '));
+    for(const ending of [' core fetch-apps',' apps',' all']) {
+        const commands=builds.filter(line=>line.endsWith(ending));
+        assert.equal(commands.length,1,'exact compilation command '+ending);
+        assert(commands[0].includes('KAZOO_FORCE_RECOMPILE=1'),'force fresh modules '+ending);
+    }
+    assert(builds.some(line=>line.includes('--eval=.PHONY: src/kz_mime.erl')),'force local MIME regeneration');
+    assert(builds.some(line=>line.includes('--eval=.PHONY: src/knm_iso3166a2_itu.erl src/knm_iso3166_util.erl')),'force local number regeneration');
     result=run('build_kazoo');assert.equal(result.status,0,result.stderr);assert.equal(result.stdout.split('build-start').length,2,'All-in-one reuses this invocation successful build');
     result=run('',{VERIFY_EXIT:'7'});assert.equal(result.status,7);assert(!result.stdout.includes('units'));assert(!result.stdout.includes('service'));
     result=run('',{DRY_RUN:'true'});assert.equal(result.status,0,result.stderr);assert(!result.stdout.includes('make'));assert(!result.stdout.includes('production-verify'));
-    console.log('PASS stale app/environment refusal, current-invocation reuse, failed verification stops activation, and dry-run build behavior');
+    result=run('build_kazoo\nSNAPSHOT_DIGEST='+ '2'.repeat(64));assert.equal(result.status,1);assert.match(result.stderr,/changed after compilation/);assert(!result.stdout.includes('units'));assert(!result.stdout.includes('service'));
+    result=run('build_kazoo\nKAZOO_BUILD_SNAPSHOT_THIS_RUN=invalid');assert.equal(result.status,1);assert(!result.stdout.includes('service'));
+    result=run('',{SNAPSHOT_DIGEST:'invalid'});assert.equal(result.status,1);assert.match(result.stderr,/Invalid Kazoo build snapshot/);assert(!result.stdout.includes('service'));
+    console.log('PASS stale app/environment refusal, current-invocation reuse, source/artifact drift refusal, invalid snapshot rejection, failed verification stops activation, and dry-run build behavior');
 } finally {fs.rmSync(temp,{recursive:true,force:true});}

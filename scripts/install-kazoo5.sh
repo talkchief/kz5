@@ -13,6 +13,7 @@ shopt -s inherit_errexit
 # Invocation-local proof only: never accept an environment value or old .app
 # file as evidence that this invocation applied and compiled current sources.
 KAZOO_BUILD_SUCCEEDED_THIS_RUN=false
+KAZOO_BUILD_SNAPSHOT_THIS_RUN=''
 
 readonly SCRIPT_NAME=${0##*/}
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
@@ -1969,7 +1970,56 @@ prepare_kazoo_runtime_artifact_permissions() {
         -exec chmod 0644 -- {} +
 }
 
+# Invocation-local reuse check, not a persistent build cache. Include generated
+# BEAMs as well as sources so a test compile or an external rebuild cannot hide
+# behind unchanged .app files. Timestamps are ignored; deployment credential
+# files are outside this source/build-artifact inventory.
+kazoo_build_snapshot() (
+    set -o pipefail
+    cd -- "$KAZOO_ROOT" || exit 1
+    [[ -f Makefile && -f erlang.mk && -f VERSION && -f .base_branch &&
+       -d scripts && -d make && -d core && -d applications && -d deps ]] || return 1
+    # A skipped linked directory could hide changed compile inputs. Individual
+    # linked files are hashed through their target; dangling links fail hashing.
+    [[ ! -L scripts && ! -L make && ! -L core && ! -L applications && ! -L deps ]] || return 1
+    # Dependency fetch tools keep separate rebar build trees with directory
+    # links. They are not the core/apps/deps runtime src/include/ebin inventory.
+    linked_directories=$(find scripts make core applications deps \
+        \( -name .git -o -name .erlang.mk -o -name _build \) -prune -o \
+        -type l -xtype d -print -quit) || return 1
+    [[ -z $linked_directories ]] || return 1
+    {
+        printf '%s\0' "$PWD" "${ERLANG_VERSION:-}" "${ERL_FLAGS:-}" \
+            "${ERL_AFLAGS:-}" "${ERL_ZFLAGS:-}" "${ERL_LIBS:-}" \
+            "${ERLC_OPTS:-}" "${ERLC_OPTS_SUPERSECRET:-}" "${KZ_VERSION:-}" \
+            "${ERL_COMPILER_OPTIONS:-}"
+        find Makefile erlang.mk VERSION .base_branch scripts make core applications deps \
+            \( -name .git -o -name .erlang.mk -o -name _build \) -prune -o \( \( -type f -o -type l \) \
+            \( -name '*.erl' -o -name '*.hrl' -o -name '*.app.src' \
+               -o -name '*.beam' -o -name '*.app' -o -name 'Makefile' \
+               -o -name '*.mk' -o -name '*.yrl' -o -name '*.xrl' \
+               -o -name '*.erl.src' -o -name 'mime.types' -o -name 'dialcodes.json' \
+               -o -name 'VERSION' -o -name '.base_branch' -o -name 'next_version' \
+               -o -name '*.bash' -o -name '*.sh' -o -name '*.escript' \
+               -o -name '*.py' -o -name '*.cjs' \) -print0 \) \
+            | LC_ALL=C sort -z | xargs -0 -r sha256sum -- || exit 1
+    } | sha256sum | cut -d ' ' -f 1
+)
+
+verify_kazoo_current_build() {
+    local current_snapshot
+    [[ $DRY_RUN != true ]] || return 0
+    [[ ${KAZOO_BUILD_SUCCEEDED_THIS_RUN:-false} == true &&
+       ${KAZOO_BUILD_SNAPSHOT_THIS_RUN:-} =~ ^[a-f0-9]{64}$ ]] ||
+        die 'No successful Kazoo build snapshot from this invocation'
+    current_snapshot=$(kazoo_build_snapshot) || die 'Cannot inspect Kazoo build inputs for reuse'
+    [[ $current_snapshot == "$KAZOO_BUILD_SNAPSHOT_THIS_RUN" ]] ||
+        die 'Kazoo sources or build artifacts changed after compilation; refusing mixed-version activation. Rerun the installer in a maintenance window.'
+}
+
 build_kazoo() {
+    KAZOO_BUILD_SUCCEEDED_THIS_RUN=false
+    KAZOO_BUILD_SNAPSHOT_THIS_RUN=''
     install_kazoo_build_dependencies
     # A new project clone has no ignored core/ or applications/ checkouts yet.
     # Fetch sources before patching or generating files inside those trees.
@@ -2004,21 +2054,26 @@ build_kazoo() {
     # Drop dependency files left malformed by an interrupted generator run.
     rm -f "$KAZOO_ROOT/core/kazoo_numbers/.deps.rules" \
         "$KAZOO_ROOT/core/kazoo_web/.deps.rules"
+    # Force only these local outputs, not download prerequisites: newer generated
+    # files must not hide restored templates or data carrying older mtimes.
     make -C "$KAZOO_ROOT/core/kazoo_numbers" \
+        --eval='.PHONY: src/knm_iso3166a2_itu.erl src/knm_iso3166_util.erl' \
         src/knm_iso3166a2_itu.erl src/knm_iso3166_util.erl
-    make -C "$KAZOO_ROOT/core/kazoo_web" src/kz_mime.erl
+    make -C "$KAZOO_ROOT/core/kazoo_web" --eval='.PHONY: src/kz_mime.erl' src/kz_mime.erl
     # `skel` declares gen_webhook as a behaviour, but the generated aggregate
     # Makefile does not encode inter-application ordering and places webhooks
     # after skel.  Build the behaviour provider once before the parallel app
     # pass so OTP 26's undefined-behaviour warning cannot fail under -Werror.
     FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT" \
-        JOBS="$KAZOO_MAKE_JOBS" core fetch-apps
-    make -C "$KAZOO_ROOT/applications/webhooks" all
+        JOBS="$KAZOO_MAKE_JOBS" KAZOO_FORCE_RECOMPILE=1 core fetch-apps
+    make -C "$KAZOO_ROOT/applications/webhooks" KAZOO_FORCE_RECOMPILE=1 all
     FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT" \
-        JOBS="$KAZOO_MAKE_JOBS" apps
+        JOBS="$KAZOO_MAKE_JOBS" KAZOO_FORCE_RECOMPILE=1 apps
     FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT" JOBS="$KAZOO_MAKE_JOBS" build-dev-release
     prepare_kazoo_runtime_artifact_permissions
     verify_kazoo_production_beams
+    KAZOO_BUILD_SNAPSHOT_THIS_RUN=$(kazoo_build_snapshot) || die 'Cannot record Kazoo build inputs'
+    [[ $KAZOO_BUILD_SNAPSHOT_THIS_RUN =~ ^[a-f0-9]{64}$ ]] || die 'Invalid Kazoo build snapshot'
     KAZOO_BUILD_SUCCEEDED_THIS_RUN=true
 }
 
@@ -2635,6 +2690,7 @@ install_ecallmgr() {
     if [[ ${KAZOO_BUILD_SUCCEEDED_THIS_RUN:-false} != true ]]; then
         build_kazoo
     fi
+    verify_kazoo_current_build
     configure_kazoo
     install_kazoo_systemd_units
     install_sup_cli

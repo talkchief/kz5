@@ -188,6 +188,19 @@ compile-lean: compile
 compile-timed: ERLC_OPTS := +time $(ERLC_OPTS)
 compile-timed: compile
 
+# Installer opt-in: artifact mtimes are not proof of current source contents.
+# Reuse the full-source recipe for compile and compile-direct; keep ordinary
+# developer builds incremental. Serialize per-BEAM recipes behind that batch
+# when parallel make is active, without making the .app a freshness dependency.
+ifeq ($(KAZOO_FORCE_RECOMPILE),1)
+.PHONY: kazoo-force-recompile
+kazoo-force-recompile:
+ebin/$(PROJECT).app: kazoo-force-recompile
+ifneq ($(strip $(BEAMS)),)
+$(BEAMS): | ebin/$(PROJECT).app
+endif
+endif
+
 ebin/$(PROJECT).app:
 	@mkdir -p ebin/
 	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) $(APPS_PA) -o ebin/ $(SOURCES)
