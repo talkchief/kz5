@@ -15,14 +15,16 @@ function checkTarget(directory) {
                 const stat = fs.lstatSync(current);
                 assert(!stat.isSymbolicLink(), 'Refusing a symlink in documentation target');
                 assert(current === file && relative && !['vendor'].includes(relative) ? stat.isFile() : stat.isDirectory(), 'Invalid documentation target type');
+                if (stat.isFile()) assert.equal(stat.nlink, 1, 'Refusing a hardlinked documentation target');
             } catch (error) {if (error.code !== 'ENOENT') throw error;}
-            if (current === base) break;
+            if (current === path.dirname(current)) break;
         }
     }
     return {target: 'safe'};
 }
 function verify(directory) {
     const base = path.resolve(directory);
+    checkTarget(base);
     const manifestFile = path.join(base, 'manifest.json');
     assert(fs.lstatSync(base).isDirectory() && !fs.lstatSync(base).isSymbolicLink(), 'Portal root must be a real directory');
     assert(fs.lstatSync(manifestFile).isFile() && !fs.lstatSync(manifestFile).isSymbolicLink(), 'Manifest must be a regular file');

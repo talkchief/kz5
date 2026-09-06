@@ -91,6 +91,14 @@ async function offline() {
         fs.mkdirSync(path.join(temp, 'target'));
         fs.symlinkSync(path.join(temp, 'vendor'), path.join(temp, 'target/vendor'), 'dir');
         assert.throws(() => checkTarget(path.join(temp, 'target')), /symlink/);
+        fs.symlinkSync(temp, path.join(temp, 'ancestor-link'), 'dir');
+        assert.throws(() => checkTarget(path.join(temp, 'ancestor-link', 'new-webroot', 'apis')), /symlink/);
+        fs.mkdirSync(path.join(temp, 'hardlinked-target'));
+        fs.writeFileSync(path.join(temp, 'unrelated-owned-file'), 'must not be overwritten');
+        fs.linkSync(path.join(temp, 'unrelated-owned-file'), path.join(temp, 'hardlinked-target', 'portal.js'));
+        assert.throws(() => checkTarget(path.join(temp, 'hardlinked-target')), /hardlinked/);
+        assert.throws(() => verify(path.join(temp, 'hardlinked-target')), /hardlinked/);
+        assert.equal(fs.readFileSync(path.join(temp, 'unrelated-owned-file'), 'utf8'), 'must not be overwritten');
         const installFunction = installer.match(/install_api_developer_docs\(\) \{[\s\S]*?\n\}/)[0];
         // Exercise the actual installer function, simulating cp -a preserving
         // a restrictive previous build. Every write stays in this test tree.
