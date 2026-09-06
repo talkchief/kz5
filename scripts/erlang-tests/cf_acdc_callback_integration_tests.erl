@@ -33,13 +33,21 @@ response_requires_full_scope_and_valid_wire_shape_test() ->
     ?assertEqual(nomatch, cf_acdc_member:callback_test_response(Malformed, context())).
 
 english_defaults_and_foreign_language_fail_closed_test() ->
+    meck:new(kz_datamgr,[passthrough,no_link]),
+    meck:expect(kz_datamgr,open_cache_doc,fun(<<"system_media">>,Id) -> acdc_gemini_prompts_tests:read(Id);
+                                             (_,_) -> error(unexpected_account_lookup) end),
+    try callback_defaults_and_explicit_legacy_media()
+    after meck:unload(kz_datamgr)
+    end.
+
+callback_defaults_and_explicit_legacy_media() ->
     Empty = kz_json:new(),
     {ok, Defaults} = cf_acdc_member:callback_test_media(Empty, <<"en-US">>),
-    ?assertEqual(<<"acdc-callback-offer-6">>, maps:get(offer, Defaults)),
-    ?assertEqual(<<"acdc-callback-menu-current">>, maps:get(menu, Defaults)),
-    ?assertEqual(<<"acdc-callback-success">>, maps:get(success, Defaults)),
-    ?assertMatch({error, {missing_media, offer}}
-                ,cf_acdc_member:callback_test_media(Empty, <<"es-ES">>)),
+    ?assertEqual(builtin_path(<<"en-us">>,<<"acdc-callback-offer-6">>), maps:get(offer, Defaults)),
+    ?assertEqual(builtin_path(<<"en-us">>,<<"acdc-callback-menu-current">>), maps:get(menu, Defaults)),
+    ?assertEqual(builtin_path(<<"en-us">>,<<"acdc-callback-success">>), maps:get(success, Defaults)),
+    ?assertMatch({error, incomplete_gemini_callback_pack}
+                ,cf_acdc_member:callback_test_media(Empty, <<"de-DE">>)),
 
     Configured = kz_json:set_values(
                    [{[<<"callback">>, <<"entry_key">>], <<"9">>}
@@ -53,8 +61,12 @@ english_defaults_and_foreign_language_fail_closed_test() ->
     AlternateEnglish = kz_json:set_values([{[<<"callback">>, <<"entry_key">>], <<"3">>}
                                           ,{[<<"callback">>, <<"allow_alternate_number">>], true}], Empty),
     {ok, AlternateDefaults} = cf_acdc_member:callback_test_media(AlternateEnglish, <<"en-us">>),
-    ?assertEqual(<<"acdc-callback-offer-3">>, maps:get(offer, AlternateDefaults)),
-    ?assertEqual(<<"acdc-callback-menu-alternate">>, maps:get(menu, AlternateDefaults)).
+    ?assertEqual(builtin_path(<<"en-us">>,<<"acdc-callback-offer-3">>), maps:get(offer, AlternateDefaults)),
+    ?assertEqual(builtin_path(<<"en-us">>,<<"acdc-callback-menu-alternate">>), maps:get(menu, AlternateDefaults)).
+
+builtin_path(Language,Canonical) ->
+    Asset=acdc_gemini_prompts:asset(Language,Canonical),
+    <<"/system_media/",Language/binary,"/",(element(3,Asset))/binary>>.
 
 alternate_entry_is_audible_without_replaying_between_digits_test_() ->
     {timeout, 30, fun() -> with_callback_commands(fun() ->
@@ -67,11 +79,11 @@ alternate_entry_is_audible_without_replaying_between_digits_test_() ->
                     Selected;
                 collecting -> Initial
             end,
-            Before = meck:num_calls(kapps_call_command, prompt, '_'),
+            Before = meck:num_calls(kapps_call_command, send_command, '_'),
             {First, []} = collect_and_reduce(<<"1">>, Collecting),
-            ?assertEqual(Before + 1, meck:num_calls(kapps_call_command, prompt, '_')),
+            ?assertEqual(Before + 1, meck:num_calls(kapps_call_command, send_command, '_')),
             {Second, []} = collect_and_reduce(<<"0">>, First),
-            ?assertEqual(Before + 1, meck:num_calls(kapps_call_command, prompt, '_')),
+            ?assertEqual(Before + 1, meck:num_calls(kapps_call_command, send_command, '_')),
             {Confirming, [{read_back_number, <<"10">>}, {prompt_confirm_alternate, <<"1">>}]} =
                 collect_and_reduce(<<"#">>, Second),
             ?assertEqual(false, maps:get(registration_emitted, Confirming)),
@@ -89,7 +101,7 @@ alternate_wrapper_preserves_invalid_digits_and_cancellation_test_() ->
         ?assertEqual(false, maps:get(registration_emitted, Invalid)),
         {Cancelled, [{resume_live_queue, caller_cancelled}]} = collect_and_reduce(<<"*">>, Invalid),
         ?assertEqual(aborted, acdc_callback_menu:status(Cancelled)),
-        ?assertEqual(3, meck:num_calls(kapps_call_command, prompt, '_'))
+        ?assertEqual(3, meck:num_calls(kapps_call_command, send_command, '_'))
     end) end}.
 
 alternate_wrapper_bounds_prompt_wait_and_observes_hangup_test_() ->
@@ -97,7 +109,7 @@ alternate_wrapper_bounds_prompt_wait_and_observes_hangup_test_() ->
         {ok, Initial, _} = acdc_callback_menu:new(menu_config(), undefined, erlang:monotonic_time(millisecond)),
         Expired = Initial#{deadline_ms => erlang:monotonic_time(millisecond) - 1},
         ?assertEqual(timeout, cf_acdc_member:callback_test_collect_alternate(fixture_call, Expired)),
-        ?assertEqual(0, meck:num_calls(kapps_call_command, prompt, '_')),
+        ?assertEqual(0, meck:num_calls(kapps_call_command, send_command, '_')),
         %% Use the real wait_for_dtmf/1 and real mailbox. A missing playback
         %% noop is bounded, and unrelated/noop events cannot renew the budget.
         Deadline = erlang:monotonic_time(millisecond) + 100,
@@ -114,16 +126,37 @@ alternate_wrapper_bounds_prompt_wait_and_observes_hangup_test_() ->
         ?assertEqual(aborted, acdc_callback_menu:status(Aborted)),
         self() ! {amqp_msg, call_event(<<"CHANNEL_DESTROY">>, [])},
         ?assertEqual(hangup, cf_acdc_member:callback_test_collect_alternate(fixture_call, Initial)),
-        ?assertEqual(2, meck:num_calls(kapps_call_command, prompt, '_'))
+        ?assertEqual(2, meck:num_calls(kapps_call_command, send_command, '_'))
     end) end}.
 
 with_callback_commands(Fun) ->
     meck:new(kapps_call_command, [passthrough, no_link]),
+    meck:new([acdc_gemini_prompts,kapps_call], [non_strict,no_link]),
     try
-        meck:expect(kapps_call_command, prompt,
-                    fun(<<"cf-enter_number">>, fixture_call) -> <<"fixture-prompt-noop">> end),
+        Media = <<"/system_media/en-us/acdc-callback-enter-number-gemini-sulafat-0123456789abcdef">>,
+        meck:expect(kapps_call, language, fun(fixture_call) -> <<"en-us">> end),
+        meck:expect(kapps_call, call_id, fun(fixture_call) -> ?CALL end),
+        meck:expect(acdc_gemini_prompts, auxiliary,
+                    fun(enter_number,<<"en-us">>) -> {ok,Media} end),
+        meck:expect(kapps_call_command, send_command,
+                    fun(Play,fixture_call) ->
+                        ?assertEqual(Media,kz_json:get_value(<<"Media-Name">>,Play)),
+                        Timeout=kz_json:get_integer_value(<<"Playback-Timeout-Ms">>,Play),
+                        ?assert(Timeout>0 andalso Timeout=<20000),
+                        ok
+                    end),
         Fun()
-    after meck:unload(kapps_call_command) end.
+    after meck:unload([kapps_call_command,acdc_gemini_prompts,kapps_call]) end.
+
+missing_alternate_auxiliary_never_uses_legacy_prompt_test_() ->
+    {timeout,30,fun() -> with_callback_commands(fun() ->
+        {ok,State,_}=acdc_callback_menu:new(menu_config(),undefined,erlang:monotonic_time(millisecond)),
+        meck:expect(acdc_gemini_prompts,auxiliary,
+                    fun(enter_number,<<"en-us">>) -> {error,gemini_media_unavailable} end),
+        ?assertEqual(media_failed,cf_acdc_member:callback_test_collect_alternate(fixture_call,State)),
+        ?assertEqual(0,meck:num_calls(kapps_call_command,send_command,'_')),
+        ?assertEqual(0,meck:num_calls(kapps_call_command,prompt,'_'))
+    end) end}.
 
 collect_and_reduce(Digit, State) ->
     self() ! {amqp_msg, call_event(<<"DTMF">>, [{<<"DTMF-Digit">>, Digit}])},

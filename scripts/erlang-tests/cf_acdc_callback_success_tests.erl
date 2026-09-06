@@ -34,6 +34,11 @@ accepted_success_cases_test_() ->
             deliver(complete()), ?assertEqual(finished, run(150)),
             ?assertEqual([play, hangup_original, stop], actions())
         end) end},
+        {"built-in success uses exact media without alias lookup", fun() -> isolated(fun() ->
+            put(builtin_success,true), deliver(complete()),
+            ?assertEqual(finished,run(150)),
+            ?assertEqual([play,hangup_original,stop],actions())
+        end) end},
         {"timeout preserves accepted callback and ends original leg", fun() -> isolated(fun() ->
             lists:foreach(fun(Ms) -> later(Ms, foreign(event(<<"CHANNEL_DISCONNECTED">>, []))) end, [0,15,30,45]),
             Started = now_ms(), ?assertEqual(finished, run(65)),
@@ -46,8 +51,12 @@ ignores_until_completion(Event) ->
     deliver(Event), later(30, complete()), Started = now_ms(),
     ?assertEqual(finished, run(150)), ?assert(now_ms() - Started >= 25),
     ?assertEqual([play, hangup_original, stop], actions()).
-run(Timeout) -> cf_acdc_member:callback_test_success(fixture_call,
-    #{media => #{success => <<"accepted-success-prompt">>}}, context(), Timeout).
+run(Timeout) ->
+    Callback = case get(builtin_success) of
+        true -> #{builtin_gemini => true, media => #{success => <<"private-prompt">>}};
+        _ -> #{media => #{success => <<"accepted-success-prompt">>}}
+    end,
+    cf_acdc_member:callback_test_success(fixture_call,Callback,context(),Timeout).
 context() -> #{account_id => ?ACCOUNT, queue_id => ?QUEUE, call_id => ?CALL,
     request_id => <<"fedcba9876543210fedcba9876543210">>,
     pause_id => <<"0123456789abcdef0123456789abcdef0123456789abcdef">>}.
@@ -66,7 +75,7 @@ actions() -> lists:reverse(get(actions)).
 isolated(Fun) ->
     put(actions, []), put(timers, []),
     try Fun()
-    after lists:foreach(fun erlang:cancel_timer/1,get(timers)), flush(), erase(actions), erase(timers) end.
+    after lists:foreach(fun erlang:cancel_timer/1,get(timers)), flush(), erase(actions), erase(timers), erase(builtin_success) end.
 flush() -> receive {amqp_msg,_} -> flush() after 0 -> ok end.
 setup() ->
     meck:new([kapps_call,kapps_call_command,cf_exe], [non_strict,no_link]),
@@ -74,7 +83,7 @@ setup() ->
     meck:expect(kapps_call,account_id,fun(fixture_call)->?ACCOUNT end),
     meck:expect(kapps_call,custom_channel_var,fun(<<"Fetch-ID">>,fixture_call)-><<"our-fetch">> end),
     meck:expect(kapps_call,language,fun(fixture_call)-><<"en-us">> end),
-    meck:expect(kapps_call,get_prompt,fun(fixture_call,<<"accepted-success-prompt">>,<<"en-us">>)-><<"private-prompt">> end),
+    meck:expect(kapps_call,get_prompt,fun(fixture_call,<<"accepted-success-prompt">>)-><<"private-prompt">> end),
     meck:expect(kapps_call_command,play,fun(<<"private-prompt">>,fixture_call)->record(play),?NOOP end),
     meck:expect(kapps_call_command,hangup,fun(fixture_call)->record(hangup_original) end),
     meck:expect(cf_exe,stop,fun(fixture_call)->record(stop) end),

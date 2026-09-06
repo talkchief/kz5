@@ -1,21 +1,65 @@
 %%% Immutable fixed Gemini defaults, never global aliases for customer media.
 -module(acdc_gemini_prompts).
 -export([canonical/1, default/4, default_alias/5, selection/2,
+         auxiliary/2, builtin/2,
          callback/5, callback_readback/2, telephone/3, capabilities/1,
          fixed_media_ids/1, verified_fixed_media/2, fixed_media_complete/2]).
 -ifdef(TEST).
--export([default_with/6, telephone_with/5, capabilities_with/2, asset/2, imported/2]).
+-export([default_with/6, telephone_with/5, capabilities_with/2, asset/2, imported/2,
+         auxiliary_with/4]).
 -endif.
 -include("acdc_gemini_map.hrl").
 -define(OWNER, <<"kazoo5_acdc_gemini_voice_installer">>).
 -define(MODEL, <<"gemini-2.5-pro-preview-tts">>).
 -define(VOICE, <<"Sulafat">>).
+-define(FIXED_ASSET_COUNT, 32).
 
 -spec canonical(any()) -> binary().
 canonical(undefined) -> <<"en-us">>;
 canonical(L) when is_binary(L) ->
     binary:replace(list_to_binary(string:lowercase(binary_to_list(L))), <<"_">>, <<"-">>, [global]);
 canonical(_) -> <<>>.
+
+%% Exact system-document playback avoids account prompt aliases and language
+%% fallback. This is immutable asset verification, not whole-language readiness.
+-spec builtin(binary(), any()) -> {ok, binary()} | {error, atom()}.
+builtin(Prompt, Language0) ->
+    Language = canonical(Language0),
+    case lists:member(Language, [<<"en-us">>, <<"he-il">>, <<"fr-fr">>, <<"es-es">>, <<"ar-sa">>]) of
+        false -> {error, unsupported_gemini_language};
+        true ->
+            case mapped(Prompt, Language, fun read_media/1) of
+                {gemini, Id} -> {ok, <<"/system_media/",Language/binary,"/",Id/binary>>};
+                Error -> Error
+            end
+    end.
+
+%% These callback-only defaults must never resolve through tenant prompt aliases
+%% or a different language. The supplemental assets are admitted only when the
+%% compiled immutable map and imported metadata both contain the exact item.
+%% Absence does not authorize the former global English prompt as a fallback.
+-spec auxiliary(any(), any()) -> {ok, binary()} | {error, atom()}.
+auxiliary(Name, Language) ->
+    auxiliary_with(Name, Language, fun asset/2, fun read_media/1).
+
+-spec auxiliary_with(any(), any(), function(), function()) -> {ok, binary()} | {error, atom()}.
+auxiliary_with(Name, Language0, Lookup, Read) ->
+    Language = canonical(Language0),
+    Prompt = case Name of
+                 unavailable -> <<"acdc-callback-unavailable">>;
+                 invalid_entry -> <<"acdc-callback-invalid-entry">>;
+                 enter_number -> <<"acdc-callback-enter-number">>;
+                 _ -> undefined
+             end,
+    case Prompt =/= undefined andalso
+        lists:member(Language, [<<"en-us">>, <<"he-il">>, <<"fr-fr">>, <<"es-es">>, <<"ar-sa">>]) of
+        false -> {error, unsupported_gemini_auxiliary};
+        true ->
+            case mapped_with(Prompt, Language, Lookup, Read) of
+                {gemini, Id} -> {ok, <<"/system_media/",Language/binary,"/",Id/binary>>};
+                Error -> Error
+            end
+    end.
 
 %% The caller must pass presence, NOT an already-defaulted/merged media value.
 %% Every explicit override (including a stock-looking prompt ID) is preserved.
@@ -41,9 +85,8 @@ selection(Key, Props) when is_list(Props) ->
     case lists:keyfind(Key, 1, Props) of false -> absent; {Key,Value} -> {configured,Value} end;
 selection(_, _) -> absent.
 
-%% Resolve the complete callback media and numeric readback contract once.
-%% EN remains an explicitly incremental native-say dependency. FR/ES do not
-%% silently borrow it; their numeric verification/recording gate is outstanding.
+%% Resolve the complete built-in callback contract once, including every digit
+%% and auxiliary branch. Legacy fully explicit custom audio stays distinguishable.
 -spec callback(any(), any(), any(), any(), binary()) -> tuple().
 callback(<<Digit>>=Entry, Alternate, Media, Language0, Account) when Digit >= $0, Digit =< $9 ->
     Language = canonical(Language0),
@@ -70,48 +113,43 @@ legacy_custom_callback(Media) ->
 
 -spec callback_defaults(binary(), any(), any(), binary(), binary()) -> tuple().
 callback_defaults(Entry, Alternate, Media, Language, Account) ->
-    case lists:member(Language, [<<"en-us">>, <<"ar-sa">>, <<"he-il">>]) of
-        false -> {error, numeric_readback_unverified};
-        true when Language =/= <<"en-us">> ->
-            %% Fixed messages + telephone digits are insufficient: the legacy
-            %% unavailable/invalid-entry/enter-number branches still need an
-            %% imported localized Gemini supplemental pack and integration.
-            {error, auxiliary_callback_media_unverified};
-        true ->
+    Keys = [<<"offer">>, <<"menu">>, <<"number_readback">>, <<"confirmation">>,
+            <<"success">>, <<"returned_confirmation">>],
+    case {valid_account(Account), lists:any(fun(K) -> selection(K,Media) =/= absent end,Keys)} of
+        {false,_} -> {error,invalid_account};
+        {_,true} -> {error,incomplete_legacy_custom_callback};
+        {true,false} ->
             Menu = case Alternate of true -> <<"acdc-callback-menu-alternate">>; _ -> <<"acdc-callback-menu-current">> end,
-            Defaults = [{offer, <<"offer">>, <<"acdc-callback-offer-",Entry/binary>>},
-                        {menu, <<"menu">>, Menu},
-                        {number_readback, <<"number_readback">>, <<"acdc-callback-number-readback">>},
-                        {confirmation, <<"confirmation">>, <<"acdc-callback-confirmation">>},
-                        {success, <<"success">>, <<"acdc-callback-success">>},
-                        {returned_confirmation, <<"returned_confirmation">>, <<"acdc-callback-returned-confirmation">>}],
-            case callback_media(Defaults, Media, Language, Account, #{}) of
-                {ok, Resolved} -> callback_numbers(Language, Account, Resolved);
+            Defaults = [{offer, <<"acdc-callback-offer-",Entry/binary>>}, {menu, Menu},
+                        {number_readback, <<"acdc-callback-number-readback">>},
+                        {confirmation, <<"acdc-callback-confirmation">>},
+                        {success, <<"acdc-callback-success">>},
+                        {returned_confirmation, <<"acdc-callback-returned-confirmation">>}],
+            case callback_builtin_assets(Language) of
+                {ok, All} ->
+                    Resolved = maps:from_list([{Name,maps:get(Prompt,All)} || {Name,Prompt} <- Defaults]),
+                    Digits = maps:from_list([{D,{play,maps:get(<<"acdc-number-",D>>,All)}} || D <- "0123456789"]),
+                    {ok,#{media=>Resolved, readback=>Digits, builtin_gemini=>true,
+                          non_gemini_numeric_dependency=>false}};
                 Error -> Error
             end
     end.
 
--spec callback_media(list(), any(), binary(), binary(), map()) -> tuple().
-callback_media([], _, _, _, Acc) -> {ok, Acc};
-callback_media([{Name,Key,Prompt}|Rest], Media, Language, Account, Acc) ->
-    case default(Prompt, Language, Account, selection(Key,Media)) of
-        {Kind,Value} when Kind =:= gemini; Kind =:= custom ->
-            case Name =:= returned_confirmation andalso byte_size(Value) > 256 of
-                true -> {error, invalid_returned_confirmation};
-                false -> callback_media(Rest,Media,Language,Account,Acc#{Name => Value})
-            end;
-        Error -> Error
-    end.
-
--spec callback_numbers(binary(), binary(), map()) -> tuple().
-callback_numbers(<<"en-us">>, _, Media) ->
-    {ok, #{media => Media, readback => native_say, non_gemini_numeric_dependency => true}};
-callback_numbers(Language, Account, Media) ->
-    case telephone(<<"0123456789">>, Language, Account) of
-        {ok, Prompts} ->
-            {ok, #{media => Media, readback => maps:from_list(lists:zip("0123456789",Prompts)),
-                   non_gemini_numeric_dependency => false}};
-        Error -> Error
+-spec callback_builtin_assets(binary()) -> tuple().
+callback_builtin_assets(Language) ->
+    Assets = [A || A <- ?GEMINI_ASSETS, element(1,A) =:= Language],
+    Fixed = [A || A <- Assets, not digit_asset(A)],
+    Digits = [A || A <- Assets, digit_asset(A)],
+    %% The supplemental map is still required. Counts alone are insufficient:
+    %% verify the identity/metadata of every asset before returning any playlist.
+    case length(Fixed) =:= ?FIXED_ASSET_COUNT andalso length(Digits) =:= 10 of
+        false -> {error,incomplete_gemini_callback_pack};
+        true ->
+            Resolved = [{element(2,A),builtin(element(2,A),Language)} || A <- Assets],
+            case lists:all(fun({_,{ok,_}}) -> true; (_) -> false end,Resolved) of
+                false -> {error,gemini_callback_media_unavailable};
+                true -> {ok,maps:from_list([{P,Path} || {P,{ok,Path}} <- Resolved])}
+            end
     end.
 
 %% Pure playback expansion: no datastore calls or partial numeric playlists.
@@ -147,7 +185,11 @@ default_with(_, _, _, _, _, _) -> {error, invalid_explicit_media}.
 
 -spec mapped(binary(), binary(), function()) -> tuple().
 mapped(Prompt, Language, Read) ->
-    case asset(Language, Prompt) of
+    mapped_with(Prompt, Language, fun asset/2, Read).
+
+-spec mapped_with(binary(), binary(), function(), function()) -> tuple().
+mapped_with(Prompt, Language, Lookup, Read) ->
+    case Lookup(Language, Prompt) of
         undefined -> {error, unsupported_gemini_prompt};
         Asset ->
             case safe(fun() -> imported(Asset, Read(media_id(Asset))) end) of
@@ -190,7 +232,7 @@ capabilities_with(Language0, Read) ->
         lists:all(fun(A) -> safe(fun() -> imported(A,Read(media_id(A))) end) =:= true end, Assets) end,
     #{schema_version => 1, map_sha256 => ?GEMINI_MAP_SHA256, locale => Language,
       source_fixed_count => length(Fixed), source_digit_count => length(Digits),
-      fixed_import_metadata_verified => Available(Fixed,29),
+      fixed_import_metadata_verified => Available(Fixed,?FIXED_ASSET_COUNT),
       gemini_telephone_digits_import_metadata_verified => Available(Digits,10),
       non_gemini_numeric_dependency => lists:member(Language,[<<"en-us">>,<<"fr-fr">>,<<"es-es">>]),
       imported_audio_sha256_requires_importer_verification => true,
@@ -211,7 +253,7 @@ verified_fixed_media(Language, Docs) ->
 -spec fixed_media_complete(binary(), list()) -> boolean().
 fixed_media_complete(Language, Media) ->
     Assets = fixed_assets(Language),
-    length(Assets) =:= 29 andalso
+    length(Assets) =:= ?FIXED_ASSET_COUNT andalso
         lists:all(fun(A) -> lists:any(fun(M) ->
             lists:all(fun({K,V}) -> get(K,M) =:= V end, element(1, fixed_projection(A)))
         end, Media) end, Assets).

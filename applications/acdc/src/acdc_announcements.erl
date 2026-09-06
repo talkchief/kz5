@@ -22,6 +22,7 @@
         ,wait_time_prompts/4
         ,initial_delay_ms/1
         ,callback_offer_prompts/2
+        ,resolve_callback_audio/2
         ,schedule_init/2
         ,schedule_due/2
         ,schedule_wait_ms/2
@@ -69,12 +70,18 @@ init(Manager, Call, Props) ->
     Config = get_config(Props),
     AnnouncementCall = maybe_set_announcement_language(Call, Config),
     kapps_call:put_callid(AnnouncementCall),
-    State = init_state(Manager, AnnouncementCall, Config),
+    Started = monotonic_ms(),
+    State = init_state(Manager, AnnouncementCall, Config, Started),
     %% Pooled event delivery registers this process only; gproc removes the
     %% registration if the per-call worker is terminated by its supervisor.
     CallId = kapps_call:call_id(AnnouncementCall),
     'ok' = kz_events:bind_call_id(CallId),
-    try loop(State)
+    try
+        ResolvedConfig = resolve_callback_audio(Config, AnnouncementCall),
+        %% Media verification must not restart the first-offer clocks or leave
+        %% manager death unmonitored while datastore reads are in progress.
+        loop(State#{config := ResolvedConfig,
+                    schedule := schedule_init(ResolvedConfig, Started)})
     after kz_events:unbind_call_id(CallId)
     end.
 
@@ -102,6 +109,7 @@ get_config(Props0) ->
      ,callback_initial_delay => bounded_seconds(<<"initial_delay">>, Offer, 30, 1)
      ,callback_interval => bounded_seconds(<<"interval">>, Offer, 60, 15)
      ,callback_entry_key => props:get_ne_binary_value(<<"entry_key">>, Callback, <<"6">>)
+     ,callback_allow_alternate => props:get_is_true(<<"allow_alternate_number">>, Callback, 'false')
      ,callback_media => normalize_announcements_props(props:get_value(<<"media">>, Callback, []))
      }.
 
@@ -158,14 +166,14 @@ maybe_set_announcement_language(Call, #{announcement_language := Language}) ->
 %% @doc Initialize state for the announcements process
 %% @end
 %%------------------------------------------------------------------------------
--spec init_state(pid(), kapps_call:call(), map()) -> map().
-init_state(Manager, Call, Config) ->
+-spec init_state(pid(), kapps_call:call(), map(), integer()) -> map().
+init_state(Manager, Call, Config, Started) ->
     #{manager => Manager
      ,manager_monitor => erlang:monitor('process', Manager)
      ,call => Call
      ,config => Config
      ,last_average_wait_time => 'undefined'
-     ,schedule => schedule_init(Config, monotonic_ms())
+     ,schedule => schedule_init(Config, Started)
      ,pending_playback => 'undefined'
      }.
 
@@ -429,23 +437,34 @@ maybe_announce_callback(Due, #{call := Call, config := Config}) ->
 
 -spec callback_offer_prompts(binary(), map()) -> list().
 callback_offer_prompts(_, #{callback_announcements_enabled := 'false'}) -> [];
-callback_offer_prompts(Language0, #{callback_entry_key := <<Digit>>=Entry,
-                                  callback_media := Media}) when Digit >= $0, Digit =< $9 ->
-    Language = acdc_language:canonical(Language0),
-    %% Match cf_acdc_member's menu readiness gate. In another language, any
-    %% missing default among these five fields requires the complete localized
-    %% callback pack (including digits where appropriate). Explicit account
-    %% media keeps its existing resolution behavior. Do not promise an unusable
-    %% callback menu merely because its offer alone has an override.
-    AllCustom = lists:all(fun(Name) -> props:get_ne_binary_value(Name, Media) =/= 'undefined' end,
-                         [<<"offer">>, <<"menu">>, <<"number_readback">>, <<"confirmation">>, <<"success">>]),
-    case Language =:= <<"en-us">> orelse AllCustom orelse acdc_language:callback_available(Language) of
-        'false' -> [];
-        'true' ->
-            Offer = props:get_ne_binary_value(<<"offer">>, Media, <<"acdc-callback-offer-", Entry/binary>>),
-            [{'prompt', Offer, Language, <<"A">>}]
+callback_offer_prompts(Language0, #{callback_audio := {Language,Audio}}) ->
+    case acdc_gemini_prompts:canonical(Language0) =:= Language of
+        false -> [];
+        true ->
+            Offer = maps:get(offer,maps:get(media,Audio)),
+            case maps:get(builtin_gemini,Audio,false) of
+                true -> [{play,Offer}];
+                false -> [{prompt,Offer,Language,<<"A">>}]
+            end
     end;
 callback_offer_prompts(_, _) -> [].
+
+%% Preflight once after binding call events, before scheduling the first offer.
+%% No interval performs datastore work, and an incomplete menu/digit/auxiliary
+%% pack can never advertise an otherwise playable callback offer.
+-spec resolve_callback_audio(map(), kapps_call:call()) -> map().
+resolve_callback_audio(#{callback_announcements_enabled := false}=Config, _) -> Config;
+resolve_callback_audio(Config, Call) ->
+    Language = acdc_gemini_prompts:canonical(kapps_call:language(Call)),
+    Result = try acdc_gemini_prompts:callback(maps:get(callback_entry_key,Config),
+                        maps:get(callback_allow_alternate,Config,false),maps:get(callback_media,Config),
+                        Language,kapps_call:account_id(Call))
+             catch _:_ -> {error,callback_media_unavailable}
+             end,
+    case Result of
+        {ok,Audio} -> Config#{callback_audio => {Language,Audio}};
+        _ -> Config#{callback_announcements_enabled := false,callback_audio => undefined}
+    end.
 
 -spec maybe_play_announcements(kapps_call_command:audio_macro_prompts(), kapps_call:call()) -> any().
 maybe_play_announcements([], _) -> 'ok';

@@ -2,6 +2,7 @@
 %%% Isolated scheduler/worker tests. No live queues, media imports, or AMQP.
 -module(acdc_callback_announcement_tests).
 -include_lib("eunit/include/eunit.hrl").
+-define(BUILTIN_OFFER, <<"/system_media/en-us/acdc-callback-offer-6-gemini-sulafat-0123456789abcdef">>).
 
 props(Position, Callback, Delay, Interval) ->
     [{<<"position_announcements_enabled">>, Position}
@@ -69,27 +70,26 @@ disabled_clocks_never_spin_and_resume_resets_delays_test() ->
     ?assertEqual(#{position => infinity, callback => 501000}, acdc_announcements:schedule_init(Callback, 500000)).
 
 callback_offer_media_readiness_and_locale_test() ->
-    ok = meck:new(acdc_language, [passthrough, no_link]),
-    meck:expect(acdc_language, callback_available, fun(<<"fr-fr">>) -> true; (_) -> false end),
-    try
-        Config = acdc_announcements:get_config(props(false, true, 1, 15)),
-        ?assertEqual([{prompt, <<"acdc-callback-offer-6">>, <<"en-us">>, <<"A">>}],
-                     acdc_announcements:callback_offer_prompts(undefined, Config)),
-        ?assertEqual([{prompt, <<"acdc-callback-offer-6">>, <<"fr-fr">>, <<"A">>}],
-                     acdc_announcements:callback_offer_prompts(<<"FR_FR">>, Config)),
-        ?assertEqual([], acdc_announcements:callback_offer_prompts(<<"he-il">>, Config)),
-        OnlyOffer = Config#{callback_media := [{<<"offer">>, <<"custom-offer">>}]},
-        ?assertEqual([], acdc_announcements:callback_offer_prompts(<<"he-il">>, OnlyOffer)),
-        FullCustom = Config#{callback_media := [{Key, <<"custom-", Key/binary>>} || Key <-
-                   [<<"offer">>, <<"menu">>, <<"number_readback">>, <<"confirmation">>, <<"success">>]]},
-        ?assertEqual([{prompt, <<"custom-offer">>, <<"he-il">>, <<"A">>}],
-                     acdc_announcements:callback_offer_prompts(<<"he-il">>, FullCustom)),
-        ?assertEqual([], acdc_announcements:callback_offer_prompts(<<"en-us">>, Config#{callback_entry_key := <<"66">>}))
-    after meck:unload(acdc_language) end.
+    Config = acdc_announcements:get_config(props(false, true, 1, 15)),
+    ?assertEqual([], acdc_announcements:callback_offer_prompts(undefined, Config)),
+    Ready = Config#{callback_audio => {<<"en-us">>,#{builtin_gemini=>true,media=>#{offer=>?BUILTIN_OFFER}}}},
+    ?assertEqual([{play,?BUILTIN_OFFER}],acdc_announcements:callback_offer_prompts(undefined,Ready)),
+    ?assertEqual([{play,?BUILTIN_OFFER}],acdc_announcements:callback_offer_prompts(<<"EN_US">>,Ready)),
+    ?assertEqual([],acdc_announcements:callback_offer_prompts(<<"he-il">>,Ready)),
+    Legacy = Config#{callback_audio => {<<"he-il">>,#{legacy_custom_media=>true,media=>#{offer=><<"custom-offer">>}}}},
+    ?assertEqual([{prompt,<<"custom-offer">>,<<"he-il">>,<<"A">>}],
+                 acdc_announcements:callback_offer_prompts(<<"he-il">>,Legacy)).
+
+mock_callback_audio() ->
+    ok=meck:new(acdc_gemini_prompts,[passthrough,no_link]),
+    meck:expect(acdc_gemini_prompts,callback,fun(<<"6">>,_,_,<<"en-us">>,_) ->
+        {ok,#{builtin_gemini=>true,media=>#{offer=>?BUILTIN_OFFER}}}
+    end).
 
 real_worker_timer_test_() -> {timeout, 45, fun real_worker_timer/0}.
 real_worker_timer() ->
     Parent = self(),
+    mock_callback_audio(),
     ok = meck:new(gen_listener, [passthrough, no_link]),
     ok = meck:new(kapps_call_command, [passthrough, no_link]),
     ok = meck:new(kz_events, [passthrough, no_link]),
@@ -110,7 +110,7 @@ real_worker_timer() ->
         {Pid, Ref} = spawn_monitor(fun() -> acdc_announcements:init(Parent, Call, props(false, true, 1, 15)) end),
         try
             receive {played, _, _} -> ?assert(false) after 200 -> ok end,
-            First = receive {played, At, [{prompt, <<"acdc-callback-offer-6">>, <<"en-us">>, <<"A">>}]} -> At
+            First = receive {played, At, [{play, ?BUILTIN_OFFER}]} -> At
                     after 1500 -> ?assert(false) end,
             ?assert(First - Started >= 1000),
             receive position_lookup -> ?assert(false) after 0 -> ok end,
@@ -120,6 +120,27 @@ real_worker_timer() ->
             stop(Pid, Ref),
             receive {played, _, _} -> ?assert(false) after 100 -> ok end
         after exit(Pid, kill) end,
+        %% Slow media preflight does not shift the queue-worker deadline, and
+        %% the manager monitor already exists while the lookup is suspended.
+        meck:expect(acdc_gemini_prompts,callback,fun(_,_,_,_,_) ->
+            Parent ! {preflight,self()},
+            receive finish_preflight ->
+                {ok,#{builtin_gemini=>true,media=>#{offer=>?BUILTIN_OFFER}}}
+            after 5000 -> error(preflight_test_timeout) end
+        end),
+        {Slow,SlowRef}=spawn_monitor(fun() -> acdc_announcements:init(Parent,Call,props(false,true,1,15)) end),
+        try
+            receive {preflight,Slow} -> ok after 1000 -> ?assert(false) end,
+            {monitors,Monitors}=process_info(Slow,monitors),
+            ?assert(lists:member({process,Parent},Monitors)),
+            receive {played,_,_} -> ?assert(false) after 1100 -> ok end,
+            Slow ! finish_preflight,
+            receive {played,_,[{play,?BUILTIN_OFFER}]} -> ok after 500 -> ?assert(false) end,
+            stop(Slow,SlowRef)
+        after exit(Slow,kill) end,
+        meck:expect(acdc_gemini_prompts,callback,fun(_,_,_,_,_) ->
+            {ok,#{builtin_gemini=>true,media=>#{offer=>?BUILTIN_OFFER}}}
+        end),
         %% Equal deadlines produce one playlist, not two independent players.
         Combined = props(true, true, 2, 15),
         {Both, BothRef} = spawn_monitor(fun() -> acdc_announcements:init(Parent, Call, Combined) end),
@@ -127,7 +148,7 @@ real_worker_timer() ->
             receive {played, _, _} -> ?assert(false) after 300 -> ok end,
             receive {played, _, [{prompt, <<"acdc-queue-your-current-position-is">>, _, _}
                                 ,{say, <<"1">>, <<"number">>}
-                                ,{prompt, <<"acdc-callback-offer-6">>, _, _}]} -> ok
+                                ,{play, ?BUILTIN_OFFER}]} -> ok
             after 2200 -> ?assert(false) end,
             stop(Both, BothRef),
             receive {played, _, _} -> ?assert(false) after 100 -> ok end
@@ -150,7 +171,7 @@ real_worker_timer() ->
             ?assertEqual([], supervisor:which_children(Supervisor)),
             receive {played, _, _} -> ?assert(false) after 1100 -> ok end
         after exit(Supervisor, shutdown) end
-    after meck:unload(gen_listener), meck:unload(kapps_call_command), meck:unload(kz_events) end.
+    after meck:unload(gen_listener), meck:unload(kapps_call_command), meck:unload(kz_events), meck:unload(acdc_gemini_prompts) end.
 
 call() ->
     kapps_call:set_account_id(<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>,
@@ -179,6 +200,7 @@ correlated_completion_and_terminal_events_test() ->
 worker_failure_lifecycle_test_() -> {timeout, 30, fun worker_failure_lifecycle/0}.
 worker_failure_lifecycle() ->
     Parent = self(), Call = call(),
+    mock_callback_audio(),
     ok = meck:new(kz_events, [passthrough, no_link]),
     ok = meck:new(gen_listener, [passthrough, no_link]),
     ok = meck:new(kapps_call_command, [passthrough, no_link]),
@@ -210,13 +232,13 @@ worker_failure_lifecycle() ->
         BothProps = [{<<"initial_delay">>, 1} | proplists:delete(<<"initial_delay">>, props(true, true, 1, 15))],
         {ok, Waiting} = acdc_announcements_sup:maybe_start_announcements(Parent, Call, BothProps),
         WaitingRef = monitor(process, Waiting),
-        receive {pending, Waiting, [{prompt, <<"acdc-callback-offer-6">>, _, _}]} -> ok after 1700 -> ?assert(false) end,
+        receive {pending, Waiting, [{play, ?BUILTIN_OFFER}]} -> ok after 1700 -> ?assert(false) end,
         Waiting ! event(Call, <<"play">>, <<"pending-noop">>),
         Waiting ! event(Call, <<"noop">>, <<"wrong-noop">>),
         receive {'DOWN', WaitingRef, process, Waiting, normal} -> ok after 1000 -> ?assert(false) end,
         receive {pending, Waiting, _} -> ?assert(false) after 0 -> ok end,
         ?assertEqual([], supervisor:which_children(Sup))
-    after exit(Sup, shutdown), meck:unload(kz_events), meck:unload(gen_listener), meck:unload(kapps_call_command) end.
+    after exit(Sup, shutdown), meck:unload(kz_events), meck:unload(gen_listener), meck:unload(kapps_call_command), meck:unload(acdc_gemini_prompts) end.
 
 stop(Pid, Ref) ->
     exit(Pid, shutdown),

@@ -20,6 +20,8 @@
 
 -ifdef(TEST).
 -export([remaining_wait_ms/3
+        ,callback_config/2
+        ,callback_confirmation_prompts/3
         ,queue_announcement_call/2
         ,callback_test_media/2
         ,callback_test_request/3
@@ -27,6 +29,7 @@
         ,callback_test_collect_alternate/2
         ,callback_test_paused/3
         ,callback_test_unavailable/4
+        ,callback_test_retry/4
         ,callback_test_control_ack/4
         ,callback_test_pause/3
         ,callback_test_registration/3
@@ -45,7 +48,8 @@
 -define(CALLBACK_DEFAULT_NUMBER_READBACK, <<"acdc-callback-number-readback">>).
 -define(CALLBACK_DEFAULT_CONFIRMATION, <<"acdc-callback-confirmation">>).
 -define(CALLBACK_DEFAULT_SUCCESS, <<"acdc-callback-success">>).
--define(CALLBACK_UNAVAILABLE_TIMEOUT_MS, 3000).
+-define(CALLBACK_UNAVAILABLE_TIMEOUT_MS, 21000).
+-define(CALLBACK_AUXILIARY_PLAYBACK_TIMEOUT_MS, 20000).
 
 -record(member_call, {call             :: kapps_call:call()
                      ,queue_id         :: kz_term:api_binary()
@@ -227,63 +231,28 @@ process_message(#member_call{call=Call}, _, Start, _Wait, _JObj, {<<"member">>, 
 process_message(MC, Timeout, Start, Wait, _JObj, _Type) ->
     wait_for_bridge(MC, kz_time:decr_timeout(Timeout, Wait), Start).
 
+-spec callback_config(kz_json:object(), kapps_call:call()) -> 'undefined' | map().
 callback_config(QueueJObj, Call) ->
     case kz_json:is_true([<<"callback">>, <<"enabled">>], QueueJObj, 'false') of
         'false' -> 'undefined';
         'true' ->
-            Language = normalize_language(kapps_call:language(Call)),
+            Language = acdc_gemini_prompts:canonical(kapps_call:language(Call)),
             Entry = kz_json:get_ne_binary_value([<<"callback">>, <<"entry_key">>]
                                                ,QueueJObj, <<"6">>),
             AllowAlternate = kz_json:is_true([<<"callback">>, <<"allow_alternate_number">>]
                                                 ,QueueJObj, 'false'),
-            case valid_callback_entry(Entry)
-                andalso callback_media(callback_media_defaults(Entry, AllowAlternate)
-                                      ,QueueJObj, Language, #{}) of
-                'false' ->
-                    lager:warning("callback menu disabled: invalid entry key"),
-                    'undefined';
+            Media = kz_json:get_json_value([<<"callback">>,<<"media">>], QueueJObj, kz_json:new()),
+            case acdc_gemini_prompts:callback(Entry, AllowAlternate, Media, Language, kapps_call:account_id(Call)) of
                 {'error', _} ->
                     lager:warning("callback menu disabled: language ~p requires all callback media", [Language]),
                     'undefined';
-                {'ok', Media} ->
-                    #{entry_key => Entry
+                {'ok', Resolved} ->
+                    Resolved#{entry_key => Entry
                      ,allow_alternate_number => AllowAlternate
                      ,timeout_ms => kz_json:get_integer_value([<<"callback">>, <<"menu_timeout_ms">>]
                                                                   ,QueueJObj, 30000)
                      ,success_timeout_ms => kz_json:get_integer_value([<<"callback">>, <<"success_timeout_ms">>]
-                                                                          ,QueueJObj, 10000)
-                     ,media => Media}
-            end
-    end.
-
-callback_media_defaults(Entry, AllowAlternate) ->
-    Menu = case AllowAlternate of
-               'true' -> <<"acdc-callback-menu-alternate">>;
-               'false' -> <<"acdc-callback-menu-current">>
-           end,
-    [{offer, <<"offer">>, <<"acdc-callback-offer-", Entry/binary>>}
-    ,{menu, <<"menu">>, Menu}
-    ,{number_readback, <<"number_readback">>, ?CALLBACK_DEFAULT_NUMBER_READBACK}
-    ,{confirmation, <<"confirmation">>, ?CALLBACK_DEFAULT_CONFIRMATION}
-    ,{success, <<"success">>, ?CALLBACK_DEFAULT_SUCCESS}].
-
-valid_callback_entry(<<Digit>>) when Digit >= $0, Digit =< $9 -> 'true';
-valid_callback_entry(_) -> 'false'.
-
-normalize_language('undefined') -> <<"en-us">>;
-normalize_language(Language) ->
-    binary:replace(kz_term:to_lower_binary(Language), <<"_">>, <<"-">>, ['global']).
-
-callback_media([], _QueueJObj, _Language, Media) -> {'ok', Media};
-callback_media([{Name, Key, Default} | Rest], QueueJObj, Language, Media) ->
-    Configured = kz_json:get_ne_binary_value([<<"callback">>, <<"media">>, Key], QueueJObj),
-    case {Configured, Language} of
-        {Value, _} when is_binary(Value) -> callback_media(Rest, QueueJObj, Language, Media#{Name => Value});
-        {'undefined', <<"en-us">>} -> callback_media(Rest, QueueJObj, Language, Media#{Name => Default});
-        {'undefined', _} ->
-            case acdc_language:callback_available(Language) of
-                'true' -> callback_media(Rest, QueueJObj, Language, Media#{Name => Default});
-                'false' -> {'error', {'missing_media', Name}}
+                                                                          ,QueueJObj, 10000)}
             end
     end.
 
@@ -291,6 +260,8 @@ callback_entry(_Digit, 'undefined', _Pending) -> 'false';
 callback_entry(_Digit, _Callback, Pending) when is_map(Pending) -> 'false';
 callback_entry(Digit, Callback, 'undefined') -> Digit =:= maps:get(entry_key, Callback).
 
+callback_media_path(Name, #{builtin_gemini := true, media := Media}, _Call) ->
+    maps:get(Name, Media);
 callback_media_path(Name, Callback, Call) ->
     kapps_call:get_prompt(Call, maps:get(Name, maps:get(media, Callback))).
 
@@ -433,16 +404,26 @@ callback_paused(#member_call{callback=Callback, call=Call}=MC, Context, Timeout,
 
 %% An unusable caller ID is not a registered callback. Give truthful feedback
 %% while the original member is paused, without silently enabling alternatives
-%% or playing the callback-success announcement. Normal prompt lookup retains
-%% account/language overrides. Never use an unbounded blocking prompt here.
-callback_unavailable(#member_call{call=Call}=MC, Context, TimeoutMs) ->
+%% or playing the callback-success announcement. Only the exact built-in
+%% localized auxiliary is eligible; missing assets resume without a fallback.
+callback_unavailable(MC, Context, TimeoutMs) ->
+    case callback_auxiliary_feedback(unavailable, MC, Context, TimeoutMs) of
+        'finished' -> 'finished';
+        _ -> 'resume'
+    end.
+
+callback_auxiliary_feedback(Name, #member_call{call=Call}=MC, Context, TimeoutMs) ->
     Deadline = monotonic_ms() + min(?CALLBACK_UNAVAILABLE_TIMEOUT_MS, max(0, TimeoutMs)),
-    %% Bound the file handle, not the channel's inherited playback variables.
-    %% Reserve one second for delivery/completion within the wrapper budget.
+    %% The generated message may last twenty seconds. Bound this file handle and
+    %% retain an absolute wrapper deadline; no inherited channel timeout changes.
     PromptResult = try
-                       Media = kapps_call:get_prompt(Call, <<"agent-invalid_choice">>),
+                       true = Deadline > monotonic_ms(),
+                       {ok, Media} = acdc_gemini_prompts:auxiliary(Name, kapps_call:language(Call)),
+                       Remaining = Deadline - monotonic_ms(),
+                       true = Remaining > 0,
                        Noop = kapps_call_command:noop_id(),
-                       Play = kz_json:set_values([{<<"Playback-Timeout-Ms">>, 2000}, {<<"Msg-ID">>, Noop}],
+                       PlaybackTimeout = min(?CALLBACK_AUXILIARY_PLAYBACK_TIMEOUT_MS, Remaining),
+                       Play = kz_json:set_values([{<<"Playback-Timeout-Ms">>, PlaybackTimeout}, {<<"Msg-ID">>, Noop}],
                                   kapps_call_command:play_command(Media, [], Call)),
                        Done = kz_json:from_list([{<<"Application-Name">>, <<"noop">>}, {<<"Msg-ID">>, Noop}
                                                 ,{<<"Call-ID">>, kapps_call:call_id(Call)}]),
@@ -454,12 +435,12 @@ callback_unavailable(#member_call{call=Call}=MC, Context, TimeoutMs) ->
     case PromptResult of
         NoopId when is_binary(NoopId), byte_size(NoopId) > 0 ->
             wait_callback_unavailable(MC, Context, NoopId, Deadline);
-        _ -> 'resume'
+        _ -> 'failed'
     end.
 
 wait_callback_unavailable(MC, Context, NoopId, Deadline) ->
     case max(0, Deadline - monotonic_ms()) of
-        0 -> 'resume';
+        0 -> 'failed';
         Remaining ->
             receive
                 {'amqp_msg', JObj} ->
@@ -467,7 +448,7 @@ wait_callback_unavailable(MC, Context, NoopId, Deadline) ->
                         'continue' -> wait_callback_unavailable(MC, Context, NoopId, Deadline);
                         Result -> Result
                     end
-            after Remaining -> 'resume'
+            after Remaining -> 'failed'
             end
     end.
 
@@ -502,7 +483,7 @@ callback_unavailable_event(#member_call{call=Call}=MC, Context, NoopId, JObj) ->
         {'true', {<<"call_event">>, <<"CHANNEL_EXECUTE_COMPLETE">>}} ->
             case kz_call_event:application_name(JObj) =:= <<"noop">>
                 andalso kz_call_event:application_response(JObj) =:= NoopId of
-                'true' -> 'resume';
+                'true' -> 'complete';
                 'false' -> 'continue'
             end;
         {'true', {<<"error">>, _}} -> callback_unavailable_media_error(NoopId, JObj);
@@ -515,7 +496,7 @@ callback_unavailable_media_error(NoopId, JObj) ->
     case kz_call_event:application_response(JObj) =:= NoopId
         orelse kz_json:get_ne_binary_value(<<"Msg-ID">>, JObj) =:= NoopId
         orelse callback_error_request_value(<<"Msg-ID">>, JObj) =:= NoopId of
-        'true' -> 'resume';
+        'true' -> 'failed';
         'false' -> 'continue'
     end.
 
@@ -561,6 +542,7 @@ run_callback_actions(MC, Context, State, ['collect_alternate' | Rest]) ->
     case collect_callback_alternate(MC, State) of
         {'ok', Digit} -> reduce_callback_event(MC, Context, State, {'dtmf', Digit}, Rest);
         'timeout' -> reduce_callback_event(MC, Context, State, 'tick', Rest);
+        'media_failed' -> resume_callback_live_queue(MC, Context, 'undefined');
         'hangup' -> reduce_callback_event(MC, Context, State, 'caller_hangup', Rest)
     end;
 run_callback_actions(MC, Context, State, [{'read_back_number', _} | Rest]) ->
@@ -569,6 +551,7 @@ run_callback_actions(MC, Context, State, [{'prompt_confirm_alternate', _} | Rest
     case collect_callback_confirmation(MC, State) of
         {'ok', Digit} -> reduce_callback_event(MC, Context, State, {'dtmf', Digit}, Rest);
         'timeout' -> reduce_callback_event(MC, Context, State, 'tick', Rest);
+        'media_failed' -> resume_callback_live_queue(MC, Context, 'undefined');
         'hangup' -> reduce_callback_event(MC, Context, State, 'caller_hangup', Rest)
     end;
 run_callback_actions(MC, Context, State
@@ -623,8 +606,12 @@ run_callback_actions(#member_call{call=Call}, _Context, _State, [{'end_original_
     cf_exe:stop(Call),
     'finished';
 run_callback_actions(MC, Context, State, [{'retry', _} | Rest]) ->
-    _ = kapps_call_command:b_prompt(<<"menu-invalid_entry">>, MC#member_call.call),
-    run_callback_actions(MC, Context, State, Rest).
+    Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
+    case callback_auxiliary_feedback(invalid_entry, MC, Context, Remaining) of
+        'complete' -> run_callback_actions(MC, Context, State, Rest);
+        'finished' -> 'finished';
+        'failed' -> resume_callback_live_queue(MC, Context, 'undefined')
+    end.
 
 reduce_callback_event(MC, Context, State, Event, Prefix) ->
     {Next, Actions} = acdc_callback_menu:event(Event, monotonic_ms(), State),
@@ -637,20 +624,39 @@ collect_callback_alternate(#member_call{call=Call}, State) ->
             %% Entering directly without usable caller ID and pressing the
             %% alternate key must both be audible. Re-prompt after invalid
             %% input clears the buffer, but never between valid digits.
-            case maps:get(digits, State) of
-                <<>> -> _ = kapps_call_command:prompt(<<"cf-enter_number">>, Call);
-                _ -> 'ok'
-            end,
-            %% Unlike collect_digits with a playback noop, this helper keeps
-            %% decrementing the receive timeout while playback events arrive.
-            %% Do not consume # or * here: the reducer validates both keys.
-            Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
-            case kapps_call_command:wait_for_dtmf(Remaining) of
-                {'ok', <<>>} -> 'timeout';
-                {'ok', Digit} -> {'ok', Digit};
-                {'error', 'timeout'} -> 'timeout';
-                {'error', _} -> 'hangup'
+            case callback_enter_number(Call, State) of
+                'error' -> 'media_failed';
+                'ok' -> wait_callback_alternate(State)
             end
+    end.
+
+callback_enter_number(Call, State) ->
+    case maps:get(digits, State) of
+        <<>> ->
+            try
+                {ok, Media} = acdc_gemini_prompts:auxiliary(enter_number, kapps_call:language(Call)),
+                Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
+                true = Remaining > 0,
+                Play = kz_json:set_value(<<"Playback-Timeout-Ms">>,
+                            min(?CALLBACK_AUXILIARY_PLAYBACK_TIMEOUT_MS, Remaining),
+                            kapps_call_command:play_command(Media, [], Call)),
+                _ = kapps_call_command:send_command(Play, Call),
+                'ok'
+            catch _:_ -> 'error'
+            end;
+        _ -> 'ok'
+    end.
+
+wait_callback_alternate(State) ->
+    %% Unlike collect_digits with a playback noop, this helper keeps
+    %% decrementing the receive timeout while playback events arrive.
+    %% Do not consume # or * here: the reducer validates both keys.
+    Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
+    case kapps_call_command:wait_for_dtmf(Remaining) of
+        {'ok', <<>>} -> 'timeout';
+        {'ok', Digit} -> {'ok', Digit};
+        {'error', 'timeout'} -> 'timeout';
+        {'error', _} -> 'hangup'
     end.
 
 collect_callback_digit(MediaName, #member_call{call=Call, callback=Callback}, State) ->
@@ -684,11 +690,28 @@ collect_callback_digit(MediaName, #member_call{call=Call, callback=Callback}, St
 
 collect_callback_confirmation(#member_call{call=Call, callback=Callback}=MC, State) ->
     Digits = maps:get(digits, State),
-    Readback = callback_media_path(number_readback, Callback, Call),
-    Confirmation = callback_media_path(confirmation, Callback, Call),
-    NumberPrompts = acdc_language:telephone_prompts(Digits, kapps_call:language(Call)),
-    NoopId = kapps_call_command:audio_macro([{'play', Readback}] ++ NumberPrompts
-                                           ++ [{'play', Confirmation}], Call),
+    Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
+    case Remaining of
+        0 -> 'timeout';
+        _ ->
+            case callback_confirmation_prompts(Callback, Call, Digits) of
+                {error,_} -> 'media_failed';
+                {ok,Prompts} ->
+                    NoopId = kapps_call_command:audio_macro(Prompts, Call),
+                    collect_callback_confirmation_digit(MC, State, NoopId)
+            end
+    end.
+
+-spec callback_confirmation_prompts(map(), kapps_call:call(), binary()) -> tuple().
+callback_confirmation_prompts(Callback, Call, Digits) ->
+    case acdc_gemini_prompts:callback_readback(Digits, Callback) of
+        {ok,NumberPrompts} ->
+            {ok,[{play,callback_media_path(number_readback,Callback,Call)}] ++ NumberPrompts
+                ++ [{play,callback_media_path(confirmation,Callback,Call)}]};
+        Error -> Error
+    end.
+
+collect_callback_confirmation_digit(MC, State, NoopId) ->
     Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
     case Remaining of
         0 -> 'timeout';
@@ -849,8 +872,12 @@ callback_response(JObj, Context) ->
 callback_test_media(QueueJObj, Language) ->
     Entry = kz_json:get_ne_binary_value([<<"callback">>, <<"entry_key">>], QueueJObj, <<"6">>),
     AllowAlternate = kz_json:is_true([<<"callback">>, <<"allow_alternate_number">>], QueueJObj, 'false'),
-    callback_media(callback_media_defaults(Entry, AllowAlternate)
-                  ,QueueJObj, normalize_language(Language), #{}).
+    Media = kz_json:get_json_value([<<"callback">>,<<"media">>], QueueJObj, kz_json:new()),
+    case acdc_gemini_prompts:callback(Entry, AllowAlternate, Media, Language,
+                                    <<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>) of
+        {ok,Resolved} -> {ok,maps:get(media,Resolved)};
+        Error -> Error
+    end.
 
 -spec callback_test_request(map(), kz_term:ne_binary(), kz_term:proplist()) -> kz_term:proplist().
 callback_test_request(Context, Operation, Extra) ->
@@ -860,7 +887,7 @@ callback_test_request(Context, Operation, Extra) ->
 callback_test_response(JObj, Context) -> callback_response(JObj, Context).
 
 -spec callback_test_collect_alternate(kapps_call:call(), map()) ->
-          {'ok', binary()} | 'timeout' | 'hangup'.
+          {'ok', binary()} | 'timeout' | 'hangup' | 'media_failed'.
 callback_test_collect_alternate(Call, State) ->
     collect_callback_alternate(#member_call{call=Call}, State).
 
@@ -873,6 +900,11 @@ callback_test_paused(Call, Callback, Context) ->
 callback_test_unavailable(Call, Callback, Context, TimeoutMs) ->
     MC = #member_call{call=Call, queue_id=maps:get(queue_id, Context), callback=Callback},
     callback_unavailable(MC, Context, TimeoutMs).
+
+-spec callback_test_retry(kapps_call:call(), map(), map(), map()) -> term().
+callback_test_retry(Call, Callback, Context, State) ->
+    MC = #member_call{call=Call, queue_id=maps:get(queue_id, Context), callback=Callback},
+    run_callback_actions(MC, Context, State, [{retry, 1}]).
 
 -spec callback_test_control_ack(kapps_call:call(), map(), binary(), non_neg_integer()) -> term().
 callback_test_control_ack(Call, Context, Operation, TimeoutMs) ->

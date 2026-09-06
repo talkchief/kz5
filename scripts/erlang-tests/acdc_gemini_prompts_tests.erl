@@ -5,12 +5,64 @@
 -define(ACCOUNT, <<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>).
 -define(PROMPT, <<"acdc-callback-success">>).
 
-all_165_exact_assets_verify_test() ->
-    ?assertEqual(165,length(?GEMINI_ASSETS)),
+auxiliary_defaults_are_exact_system_documents_test() ->
+    lists:foreach(fun(Language) ->
+        lists:foreach(fun({Name,Canonical}) ->
+            %% Synthetic supplemental entries exercise resolver plumbing only;
+            %% they are not generated/imported assets or readiness evidence.
+            Base = acdc_gemini_prompts:asset(Language, ?PROMPT),
+            Id = <<Canonical/binary,"-gemini-sulafat-0123456789abcdef">>,
+            Asset = setelement(3, setelement(2, Base, Canonical), Id),
+            Lookup = fun(L,P) -> ?assertEqual(Language,L), ?assertEqual(Canonical,P), Asset end,
+            Read = fun(MediaId) ->
+                ?assertEqual(<<Language/binary,"/",Id/binary>>, MediaId), {ok,doc(Asset)}
+            end,
+            ?assertEqual({ok,<<"/system_media/",Language/binary,"/",Id/binary>>},
+                acdc_gemini_prompts:auxiliary_with(Name,Language,Lookup,Read)),
+            ?assertEqual({error,gemini_media_unavailable},
+                acdc_gemini_prompts:auxiliary_with(Name,Language,Lookup,fun(_) -> {error,not_found} end)),
+            Wrong = set(<<"language">>,<<"wrong">>,doc(Asset)),
+            ?assertEqual({error,gemini_media_unavailable},
+                acdc_gemini_prompts:auxiliary_with(Name,Language,Lookup,fun(_) -> {ok,Wrong} end))
+        end, [{unavailable,<<"acdc-callback-unavailable">>},
+              {invalid_entry,<<"acdc-callback-invalid-entry">>},
+              {enter_number,<<"acdc-callback-enter-number">>}])
+    end,[<<"en-us">>,<<"he-il">>,<<"fr-fr">>,<<"es-es">>,<<"ar-sa">>]).
+
+auxiliary_missing_map_and_unsupported_inputs_never_fall_back_test() ->
+    NoRead = fun(_) -> error(unexpected_media_read) end,
+    NoLookup = fun(_,_) -> error(unexpected_lookup) end,
+    ?assertEqual({error,unsupported_gemini_prompt},
+        acdc_gemini_prompts:auxiliary_with(unavailable,<<"en-us">>,fun(_,_) -> undefined end,NoRead)),
+    ?assertEqual({error,unsupported_gemini_auxiliary},
+        acdc_gemini_prompts:auxiliary_with(unavailable,<<"fr-ca">>,NoLookup,NoRead)),
+    ?assertEqual({error,unsupported_gemini_auxiliary},
+        acdc_gemini_prompts:auxiliary_with(unknown,<<"en-us">>,NoLookup,NoRead)).
+
+all_210_exact_assets_verify_test() ->
+    ?assertEqual(210,length(?GEMINI_ASSETS)),
     lists:foreach(fun(A) ->
         ?assert(acdc_gemini_prompts:imported(A,{ok,doc(A)})),
         ?assertEqual(A,acdc_gemini_prompts:asset(element(1,A),element(2,A)))
     end,?GEMINI_ASSETS).
+
+fixed_editor_projection_requires_expanded_inventory_test() ->
+    lists:foreach(fun(Language) ->
+        Ids = acdc_gemini_prompts:fixed_media_ids(Language),
+        ?assertEqual(32, length(Ids)),
+        Docs = [begin {ok,Doc}=read(Id), Doc end || Id <- Ids],
+        Media = acdc_gemini_prompts:verified_fixed_media(Language, Docs),
+        ?assertEqual(32, length(Media)),
+        ?assert(acdc_gemini_prompts:fixed_media_complete(Language, Media)),
+        ?assertNot(acdc_gemini_prompts:fixed_media_complete(Language, lists:sublist(Media,29))),
+        lists:foreach(fun(Missing) ->
+            ?assertNot(acdc_gemini_prompts:fixed_media_complete(Language, lists:delete(Missing,Media)))
+        end,Media),
+        [First|Rest] = Media,
+        Tampered = set(<<"sha256">>, <<"wrong">>, First),
+        ?assertNot(acdc_gemini_prompts:fixed_media_complete(Language,[Tampered|Rest]))
+    end,[<<"en-us">>,<<"he-il">>,<<"fr-fr">>,<<"es-es">>,<<"ar-sa">>]),
+    ?assertNot(acdc_gemini_prompts:fixed_media_complete(<<"unsupported">>, [])).
 
 fixed_defaults_are_localized_and_immutable_test() ->
     lists:foreach(fun(L) ->
@@ -91,10 +143,10 @@ digit_missing_no_partial_audio_and_no_say_fallback_test() ->
 capabilities_never_claim_full_language_or_position_readiness_test() ->
     lists:foreach(fun(L) ->
         C=acdc_gemini_prompts:capabilities_with(L,fun read/1),
-        ?assertEqual(29,maps:get(source_fixed_count,C)),
+        ?assertEqual(32,maps:get(source_fixed_count,C)),
         ?assert(maps:get(fixed_import_metadata_verified,C)),
         Recorded=lists:member(L,[<<"ar-sa">>,<<"he-il">>]),
-        ?assertEqual(Recorded,maps:get(gemini_telephone_digits_import_metadata_verified,C)),
+        ?assert(maps:get(gemini_telephone_digits_import_metadata_verified,C)),
         ?assertEqual(not Recorded,maps:get(non_gemini_numeric_dependency,C)),
         lists:foreach(fun(K) -> ?assertNot(maps:get(K,C)) end,[position_available,callback_runtime_ready,full_language_ready,native_speaker_review]),
         Missing=acdc_gemini_prompts:capabilities_with(L,fun(_) -> {error,not_found} end),

@@ -166,15 +166,15 @@ deadline_case() ->
         ?assertEqual([prompt_lookup, play], actions())
     end).
 
-feedback_timeout_is_capped_at_three_seconds_test_() ->
+feedback_timeout_is_capped_at_twenty_one_seconds_test_() ->
     %% Mock compilation is outside the measured playback budget, but counts
     %% towards EUnit's outer timeout on low-core production-sized hosts.
-    {timeout, 20, fun() -> with_mocks(fun() ->
+    {timeout, 60, fun() -> with_mocks(fun() ->
         Started = now_ms(),
         ?assertEqual(resume, feedback(30000)),
         Elapsed = now_ms() - Started,
-        ?assert(Elapsed >= 2950),
-        ?assert(Elapsed < 3300)
+        ?assert(Elapsed >= 20950),
+        ?assert(Elapsed < 21500)
     end) end}.
 
 media_error_case() ->
@@ -198,10 +198,52 @@ request_error_case() ->
 
 lookup_failure_case() ->
     with_mocks(fun() ->
-        meck:expect(kapps_call, get_prompt, fun(fixture_call, <<"agent-invalid_choice">>) -> error(media_unavailable) end),
+        meck:expect(acdc_gemini_prompts, auxiliary, fun(unavailable, <<"en-us">>) -> {error,gemini_media_unavailable} end),
         ?assertEqual(resume, feedback(100)),
         ?assertEqual([], actions())
     end).
+
+retry_auxiliary_observes_completion_and_ownership_test_() ->
+    {timeout,30,fun() -> with_mocks(fun() ->
+        meck:expect(acdc_gemini_prompts,auxiliary,fun(invalid_entry,<<"en-us">>) ->
+            record(prompt_lookup),{ok,<<"/system_media/en-us/acdc-callback-invalid-entry-gemini-sulafat-0123456789abcdef">>}
+        end),
+        State=#{phase=>complete,deadline_ms=>now_ms()+1000},
+        put(play_action,fun() ->
+            deliver(complete(<<"stale">>)),
+            deliver(kz_json:set_value(<<"Application-Name">>,<<"play">>,complete(?NOOP))),
+            later(30,complete(?NOOP))
+        end),
+        Started=now_ms(),
+        ?assertEqual(finished,cf_acdc_member:callback_test_retry(fixture_call,callback(),context(),State)),
+        ?assert(now_ms()-Started>=25),
+        ?assertEqual([prompt_lookup,play],actions()),
+        put(actions,[]),
+        put(play_action,fun() -> deliver(event(<<"CHANNEL_BRIDGE">>,[])) end),
+        ?assertEqual(finished,cf_acdc_member:callback_test_retry(fixture_call,callback(),context(),State)),
+        ?assertEqual([prompt_lookup,play,usurped],actions()),
+        ?assertEqual(0,meck:num_calls(kapps_call_command,b_prompt,'_'))
+    end) end}.
+
+retry_auxiliary_failure_resumes_original_queue_test_() ->
+    {timeout,30,fun() -> with_mocks(fun() ->
+        meck:expect(acdc_gemini_prompts,auxiliary,
+                    fun(invalid_entry,<<"en-us">>) -> {error,unsupported_gemini_prompt} end),
+        put(resume_action,fun(_) -> deliver(response()) end),
+        State=#{phase=>menu,deadline_ms=>now_ms()+1000},
+        ?assertEqual(resume,cf_acdc_member:callback_test_retry(fixture_call,callback(),context(),State)),
+        ?assertEqual([resume],actions()),
+        ?assertEqual(0,meck:num_calls(kapps_call_command,send_command,'_')),
+        ?assertEqual(0,meck:num_calls(kapps_call_command,b_prompt,'_')),
+        ?assertEqual(0,meck:num_calls(kapi_acdc_queue,publish_member_call_cancel,'_'))
+    end) end}.
+
+expired_auxiliary_deadline_never_starts_media_test_() ->
+    {timeout,30,fun() -> with_mocks(fun() ->
+        ?assertEqual(resume,feedback(0)),
+        ?assertEqual([],actions()),
+        ?assertEqual(0,meck:num_calls(acdc_gemini_prompts,auxiliary,'_'))
+    end) end}.
 
 late_completion_case() ->
     with_mocks(fun() ->
@@ -219,11 +261,12 @@ late_completion_case() ->
 bounded_command_preserves_prompt_provenance_case() ->
     with_mocks(fun() ->
         %% Use the real play command builder and intercept only its custom
-        %% publisher. Prompt resolution stays at the normal call-aware API,
-        %% which may select an account-specific recording in any language.
-        CustomMedia = <<"prompt://fixture-account/agent-invalid_choice/fr-fr">>,
-        meck:expect(kapps_call, get_prompt, fun(fixture_call, <<"agent-invalid_choice">>) ->
-            record(prompt_lookup), CustomMedia end),
+        %% publisher. Exact localized system-document identity bypasses tenant
+        %% aliases; no global English or account recording fallback is used.
+        CustomMedia = <<"/system_media/fr-fr/acdc-callback-unavailable-gemini-sulafat-0123456789abcdef">>,
+        meck:expect(kapps_call, language, fun(fixture_call) -> <<"fr-fr">> end),
+        meck:expect(acdc_gemini_prompts, auxiliary, fun(unavailable, <<"fr-fr">>) ->
+            record(prompt_lookup), {ok,CustomMedia} end),
         meck:expect(kapps_call, is_call, fun(fixture_call) -> true end),
         meck:expect(kapps_call, control_queue, fun(fixture_call) -> undefined end),
         meck:expect(kapps_call, custom_publish_function, fun(fixture_call) ->
@@ -238,7 +281,7 @@ bounded_command_preserves_prompt_provenance_case() ->
                 ?assertEqual(<<"play">>, kz_json:get_value(<<"Application-Name">>, Play)),
                 ?assertEqual(?CALL, kz_json:get_value(<<"Call-ID">>, Play)),
                 ?assertEqual(CustomMedia, kz_json:get_value(<<"Media-Name">>, Play)),
-                ?assertEqual(2000, kz_json:get_integer_value(<<"Playback-Timeout-Ms">>, Play)),
+                ?assertEqual(20000, kz_json:get_integer_value(<<"Playback-Timeout-Ms">>, Play)),
                 ?assertEqual(undefined, kz_json:get_value(<<"Playback-Timeout">>, Play)),
                 ?assertEqual(false, kz_json:get_value(<<"Endless-Playback">>, Play)),
                 ?assertEqual(NoopId, kz_json:get_value(<<"Msg-ID">>, Play)),
@@ -252,7 +295,7 @@ bounded_command_preserves_prompt_provenance_case() ->
         meck:expect(kapps_call_command, send_command, fun(Command, Call) ->
             meck:passthrough([Command, Call]) end),
         Started = now_ms(),
-        ?assertEqual(resume, feedback(200)),
+        ?assertEqual(resume, feedback(30000)),
         ?assert(now_ms() - Started >= 25),
         ?assertEqual([prompt_lookup, play], actions())
     end).
@@ -284,16 +327,17 @@ response() -> kz_json:from_list([{<<"Event-Category">>, <<"acdc_callback">>}, {<
 with_mocks(Fun) ->
     put(actions, []), put(play_action, fun() -> ok end),
     put(resume_action, fun(_) -> error(unexpected_resume) end),
-    meck:new([kapps_call, cf_exe, kapi_acdc_queue], [non_strict, no_link]),
+    meck:new([kapps_call, cf_exe, kapi_acdc_queue, acdc_gemini_prompts], [non_strict, no_link]),
     meck:new(kapps_call_command, [passthrough, non_strict, no_link]),
     try
         meck:expect(kapps_call, call_id, fun(fixture_call) -> ?CALL end),
         meck:expect(kapps_call, caller_id_number, fun(fixture_call) -> <<"kz5_test">> end),
         meck:expect(kapps_call, account_id, fun(fixture_call) -> ?ACCOUNT end),
+        meck:expect(kapps_call, language, fun(fixture_call) -> <<"en-us">> end),
         meck:expect(kapps_call, kvs_find, fun(queue_id, fixture_call) -> {ok, ?QUEUE} end),
         meck:expect(kapps_call, custom_channel_var, fun(<<"Fetch-ID">>, fixture_call) -> <<"original-fetch">> end),
-        meck:expect(kapps_call, get_prompt, fun(fixture_call, <<"agent-invalid_choice">>) ->
-            record(prompt_lookup), <<"prompt://fixture/agent-invalid_choice/en-us">> end),
+        meck:expect(acdc_gemini_prompts, auxiliary, fun(unavailable, <<"en-us">>) ->
+            record(prompt_lookup), {ok,<<"/system_media/en-us/acdc-callback-unavailable-gemini-sulafat-0123456789abcdef">>} end),
         meck:expect(kapps_call_command, noop_id, fun() -> ?NOOP end),
         meck:expect(kapps_call_command, send_command, fun(_, fixture_call) ->
             record(play), (get(play_action))(), ok end),
@@ -311,7 +355,7 @@ with_mocks(Fun) ->
             ?assertEqual(?CALL, proplists:get_value(<<"Call-ID">>, Props)), record(cancel_member) end),
         Fun()
     after
-        meck:unload([kapps_call, cf_exe, kapi_acdc_queue, kapps_call_command]),
+        meck:unload([kapps_call, cf_exe, kapi_acdc_queue, kapps_call_command, acdc_gemini_prompts]),
         erase(actions), erase(play_action), erase(resume_action), flush_mailbox()
     end.
 

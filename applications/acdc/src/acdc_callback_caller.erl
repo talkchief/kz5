@@ -325,7 +325,7 @@ begin_confirmation(#state{returned_call=Call, queue_doc=QueueDoc}=State) ->
                                       ,QueueDoc, ?DEFAULT_CONFIRM_TIMEOUT),
     case {confirmation_prompt(QueueDoc, Call), bounded(Timeout, 3, 30)} of
         {{'ok', Prompt}, 'true'} ->
-            try kapps_call_command:prompt(Prompt, Call) of
+            try kapps_call_command:play(Prompt, Call) of
                 _NoopId -> {'noreply', set_timer(Timeout * 1000, 'confirming'
                                                 ,State#state{stage='confirming'})}
             catch
@@ -337,27 +337,29 @@ begin_confirmation(#state{returned_call=Call, queue_doc=QueueDoc}=State) ->
 -spec confirmation_prompt(kz_json:object(), kapps_call:call()) ->
           {'ok', kz_term:ne_binary()} | {'error', 'missing_localized_media'}.
 confirmation_prompt(QueueDoc, Call) ->
-    Configured = kz_json:get_ne_binary_value([<<"callback">>, <<"media">>
-                                             ,<<"returned_confirmation">>]
-                                            ,QueueDoc),
-    case {Configured, normalized_language(kapps_call:language(Call))} of
-        {Prompt, _} when is_binary(Prompt) ->
+    Media = kz_json:get_json_value([<<"callback">>,<<"media">>], QueueDoc, kz_json:new()),
+    Configured = case acdc_gemini_prompts:selection(<<"returned_confirmation">>,Media) of
+                     absent -> acdc_gemini_prompts:selection(<<"return_confirmation_prompt">>,
+                                   kz_json:get_json_value(<<"callback">>,QueueDoc,kz_json:new()));
+                     Selection -> Selection
+                 end,
+    Language = kz_json:get_ne_binary_value([<<"announcements">>,<<"language">>], QueueDoc,
+                                           kapps_call:language(Call)),
+    case Configured of
+        {configured,Prompt} when is_binary(Prompt) ->
+            %% Explicit legacy customer media is resolved separately. Built-in
+            %% queue language adoption removes this override in the editor.
             case valid_text(Prompt, 256) of
-                'true' -> {'ok', Prompt};
+                'true' -> {'ok', kapps_call:get_prompt(Call,Prompt,Language)};
                 'false' -> {'error', 'missing_localized_media'}
             end;
-        {'undefined', <<"en-us">>} -> {'ok', ?DEFAULT_CONFIRM_PROMPT};
-        {'undefined', Language} ->
-            case acdc_language:media_available(Language, [?DEFAULT_CONFIRM_PROMPT]) of
-                'true' -> {'ok', ?DEFAULT_CONFIRM_PROMPT};
-                'false' -> {'error', 'missing_localized_media'}
-            end
+        absent ->
+            case acdc_gemini_prompts:builtin(?DEFAULT_CONFIRM_PROMPT,Language) of
+                {ok,Path} -> {ok,Path};
+                _ -> {'error','missing_localized_media'}
+            end;
+        _ -> {'error','missing_localized_media'}
     end.
-
--spec normalized_language(kz_term:api_binary()) -> kz_term:ne_binary().
-normalized_language('undefined') -> <<"en-us">>;
-normalized_language(Language) ->
-    binary:replace(kz_term:to_lower_binary(Language), <<"_">>, <<"-">>, ['global']).
 
 confirmed(#state{owner=Owner, callback_id=CallbackId, lease_token=Token
                 ,returned_call=ReturnedCall, queue_doc=QueueDoc}=State) ->

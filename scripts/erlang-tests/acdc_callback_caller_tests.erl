@@ -81,15 +81,19 @@ confirmation_events_are_fail_closed_test() ->
                    confirming, <<"CHANNEL_EXECUTE_COMPLETE">>, undefined)).
 
 returned_confirmation_media_is_language_safe_test() ->
-    ok = meck:new(kz_datamgr, [passthrough, no_link]),
-    meck:expect(kz_datamgr, open_cache_doc, fun(_, _) -> {error, not_found} end),
+    ok = meck:new(acdc_gemini_prompts, [passthrough, no_link]),
+    ok = meck:new(kapps_call, [passthrough, no_link]),
+    meck:expect(acdc_gemini_prompts, builtin, fun(_, _) -> {error,gemini_media_unavailable} end),
+    meck:expect(kapps_call,get_prompt,fun(_,<<"fr-callback-confirmation">>,<<"fr-FR">>) ->
+        <<"prompt://legacy/fr-callback-confirmation/fr-fr">>
+    end),
     try returned_confirmation_media_is_language_safe()
-    after meck:unload(kz_datamgr)
+    after meck:unload([acdc_gemini_prompts,kapps_call])
     end.
 
 returned_confirmation_media_is_language_safe() ->
     English = kapps_call:set_language(<<"en_US">>, original_call()),
-    ?assertEqual({ok, <<"acdc-callback-returned-confirmation">>},
+    ?assertEqual({error, missing_localized_media},
                  acdc_callback_caller:confirmation_prompt(queue(), English)),
     French = kapps_call:set_language(<<"fr-FR">>, original_call()),
     ?assertEqual({error, missing_localized_media},
@@ -97,7 +101,7 @@ returned_confirmation_media_is_language_safe() ->
     LocalizedQueue = kz_json:set_value(
                        [<<"callback">>, <<"media">>, <<"returned_confirmation">>],
                        <<"fr-callback-confirmation">>, queue()),
-    ?assertEqual({ok, <<"fr-callback-confirmation">>},
+    ?assertEqual({ok, <<"prompt://legacy/fr-callback-confirmation/fr-fr">>},
                  acdc_callback_caller:confirmation_prompt(LocalizedQueue, French)),
     InvalidQueue = kz_json:set_value(
                      [<<"callback">>, <<"media">>, <<"returned_confirmation">>],

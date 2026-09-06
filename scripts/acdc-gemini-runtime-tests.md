@@ -1,5 +1,11 @@
 # Gemini runtime regression suite
 
+For the current canonical callback implementation, use
+`scripts/test-acdc-gemini-canonical-callback.sh` under the resource guard.
+See [current-source acceptance and commands](../doc/acdc_canonical_callback_acceptance.md).
+The replay runner described below is historical compatibility coverage, not
+acceptance of the current callback source or the expanded210-asset release.
+
 Run from a prepared Kazoo checkout containing the directly tracked ACDC source, compiled Erlang dependencies and the checked-in Gemini voice assets:
 
 ```sh
