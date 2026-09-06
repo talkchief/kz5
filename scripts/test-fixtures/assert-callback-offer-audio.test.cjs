@@ -1,6 +1,6 @@
 'use strict';
 // Synthetic exact-dialog SIP/RTP PCAP; does not call SIPp or any live service.
-const assert=require('node:assert/strict'),{inspect}=require('./assert-callback-offer-audio.cjs');
+const assert=require('node:assert/strict'),{inspect,assertCaptureLog}=require('./assert-callback-offer-audio.cjs');
 const call='1-999@127.0.0.20',expected={call_id:call,queue_id:'1'.repeat(32),ip:'127.0.0.20',sip_port:15064,media_port:47200,queue_entry:100};
 function reference(length,seed){const b=Buffer.alloc(length);for(let i=0;i<length;i++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;b[i]=(seed>>>24)&127;}return b;}
 const refs={offer:reference(32000,41),position:reference(12000,79)};
@@ -44,4 +44,12 @@ for(const [options,pattern] of [[{offer:[0,18,33]},/schedule/],[{offer:[3,17,31]
 assert.throws(()=>inspect(valid,refs,{...expected,call_id:'1-888@127.0.0.20'}),/Foreign dialog/);groups++;
 assert.throws(()=>inspect(valid.subarray(0,-1),refs,expected),/Truncated/);groups++;
 assert.throws(()=>inspect(valid,{...refs,offer:Buffer.alloc(56000,17)},expected),/shorter than7/);groups++;
+const captureLog='2304 packets captured\n4608 packets received by filter\n0 packets dropped by kernel\n';
+assertCaptureLog(captureLog);groups++;
+for(const bad of ['', captureLog.replace('0 packets dropped','1 packets dropped'),
+    captureLog.replace('2304 packets captured','0 packets captured'),
+    captureLog.replace('4608 packets received by filter\n',''),
+    captureLog+'0 packets dropped by kernel\n', 'x'.repeat(65537)]) {
+    assert.throws(()=>assertCaptureLog(bad));groups++;
+}
 console.log('PASS '+groups+' synthetic dual-schedule SIP/RTP gates; full phrases, exact peer, no DTMF, loss and timing negatives');

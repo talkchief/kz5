@@ -4,6 +4,18 @@ const fs = require('node:fs'), assert = require('node:assert/strict'), crypto = 
 const {packets, audioSdp} = require('./assert-callback-confirmation-pcap.cjs');
 const {phraseMatches} = require('./assert-announcement-audio.cjs');
 const sha = data => crypto.createHash('sha256').update(data).digest('hex');
+function assertCaptureLog(text) {
+    assert(typeof text === 'string' && text.length <= 65536, 'Invalid capture completion log');
+    const values = {};
+    for (const field of ['captured', 'received by filter', 'dropped by kernel']) {
+        const matches = [...text.matchAll(new RegExp('^([0-9]+) packets ' + field + '$', 'gm'))];
+        assert(matches.length === 1, 'Missing or ambiguous capture completion: ' + field);
+        values[field] = Number(matches[0][1]);
+        assert(Number.isSafeInteger(values[field]), 'Invalid capture packet count');
+    }
+    assert(values.captured > 0 && values['received by filter'] > 0, 'Empty capture');
+    assert(values['dropped by kernel'] === 0, 'Capture loss makes absence evidence inconclusive');
+}
 function decode(byte) { const x = ~byte & 255, s = (((x & 15) << 3) + 132) << ((x >> 4) & 7); return x & 128 ? 132 - s : s - 132; }
 function completeMatches(audio, reference) {
     assert(reference.length >= 512 && reference.length < 7 * 8000, 'Installed reference must be audible and shorter than7seconds');
@@ -104,10 +116,11 @@ function inspect(buffer, refs, expected) {
         delivery_tolerance_seconds:1, no_offer_on_entry:true, exact_negotiated_received_pcmu:true, complete_audio_coverage:true,
         call_duration_seconds:Number((bye.time-answer.time).toFixed(3)), normal_sip_teardown:true};
 }
-module.exports = {inspect, completeMatches};
+module.exports = {inspect, completeMatches, assertCaptureLog};
 if (require.main === module) {
     try {
         const run = process.argv[2], read = name => { const p=run+'/'+name,s=fs.lstatSync(p); assert(s.isFile()&&!s.isSymbolicLink()&&s.uid===0&&(s.mode&511)===384); return fs.readFileSync(p); };
+        assertCaptureLog(read('offer-capture.log').toString('utf8'));
         const expected = JSON.parse(read('offer-call.json')), fixture = JSON.parse(read('offer-fixture.json'));
         assert(expected.queue_id===fixture.queue_id && expected.account===fixture.account);
         const evidence=JSON.parse(read('offer-queue-entry.json')); assert(evidence.call_id===expected.call_id && evidence.queue_id===expected.queue_id);
