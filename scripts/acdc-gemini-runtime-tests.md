@@ -6,7 +6,7 @@ Run from a prepared Kazoo checkout containing its pinned ACDC Git history, compi
 bash scripts/test-acdc-gemini-runtime.sh
 ```
 
-The suite is offline. It archives the literal `ACDC_REF` from the installer into a private temporary directory, applies a snapshot of `scripts/patches/acdc-kazoo5-integration.patch`, verifies reverse applicability, and compiles that replayed **default deployment baseline**. It does not compile the separately staged media/language implementations in `applications/acdc/src`, install media or change any application BEAM.
+The suite is offline. It copies the ACDC source tracked in `kz5` into a private directory and reverses the retained language/atomic patch layers to reconstruct the **historical compatibility baseline**. It verifies reverse applicability of the baseline patch and records hashes of the bundled inputs and every projection patch. `ACDC_REF` records upstream provenance; no nested repository or network fetch is required. This suite does not validate all bundled media/language behavior, install media, or change application BEAMs. Use the source unit/strategy and language suites for current source coverage.
 
 Production modules are built with `-Werror +warn_missing_spec` and the Lager parse transform, separately from `-DTEST +debug_info` builds. Their imports and exports are checked so a staged `acdc_language` module or TEST-only entry point cannot slip into the production artifact. The private test VM removes code paths containing the staged language BEAM and uses a test-only storage stub.
 

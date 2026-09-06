@@ -195,8 +195,8 @@ grep -Fq "output != *'error getting system acls'" "$INSTALLER" || \
     fail 'Kamailio SBC registration accepts a zero-exit SUP exception response'
 grep -Fq 'cdr-report-timestamp-fallback.patch' "$INSTALLER" || \
     fail 'CDR reports without an optional Timestamp can crash the CDR worker'
-grep -Fq 'acdc-kazoo5-integration.patch' "$INSTALLER" || \
-    fail 'ACDC durable callback state is not included in reproducible source preparation'
+grep -Fq 'ensure_bundled_acdc_source' "$INSTALLER" || \
+    fail 'Installer does not validate the ACDC source bundled in kz5'
 grep -Fq 'callback_recover(' "$SCRIPT_DIR/patches/acdc-kazoo5-integration.patch" || \
     fail 'ACDC integration omits callback recovery'
 grep -Fq 'maybe_announce_before_connect(' "$SCRIPT_DIR/patches/acdc-kazoo5-integration.patch" || \

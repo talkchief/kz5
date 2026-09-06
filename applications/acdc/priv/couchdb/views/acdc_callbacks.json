@@ -1,0 +1,21 @@
+{
+    "_id": "_design/acdc_callbacks",
+    "kazoo": {
+        "view_map": [
+            {
+                "classification": "account"
+            }
+        ]
+    },
+    "language": "javascript",
+    "views": {
+        "by_queue": {
+            "map": [
+                "function(doc) {",
+                "  if (doc.pvt_type !== 'acdc_callback' || doc.pvt_deleted) return;",
+                "  emit([doc.queue_id, doc.enqueued_at, doc.enqueue_sequence, doc._id], null);",
+                "}"
+            ]
+        }
+    }
+}

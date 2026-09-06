@@ -22,7 +22,19 @@ function projectSnapshot(projectRoot,packageRoot) {
     'scripts/erlang-tests/acdc_callback_caller_tests.erl',
     'scripts/erlang-tests/cf_acdc_callback_integration_tests.erl',
     'scripts/erlang-tests/cf_acdc_callback_feedback_tests.erl',
-    'core/kazoo_amqp/src/api/kapi_dialplan.erl'];
+    'core/kazoo_amqp/src/api/kapi_dialplan.erl',
+    'scripts/patches/acdc-atomic-answer-runtime.patch',
+    'scripts/patches/acdc-language-runtime.patch'];
+  // Bind the historical projection to the bundled inputs, without a nested Git repository.
+  function sourceFiles(directory) {
+    return fs.readdirSync(path.join(projectRoot,directory),{withFileTypes:true}).flatMap(entry=>{
+      const file=directory+'/'+entry.name;
+      assert(!entry.isSymbolicLink(),'Symlinked ACDC test source: '+file);
+      return entry.isDirectory()?sourceFiles(file):[file];
+    });
+  }
+  for(const directory of ['src','include','priv','test'])
+    projectFiles.push(...sourceFiles('applications/acdc/'+directory));
   const packageFiles=[
     'test-acdc-gemini-runtime.sh','generate-acdc-gemini-map.cjs','gemini-runtime-inputs.cjs',
     'test-acdc-gemini-runtime-inputs.cjs','erlang-tests/acdc_gemini_prompts_tests.erl',

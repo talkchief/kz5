@@ -1453,17 +1453,26 @@ install_kazoo_build_dependencies() {
     fi
 }
 
-ensure_kazoo_sources() {
+ensure_bundled_acdc_source() {
     local acdc_dir="${KAZOO_ROOT}/applications/acdc"
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would use ACDC source tracked in kz5 (no separate clone or integration patch)'
+        return 0
+    fi
+    [[ ! -e $acdc_dir/.git && ! -L $acdc_dir/.git ]] || \
+        die 'ACDC still has nested Git metadata; complete the kz5 source migration first'
+    [[ -s $acdc_dir/Makefile && -s $acdc_dir/src/acdc_agent_fsm.erl && -s $acdc_dir/src/acdc.app.src ]] || \
+        die 'Bundled ACDC source is missing; restore applications/acdc from this kz5 revision'
+    git -C "$KAZOO_ROOT" ls-files --error-unmatch \
+        applications/acdc/Makefile applications/acdc/src/acdc_agent_fsm.erl applications/acdc/src/acdc.app.src \
+        >/dev/null 2>&1 || die 'ACDC source must be tracked by the kz5 repository'
+}
+
+ensure_kazoo_sources() {
     local core_dir="${KAZOO_ROOT}/core"
     local cookie_patch="${SCRIPT_DIR}/patches/kazoo-cookie-redaction.patch"
     [[ -f ${KAZOO_ROOT}/make/apps.mk ]] || die 'Kazoo source manifest is missing'
-    if [[ ! -d ${acdc_dir}/.git ]]; then
-        sync_git https://github.com/kazoo-community/kazoo-acdc.git \
-            "$acdc_dir" "$ACDC_REF"
-    elif [[ $(git -C "$acdc_dir" rev-parse HEAD 2>/dev/null || true) != "$ACDC_REF" ]]; then
-        die "Existing ACDC checkout is not the pinned compatible revision ${ACDC_REF}"
-    fi
+    ensure_bundled_acdc_source
     [[ $DRY_RUN == true || -d $core_dir/.git ]] || die 'Kazoo core source checkout is missing'
     if [[ $DRY_RUN != true ]]; then
         [[ $(git -C "$core_dir" rev-parse HEAD) == "$KAZOO_CORE_REF" ]] || \
@@ -1501,7 +1510,7 @@ ensure_kazoo_sources() {
     # One patch per overlapping source stack makes reinstallation idempotent:
     # later callback edits must not invalidate reverse checks of earlier OTP
     # and announcement hunks. Feature patches remain review/test provenance.
-    apply_required_source_patch "$acdc_dir" "$SCRIPT_DIR/patches/acdc-kazoo5-integration.patch"
+    # ACDC is already part of kz5; its historical patches are not applied.
     apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
         "$SCRIPT_DIR/patches/crossbar-kazoo5-integration.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
@@ -1663,7 +1672,6 @@ build_kazoo() {
         "dep_ecallmgr=git https://github.com/2600hz/kazoo-ecallmgr.git $KAZOO_ECALLMGR_REF" \
         "dep_stepswitch=git https://github.com/2600hz/kazoo-stepswitch.git $KAZOO_STEPSWITCH_REF" \
         "dep_cdr=git https://github.com/2600hz/kazoo-cdr.git $KAZOO_CDR_REF" \
-        "dep_acdc=git https://github.com/kazoo-community/kazoo-acdc.git $ACDC_REF" \
         fetch-core fetch-apps
     ensure_kazoo_sources
     configure_kazoo

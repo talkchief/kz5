@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 // Ignored upstream source is reproduced by explicit patch layers.
+// ACDC is tracked directly in kz5 and is intentionally excluded; its patches
+// remain historical test fixtures and must not overwrite the bundled source.
 // README: language and atomic layers are STAGED, NOT default installer hooks.
 // --write preserves their baseline versions; it never promotes staged changes
 // into the installed aggregate. Language is preserved, atomic files are explicit.
@@ -11,11 +13,6 @@ const mode=process.argv[2];
 assert(process.argv.length===3&&['--check','--write'].includes(mode),
     'Usage: node scripts/refresh-kazoo-integration-patches.cjs --check|--write');
 const components=[
-    {name:'acdc',base:'acdc-kazoo5-integration.patch',layers:[
-        {name:'acdc-language-runtime.patch',preserve:true,files:[
-            'src/acdc_language.erl','src/acdc_language_maintenance.erl','src/acdc_announcements.erl',
-            'src/cf_acdc_member.erl','src/acdc_callback_caller.erl','test/acdc_announcements_tests.erl']},
-        {name:'acdc-atomic-answer-runtime.patch',files:['src/acdc_agent_fsm.erl','src/acdc_queue_fsm.erl']}]},
     {name:'crossbar',base:'crossbar-kazoo5-integration.patch',layers:[]},
     {name:'ecallmgr',base:'ecallmgr-kazoo5-integration.patch',layers:[
         {name:'ecallmgr-atomic-answer-runtime.patch',files:['src/ecallmgr_originate.erl']}]},

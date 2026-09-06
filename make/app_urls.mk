@@ -18,7 +18,7 @@ endif
 BASE_BRANCH ?= origin/master
 BRANCH = $(subst origin/,,$(BASE_BRANCH))
 
-dep_acdc = git $(FETCH_AS)kazoo-community/kazoo-acdc.git $(BRANCH)
+# ACDC is bundled in kz5; it has no external Git dependency.
 dep_blackhole = git $(FETCH_AS)2600hz/kazoo-blackhole.git $(BRANCH)
 dep_call_inspector = git $(FETCH_AS)2600hz/kazoo-call-inspector.git $(BRANCH)
 dep_callflow = git $(FETCH_AS)2600hz/kazoo-callflow.git $(BRANCH)

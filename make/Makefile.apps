@@ -24,6 +24,9 @@ BRANCH = $(subst origin/,,$(BASE_BRANCH))
 # dep_{APP1} = git $(FETCH_AS)kazoo-community/kazoo-{APP1}.git $(BRANCH)
 
 
+# ACDC is source in kz5, including when an app requests it in apps.mk.
+override DEPS := $(filter-out acdc,$(DEPS))
+
 # Don't autopatch applications' Makefiles
 # https://erlang.mk/guide/deps.html#_autopatch
 NO_AUTOPATCH_ERLANG_MK = 1

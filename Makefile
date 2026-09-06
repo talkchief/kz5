@@ -135,7 +135,7 @@ compile: deps kazoo
 
 .PHONY: sparkly-clean
 sparkly-clean: stop-if-changed clean-kazoo clean-release clean-deps clean-tags
-	 @(rm -rf $(APPS_DIR) $(CORE_DIR))
+	@rm -rf $(CORE_DIR)
 
 .PHONY: stop-if-changed
 stop-if-changed:
@@ -143,8 +143,10 @@ stop-if-changed:
 
 .PHONY: clean-kazoo
 clean-kazoo: stop-if-changed
-	@$(ls -d $(APPS_DIR)/* | xargs rm -rf)
-	@$(rm -rf $(CORE_DIR))
+	@for app in "$(APPS_DIR)"/*; do \
+		[ "$$app" = "$(APPS_DIR)/acdc" ] || rm -rf -- "$$app"; \
+	done
+	@rm -rf -- "$(CORE_DIR)"
 	@$(if $(wildcard $(CORE_HASH_FILE)), rm -rf $(CORE_HASH_FILE))
 	@$(if $(wildcard $(APPS_HASH_FILE)), rm -rf $(APPS_HASH_FILE))
 	@$(if $(wildcard $(APP_URLS_HASH_FILE)), rm -rf $(APP_URLS_HASH_FILE))

@@ -55,6 +55,8 @@ erlang.mk
 /deps/
 /core/
 /applications/*/
+!/applications/acdc/
+/applications/acdc/.git
 
 /TAGS
 
