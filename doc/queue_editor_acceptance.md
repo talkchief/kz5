@@ -97,3 +97,38 @@ the backend. The subsequent static publication (`83187`) verified all eleven
 public `/apis` files against these repository bytes over loopback HTTP. Its
 rollback and explicit non-TLS/non-backend scope are recorded in
 [the portal publication log](api_developer_portal.md).
+
+## 2026-09-06 — offline production-auth controls
+
+Session `36276` passed nine grouped authorization tests using the real JWT,
+restriction, hierarchy and scope code. Fifteen production modules compiled
+with `-Werror` and without `-DTEST`; their private loaded paths and compiler
+options were checked before and after EUnit. Seventeen source inputs and
+37 prebuilt dependency files (including the JSON NIF) retained identical hashes.
+This is bounded dependency evidence, not a fresh build of every transitive library.
+
+Controls cover exact queue/editor/roster/callflow grants, null-preservation
+requests, partial forbidden catalogs, changed media/number selections,
+unrelated-account denial with a descendant-account positive, expired signed
+tokens and independently omitted scopes. All writes stop at validation: no
+database mutation, AMQP operation, live HTTP request or service reload occurs.
+Datastore, account/config/key/identity providers, binding dispatch, error
+serialization and queue/callflow schema validators remain explicit substitutes.
+Global-media authorization does not certify installed language readiness.
+
+The missing outer queue scope produces a real permission stop before editor
+entry or resource reads. The generic middleware leaves its error-code field
+unset at that boundary; this fixture does not synthesize an HTTP 403. A separate
+public editor call after real preauthentication verifies its own 403 recheck.
+The generic middleware's final HTTP error behavior remains separately unverified.
+
+The initial run `46413` retained four passing and five failing groups at
+`/tmp/kazoo-queue-editor-auth.PJBVKw`. Corrections used the actual `_` restriction
+wildcard, distinguished validation plans from GET response bodies, and captured
+the real scope-stop boundary. Its original fixture and failure log are retained.
+The passing log is `/tmp/kazoo-queue-editor-auth.pBZfC8/eunit.log`, SHA-256
+`1edacc5fc4244ad670047fb161df883a28999881e8d186ce9779d6ba0960be69`.
+Run `scripts/test-acdc-queue-editor-real-auth.sh` through the 180-second,
+384-MiB/768-MiB-reserve guard with `unshare --net`. No production auth code changed;
+live restricted principals, current-revision deployment and live failure
+injection remain separate acceptance gates.
