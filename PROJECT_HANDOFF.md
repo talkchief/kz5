@@ -8,8 +8,9 @@ file nor a green unit test means the platform is production-ready.
 
 Read this file first, then [PROJECT_TASKS.md](PROJECT_TASKS.md), then the
 acceptance document for the component you will change. This guide describes the
-checkpoint at committed baseline **`61bf505`**, plus explicitly identified work
-in progress. A later commit containing this documentation is not a new runtime
+checkpoint through callback fix **`a75806c`** and French catalog **`2325d9b`**,
+following the UI/API baseline `61bf505`, plus explicitly identified work in
+progress. A later commit containing this documentation is not a new runtime
 release. Recheck Git and live state before acting.
 
 | Area | Achieved | Not yet established |
@@ -20,7 +21,7 @@ release. Recheck Git and live state before acting.
 | Queue language UI/editor | Five choices, obsolete-reference deletion,42-entry callback/57-entry transitional readiness checks tested in `61bf505` | Fresh compiled UI publication and real browser/live queue acceptance |
 | Developer reference | Updated static `/apis/` publication verified against all12 HTTP-served files | Documentation is not proof its backend is deployed; proposed dashboards are not callable APIs |
 | Installer/services | Modular installer and offline main smoke pass; `kazoo-applications.service` resolves to active `kazoo-apps.service` | Fresh separate-server/ALL installation, reboot, interoperability and sustained load acceptance |
-| Release | Recent changes committed locally through `61bf505` | Final master integration/push and remote-SHA verification |
+| Release | Recent changes committed locally through `a75806c` | Final master integration/push and remote-SHA verification |
 
 For precise test boundaries and failed-before/fixed-after evidence, see
 [canonical callback acceptance](doc/acdc_canonical_callback_acceptance.md).
@@ -238,8 +239,9 @@ Update this section with final outcomes rather than deleting failed evidence.
 6. Continue the remaining task register; voice completion alone does not close
    the original platform goal.
 
-Ownership at this checkpoint: `native_audio_path_audit` owns the uncommitted
-P0-12 helper/member and related canonical/feedback/integration tests. Installer
+Ownership at this checkpoint: `native_audio_path_audit` handed back the P0-12
+helper/member and related canonical/feedback/integration tests, committed in
+`a75806c`. Installer
 71503 finished and its validation window was released; focused run6821 exited0
 with22 media/helper/contract tests passing, production/TEST compilation and
 source pins checked. Input digest:
@@ -250,7 +252,8 @@ then root's production compile. These are source checks, not live acceptance.
 `media_prerequisites` owns the French
 finite-cardinal addition in `scripts/acdc-cardinal-catalog.cjs`, its test, and
 `doc/acdc_prerecorded_cardinal_design.md`; French validation19058 passed all nine
-groups and is ready for integration, Arabic/Hebrew grammar remains open. These agent names
+groups and was committed in `2325d9b`. Arabic/Hebrew grammar remains open; Hebrew
+source/context research is the next assigned slice. These agent names
 are coordination hints, not durable jobs: inspect current messages/processes
 before overlapping edits or starting another memory-heavy test. Root owns this
 guide, review and release integration. Never blanket-stage another agent's
