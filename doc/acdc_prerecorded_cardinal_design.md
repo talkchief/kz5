@@ -1,6 +1,6 @@
 # Prerecorded queue cardinal numbers: finite-catalog design
 
-Status: design and isolated EN/ES source building block, **not runtime readiness**.
+Status: design and isolated EN/ES/FR source building block, **not runtime readiness**.
 The release requirement remains EN/HE/FR/ES/AR, each covering every integer
 0..999999999 using one built-in female Gemini voice and recordings authored in
 this release. No native SAY, digit-spelling substitute for cardinals, runtime TTS,
@@ -13,12 +13,12 @@ separate digit-by-digit operation. Existing manifests/assets must not be rewritt
 ## Source contract and next action
 
 `scripts/acdc-cardinal-catalog.cjs` is a pure versioned authoring-time building
-block. Version `acdc-cardinal-v1` contains 31 EN and 53 ES logical recordings.
+block. Version `acdc-cardinal-v1` contains 31 EN, 53 ES and 161 FR logical recordings.
 `compose(number, locale)` returns `{catalog_version, locale, number, token_ids}`;
 `tokens`, `transcript` and `plan` expose playback IDs, review text and the catalog.
 The module has no imports, I/O, provider, playback or account integration.
-Only exact `en-us` and `es-es` currently compose. Required but unimplemented
-`fr-fr`, `he-il`, `ar-sa` fail explicitly. This is not a reduced release scope.
+Only exact `en-us`, `es-es` and `fr-fr` currently compose. Required but
+unimplemented `he-il`, `ar-sa` fail explicitly. This is not a reduced release scope.
 
 IDs are `acdc-cardinal-v1-<role>` with locale forming part of the media identity.
 They are distinct from historical `acdc-number-*` IDs; do not overwrite the
@@ -82,7 +82,7 @@ Examples: 101 = “ciento uno”; 21000 = “veintiún mil”; 101000 = “cient
 The complete source plan contains the exact spelled transcript of all53 roles.
 Rules and irregular forms: [RAE, cardinales](https://www.rae.es/dpd/cardinales).
 
-## Practical FR proposal: 161 logical recordings, not yet implemented
+## Implemented pure FR catalog: 161 logical recordings, no WAVs generated
 
 France French, not septante/nonante variants. Prefer whole short phrases to
 unreliable phoneme fragments from isolated-word TTS:
@@ -109,12 +109,36 @@ mille; million coefficient1 is un million. Hundred-one phrases deliberately
 avoid depending on an unverified cent/un audio join. Orthographic cent/vingt
 plural context still belongs in the full transcript, even where audio is equal.
 
-Sources: [OQLF six/dix](https://vitrinelinguistique.oqlf.gouv.qc.ca/23137/la-prononciation/prononciation-des-nombres/prononciation-de-six-et-de-dix),
+The pure source implements these exact161 roles. A `scaled-tail` entry has numeric
+`value` (the tail coefficient) and `scale` (1000 or1000000). It closes the current
+group as `(preceding hundreds + value) * scale`; the compositor must not append a
+second scale token. Whole H01 entries carry their complete numeric value. The
+immutable catalog stores normal standalone recording transcripts. Full
+`transcript()` output separately removes the silent plural s in cent(s) or
+quatre-vingt(s) when another numeral, including mille, follows; it retains the
+plural before the noun millions. This spelling operation never alters audio or
+replaces a contextual sound with an isolated digit. Existing EN/ES transcripts,
+IDs, forms and14-token maximum remain unchanged; French needs at most8 tokens.
+
+Examples: 71 = “soixante et onze”; 81 = “quatre-vingt-un”; 108 = “cent huit”;
+111 = “cent onze”; 201 = “deux cent un”; 26000 uses the whole “vingt-six mille”
+tail; 106000 = [cent, six mille]; 200000 = “deux cent mille” but200000000 =
+“deux cents millions”; 280000 = “deux cent quatre-vingt mille” but280000000 =
+“deux cent quatre-vingts millions.” No et is inserted between hundreds or scale
+groups; 1001 uses “mille un,” not the indefinite-quantity expression “mille et un.”
+The selected full-text spelling is traditional cardinal spelling, not a general
+ordinal, feminine counted-noun or currency API. Native listening still needs to
+qualify pronunciation and coarticulation; a correct transcript is not audio proof.
+
+Primary references checked during implementation on2026-09-06:
+[OQLF six/dix](https://vitrinelinguistique.oqlf.gouv.qc.ca/23137/la-prononciation/prononciation-des-nombres/prononciation-de-six-et-dix),
 [huit](https://vitrinelinguistique.oqlf.gouv.qc.ca/23149/la-prononciation/prononciation-des-nombres/prononciation-de-huit),
 [vingt](https://vitrinelinguistique.oqlf.gouv.qc.ca/23141/la-prononciation/prononciation-des-nombres/prononciation-de-vingt),
-[cent/vingt/mille plurals](https://vitrinelinguistique.oqlf.gouv.qc.ca/21532/la-grammaire/les-determinants/determinants-numeraux/pluriel-de-vingt-de-cent-et-de-mille).
-This161-role proposal needs exact transcript and listening review before payment;
-it is a practical bounded bank, not a proven minimum or existing artifact pack.
+[cent/vingt/mille plurals](https://vitrinelinguistique.oqlf.gouv.qc.ca/21532/la-grammaire/les-determinants/determinants-numeraux/pluriel-de-vingt-de-cent-et-de-mille),
+[et in compound numbers](https://vitrinelinguistique.oqlf.gouv.qc.ca/24631/la-prononciation/prononciation-des-nombres/prononciation-de-et-dans-les-nombres-composes),
+[traditional number spelling](https://vitrinelinguistique.oqlf.gouv.qc.ca/index.php?id=23494).
+This161-role bank needs authoring review before payment and listening review after
+generation; it is a practical bounded bank, not a proven minimum or artifact pack.
 
 ## HE draft: 133 roles, explicit unresolved transcript gates
 
@@ -171,6 +195,12 @@ scales, numeric meaning of token streams, apocope and cien/ciento context, expli
 full transcripts, cross-products of22 group boundaries, mixed full-range values,
 and maximum999999999. Both implemented grammars have a14-token maximum. Invalid
 inputs/locales fail; imports work with no filesystem/network/provider globals.
+The French extension preserves these29,344 EN/ES composition checks and adds
+all3000 French group/scale cases, a separately written literal0..99 table, full
+transcript goldens, every contextual-tail selection and all161-role reachability.
+It also checks22-by22-by22 French group-boundary combinations plus1000 mixed
+values, including plural spelling across groups and the8-token maximum. Receipt
+counts report actual checks; a prepared fixture is not a claimed test pass.
 This is source grammar evidence only, not audio generation or native acceptance.
 
 Guarded run90582 exited0 on September6: six groups passed with29,344 compositions
@@ -181,6 +211,17 @@ test SHA-256:
 `25414e714ef8340cebd3ac9072a0e0a6c07b9882770eee59537f6b89064384f7`.
 These input hashes remained stable. No clips were generated or reused by this
 run; no runtime media paths changed.
+
+French extension run19058 exited0 on September6 under the256-MiB/768-MiB-reserve,
+60-second offline guard. All nine groups passed with44,040 semantic composition
+checks, retaining the prior EN/ES coverage and adding48 French goldens, the
+literal100 short forms, exhaustive groups/scales, all161-role reachability and
+the eight-token maximum. Catalog SHA-256:
+`ab64c000ca343e7f0f3289016754555ba24a8b247c0763868346b8e63355e459`;
+test SHA-256:
+`246884834f2c88514ceaadf302c1aa7ba385c74601bd73848eb25e41f3fbe595`.
+Both remained stable. This is a tested pure EN/ES/FR compositor, not a WAV pack
+or a deployed runtime. Hebrew/Arabic and listening acceptance remain open.
 
 Reproduce from a prepared host with Node18 or later:
 
