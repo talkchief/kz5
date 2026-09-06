@@ -1135,7 +1135,7 @@
         "tags": [
           "ACDC agents"
         ],
-        "summary": "Read agent /{USER_ID}/queue_status",
+        "summary": "Read persisted enrollment or check selected runtime queue membership",
         "parameters": [
           {
             "in": "path",
@@ -1154,6 +1154,40 @@
               "type": "string",
               "pattern": "^[a-f0-9]{32}$"
             }
+          },
+          {
+            "in": "query",
+            "name": "runtime_only",
+            "schema": {
+              "type": "boolean",
+              "enum": [
+                true
+              ]
+            },
+            "description": "Optional opt-in. Omit for legacy enrollment; false or malformed explicit values are invalid."
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "login"
+              ]
+            },
+            "description": "Required when runtime_only=true; no runtime-only logout operation."
+          },
+          {
+            "in": "query",
+            "name": "queue_id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "x-max-utf8-bytes": 128,
+              "description": "Runtime-only queue IDs are limited to 128 UTF-8 bytes, not 128 multibyte characters."
+            },
+            "description": "Required when runtime_only=true; must be an existing selected enrollment."
           }
         ],
         "security": [
@@ -1163,7 +1197,18 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "Legacy enrollment array, or runtime-only pending/confirmed membership proof",
+            "headers": {
+              "Cache-Control": {
+                "description": "Runtime-only handler responses are not cacheable. Legacy and pre-handler authentication/load errors retain their existing behavior.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1173,7 +1218,21 @@
                       "type": "string"
                     },
                     "data": {
-                      "description": "Resource-specific data; optional envelope fields may also be returned."
+                      "oneOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "x-max-utf8-bytes": 128,
+                            "description": "Runtime-only queue IDs are limited to 128 UTF-8 bytes, not 128 multibyte characters."
+                          }
+                        },
+                        {
+                          "$ref": "#/components/schemas/AgentQueueRuntimeSnapshot"
+                        }
+                      ]
                     },
                     "request_id": {
                       "type": "string"
@@ -1187,7 +1246,18 @@
             }
           },
           "400": {
-            "description": "Invalid request",
+            "description": "Invalid explicit runtime_only mode, missing/non-login action, or invalid queue ID.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Runtime-only handler responses are not cacheable. Legacy and pre-handler authentication/load errors retain their existing behavior.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1207,7 +1277,18 @@
             }
           },
           "403": {
-            "description": "Insufficient permissions",
+            "description": "Agent is disabled/deleted, foreign-account or not enrolled in the selected queue; existing authorization also applies.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Runtime-only handler responses are not cacheable. Legacy and pre-handler authentication/load errors retain their existing behavior.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1217,7 +1298,18 @@
             }
           },
           "404": {
-            "description": "Resource not found in this account",
+            "description": "Selected queue missing, deleted, wrong type or foreign-account; existing resource-load errors are retained.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Runtime-only handler responses are not cacheable. Legacy and pre-handler authentication/load errors retain their existing behavior.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1237,7 +1329,18 @@
             }
           },
           "503": {
-            "description": "Dependency unavailable; do not blindly retry mutations",
+            "description": "Queue datastore or command publication unavailable; do not blindly retry a mutation.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Runtime-only handler responses are not cacheable. Legacy and pre-handler authentication/load errors retain their existing behavior.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1249,14 +1352,21 @@
         },
         "x-contract-review": "source-reviewed",
         "x-source-file": "applications/acdc/src/cb_agents.erl",
-        "x-runtime-verification": "Source review only unless explicitly noted in the operation description."
+        "x-runtime-verification": "Offline contract/source validation only; a deployment-specific live runtime proof remains required.",
+        "description": "Implemented in source; not yet live-deployed. Same authenticated account-scoped route and existing authorization rules. Opt in with runtime_only=true plus action=login and a selected queue_id already in the enabled account-owned user’s persisted enrollment. The queue must exist, have queue type and belong to the same account. Validation and POST execution recheck enrollment; the AMQP consumer checks it again. No roster/user/queue document is saved in runtime-only mode. A running agent keeps other queues and its status; a new agent starts with only the selected runtime queue. No other agent is logged out. Probe runtime-only GET before POST: a legacy array response is not support or confirmation. Without runtime_only, GET returns the legacy persisted queue-ID array. With runtime_only=true, a fresh correlated listener sync is bounded to two seconds. Timeout, absent/old/stale/foreign/malformed proof remains pending with runtime_observed=false; global ready alone is never confirmation. A valid listener reply without the queue is pending with runtime_observed=true.",
+        "x-implementation-status": "implemented-in-source; not-live-deployed",
+        "x-source-files": [
+          "applications/acdc/src/cb_agents.erl",
+          "applications/acdc/src/cb_acdc_agent_queue.erl"
+        ],
+        "x-runtime-source-sha256": "f018a57a3b8c70572033a19f78756403f30a2d8699e5db785fd40dcfc2dfbfd1"
       },
       "post": {
         "operationId": "post__accounts_ACCOUNT_ID_agents_USER_ID_queue_status",
         "tags": [
           "ACDC agents"
         ],
-        "summary": "Log an agent into or out of queue membership",
+        "summary": "Request selected runtime queue login or change legacy enrollment",
         "parameters": [
           {
             "in": "path",
@@ -1284,7 +1394,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "Legacy persisted-enrollment update only; not runtime confirmation",
             "content": {
               "application/json": {
                 "schema": {
@@ -1294,7 +1404,49 @@
                       "type": "string"
                     },
                     "data": {
-                      "description": "Resource-specific data; optional envelope fields may also be returned."
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "x-max-utf8-bytes": 128,
+                        "description": "Runtime-only queue IDs are limited to 128 UTF-8 bytes, not 128 multibyte characters."
+                      }
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Runtime-only login command published; confirmation pending",
+            "headers": {
+              "Cache-Control": {
+                "description": "Runtime-only handler responses are not cacheable. Legacy and pre-handler authentication/load errors retain their existing behavior.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AgentQueueRuntimeAccepted"
                     },
                     "request_id": {
                       "type": "string"
@@ -1308,7 +1460,18 @@
             }
           },
           "400": {
-            "description": "Invalid request",
+            "description": "Invalid explicit runtime_only mode, missing/non-login action, or invalid queue ID.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Runtime-only handler responses are not cacheable. Legacy and pre-handler authentication/load errors retain their existing behavior.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1328,7 +1491,18 @@
             }
           },
           "403": {
-            "description": "Insufficient permissions",
+            "description": "Agent is disabled/deleted, foreign-account or not enrolled in the selected queue; existing authorization also applies.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Runtime-only handler responses are not cacheable. Legacy and pre-handler authentication/load errors retain their existing behavior.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1338,7 +1512,18 @@
             }
           },
           "404": {
-            "description": "Resource not found in this account",
+            "description": "Selected queue missing, deleted, wrong type or foreign-account; existing resource-load errors are retained.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Runtime-only handler responses are not cacheable. Legacy and pre-handler authentication/load errors retain their existing behavior.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1358,7 +1543,18 @@
             }
           },
           "503": {
-            "description": "Dependency unavailable; do not blindly retry mutations",
+            "description": "Queue datastore or command publication unavailable; do not blindly retry a mutation.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Runtime-only handler responses are not cacheable. Legacy and pre-handler authentication/load errors retain their existing behavior.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1370,7 +1566,7 @@
         },
         "x-contract-review": "source-reviewed",
         "x-source-file": "applications/acdc/src/cb_agents.erl",
-        "x-runtime-verification": "Source review only unless explicitly noted in the operation description.",
+        "x-runtime-verification": "Offline contract/source validation only; a deployment-specific live runtime proof remains required.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1379,33 +1575,51 @@
                 "type": "object",
                 "properties": {
                   "data": {
-                    "type": "object",
-                    "properties": {
-                      "action": {
-                        "type": "string",
-                        "enum": [
-                          "login",
-                          "logout"
-                        ]
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/AgentQueueRuntimeLogin"
                       },
-                      "queue_id": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{32}$"
+                      {
+                        "$ref": "#/components/schemas/AgentQueueLegacyUpdate"
                       }
-                    },
-                    "required": [
-                      "action",
-                      "queue_id"
                     ]
                   }
                 },
                 "required": [
                   "data"
                 ]
+              },
+              "examples": {
+                "runtime_only_login": {
+                  "summary": "Selected already-enrolled queue; no enrollment write",
+                  "value": {
+                    "data": {
+                      "runtime_only": true,
+                      "action": "login",
+                      "queue_id": "00000000000000000000000000000000"
+                    }
+                  }
+                },
+                "legacy_enrollment": {
+                  "summary": "Legacy enrollment mutation — not runtime-only",
+                  "value": {
+                    "data": {
+                      "action": "login",
+                      "queue_id": "00000000000000000000000000000000"
+                    }
+                  }
+                }
               }
             }
           }
-        }
+        },
+        "description": "Implemented in source; not yet live-deployed. Same authenticated account-scoped route and existing authorization rules. Opt in with runtime_only=true plus action=login and a selected queue_id already in the enabled account-owned user’s persisted enrollment. The queue must exist, have queue type and belong to the same account. Validation and POST execution recheck enrollment; the AMQP consumer checks it again. No roster/user/queue document is saved in runtime-only mode. A running agent keeps other queues and its status; a new agent starts with only the selected runtime queue. No other agent is logged out. Probe runtime-only GET before POST: a legacy array response is not support or confirmation. POST 202 is always pending/confirmed=false; it acknowledges publication only. Poll runtime-only GET to confirm membership. Do not automatically repeat a POST after an ambiguous response. Legacy unflagged login/logout still changes persisted enrollment and returns its queue-ID array; use that only when an enrollment change is intended.",
+        "x-implementation-status": "implemented-in-source; not-live-deployed",
+        "x-source-files": [
+          "applications/acdc/src/cb_agents.erl",
+          "applications/acdc/src/cb_acdc_agent_queue.erl"
+        ],
+        "x-runtime-source-sha256": "f018a57a3b8c70572033a19f78756403f30a2d8699e5db785fd40dcfc2dfbfd1"
       }
     },
     "/accounts/{ACCOUNT_ID}/agents/{USER_ID}/status": {
@@ -47769,6 +47983,242 @@
         "required": [
           "status"
         ]
+      },
+      "AgentQueueRuntimePending": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "agent_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "queue_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "x-max-utf8-bytes": 128,
+            "description": "Runtime-only queue IDs are limited to 128 UTF-8 bytes, not 128 multibyte characters."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "login"
+            ]
+          },
+          "runtime_only": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending"
+            ]
+          },
+          "confirmed": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "runtime_member": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "runtime_observed": {
+            "type": "boolean"
+          },
+          "agent_status": {
+            "type": "string",
+            "description": "Observed global agent status, or unknown when no valid runtime reply arrived. This is separate from selected-queue membership."
+          }
+        },
+        "required": [
+          "account_id",
+          "agent_id",
+          "queue_id",
+          "action",
+          "runtime_only",
+          "state",
+          "confirmed",
+          "runtime_member",
+          "runtime_observed",
+          "agent_status"
+        ],
+        "description": "No selected-queue membership confirmation. runtime_observed=false means missing/old/malformed/unmatched/timed-out proof; true means a fresh listener reply did not include the queue. This is not a saved-roster result."
+      },
+      "AgentQueueRuntimeConfirmed": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "agent_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "queue_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "x-max-utf8-bytes": 128,
+            "description": "Runtime-only queue IDs are limited to 128 UTF-8 bytes, not 128 multibyte characters."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "login"
+            ]
+          },
+          "runtime_only": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "confirmed"
+            ]
+          },
+          "confirmed": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "runtime_member": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "runtime_observed": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "agent_status": {
+            "type": "string",
+            "description": "Observed global agent status, or unknown when no valid runtime reply arrived. This is separate from selected-queue membership."
+          }
+        },
+        "required": [
+          "account_id",
+          "agent_id",
+          "queue_id",
+          "action",
+          "runtime_only",
+          "state",
+          "confirmed",
+          "runtime_member",
+          "runtime_observed",
+          "agent_status"
+        ],
+        "description": "A fresh correlated account/agent listener reply included the selected queue. Membership only: not ready, ringing, SIP registration, audio or queue-manager acknowledgement."
+      },
+      "AgentQueueRuntimeSnapshot": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AgentQueueRuntimePending"
+          },
+          {
+            "$ref": "#/components/schemas/AgentQueueRuntimeConfirmed"
+          }
+        ]
+      },
+      "AgentQueueRuntimeAccepted": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AgentQueueRuntimePending"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "runtime_observed": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "agent_status": {
+                "type": "string",
+                "enum": [
+                  "unknown"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "POST acknowledgement only; no runtime observation has been made."
+      },
+      "AgentQueueRuntimeLogin": {
+        "type": "object",
+        "properties": {
+          "runtime_only": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "login"
+            ]
+          },
+          "queue_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "x-max-utf8-bytes": 128,
+            "description": "Runtime-only queue IDs are limited to 128 UTF-8 bytes, not 128 multibyte characters."
+          }
+        },
+        "required": [
+          "runtime_only",
+          "action",
+          "queue_id"
+        ]
+      },
+      "AgentQueueLegacyUpdate": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "login",
+              "logout"
+            ]
+          },
+          "queue_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "x-max-utf8-bytes": 128,
+            "description": "Runtime-only queue IDs are limited to 128 UTF-8 bytes, not 128 multibyte characters."
+          }
+        },
+        "required": [
+          "action",
+          "queue_id"
+        ],
+        "not": {
+          "required": [
+            "runtime_only"
+          ]
+        },
+        "description": "Legacy mode is selected only when runtime_only is absent. This route changes persisted user.queues enrollment and sends a queue command. It is not a runtime-only login or confirmation."
       },
       "MonitorStart": {
         "type": "object",

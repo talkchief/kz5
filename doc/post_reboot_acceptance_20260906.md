@@ -17,6 +17,24 @@ This is repository artifact acceptance, not live publication or browser proof.
 Receipt: `/usr/local/src/kazoo5-installer/queue-login-ui.wAuMpU/docs-full-tests-afb551798339.json`,
 SHA256 `2d15cc187340fa85af7045eb95ec00116621324b94591f56714c653afbc35a53`.
 
+After the ACDC direct-source handoff, root revalidated the current artifact in
+session `84398` (exit 0): 354 paths, 649 operations, deterministic rebuild,
+schema negatives and tamper detection passed. All 120 input fingerprints and
+111 source-inventory fingerprints match the current checkout. Focused session
+`97556` also exited 0 with nine queue-login groups / 45 schema cases. The pending
+artifact delta changes only the agent `queue_status` route and adds six related
+schemas; no unrelated path/schema was removed or changed. These generated
+assets are being committed in kz5; the route still explicitly says it is not
+live-deployed. No `/apis` publication or endpoint activation occurred.
+
+Current artifact SHA-256 values:
+
+```text
+d1f180cd88929ca0208d370a30bc93628f6253e856580625048752124f01f81f  openapi.json
+df343c480adee7754af5bbbfb1703f83e151bafd44255e6668717108050e3a2a  coverage.json
+3c4d20e54aefc7968122d861f9be4a380e2953f1571c546751eb131c58cc070d  manifest.json
+```
+
 The callback-offer PCAP checker now rejects missing packets throughout the
 observed audio timeline, not only inside the expected spoken phrases. Twenty-six
 synthetic gates passed in a 30-second resource-capped invocation, including

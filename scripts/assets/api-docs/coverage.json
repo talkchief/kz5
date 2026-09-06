@@ -1297,8 +1297,8 @@
     "GET /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}",
     "POST /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}"
   ],
-  "schema_count": 471,
-  "internal_reference_count": 1541,
+  "schema_count": 477,
+  "internal_reference_count": 1548,
   "unresolved_reference_count": 0,
   "schema_adjustments": [
     {
@@ -2266,6 +2266,11 @@
       ]
     },
     {
+      "file": "applications/acdc/src/cb_acdc_agent_queue.erl",
+      "sha256": "f018a57a3b8c70572033a19f78756403f30a2d8699e5db785fd40dcfc2dfbfd1",
+      "literal_binding_nouns": []
+    },
+    {
       "file": "applications/acdc/src/cb_acdc_call_stats.erl",
       "sha256": "371ee4e109e8dbbb9a6df1f2835e5cc37c4fff4bd6d7c3eed16826b0a59323b5",
       "literal_binding_nouns": [
@@ -2279,7 +2284,7 @@
     },
     {
       "file": "applications/acdc/src/cb_agents.erl",
-      "sha256": "3602effb3ebfed89fbf5bc6c86a7aaa5ea9dfe1de17bf39e5be9b45103ebbe0d",
+      "sha256": "fc64b5ceda99d46e6bd7c22a5e50fe662e5169feab4179de6641fabb4c512423",
       "literal_binding_nouns": [
         "agents"
       ]
@@ -2312,8 +2317,20 @@
   ],
   "inputs": [
     {
+      "file": "applications/acdc/src/acdc_agent_handler.erl",
+      "sha256": "f1f90d479e904cdb1fd0f623fbbfc6e3b50b4788e6c06e47ea858184beadbb60"
+    },
+    {
+      "file": "applications/acdc/src/acdc_agent_listener.erl",
+      "sha256": "de1176c49fc3d41a1b699f45b10d3a07b089055df76db74074702daa90324dea"
+    },
+    {
       "file": "applications/acdc/src/acdc_callback_store.erl",
       "sha256": "79c0c21aac1a1454e9bde3780e6f2638a8fec49a914be3216ab86c279a25b112"
+    },
+    {
+      "file": "applications/acdc/src/cb_acdc_agent_queue.erl",
+      "sha256": "f018a57a3b8c70572033a19f78756403f30a2d8699e5db785fd40dcfc2dfbfd1"
     },
     {
       "file": "applications/acdc/src/cb_acdc_queue_editor.erl",
@@ -2321,11 +2338,19 @@
     },
     {
       "file": "applications/acdc/src/cb_agents.erl",
-      "sha256": "3602effb3ebfed89fbf5bc6c86a7aaa5ea9dfe1de17bf39e5be9b45103ebbe0d"
+      "sha256": "fc64b5ceda99d46e6bd7c22a5e50fe662e5169feab4179de6641fabb4c512423"
+    },
+    {
+      "file": "applications/acdc/src/cb_agents.erl",
+      "sha256": "fc64b5ceda99d46e6bd7c22a5e50fe662e5169feab4179de6641fabb4c512423"
     },
     {
       "file": "applications/acdc/src/cb_queues.erl",
       "sha256": "6084ea66584118478e54ae0bebdcd46222fa981de99b18bd927b3a964820de57"
+    },
+    {
+      "file": "applications/acdc/src/kapi_acdc_agent.erl",
+      "sha256": "b31586bda8cc1aac183d72e0c2788763ca179721e0fb7855bca96bb26bbdc97c"
     },
     {
       "file": "applications/crossbar/priv/couchdb/schemas/queues.json",
@@ -2744,12 +2769,16 @@
       "sha256": "4f83a0e8d60d49f1ebe336f035f4e0a1fb7d3c46bd632cfa61be8a20645c8cc0"
     },
     {
+      "file": "scripts/api-docs-agent-queue-login.cjs",
+      "sha256": "d0eb9f00621acffcf4782244a06c080e49c90731bbb4eca2b6c62adde8a60803"
+    },
+    {
       "file": "scripts/api-docs-members-devices.cjs",
       "sha256": "b9306fd413d55008310ce4d4da3aa76980ad1ce58cb0a313ea2b83969639a648"
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "2e9124ac1f16952612b0c518221a5145066cabcccb3c6142312388e5188f4060"
+      "sha256": "ae7b7553d5222bd0cc27416f7f912e6c53427beeaa846ffb5d1ea87c70adb894"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",
