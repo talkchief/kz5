@@ -1,7 +1,77 @@
 # Current deployment tasks
 
+Project-wide priorities, owners and dashboard/workforce requirements are tracked
+in [PROJECT_TASKS.md](../PROJECT_TASKS.md). This file retains detailed deployment
+and incident evidence; task completion must agree with the project register.
+
 This checklist records requested work, not production certification. The checked
 items below have the specific evidence stated; unchecked items are not finished.
+
+- [ ] DASH-01–07: implement the supplied queue overview/live drilldown and both
+  historical dashboard designs; add bounded source-backed snapshot/history APIs,
+  account/queue-scoped WebSocket updates and OpenAPI/event documentation at
+  `/apis`. Clicking a queue opens its live dashboard. See the
+  [design and acceptance brief](dashboard_delivery_plan.md).
+- [ ] WFM-01–04: agent workforce report in the same style covering login/logout
+  sessions, working hours, breaks and break types; filters, details, exports,
+  durable event history, policy/timezone definitions and documented APIs.
+  Multi-queue logins must not double-count working hours; unknown intervals and
+  missing break reasons must be reported rather than invented.
+
+- [ ] P0 report at 2026-09-06 09:48: extension 2000 caller waiting despite a
+  globally ready agent. Read-only API snapshot shows queue roster contains only
+  Agent 12 (logged out); ready Agent 19 has no queue memberships. SUP queue
+  detail reports `Known Agents: NONE`. Both exact SIP endpoints are registered.
+  Await operator choice before changing roster/login state; then verify ringing
+  on the corrected queue. Improve UI distinction between global status and
+  queue eligibility. No broad agent reset, call hangup or queue restart was used.
+
+- [ ] P0 follow-up — queue-specific agent login. Clicking Login must present
+  an explicit queue selector and confirm successful login to the chosen queue,
+  not merely global agent readiness. Respect account access and queue membership;
+  do not silently add an agent to a roster or log other agents out. Show which
+  queues the agent is actually logged into. Acceptance: select queue 2000, verify
+  runtime eligibility, place a call and confirm that the selected agent rings;
+  a globally ready but unassigned agent must not appear eligible for that queue.
+
+- [ ] Update the agent queue-login API and its OpenAPI documentation at `/apis`
+  alongside the queue-selecting Login UI. Inspect and reuse the existing
+  queue-login contract where possible; explicitly identify the account, agent
+  and selected queue, enforce authorization and membership, and make repeated
+  login requests safe. Distinguish accepted/pending commands from confirmed
+  runtime queue login; never report global readiness as queue-login success.
+  Specify request/response schemas, examples, authentication, validation and
+  permission errors, missing/nonmember queues, unavailable runtime and retry
+  behavior. Document membership changes as a separate explicit operation.
+  Add backend, authorization, idempotency, UI and OpenAPI contract tests; publish
+  the matching documentation with the implemented API, not as an already-live
+  endpoint before implementation and verification.
+
+- [ ] P0 follow-up — pressing callback key 6 did not register a callback or
+  play audible notification in the user's live call. Logs for the 09:46:58 call
+  report `callback menu unavailable: invalid_number; resuming live queue`; this
+  explains a rejected attempt, not successful callback registration. Diagnose
+  return-number selection and keypad failure feedback. Provide a usable,
+  validated return-number path and clear audio on failure; play success only
+  after durable registration, finish confirmation before hanging up, preserve
+  queue position and verify unanswered-attempt retries. Reproduce with the
+  user's MicroSIP path as well as the isolated fixture; do not invent a number.
+
+- [ ] P0 follow-up — callback offer was not heard at the configured 30 seconds.
+  Verify the saved callback-specific enable/initial-delay/repeat fields, their
+  runtime loading and actual received audio timestamps on the affected queue.
+  The callback offer must use its own schedule, independently of position,
+  estimated-wait and generic announcements. Test first offer at the configured
+  delay, subsequent repeats, and interaction with key 6/invalid return numbers;
+  retain the user's report as unresolved until that live path passes.
+
+- [ ] Finalize prompt-language override for EN, HE, AR, FR and ES. Generate and
+  review Gemini speech once at artifact-build time; retain shared versioned
+  audio/transcripts/provenance in Git and install shared system-media assets.
+  Existing and future accounts/sub-accounts must select those installed assets
+  without Gemini requests during account creation, queue editing or playback.
+  Test explicit queue overrides and inherited/default language selection,
+  including clear missing-pack handling; do not mark incomplete packs ready.
 
 - [ ] Resolve and revalidate the 23:27 host-memory/AMQP incident. Broker alarms
   cleared without platform restarts. The all-offline test phones were recovered
