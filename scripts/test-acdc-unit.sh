@@ -26,4 +26,13 @@ erlc -DTEST -I applications/acdc/src -I applications/acdc/include -pa deps/lager
     applications/acdc/test/acdc_queue_fsm_tests.erl applications/acdc/test/acdc_queue_manager_tests.erl \
     applications/acdc/test/acdc_queue_member_tests.erl
 KAZOO_CONFIG="$project_root/rel/config-test.ini" erl -pa "$test_dir" -noshell \
-    -eval 'case eunit:test([acdc_agent_fsm_tests,acdc_queue_fsm_tests,acdc_queue_manager_tests,acdc_queue_member_tests], [verbose]) of ok -> halt(0); _ -> halt(1) end.'
+    -eval '
+      %% Mock compilation is included in EUnit wall time. At the validation
+      %% guards 50% CPU quota, the five-second default intermittently expires
+      %% in meck setup before an assertion runs. Keep every test/assertion and
+      %% use the supported slow-host scale; production timers and the outer
+      %% finite resource/runtime guard are unchanged.
+      case eunit:test([acdc_agent_fsm_tests,acdc_queue_fsm_tests,acdc_queue_manager_tests,acdc_queue_member_tests],
+                      [verbose,{scale_timeouts,4}]) of
+        ok -> halt(0); _ -> halt(1)
+      end.'

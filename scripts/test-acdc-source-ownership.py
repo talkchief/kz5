@@ -76,18 +76,76 @@ class AcdcSourceOwnershipTests(unittest.TestCase):
         for target in ["clean-kazoo", "sparkly-clean"]:
             with self.subTest(target=target), tempfile.TemporaryDirectory(prefix="acdc-clean-") as directory:
                 root = Path(directory)
-                for relative in ["applications/acdc/src/keep.erl", "applications/crossbar/remove.erl", "core/remove.erl"]:
+                preserved = ["applications/acdc/src/keep.erl", "applications/acdc/include/keep.hrl",
+                             "applications/acdc/priv/keep.json", "applications/acdc/test/keep.erl",
+                             "applications/acdc/ebin/.placeholder", "applications/acdc/ebin/tracked.app",
+                             "applications/acdc/ebin/operator-note.txt"]
+                generated = ["applications/acdc/ebin/stale.beam", "applications/acdc/ebin/acdc.app",
+                             "applications/acdc/.deps.rules", "applications/acdc/.deps.mk.fixture",
+                             "applications/acdc/.apps.mk.fixture", "applications/acdc/.test.deps",
+                             "applications/acdc/test/acdc.app"]
+                for relative in preserved + generated + ["applications/crossbar/remove.erl", "core/remove.erl", "outside/keep.beam"]:
                     file = root / relative
                     file.parent.mkdir(parents=True, exist_ok=True)
                     file.write_text("fixture\n")
-                (root / "Makefile").write_text("APPS_DIR := $(CURDIR)/applications\nCORE_DIR := $(CURDIR)/core\n" + clean + sparkly +
+                (root / "applications/acdc/.gitignore").write_bytes((ROOT / "applications/acdc/.gitignore").read_bytes())
+                self.assertEqual(run(["git", "init", "-q"], root).returncode, 0)
+                tracked = [file for file in preserved if not file.endswith("operator-note.txt")]
+                self.assertEqual(run(["git", "add", "-f", *tracked, "applications/acdc/.gitignore"], root).returncode, 0)
+                (root / "applications/acdc/ebin/borrowed.beam").symlink_to(root / "outside/keep.beam")
+                (root / "Makefile").write_text("ROOT := $(CURDIR)\nAPPS_DIR := $(CURDIR)/applications\nCORE_DIR := $(CURDIR)/core\n" + clean + sparkly +
                                               "\n.PHONY: stop-if-changed clean-release clean-deps clean-tags\n"
                                               "stop-if-changed clean-release clean-deps clean-tags:\n\t@:\n")
                 result = run(["make", "--no-print-directory", target], root)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual((root / "applications/acdc/src/keep.erl").read_text(), "fixture\n")
+                for relative in preserved:
+                    self.assertEqual((root / relative).read_text(), "fixture\n", relative)
+                for relative in generated:
+                    self.assertFalse((root / relative).exists(), relative)
+                self.assertFalse((root / "applications/acdc/ebin/borrowed.beam").is_symlink())
+                self.assertEqual((root / "outside/keep.beam").read_text(), "fixture\n", "Do not follow generated symlinks")
                 self.assertFalse((root / "applications/crossbar").exists())
                 self.assertFalse((root / "core").exists())
+
+    def test_historical_replay_excludes_uncompiled_tests_but_rejects_runtime_drift(self):
+        source = (ROOT / "scripts/test-acdc-gemini-runtime.sh").read_text()
+        hook = re.findall(r"^reconstruct_historical_runtime\(\) \{[\s\S]*?^\}", source, re.M)
+        self.assertEqual(len(hook), 1)
+
+        def patch(before, after):
+            return "".join("diff --git a/{0}/fixture b/{0}/fixture\n--- a/{0}/fixture\n+++ b/{0}/fixture\n"
+                           "@@ -1 +1 @@\n-{0}-{1}\n+{0}-{2}\n".format(directory, before, after)
+                           for directory in ["src", "test"])
+
+        for drift in [False, True]:
+            with self.subTest(runtime_drift=drift), tempfile.TemporaryDirectory(prefix="acdc-runtime-projection-") as directory:
+                root = Path(directory)
+                acdc = root / "applications/acdc"
+                for part in ["src", "include", "priv", "test"]:
+                    (acdc / part).mkdir(parents=True, exist_ok=True)
+                runtime = acdc / "src/fixture"
+                runtime.write_text("src-foreign\n" if drift else "src-atomic\n")
+                tests = acdc / "test/fixture"
+                tests.write_text("test-unrelated-current-edit\n")
+                patches = root / "scripts/patches"
+                patches.mkdir(parents=True)
+                (patches / "acdc-atomic-answer-runtime.patch").write_text(patch("language", "atomic"))
+                (patches / "acdc-language-runtime.patch").write_text(patch("baseline", "language"))
+                output = root / "private-replay"
+                (output / "source").mkdir(parents=True)
+                (output / "integration.patch").write_text(patch("upstream", "baseline"))
+                code = "set -euo pipefail\n" + hook[0] + "\nreconstruct_historical_runtime\n"
+                result = run(["bash", "--noprofile", "--norc", "-s"], root, input=code,
+                             env={"PATH": os.environ["PATH"], "project_root": str(root),
+                                  "acdc_repository": str(acdc), "test_dir": str(output)})
+                if drift:
+                    self.assertNotEqual(result.returncode, 0, "Changed runtime source must fail reverse checks")
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual((output / "source/src/fixture").read_text(), "src-baseline\n")
+                self.assertFalse((output / "source/test").exists(), "Uncompiled bundled tests must not be copied")
+                self.assertEqual(runtime.read_text(), "src-foreign\n" if drift else "src-atomic\n")
+                self.assertEqual(tests.read_text(), "test-unrelated-current-edit\n")
 
     def test_installer_and_patch_generator_do_not_restore_nested_acdc(self):
         self.assertNotIn("kazoo-community/kazoo-acdc.git", INSTALLER)

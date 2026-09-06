@@ -49,15 +49,19 @@ const assert=require('node:assert/strict'),snapshot=JSON.parse(process.argv[2]);
 assert.equal(snapshot.pinned_ref,process.argv[3],'Pinned revision changed before snapshot');
 assert.equal(snapshot.patch_sha256,process.argv[4],'Patch changed while snapshotting');
 NODE
-# Copy source, never runtime BEAMs or nested Git metadata. Reverse only the
-# historical staged layers so the original baseline assertions remain useful.
-tar -cf - -C "$acdc_repository" src include priv test | tar -xf - -C "$test_dir/source"
-for layer in acdc-atomic-answer-runtime acdc-language-runtime; do
-    cp -- "$project_root/scripts/patches/$layer.patch" "$test_dir/$layer.patch"
-    git -C "$test_dir/source" apply --reverse --check "$test_dir/$layer.patch"
-    git -C "$test_dir/source" apply --reverse "$test_dir/$layer.patch"
-done
-git -C "$test_dir/source" apply --reverse --check "$test_dir/integration.patch"
+reconstruct_historical_runtime() {
+    # This suite compiles scripts/erlang-tests, never bundled test/. Keep its
+    # unrelated edits outside replay while checking every historical runtime hunk.
+    local layer
+    tar -cf - -C "$acdc_repository" src include priv | tar -xf - -C "$test_dir/source"
+    for layer in acdc-atomic-answer-runtime acdc-language-runtime; do
+        cp -- "$project_root/scripts/patches/$layer.patch" "$test_dir/$layer.patch"
+        git -C "$test_dir/source" apply --reverse --check --exclude='test/*' "$test_dir/$layer.patch"
+        git -C "$test_dir/source" apply --reverse --exclude='test/*' "$test_dir/$layer.patch"
+    done
+    git -C "$test_dir/source" apply --reverse --check --exclude='test/*' "$test_dir/integration.patch"
+}
+reconstruct_historical_runtime
 [[ ! -e "$test_dir/source/src/acdc_language.erl" ]] || {
     printf '%s\n' 'Default replay unexpectedly contains the staged language module.' >&2; exit 1;
 }

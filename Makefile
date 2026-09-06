@@ -143,6 +143,12 @@ stop-if-changed:
 
 .PHONY: clean-kazoo
 clean-kazoo: stop-if-changed
+	@# Only ignored generated ACDC files: keep all tracked files and .placeholder.
+	@git -C "$(ROOT)" clean -f -X -- \
+		'applications/acdc/ebin/*.beam' 'applications/acdc/ebin/*.app' \
+		'applications/acdc/.deps.rules' 'applications/acdc/.deps.mk.*' \
+		'applications/acdc/.apps.mk.*' 'applications/acdc/.test.deps' \
+		'applications/acdc/test/acdc.app'
 	@for app in "$(APPS_DIR)"/*; do \
 		[ "$$app" = "$(APPS_DIR)/acdc" ] || rm -rf -- "$$app"; \
 	done

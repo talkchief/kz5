@@ -297,7 +297,10 @@ call(Id) ->
           <<"control">>, kapps_call:set_call_id(Id, kapps_call:new())))).
 
 with_config_defaults(Fun) ->
-    meck:new(kapps_config, [passthrough, no_link]),
+    %% This fixture needs only the four explicit default readers below. Avoid
+    %% recompiling the entire configuration module for every synthetic call;
+    %% an unexpected reader must fail instead of reaching real configuration.
+    meck:new(kapps_config, [non_strict, no_link]),
     meck:expect(kapps_config, get_ne_binary, fun(_, _, Default) -> Default end),
     meck:expect(kapps_config, get_ne_binary, fun(_, _, Default, _) -> Default end),
     meck:expect(kapps_config, get_binary, fun(_, _, Default) -> Default end),

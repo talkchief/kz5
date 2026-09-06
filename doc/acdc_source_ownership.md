@@ -18,12 +18,24 @@ ACDC patch stack. Dependency fetching excludes ACDC, and deep-clean targets
 preserve its source directory. A missing bundled directory must be restored
 from kz5 rather than silently replaced with upstream code.
 
+Deep clean removes only ignored ACDC BEAM/application outputs and dependency
+stamps, using fixed paths. Tracked files (including `ebin/.placeholder`) and
+unrelated untracked notes remain intact; generated symlinks are unlinked without
+following their targets. The source-ownership tests exercise both clean targets
+only in disposable Git fixtures, never the current working checkout.
+
 `scripts/refresh-kazoo-integration-patches.cjs` manages only the remaining
 external checkouts. The existing ACDC patch files remain historical fixtures.
 The Gemini compatibility suite reconstructs its historical baseline privately
 from bundled source by reversing the language/atomic layers; it no longer
 requires ACDC Git metadata. That suite does not establish acceptance of all
 current bundled behavior.
+
+Only `src/`, `include/` and `priv/` participate in that historical projection.
+Bundled `test/` changes are excluded from patch reversal and the runtime input
+receipt because the suite compiles its separate `scripts/erlang-tests/` fixtures.
+Those actual compiled fixtures remain fingerprinted; runtime source drift still
+fails the historical patch checks.
 
 Run source regressions separately to avoid competing Erlang mock compilation:
 

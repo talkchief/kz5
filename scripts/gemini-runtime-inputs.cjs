@@ -15,6 +15,17 @@ function capture({installer,patch,mapText,files=[]}) {
     verified_map_sha256:hash(mapText),
     sources:files.map(([label,file])=>[label,hash(fs.readFileSync(file))]).sort((a,b)=>a[0].localeCompare(b[0],'en'))});
 }
+function bundledRuntimeFiles(projectRoot) {
+  function sourceFiles(directory) {
+    return fs.readdirSync(path.join(projectRoot,directory),{withFileTypes:true}).flatMap(entry=>{
+      const file=directory+'/'+entry.name;
+      assert(!entry.isSymbolicLink(),'Symlinked ACDC test source: '+file);
+      return entry.isDirectory()?sourceFiles(file):[file];
+    });
+  }
+  // Bundled test/ is not copied or compiled by the historical runtime suite.
+  return ['src','include','priv'].flatMap(directory=>sourceFiles('applications/acdc/'+directory));
+}
 function projectSnapshot(projectRoot,packageRoot) {
   const {render}=require(path.join(packageRoot,'generate-acdc-gemini-map.cjs'));
   const projectFiles=[
@@ -25,16 +36,8 @@ function projectSnapshot(projectRoot,packageRoot) {
     'core/kazoo_amqp/src/api/kapi_dialplan.erl',
     'scripts/patches/acdc-atomic-answer-runtime.patch',
     'scripts/patches/acdc-language-runtime.patch'];
-  // Bind the historical projection to the bundled inputs, without a nested Git repository.
-  function sourceFiles(directory) {
-    return fs.readdirSync(path.join(projectRoot,directory),{withFileTypes:true}).flatMap(entry=>{
-      const file=directory+'/'+entry.name;
-      assert(!entry.isSymbolicLink(),'Symlinked ACDC test source: '+file);
-      return entry.isDirectory()?sourceFiles(file):[file];
-    });
-  }
-  for(const directory of ['src','include','priv','test'])
-    projectFiles.push(...sourceFiles('applications/acdc/'+directory));
+  // Bind actual runtime inputs, without depending on unrelated unit-test edits.
+  projectFiles.push(...bundledRuntimeFiles(projectRoot));
   const packageFiles=[
     'test-acdc-gemini-runtime.sh','generate-acdc-gemini-map.cjs','gemini-runtime-inputs.cjs',
     'test-acdc-gemini-runtime-inputs.cjs','erlang-tests/acdc_gemini_prompts_tests.erl',
@@ -47,7 +50,7 @@ function projectSnapshot(projectRoot,packageRoot) {
     files:[...projectFiles.map(p=>['project/'+p,path.join(projectRoot,p)]),
            ...packageFiles.map(p=>['package/'+p,path.join(packageRoot,p)])]});
 }
-module.exports={pinnedRef,capture,projectSnapshot};
+module.exports={pinnedRef,capture,bundledRuntimeFiles,projectSnapshot};
 if(require.main===module) {
   assert.equal(process.argv.length,4,'Expected project root and package scripts root');
   process.stdout.write(projectSnapshot(fs.realpathSync(process.argv[2]),fs.realpathSync(process.argv[3])));

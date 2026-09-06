@@ -24,7 +24,9 @@ Our phone-service commit `49ccb98` is also on this branch. Preserve all changes
 and reconcile the pending installer/UI work against this combined source.
 
 The handoff reports 48 unit, 26 strategy and five migration checks passing,
-with no deployment or restart. Independent combined checks are in progress;
+with no deployment or restart. Independent combined testing now passes all 48
+unit tests and six expanded source-ownership groups. Strategy and remaining
+integration checks are still being revalidated;
 this is not live-call acceptance. Regenerate affected API coverage and run
 combined call-delivery/callback regressions before release. The private callback
 audio adapter still needs native completion, cancellation and owner-handoff
@@ -48,8 +50,14 @@ The three recovery findings above were added from the operator's 2026-09-06
 review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
 delayed-notification regression verifies recovery after direct calls finish and
 preserves pause/pending logout. Independent testing also passed those three
-cases; the wider unit run stopped later on an older mock-setup timeout and has
-not yet passed in full under the current resource cap. Each new P0 requires a
+cases. The first two resource-capped unit runs stopped in mock setup; a subsequent
+run passed all 48 tests using EUnit's supported slow-host timeout scaling and a
+narrow configuration mock. The same 384 MiB / 50% CPU cap and 120-second outer
+limit remained enforced; production timers and assertions were unchanged.
+The operator assigned P0-07, P0-08 and P0-09 to their external team, which is
+actively working on them and will provide a branch for integration. These remain
+open release gates: do not duplicate or overwrite their agent-recovery work.
+Each new P0 requires a
 reproducer, code and installer integration, focused fault-injection regression,
 and relevant live call/state/log evidence before closure.
 
