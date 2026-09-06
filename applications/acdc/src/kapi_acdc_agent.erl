@@ -121,6 +121,7 @@ sync_req_routing_key(AcctId, Id) ->
                                           ,<<"answered">>
                                           ,<<"wrapup">>
                                           ,<<"paused">>
+                                          ,<<"outbound">>
                                           ]}
                           ]).
 -define(SYNC_RESP_TYPES, []).
