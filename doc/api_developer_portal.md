@@ -120,7 +120,7 @@ The lockfile retains tarball integrity for reproducible dependencies.
 ## Deployment boundary
 
 `install_api_developer_docs` verifies committed hashes, refuses a symlinked
-`apis` target, copies the static files after Monster UI's replacement rsync, and
+`apis` target, copies the static files after Monster UI's ownership-preserving deployment, and
 verifies the deployed copy. Both TLS/non-TLS nginx branches have explicit `/apis/`
 static locations that return a real 404 for missing assets instead of Monster's
 SPA fallback. The normal installer tests nginx before restarting its service.
@@ -130,3 +130,19 @@ callback media or load monitoring backend modules. Those have separate build,
 deployment and acceptance gates. Preserve existing live configuration and test
 the exact nginx configuration before reloading; do not rerun an unrelated full
 telephony installation merely to publish documentation.
+
+## Post-recovery source refresh — 2026-09-06
+
+After ACDC recovery merge `8548b98`, regenerated coverage binds the changed
+agent listener and agent wire API source hashes. The members/devices schema now
+requires page and member inventory completeness to agree; incomplete registrar
+evidence cannot contain confirmed online/offline devices. Valid empty pages and
+Crossbar's omitted-null response form remain supported.
+
+Guarded session `26112` passed all 12 focused contract groups. Generator `2980`
+and full offline session `14879` passed: 354 paths, 649 operations, 31 existing
+negative schema cases, deterministic regeneration, current source bindings and
+tamper checks. These checks neither authenticate live principals nor execute
+telephony calls. Restricted-token/cross-account/expiry live acceptance is open.
+OpenAPI SHA-256: `aaba0a3d9f75ca54ce498a139a86e1d31468b09fe1879e0289eaa45c1322e4b2`.
+Manifest SHA-256: `fb90e2a7e392c68eb2987c75ca3526f8957f0b69a22e47a8d62450dd25413307`.

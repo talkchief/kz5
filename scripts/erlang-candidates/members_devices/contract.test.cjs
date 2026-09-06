@@ -51,6 +51,46 @@ test('overflow is explicitly incomplete, never an invented empty complete device
         const invalid=copy(overflow);mutate(invalid);assert.equal(page(invalid),false);
     }
 });
+test('page inventory completeness applies to every member',()=>{
+    const {page}=validators(),complete=copy(data);
+    complete.items.push({...copy(member),id:'2'.padStart(32,'0'),devices:[],device_count:0});complete.count=2;
+    const incomplete=copy(complete);
+    incomplete.device_inventory={complete:false,limit:1000,count:null,reason:'limit_exceeded'};
+    incomplete.items=incomplete.items.map(m=>({...m,devices:[],devices_complete:false,device_count:null}));
+    incomplete.registration_snapshot={...snapshot,complete:false,reason:'not_requested',expiry_available:false};
+    for(const valid of [complete,incomplete]) {
+        assert(page(valid),JSON.stringify(page.errors));assert(page(omitNull(valid)),JSON.stringify(page.errors));
+    }
+    const falseComplete=copy(incomplete);falseComplete.items[1].devices_complete=true;falseComplete.items[1].device_count=0;
+    const falseIncomplete=copy(complete);falseIncomplete.items[1].devices_complete=false;falseIncomplete.items[1].device_count=null;
+    for(const invalid of [falseComplete,falseIncomplete]) {
+        assert.equal(page(invalid),false);assert.equal(page(omitNull(invalid)),false);
+    }
+});
+test('incomplete registrar evidence permits only unknown devices across every member',()=>{
+    const {page}=validators(),partial=copy(data);
+    partial.registration_snapshot={...snapshot,complete:false,reason:'registration_unavailable',expiry_available:false};
+    partial.items[0].devices[0].registration={...registration,status:'unknown',reason:'registration_unavailable',expires_at_ms:null};
+    partial.items.push({...copy(partial.items[0]),id:'2'.padStart(32,'0')});partial.count=2;
+    partial.items[1].devices[0].id='b'.repeat(32);partial.device_inventory.count=2;
+    for(const valid of [partial,omitNull(partial)])assert(page(valid),JSON.stringify(page.errors));
+    for(const evidence of [registration,{...registration,status:'online',reason:'registered_permanent',expires_at_ms:null},
+        {...registration,status:'offline',reason:'not_registered',expires_at_ms:null},
+        {...registration,status:'offline',reason:'registration_expired',expires_at_ms:null}]) {
+        const invalid=copy(partial);invalid.items[1].devices[0].registration=copy(evidence);
+        assert.equal(page(invalid),false);assert.equal(page(omitNull(invalid)),false);
+    }
+});
+test('page consistency accepts empty pages with complete or incomplete inventories and null filtering',()=>{
+    const {page}=validators();
+    for(const inventoryComplete of [true,false]) {
+        const empty=copy(data);empty.items=[];empty.count=0;
+        empty.device_inventory=inventoryComplete?{complete:true,limit:1000,count:0,reason:'complete'}
+            :{complete:false,limit:1000,count:null,reason:'limit_exceeded'};
+        empty.registration_snapshot={...snapshot,complete:false,reason:'not_requested',expiry_available:false};
+        assert(page(empty),JSON.stringify(page.errors));assert(page(omitNull(empty)),JSON.stringify(page.errors));
+    }
+});
 test('schema forbids raw device/user/registrar fields and invalid continuation states',()=>{
     const {page}=validators();
     for(const mutate of [x=>{x.items[0].password='secret';},x=>{x.items[0].devices[0].sip={password:'secret'};},

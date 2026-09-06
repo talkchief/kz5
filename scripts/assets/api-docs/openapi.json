@@ -50591,6 +50591,135 @@
             }
           }
         ],
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "device_inventory": {
+                    "type": "object",
+                    "properties": {
+                      "complete": {
+                        "type": "boolean",
+                        "enum": [
+                          true
+                        ]
+                      }
+                    }
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "devices_complete": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "device_inventory": {
+                    "type": "object",
+                    "properties": {
+                      "complete": {
+                        "type": "boolean",
+                        "enum": [
+                          false
+                        ]
+                      }
+                    }
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "devices_complete": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "registration_snapshot": {
+                    "type": "object",
+                    "properties": {
+                      "complete": {
+                        "type": "boolean",
+                        "enum": [
+                          true
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "registration_snapshot": {
+                    "type": "object",
+                    "properties": {
+                      "complete": {
+                        "type": "boolean",
+                        "enum": [
+                          false
+                        ]
+                      }
+                    }
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "devices": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "registration": {
+                                "type": "object",
+                                "properties": {
+                                  "status": {
+                                    "type": "string",
+                                    "enum": [
+                                      "unknown"
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
         "description": "Member-paginated live listing, not a cross-page database transaction. Count is the current page count; total_members is deliberately unknown. A page includes users with no devices. Optional nullable properties may be omitted by Crossbar envelope null filtering: absent means unknown/not applicable, never zero, false, or an empty complete inventory. Device catalog limit applies to the entire account, not each member. Above1000 account devices, all device inventories are explicitly incomplete; member pagination does not bypass this limit and no device continuation API is currently supplied."
       },
       "MemberDevicesEnvelope": {

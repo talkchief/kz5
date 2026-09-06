@@ -51,6 +51,19 @@ function overlay({sourcePath=path.join(__dirname,'../applications/crossbar/src/m
     ['items','count','page_size','has_more','device_inventory','registration_snapshot']);
     data.oneOf=[{properties:{has_more:{enum:[true]},next_cursor:{type:'string',nullable:false,minLength:1}},required:['next_cursor']},
         {properties:{has_more:{enum:[false]},next_cursor:{type:'string',nullable:true,enum:[null]}}}];
+    // Apply page-wide evidence constraints in addition to each local schema and cursor branch.
+    const fields=properties=>({type:'object',properties}),each=items=>({type:'array',items});
+    data.allOf=[
+        {oneOf:[true,false].map(complete=>fields({
+            device_inventory:fields({complete:{type:'boolean',enum:[complete]}}),
+            items:each(fields({devices_complete:{type:'boolean',enum:[complete]}}))
+        }))},
+        {oneOf:[
+            fields({registration_snapshot:fields({complete:{type:'boolean',enum:[true]}})}),
+            fields({registration_snapshot:fields({complete:{type:'boolean',enum:[false]}}),
+                items:each(fields({devices:each(fields({registration:fields({status:{type:'string',enum:['unknown']}})}))}))})
+        ]}
+    ];
     data.description='Member-paginated live listing, not a cross-page database transaction. Count is the current page count; total_members is deliberately unknown. A page includes users with no devices. Optional nullable properties may be omitted by Crossbar envelope null filtering: absent means unknown/not applicable, never zero, false, or an empty complete inventory. Device catalog limit applies to the entire account, not each member. Above1000 account devices, all device inventories are explicitly incomplete; member pagination does not bypass this limit and no device continuation API is currently supplied.';
     const schemas={MemberDeviceRegistration:registration,MemberDevice:strict({id:hex,name:nullableText,type:nullableText,enabled:{type:'boolean'},registration:ref('MemberDeviceRegistration')},['id','enabled','registration']),
         MemberWithDevices:member,MemberDeviceInventory:inventory,MemberRegistrationSnapshot:snapshot,MemberDevicesPage:data,

@@ -10,6 +10,10 @@ accepted; **BLOCKED** = named external input needed; **VERIFIED** = only the
 explicitly stated test scope. An item is complete only when its source,
 installer integration, API documentation and relevant tests agree. Changes must
 be committed and pushed before the delivery is reproducible from the remote.
+Final delivery target requested by the operator: `master`. Integrate reviewed
+work without discarding team changes or force-pushing; verify the destination
+and remote state before publishing. Fresh per-module, ALL and distributed-server
+installer acceptance remains required, not inferred from unit tests.
 
 ## Active team coordination — 2026-09-06
 

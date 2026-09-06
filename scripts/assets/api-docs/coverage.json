@@ -2322,7 +2322,7 @@
     },
     {
       "file": "applications/acdc/src/acdc_agent_listener.erl",
-      "sha256": "de1176c49fc3d41a1b699f45b10d3a07b089055df76db74074702daa90324dea"
+      "sha256": "e76a656873ab547d030868c26c351f11daccb810d0db456c7bef9ddae953d846"
     },
     {
       "file": "applications/acdc/src/acdc_callback_store.erl",
@@ -2350,7 +2350,7 @@
     },
     {
       "file": "applications/acdc/src/kapi_acdc_agent.erl",
-      "sha256": "b31586bda8cc1aac183d72e0c2788763ca179721e0fb7855bca96bb26bbdc97c"
+      "sha256": "5fa6d863110327116c7be0f8323720441aa850dcee87539c963cd35e09668611"
     },
     {
       "file": "applications/crossbar/priv/couchdb/schemas/queues.json",
@@ -2774,7 +2774,7 @@
     },
     {
       "file": "scripts/api-docs-members-devices.cjs",
-      "sha256": "b9306fd413d55008310ce4d4da3aa76980ad1ce58cb0a313ea2b83969639a648"
+      "sha256": "0d75a44da6233e1c9d1f00b5e141bdeaff446ee90c04f03ee9d0c6e0b6fe144a"
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
