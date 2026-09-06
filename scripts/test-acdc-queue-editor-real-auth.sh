@@ -5,6 +5,7 @@ umask 077
 [[ $# == 0 ]] || { printf 'Usage: %s\n' "$0" >&2; exit 2; }
 auth_editor_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 auth_editor_output=$(mktemp -d /tmp/kazoo-queue-editor-auth.XXXXXX)
+auth_editor_completed=0
 cd "$auth_editor_root"
 auth_editor_sources=(
     applications/crossbar/src/api_util.erl
@@ -79,6 +80,10 @@ printf '%s\n' "${auth_editor_dependencies[@]}" >"$auth_editor_output/dependency-
 finish() {
     local auth_editor_status=$?
     trap - EXIT
+    if [[ $auth_editor_status == 0 && $auth_editor_completed != 1 ]]; then
+        printf 'FAIL auth fixture validation interrupted before completion\n' >&2
+        auth_editor_status=99
+    fi
     if ! sha256sum --check --status "$auth_editor_output/source-pins.sha256" ||
        ! sha256sum --check --status "$auth_editor_output/dependency-pins.sha256"; then
         printf 'FAIL auth fixture source or dependency bytes changed during validation\n' >&2
@@ -88,6 +93,8 @@ finish() {
     exit "$auth_editor_status"
 }
 trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 # Prevent inherited compiler defines/code-path flags from changing auth gates.
 unset ERL_AFLAGS ERL_ZFLAGS ERL_COMPILER_OPTIONS ERL_INETRC
 export ERL_LIBS="$auth_editor_root/deps:$auth_editor_root/core:$auth_editor_root/applications"
@@ -133,3 +140,4 @@ Gate(), io:format("PASS ~p production module paths/no-TEST defines and ~p pinned
 Result = eunit:test(acdc_queue_editor_real_auth_tests, [verbose]),
 Gate(), io:format("PASS post-test module path/no-TEST checks~n"),
 case Result of ok -> halt(0); _ -> halt(1) end.' 2>&1 | tee "$auth_editor_output/eunit.log"
+auth_editor_completed=1

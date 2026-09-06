@@ -132,3 +132,28 @@ Run `scripts/test-acdc-queue-editor-real-auth.sh` through the 180-second,
 384-MiB/768-MiB-reserve guard with `unshare --net`. No production auth code changed;
 live restricted principals, current-revision deployment and live failure
 injection remain separate acceptance gates.
+
+## 2026-09-06 — interrupted validation must not report success
+
+Combined guarded session `90416` finished all 12 queue-runtime tests and all
+41 editor/manifest tests. It then reached its 180-second runtime limit during
+the first production-auth compilation. The guard exited 1; the authorization
+suite did not finish and the recovery suite was not reached. This is not an
+all-suite pass. The completed editor log is
+`/tmp/kazoo-queue-editor-test.xS7GQE/eunit.log`, SHA-256
+`549f3886d069c64178c577c1526bba5bc6779b1af3f47d070b26ea53e3568a89`.
+
+That interruption exposed a reporting defect: the auth shell's EXIT cleanup
+printed `exit=0` even though compilation had been terminated. Both retained
+editor runners now require an explicit completion flag after their final test
+pipeline and return nonzero on SIGINT/SIGTERM. Changed source/dependency pins
+still fail validation. SIGKILL cannot produce a final receipt; missing or
+unfinished evidence remains incomplete, never a pass.
+
+`scripts/test-editor-validation-completion.cjs` extracts the actual finish and
+signal handlers and checks 16 completed/incomplete/error/signal/pin-change
+cases. It passed under the 384-MiB, network-isolated validation guard at
+15:48 UTC. The pin checker is substituted in that fixture: this is bookkeeping
+proof, not another Erlang, authorization or live-platform acceptance run.
+Run longer suites in separate bounded invocations so one suite's runtime does
+not consume the next suite's allowance.
