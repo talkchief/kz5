@@ -9,7 +9,7 @@ readonly blackhole_test_ref=4e3f02a5ab01c09a44c287f4f93b15d2782f5614
 blackhole_test_repo="$blackhole_test_root/applications/blackhole"
 blackhole_test_replay="$blackhole_test_output/replay"
 blackhole_test_production="$blackhole_test_output/production"
-blackhole_test_patch="$blackhole_test_root/scripts/patches/blackhole-token-redaction.patch"
+blackhole_test_patch="$blackhole_test_root/scripts/patches/blackhole-kazoo5-integration.patch"
 cd "$blackhole_test_root"
 blackhole_test_sources=(
     applications/blackhole/src/modules/bh_token_auth.erl
@@ -57,7 +57,7 @@ blackhole_test_dependencies=(
 blackhole_test_other_inputs=(
     scripts/test-blackhole-auth-redaction.sh
     scripts/erlang-tests/blackhole_auth_redaction_tests.erl
-    scripts/patches/blackhole-token-redaction.patch
+    scripts/patches/blackhole-kazoo5-integration.patch
     scripts/install-kazoo5.sh
     applications/blackhole/src/blackhole.hrl
     core/kazoo_stdlib/include/kz_types.hrl
@@ -106,7 +106,7 @@ blackhole_test_hooks=(
     '[[ $(git -C "$KAZOO_ROOT/applications/blackhole" rev-parse HEAD) == "$KAZOO_BLACKHOLE_REF" ]]'
     '"dep_blackhole=git https://github.com/2600hz/kazoo-blackhole.git $KAZOO_BLACKHOLE_REF"'
     'apply_required_source_patch "$KAZOO_ROOT/applications/blackhole"'
-    '"$SCRIPT_DIR/patches/blackhole-token-redaction.patch"'
+    '"$SCRIPT_DIR/patches/blackhole-kazoo5-integration.patch"'
 )
 for blackhole_test_hook in "${blackhole_test_hooks[@]}"; do
     /usr/bin/grep -Fq -- "$blackhole_test_hook" scripts/install-kazoo5.sh || {

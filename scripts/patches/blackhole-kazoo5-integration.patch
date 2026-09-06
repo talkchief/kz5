@@ -1,0 +1,181 @@
+diff --git a/src/blackhole_bindings.erl b/src/blackhole_bindings.erl
+index 204e2d6..0ca9069 100644
+--- a/src/blackhole_bindings.erl
++++ b/src/blackhole_bindings.erl
+@@ -136,12 +136,12 @@ filter_out_failed('false') -> 'false';
+ filter_out_failed({'EXIT', _}) -> 'false';
+ filter_out_failed([Result]) ->
+     case bh_context:is_context(Result) of
+-        'true' -> not bh_context:success(Result);
++        'true' -> bh_context:success(Result);
+         'false' -> not kz_term:is_empty(Result)
+     end;
+ filter_out_failed(Result) ->
+     case bh_context:is_context(Result) of
+-        'true' -> not bh_context:success(Result);
++        'true' -> bh_context:success(Result);
+         'false' -> not kz_term:is_empty(Result)
+     end.
+ 
+@@ -159,12 +159,12 @@ filter_out_succeeded('false') -> 'true';
+ filter_out_succeeded({'EXIT', _}) -> 'true';
+ filter_out_succeeded([Result]) ->
+     case bh_context:is_context(Result) of
+-        'true' -> bh_context:success(Result);
++        'true' -> not bh_context:success(Result);
+         'false' -> kz_term:is_empty(Result)
+     end;
+ filter_out_succeeded(Result) ->
+     case bh_context:is_context(Result) of
+-        'true' -> bh_context:success(Result);
++        'true' -> not bh_context:success(Result);
+         'false' -> kz_term:is_empty(Result)
+     end.
+ 
+diff --git a/src/blackhole_socket_handler.erl b/src/blackhole_socket_handler.erl
+index 85a4bd8..9cd2374 100644
+--- a/src/blackhole_socket_handler.erl
++++ b/src/blackhole_socket_handler.erl
+@@ -21,6 +21,8 @@
+ -include("blackhole.hrl").
+ 
+ -define(IDLE_TIMEOUT, ?MILLISECONDS_IN_HOUR).
++-define(DEFAULT_MAX_FRAME_SIZE, 65536).
++-define(MAX_FRAME_SIZE_LIMIT, 1048576).
+ 
+ -type blackhole_init() :: bh_context:context().
+ -type init_reply() ::  {'ok' , cowboy_req:req(), cowboy_websocket:opts()} |
+@@ -39,7 +41,9 @@ init(Req, HandlerOpts) ->
+     init_fold(Req, HandlerOpts, bh_context:new(), InitFuns).
+ 
+ init_fold(Req, _HandlerOpts, Context, []) ->
+-    {'cowboy_websocket', Req, Context, #{idle_timeout => ?IDLE_TIMEOUT}};
++    {'cowboy_websocket', Req, Context, #{idle_timeout => ?IDLE_TIMEOUT
++                                      ,max_frame_size => max_frame_size()
++                                      }};
+ init_fold(Req, HandlerOpts, Context, [Fun | Funs]) ->
+     case Fun(Req, HandlerOpts, Context) of
+         {'ok', _, _} = Reply -> Reply;
+@@ -47,6 +51,13 @@ init_fold(Req, HandlerOpts, Context, [Fun | Funs]) ->
+         Ctx -> init_fold(Req, HandlerOpts, Ctx, Funs)
+     end.
+ 
++-spec max_frame_size() -> pos_integer().
++max_frame_size() ->
++    case kapps_config:get(?CONFIG_CAT, <<"max_frame_size_bytes">>, ?DEFAULT_MAX_FRAME_SIZE) of
++        Bytes when is_integer(Bytes), Bytes > 0, Bytes =< ?MAX_FRAME_SIZE_LIMIT -> Bytes;
++        _ -> ?DEFAULT_MAX_FRAME_SIZE
++    end.
++
+ -spec check_subprotocols(cowboy_req:req(), cowboy_websocket:opts(), bh_context:context()) ->
+           init_fun_reply().
+ check_subprotocols(Req, HandlerOpts, Context) ->
+@@ -117,8 +128,8 @@ authenticate_token(Req, HandlerOpts, Context, Token) ->
+                       ,fun bh_context:set_authorized/1
+                       ],
+             bh_context:setters(Context, Setters);
+-        {'error', R} ->
+-            lager:debug("failed to authenticate token auth, ~p", [R]),
++        {'error', _Reason} ->
++            lager:debug("failed to authenticate token auth"),
+             {'ok', cowboy_req:reply(403, Req), HandlerOpts}
+     end.
+ 
+@@ -131,11 +142,11 @@ maybe_start_keep_alive() ->
+ 
+ -spec terminate(any(), cowboy_req:req(), bh_context:context() | cowboy_websocket:opts())  -> 'ok'.
+ terminate(_Reason, Req, Opts) when is_list(Opts) ->
+-    lager:info("socket for session ~s down early: ~p", [session_id(Req), _Reason]);
++    lager:info("socket for session ~s down early", [session_id(Req)]);
+ terminate(_Reason, Req, Context) ->
+     SessionId = session_id(Req),
+     _ = blackhole_socket_callback:close(Context),
+-    lager:info("socket for session ~s down: ~p", [SessionId, _Reason]).
++    lager:info("socket for session ~s down", [SessionId]).
+ 
+ -spec websocket_init(blackhole_init()) -> {'ok', bh_context:context()}.
+ websocket_init(Context) ->
+@@ -148,23 +159,51 @@ websocket_init(Context) ->
+     {'ok', _NewContext} = blackhole_socket_callback:open(Ctx).
+ 
+ -spec websocket_handle(any(), bh_context:context()) ->
++          {'ok', bh_context:context(), 'hibernate'} |
++          {'reply', {'close', 1003 | 1007, binary()}, bh_context:context()}.
++websocket_handle({'text', Data}, Context) when is_binary(Data) ->
++    case decode_frame(Data) of
++        {'ok', JObj} -> handle_object(JObj, Context);
++        {'error', Code, Reason} -> {'reply', {'close', Code, Reason}, Context}
++    end;
++websocket_handle('ping', Context) ->
++    {'ok', Context, 'hibernate'};
++websocket_handle('pong', Context) ->
++    {'ok', Context, 'hibernate'};
++websocket_handle({'ping', Payload}, Context) when is_binary(Payload) ->
++    {'ok', Context, 'hibernate'};
++websocket_handle({'pong', Payload}, Context) when is_binary(Payload) ->
++    {'ok', Context, 'hibernate'};
++websocket_handle(_Other, Context) ->
++    lager:debug("closing unsupported websocket message"),
++    {'reply', {'close', 1003, <<"unsupported frame">>}, Context}.
++
++-spec decode_frame(binary()) -> {'ok', kz_json:object()} |
++                                {'error', 1003 | 1007, binary()}.
++decode_frame(Data) ->
++    %% The forgiving decoder logs malformed input and substitutes an empty
++    %% object. Keep that input out of logs and never dispatch a replacement.
++    try kz_json:unsafe_decode(Data) of
++        JObj ->
++            case kz_json:is_json_object(JObj) of
++                'true' -> {'ok', JObj};
++                'false' -> {'error', 1003, <<"JSON object required">>}
++            end
++    catch
++        'throw':{'invalid_json', _, _} -> {'error', 1007, <<"invalid JSON">>}
++    end.
++
++-spec handle_object(kz_json:object(), bh_context:context()) ->
+           {'ok', bh_context:context(), 'hibernate'}.
+-websocket_handle({'text', Data}, Context) ->
+-    JObj   = kz_json:decode(Data),
++handle_object(JObj, Context) ->
+     Action = kz_json:get_ne_binary_value(<<"action">>, JObj, <<"noop">>),
+     Msg    = kz_json:delete_key(<<"action">>, JObj),
+ 
++    %% Do not catch callback failures as JSON failures.
+     case blackhole_socket_callback:recv({Action, Msg}, Context) of
+         {'ok', NewContext} -> {'ok', NewContext, 'hibernate'};
+         'error' -> {'ok', Context, 'hibernate'}
+-    end;
+-websocket_handle('ping', Context) ->
+-    {'ok', Context, 'hibernate'};
+-websocket_handle('pong', Context) ->
+-    {'ok', Context, 'hibernate'};
+-websocket_handle(_Other, Context) ->
+-    lager:debug("not handling message : ~p", [_Other]),
+-    {'ok', Context, 'hibernate'}.
++    end.
+ 
+ -spec websocket_info(any(), bh_context:context()) ->
+           {'ok', bh_context:context()} |
+diff --git a/src/modules/bh_token_auth.erl b/src/modules/bh_token_auth.erl
+index 26b80d0..72f6a61 100644
+--- a/src/modules/bh_token_auth.erl
++++ b/src/modules/bh_token_auth.erl
+@@ -55,13 +55,13 @@ authenticate_token(Context, 'undefined') ->
+     lager:debug("failed to authenticate with undefined token"),
+     bh_context:add_error(Context, <<"authentication token required">>);
+ authenticate_token(Context, <<Token/binary>>) ->
+-    lager:debug("trying to authenticate with token: ~s", [Token]),
++    lager:debug("trying to authenticate with token"),
+     case kz_auth:validate_token(Token) of
+         {'ok', JObj} ->
+             AccountId = kz_json:get_ne_value(<<"account_id">>, JObj),
+             lager:info("token auth is valid, authenticating account is ~s", [AccountId]),
+             bh_context:set_auth_account_id(Context, AccountId);
+-        {'error', R} ->
+-            lager:debug("failed to authenticate token auth, ~p", [R]),
+-            bh_context:add_error(Context, <<"failed to authenticate token ", Token/binary>>)
++        {'error', _Reason} ->
++            lager:debug("failed to authenticate token auth"),
++            bh_context:add_error(Context, <<"failed to authenticate token">>)
+     end.

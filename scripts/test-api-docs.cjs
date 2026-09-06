@@ -58,6 +58,15 @@ async function offline() {
     assert.equal(wsEvent({...event, data: null}), false);
     const wsPage = fs.readFileSync(path.join(committed, 'blackhole.html'), 'utf8');
     assert(wsPage.includes('Next.js client lifecycle'));
+    assert(wsPage.includes('Company, queue and agent selection'));
+    assert(wsPage.includes('Call supervision is an HTTP command'));
+    assert(wsPage.includes('planned, not callable'));
+    assert(spec['x-blackhole'].filtering.company.includes('data.account_id'));
+    assert(spec['x-blackhole'].filtering.queue_and_agent.includes('not implemented'));
+    assert.equal(spec['x-blackhole'].inbound_limits.default_bytes, 65536);
+    assert.equal(spec['x-blackhole'].inbound_limits.maximum_configured_bytes, 1048576);
+    assert.deepEqual(Object.keys(spec['x-blackhole'].inbound_limits.close_codes).sort(), ['1003', '1007', '1009']);
+    assert(spec.components.schemas.BlackholeSubscribe.properties.data.properties.binding.description.includes('never a queue or agent ID'));
     assert(wsPage.includes('cached') || wsPage.includes('caches authenticated'));
     assert(wsPage.includes('best effort'));
     assert(!/<script\b|\son\w+\s*=|javascript:/i.test(wsPage), 'Protocol reference must not execute scripts or open sockets');
@@ -220,6 +229,9 @@ async function browser() {
         await page.getByRole('link', {name: 'Blackhole / Next.js integration', exact: true}).click();
         await page.waitForURL(origin + '/apis/blackhole.html');
         assert.equal(await page.getByRole('heading', {name: 'Next.js client lifecycle', exact: true}).count(), 1);
+        assert.equal(await page.getByRole('heading', {name: 'Company, queue and agent selection', exact: true}).count(), 1);
+        assert.equal(await page.getByRole('heading', {name: 'Call supervision is an HTTP command', exact: true}).count(), 1);
+        assert((await page.locator('body').innerText()).includes('planned, not callable'));
         assert.equal(await page.locator('script').count(), 0);
         assert((await page.locator('body').innerText()).includes('best effort'));
         assert.deepEqual(denied, []);

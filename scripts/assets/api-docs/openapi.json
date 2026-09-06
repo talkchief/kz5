@@ -50873,11 +50873,13 @@
             "type": "object",
             "properties": {
               "account_id": {
-                "type": "string"
+                "type": "string",
+                "description": "Company scope is the Kazoo ACCOUNT_ID, not a company name. Defaults to the authenticated account; subject to server account-hierarchy authorization. This does not implement queue/agent dashboard permissions."
               },
               "binding": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Native selector such as call.CHANNEL_ANSWER.* for account call answers, or call.CHANNEL_ANSWER.<CALL_ID> for one call. The last segment is a call ID, never a queue or agent ID. Arbitrary queue_id/agent_id fields do not create dashboard filters."
               },
               "bindings": {
                 "type": "array",
@@ -50942,11 +50944,13 @@
             "type": "object",
             "properties": {
               "account_id": {
-                "type": "string"
+                "type": "string",
+                "description": "Company scope is the Kazoo ACCOUNT_ID, not a company name. Defaults to the authenticated account; subject to server account-hierarchy authorization. This does not implement queue/agent dashboard permissions."
               },
               "binding": {
                 "type": "string",
-                "minLength": 1
+                "minLength": 1,
+                "description": "Native selector such as call.CHANNEL_ANSWER.* for account call answers, or call.CHANNEL_ANSWER.<CALL_ID> for one call. The last segment is a call ID, never a queue or agent ID. Arbitrary queue_id/agent_id fields do not create dashboard filters."
               },
               "bindings": {
                 "type": "array",
@@ -52190,6 +52194,23 @@
       "$ref": "#/components/schemas/BlackholePingResult"
     },
     "delivery": "Best effort, socket-local subscriptions. Native emitter can drop messages under pressure. No durable replay or atomic snapshot/event boundary.",
+    "inbound_limits": {
+      "config_key": "blackhole.max_frame_size_bytes",
+      "default_bytes": 65536,
+      "maximum_configured_bytes": 1048576,
+      "applies_to": "New connections; individual frames and reassembled fragmented messages. Invalid configuration falls back to the default.",
+      "close_codes": {
+        "1003": "Unsupported binary frame or non-object JSON",
+        "1007": "Malformed or ambiguous JSON",
+        "1009": "Frame or reassembled message exceeds the configured limit"
+      },
+      "acceptance": "Source implementation; consult deployment evidence before assuming the running server has this patch."
+    },
+    "filtering": {
+      "company": "data.account_id selects a Kazoo account, checked against the authenticated account hierarchy.",
+      "call": "call.<EVENT>.<CALL_ID>; use * in the final segment for account-wide call events.",
+      "queue_and_agent": "Dedicated dashboard selectors are not implemented. Do not use a queue/agent ID in the call-ID position or rely on client-side filtering for authorization."
+    },
     "acdc_dashboard": "Proposed: queue-scoped dashboard snapshots/events, permissions and gap/resync protocol are not yet implemented or published as callable contracts."
   },
   "tags": [

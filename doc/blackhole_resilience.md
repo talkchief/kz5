@@ -1,16 +1,21 @@
-# Blackhole frame resilience: next-checkpoint proposal
+# Blackhole frame resilience: offline-validated candidate
 
-Status, 2026-09-06: source-reviewed proposal only. The changes and tests below
-are **not implemented or executed**. The current token-redaction checkpoint is
-separate; it does not fix malformed-JSON handling, connection-lifetime token
-expiry, or outbound backpressure. No live WebSocket acceptance is claimed here.
+Status, 2026-09-06: the frame-boundary source candidate passed the isolated
+wire and public-handler checks recorded below. The earlier token-redaction
+checkpoint remains separate evidence. No frame-hardening deployment or live
+WebSocket acceptance is claimed here; connection-lifetime token expiry and
+outbound backpressure remain outside this change. Installer transitions from
+the previous applied patches require the separate upgrade work described below.
 
 ## Pinned source findings
 
 Blackhole baseline is `4e3f02a5ab01c09a44c287f4f93b15d2782f5614`.
-The current required `scripts/patches/blackhole-token-redaction.patch` removes
+The earlier `scripts/patches/blackhole-token-redaction.patch` removes
 specific token/reason/unsupported-frame log sinks without changing dispatch.
-Keep that checkpoint frozen until it is committed and its tests are reviewed.
+It remains unchanged as review provenance. The candidate installer now applies
+one `scripts/patches/blackhole-kazoo5-integration.patch` against the same pinned
+baseline, combining redaction with the frame boundary. The following findings
+describe the baseline/redaction-only source, before that candidate.
 
 Cowboy is pinned by `make/deps.mk` to `50c21ad`, locally resolved to
 `50c21ad6b8170567b86b573b11fc95c38b58fb74` (Cowboy 2.12.0).
@@ -41,10 +46,10 @@ Relevant local source and documentation:
   defines connection count, queued-message count and timeout settings, but no
   incoming frame-size setting.
 
-## Proposed bounded change
+## Candidate bounded change
 
-Add `max_frame_size_bytes` to Blackhole system configuration, default 65,536
-bytes and maximum 1,048,576 bytes. Use the raw configured value and accept
+The candidate adds `max_frame_size_bytes` to Blackhole system configuration,
+default 65,536 bytes and maximum 1,048,576 bytes. Use the raw configured value and accept
 only an integer in the supported positive range. Missing, non-integer,
 non-positive or excessive values fall back to the finite default, never
 `infinity`. Apply it as Cowboy's `max_frame_size` option when each connection
@@ -137,8 +142,8 @@ this proposal does not replace the native event server or redesign auth.
 
 ## Separate token-redaction checkpoint: verified offline
 
-The preceding frame-hardening proposal is still unimplemented. The narrower
-token-redaction patch passed session `86439` under the 180-second/384-MiB/
+At this earlier checkpoint the frame-hardening proposal was unimplemented.
+The narrower token-redaction patch passed session `86439` under the 180-second/384-MiB/
 768-MiB-reserve guard in a private network namespace. Exact Blackhole baseline
 replay matched the modified source, reverse/idempotence checks passed, and six
 production modules compiled with `-Werror` and the production Lager transform.
@@ -150,8 +155,10 @@ this is not real JWT, connection-lifetime or live WebSocket acceptance.
 
 The tracked patch is `scripts/patches/blackhole-token-redaction.patch`, SHA-256
 `e36ac18c19fa9b3f93302566dcd85363aab74da84f7c5ea07e33ef3b9d69323a`.
-The installer pins Blackhole, checks the existing checkout identity and applies
-this patch before building. No commit was made to the nested Blackhole repository.
+At that checkpoint the installer pinned Blackhole, checked the existing
+checkout identity and applied this patch before building. The candidate above
+replaces that required patch with a combined patch. No commit was made to the
+nested Blackhole repository.
 Forty-eight source/dependency inputs, seven replay files and thirteen compiled
 artifacts retained identical hashes. Thirty-one prebuilt dependency paths were
 checked before/after; this does not rebuild all transitive dependencies.
@@ -162,3 +169,76 @@ Earlier runs remain at `31KckI` (guard PATH lacked rg, before compilation) and
 `KK59TH` (six passing/two failing tests because the logger metadata mock was
 missing). Only the literal-search tool and metadata fixture/dependency pin were
 corrected. No pre-fix negative run or live deployment is claimed.
+
+## Combined candidate: public-handler stage before wire proof
+
+The combined patch also contains a separately demonstrated binding-result fix:
+successful and failed `bh_context` values were assigned to the opposite result
+lists. Four predicate branches now classify direct and single-wrapped contexts
+consistently. The public callback regression supplies mixed allow/deny contexts
+in both orders, requires an error without later command/finish dispatch, and
+retains an all-good positive control. Its provider decisions are fixtures, not
+real-token or account-authorization certification.
+
+Session `69993` passed all ten public-handler/redaction groups against the
+combined candidate. Pinned baseline replay, source equality, reverse/idempotence,
+six production `-Werror`/Lager compiles and 31 dependency paths before/after also
+passed. Evidence: `/tmp/kazoo-blackhole-redaction.Oah9N3/eunit.log`, SHA-256
+`9982e4a18b1fc3a6150ee32b4c3cc84f2f5b9a8971eab3009ff062267f0da056`.
+
+The termination logs now retain session identity but omit the arbitrary close
+reason, which may contain client-supplied data. This run checked the early
+termination branch with a secret-bearing reason. At that stage, the established-session
+wire-close regression, real Cowboy size/fragment handling and actual session/
+subscription cleanup were pending in the separate wire suite. No complete
+log-safety, runtime auth-lifetime, transport or deployment claim follows from
+these ten passing groups.
+
+The first wire attempt, session `38610`, retained thirteen passing test groups
+but exited **99** because a late dependency-pin edit changed its runner during
+execution. It is not an accepted frozen-input checkpoint. This orchestration
+failure is retained at `/tmp/kazoo-blackhole-frames.iLuig5`; EUnit log SHA-256
+`d3305a0dbdeb6955e7c7b80501e82c940394dacbab232da9453c2583d7eb2d90`.
+The late change added the actually used `kazoo_bindings_rt.beam` dependency to
+the pin/path gates. A separately reviewed clean run is required; the passing
+case count does not override the failed input-preservation result.
+
+## Clean isolated wire checkpoint
+
+Session `62506` exited zero with all thirteen frame/wire groups passing.
+The fresh Blackhole baseline plus combined patch and the pinned Crossbar
+one-schema replay matched the candidate files, including reverse/idempotence
+checks. Eight production modules compiled with `-Werror` and the Lager
+transform; the raw-logging test build separately exercised the real Cowboy,
+Ranch, cowlib and Jiffy implementations. Ninety-four dependency paths and the
+input/replay/artifact hashes passed their before/after gates.
+
+The listener bound an ephemeral loopback port inside a private network
+namespace with no external interface. Wire assertions covered exact configured
+and default 65,536-byte boundaries, oversized headers without payloads, final
+and intermediate fragmented overruns, malformed/non-object/binary rejection,
+ping/pong continuation, and a secret-bearing client close reason. Rejections
+closed with the expected 1007/1003/1009 codes. The real lifecycle removed the
+synthetic session's tracking and event bindings, with exactly one close,
+listener-removal and demonitor observation. Valid JSON and representative
+subscribe/unsubscribe/escaped legacy-API envelopes retained their payloads;
+the latter used a capture boundary and did not make HTTP requests.
+
+Authentication was explicitly fixture-seeded for the wire sessions. Broker,
+configuration and logger providers were substitutes; the callback pipeline,
+open/close hooks, bindings server and cleanup functions were real. This proves
+the tested native framing/lifecycle behavior, not real JWT authorization,
+tenant isolation, broker delivery, arbitrary client compatibility or live
+deployment readiness.
+
+Evidence: `/tmp/kazoo-blackhole-frames.SEU9co/eunit.log`, SHA-256
+`957387bb8222c446615a6b94f4f37d496d1af3697089458903b95e1ef4ec6093`.
+The frozen runner is `64350c095d01231b505ec3eaa460ab75658c61f8812f459cbc7f61e91d70d2f9`;
+the fixture is `2c532e07ce4e46059e4602129643817076b0183acd08dbac0896360b46071ed5`.
+The earlier exit-99 attempt remains retained and is not reclassified.
+
+One installer gap remains at this checkpoint: the required-patch helper accepts
+clean and fully current trees, but cannot yet upgrade an earlier applied
+Blackhole redaction patch or the previous Crossbar aggregate. A bounded,
+explicit old-to-new transition with private preflight and negative fixtures is
+being prepared separately; these wire tests do not certify that upgrade path.

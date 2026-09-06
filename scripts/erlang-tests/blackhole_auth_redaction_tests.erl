@@ -14,11 +14,13 @@ redaction_test_() ->
      [{"valid token is retained but never logged", fun successful_auth/0},
       {"already authorized context bypass is unchanged", fun authorized_bypass/0},
       {"denied text frames emit sanitized errors and never dispatch commands", fun denied_frames/0},
+      {"mixed authentication failures stop both result orders", fun mixed_auth_results/0},
       {"valid text frame still reaches command dispatch", fun successful_frame/0},
       {"handshake denials preserve HTTP 403 without logging reasons", fun denied_handshakes/0},
       {"valid handshake preserves account and authorization", fun successful_handshake/0},
       {"unsupported binary frame contents are not logged", fun unsupported_frame/0},
-      {"empty context token still reaches the validator", fun empty_token/0}]}.
+      {"empty context token still reaches the validator", fun empty_token/0},
+      {"early termination does not log arbitrary close reasons", fun early_close_reason/0}]}.
 
 mocks() -> [lager, kz_auth, kz_nodes, kz_buckets, kapps_config, cowboy_req,
             blackhole_tracking, blackhole_bindings].
@@ -46,6 +48,8 @@ setup() ->
                 fun(<<"blackhole">>, <<"max_connections_per_ip">>) -> 10 end),
     meck:expect(kapps_config, get_integer,
                 fun(<<"blackhole">>, <<"max_queued_messages">>, 50) -> 50 end),
+    meck:expect(kapps_config, get,
+                fun(<<"blackhole">>, <<"max_frame_size_bytes">>, 65536) -> 65536 end),
     meck:expect(cowboy_req, parse_header,
                 fun(<<"sec-websocket-protocol">>, _) -> undefined;
                    (<<"authorization">>, _) -> ?SECRET
@@ -154,6 +158,39 @@ successful_frame() ->
     ?assert(meck:called(blackhole_bindings, map, [<<"blackhole.command.fixture">>, '_'])),
     assert_clean_logs(), assert_no_reply().
 
+mixed_auth_results() ->
+    try
+        lists:foreach(fun(Order) ->
+            configure({ok, claims()}),
+            meck:expect(blackhole_bindings, map, fun
+                (<<"blackhole.authenticate.fixture">>=Event, Args) ->
+                    [Good] = dispatch(Event, Args),
+                    Bad = bh_context:add_error(Good, <<"fixture authentication denied">>),
+                    case Order of good_first -> [Good,Bad]; bad_first -> [Bad,Good] end;
+                (Event, Args) -> dispatch(Event, Args)
+            end),
+            Before = context(),
+            ?assertEqual({ok,Before,hibernate}, blackhole_socket_handler:websocket_handle({text,frame()},Before)),
+            receive {send_data, Reply} ->
+                ?assertEqual(<<"error">>,kz_json:get_value(<<"status">>,Reply)),
+                ?assertEqual([<<"fixture authentication denied">>],kz_json:get_value([<<"data">>,<<"errors">>],Reply)),
+                ?assertEqual(nomatch,binary:match(kz_json:encode(Reply),?SECRET))
+            after 1000 -> ?assert(false)
+            end,
+            Events = [Event || {_,{blackhole_bindings,map,[Event,_]},_} <- meck:history(blackhole_bindings)],
+            ?assertEqual([<<"blackhole.authenticate.fixture">>],Events),
+            ?assertNot(meck:called(blackhole_bindings,fold,'_')),
+            assert_clean_logs(), assert_no_reply()
+        end,[good_first,bad_first]),
+        meck:expect(blackhole_bindings,map,fun
+            (<<"blackhole.authenticate.fixture">>=Event,Args) ->
+                [Good] = dispatch(Event,Args), [Good,Good];
+            (Event,Args) -> dispatch(Event,Args)
+        end),
+        successful_frame()
+    after meck:expect(blackhole_bindings,map,fun dispatch/2)
+    end.
+
 denied_handshakes() ->
     lists:foreach(fun(Reason) ->
         configure({error, Reason}),
@@ -170,7 +207,7 @@ denied_handshakes() ->
 successful_handshake() ->
     configure({ok, claims()}),
     Req = #{fixture_request => true},
-    {cowboy_websocket, Req, Context, #{idle_timeout := 3600000}} = blackhole_socket_handler:init(Req, []),
+    {cowboy_websocket, Req, Context, #{idle_timeout := 3600000, max_frame_size := 65536}} = blackhole_socket_handler:init(Req, []),
     ?assertEqual(?ACCOUNT, bh_context:auth_account_id(Context)),
     ?assertEqual(?SECRET, bh_context:auth_token(Context)),
     ?assertEqual(true, bh_context:authorized(Context)),
@@ -181,11 +218,11 @@ successful_handshake() ->
 unsupported_frame() ->
     configure({error, unexpected_validation}),
     Before = context(),
-    ?assertEqual({ok, Before, hibernate},
+    ?assertEqual({reply, {close, 1003, <<"unsupported frame">>}, Before},
                  blackhole_socket_handler:websocket_handle({binary, frame()}, Before)),
     ?assertEqual([], meck:history(kz_auth)),
     ?assertEqual([], meck:history(blackhole_bindings)),
-    ?assert(meck:called(lager, debug, ["not handling unsupported websocket message"])),
+    ?assert(meck:called(lager, debug, ["closing unsupported websocket message"])),
     assert_clean_logs(), assert_no_reply().
 
 empty_token() ->
@@ -195,4 +232,10 @@ empty_token() ->
     After = bh_token_auth:authenticate(Before, kz_json:new()),
     ?assertEqual(bh_context:add_error(Before, <<"failed to authenticate token">>), After),
     ?assert(meck:called(kz_auth, validate_token, [<<>>])),
+    assert_clean_logs().
+
+early_close_reason() ->
+    configure({error,unexpected_validation}),
+    ?assertEqual(ok,blackhole_socket_handler:terminate({remote,1000,?SECRET},#{fixture_request => true},[])),
+    ?assertEqual([],meck:history(blackhole_bindings)),
     assert_clean_logs().

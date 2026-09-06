@@ -5,10 +5,13 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 function applyBlackhole({spec, root}) {
     const files = ['scripts/api-docs-blackhole.cjs', 'scripts/install-kazoo5.sh',
+        'scripts/patches/blackhole-kazoo5-integration.patch',
+        'applications/crossbar/priv/couchdb/schemas/system_config.blackhole.json',
         'applications/crossbar/src/modules/cb_websockets.erl',
         'applications/blackhole/src/blackhole_socket_handler.erl',
         'applications/blackhole/src/blackhole_init.erl',
         'applications/blackhole/src/blackhole_socket_callback.erl',
+        'applications/blackhole/src/blackhole_bindings.erl',
         'applications/blackhole/src/blackhole_data_emitter.erl',
         'applications/blackhole/src/bh_context.erl', 'applications/blackhole/src/bh_events.erl',
         'applications/blackhole/src/modules/bh_ping.erl',
@@ -23,7 +26,7 @@ function applyBlackhole({spec, root}) {
     const request = action => obj({action: {type: 'string', enum: [action]}, auth_token: {...str, writeOnly: true, description: 'Secret Crossbar auth_token. Send in the JSON message, never in the URL or a WebSocket subprotocol.'}, request_id: {...str, minLength: 1, description: 'Client correlation ID; use a fresh ID per command, and match replies.'}}, ['action', 'auth_token', 'request_id']);
     for (const action of ['subscribe', 'unsubscribe']) {
         const shape = request(action);
-        shape.properties.data = {...obj({account_id: str, binding: {...str, minLength: 1}, bindings: {...strings, minItems: 1}}),
+        shape.properties.data = {...obj({account_id: {...str, description: 'Company scope is the Kazoo ACCOUNT_ID, not a company name. Defaults to the authenticated account; subject to server account-hierarchy authorization. This does not implement queue/agent dashboard permissions.'}, binding: {...str, minLength: 1, description: 'Native selector such as call.CHANNEL_ANSWER.* for account call answers, or call.CHANNEL_ANSWER.<CALL_ID> for one call. The last segment is a call ID, never a queue or agent ID. Arbitrary queue_id/agent_id fields do not create dashboard filters.'}, bindings: {...strings, minItems: 1}}),
             oneOf: [{required: ['binding'], not: {required: ['bindings']}}, {required: ['bindings'], not: {required: ['binding']}}]};
         shape.required.push('data');
         shape.description = 'Recommended frontend command profile: explicitly send token and correlation ID, and exactly one of binding or bindings. Server fields are more permissive. In this checkout a supplied bindings array takes precedence over binding; do not rely on upstream documentation claiming the reverse. Omitted account_id defaults to the authenticated account. Empty unsubscribe is rejected; unsubscribe the explicit tracked bindings or close the socket.';
@@ -47,6 +50,13 @@ function applyBlackhole({spec, root}) {
         server_messages: {reply: ref('BlackholeReply'), event: ref('BlackholeEvent')},
         subscription_result: ref('BlackholeSubscriptionResult'), error_data: ref('BlackholeErrorData'), ping_result: ref('BlackholePingResult'),
         delivery: 'Best effort, socket-local subscriptions. Native emitter can drop messages under pressure. No durable replay or atomic snapshot/event boundary.',
+        inbound_limits: {config_key: 'blackhole.max_frame_size_bytes', default_bytes: 65536, maximum_configured_bytes: 1048576,
+            applies_to: 'New connections; individual frames and reassembled fragmented messages. Invalid configuration falls back to the default.',
+            close_codes: {'1003': 'Unsupported binary frame or non-object JSON', '1007': 'Malformed or ambiguous JSON', '1009': 'Frame or reassembled message exceeds the configured limit'},
+            acceptance: 'Source implementation; consult deployment evidence before assuming the running server has this patch.'},
+        filtering: {company: 'data.account_id selects a Kazoo account, checked against the authenticated account hierarchy.',
+            call: 'call.<EVENT>.<CALL_ID>; use * in the final segment for account-wide call events.',
+            queue_and_agent: 'Dedicated dashboard selectors are not implemented. Do not use a queue/agent ID in the call-ID position or rely on client-side filtering for authorization.'},
         acdc_dashboard: 'Proposed: queue-scoped dashboard snapshots/events, permissions and gap/resync protocol are not yet implemented or published as callable contracts.'};
     spec.tags ||= [];
     spec.tags.push({name: 'Blackhole WebSocket', description: 'Native event transport; see x-blackhole and Blackhole* schemas for frame contracts. HTTP OpenAPI generators do not generate WebSocket clients.', externalDocs});

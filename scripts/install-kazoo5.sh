@@ -1597,7 +1597,7 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
         "$SCRIPT_DIR/patches/crossbar-kazoo5-integration.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/blackhole" \
-        "$SCRIPT_DIR/patches/blackhole-token-redaction.patch"
+        "$SCRIPT_DIR/patches/blackhole-kazoo5-integration.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \

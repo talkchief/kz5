@@ -136,6 +136,17 @@ The published manifest remains `0f350101477e9ba761bdc84985278fed5563fd1aa4c1e86e
 No service was restarted or reloaded, no backend BEAM was activated, and this
 publication does not certify TLS or live authenticated WebSocket behavior.
 
+The next repository artifact adds explicit company/call versus planned
+queue/agent filtering, the supervision audio matrix, and source-level inbound
+frame limits/close codes. It also pins the Blackhole binding classifier,
+combined installer patch and Crossbar frame-setting schema. Session `24389`
+regenerated and passed offline checks; `95890` repeated those checks and passed
+actual Chromium rendering, including both new reference headings: 651 operations,
+10 local GETs, zero external requests and zero console errors. Its manifest is
+`024aac0c3a9563e3d46140c7527e104313f6bec00ed505f1a320e319b242aa0e`.
+This newer artifact has **not** been published by the earlier `73763` operation;
+that served checkpoint and rollback receipt remain distinct.
+
 - Queue CRUD, full roster replacement/clear, statistics, and historical ACDC stats.
 - Callback list, read and cancel. There is no public callback-create endpoint;
   a trusted queued caller must explicitly confirm registration. Cancellation of
