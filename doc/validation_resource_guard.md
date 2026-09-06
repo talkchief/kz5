@@ -37,6 +37,10 @@ sudo /usr/bin/bash scripts/run-kazoo-validation.sh --runtime-sec 600 -- /usr/bin
 
 The wrapper requires an absolute executable. Arguments after `--` are kept as
 distinct arguments; they are not reconstructed through `eval`. It preserves
+literal dollar bytes across systemd's ExecStart expansion by encoding each
+command-argument dollar as `$$` exactly once, including the worker script.
+This does not expand or import caller variables; a payload shell can evaluate
+its own script normally after systemd restores those literal bytes. It preserves
 the physical working directory. Only fixed local-system manager options are
 used: user managers, remote hosts, containers, scope units, alternate runners
 and arbitrary unit properties cannot be selected through wrapper options.
@@ -166,3 +170,35 @@ without `-e` reached Kazoo but failed because SUP passed a binary instead of
 the atom required by `code:which/1`; that probe is not counted as a pass.
 Bash syntax and ShellCheck also passed. Callback behavior itself requires the
 separate live scenario receipt.
+
+### Literal-argument correction, 2026-09-06 09:01 UTC
+
+The installed systemd 252 client has no `--expand-environment` switch. Its
+manager expands ExecStart variables even inside an argument intended for
+`bash -c`. A harmless synthetic reproduction confirmed the previous wrapper
+emptied `${KAZOO_ARGV_LITERAL_8D1F}`, removed the standalone
+`$KAZOO_ARGV_LITERAL_8D1F` argument and collapsed `$$` to `$`. Consequently,
+shell-local variables in an inline URL could disappear before the shell ran.
+The wrapper now escapes dollars in every ExecStart command argument once;
+manager decoding restores exact worker and payload bytes. Unit options,
+environment isolation, admission checks, service-owned locking and caps are
+unchanged.
+
+The corrected actual systemd path preserved all 14 synthetic arguments,
+including empty, whitespace, multiline, percent, quoted and dollar cases.
+The same worker confirmed memory.max=134217728, memory.swap.max=0,
+memory.oom.group=1, pids.max=128 and cpu.max=50000/100000 under the selected
+128 MiB cap. A separate guarded inline shell produced the exact synthetic URL
+`http://127.0.0.1:5984/synthetic`. Both commands exited 0 with empty stderr;
+no application services, credentials, HTTP/RPC or SIP were used. The protected
+actual receipt is
+`/usr/local/src/kazoo5-installer/validation-argv-preservation.0msw8a/actual-proof.yb8Y0b/summary.json`.
+
+The expanded 75-case mock suite passed under a 384 MiB cap and a 60-second
+runtime bound. Its earlier 10-second guarded attempt timed out before emitting
+an assertion result; that failed attempt is retained, not counted as a pass.
+PID1 reported RuntimeMaxSec expiry for
+`kazoo-validation-84927b9d-e166-4989-b651-8e428d8042eb.service`. Bash syntax,
+Node syntax and ShellCheck passed for the candidate; byte-identical source
+promotion also passed syntax and scoped diff checks. The private promotion
+receipt records the original/fixed hashes and both test outcomes.

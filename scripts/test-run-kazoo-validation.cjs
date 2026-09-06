@@ -51,12 +51,29 @@ function noTransport(result,status) {
     assert.equal(result.status,status,result.stderr);
     assert(!result.events.some(e=>e[0]==='transport'));
 }
+function literalExecArguments(argv) {
+    // A paired dollar is systemd's literal-dollar encoding. Refuse every
+    // unpaired dollar here: it could otherwise trigger manager expansion.
+    return argv.map(argument=>{
+        let decoded='';
+        for(let index=0;index<argument.length;index++) {
+            const value=argument[index];
+            if(value==='$')assert.equal(argument[++index],'$','Unescaped dollar reached systemd ExecStart');
+            decoded+=value;
+        }
+        return decoded;
+    });
+}
 try {
-    const payload=['/usr/bin/printf','%s\n','with spaces','line\nbreak','--user','$(not-a-command)','synthetic-sensitive-fixture'];
+    const payload=['/usr/bin/printf','%s\n','with spaces','line\nbreak','--user','$(not-a-command)','synthetic-sensitive-fixture',
+        '${KAZOO_ARGV_LITERAL_8D1F}','$KAZOO_ARGV_LITERAL_8D1F','$$','$$$','before${KAZOO_ARGV_LITERAL_8D1F}after',
+        '${KAZOO_ARGV_LITERAL_8D1F:-synthetic-default}','quoted "$literal"','backslash\\$literal','%n',''];
     const result=run(['--',...payload]);
     assert.equal(result.status,0,result.stderr);assert.equal(result.stdout,'');assert.equal(result.stderr,'');
-    const launch=result.events.find(e=>e[0]==='transport');assert(launch);
-    assert.deepEqual(launch.slice(-payload.length),payload,'Workload argv must stay byte-for-byte distinct arguments');
+    const rawLaunch=result.events.find(e=>e[0]==='transport');assert(rawLaunch);
+    const boundary=rawLaunch.indexOf('--');
+    const launch=[...rawLaunch.slice(0,boundary+1),...literalExecArguments(rawLaunch.slice(boundary+1))];
+    assert.deepEqual(launch.slice(-payload.length),payload,'Workload argv must stay byte-for-byte distinct arguments after systemd expansion');
     assert.equal(launch[1],'900');
     const delimiter=launch.indexOf('--'),options=launch.slice(2,delimiter),wrapped=launch.slice(delimiter+1),program=wrapped.slice(5);
     assert.deepEqual(wrapped.slice(0,5),['/usr/bin/env','-i','PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin','LANG=C','HOME=/root']);
@@ -79,6 +96,16 @@ try {
     assert.deepEqual(result.events[0].slice(1,5),['--exclusive','--nonblock','--conflict-exit-code','75']);
     assert.equal(result.events[2][1],'--unlock');
     assert.equal(result.events[0][5],result.events[2][2]);
+
+    const inline=['/usr/bin/bash','-c',String.raw`KAZOO_ARGV_TEST_HOST_8D1F=127.0.0.1; KAZOO_ARGV_TEST_PORT_8D1F=5984; printf '%s\n' "http://${'${'}KAZOO_ARGV_TEST_HOST_8D1F}:${'${'}KAZOO_ARGV_TEST_PORT_8D1F}/synthetic"`];
+    const inlineResult=run(['--',...inline]);assert.equal(inlineResult.status,0,inlineResult.stderr);
+    const inlineRaw=inlineResult.events.find(e=>e[0]==='transport');
+    const inlineDecoded=literalExecArguments(inlineRaw.slice(inlineRaw.indexOf('--')+1));
+    assert.deepEqual(inlineDecoded.slice(-inline.length),inline);
+    const synthetic=cp.spawnSync(inline[0],inlineDecoded.slice(-inline.length+1),
+        {env:{PATH:'/usr/bin:/bin',LANG:'C'},encoding:'utf8',timeout:3000,maxBuffer:1024});
+    assert.equal(synthetic.status,0,synthetic.stderr);
+    assert.equal(synthetic.stdout,'http://127.0.0.1:5984/synthetic\n');
 
     for(const status of [37,75,124,137])assert.equal(run(['--','/usr/bin/true'],{TEST_EXIT:String(status)}).status,status);
     noTransport(run(['--','/usr/bin/true'],{TEST_LOCK_STATUS:'75'}),75);
@@ -159,7 +186,7 @@ try {
     assert(script.includes('/usr/bin/env -i PATH=/usr/bin:/bin LANG=C'));
     assert(script.includes('SYSTEMD_LOG_LEVEL=err SYSTEMD_LOG_TARGET=console SYSTEMD_BUS_TIMEOUT=15s'));
     assert(!/\beval\b|--setenv|--user\b|--host=|--machine=|--scope\b/.test(script));
-    console.log(JSON.stringify({result:'PASS',cases,exact_argv:true,service_held_lock:true,
+    console.log(JSON.stringify({result:'PASS',cases,exact_argv:true,systemd_literal_dollars:true,service_held_lock:true,
         memory_admission_twice:true,effective_cgroup_fail_closed:true,actual_systemd_calls:0,live_workloads:0}));
 } finally {
     // Exact mkdtemp-owned directory only; it contains synthetic test fixtures.

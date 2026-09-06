@@ -185,7 +185,7 @@ validation_main() (
         validation_error 64 'an absolute executable after -- is required'; return;
     }
     validation_host || return $?
-    local lockfile lock_fd required_kib memory_bytes nonce unit working_directory worker result account_home
+    local lockfile lock_fd required_kib memory_bytes nonce unit working_directory worker result account_home argument_index
     account_home=$(validation_account_home) || {
         validation_error 69 'root account home cannot be verified'; return;
     }
@@ -203,6 +203,19 @@ validation_main() (
     unit=kazoo-validation-$nonce.service
     working_directory=$(pwd -P)
     worker=$(validation_worker_source)
+    local -a service_argv=(
+        /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin LANG=C "HOME=$account_home"
+        /usr/bin/flock --exclusive --nonblock --conflict-exit-code 75
+        "$lockfile" /usr/bin/bash -c "$worker" kazoo-validation-worker
+        "$unit" "$memory_bytes" "$required_kib" "$@"
+    )
+    # systemd performs ExecStart dollar substitution before starting this env
+    # wrapper, even inside a bash -c argument. Escape every command argument
+    # once so its worker/payload bytes survive that layer. systemd 252 lacks
+    # systemd-run's newer expansion-disable option; $$ is its literal dollar.
+    for argument_index in "${!service_argv[@]}"; do
+        service_argv[argument_index]=${service_argv[argument_index]//\$/\$\$}
+    done
     # The service takes the same nonblocking lock and repeats memory admission.
     # Racing launchers may start a tiny guarded service, but only one payload
     # can run. Keeping the lock solely in this shell would be unsafe on SIGKILL.
@@ -220,10 +233,7 @@ validation_main() (
         --property=RuntimeMaxSec="${runtime}s" --property=TimeoutStartSec=15s \
         --property=TimeoutStopSec=10s --property=KillMode=control-group \
         --property=SendSIGKILL=yes --property=Delegate=no --property=ProtectControlGroups=yes \
-        -- /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin LANG=C "HOME=$account_home" \
-        /usr/bin/flock --exclusive --nonblock --conflict-exit-code 75 \
-        "$lockfile" /usr/bin/bash -c "$worker" kazoo-validation-worker \
-        "$unit" "$memory_bytes" "$required_kib" "$@"; then
+        -- "${service_argv[@]}"; then
         result=0
     else
         result=$?
