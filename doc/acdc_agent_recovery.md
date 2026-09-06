@@ -116,6 +116,10 @@ Against the combined source, root independently observed:
   recovery merge and installer commit `5184dbc`, under the same 120-second
   resource guard. This includes the earlier delayed-notification recovery
   cases and preserves the team's source changes.
+- Recovery I/O session `60899`: exit zero, all 16 tests passed against the
+  combined collector refactor. Correlation/account checks, incomplete/unknown
+  observations, exact cleanup targets and unresolved publication outcomes
+  retain their fail-closed behavior in these isolated tests.
 - Historical media session `83435`: deterministic 165-asset map and four
   production-module compilation/export/import checks passed, but the complete
   EUnit run exceeded the 120-second outer guard and exited 143. This is a
