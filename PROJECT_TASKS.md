@@ -51,6 +51,15 @@ proof before promotion; the handoff does not waive those safety gates.
 | P0-08 | OPEN — ACDC + AMQP | Failed AMQP delivery can prevent recovery from ringing (operator review finding). Identify affected publish/ack/recovery paths and make recovery bounded, observable and safe to retry. Test publish failure, broker interruption, lost acknowledgements and redelivery: no permanently stuck ringing state, duplicate bridge, stolen call or unrelated agent/roster mutation. Broker acceptance alone must not count as completed state recovery. |
 | P0-09 | OPEN — ACDC policy + UI/API | Repeated connection failures can automatically log agents out (operator review finding). Distinguish intentional configured protection from unintended logout; define configurable thresholds and recovery behavior, expose the reason/current state through API/UI and document it in OpenAPI. Test threshold boundaries, transient failure, successful-call counter reset, reconnect and explicit operator logout. Do not silently disable unreachable-agent safeguards or automatically override an intentional logout. |
 
+Native callback candidate review remains part of P0-03, not a completed fix:
+revocation acknowledgement is not proof that the full native playback stack has
+finished. Bridging must reserve both call legs and wait for actual completion
+before side effects. A candidate owner-change-away-and-back race also requires a
+non-reusable binding generation in both native state and wire requests. The
+earlier ten-test/eight-wire-shape codec proof does not cover that new field or
+native transport. Core/module lifetime, exact bridge-end release, stale requests,
+native build/link and real audio acceptance must pass before promotion.
+
 The three recovery findings above were added from the operator's 2026-09-06
 review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
 delayed-notification regression verifies recovery after direct calls finish and
