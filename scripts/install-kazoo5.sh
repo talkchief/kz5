@@ -691,16 +691,22 @@ sync_git() {
     local url=$1
     local destination=$2
     local ref=${3:-master}
+    # Do not rely on errexit: a caller testing this function's status disables
+    # it inside the function, and an unconditional return could hide a failure.
     if [[ ! -d $destination/.git ]]; then
-        run mkdir -p "$(dirname -- "$destination")"
+        run mkdir -p "$(dirname -- "$destination")" || die 'Cannot prepare source parent directory'
         if [[ $ref =~ ^[0-9a-fA-F]{40}$ ]]; then
-            run mkdir -p "$destination"
-            run git -C "$destination" init
-            run git -C "$destination" remote add origin "$url"
-            run git -C "$destination" fetch --depth 1 origin "$ref"
-            run git -C "$destination" checkout --detach FETCH_HEAD
+            run mkdir -p "$destination" || die 'Cannot prepare source directory'
+            run git -C "$destination" init || die 'Cannot initialize source repository'
+            run git -C "$destination" remote add origin "$url" || die 'Cannot configure source remote'
+            run git -C "$destination" fetch --depth 1 origin "$ref" || die 'Cannot fetch required source revision'
+            run git -C "$destination" checkout --detach FETCH_HEAD || die 'Cannot check out required source revision'
+            if [[ $DRY_RUN != true ]]; then
+                [[ $(git -C "$destination" rev-parse --verify HEAD) == "${ref,,}" ]] ||
+                    die 'Checked-out source does not match required revision'
+            fi
         else
-            run git clone --branch "$ref" --depth 1 "$url" "$destination"
+            run git clone --branch "$ref" --depth 1 "$url" "$destination" || die 'Cannot clone required source branch'
         fi
         return 0
     fi
@@ -708,15 +714,17 @@ sync_git() {
         log "Would fast-forward ${destination} from ${url} (${ref})"
         return 0
     fi
-    git -C "$destination" remote set-url origin "$url"
-    git -C "$destination" fetch --depth 1 origin "$ref"
+    git -C "$destination" remote set-url origin "$url" || die 'Cannot configure source remote'
+    git -C "$destination" fetch --depth 1 origin "$ref" || die 'Cannot fetch required source revision'
     if [[ $ref =~ ^[0-9a-fA-F]{40}$ ]]; then
-        git -C "$destination" checkout --detach FETCH_HEAD
+        git -C "$destination" checkout --detach FETCH_HEAD || die 'Cannot check out required source revision'
+        [[ $(git -C "$destination" rev-parse --verify HEAD) == "${ref,,}" ]] ||
+            die 'Checked-out source does not match required revision'
     elif git -C "$destination" show-ref --verify --quiet "refs/remotes/origin/${ref}"; then
-        git -C "$destination" checkout "$ref"
-        git -C "$destination" merge --ff-only FETCH_HEAD
+        git -C "$destination" checkout "$ref" || die 'Cannot check out required source branch'
+        git -C "$destination" merge --ff-only FETCH_HEAD || die 'Cannot fast-forward source branch'
     else
-        git -C "$destination" checkout --detach FETCH_HEAD
+        git -C "$destination" checkout --detach FETCH_HEAD || die 'Cannot check out fetched source revision'
     fi
 }
 
