@@ -11,7 +11,7 @@ const names = [
     'fetch-reply-ownership', 'thread-lifecycle', 'worker-shutdown-synchronization',
     'cookie-redaction', 'prefixes-serialization', 'fetch-channel-data', 'fetch-log-redaction',
     'originate-compatibility', 'reply-completeness', 'sync-command-protocol',
-    'originate-reconcile', 'hold-dtmf-events', 'version-namespace'
+    'originate-reconcile', 'hold-dtmf-events', 'version-namespace', 'atomic-intercept'
 ].map(name => `mod-kazoo-${name}.patch`);
 const aggregateNames = ['mod-kazoo-before-version.patch', 'mod-kazoo-kz5-integration.patch'];
 const [sourceRepo, ...extra] = process.argv.slice(2);
@@ -72,9 +72,10 @@ try {
     const helper = path.join(out, 'actual-helpers.sh'); write(helper, integrations[0] + '\n' + prepare + '\n' + fingerprint);
     const patchDir = path.join(out, 'scripts/patches'); fs.mkdirSync(patchDir, { recursive: true, mode: 0o700 });
     for (const name of [...names, ...aggregateNames]) fs.copyFileSync(path.join(__dirname, 'patches', name), path.join(patchDir, name));
-    test('actual helper requires all 13 patches and the namespace fingerprint', () => {
+    test('actual helper requires all 14 patches and namespace/intercept fingerprints', () => {
         assert.deepEqual([...prepare.matchAll(/\$SCRIPT_DIR\/patches\/([^"\n]+)/g)].map(m => m[1]), names);
         assert.equal((fingerprint.match(/\+version-namespace-v1/g) || []).length, 1);
+        assert.equal((fingerprint.match(/\+atomic-intercept-v1/g) || []).length, 1);
         assert(installer.includes(`MOD_KAZOO_REF=\${MOD_KAZOO_REF:-${ref}}`));
     });
     assert.equal(git('-C', sourceRepo, 'rev-parse', `${ref}^{commit}`).trim(), ref);
@@ -106,27 +107,49 @@ prepare_mod_kazoo_source "$FIXTURE_ROOT"
     const prepareRun = (targetRoot = fsRoot) => run('/usr/bin/bash', ['-c', shell], { env: {
         ...helperEnv, FIXTURE_ROOT: targetRoot, FIXTURE_MODULE: path.join(targetRoot, 'src/mod/outoftree/mod_kazoo')
     } });
+    function completeIntercept(target) {
+        const patch = read(path.join(patchDir, names.at(-1)));
+        const first = patch.slice(patch.indexOf('@@ -0,0 +1,142 @@\n') + '@@ -0,0 +1,142 @@\n'.length,
+            patch.indexOf('diff --git a/kazoo_dptools.c'));
+        assert.equal(first.split('\n').filter(line => line.startsWith('+')).length, 142);
+        assert.equal(read(path.join(target, 'kazoo_intercept.h')),
+            first.split('\n').filter(line => line.startsWith('+')).map(line => line.slice(1)).join('\n') + '\n');
+        const app = read(path.join(target, 'kazoo_dptools.c'));
+        assert.equal((app.match(/#include "kazoo_intercept\.h"/g) || []).length, 1);
+        assert.equal((app.match(/\tkz_intercept_start\(\);/g) || []).length, 1);
+        assert.equal((app.match(/SWITCH_ADD_APP\(app_interface, "kz_intercept",/g) || []).length, 1);
+        assert.equal((read(path.join(target, 'mod_kazoo.h')).match(/void remove_kz_dptools\(void\);/g) || []).length, 1);
+        const module = read(path.join(target, 'mod_kazoo.c'));
+        assert.equal((module.match(/\tremove_kz_dptools\(\);/g) || []).length, 1);
+        assert(module.indexOf('remove_kz_dptools();') < module.indexOf('kz_cdr_stop();'));
+        assert(!app.includes('switch_ivr_owned_audio'), 'baseline integration must not enable the private owned-audio path');
+    }
     test('actual prepare helper applies every patch to the pinned local baseline', () => {
         const log = success(prepareRun());
         assert(log.includes('Applied mod_kazoo integration from clean after private preflight'));
         const independent = path.join(out, 'independent-series'); fs.mkdirSync(independent, { mode: 0o700 });
         success(run('/usr/bin/tar', ['-xf', archive, '-C', independent]));
         for (const name of names) git('-C', independent, 'apply', path.join(patchDir, name));
-        assert.deepEqual(tree(moduleDir), tree(independent), 'aggregate must equal all 13 sequential source patches');
+        assert.deepEqual(tree(moduleDir), tree(independent), 'aggregate must equal all 14 sequential source patches');
+        completeIntercept(moduleDir);
     });
     const prepared = tree(moduleDir);
-    test('repeat actual prepare is idempotent for all 13 patches', () => {
+    test('repeat actual prepare preserves complete intercept header/registration/shutdown and all 14 patches', () => {
         const log = success(prepareRun());
         assert(log.includes('Required mod_kazoo integration is already current'));
         assert.deepEqual(tree(moduleDir), prepared);
+        completeIntercept(moduleDir);
     });
-    const previous = path.join(out, 'before-version-namespace'); fs.cpSync(moduleDir, previous, { recursive: true });
-    git('-C', previous, 'apply', '--reverse', path.join(patchDir, names.at(-1)));
+    const versionOnly = path.join(out, 'before-atomic-intercept'); fs.cpSync(moduleDir, versionOnly, { recursive: true });
+    git('-C', versionOnly, 'apply', '--reverse', path.join(patchDir, names.at(-1)));
+    const namespaced = tree(versionOnly);
+    const previous = path.join(out, 'before-version-namespace'); fs.cpSync(versionOnly, previous, { recursive: true });
+    git('-C', previous, 'apply', '--reverse', path.join(patchDir, names.at(-2)));
     const beforeVersion = tree(previous);
     test('previous aggregate equals all 12 preceding source patches', () => {
         const independent = path.join(out, 'independent-previous'); fs.mkdirSync(independent, { mode: 0o700 });
         success(run('/usr/bin/tar', ['-xf', archive, '-C', independent]));
-        for (const name of names.slice(0, -1)) git('-C', independent, 'apply', path.join(patchDir, name));
+        for (const name of names.slice(0, -2)) git('-C', independent, 'apply', path.join(patchDir, name));
         assert.deepEqual(tree(previous), tree(independent));
         git('-C', independent, 'apply', '--reverse', '--check', path.join(patchDir, aggregateNames[0]));
         const aggregateOnly = path.join(out, 'previous-aggregate-only'); fs.mkdirSync(aggregateOnly, { mode: 0o700 });
@@ -149,7 +172,24 @@ prepare_mod_kazoo_source "$FIXTURE_ROOT"
         const upgraded = tree(target);
         assert(success(prepareRun(previousRoot)).includes('Required mod_kazoo integration is already current'));
         assert.deepEqual(tree(target), upgraded);
+        completeIntercept(target);
     });
+    for (const kind of ['namespace-only', 'intercept-only']) {
+        test(`known ${kind} integration upgrades only the missing delta and remains repeatable`, () => {
+            const targetRoot = path.join(out, kind + '-freeswitch');
+            const target = path.join(targetRoot, 'src/mod/outoftree/mod_kazoo');
+            fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+            fs.cpSync(kind === 'namespace-only' ? versionOnly : previous, target, { recursive: true });
+            if (kind === 'intercept-only') git('-C', target, 'apply', path.join(patchDir, names.at(-1)));
+            const retainedFile = kind === 'namespace-only' ? 'kazoo_ei.h' : 'kazoo_intercept.h';
+            const retainedHash = sha(path.join(target, retainedFile));
+            assert(success(prepareRun(targetRoot)).includes('Applied mod_kazoo integration from previous after private preflight'));
+            assert.equal(sha(path.join(target, retainedFile)), retainedHash);
+            assert.deepEqual(tree(target), prepared); completeIntercept(target);
+            assert(success(prepareRun(targetRoot)).includes('Required mod_kazoo integration is already current'));
+            assert.deepEqual(tree(target), prepared);
+        });
+    }
     test('partial source integration is rejected without completing it implicitly', () => {
         const partialRoot = path.join(out, 'partial-freeswitch');
         const target = path.join(partialRoot, 'src/mod/outoftree/mod_kazoo');
@@ -163,14 +203,14 @@ prepare_mod_kazoo_source "$FIXTURE_ROOT"
     });
     const consumers = ['kazoo_api.c', 'kazoo_fetch_agent.c', 'kazoo_node.c'];
     test('namespace patch changes only the four exact identifiers, preserving external bytes', () => {
-        assert.deepEqual(Object.keys(prepared), Object.keys(beforeVersion));
-        assert.deepEqual(Object.keys(prepared).filter(file => prepared[file].sha256 !== beforeVersion[file].sha256).sort(),
+        assert.deepEqual(Object.keys(namespaced), Object.keys(beforeVersion));
+        assert.deepEqual(Object.keys(namespaced).filter(file => namespaced[file].sha256 !== beforeVersion[file].sha256).sort(),
             ['kazoo_ei.h', ...consumers].sort());
         for (const file of ['kazoo_ei.h', ...consumers]) {
-            const before = read(path.join(previous, file)), after = read(path.join(moduleDir, file));
+            const before = read(path.join(previous, file)), after = read(path.join(versionOnly, file));
             assert.equal((before.match(/\bVERSION\b/g) || []).length, 1, file);
             assert.equal(after, before.replace(/\bVERSION\b/, 'KAZOO_MODULE_VERSION'), file);
-            assert.equal(prepared[file].mode, beforeVersion[file].mode);
+            assert.equal(namespaced[file].mode, beforeVersion[file].mode);
         }
         assert(read(path.join(moduleDir, 'kazoo_ei.h')).includes('#define KAZOO_MODULE_VERSION "mod_kazoo v1.5.0-1 community"\n'));
     });
@@ -192,11 +232,41 @@ prepare_mod_kazoo_source "$FIXTURE_ROOT"
         assert(current.split('\n').find(line => line.includes('version-namespace-v1')).startsWith(`mod_kazoo=${ref}+`));
     });
     test('missing required namespace patch fails without changing the prepared source', () => {
+        const patch = path.join(patchDir, names.at(-2)); fs.renameSync(patch, patch + '.held');
+        try { const result = prepareRun(); assert.notEqual(result.status, 0); assert(result.stderr.includes('Required mod_kazoo patch is missing:')); }
+        finally { fs.renameSync(patch + '.held', patch); }
+        assert.deepEqual(tree(moduleDir), prepared);
+    });
+    test('atomic-intercept fingerprint changes the build marker without changing other components', () => {
+        const fpEnv = { ...env, FREESWITCH_VERSION: 'fixture-version', FREESWITCH_REF: 'a'.repeat(40),
+            MOD_KAZOO_REF: ref, SOFIA_SIP_REF: 'b'.repeat(40), SPANDSP_REF: 'c'.repeat(40) };
+        const current = success(run('/usr/bin/bash', ['-c', `set -euo pipefail\n${fingerprint}\nfreeswitch_build_fingerprint`], { env: fpEnv }));
+        const old = success(run('/usr/bin/bash', ['-c', `set -euo pipefail\n${fingerprint.replace('+atomic-intercept-v1', '')}\nfreeswitch_build_fingerprint`], { env: fpEnv }));
+        assert.notEqual(current, old); assert.equal(current.replace('+atomic-intercept-v1', ''), old);
+        assert.equal(current.split('\n').filter(line => line.includes('atomic-intercept-v1')).length, 1);
+        assert(current.split('\n').find(line => line.includes('atomic-intercept-v1')).startsWith(`mod_kazoo=${ref}+`));
+    });
+    test('missing required atomic patch fails without changing current source', () => {
         const patch = path.join(patchDir, names.at(-1)); fs.renameSync(patch, patch + '.held');
         try { const result = prepareRun(); assert.notEqual(result.status, 0); assert(result.stderr.includes('Required mod_kazoo patch is missing:')); }
         finally { fs.renameSync(patch + '.held', patch); }
         assert.deepEqual(tree(moduleDir), prepared);
     });
+    for (const kind of ['missing-header', 'missing-shutdown-cleanup']) {
+        test(`partial intercept ${kind} fails with no implicit repair or target mutation`, () => {
+            const targetRoot = path.join(out, kind + '-freeswitch');
+            const target = path.join(targetRoot, 'src/mod/outoftree/mod_kazoo');
+            fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+            fs.cpSync(moduleDir, target, { recursive: true });
+            if (kind === 'missing-header') fs.unlinkSync(path.join(target, 'kazoo_intercept.h'));
+            else {
+                const file = path.join(target, 'mod_kazoo.c');
+                fs.writeFileSync(file, read(file).replace('\tremove_kz_dptools();\n', ''));
+            }
+            const damaged = tree(target), result = prepareRun(targetRoot);
+            assert.notEqual(result.status, 0); assert.deepEqual(tree(target), damaged);
+        });
+    }
     test('missing aggregate fails without changing the prepared source', () => {
         const patch = path.join(patchDir, aggregateNames[1]); fs.renameSync(patch, patch + '.held');
         try {

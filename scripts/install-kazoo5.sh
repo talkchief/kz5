@@ -1628,7 +1628,8 @@ apply_kazoo_integration_patch() (
     done
     local transition_app=$1 transition_new transition_old transition_delta
     local transition_source transition_relative transition_path
-    local transition_state transition_stage transition_apply
+    local transition_state transition_stage transition_intercept=''
+    local transition_apply=()
     local transition_files=() transition_old_files=() transition_delta_files=()
     local transition_created_files=()
     case $transition_app in
@@ -1659,11 +1660,14 @@ apply_kazoo_integration_patch() (
             transition_old=mod-kazoo-before-version.patch
             transition_delta=mod-kazoo-version-namespace.patch
             transition_source=$2
+            transition_intercept=mod-kazoo-atomic-intercept.patch
             transition_files=(kazoo_api.c kazoo_commands.c kazoo_config.c kazoo_dptools.c
                 kazoo_ei.h kazoo_ei_config.c kazoo_ei_utils.c kazoo_event_stream.c
-                kazoo_fetch_agent.c kazoo_fields.h kazoo_message.c kazoo_node.c mod_kazoo.c mod_kazoo.h)
-            transition_old_files=("${transition_files[@]}")
+                kazoo_fetch_agent.c kazoo_fields.h kazoo_message.c kazoo_node.c mod_kazoo.c mod_kazoo.h
+                kazoo_intercept.h)
+            transition_old_files=("${transition_files[@]:0:14}")
             transition_delta_files=(kazoo_api.c kazoo_ei.h kazoo_fetch_agent.c kazoo_node.c)
+            transition_created_files=(kazoo_intercept.h)
             ;;
         *) die 'Unknown Kazoo integration family' ;;
     esac
@@ -1677,10 +1681,12 @@ apply_kazoo_integration_patch() (
     transition_new="$SCRIPT_DIR/patches/$transition_new"
     transition_old="$SCRIPT_DIR/patches/$transition_old"
     transition_delta="$SCRIPT_DIR/patches/$transition_delta"
+    [[ ! $transition_intercept ]] || transition_intercept="$SCRIPT_DIR/patches/$transition_intercept"
     if [[ $DRY_RUN == true ]]; then
         transition_safe_file "$transition_new"
         transition_safe_file "$transition_old"
         transition_safe_file "$transition_delta"
+        [[ ! $transition_intercept ]] || transition_safe_file "$transition_intercept"
         log "Would ensure $transition_app integration with private preflight; source state and preflight are unverified"
         return 0
     fi
@@ -1725,7 +1731,10 @@ apply_kazoo_integration_patch() (
     transition_check_inventory "$transition_new" "${transition_files[@]}"
     transition_check_inventory "$transition_old" "${transition_old_files[@]}"
     transition_check_inventory "$transition_delta" "${transition_delta_files[@]}"
-    # Only the four additions in the clean Crossbar baseline may be absent.
+    if [[ $transition_intercept ]]; then
+        transition_check_inventory "$transition_intercept" kazoo_intercept.h kazoo_dptools.c mod_kazoo.h mod_kazoo.c
+    fi
+    # Only explicitly added files may be absent before their reviewed transition.
     transition_check_sources() {
         local transition_check_file transition_check_path transition_check_created transition_may_be_absent
         for transition_check_file in "${transition_files[@]}"; do
@@ -1746,14 +1755,32 @@ apply_kazoo_integration_patch() (
     transition_check_sources
     if git -C "$transition_source" apply --check "$transition_new" 2>/dev/null; then
         transition_state=clean
-        transition_apply=$transition_new
+        transition_apply=("$transition_new")
     elif git -C "$transition_source" apply --reverse --check "$transition_new" 2>/dev/null; then
         log "Required $transition_app integration is already current"
         return 0
+    elif [[ $transition_app == mod_kazoo ]]; then
+        # Namespace and atomic interception touch disjoint file sets. Existing
+        # installations can have neither, either, or both reviewed additions.
+        # Select only missing deltas; the private full-aggregate reverse check
+        # below must still prove the complete result before any target write.
+        for transition_relative in "${transition_old_files[@]}"; do
+            transition_safe_file "$transition_source/$transition_relative"
+        done
+        for transition_path in "$transition_delta" "$transition_intercept"; do
+            if git -C "$transition_source" apply --check "$transition_path" 2>/dev/null; then
+                transition_apply+=("$transition_path")
+            elif ! git -C "$transition_source" apply --reverse --check "$transition_path" 2>/dev/null; then
+                die 'Source is neither the clean, current nor explicitly supported previous integration'
+            fi
+        done
+        [[ ${#transition_apply[@]} -gt 0 ]] ||
+            die 'Source is neither the clean, current nor explicitly supported previous integration'
+        transition_state=previous
     elif git -C "$transition_source" apply --reverse --check "$transition_old" 2>/dev/null &&
          git -C "$transition_source" apply --check "$transition_delta" 2>/dev/null; then
         transition_state=previous
-        transition_apply=$transition_delta
+        transition_apply=("$transition_delta")
         for transition_relative in "${transition_files[@]}"; do
             transition_safe_file "$transition_source/$transition_relative"
         done
@@ -1792,9 +1819,13 @@ apply_kazoo_integration_patch() (
     done
     sha256sum "$transition_new" "$transition_old" "$transition_delta" >"$transition_stage/patch-pins.sha256" ||
         die 'Cannot retain integration patch hashes'
-    git -C "$transition_stage/desired" apply --check "$transition_apply" ||
+    if [[ $transition_intercept ]]; then
+        sha256sum "$transition_intercept" >>"$transition_stage/patch-pins.sha256" ||
+            die 'Cannot retain intercept patch hash'
+    fi
+    git -C "$transition_stage/desired" apply --check "${transition_apply[@]}" ||
         die 'Integration patch cannot apply to private source copies'
-    git -C "$transition_stage/desired" apply "$transition_apply" ||
+    git -C "$transition_stage/desired" apply "${transition_apply[@]}" ||
         die 'Cannot apply integration patch to private source copies'
     git -C "$transition_stage/desired" apply --reverse --check "$transition_new" ||
         die 'Transition does not produce the complete current integration'
@@ -1815,9 +1846,9 @@ apply_kazoo_integration_patch() (
                 die 'Integration source changed during preflight'
         fi
     done
-    git -C "$transition_source" apply --check "$transition_apply" ||
+    git -C "$transition_source" apply --check "${transition_apply[@]}" ||
         die 'Integration patch no longer applies to target sources'
-    git -C "$transition_source" apply "$transition_apply" ||
+    git -C "$transition_source" apply "${transition_apply[@]}" ||
         die 'Cannot apply integration patch to target sources'
     git -C "$transition_source" apply --reverse --check "$transition_new" ||
         die 'Applied integration failed its final current-source check'
@@ -3136,6 +3167,7 @@ prepare_mod_kazoo_source() {
         "$SCRIPT_DIR/patches/mod-kazoo-originate-reconcile.patch"
         "$SCRIPT_DIR/patches/mod-kazoo-hold-dtmf-events.patch"
         "$SCRIPT_DIR/patches/mod-kazoo-version-namespace.patch"
+        "$SCRIPT_DIR/patches/mod-kazoo-atomic-intercept.patch"
     )
     sync_git https://github.com/freeswitch/mod_kazoo.git "$module_dir" "$MOD_KAZOO_REF"
     for patch_file in "${patch_files[@]}"; do
@@ -3157,7 +3189,7 @@ freeswitch_build_fingerprint() {
         "freeswitch_core=module-load-shutdown-v1" \
         "speech_modules=en-es-fr-v1" \
         "mod_sofia=profile-thread-lifecycle-v1+kazoo-proxy-uri-v1" \
-        "mod_kazoo=${MOD_KAZOO_REF}+fetch-reply-ownership-v1+thread-lifecycle-v1+worker-shutdown-v3+cookie-redaction-v1+prefixes-serialization-v2+fetch-channel-data-v1+fetch-log-redaction-v1+originate-compatibility-v1+reply-completeness-v1+sync-command-protocol-v1+originate-reconcile-v1+hold-dtmf-events-v1+version-namespace-v1" \
+        "mod_kazoo=${MOD_KAZOO_REF}+fetch-reply-ownership-v1+thread-lifecycle-v1+worker-shutdown-v3+cookie-redaction-v1+prefixes-serialization-v2+fetch-channel-data-v1+fetch-log-redaction-v1+originate-compatibility-v1+reply-completeness-v1+sync-command-protocol-v1+originate-reconcile-v1+hold-dtmf-events-v1+version-namespace-v1+atomic-intercept-v1" \
         "sofia_sip=${SOFIA_SIP_REF}" \
         "spandsp=${SPANDSP_REF}"
 }

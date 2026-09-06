@@ -53,12 +53,17 @@ their existing bounded proof/reconciliation lifecycle.
 
 ## Validation and deployment
 
-The checkpoint keeps atomic changes in explicit supplemental patches. They are
-not default installer hooks and are not evidence of runtime deployment.
+The Erlang atomic changes remain explicit supplemental patches. The existing
+native `mod-kazoo-atomic-intercept.patch` is now included in the default installer
+source aggregate; its 21-case offline installer/source regression passes, but
+this is not evidence of a new runtime deployment. See
+[the installer reconciliation](mod_kazoo_version_namespace.md#atomic-intercept-installer-reconciliation--2026-09-06).
 The reproducible source order is:
 
-1. Apply the installer's existing `mod_kazoo` patches, then
-   `scripts/patches/mod-kazoo-atomic-intercept.patch` in the pinned module tree.
+1. Apply the installer's current `mod-kazoo-kz5-integration.patch` in the pinned
+   module tree. It already includes `mod-kazoo-atomic-intercept.patch`; do not
+   apply that supplemental patch a second time. Independent replay uses the
+   original thirteen patches followed by the unchanged atomic-intercept patch.
 2. Apply `scripts/patches/acdc-kazoo5-integration.patch` to pinned ACDC, then
    `scripts/patches/acdc-atomic-answer-runtime.patch`. The independently staged
    `acdc-language-runtime.patch` is optional for atomic answering; to reproduce
