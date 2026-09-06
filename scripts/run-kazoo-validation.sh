@@ -97,10 +97,13 @@ validation_limits() {
 
 validation_worker_source() {
     declare -f validation_error validation_mem_available validation_require_memory validation_limits
+    # Expand these expressions only inside the generated service worker.
+    # shellcheck disable=SC2016
     printf '%s\n' 'set +x' 'set -euo pipefail' \
         '[[ $# -ge 4 ]] || exit 64' \
         'unit=$1; memory_bytes=$2; required_kib=$3; shift 3' \
         '[[ $required_kib =~ ^[1-9][0-9]{1,9}$ ]] || exit 64' \
+        '[[ $(ulimit -S -c) == 0 && $(ulimit -H -c) == 0 ]] || { validation_error 78 "validation core-file limits are not zero"; exit $?; }' \
         'validation_limits "$unit" "$memory_bytes" /proc/self/cgroup /sys/fs/cgroup || { validation_error 78 "effective cgroup limits are not the required hard limits"; exit $?; }' \
         'validation_require_memory "$required_kib" /proc/meminfo || exit $?' \
         'exec -- "$@"'
@@ -109,7 +112,7 @@ validation_worker_source() {
 validation_host() {
     local controllers controller executable
     [[ $(/usr/bin/id -u) == 0 ]] || { validation_error 77 'root is required'; return; }
-    for executable in /usr/bin/bash /usr/bin/env /usr/bin/flock /usr/bin/mkdir /usr/bin/stat /usr/bin/systemd-run /usr/bin/timeout; do
+    for executable in /usr/bin/bash /usr/bin/env /usr/bin/flock /usr/bin/getent /usr/bin/mkdir /usr/bin/stat /usr/bin/systemd-run /usr/bin/timeout; do
         [[ -x $executable ]] || { validation_error 69 'a required fixed-path system tool is unavailable'; return; }
     done
     [[ -d /run/systemd/system && -r /sys/fs/cgroup/cgroup.controllers ]] || {
@@ -121,6 +124,19 @@ validation_host() {
             validation_error 69 'a required cgroup controller is unavailable'; return;
         }
     done
+}
+
+validation_account_home() {
+    # Restore the actual root account home, never the caller's environment.
+    # Erlang's distribution authentication needs this even when SUP reads the
+    # Kazoo cookie from config.ini after starting its network kernel.
+    local entry account _password uid gid _comment account_home login_shell
+    entry=$(/usr/bin/getent passwd 0) || return 1
+    [[ $entry != *$'\n'* ]] || return 1
+    IFS=: read -r account _password uid gid _comment account_home login_shell <<<"$entry"
+    [[ -n $account && $uid == 0 && $gid == 0 && $account_home == /* && $account_home != / && -n $login_shell && $login_shell != *:* ]] || return 1
+    validation_secure_directory "$account_home" || return 1
+    printf '%s\n' "$account_home"
 }
 
 validation_flock() { /usr/bin/flock "$@"; }
@@ -169,7 +185,10 @@ validation_main() (
         validation_error 64 'an absolute executable after -- is required'; return;
     }
     validation_host || return $?
-    local lockfile lock_fd required_kib memory_bytes nonce unit working_directory worker result
+    local lockfile lock_fd required_kib memory_bytes nonce unit working_directory worker result account_home
+    account_home=$(validation_account_home) || {
+        validation_error 69 'root account home cannot be verified'; return;
+    }
     lockfile=$(validation_prepare_lock /run /run/kazoo-validation) || {
         validation_error 73 'lock directory/file is not protected and root-owned'; return;
     }
@@ -195,12 +214,13 @@ validation_main() (
         '--description=Kazoo bounded validation' --working-directory="$working_directory" \
         --property=MemoryAccounting=yes --property=MemoryMax="${memory}M" \
         --property=MemorySwapMax=0 --property=OOMPolicy=kill \
+        --property=LimitCORE=0 \
         --property=CPUAccounting=yes --property=CPUQuota=50% --property=CPUQuotaPeriodSec=100ms \
         --property=TasksAccounting=yes --property=TasksMax=128 \
         --property=RuntimeMaxSec="${runtime}s" --property=TimeoutStartSec=15s \
         --property=TimeoutStopSec=10s --property=KillMode=control-group \
         --property=SendSIGKILL=yes --property=Delegate=no --property=ProtectControlGroups=yes \
-        -- /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin LANG=C \
+        -- /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin LANG=C "HOME=$account_home" \
         /usr/bin/flock --exclusive --nonblock --conflict-exit-code 75 \
         "$lockfile" /usr/bin/bash -c "$worker" kazoo-validation-worker \
         "$unit" "$memory_bytes" "$required_kib" "$@"; then

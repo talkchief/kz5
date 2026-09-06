@@ -12,6 +12,7 @@ fs.writeFileSync(capture,'#!/usr/bin/node\nconst fs=require("node:fs");fs.append
 const mocks=String.raw`
 source "$TEST_SOURCE"
 validation_host() { return "${'${'}TEST_HOST_STATUS:-0}"; }
+validation_account_home() { [[ ${'${'}TEST_HOME_STATUS:-0} == 0 ]] || return 1; printf '%s\n' /root; }
 validation_prepare_lock() {
     [[ $1 == /run && $2 == /run/kazoo-validation ]] || return 98
     printf '%s\n' "$TEST_LOCK"
@@ -57,13 +58,13 @@ try {
     const launch=result.events.find(e=>e[0]==='transport');assert(launch);
     assert.deepEqual(launch.slice(-payload.length),payload,'Workload argv must stay byte-for-byte distinct arguments');
     assert.equal(launch[1],'900');
-    const delimiter=launch.indexOf('--'),options=launch.slice(2,delimiter),wrapped=launch.slice(delimiter+1),program=wrapped.slice(4);
-    assert.deepEqual(wrapped.slice(0,4),['/usr/bin/env','-i','PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin','LANG=C']);
+    const delimiter=launch.indexOf('--'),options=launch.slice(2,delimiter),wrapped=launch.slice(delimiter+1),program=wrapped.slice(5);
+    assert.deepEqual(wrapped.slice(0,5),['/usr/bin/env','-i','PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin','LANG=C','HOME=/root']);
     assert.deepEqual(options,[
         '--system','--no-ask-password','--quiet','--wait','--pipe','--collect','--service-type=exec','--slice=system.slice',
         '--unit=kazoo-validation-'+nonce+'.service','--description=Kazoo bounded validation','--working-directory='+cwd,
         '--property=MemoryAccounting=yes','--property=MemoryMax=384M','--property=MemorySwapMax=0',
-        '--property=OOMPolicy=kill','--property=CPUAccounting=yes','--property=CPUQuota=50%',
+        '--property=OOMPolicy=kill','--property=LimitCORE=0','--property=CPUAccounting=yes','--property=CPUQuota=50%',
         '--property=CPUQuotaPeriodSec=100ms','--property=TasksAccounting=yes','--property=TasksMax=128',
         '--property=RuntimeMaxSec=900s','--property=TimeoutStartSec=15s','--property=TimeoutStopSec=10s',
         '--property=KillMode=control-group','--property=SendSIGKILL=yes','--property=Delegate=no','--property=ProtectControlGroups=yes'
@@ -82,6 +83,11 @@ try {
     for(const status of [37,75,124,137])assert.equal(run(['--','/usr/bin/true'],{TEST_EXIT:String(status)}).status,status);
     noTransport(run(['--','/usr/bin/true'],{TEST_LOCK_STATUS:'75'}),75);
     noTransport(run(['--','/usr/bin/true'],{TEST_HOST_STATUS:'77'}),77);
+    noTransport(run(['--','/usr/bin/true'],{TEST_HOME_STATUS:'1'}),69);
+    const cleanHome=run(['--','/usr/bin/true'],{HOME:'/synthetic-untrusted-home'});
+    assert.equal(cleanHome.status,0);
+    assert(cleanHome.events.find(e=>e[0]==='transport').includes('HOME=/root'));
+    assert(!JSON.stringify(cleanHome.events).includes('/synthetic-untrusted-home'));
     noTransport(run(['--','/usr/bin/true'],{TEST_AVAILABLE:String((384+768)*1024-1)}),69);
     assert.equal(run(['--','/usr/bin/true'],{TEST_AVAILABLE:String((384+768)*1024)}).status,0);
     const minimum=run(['--memory-mib','128','--reserve-mib','512','--runtime-sec','10','--','/usr/bin/true'],

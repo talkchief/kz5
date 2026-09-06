@@ -42,7 +42,11 @@ used: user managers, remote hosts, containers, scope units, alternate runners
 and arbitrary unit properties cannot be selected through wrapper options.
 
 Caller environment variables are not implicitly forwarded. The systemd client
-and the worker start with minimal fixed environments. For explicit nonsecret
+and the worker start with minimal environments. The worker's home is the actual
+UID 0 account home from `getent passwd 0`, verified as a protected root-owned
+directory; it is never taken from the caller's environment. This preserves
+Erlang/SUP network-kernel initialization without forwarding caller startup flags
+or credentials. For explicit nonsecret
 runtime flags, use a bounded command such as:
 
 ```sh
@@ -81,6 +85,12 @@ and reads the effective `memory.max`, `memory.swap.max`, `memory.oom.group`,
 `cpu.max` and `pids.max`. Missing controllers, changed limits, a different cgroup, malformed
 MemAvailable, insufficient memory or a busy lock cause refusal. There is no
 direct-execution fallback.
+
+The unit also sets `LimitCORE=0` and verifies both soft and hard core-file limits
+before executing the payload. This confines the change to validation processes;
+it does not change global coredump policy or discard earlier crash evidence.
+The workload's failure status and diagnostics are still retained. It is not a
+promise that the system's crash handler will emit no journal metadata.
 
 The unit uses OOMPolicy=kill with verified memory.oom.group=1, fixed accounting and hard
 limits, a 15-second start timeout, 10-second stop timeout, KillMode=control-group,
@@ -136,3 +146,23 @@ and subsequent success are retained in the protected receipt directory
 `/var/log/kazoo-validation-smoke.2QVSR8`, including `summary.json`. No intentional
 OOM or resource-exhaustion test was run. This demonstrates harmless host
 enforcement, not suitability or completion of any heavy build/test workload.
+
+### Follow-up, 2026-09-06
+
+An actual harmless worker verified soft and hard core limits of zero. The
+callback retry at `20260906T003353Z` then failed during isolated fixture setup,
+before any SIP calls, because the previous minimal environment omitted the
+account home required by Erlang authentication startup. Fixture setup had
+already performed isolated configuration writes, so this was not a successful
+callback test or a no-write run. The failure evidence is retained under
+`/var/log/kazoo-acceptance/20260906T003353Z`.
+
+The guard now restores the verified account home. Its 74 mock cases include
+rejection when that home cannot be verified and proof that a caller-supplied
+home does not enter the worker environment. The resource caps are unchanged.
+A guarded read-only `sup -e code which stepswitch_maintenance` subsequently
+exited 0 and returned the installed module path. The initial follow-up probe
+without `-e` reached Kazoo but failed because SUP passed a binary instead of
+the atom required by `code:which/1`; that probe is not counted as a pass.
+Bash syntax and ShellCheck also passed. Callback behavior itself requires the
+separate live scenario receipt.
