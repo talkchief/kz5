@@ -214,8 +214,9 @@ Review left these exact next fixes/tests:
    ownership, sticky failure and counter overflow; then recompile current source.
    The updated64-case fixture passed in64711. Helper fixtures remain narrower
    than whole native execution; actual encoder branch execution remains open.
-5. Existing private RTP code still advances `timestamp_send` by160 and rejects
-   secure output. Codec/ptime widening needs normal timestamp/sample accounting,
+5. The earlier private RTP baseline advances `timestamp_send` by160 and rejects
+   secure output. The later compile-only derivative below changes these paths.
+   Codec/ptime widening still needs validated normal timestamp/sample accounting,
    SRTP and full producer/media/session lifetime work, not merely removal of
    these guards. Bridge helpers still need actual bridge-entry/end integration.
 
@@ -262,6 +263,67 @@ cross-leg deferral/continuation is still unaccepted, not permission to report
 success, drop events, hang the agent or replay the entire partially applied event.
 No global all-call blocking is an acceptable substitute. These are proposed
 changes/tests, not implemented or passing evidence at this checkpoint.
+
+## Latest private RTP/codec checkpoint — compile only
+
+September 6, 2026, after local documentation commit `57b55e1`. Root's derivative:
+
+```text
+/usr/local/src/kazoo5-installer/callback-owned-audio.EeqmMW/native-rtp-packets.OiCUA5/
+  switch_core_media.c
+  switch_rtp.c
+  check.cjs
+  compile-proof.Yg86gt/receipt.json
+```
+
+This directory is outside the repository, not installed code, not a release
+patch and not reproducible from a fresh clone yet. Its inputs derive from
+`native-normal-codec.nZYBwT` and `native-write-extractor.DmBWMY`, with the real
+passive-readiness/header overlay. The older cached PIC/link checkpoint does not
+include these new objects and cannot certify them.
+
+Implemented candidate changes:
+
+- Stack-local owned RTP packet storage, encoded-payload bounds with reserved
+  SRTP trailer space, negotiated RTP payload validation and positive frame
+  metadata checks, removing the earlier G.711/160-byte-only restriction.
+- Try-lock reservation in write → ICE → flag order through owned output, with
+  captured cleanup on rejected paths. Unsupported modes and secure-send reset
+  remain rejected; this is not a proof that every lifecycle mutator is fenced.
+- Existing native SRTP protection path with explicit context/error/length checks:
+  failed protection must not fall through to plaintext output. Protected packet
+  or ambiguous-send failures must not rewind sequence state for owned output.
+- Owned media timestamp accounting based on the negotiated read implementation
+  and complete encoded packet count, rather than an unconditional160 increment.
+  Actual RTP timestamp generation still uses the normal native path.
+
+Guarded offline session **13529 exited0**, 192MiB cap,768MiB reserve,180-second
+deadline. A preceding224MiB request was refused with exit69 **before payload
+execution**; the reserve was not reduced. The successful harness compiled both
+actual full production translation units with configured real headers,
+`-O2 -fPIC -Werror`, checked390 inputs and compared the ordinary core writer body.
+It did not establish unchanged behavior of every RTP branch.
+
+| Identity | SHA-256 |
+| --- | --- |
+| `switch_core_media.c` | `c8790f105b51c504a5b96128d7d373c0261b8b48c480125ec74edea7ed057414` |
+| `switch_rtp.c` | `d87ef277d4912ce54f4e5a55ebe322b32bd7461d54be93db31cc00300298ce0f` |
+| `compile-proof.Yg86gt/receipt.json` | `eb3928835d03b7a916d626796c66cd647f6cf205518da283f3e4a5ed0f6b2e51` |
+
+**Not tested/accepted:** actual SRTP encrypt/decrypt, local UDP send and received
+bytes, short/failed sends, mutex-contention cleanup, all dynamic payload/codec/
+ptime cases, full producer/session lifetime, canonical combined linking, module
+load or a real call. `switch_socket_sendto` boundedness remains open: keeping
+locks through a potentially blocking socket call is not accepted merely because
+compilation passed. Native admission stays hard closed; nothing was deployed.
+
+Next root slice: exercise actual production packet/protection/send boundaries
+with real local libSRTP/UDP where feasible and explicit labels for any doubles;
+add failure and contention controls; review lifetime and bounded socket behavior;
+then integrate one canonical source/header tree with the signal-processing and
+installer owners. Preserve strict rejection rather than opening a deployment
+gate to make a test pass. Before running `check.cjs`, inspect its resource/input
+requirements and acquire the serialized validation window.
 
 ## Acceptance that advances deployment
 

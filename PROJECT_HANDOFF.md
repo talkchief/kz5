@@ -4,6 +4,41 @@ Last updated: **2026-09-06**. This is the navigation and current-state guide;
 `PROJECT_TASKS.md` is the detailed requirement/acceptance register. Neither this
 file nor a green unit test means the platform is production-ready.
 
+## Latest working snapshot — read before resuming
+
+Documentation baseline: local commit **`57b55e1`**, branch
+`fix/acdc-outbound-agent-availability`, September 6, 2026. This section records
+subsequent work in progress, not a new deployment. No backend/UI/native service
+was deployed or restarted and no master push was performed for this snapshot.
+
+Use this file as the front door, `PROJECT_TASKS.md` as the complete requirements
+register, and the component documents linked below as the detailed evidence.
+In particular, do not confuse these four states: **committed source**, **passing
+tests**, **installed artifacts**, and **accepted live behavior**.
+
+| Current owner / work | Where to resume | Verified state / next step |
+| --- | --- | --- |
+| `media_prerequisites`: cardinal audio-pack verifier | Uncommitted `scripts/acdc-cardinal-pack.cjs` and `scripts/test-acdc-cardinal-pack.cjs`; catalog/design already tracked | 584-role manifest/WAV validation is being implemented. Compare telephony PCM against deterministic local SoX resampling of the exact master; matching durations/hashes alone do not prove that relationship. Guarded tests and review still pending at this snapshot. No new recordings generated. |
+| Root: owned RTP/codec candidate | Private `/usr/local/src/kazoo5-installer/callback-owned-audio.EeqmMW/native-rtp-packets.OiCUA5/`; detailed checkpoint in `doc/callback_native_vertical_slice.md` | Session13529 exited0: two real production translation units compiled with390 pinned inputs. Actual encryption/decryption, UDP output, concurrency, linking and live-call tests remain open. Admission remains closed. |
+| `native_audio_path_audit`: SIP signal-processing lifetime | Private `native-signal-fence.ChqP6i` under the same private root, derived from `native-ei-dispatch.S4NXF3` and `native-passive-ready.jpGiQK` | Registry/header, signal parser and Sofia reattach edits implemented; five-TU/fixture proof authored but not run. Reserve before dequeue and retain queued events while playback unwinds. Cross-leg continuation and persistent allocation-failure recovery remain unaccepted. |
+| `/root/monster_finalize/browser_harness_audit`: installer baseline reconciliation | Uncommitted `scripts/install-kazoo5.sh`, `scripts/patches/mod-kazoo-kz5-integration.patch`, `scripts/test-mod-kazoo-version-namespace.cjs`; packaging guidance being authored in `doc/callback_native_source_packaging.md` | Installed mod_kazoo includes the separately tracked atomic-intercept patch, but the aggregate omitted it. Reconciliation and21-case fixture authored; only Bash/Node syntax checked so far. Require private-copy preflight, fresh/repeat/upgrade tests and rejection of partial/foreign trees before target writes. Do not open native audio gates as a shortcut. |
+
+Agent names are coordination hints, not services or guaranteed active sessions.
+Inspect current agents, Git status and actual process handles before assigning
+overlapping work. These files were intentionally **not** included in the
+documentation-only commit. Never use `git add -A` to sweep in their unfinished
+changes. Private native candidates are outside Git and **will not exist on a
+fresh clone**: reviewed source, canonical headers, build integration and tests
+must be brought into kz5 before claiming reproducible delivery.
+
+The next release-critical sequence is: finish/review the missing prerecorded
+cardinal artifacts and native ownership/output path; reconcile installer
+patches; validate a coherent build; deploy matching backend/UI/media; run the
+requested key-6 confirmation and unanswered-first-callback retry; then continue
+the broader installer, dashboard, supervision, security and load acceptance
+register. Do not regenerate the existing210 successful assets or treat this
+sequence as permission to skip the other requested features.
+
 ## Quick checkpoint for the next agent
 
 Read this file first, then [PROJECT_TASKS.md](PROJECT_TASKS.md), then the
@@ -24,7 +59,7 @@ release. Recheck Git and live state before acting.
 | Installer/services | Modular installer and offline main smoke pass; `kazoo-applications.service` resolves to active `kazoo-apps.service` | Fresh separate-server/ALL installation, reboot, interoperability and sustained load acceptance |
 | Cardinal authoring | Pure EN/ES/FR/HE/AR catalog tested through `9773c35`;79,465 checks,584 roles | Reviewed contextual transcripts, missing recordings and runtime integration |
 | Native callback transport | Private typed decoder/handler integration compiled;7,962 checks each plain and sanitized | Hard-closed admission; no distributed EI, full module execution or audible media acceptance |
-| Release | Recent source changes committed locally through `9773c35` | Final master integration/push and remote-SHA verification |
+| Release | Recent source changes committed locally through `9773c35`, documentation checkpoint `57b55e1` | Final master integration/push and remote-SHA verification |
 
 For precise test boundaries and failed-before/fixed-after evidence, see
 [canonical callback acceptance](doc/acdc_canonical_callback_acceptance.md).
@@ -280,7 +315,9 @@ exact locations, review defects and next steps are in
 Work resumed after the documentation freeze: native passive-readiness and
 normal-writer behavior fixtures passed in23159/64711; the next native slice
 addresses pending SIP signal processing vs full PLAY lifetime, with cross-leg
-continuation explicitly still open. No root validation job remains running.
+continuation explicitly still open. The later RTP/codec derivative compiled
+both production units in13529; see the latest snapshot above. No root validation
+job remained running when that compilation window was released.
 These names and job observations are coordination hints, not persistent services:
 inspect current messages/processes before resuming. Never blanket-stage another agent's
 unfinished source changes with a documentation commit.

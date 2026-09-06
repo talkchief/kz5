@@ -13,6 +13,17 @@ Those private files are not yet reproducible from a fresh kz5 clone and their
 admission gates remain hard closed. No new runtime deployment or master push
 is established by this documentation checkpoint.
 
+Subsequent work-in-progress snapshot (after local `57b55e1`): the cardinal
+manifest/WAV verifier and deterministic resampling check are being authored;
+the private RTP/codec derivative compiled two production units in13529 but has
+no crypto/UDP/live-call acceptance; SIP signal-processing reservations remain
+under implementation; installer atomic-intercept baseline reconciliation is
+uncommitted and awaiting tests. Owners, paths and next steps are in
+[the latest handoff snapshot](PROJECT_HANDOFF.md#latest-working-snapshot--read-before-resuming).
+These are existing voice/P0-03/installer workstreams, not additional completed
+features. No backend/UI/native deployment or final master push accompanies this
+documentation update.
+
 Updated: 2026-09-06. This is the project-wide priority/status index. Detailed
 incident evidence remains in [deployment tasks](doc/deployment_tasks.md) and
 [acceptance status](doc/kazoo5_acceptance_status.md); earlier passes are scoped
