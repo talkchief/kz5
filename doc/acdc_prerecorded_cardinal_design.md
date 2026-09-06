@@ -244,7 +244,7 @@ cross-check, not a normative text oracle: its current conjunction helper omits
 vav for120, so it must not replace the explicit tests or Academy rules. These
 gates do not reduce the required full range or authorize fallback/native SAY.
 
-## AR draft: 103 roles, explicit unresolved transcript gates
+## AR historical draft: 103 roles, not approved
 
 Provisional role accounting (not an approved generation manifest):
 
@@ -265,7 +265,50 @@ composition and construct/pausal endings must be settled with exact grammatical
 and spoken goldens; those may require additional roles. Do not silently select a
 dialect, misuse accusative duals in a nominative frame, or certify a draft library
 merely because a third-party number converter emits it. Freeze the introduction's
-number-label context too. [Arabic number agreement and scale cases](https://learning.aljazeera.net/ar/node/21410).
+number-label context too. The previously cited Al Jazeera node21410 resolves to
+an oil-barrel lesson, not the intended grammar source; do not use it as evidence.
+
+### Arabic continuation checkpoint — research only, September6
+
+No Arabic catalog/test implementation, generation or runtime edit was made.
+The researcher proposed208 whole-context roles to avoid the unresolved joins
+in the103-role draft. This is **not a frozen manifest, minimum proof or approved
+transcript set**:
+
+- 73 unscaled roles:37 plain (0..19,8 decades,9 whole hundreds) and36 joined
+  counterparts excluding zero.
+- 76 whole1..19 ×2 scale phrases, plain and joined.
+- 32 whole-decade ×2 scale phrases, plain and joined.
+- 27 whole-hundred ×scale phrases:18 plain plus9 joined thousand phrases;
+  joined million-hundreds would be unreachable under the proposed ordering.
+
+The estimated9-token maximum and reachability have not been implemented or
+tested. Proposed101000 = `مئة ألف وألف`,102000 = `مئة ألف وألفان` apply an
+additive repeated-scale rule by **inference**, not a directly sourced example.
+Whole phrases preserve contextual case/dual/plural forms rather than splicing
+isolated ta-marbuta endings. Pausal delivery and conjunction cadence still need
+qualified review, as do all vocalized authoring transcripts.
+
+The proposed MSA masculine/nominative numeric-label context must denote the
+**current queue position**, not an ordinal, ticket number or callers ahead.
+Existing `scripts/acdc-language-catalog.cjs` intro `مَوْقِعُكَ الحالي هُوَ.` and
+alternative `أَنْتَ في المَوْقِعِ.` do not explicitly introduce a number.
+Compatibility is unresolved; no replacement intro has been selected or recorded.
+
+Research handoff references (retrieved by the language research agent; they do
+not approve the proposed recordings):
+
+- [Al Jazeera grammar answer](https://learning.aljazeera.net/ar/node/590), covering
+  genitive nouns after hundred/thousand/million and linking the actual
+  [number-agreement lesson](https://learning.aljazeera.net/tr/languageofmedia/جائزة-الشيخ-حمد-للترجمة-1).
+- [Virtual Academy2018 adopted decision](https://almajma3.blogspot.com/2018/04/blog-post_20.html),
+  covering large-to-small ordering and an explicit100K+24K repeated-scale
+  example. This is the Virtual Academy, not a Cairo Academy decision.
+
+Next: independently review that evidence/context, implement exact grammar and
+goldens, prove full-range coverage and role reachability, review transcripts,
+then author missing immutable WAVs once. Do not start paid generation from the
+provisional role count alone.
 
 ## Tests and acceptance boundaries
 

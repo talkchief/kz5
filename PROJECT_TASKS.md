@@ -3,6 +3,15 @@
 New or returning contributors: read [the engineering handoff](PROJECT_HANDOFF.md)
 first for achieved work, deployment status, source locations and next steps.
 
+Latest continuation checkpoint: callback source `a75806c`, French catalog
+`2325d9b`, Hebrew catalog `98f62cf`. Hebrew is source-tested, not recorded or
+deployed; Arabic remains read-only research. Private native transport and
+normal-codec work, exact receipts and unresolved review findings are indexed in
+[the native continuation guide](doc/callback_native_vertical_slice.md).
+Those private files are not yet reproducible from a fresh kz5 clone and their
+admission gates remain hard closed. No new runtime deployment or master push
+is established by this documentation checkpoint.
+
 Updated: 2026-09-06. This is the project-wide priority/status index. Detailed
 incident evidence remains in [deployment tasks](doc/deployment_tasks.md) and
 [acceptance status](doc/kazoo5_acceptance_status.md); earlier passes are scoped

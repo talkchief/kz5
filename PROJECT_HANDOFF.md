@@ -8,7 +8,8 @@ file nor a green unit test means the platform is production-ready.
 
 Read this file first, then [PROJECT_TASKS.md](PROJECT_TASKS.md), then the
 acceptance document for the component you will change. This guide describes the
-checkpoint through callback fix **`a75806c`** and French catalog **`2325d9b`**,
+checkpoint through callback fix **`a75806c`**, French catalog **`2325d9b`** and
+Hebrew catalog **`98f62cf`**,
 following the UI/API baseline `61bf505`, plus explicitly identified work in
 progress. A later commit containing this documentation is not a new runtime
 release. Recheck Git and live state before acting.
@@ -21,7 +22,9 @@ release. Recheck Git and live state before acting.
 | Queue language UI/editor | Five choices, obsolete-reference deletion,42-entry callback/57-entry transitional readiness checks tested in `61bf505` | Fresh compiled UI publication and real browser/live queue acceptance |
 | Developer reference | Updated static `/apis/` publication verified against all12 HTTP-served files | Documentation is not proof its backend is deployed; proposed dashboards are not callable APIs |
 | Installer/services | Modular installer and offline main smoke pass; `kazoo-applications.service` resolves to active `kazoo-apps.service` | Fresh separate-server/ALL installation, reboot, interoperability and sustained load acceptance |
-| Release | Recent changes committed locally through `a75806c` | Final master integration/push and remote-SHA verification |
+| Cardinal authoring | Pure EN/ES/FR/HE catalog tested through `98f62cf`; Hebrew run passed61,747 total checks | Arabic implementation, reviewed contextual transcripts, missing recordings and runtime integration |
+| Native callback transport | Private typed decoder/handler integration compiled;7,962 checks each plain and sanitized | Hard-closed admission; no distributed EI, full module execution or audible media acceptance |
+| Release | Recent source changes committed locally through `98f62cf` | Final master integration/push and remote-SHA verification |
 
 For precise test boundaries and failed-before/fixed-after evidence, see
 [canonical callback acceptance](doc/acdc_canonical_callback_acceptance.md).
@@ -192,6 +195,7 @@ the Kazoo apps node, not as three independent systemd services.
 | Sessions6821/75590, exit0 | P0-12 cached auxiliary metadata:22 focused then all87 current-source tests, production/TEST compilation and stable matching input digest. No timed metadata calls under poisoned resolver/store assertions; see canonical acceptance |
 | Session19058, exit0 | Pure EN/ES/FR cardinal catalog: nine groups /44,040 composition checks;161 French recording roles, full range and8-token bound. No new audio generated or runtime integration |
 | Session7787, exit0 | Root combined-source production compile after P0-12: all63 ACDC modules,-Werror/noTEST and stable inputs. No installed BEAM changes |
+| Commit `98f62cf`; session50243, exit0 | Pure EN/ES/FR/HE catalog:12 groups /61,747 checks;131 reachable Hebrew roles,11-token bound. No recordings generated or runtime changes. Hebrew number-label context remains subject to intro/transcript review |
 
 Temporary receipt paths are local evidence and may not survive a new server.
 The durable test implementations and explanatory documents are in Git/worktree.
@@ -229,8 +233,10 @@ Update this section with final outcomes rather than deleting failed evidence.
    languages, generate missing release artifacts once, and verify natural
    playback. `doc/acdc_prerecorded_cardinal_design.md` records the finite catalog
    design and unresolved linguistic gates. `scripts/acdc-cardinal-catalog.cjs`
-   is now a tested pure EN/ES/FR full-range building block, not runtime integration
-   or recorded assets; HE/AR remain required. Do not enable a full-language
+   is now a tested pure EN/ES/FR/HE full-range building block, not runtime integration
+   or recorded assets; AR remains unimplemented. Hebrew is an abstract feminine
+   number-label context with masculine scale coefficients, not approval of the
+   existing intro's grammatical fit. Do not enable a full-language
    capability based on native SAY.
 5. Verify the imported receipt and activate the targeted mappings with validated
    node/hostname settings; deploy the coherent backend/UI
@@ -249,14 +255,24 @@ source pins checked. Input digest:
 The full lifecycle/timer suite75590 subsequently exited0 with all87 tests and
 the same digest. The serialized test window was released for French validation,
 then root's production compile. These are source checks, not live acceptance.
-`media_prerequisites` owns the French
-finite-cardinal addition in `scripts/acdc-cardinal-catalog.cjs`, its test, and
-`doc/acdc_prerecorded_cardinal_design.md`; French validation19058 passed all nine
-groups and was committed in `2325d9b`. Arabic/Hebrew grammar remains open; Hebrew
-source/context research is the next assigned slice. These agent names
-are coordination hints, not durable jobs: inspect current messages/processes
-before overlapping edits or starting another memory-heavy test. Root owns this
-guide, review and release integration. Never blanket-stage another agent's
+`media_prerequisites` completed French and Hebrew pure catalog work in
+`scripts/acdc-cardinal-catalog.cjs`, its test and
+`doc/acdc_prerecorded_cardinal_design.md`; commits `2325d9b` and `98f62cf`.
+Arabic research is read-only and frozen for this documentation checkpoint:
+proposed208 context-specific roles/max9 tokens are **unproven**, not implemented,
+approved transcripts or an authoring manifest. Existing Arabic intro
+`مَوْقِعُكَ الحالي هُوَ.` does not explicitly introduce a number; preserve current
+position semantics and review compatibility before choosing new recordings.
+No generation or runtime edits have been made for this proposal.
+
+`native_audio_path_audit` handed back the private typed transport candidate and
+its terminal7634 proof; root owns the private normal-codec derivative. Their
+exact locations, review defects and next steps are in
+[native callback implementation handoff](doc/callback_native_vertical_slice.md).
+All agent edits were frozen for this documentation checkpoint; no validation
+jobs remained running when the transport window was released. These names and
+job observations are coordination hints, not persistent services: inspect
+current messages/processes before resuming. Never blanket-stage another agent's
 unfinished source changes with a documentation commit.
 
 ### Safe next-agent verification commands
@@ -301,7 +317,7 @@ the existence of a module is not evidence of successful deployment.
 | ACDC agent recovery | `applications/acdc/src/acdc_agent_fsm.erl`, `scripts/test-acdc-agent-recovery.sh` | [Recovery plan](doc/acdc_agent_recovery.md), P0-05/07/08/09 |
 | Unified queue editor and login | `applications/acdc/src/cb_acdc_queue_editor.erl`, `applications/acdc/src/cb_agents.erl`, `monster-ui/acdc/app.js` | [Editor acceptance](doc/queue_editor_acceptance.md), [ACDC UI guide](monster-ui/acdc/README.md), P0-01 / ACDC-01 |
 | Callback/menu/scheduling | Source table in section2; `scripts/test-acdc-gemini-canonical-callback.sh` | [Canonical tests](doc/acdc_canonical_callback_acceptance.md), [callback acceptance](doc/acdc_callback_acceptance.md), P0-03/04/10/11/12 |
-| Native audio and coherent rollout | Installer's Kazoo FreeSWITCH integration; private candidate is NOT the deployed source | [Native link readiness](doc/callback_native_link_readiness.md), [coherent upgrade](doc/acdc_coherent_upgrade_readiness.md) |
+| Native audio and coherent rollout | Installer's Kazoo FreeSWITCH integration; private candidate is NOT the deployed source | [Current implementation handoff](doc/callback_native_vertical_slice.md), [native link readiness](doc/callback_native_link_readiness.md), [coherent upgrade](doc/acdc_coherent_upgrade_readiness.md) |
 | Company members/device status | `applications/crossbar/src/modules/cb_members.erl`, `scripts/api-docs-members-devices.cjs` | [Members/device evidence and limits](doc/members_devices_acceptance.md) |
 | Listen/whisper/barge/join | `applications/crossbar/src/cb_channel_monitor.erl`, `scripts/test-channel-monitor-live.cjs` | [Monitoring acceptance](doc/channel_monitor_acceptance.md), SUP-01–03 |
 | Native WebSocket transport | `applications/blackhole/src/`, `scripts/api-docs-blackhole.cjs` | [Resilience](doc/blackhole_resilience.md), [authorization results](doc/blackhole_binding_results_acceptance.md), BH-01–05 |
@@ -378,6 +394,8 @@ The last TLS audit found certificates without a matching private key under
 - `/etc/kazoo/deployment.env` is protected persisted deployment configuration.
   The installer decodes validated key/value data; do not print secret values or
   replace it with an unsafe shell evaluation. Audio manifests contain no keys.
+  `/etc/kazoo/installer-secrets.env` is also protected; do not include its contents
+  in evidence or a handoff.
 - Use `scripts/run-kazoo-validation.sh` for resource-bounded heavy validation.
   Recent runs use256MiB cap,768MiB reserve and a task-appropriate deadline;
   offline tests additionally use `unshare --net`. Do not remove the reserve to
