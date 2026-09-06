@@ -45,6 +45,12 @@ bash scripts/test-acdc-unit.sh
 bash scripts/test-acdc-strategies.sh
 ```
 
+On the resource-capped validation host, run the strategy suite in two sequential
+guarded invocations with `--shard 1/2` and `--shard 2/2`. Each prints the full
+exported test inventory and its deterministic selection; both are required.
+This avoids raising the guard's two-minute deadline or dropping assertions.
+Without `--shard`, the script still selects the complete suite.
+
 The outbound-agent regression covers a delayed queue satisfaction event during
 multiple direct calls, readiness after the final hangup, preservation of an
 existing pause and application of a pending logout. These checks run in

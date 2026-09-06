@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # Isolated source-level regression tests. No service, API or telephony mutation.
 set -Eeuo pipefail
+test_shard=all
+if (($#)); then
+    if [[ $# != 2 || $1 != --shard || ! $2 =~ ^[12]/2$ ]]; then
+        printf '%s\n' 'Usage: test-acdc-strategies.sh [--shard 1/2|--shard 2/2]' >&2
+        exit 2
+    fi
+    test_shard=${2%/2}
+fi
 project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 test_dir=$(mktemp -d /tmp/kazoo-acdc-strategies.XXXXXX)
 cleanup() {
@@ -17,4 +25,27 @@ erlc -DTEST -Werror +debug_info -I applications/acdc/src -I applications/acdc/in
     applications/acdc/src/acdc_queue_strategy.erl applications/acdc/src/acdc_queue_manager.erl \
     applications/acdc/src/acdc_queue_fsm.erl applications/acdc/src/acdc_agent_fsm.erl
 erlc -Werror -I applications/acdc/src -I applications/acdc/include -o "$test_dir" scripts/erlang-tests/acdc_queue_strategy_tests.erl
-erl -pa "$test_dir" -noshell -eval 'case eunit:test(acdc_queue_strategy_tests, [verbose]) of ok -> halt(0); _ -> halt(1) end.'
+# Same slow-host accommodation as test-acdc-unit.sh: mock compilation is part
+# of EUnit wall time under the validation CPU quota. Keep every assertion and
+# leave the external runtime/resource guard and production timers unchanged.
+KAZOO_STRATEGY_TEST_SHARD="$test_shard" erl -pa "$test_dir" -noshell -eval '
+  Module = acdc_queue_strategy_tests,
+  Exports = Module:module_info(exports),
+  Tests = lists:sort([Name || {Name,0} <- Exports,
+      lists:suffix("_test", atom_to_list(Name)) orelse lists:suffix("_test_", atom_to_list(Name))]),
+  true = length(Tests) > 0,
+  Indexed = lists:zip(Tests, lists:seq(1,length(Tests))),
+  Shard = os:getenv("KAZOO_STRATEGY_TEST_SHARD"),
+  Selected = case Shard of
+    "all" -> Tests;
+    "1" -> [Name || {Name,I} <- Indexed, I rem 2 =:= 1];
+    "2" -> [Name || {Name,I} <- Indexed, I rem 2 =:= 0]
+  end,
+  true = length(Selected) > 0,
+  io:format("Strategy suite inventory (~p): ~p~nShard ~s selected (~p): ~p~n",
+            [length(Tests),Tests,Shard,length(Selected),Selected]),
+  Descriptors = [case lists:suffix("_test_",atom_to_list(Name)) of
+      true -> {generator, fun() -> apply(Module,Name,[]) end};
+      false -> {test,Module,Name}
+    end || Name <- Selected],
+  case eunit:test(Descriptors, [verbose,{scale_timeouts,4}]) of ok -> halt(0); _ -> halt(1) end.'

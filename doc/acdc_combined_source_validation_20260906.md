@@ -54,6 +54,33 @@ Private detailed receipt:
 
 ## Remaining release gates
 
+### Strategy validation follow-up
+
+All **26 strategy tests passed**, with 13 tests in each of two sequential,
+disjoint groups: sessions `18643` and `93873`, both exit 0. Each run printed the
+same complete 26-test inventory and selected alternating entries from its sorted
+export list. Their union covers the whole suite, including the generator cases.
+The unchanged strategy assertions were compiled privately with `-Werror`.
+
+The earlier default-timeout session `55409` failed in mock setup after 13 passes.
+With slow-host timeout scaling, unsharded session `14686` passed 25 cases before
+the outer 120-second guard stopped it during the last case. Both failed runs
+remain failures. Sharding, not a larger resource/runtime cap, allowed complete
+verification. Both groups used the existing 384 MiB / zero-swap / 50% CPU limits
+and independent 120-second deadlines.
+
+```sh
+bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 --runtime-sec 120 -- /usr/bin/bash /opt/kz5/scripts/test-acdc-strategies.sh --shard 1/2
+bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 --runtime-sec 120 -- /usr/bin/bash /opt/kz5/scripts/test-acdc-strategies.sh --shard 2/2
+```
+
+Validated runner SHA-256:
+`675328123dda7c49a474db3ea03192871c53aa5bf1a25f16fa68b18a516a6d26`.
+Unchanged strategy assertion source SHA-256:
+`4839c6a3d8508718232dc49038ce1c48d82c5729ee4841c9d66779a54e040e74`.
+
+### Unclosed acceptance
+
 P0-07/08/09 are assigned to the operator's external team and remain open until
 their branch is integrated and independently verified. These source checks do
 not establish live queue ringing, callback audio/DTMF/retries, multi-node

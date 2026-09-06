@@ -25,8 +25,9 @@ and reconcile the pending installer/UI work against this combined source.
 
 The handoff reports 48 unit, 26 strategy and five migration checks passing,
 with no deployment or restart. Independent combined testing now passes all 48
-unit tests and six expanded source-ownership groups. Strategy and remaining
-integration checks are still being revalidated;
+unit tests, all 26 strategy tests in two disjoint guarded groups, and six
+expanded source-ownership groups. Remaining integration checks are still being
+revalidated;
 this is not live-call acceptance. Regenerate affected API coverage and run
 combined call-delivery/callback regressions before release. The private callback
 audio adapter still needs native completion, cancellation and owner-handoff
