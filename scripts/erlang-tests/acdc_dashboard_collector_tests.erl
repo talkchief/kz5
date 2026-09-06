@@ -1,0 +1,209 @@
+-module(acdc_dashboard_collector_tests).
+-include_lib("eunit/include/eunit.hrl").
+-include("acdc_stats.hrl").
+
+now_s() -> calendar:datetime_to_gregorian_seconds(calendar:universal_time()).
+row(N, Account, Queue, Status, Entered) ->
+    Call = integer_to_binary(N),
+    #call_stat{id = <<Call/binary, "::", Queue/binary>>, call_id=Call,
+               account_id=Account, queue_id=Queue, status=Status,
+               entered_timestamp=Entered}.
+waiting(N) -> row(N, <<"a">>, <<"q">>, <<"waiting">>, now_s()-20).
+table() -> ets:new(?MODULE, [set, protected, {keypos, #call_stat.id}]).
+with_table(F) -> T=table(), try F(T) after ets:delete(T) end.
+collect(T, Options) ->
+    Now=now_s(), acdc_dashboard_collector:collect(T, <<"a">>, [<<"q">>], Now-100, Now, Options).
+source(R) -> maps:get(source, R).
+queue(R) -> [Q]=maps:get(queues, R), Q.
+metrics(R) -> maps:get(metrics, queue(R)).
+
+complete_empty_local_is_not_cluster_complete_test() ->
+    with_table(fun(T) ->
+        {ok, R}=collect(T, #{}), S=source(R),
+        ?assertEqual(0, maps:get(current_waiting, metrics(R))),
+        ?assertEqual(undefined, maps:get(average_answered_wait_seconds, metrics(R))),
+        ?assertEqual(local_table_only, maps:get(coverage, S)),
+        ?assertEqual(false, maps:get(cluster_complete, S)),
+        ?assertEqual(false, maps:get(atomic_snapshot, S)),
+        ?assertEqual(unknown, maps:get(archive_coverage, S)),
+        ?assertEqual(available, maps:get(availability, S)),
+        ?assertEqual(0, maps:get(scan_keys, S)),
+        ?assertEqual(exhausted, maps:get(completion_reason, S)),
+        ?assertEqual(kazoo_gregorian_seconds, maps:get(timestamp_unit, R)),
+        ?assertEqual(false, ets:info(T, safe_fixed))
+    end).
+
+scope_and_options_rejected_before_missing_source_test_() ->
+    Now=now_s(), Missing=dashboard_collector_missing,
+    [?_assertEqual({error, Why}, acdc_dashboard_collector:collect(Missing, A, Q, F, To, O)) ||
+     {A,Q,F,To,O,Why} <- [
+        {<<>>, [<<"q">>], Now-10, Now, #{}, invalid_projection_scope},
+        {<<"a">>, [], Now-10, Now, #{}, invalid_queue_scope},
+        {<<"a">>, [<<"q">>,<<"q">>], Now-10, Now, #{}, invalid_queue_scope},
+        {<<"a">>, [<<"q">>], Now, Now, #{}, invalid_projection_scope},
+        {<<"a">>, [<<"q">>], Now-10, Now, #{max_scan=>10001}, invalid_collector_options},
+        {<<"a">>, [<<"q">>], Now-10, Now, #{max_scan=>0}, invalid_collector_options},
+        {<<"a">>, [<<"q">>], Now-10, Now, #{budget_ms=>1001}, invalid_collector_options},
+        {<<"a">>, [<<"q">>], Now-10, Now, #{budget_ms=>-1}, invalid_collector_options},
+        {<<"a">>, [<<"q">>], Now-10, Now, #{unknown=>true}, invalid_collector_options},
+        {<<"a">>, [<<"q">>], Now-10, Now, [], invalid_collector_options}]].
+
+missing_deleted_and_invalid_sources_not_zero_test() ->
+    ?assertEqual({error, source_unavailable}, collect(dashboard_collector_missing, #{})),
+    T=table(), ets:delete(T), ?assertEqual({error, source_unavailable}, collect(T, #{})),
+    ?assertEqual({error, source_unavailable}, collect({invalid, table}, #{})).
+
+missing_table_cannot_alias_named_undefined_test() ->
+    undefined=ets:new(undefined,[named_table,protected,{keypos,2}]),
+    try
+        ets:insert(undefined,waiting(1)),
+        ?assertEqual({error,source_unavailable},collect(dashboard_collector_missing,#{})),
+        ?assertEqual(false,ets:info(undefined,safe_fixed)),
+        %% An explicitly requested existing table named undefined is valid;
+        %% it resolves to its real tid, not the absence sentinel.
+        {ok,R}=collect(undefined,#{}), ?assertEqual(1,maps:get(current_waiting,metrics(R)))
+    after ets:delete(undefined) end.
+
+unsupported_shape_test_() ->
+    [?_test(begin T=ets:new(?MODULE, Opts),
+                 try ?assertEqual({error, unsupported_source_table}, collect(T, #{}))
+                 after ets:delete(T) end
+            end) || Opts <- [[bag,{keypos,2}], [ordered_set,{keypos,2}], [set,{keypos,1}]]].
+
+private_table_is_unavailable_test() ->
+    Parent=self(), {Pid,Ref}=spawn_monitor(fun() ->
+        T=ets:new(?MODULE,[private,{keypos,2}]), Parent!{private_table,self(),T},
+        receive stop -> ok end
+    end),
+    receive {private_table,Pid,T} -> ?assertEqual({error,source_unavailable},collect(T,#{})) end,
+    Pid!stop, receive {'DOWN',Ref,process,Pid,normal} -> ok end.
+
+older_live_occupancy_and_selected_scope_test() ->
+    with_table(fun(T) ->
+        E=now_s()-500,
+        ets:insert(T, [row(1,<<"a">>,<<"q">>,<<"waiting">>,E),
+                       (row(2,<<"a">>,<<"q">>,<<"handled">>,E))#call_stat{handled_timestamp=E+5},
+                       row(3,<<"foreign">>,<<"q">>,<<"waiting">>,E),
+                       row(4,<<"a">>,<<"foreign">>,<<"waiting">>,E)]),
+        {ok,R}=collect(T,#{}), C=metrics(R),
+        ?assertEqual(4,maps:get(scan_keys,source(R))),
+        ?assertEqual(2,maps:get(input_rows,source(R))),
+        ?assertEqual(1,maps:get(current_waiting,C)), ?assertEqual(1,maps:get(current_handled,C)),
+        ?assertEqual(0,maps:get(records_entered,C)),
+        ?assert(maps:get(max_current_wait_seconds,C)>=500),
+        ?assertEqual(false,ets:info(T,safe_fixed))
+    end).
+
+all_foreign_keys_count_against_scan_budget_test() ->
+    with_table(fun(T) ->
+        ets:insert(T,[row(I,<<"foreign">>,<<"other">>,<<"waiting">>,now_s()-20) || I<-lists:seq(1,100)]),
+        {ok,R}=collect(T,#{max_scan=>7}),
+        ?assertEqual(7,maps:get(scan_keys,source(R))),
+        ?assertEqual(0,maps:get(input_rows,source(R))),
+        ?assertEqual(scan_limit,maps:get(completion_reason,source(R))),
+        ?assertEqual(false,maps:get(exhausted,source(R))),
+        ?assertEqual(undefined,metrics(R)), ?assertEqual(false,ets:info(T,safe_fixed))
+    end).
+
+exact_scan_budget_can_exhaust_test() ->
+    with_table(fun(T) ->
+        ets:insert(T,[waiting(I) || I<-lists:seq(1,7)]),
+        {ok,R}=collect(T,#{max_scan=>7}),
+        ?assertEqual(7,maps:get(scan_keys,source(R))),
+        ?assertEqual(true,maps:get(exhausted,source(R))),
+        ?assertEqual(7,maps:get(current_waiting,metrics(R)))
+    end).
+
+zero_deadline_does_not_read_or_invent_metrics_test() ->
+    {ok,R}=collect(dashboard_collector_missing,#{budget_ms=>0}),
+    ?assertEqual(not_read,maps:get(availability,source(R))),
+    ?assertEqual(deadline,maps:get(completion_reason,source(R))),
+    ?assertEqual(0,maps:get(scan_keys,source(R))),
+    ?assertEqual(undefined,metrics(R)).
+
+large_source_respects_small_deadline_and_releases_test() ->
+    with_table(fun(T) ->
+        ets:insert(T,[waiting(I) || I<-lists:seq(1,10000)]),
+        Start=erlang:monotonic_time(millisecond), {ok,R}=collect(T,#{budget_ms=>1}),
+        Elapsed=erlang:monotonic_time(millisecond)-Start,
+        ?assert(maps:get(scan_keys,source(R))=<10000),
+        ?assertEqual(false,maps:get(exhausted,source(R))),
+        ?assertEqual(deadline,maps:get(completion_reason,source(R))),
+        ?assertEqual(undefined,metrics(R)),
+        %% Scheduler delays are not a strict wall-clock/SLA assertion.
+        ?assert(Elapsed<2000), ?assertEqual(false,ets:info(T,safe_fixed))
+    end).
+
+caller_and_misses_fields_not_copied_into_projection_test() ->
+    with_table(fun(T) ->
+        Secret=binary:copy(<<"DO-NOT-RETURN-PII">>,100000),
+        W=(waiting(1))#call_stat{caller_id_name=Secret,caller_id_number=Secret,
+                                agent_id=Secret,misses=lists:seq(1,100000)},
+        ets:insert(T,W), {ok,R}=collect(T,#{}),
+        ?assertEqual(1,maps:get(current_waiting,metrics(R))),
+        Encoded=term_to_binary(R), ?assert(byte_size(Encoded)<4096),
+        ?assertEqual(nomatch,binary:match(Encoded,<<"DO-NOT-RETURN-PII">>))
+    end).
+
+invalid_selected_record_releases_fixation_test_() ->
+    [?_test(with_table(fun(T) -> ets:insert(T,W),
+        ?assertMatch({error,_},collect(T,#{})), ?assertEqual(false,ets:info(T,safe_fixed)) end)) ||
+        W <- [(waiting(1))#call_stat{call_id=binary:copy(<<"x">>,257)},
+              (waiting(1))#call_stat{status=binary:copy(<<"x">>,33)},
+              (waiting(1))#call_stat{entered_timestamp=0},
+              (waiting(1))#call_stat{entered_timestamp=1 bsl 2000},
+              (waiting(1))#call_stat{id = <<"forged">>},
+              (waiting(1))#call_stat{status = <<"unknown">>},
+              (waiting(1))#call_stat{handled_timestamp=now_s()},
+              {bad_record,<<"bad-key">>}, {call_stat,<<"bad-key">>},
+              (waiting(1))#call_stat{id=42}]].
+
+named_table_resolution_test() ->
+    T=ets:new(dashboard_collector_named,[named_table,protected,{keypos,2}]),
+    try ets:insert(T,waiting(1)), {ok,R}=collect(dashboard_collector_named,#{}),
+        ?assertEqual(1,maps:get(current_waiting,metrics(R))),
+        ?assertEqual(false,ets:info(T,safe_fixed))
+    after ets:delete(T) end.
+
+named_table_replacement_does_not_switch_source_test_() ->
+    {timeout, 5, fun() ->
+        Name=dashboard_collector_replaced,
+        T=ets:new(Name,[named_table,protected,{keypos,2}]),
+        Tid=ets:whereis(Name),
+        ets:insert(T,[waiting(I) || I<-lists:seq(1,10000)]),
+        Parent=self(), {Pid,Ref}=spawn_monitor(fun() -> Parent!{collected,self(),collect(Name,#{})} end),
+        try
+            %% Use the actual fixation as the synchronization point. No test
+            %% hook, injected resolver, or alternative collector is involved.
+            ok=await_fixed(Tid,Pid,erlang:monotonic_time(millisecond)+1500),
+            true=erlang:suspend_process(Pid),
+            ets:delete(T),
+            Name=ets:new(Name,[named_table,protected,{keypos,2}]),
+            ets:insert(Name,waiting(20000)),
+            ?assertNotEqual(Tid,ets:whereis(Name)),
+            true=erlang:resume_process(Pid),
+            receive {collected,Pid,Result} -> ?assertEqual({error,source_unavailable},Result)
+            after 1500 -> error(collector_did_not_finish) end,
+            receive {'DOWN',Ref,process,Pid,normal} -> ok after 1500 -> error(collector_did_not_exit) end,
+            ?assertEqual(false,ets:info(Name,safe_fixed)),
+            ?assertEqual(1,ets:info(Name,size))
+        after
+            case is_process_alive(Pid) of true -> exit(Pid,kill); false -> ok end,
+            case ets:whereis(Name) of undefined -> ok; _ -> ets:delete(Name) end
+        end
+    end}.
+
+await_fixed(Tid,Pid,Deadline) ->
+    case ets:info(Tid,safe_fixed) of
+        {_,Fixers} ->
+            case lists:keymember(Pid,1,Fixers) of
+                true -> ok;
+                false -> await_fixed_again(Tid,Pid,Deadline)
+            end;
+        false -> await_fixed_again(Tid,Pid,Deadline)
+    end.
+await_fixed_again(Tid,Pid,Deadline) ->
+    case erlang:monotonic_time(millisecond)>=Deadline of
+        true -> error(fixation_not_observed);
+        false -> receive after 1 -> await_fixed(Tid,Pid,Deadline) end
+    end.

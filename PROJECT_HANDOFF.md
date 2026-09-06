@@ -35,6 +35,14 @@ dashboard UI is deployed. Development ecallmgr was briefly paused with trapped
 restoration to provide test memory; it was active afterward. This is a service
 restart for validation capacity, not deployment of the new source.
 
+Live-only follow-up: `acdc_dashboard_collector.erl` now passes 35 real-ETS
+regressions and production compilation in session 7720. It fixes the collection
+gap for old active calls, bounds scan/time and distinguishes missing/incomplete
+local observations from zero. Evidence is in
+`/tmp/kazoo-dashboard-collector.zxfQ8k`; details in the projection document above.
+HTTP/AMQP authorization, cluster coverage and Blackhole/UI integration remain
+open. No source was deployed; all eight core services were active afterward.
+
 | Current owner / work | Where to resume | Verified state / next step |
 | --- | --- | --- |
 | `media_prerequisites`: cardinal audio authoring | `scripts/acdc-cardinal-pack.cjs`, `scripts/test-acdc-cardinal-pack.cjs`; [verifier evidence](doc/acdc_cardinal_pack_verification.md) | Verifier passed52469:13 groups/2,542 assertions, actual deterministic SoX PCM replay. No new recordings generated. Next: bounded one-time generator with explicit approval/request ledger; no provider calls yet. |

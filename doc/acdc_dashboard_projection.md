@@ -1,11 +1,55 @@
 # Dashboard call-stat projection
 
-Status: pure backend implementation tested, not an HTTP endpoint, live snapshot
-collector, Blackhole binding or rendered dashboard. DASH-03 remains active.
+Status: pure projection and bounded local ETS collector tested; not an HTTP
+endpoint, complete cluster snapshot or Blackhole binding. DASH-03 remains active.
 
 Source: `applications/acdc/src/acdc_dashboard_projection.erl`.
 Tests: `scripts/erlang-tests/acdc_dashboard_projection_tests.erl` and
 `scripts/test-acdc-dashboard-projection.sh`.
+
+## Live collector checkpoint — September 6, 2026
+
+`applications/acdc/src/acdc_dashboard_collector.erl` now provides internal
+`collect(Table, Account, QueueIds, From, To, Options)`. It reads the actual local
+ACDC call-stat ETS table, without the old recent-entry filter that could omit
+long-waiting calls. This is current-state collection, not new historical
+storage; the user has postponed historical/ClickHouse work.
+
+Scope validation precedes table access. A stable table identifier prevents a
+deleted/recreated named table from silently switching the source midway. A
+bounded traversal counts every visited key, including foreign accounts/queues,
+and key-bound selection copies only bounded statistical fields, never caller
+names/numbers or misses lists. Temporary ETS fixation is released on success or
+failure before projection. The table remains mutable: this is not atomic.
+
+Options are `max_scan` (1–10,000, default 10,000) and `budget_ms` (0–1,000,
+default 1,000). Zero budget reads nothing and returns incomplete/not-read.
+Deadlines are cooperative between ETS operations, not a hard scheduling SLA.
+Incomplete collections withhold complete-looking metrics; missing, inaccessible
+or invalid sources return errors rather than zero. Local exhaustion does not
+prove cluster completeness, freshness after broker loss or archive coverage.
+Node identity and scanned-key counts are internal diagnostics: the future
+authorized HTTP DTO must not expose foreign-tenant scan counts verbatim.
+
+Root validation session **7720 exited 0: all 35 collector tests passed**, with
+production compilation under `-Werror +warn_missing_spec` and all five input
+hashes unchanged. Tests used actual ETS tables, including source deletion/name
+replacement, foreign-account scan bounds, long-waiting calls, malformed records,
+deadline limits and fixation cleanup. Evidence:
+`/tmp/kazoo-dashboard-collector.zxfQ8k/{inputs.sha256,eunit.log}`.
+
+```bash
+bash scripts/run-kazoo-validation.sh \
+  --memory-mib 128 --reserve-mib 768 --runtime-sec 60 -- \
+  /usr/bin/unshare --net /usr/bin/bash \
+  /opt/kz5/scripts/test-acdc-dashboard-collector.sh
+```
+
+For this authorized development run, root confirmed zero calls and briefly
+paused only eCallMgr for memory, restoring it through an EXIT trap. No source
+was deployed. This command does not authorize stopping production services.
+Authenticated HTTP/AMQP integration, queue runtime roster/eligibility, cluster
+coverage, native Blackhole delivery and browser/live acceptance remain open.
 
 ## What it computes
 
