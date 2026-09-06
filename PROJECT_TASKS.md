@@ -47,8 +47,8 @@ proof before promotion; the handoff does not waive those safety gates.
 | P0-04 | ACTIVE — callback | Callback offer at configured 30 seconds: separate enable, initial delay and repeat interval from position/wait/generic announcements; verify saved values, runtime schedule and received audio. Invalid return numbers must not cause silent failure. |
 | P0-05 | OPEN — ACDC | Agent stability: one answered call must not log unrelated agents out. Test failed ringing, reconnect, queue-specific logout, pause/resume and reboot recovery. |
 | P0-06 | OPEN — ACDC | Resolve retained ambiguous callback cleanup/reconciliation ticket without losing evidence or falsely marking a live leg settled. |
-| P0-07 | OPEN — ACDC recovery | Missed hangup events can leave an agent incorrectly busy (operator review finding). Add bounded reconciliation against authoritative current call state, with exact call/account/owner identity. Prove recovery after lost, duplicate and late hangup events, including multiple direct calls and node reconnect. Never mark an agent available while another tracked call is active; preserve explicit pause/logout and queue membership. SIP registration alone is not recovery proof. |
-| P0-08 | OPEN — ACDC + AMQP | Failed AMQP delivery can prevent recovery from ringing (operator review finding). Identify affected publish/ack/recovery paths and make recovery bounded, observable and safe to retry. Test publish failure, broker interruption, lost acknowledgements and redelivery: no permanently stuck ringing state, duplicate bridge, stolen call or unrelated agent/roster mutation. Broker acceptance alone must not count as completed state recovery. |
+| P0-07 | ACTIVE — staging acceptance | Team recovery fix `d69cf04` merged in `8548b98`; combined 174 tests and 63 production-module compile passed. Bounded reconciliation must now be validated with actual lost/late hangups, multiple direct calls and node reconnect. Never mark an agent available while another tracked call is active; preserve pause/logout and membership. SIP registration alone is not recovery proof. |
+| P0-08 | ACTIVE — staging acceptance | Team AMQP recovery fix merged and covered by the combined offline checkpoint. Actual broker interruption, lost acknowledgements/redelivery and node failures remain untested: prove no permanently stuck ringing state, duplicate bridge, stolen call or unrelated agent/roster mutation. Broker acceptance alone must not count as completed state recovery. |
 | P0-09 | OPEN — ACDC policy + UI/API | Repeated connection failures can automatically log agents out (operator review finding). Distinguish intentional configured protection from unintended logout; define configurable thresholds and recovery behavior, expose the reason/current state through API/UI and document it in OpenAPI. Test threshold boundaries, transient failure, successful-call counter reset, reconnect and explicit operator logout. Do not silently disable unreachable-agent safeguards or automatically override an intentional logout. |
 
 Native callback candidate review remains part of P0-03, not a completed fix:
@@ -59,6 +59,11 @@ non-reusable binding generation in both native state and wire requests. The
 earlier ten-test/eight-wire-shape codec proof does not cover that new field or
 native transport. Core/module lifetime, exact bridge-end release, stale requests,
 native build/link and real audio acceptance must pass before promotion.
+Private core-source session `19793` passed nine groups plus real-header syntax
+checks, including owner-generation reuse, admitted-write quiescence and exact
+bridge-ticket release. The core native dispatcher and actual bridge/end caller
+hooks are still being implemented; these private proofs do not certify deployed
+callback behavior or constitute an installer-ready patch.
 
 The three recovery findings above were added from the operator's 2026-09-06
 review and are release-blocking P0 items, not fixed by `83194e7`. That commit's
