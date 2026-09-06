@@ -1,0 +1,424 @@
+#!/usr/bin/env bash
+# Source-only integration fixtures. Extract one helper; never source the installer or modify shared trees.
+set -Eeuo pipefail
+umask 077
+[[ $# == 0 ]] || { printf 'Usage: %s\n' "$0" >&2; exit 2; }
+transition_fixture_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+transition_fixture_installer="$transition_fixture_dir/install-kazoo5.sh"
+transition_fixture_patches="$transition_fixture_dir/patches"
+transition_fixture_output=$(mktemp -d /tmp/kazoo-source-transition-tests.XXXXXX)
+transition_fixture_helper="$transition_fixture_output/apply-source-transition.sh"
+readonly transition_fixture_shared=$(cd -- "$transition_fixture_dir/.." && pwd -P)
+readonly transition_fixture_blackhole_ref=4e3f02a5ab01c09a44c287f4f93b15d2782f5614
+readonly transition_fixture_crossbar_ref=2ac862830f9b626d2170d08daf1991b0ca33dba7
+transition_fixture_count=0
+transition_fixture_inputs=(
+    "$transition_fixture_dir/test-kazoo-source-transition.sh"
+    "$transition_fixture_installer"
+    "$transition_fixture_patches/blackhole-kazoo5-integration.patch"
+    "$transition_fixture_patches/blackhole-token-redaction.patch"
+    "$transition_fixture_patches/blackhole-redaction-to-integration.patch"
+    "$transition_fixture_patches/crossbar-kazoo5-integration.patch"
+    "$transition_fixture_patches/crossbar-kazoo5-before-frame.patch"
+    "$transition_fixture_patches/crossbar-blackhole-frame-schema.patch"
+)
+finish() {
+    local status=$?
+    trap - EXIT
+    if [[ -f $transition_fixture_output/input-pins.sha256 ]] &&
+       ! sha256sum --check --status "$transition_fixture_output/input-pins.sha256"; then
+        printf 'FAIL private source-transition input changed during validation\n' >&2
+        status=99
+    fi
+    printf 'Source-transition exit=%s; cases=%s; retained evidence: %s\n' \
+        "$status" "$transition_fixture_count" "$transition_fixture_output"
+    exit "$status"
+}
+trap finish EXIT
+for transition_fixture_input in "${transition_fixture_inputs[@]}"; do
+    [[ -f $transition_fixture_input && ! -L $transition_fixture_input ]] || {
+        printf 'Missing or symlinked fixture input: %s\n' "$transition_fixture_input" >&2
+        exit 2
+    }
+done
+sha256sum "${transition_fixture_inputs[@]}" >"$transition_fixture_output/input-pins.sha256"
+
+# Generate only the reviewed function into the protected evidence directory.
+# Pin the full installer, assert both integration call sites, and pin extraction.
+node - "$transition_fixture_installer" "$transition_fixture_helper" <<'NODE'
+const fs = require('node:fs'), assert = require('node:assert/strict');
+const [installer, output] = process.argv.slice(2);
+const source = fs.readFileSync(installer, 'utf8');
+const definitions = source.match(/^apply_kazoo_integration_patch\(\) \(\n[\s\S]*?^\)\n/gm);
+assert.equal(definitions?.length, 1, 'Expected exactly one integration helper');
+for (const family of ['blackhole', 'crossbar']) {
+  assert(source.includes('    apply_kazoo_integration_patch ' + family + '\n'), 'Missing integration call site');
+}
+fs.writeFileSync(output, definitions[0], {flag: 'wx', mode: 0o600});
+NODE
+sha256sum "$transition_fixture_helper" >>"$transition_fixture_output/input-pins.sha256"
+
+fail() { printf 'FAIL %s\n' "$*" >&2; exit 1; }
+pass() {
+    transition_fixture_count=$((transition_fixture_count + 1))
+    printf 'PASS %s\n' "$*" | tee -a "$transition_fixture_output/results.log"
+}
+
+# Include names, object types, permissions, regular bytes and link destinations.
+# No dereference: an escaping fixture symlink must not hide a target mutation.
+snapshot_tree() (
+    cd -- "$1"
+    while IFS= read -r -d '' path; do
+        printf '%s\0%s\0' "$path" "$(stat -c '%F:%a' -- "$path")"
+        if [[ -L $path ]]; then
+            readlink -- "$path"
+        elif [[ -f $path ]]; then
+            sha256sum -- "$path"
+        elif [[ ! -d $path ]]; then
+            fail "unexpected fixture object: $path"
+        fi
+        printf '\0'
+    done < <(find . -print0 | LC_ALL=C sort -z)
+)
+
+# Intentional test-data edit, limited to the exact file passed by this harness.
+# Refuse silent no-ops and ambiguous replacements.
+replace_once() {
+    node - "$1" "$2" "$3" <<'NODE'
+const fs = require('node:fs');
+const [file, before, after] = process.argv.slice(2);
+const value = fs.readFileSync(file, 'utf8');
+if (!before || value.split(before).length !== 2) {
+  throw new Error(`fixture replacement must match exactly once: ${file}`);
+}
+fs.writeFileSync(file, value.replace(before, after));
+NODE
+}
+
+select_app() {
+    app=$1
+    new_patch="$app-kazoo5-integration.patch"
+    case $app in
+        blackhole)
+            old_patch=blackhole-token-redaction.patch
+            step_patch=blackhole-redaction-to-integration.patch
+            sentinel_source=src/modules/bh_token_auth.erl
+            partial_source=src/modules/bh_token_auth.erl
+            missing_hunk_source=src/blackhole_socket_handler.erl
+            missing_source=src/modules/bh_token_auth.erl
+            ;;
+        crossbar)
+            old_patch=crossbar-kazoo5-before-frame.patch
+            step_patch=crossbar-blackhole-frame-schema.patch
+            sentinel_source=src/api_util.erl
+            partial_source=priv/couchdb/schemas/queues.json
+            missing_hunk_source=src/crossbar_auth.erl
+            missing_source=src/modules/cb_members.erl
+            ;;
+        *) fail "unsupported fixture app: $app" ;;
+    esac
+}
+
+prepare_baseline() {
+    local ref=$1
+    shift
+    [[ $(git -C "$transition_fixture_shared/applications/$app" rev-parse HEAD) == "$ref" ]] ||
+        fail "$app shared checkout is not the pinned baseline"
+    mkdir -m 0700 "$transition_fixture_output/baseline-$app"
+    git -C "$transition_fixture_shared/applications/$app" archive "$ref" "$@" |
+        tar -xf - -C "$transition_fixture_output/baseline-$app"
+    printf '%s %s\n' "$app" "$ref" >>"$transition_fixture_output/baseline-refs.txt"
+    snapshot_tree "$transition_fixture_output/baseline-$app" >"$transition_fixture_output/baseline-$app.snapshot"
+}
+
+select_app blackhole
+prepare_baseline "$transition_fixture_blackhole_ref" \
+    src/blackhole_bindings.erl src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl
+select_app crossbar
+# The other four permitted Crossbar paths are genuinely absent in this commit;
+# the integration adds them. Do not manufacture placeholder files in baseline.
+prepare_baseline "$transition_fixture_crossbar_ref" \
+    priv/couchdb/schemas/queue_update.json priv/couchdb/schemas/queues.json \
+    src/api_util.erl src/crossbar_auth.erl src/modules/cb_channels.erl \
+    src/modules/cb_devices.erl priv/couchdb/schemas/system_config.blackhole.json
+
+seed_sentinels() {
+    local source_module=${sentinel_source##*/}
+    source_module=${source_module%.erl}
+    printf 'unrelated source-transition sentinel\n' >"$1/UNRELATED.fixture"
+    chmod 0640 "$1/UNRELATED.fixture"
+    # Keep the sentinel away from EOF: the legacy token patch has an
+    # intentionally EOF-anchored hunk and must still be applicable as authored.
+    replace_once "$1/$sentinel_source" "-module($source_module)." \
+        $'%% KAZOO_SOURCE_TRANSITION_SENTINEL\n'"-module($source_module)."
+}
+
+new_case() {
+    local label=$1 state=$2
+    case_dir="$transition_fixture_output/$app-$label"
+    work="$case_dir/work"
+    root="$work/root"
+    source_dir="$root/applications/$app"
+    script_dir="$root/scripts"
+    mkdir -p -m 0700 "$root/applications" "$script_dir/patches"
+    cp -a -- "$transition_fixture_output/baseline-$app" "$source_dir"
+    cp -- "${transition_fixture_inputs[@]:2}" "$script_dir/patches/"
+    seed_sentinels "$source_dir"
+    case $state in
+        clean) ;;
+        legacy) git -C "$source_dir" apply "$script_dir/patches/$old_patch" ;;
+        current) git -C "$source_dir" apply "$script_dir/patches/$new_patch" ;;
+        *) fail "unknown fixture state: $state" ;;
+    esac
+    configured_root="$root"
+    fixture_dry_run=false
+    fixture_git_redirect=false
+    fixture_failure_mode=none
+}
+
+invoke_helper() (
+    # Actual private helper, with only the documented caller environment.
+    # A distinguishable die status prevents command-not-found from counting as
+    # an expected safety rejection.
+    set -Eeuo pipefail
+    KAZOO_ROOT="$configured_root"
+    SCRIPT_DIR="$script_dir"
+    DRY_RUN=$fixture_dry_run
+    log() { printf 'FIXTURE-LOG %s\n' "$*"; }
+    die() { printf 'FIXTURE-DIE %s\n' "$*" >&2; exit 65; }
+    source "$transition_fixture_helper"
+    case $fixture_failure_mode in
+        mktemp)
+            mktemp() {
+                if [[ $# == 2 && $1 == -d && $2 == /tmp/kazoo-integration-preflight.XXXXXX ]]; then
+                    printf 'FIXTURE-INJECT mktemp\n' >&2
+                    return 73
+                fi
+                command mktemp "$@"
+            }
+            ;;
+        private-copy)
+            cp() {
+                if [[ $# == 4 && $1 == --preserve=mode,timestamps && $2 == -- &&
+                      $4 == /tmp/kazoo-integration-preflight.*/desired/* ]]; then
+                    printf 'FIXTURE-INJECT private-copy\n' >&2
+                    return 74
+                fi
+                command cp "$@"
+            }
+            ;;
+        none) ;;
+        *) die 'Unknown fixture failure injection' ;;
+    esac
+    if [[ $fixture_git_redirect == true ]]; then
+        # Injection occurs only after all fixture-setup Git commands have run,
+        # and only in the caller of the helper's own isolation subshell.
+        export GIT_DIR="$fixture_git_tree/repo/.git"
+        export GIT_WORK_TREE="$fixture_git_tree/repo"
+        export GIT_COMMON_DIR="$fixture_git_tree/repo/.git"
+        export GIT_INDEX_FILE="$fixture_git_tree/index.sentinel"
+        export GIT_OBJECT_DIRECTORY="$fixture_git_tree/repo/.git/objects"
+        export GIT_ALTERNATE_OBJECT_DIRECTORIES="$fixture_git_tree/repo/.git/objects"
+        export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.worktree
+        export GIT_CONFIG_VALUE_0="$fixture_git_tree/repo"
+        export GIT_CONFIG_PARAMETERS="'core.worktree=$fixture_git_tree/repo'"
+        export GIT_TRACE="$fixture_git_tree/trace.sentinel"
+        export GIT_EXEC_PATH="$fixture_git_tree/empty-exec"
+        for fixture_git_name in "${!GIT_@}"; do
+            declare -p "$fixture_git_name"
+        done >"$case_dir/git-caller.before"
+    fi
+    apply_kazoo_integration_patch "$app" || return "$?"
+    if [[ $fixture_git_redirect == true ]]; then
+        for fixture_git_name in "${!GIT_@}"; do
+            declare -p "$fixture_git_name"
+        done >"$case_dir/git-caller.after"
+        cmp -- "$case_dir/git-caller.before" "$case_dir/git-caller.after" ||
+            die 'Integration helper changed its caller Git environment'
+    fi
+)
+
+expect_success() {
+    local label=$1
+    invoke_helper >"$case_dir/invoke.log" 2>&1 || fail "$app/$label helper rejected valid state; see $case_dir/invoke.log"
+    git -C "$source_dir" apply --reverse --check "$script_dir/patches/$new_patch" \
+        >"$case_dir/reverse.log" 2>&1 || fail "$app/$label new postcondition absent"
+    if git -C "$source_dir" apply --check "$script_dir/patches/$new_patch" >"$case_dir/reapply.log" 2>&1; then
+        fail "$app/$label complete integration unexpectedly applies twice"
+    fi
+    # Independently build the exact target from the pinned clean archive.
+    cp -a -- "$transition_fixture_output/baseline-$app" "$case_dir/expected"
+    seed_sentinels "$case_dir/expected"
+    git -C "$case_dir/expected" apply "$transition_fixture_patches/$new_patch"
+    snapshot_tree "$case_dir/expected" >"$case_dir/expected.snapshot"
+    snapshot_tree "$source_dir" >"$case_dir/actual.snapshot"
+    cmp -- "$case_dir/expected.snapshot" "$case_dir/actual.snapshot" ||
+        fail "$app/$label target bytes, modes or sentinel differ"
+    snapshot_tree "$work" >"$case_dir/before-repeat.snapshot"
+    invoke_helper >"$case_dir/repeat.log" 2>&1 || fail "$app/$label repeat failed"
+    snapshot_tree "$work" >"$case_dir/after-repeat.snapshot"
+    cmp -- "$case_dir/before-repeat.snapshot" "$case_dir/after-repeat.snapshot" ||
+        fail "$app/$label repeat changed the private tree"
+    pass "$app/$label exact target + unrelated bytes/modes + idempotence"
+}
+
+expect_rejection() {
+    local label=$1 status=0
+    snapshot_tree "$work" >"$case_dir/before.snapshot"
+    invoke_helper >"$case_dir/invoke.log" 2>&1 || status=$?
+    [[ $status == 65 ]] || fail "$app/$label expected explicit die=65, got $status; see $case_dir/invoke.log"
+    snapshot_tree "$work" >"$case_dir/after.snapshot"
+    cmp -- "$case_dir/before.snapshot" "$case_dir/after.snapshot" ||
+        fail "$app/$label rejected state mutated bytes, modes, links or paths"
+    if [[ $fixture_failure_mode != none ]]; then
+        /usr/bin/grep -Fq "FIXTURE-INJECT $fixture_failure_mode" "$case_dir/invoke.log" ||
+            fail "$app/$label did not reach the requested private-operation failure"
+    fi
+    pass "$app/$label explicit rejection with no private-tree mutation"
+}
+
+expect_unverified_dry_run() {
+    snapshot_tree "$work" >"$case_dir/before.snapshot"
+    invoke_helper >"$case_dir/invoke.log" 2>&1 || fail "$app/dry-run absent source was rejected"
+    /usr/bin/grep -Fq 'source state and preflight are unverified' "$case_dir/invoke.log" ||
+        fail "$app/dry-run must not imply source-state validation"
+    [[ ! -e $configured_root && ! -L $configured_root ]] || fail "$app/dry-run created source root"
+    snapshot_tree "$work" >"$case_dir/after.snapshot"
+    cmp -- "$case_dir/before.snapshot" "$case_dir/after.snapshot" ||
+        fail "$app/dry-run mutated the private tree"
+    pass "$app/dry-run absent source, explicit unverified warning, no mutation"
+}
+
+for app in blackhole crossbar; do
+    select_app "$app"
+    for state in clean current legacy; do
+        new_case "$state" "$state"
+        expect_success "$state"
+    done
+
+    # expect_rejection calls invoke_helper conditionally; invoke_helper also
+    # calls the actual helper conditionally. Safety must not depend on errexit.
+    for failure in mktemp private-copy; do
+        new_case "$failure-failure" legacy
+        fixture_failure_mode=$failure
+        expect_rejection "$failure-failure"
+    done
+
+    new_case legacy-git-environment-isolation legacy
+    fixture_git_tree="$work/redirect-sentinel"
+    mkdir -m 0700 "$fixture_git_tree" "$fixture_git_tree/empty-exec"
+    cp -a -- "$transition_fixture_output/baseline-$app" "$fixture_git_tree/repo"
+    seed_sentinels "$fixture_git_tree/repo"
+    git -C "$fixture_git_tree/repo" apply "$transition_fixture_patches/$old_patch"
+    git -C "$fixture_git_tree/repo" init --quiet
+    printf 'unrelated index sentinel\n' >"$fixture_git_tree/index.sentinel"
+    printf 'unrelated trace sentinel\n' >"$fixture_git_tree/trace.sentinel"
+    snapshot_tree "$fixture_git_tree" >"$case_dir/git-redirect.before"
+    fixture_git_redirect=true
+    expect_success legacy-git-environment-isolation
+    snapshot_tree "$fixture_git_tree" >"$case_dir/git-redirect.after"
+    cmp -- "$case_dir/git-redirect.before" "$case_dir/git-redirect.after" ||
+        fail "$app/Git environment redirected a write into unrelated sentinel tree"
+
+    new_case dry-run-absent-source clean
+    fixture_dry_run=true
+    configured_root="$work/not-created"
+    expect_unverified_dry_run
+
+    new_case dry-run-missing-patch clean
+    fixture_dry_run=true
+    configured_root="$work/not-created"
+    mv -- "$script_dir/patches/$new_patch" "$work/withheld-current.patch"
+    expect_rejection dry-run-missing-patch
+
+    new_case partial-legacy clean
+    git -C "$source_dir" apply --include="$partial_source" "$script_dir/patches/$old_patch"
+    expect_rejection partial-legacy
+
+    new_case missing-legacy-hunk legacy
+    git -C "$source_dir" apply --reverse --include="$missing_hunk_source" "$script_dir/patches/$old_patch"
+    expect_rejection missing-legacy-hunk
+
+    new_case half-new-transition legacy
+    if [[ $app == blackhole ]]; then
+        git -C "$source_dir" apply --include=src/blackhole_bindings.erl "$script_dir/patches/$step_patch"
+    else
+        replace_once "$source_dir/priv/couchdb/schemas/system_config.blackhole.json" \
+            '        "max_queued_messages": {' \
+            $'        "max_frame_size_bytes": {"type": "integer"},\n        "max_queued_messages": {'
+    fi
+    expect_rejection half-new-transition
+
+    new_case edited-feature-line legacy
+    if [[ $app == blackhole ]]; then
+        replace_once "$source_dir/src/modules/bh_token_auth.erl" \
+            'lager:debug("trying to authenticate with token")' \
+            'lager:debug("fixture-edited-token-message")'
+    else
+        replace_once "$source_dir/src/api_util.erl" \
+            'is_custom_route_module(<<"members">>) -> '\''true'\'';' \
+            'is_custom_route_module(<<"members">>) -> '\''false'\'';'
+    fi
+    expect_rejection edited-feature-line
+
+    new_case missing-file legacy
+    mv -- "$source_dir/$missing_source" "$work/removed-source.fixture"
+    expect_rejection missing-file
+
+    new_case symlink-file legacy
+    mv -- "$source_dir/$missing_source" "$work/link-target.fixture"
+    ln -s -- "$work/link-target.fixture" "$source_dir/$missing_source"
+    expect_rejection symlink-file
+
+    new_case symlink-ancestor legacy
+    mv -- "$source_dir/src" "$work/external-src"
+    ln -s -- "$work/external-src" "$source_dir/src"
+    expect_rejection symlink-ancestor
+
+    new_case traversal-root legacy
+    configured_root="$root/../root"
+    expect_rejection traversal-root
+
+    for patch_kind in current transition; do
+        new_case "out-of-scope-$patch_kind-patch" legacy
+        if [[ $patch_kind == current ]]; then target_patch=$new_patch; else target_patch=$step_patch; fi
+        printf '\ndiff --git a/src/fixture-out-of-scope b/src/fixture-out-of-scope\nnew file mode 100644\n--- /dev/null\n+++ b/src/fixture-out-of-scope\n@@ -0,0 +1 @@\n+unexpected mutation\n' \
+            >>"$script_dir/patches/$target_patch"
+        expect_rejection "out-of-scope-$patch_kind-patch"
+    done
+
+    new_case missing-transition legacy
+    mv -- "$script_dir/patches/$step_patch" "$work/withheld-transition.patch"
+    expect_rejection missing-transition
+
+    new_case invalid-new-postcondition legacy
+    # Transition itself is valid, but the proposed current patch describes a
+    # different result. This must fail during private staging, before real apply.
+    if [[ $app == blackhole ]]; then
+        replace_once "$script_dir/patches/$new_patch" \
+            '+    lager:debug("trying to authenticate with token"),' \
+            '+    lager:debug("fixture-inconsistent-current-patch"),'
+    else
+        replace_once "$script_dir/patches/$new_patch" \
+            '+            "default": 65536,' '+            "default": 65535,'
+    fi
+    expect_rejection invalid-new-postcondition
+
+    new_case wrong-transition-content legacy
+    # Unlike the previous case, current is the authentic reviewed patch. The
+    # transition is valid/applicable but its result has the wrong frame default.
+    # Full-current reverse verification must catch this before real-tree writes.
+    if [[ $app == blackhole ]]; then
+        replace_once "$script_dir/patches/$step_patch" \
+            '+-define(DEFAULT_MAX_FRAME_SIZE, 65536).' '+-define(DEFAULT_MAX_FRAME_SIZE, 65535).'
+    else
+        replace_once "$script_dir/patches/$step_patch" \
+            '+            "default": 65536,' '+            "default": 65535,'
+    fi
+    git -C "$source_dir" apply --check "$script_dir/patches/$step_patch"
+    expect_rejection wrong-transition-content
+done
+
+[[ $transition_fixture_count == 42 ]] || fail "unexpected case count: $transition_fixture_count"
+printf 'PASS all %s bounded source-transition cases (no builds, services or network)\n' "$transition_fixture_count" \
+    | tee -a "$transition_fixture_output/results.log"

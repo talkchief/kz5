@@ -105,8 +105,8 @@ blackhole_test_hooks=(
     '$KAZOO_BLACKHOLE_REF =~ ^[0-9a-f]{40}$'
     '[[ $(git -C "$KAZOO_ROOT/applications/blackhole" rev-parse HEAD) == "$KAZOO_BLACKHOLE_REF" ]]'
     '"dep_blackhole=git https://github.com/2600hz/kazoo-blackhole.git $KAZOO_BLACKHOLE_REF"'
-    'apply_required_source_patch "$KAZOO_ROOT/applications/blackhole"'
-    '"$SCRIPT_DIR/patches/blackhole-kazoo5-integration.patch"'
+    'apply_kazoo_integration_patch blackhole'
+    'transition_new=blackhole-kazoo5-integration.patch'
 )
 for blackhole_test_hook in "${blackhole_test_hooks[@]}"; do
     /usr/bin/grep -Fq -- "$blackhole_test_hook" scripts/install-kazoo5.sh || {

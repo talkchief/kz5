@@ -2829,7 +2829,7 @@
     },
     {
       "file": "scripts/api-docs-blackhole.cjs",
-      "sha256": "cb20251147c25d60e53f589caea28f8957914425670ec8602fe66fc4dc611575"
+      "sha256": "9efd3137442f68dd23ed22cd38b15405fee5e7e3893faae0325bc3cdee12f7f2"
     },
     {
       "file": "scripts/api-docs-members-devices.cjs",
@@ -2857,11 +2857,31 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "7d119e7dddac15dcc6f601919798d971bb4d15a6092d828c354693898ece2258"
+      "sha256": "84a140d6553c501b7d5b96f0b37b4382c6b0d6f8237e3f83710b1a67f333a20d"
     },
     {
       "file": "scripts/patches/blackhole-kazoo5-integration.patch",
       "sha256": "17d718cf1e9b90085c824eefcf39442eca885f8953d4859eb0ded0702a12ea7c"
+    },
+    {
+      "file": "scripts/patches/blackhole-redaction-to-integration.patch",
+      "sha256": "357169d423fb45443491894797fd67af0628b98762971d3e9b97950b10fd9e28"
+    },
+    {
+      "file": "scripts/patches/blackhole-token-redaction.patch",
+      "sha256": "e36ac18c19fa9b3f93302566dcd85363aab74da84f7c5ea07e33ef3b9d69323a"
+    },
+    {
+      "file": "scripts/patches/crossbar-blackhole-frame-schema.patch",
+      "sha256": "2c4f9e567f39a400d6550b1b43972e65e3b14a5bb1424e30768163035c122140"
+    },
+    {
+      "file": "scripts/patches/crossbar-kazoo5-before-frame.patch",
+      "sha256": "5ec8f080b30054404c2fe181f46ea6bfa5ccb98ec9f4cec49b73ef0ff32b05a3"
+    },
+    {
+      "file": "scripts/patches/crossbar-kazoo5-integration.patch",
+      "sha256": "8fee114b0351abd20c3b7c52d822cd805f8ed192d2fcd46729dabf8455de5272"
     }
   ]
 }

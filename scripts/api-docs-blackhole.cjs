@@ -6,6 +6,11 @@ const crypto = require('node:crypto');
 function applyBlackhole({spec, root}) {
     const files = ['scripts/api-docs-blackhole.cjs', 'scripts/install-kazoo5.sh',
         'scripts/patches/blackhole-kazoo5-integration.patch',
+        'scripts/patches/blackhole-token-redaction.patch',
+        'scripts/patches/blackhole-redaction-to-integration.patch',
+        'scripts/patches/crossbar-kazoo5-integration.patch',
+        'scripts/patches/crossbar-kazoo5-before-frame.patch',
+        'scripts/patches/crossbar-blackhole-frame-schema.patch',
         'applications/crossbar/priv/couchdb/schemas/system_config.blackhole.json',
         'applications/crossbar/src/modules/cb_websockets.erl',
         'applications/blackhole/src/blackhole_socket_handler.erl',

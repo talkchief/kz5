@@ -1,0 +1,1078 @@
+diff --git a/priv/couchdb/schemas/queue_update.json b/priv/couchdb/schemas/queue_update.json
+index 5c1749df..40a6e9f3 100644
+--- a/priv/couchdb/schemas/queue_update.json
++++ b/priv/couchdb/schemas/queue_update.json
+@@ -3,6 +3,10 @@
+     "_id": "queue_update",
+     "description": "Schema for queue update request",
+     "properties": {
++        "runtime_only": {
++            "description": "Opt-in login for an already enrolled queue without changing the saved roster; requires runtime confirmation",
++            "type": "boolean"
++        },
+         "action": {
+             "description": "Action to perform",
+             "enum": [
+diff --git a/priv/couchdb/schemas/queues.json b/priv/couchdb/schemas/queues.json
+index 52be2769..4cbcdc3b 100644
+--- a/priv/couchdb/schemas/queues.json
++++ b/priv/couchdb/schemas/queues.json
+@@ -22,12 +22,26 @@
+         "announcements": {
+             "description": "Configuration for periodic announcements to callers waiting in the queue",
+             "properties": {
++                "initial_delay": {
++                    "default": 30,
++                    "description": "Seconds to wait after queue entry before the first position or wait-time announcement",
++                    "minimum": 1,
++                    "maximum": 3600,
++                    "type": "integer"
++                },
+                 "interval": {
+                     "default": 30,
+                     "description": "Time between announcements",
+                     "minimum": 15,
+                     "type": "integer"
+                 },
++                "language": {
++                    "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used.",
++                    "maxLength": 35,
++                    "minLength": 2,
++                    "pattern": "^[a-z]{2,3}(-[a-z0-9]{2,8})*$",
++                    "type": "string"
++                },
+                 "media": {
+                     "description": "Custom prompts to be played for the announcements",
+                     "properties": {
+@@ -67,6 +81,212 @@
+             },
+             "type": "object"
+         },
++        "callback": {
++            "description": "Authenticated virtual callback configuration. Registrations are created only by a live queue member flow.",
++            "properties": {
++                "announcement": {
++                    "description": "Independent schedule for announcing the callback option while waiting. Disabling this announcement does not disable callback registration with entry_key.",
++                    "properties": {
++                        "enabled": {
++                            "default": true,
++                            "description": "Announce the callback option when virtual callback is enabled",
++                            "type": "boolean"
++                        },
++                        "initial_delay": {
++                            "default": 30,
++                            "description": "Seconds before the first callback option announcement, independent of position and estimated-wait announcements",
++                            "maximum": 3600,
++                            "minimum": 1,
++                            "type": "integer"
++                        },
++                        "interval": {
++                            "default": 60,
++                            "description": "Seconds between callback option announcements, independent of position and estimated-wait announcements",
++                            "maximum": 3600,
++                            "minimum": 15,
++                            "type": "integer"
++                        }
++                    },
++                    "type": "object"
++                },
++                "allow_alternate_number": {
++                    "default": false,
++                    "description": "Allow a caller to enter and explicitly reconfirm a return number other than the current caller ID",
++                    "type": "boolean"
++                },
++                "use_local_resources": {
++                    "default": false,
++                    "description": "Restrict callback origination to resources owned by the authenticated account",
++                    "type": "boolean"
++                },
++                "enabled": {
++                    "default": false,
++                    "description": "Offer durable virtual callback registration to callers waiting in this queue",
++                    "type": "boolean"
++                },
++                "entry_key": {
++                    "default": "6",
++                    "description": "Single DTMF digit that opens the callback menu while the caller is waiting",
++                    "pattern": "^[0-9]$",
++                    "type": "string"
++                },
++                "handoff_timeout": {
++                    "default": 5,
++                    "description": "Seconds allowed for the queue worker to accept a confirmed returned caller",
++                    "maximum": 10,
++                    "minimum": 1,
++                    "type": "integer"
++                },
++                "max_attempts": {
++                    "default": 3,
++                    "description": "Maximum outbound callback attempts before the registration fails",
++                    "maximum": 10,
++                    "minimum": 1,
++                    "type": "integer"
++                },
++                "media": {
++                    "description": "Optional account media IDs or prompt names overriding generated callback menu audio",
++                    "properties": {
++                        "confirmation": {
++                            "description": "Played after the inbound caller confirms the callback number",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "menu": {
++                            "description": "Callback menu choices played after the initial offer",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "number_readback": {
++                            "description": "Played before speaking the selected callback number",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "offer": {
++                            "description": "Initial callback option offer played while the caller waits",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "returned_confirmation": {
++                            "description": "Played to a returned caller before requiring DTMF 1 confirmation and agent connection",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "success": {
++                            "description": "Played only after durable callback registration is acknowledged",
++                            "maxLength": 256,
++                            "minLength": 1,
++                            "type": "string"
++                        }
++                    },
++                    "type": "object"
++                },
++                "menu_timeout_ms": {
++                    "default": 30000,
++                    "description": "Absolute milliseconds allowed for inbound callback menu input and durable registration acknowledgement",
++                    "maximum": 120000,
++                    "minimum": 1000,
++                    "type": "integer"
++                },
++                "originate_timeout": {
++                    "default": 60,
++                    "description": "Seconds allowed for each outbound callback originate request",
++                    "maximum": 300,
++                    "minimum": 5,
++                    "type": "integer"
++                },
++                "outbound_authority": {
++                    "description": "Enabled account-owned callback user (or legacy device) whose outbound identity and restrictions authorize callback origination",
++                    "properties": {
++                        "id": {
++                            "maxLength": 128,
++                            "minLength": 1,
++                            "pattern": "^[A-Za-z0-9_-]+$",
++                            "type": "string"
++                        },
++                        "type": {
++                            "enum": [
++                                "device",
++                                "user"
++                            ],
++                            "type": "string"
++                        }
++                    },
++                    "required": [
++                        "id",
++                        "type"
++                    ],
++                    "type": "object"
++                },
++                "outbound_caller_id": {
++                    "description": "Optional account-owned caller-ID override; when name is omitted it inherits the current callback authority/account name. Ignored when caller_id_source is inherit.",
++                    "properties": {
++                        "name": {
++                            "maxLength": 128,
++                            "minLength": 1,
++                            "type": "string"
++                        },
++                        "number": {
++                            "pattern": "^\\+?[0-9]{1,15}$",
++                            "type": "string"
++                        }
++                    },
++                    "required": [
++                        "number"
++                    ],
++                    "type": "object"
++                },
++                "caller_id_source": {
++                    "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
++                    "enum": [
++                        "inherit",
++                        "custom"
++                    ],
++                    "type": "string"
++                },
++                "ready_ack_timeout": {
++                    "default": 5,
++                    "description": "Seconds allowed to retain an outbound originate cancellation handle before execution",
++                    "maximum": 10,
++                    "minimum": 1,
++                    "type": "integer"
++                },
++                "retry_delay": {
++                    "default": 60,
++                    "description": "Seconds before an eligible failed callback attempt may be retried",
++                    "maximum": 3600,
++                    "minimum": 15,
++                    "type": "integer"
++                },
++                "confirmation_timeout": {
++                    "default": 10,
++                    "description": "Seconds allowed for the returned caller to press DTMF 1",
++                    "maximum": 30,
++                    "minimum": 3,
++                    "type": "integer"
++                },
++                "success_timeout_ms": {
++                    "default": 10000,
++                    "description": "Milliseconds allowed to finish the inbound success prompt after registration acknowledgement",
++                    "maximum": 30000,
++                    "minimum": 1000,
++                    "type": "integer"
++                },
++                "ttl": {
++                    "default": 3600,
++                    "description": "Maximum lifetime of a callback registration in seconds",
++                    "maximum": 86400,
++                    "minimum": 60,
++                    "type": "integer"
++                }
++            },
++            "type": "object"
++        },
+         "caller_exit_key": {
+             "default": "#",
+             "description": "Key caller can press while on hold to exit the queue and continue in the callflow",
+@@ -137,7 +357,7 @@
+         },
+         "ring_simultaneously": {
+             "default": 1,
+-            "description": "The number of agents to try in parallel when connecting a caller",
++            "description": "Legacy setting preserved for compatibility; currently not used by agent selection. Use strategy ring_all for all eligible agents, or another strategy for one at a time.",
+             "minimum": 1,
+             "type": "integer"
+         },
+@@ -147,9 +367,21 @@
+             "enum": [
+                 "ring_all",
+                 "round_robin",
+-                "most_idle"
++                "most_idle",
++                "in_order"
+             ],
+             "type": "string"
++        },
++        "agent_order": {
++            "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
++            "type": "array",
++            "default": [],
++            "uniqueItems": true,
++            "items": {
++                "type": "string",
++                "minLength": 1,
++                "maxLength": 128
++            }
+         }
+     },
+     "required": [
+diff --git a/src/api_util.erl b/src/api_util.erl
+index fe82dd7a..c966b62a 100644
+--- a/src/api_util.erl
++++ b/src/api_util.erl
+@@ -836,6 +836,10 @@ parse_path_tokens_module(Context, [Module | Token], Events, 'false') ->
+     parse_path_tokens(Context, List2, [{Module, Params} | Events]).
+ 
+ -spec is_custom_route_module(kz_term:ne_binary()) -> boolean().
++%% The members API owns its devices suffix. Keep this built-in route intact
++%% even when deployments extend/override custom_route_modules; do not rewrite
++%% their configuration or dispatch the suffix to cb_devices.
++is_custom_route_module(<<"members">>) -> 'true';
+ is_custom_route_module(Module) ->
+     CustomRouteModules = kapps_config:get_ne_binaries(?CONFIG_CAT, <<"custom_route_modules">>, ?DEFAULT_CUSTOM_ROUTES),
+     lists:member(Module, CustomRouteModules).
+diff --git a/src/crossbar_auth.erl b/src/crossbar_auth.erl
+index 9329b441..2e732442 100644
+--- a/src/crossbar_auth.erl
++++ b/src/crossbar_auth.erl
+@@ -197,6 +197,7 @@ validate_auth_token(Token) ->
+ validate_auth_token(Token, Options) ->
+     case kz_auth:validate_token(Token, Options) of
+         {'error', 'no_jwt_signed_token'} -> maybe_db_token(Token);
++        {'error', _Reason}=Error -> Error;
+         {'ok', Claims} ->
+             ProxyIPs = props:get_value(<<"proxy_ips">>, Options),
+             maybe_check_proxy(Claims, ProxyIPs)
+diff --git a/src/modules/cb_channels.erl b/src/modules/cb_channels.erl
+index 789f1b59..08651793 100644
+--- a/src/modules/cb_channels.erl
++++ b/src/modules/cb_channels.erl
+@@ -128,8 +128,11 @@ validate_channel(Context, Id, ?HTTP_PUT) ->
+ %% @end
+ %%------------------------------------------------------------------------------
+ -spec post(cb_context:context(), path_token()) -> cb_context:context().
+-post(Context, _UUID) ->
+-    cb_context:set_resp_status(Context, 'success').
++post(Context, UUID) ->
++    case cb_channel_monitor:is_action(kz_json:get_value(<<"action">>, cb_context:req_data(Context))) of
++        'true' -> cb_channel_monitor:execute(Context, UUID);
++        'false' -> cb_context:set_resp_status(Context, 'success')
++    end.
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc If the HTTP verb is PUT, execute the actual action, usually a db save
+@@ -229,6 +232,13 @@ find_channel(AccountId, CallId, [StatusJObj|JObjs]) ->
+ %%------------------------------------------------------------------------------
+ -spec update(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
+ update(Context, CallId) ->
++    case cb_channel_monitor:is_action(kz_json:get_value(<<"action">>, cb_context:req_data(Context))) of
++        'true' -> cb_channel_monitor:validate(Context, CallId);
++        'false' -> update_legacy(Context, CallId)
++    end.
++
++-spec update_legacy(cb_context:context(), kz_term:ne_binary()) -> cb_context:context().
++update_legacy(Context, CallId) ->
+     Context1 = read(Context, CallId),
+ 
+     case cb_context:has_errors(Context1) of
+diff --git a/src/modules/cb_devices.erl b/src/modules/cb_devices.erl
+index 07fb9c62..ce32ef94 100644
+--- a/src/modules/cb_devices.erl
++++ b/src/modules/cb_devices.erl
+@@ -362,15 +362,20 @@ load_device_status(Context, View, Selector, ValueFun) ->
+     AccountRealm = kz_term:to_lower_binary(
+                      kzd_accounts:fetch_realm(cb_context:account_id(Context))
+                     ),
+-    RegUsernames = lookup_regs(AccountRealm, 'sets'),
+-
+-    MapperFun = fun(J, A) ->
+-                        normalize_reg_devices(J, A, RegUsernames, NotRegTypes, ValueFun, AccountRealm)
+-                end,
+-    Options = [{'doc_type', kzd_devices:type()}
+-              ,{'mapper', MapperFun}
+-              ],
+-    crossbar_view:find(Context, View, Selector, Options).
++    case lookup_regs(AccountRealm, 'sets') of
++        {'error', _} ->
++            cb_context:add_system_error(503, <<"registration_unavailable">>
++                                        ,<<"Registration status could not be verified; retry shortly">>
++                                        ,Context);
++        RegUsernames ->
++            MapperFun = fun(J, A) ->
++                                normalize_reg_devices(J, A, RegUsernames, NotRegTypes, ValueFun, AccountRealm)
++                        end,
++            Options = [{'doc_type', kzd_devices:type()}
++                      ,{'mapper', MapperFun}
++                      ],
++            crossbar_view:find(Context, View, Selector, Options)
++    end.
+ 
+ -spec normalize_reg_devices(kz_json:object(), kz_json:objects(), gb_sets:set(kz_term:ne_binaries())
+                            ,kz_term:ne_binaries(), fun((kz_json:object()) -> kz_json:object()), kz_term:ne_binary()
+@@ -396,21 +401,22 @@ normalize_reg_devices(JObj, Acc, RegUsernames, NotRegTypes, ValueFun, AccountRea
+     end.
+ 
+ %%------------------------------------------------------------------------------
+-%% @doc Returns the complete list of registrations in a the first registrar
+-%% to respond for a given account realm.  This is not 100% accurate
+-%% as an endpoint might be stored in another registrar, but it is
+-%% accurate enough for the status icons.
++%% @doc Returns a complete, correlated snapshot from the advertised registrars.
++%% Incomplete or legacy unnumbered replies are unavailable, not proof that a
++%% currently registered endpoint is offline.
+ %% @end
+ %%------------------------------------------------------------------------------
+--spec lookup_regs(kz_term:ne_binary()) -> kz_json:objects().
++-spec lookup_regs(kz_term:ne_binary()) -> kz_json:objects() | {'error', any()}.
+ lookup_regs(AccountRealm) ->
+     lookup_regs(AccountRealm, 'list').
+ 
+ -spec lookup_regs(kz_term:ne_binary(), 'sets' | 'list') ->
+-          kz_json:objects() | gb_sets:set(kz_term:ne_binaries()).
++          kz_json:objects() | gb_sets:set(kz_term:ne_binaries()) | {'error', any()}.
+ lookup_regs(AccountRealm, ReturnType) ->
+-    Regs = search_registrations(AccountRealm),
+-    process_regs(Regs, ReturnType).
++    case search_registrations(AccountRealm) of
++        {'error', _}=Error -> Error;
++        Regs -> process_regs(Regs, ReturnType)
++    end.
+ 
+ -spec process_regs(kz_term:ne_binaries(), 'sets' | 'list') ->
+           kz_json:objects() | gb_sets:set(kz_term:ne_binaries()).
+@@ -424,11 +430,12 @@ process_regs(Registrations, 'list') ->
+      || AuthorizingId <- Registrations
+     ].
+ 
+--spec search_registrations(kz_term:ne_binary()) -> kz_term:ne_binaries().
++-spec search_registrations(kz_term:ne_binary()) -> kz_term:ne_binaries() | {'error', any()}.
+ search_registrations(AccountRealm) ->
+-    [kz_term:to_lower_binary(Username)
+-     || Username <- kapi_registration:search_realm_regs(AccountRealm, <<"summary">>)
+-    ].
++    case kapi_registration:search_realm_regs(AccountRealm, <<"summary">>) of
++        {'error', _}=Error -> Error;
++        Usernames -> [kz_term:to_lower_binary(Username) || Username <- Usernames]
++    end.
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Perform actions on a device.
+diff --git a/priv/couchdb/schemas/channel_monitoring.json b/priv/couchdb/schemas/channel_monitoring.json
+new file mode 100644
+index 00000000..fdfa913f
+--- /dev/null
++++ b/priv/couchdb/schemas/channel_monitoring.json
+@@ -0,0 +1,27 @@
++{
++  "$schema": "http://json-schema.org/draft-04/schema#",
++  "id": "channel_monitoring",
++  "description": "Account-administrator-only supervisor actions on an exact channel leg. Whisper speaks only to the selected leg; barge and join are three-way conversation, not takeover. Acceptance does not prove connection.",
++  "type": "object",
++  "oneOf": [
++    {
++      "type": "object",
++      "additionalProperties": false,
++      "properties": {
++        "action": {"type": "string", "enum": ["eavesdrop", "whisper", "barge", "join"]},
++        "device_id": {"type": "string", "pattern": "^[a-f0-9]{32}$", "description": "Enabled SIP phone in the authenticated account; no forwarding or PSTN routes are used."},
++        "timeout": {"type": "integer", "minimum": 5, "maximum": 60, "default": 20, "description": "Supervisor ringing timeout in seconds."}
++      },
++      "required": ["action", "device_id"]
++    },
++    {
++      "type": "object",
++      "additionalProperties": false,
++      "properties": {
++        "action": {"type": "string", "enum": ["stop_monitoring"]},
++        "request_id": {"type": "string", "pattern": "^[a-f0-9]{32}$", "description": "Correlation returned by the original start request. URL UUID must be its supervisor_call_id, never the target UUID."}
++      },
++      "required": ["action", "request_id"]
++    }
++  ]
++}
+diff --git a/src/cb_channel_monitor.erl b/src/cb_channel_monitor.erl
+new file mode 100644
+index 00000000..075e60c0
+--- /dev/null
++++ b/src/cb_channel_monitor.erl
+@@ -0,0 +1,239 @@
++%%% Account-scoped, administrator-only monitoring. No client-supplied routes.
++%%% This Source Code Form is subject to the Mozilla Public License, v. 2.0.
++-module(cb_channel_monitor).
++-export([is_action/1, validate/2, execute/2]).
++-ifdef(TEST).
++-export([valid_data/2, choose_channel/3, endpoint/3, ready/3, request/6, complete/3]).
++-endif.
++-include("crossbar.hrl").
++
++-spec is_action(any()) -> boolean().
++is_action(Action) -> lists:member(Action, [<<"eavesdrop">>, <<"whisper">>, <<"barge">>, <<"join">>, <<"stop_monitoring">>]).
++
++-spec validate(cb_context:context(), binary()) -> cb_context:context().
++validate(Context, CallId) ->
++    Account = cb_context:account_id(Context),
++    Authorized = is_binary(Account) andalso Account =:= cb_context:auth_account_id(Context)
++        andalso cb_context:is_account_admin(Context),
++    case {Authorized, valid_data(cb_context:req_data(Context), CallId)} of
++        {'false', _} -> fail(Context, 403, <<"account administrator required">>);
++        {_, 'false'} -> fail(Context, 400, <<"invalid monitoring request">>);
++        {'true', 'true'} -> prepare(Context, CallId)
++    end.
++
++-spec valid_data(kz_json:object(), binary()) -> boolean().
++valid_data(Data, CallId) ->
++    Action = kz_json:get_value(<<"action">>, Data),
++    Keys = kz_json:get_keys(Data),
++    safe_id(CallId) andalso
++        case Action of
++            <<"stop_monitoring">> ->
++                Keys -- [<<"action">>, <<"request_id">>] =:= []
++                    andalso hex_id(kz_json:get_value(<<"request_id">>, Data));
++            _ ->
++                Timeout = kz_json:get_value(<<"timeout">>, Data, 20),
++                is_action(Action) andalso Keys -- [<<"action">>, <<"device_id">>, <<"timeout">>] =:= []
++                    andalso hex_id(kz_json:get_value(<<"device_id">>, Data))
++                    andalso is_integer(Timeout) andalso Timeout >= 5 andalso Timeout =< 60
++        end.
++
++-spec prepare(cb_context:context(), binary()) -> cb_context:context().
++prepare(Context, CallId) ->
++    Account = cb_context:account_id(Context),
++    case locate(Account, CallId) of
++        {'ok', Channel} -> prepare_device(Context, Channel);
++        {'error', 'not_found'} -> fail(Context, 404, <<"channel not found in account">>);
++        {'error', 'conflict'} -> fail(Context, 409, <<"channel ownership is ambiguous">>);
++        _ -> fail(Context, 503, <<"channel ownership could not be verified">>)
++    end.
++
++-spec prepare_device(cb_context:context(), kz_json:object()) -> cb_context:context().
++prepare_device(Context, Channel) ->
++    Data = cb_context:req_data(Context),
++    case kz_json:get_value(<<"action">>, Data) of
++        <<"stop_monitoring">> ->
++            RequestId = kz_json:get_value(<<"request_id">>, Data),
++            case kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Monitor-Request-ID">>], Channel) of
++                RequestId -> prepared(Context, Channel, 'undefined');
++                _ -> fail(Context, 403, <<"not the correlated supervisor channel">>)
++            end;
++        _ ->
++            DeviceId = kz_json:get_value(<<"device_id">>, Data),
++            Account = cb_context:account_id(Context),
++            case kz_datamgr:open_doc(cb_context:db_name(Context), DeviceId) of
++                {'ok', Device} ->
++                    Realm = kzd_accounts:fetch_realm(Account),
++                    case endpoint(Account, Realm, Device) of
++                        {'ok', Endpoint} -> prepared(Context, Channel, Endpoint);
++                        _ -> fail(Context, 400, <<"an enabled account-owned SIP phone is required">>)
++                    end;
++                _ -> fail(Context, 404, <<"supervisor device not found">>)
++            end
++    end.
++
++-spec prepared(cb_context:context(), kz_json:object(), any()) -> cb_context:context().
++prepared(Context, Channel, Endpoint) ->
++    cb_context:set_resp_status(cb_context:store(Context, 'channel_monitor', {Channel, Endpoint}), 'success').
++
++%% Build only a registrar-resolved SIP endpoint. Device call forwarding, route,
++%% IP, failover, custom headers and client-provided endpoints are never copied.
++-spec endpoint(binary(), binary(), kz_json:object()) -> {'ok', kz_json:object()} | {'error', atom()}.
++endpoint(Account, Realm, Device) ->
++    User = kz_json:get_value([<<"sip">>, <<"username">>], Device),
++    Type = kz_json:get_value(<<"device_type">>, Device),
++    Valid = kz_json:get_value(<<"pvt_account_id">>, Device) =:= Account
++        andalso kz_doc:type(Device) =:= <<"device">>
++        andalso kz_json:get_value(<<"enabled">>, Device, 'true') =:= 'true'
++        andalso lists:member(Type, [<<"sip_device">>, <<"softphone">>])
++        andalso safe_aor(User) andalso safe_realm(Realm)
++        andalso kz_json:get_value([<<"sip">>, <<"realm">>], Device, Realm) =:= Realm,
++    case Valid of
++        'false' -> {'error', 'invalid_device'};
++        'true' ->
++            {'ok', kz_json:from_list([{<<"Invite-Format">>, <<"username">>}
++                                    ,{<<"Endpoint-Type">>, <<"sip">>}
++                                    ,{<<"To-User">>, User}, {<<"To-Username">>, User}, {<<"To-Realm">>, Realm}
++                                    ,{<<"Ignore-Early-Media">>, 'true'}
++                                    ,{<<"Bypass-Media">>, 'false'}])}
++    end.
++
++-spec locate(binary(), binary()) -> {'ok', kz_json:object()} | {'error', atom()}.
++locate(Account, CallId) ->
++    MsgId = kz_binary:rand_hex(16),
++    Req = [{<<"Call-ID">>, CallId}, {<<"Fields">>, <<"all">>}, {<<"Active-Only">>, 'false'}
++           ,{<<"Msg-ID">>, MsgId} | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
++    %% This is only a routing candidate, never authority. The target worker must
++    %% prove the live FS account before READY and again immediately before EXECUTE.
++    Count = kz_nodes:whapp_count('ecallmgr', 'true'),
++    Collector = fun(Replies) -> complete(Replies, Count, MsgId) end,
++    case kz_amqp_worker:call_collect(Req, fun kapi_call:publish_query_channels_req/1, Collector, 3000) of
++        {'ok', Replies} ->
++            case lists:all(fun(R) -> kz_api:msg_id(R) =:= MsgId andalso kapi_call:query_channels_resp_v(R) end, Replies) of
++                'true' -> choose_channel(Account, CallId, Replies);
++                'false' -> {'error', 'unavailable'}
++            end;
++        _ -> {'error', 'unavailable'}
++    end.
++
++-spec complete(kz_json:objects(), integer(), binary()) -> boolean().
++complete(Replies, Count, MsgId) when Count > 0 ->
++    Valid = lists:all(fun(R) -> kz_api:msg_id(R) =:= MsgId
++                        andalso kapi_call:query_channels_resp_v(R)
++                        andalso is_binary(kz_json:get_value(<<"Node">>, R)) end, Replies),
++    Valid andalso length(lists:usort([kz_json:get_value(<<"Node">>, R) || R <- Replies])) >= Count;
++complete(_, _, _) -> 'false'.
++
++-spec choose_channel(binary(), binary(), kz_json:objects()) -> {'ok', kz_json:object()} | {'error', atom()}.
++choose_channel(Account, CallId, Replies) ->
++    Channels = [C || R <- Replies, C <- [kz_json:get_value([<<"Channels">>, CallId], R)], C =/= 'undefined'],
++    Owners = lists:usort([{kz_json:get_value(<<"Account-ID">>, C), kz_json:get_value(<<"Media-Node">>, C)} || C <- Channels]),
++    case Owners of
++        [] -> {'error', 'not_found'};
++        [{Account, Node}] when is_binary(Node), byte_size(Node) > 0 -> {'ok', hd(Channels)};
++        [{_, _}] -> {'error', 'not_found'};
++        _ -> {'error', 'conflict'}
++    end.
++
++-spec execute(cb_context:context(), binary()) -> cb_context:context().
++execute(Context, CallId) ->
++    case cb_context:fetch(Context, 'channel_monitor') of
++        {Channel, Endpoint} -> execute_prepared(Context, CallId, Channel, Endpoint);
++        _ -> fail(Context, 403, <<"monitoring request was not authorized">>)
++    end.
++
++-spec execute_prepared(cb_context:context(), binary(), kz_json:object(), any()) -> cb_context:context().
++execute_prepared(Context, CallId, Channel, Endpoint) ->
++    Data = cb_context:req_data(Context),
++    Account = cb_context:account_id(Context),
++    RequestId = kz_json:get_value(<<"request_id">>, Data, kz_binary:rand_hex(16)),
++    SupervisorId = case kz_json:get_value(<<"action">>, Data) of
++                       <<"stop_monitoring">> -> CallId;
++                       _ -> kz_binary:rand_hex(16)
++                   end,
++    Request = request(Account, Data, Channel, Endpoint, RequestId, SupervisorId),
++    case kz_json:get_value(<<"action">>, Data) of
++        <<"stop_monitoring">> -> stop(Context, Request, RequestId, SupervisorId);
++        Action ->
++            Validator = fun(R) -> ready(R, RequestId, SupervisorId) end,
++            case kz_amqp_worker:call(Request, fun kapi_resource:publish_originate_req/1, Validator, 5000) of
++                {'ok', Ready} ->
++                    Execute = [{<<"Originate-UUID">>, SupervisorId}, {<<"Msg-ID">>, RequestId}
++                               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
++                    Queue = kz_json:get_ne_binary_value(<<"Originate-Queue">>, Ready),
++                    case kz_amqp_worker:cast(Execute, fun(P) -> kapi_dialplan:publish_originate_execute(Queue, P) end) of
++                        'ok' -> accepted(Context, Action, CallId, RequestId, SupervisorId);
++                        _ -> fail(Context, 503, <<"monitor execution could not be submitted">>)
++                    end;
++                _ -> fail(Context, 503, <<"live target or supervisor route could not be verified">>)
++            end
++    end.
++
++-spec ready(kz_json:object(), binary(), binary()) -> boolean().
++ready(R, RequestId, SupervisorId) ->
++    kapi_dialplan:originate_ready_v(R)
++        andalso kz_api:msg_id(R) =:= RequestId
++        andalso kz_json:get_value(<<"Originate-UUID">>, R) =:= SupervisorId
++        andalso kz_json:get_value(<<"Monitor-Request-ID">>, R) =:= RequestId
++        andalso kz_json:get_value(<<"Monitor-Verified">>, R) =:= 'true'.
++
++-spec request(binary(), kz_json:object(), kz_json:object(), any(), binary(), binary()) -> kz_term:proplist().
++request(Account, Data, Channel, Endpoint, RequestId, SupervisorId) ->
++    Action = kz_json:get_value(<<"action">>, Data),
++    Operation = case Action of <<"stop_monitoring">> -> <<"stop">>; _ -> <<"start">> end,
++    Mode = case Action of <<"whisper">> -> <<"whisper">>; <<"barge">> -> <<"full">>; <<"join">> -> <<"full">>; _ -> <<"listen">> end,
++    TargetId = kz_json:get_value(<<"Call-ID">>, Channel),
++    DeviceId = kz_json:get_value(<<"device_id">>, Data),
++    CCVs = kz_json:from_list(props:filter_undefined([{<<"Account-ID">>, Account}
++            ,{<<"Authorizing-ID">>, DeviceId}, {<<"Authorizing-Type">>, <<"device">>}
++            ,{<<"Monitor-Request-ID">>, RequestId}, {<<"Monitor-Target-ID">>, TargetId}
++            ,{<<"Monitor-Mode">>, Mode}, {<<"Eavesdrop-Enable-DTMF">>, 'false'}])),
++    Endpoints = case Endpoint of 'undefined' -> []; _ -> [kz_json:set_value(<<"Outbound-Call-ID">>, SupervisorId, Endpoint)] end,
++    props:filter_undefined([{<<"Application-Name">>, <<"eavesdrop">>}
++        ,{<<"Monitor-Operation">>, Operation}, {<<"Monitor-Account-ID">>, Account}
++        ,{<<"Monitor-Request-ID">>, RequestId}, {<<"Monitor-Device-ID">>, DeviceId}
++        ,{<<"Switch-Nodename">>, kz_json:get_value(<<"Media-Node">>, Channel)}
++        ,{<<"Eavesdrop-Call-ID">>, TargetId}, {<<"Eavesdrop-Mode">>, Mode}
++        ,{<<"Originate-UUID">>, SupervisorId}, {<<"Outbound-Call-ID">>, SupervisorId}
++        ,{<<"Originate-Immediate">>, 'false'}, {<<"Start-Control-Process">>, 'true'}
++        ,{<<"Timeout">>, kz_json:get_value(<<"timeout">>, Data, 20)}
++        ,{<<"Outbound-Caller-ID-Name">>, <<"Call Supervisor">>}, {<<"Outbound-Caller-ID-Number">>, <<"monitor">>}
++        ,{<<"Custom-Channel-Vars">>, CCVs}, {<<"Endpoints">>, Endpoints}
++        ,{<<"Msg-ID">>, RequestId} | kz_api:default_headers(?APP_NAME, ?APP_VERSION)]).
++
++-spec stop(cb_context:context(), kz_term:proplist(), binary(), binary()) -> cb_context:context().
++stop(Context, Request, RequestId, SupervisorId) ->
++    Validator = fun(R) -> kapi_resource:originate_resp_v(R)
++                    andalso kz_api:msg_id(R) =:= RequestId
++                    andalso kz_api:call_id(R) =:= SupervisorId
++                    andalso kz_json:get_value(<<"Monitor-Request-ID">>, R) =:= RequestId
++                    andalso kz_json:get_value(<<"Application-Response">>, R) =:= <<"MONITOR_STOPPED">> end,
++    case kz_amqp_worker:call(Request, fun kapi_resource:publish_originate_req/1, Validator, 5000) of
++        {'ok', _} -> accepted(Context, <<"stop_monitoring">>, SupervisorId, RequestId, SupervisorId);
++        _ -> fail(Context, 503, <<"supervisor termination could not be verified">>)
++    end.
++
++-spec accepted(cb_context:context(), binary(), binary(), binary(), binary()) -> cb_context:context().
++accepted(Context, Action, Target, RequestId, SupervisorId) ->
++    lager:notice("call_monitor account=~s admin=~s action=~s target=~s supervisor=~s request=~s accepted"
++                 ,[cb_context:account_id(Context), cb_context:auth_user_id(Context), Action, Target, SupervisorId, RequestId]),
++    crossbar_util:response_202(<<"monitor request accepted; connection is not confirmed">>,
++        kz_json:from_list([{<<"status">>, <<"accepted">>}, {<<"action">>, Action}
++                          ,{<<"request_id">>, RequestId}, {<<"target_call_id">>, Target}
++                          ,{<<"supervisor_call_id">>, SupervisorId}]), Context).
++
++-spec fail(cb_context:context(), integer(), binary()) -> cb_context:context().
++fail(Context, Code, Message) ->
++    lager:notice("call_monitor account=~p admin=~p rejected code=~B reason=~s"
++                 ,[cb_context:account_id(Context), cb_context:auth_user_id(Context), Code, Message]),
++    crossbar_util:response('error', Message, Code, Context).
++-spec safe_id(any()) -> boolean().
++safe_id(V) -> matches(V, <<"^[A-Za-z0-9_.:@-]{1,128}$">>).
++-spec hex_id(any()) -> boolean().
++hex_id(V) -> matches(V, <<"^[a-f0-9]{32}$">>).
++-spec safe_aor(any()) -> boolean().
++safe_aor(V) -> matches(V, <<"^[A-Za-z0-9_.+-]{1,128}$">>).
++-spec safe_realm(any()) -> boolean().
++safe_realm(V) -> matches(V, <<"^[A-Za-z0-9.-]{1,253}$">>).
++-spec matches(any(), binary()) -> boolean().
++matches(V, Regex) when is_binary(V) -> re:run(V, Regex, [{'capture', 'none'}]) =:= 'match';
++matches(_, _) -> 'false'.
+diff --git a/src/kazoo_monster_catalog.erl b/src/kazoo_monster_catalog.erl
+new file mode 100644
+--- /dev/null
++++ b/src/kazoo_monster_catalog.erl
+@@ -0,0 +1,124 @@
++%%% MPL-2.0. Private candidate: absent-only installer app registration.
++-module(kazoo_monster_catalog).
++-export([init_app/3]).
++-ifdef(TEST).
++-export([create_only/4, read_regular/2, read_regular/3, master_db/1]).
++-endif.
++-include_lib("kernel/include/file.hrl").
++
++-spec init_app(binary(), binary() | string(), binary()) -> created | preserved | {error, atom()}.
++init_app(Name, Path0, Api) ->
++    try
++        true = lists:member(Name, [<<"acdc">>,<<"accounts">>,<<"callflows">>,<<"csv-onboarding">>,<<"fax">>
++                                  ,<<"numbers">>,<<"pbxs">>,<<"voicemails">>,<<"webhooks">>,<<"voip">>]),
++        Path = binary_to_list(iolist_to_binary(Path0)),
++        true = filename:pathtype(Path) =:= absolute,
++        Uri = uri_string:parse(Api),
++        true = lists:member(maps:get(scheme,Uri),[<<"http">>,<<"https">>]),
++        false = maps:is_key(userinfo,Uri), false = maps:is_key(query,Uri), false = maps:is_key(fragment,Uri),
++        true = byte_size(maps:get(host,Uri)) > 0,
++        true = lists:suffix("/v2/",binary_to_list(maps:get(path,Uri))),
++        Metadata0 = kz_json:decode(read_regular(filename:join([Path,"metadata","app.json"]),262144)),
++        Name = kz_json:get_value(<<"name">>,Metadata0),
++        Metadata = kz_json:set_value(<<"api_url">>,Api,kz_doc:public_fields(Metadata0)),
++        {ok,_} = kz_json_schema:validate(<<"app">>,Metadata),
++        Images = images(Path, Metadata),
++        %% No oldest-account discovery or implicit configuration writes here.
++        %% Bootstrap remains the installer's explicit ensure_master_account step.
++        Db = master_db(kapps_config:get_ne_binary(<<"accounts">>, <<"master_account_id">>)),
++        create_only(Db,Metadata,Images,fun storage/2)
++    catch _:_ -> {error, invalid_source_or_unavailable} end.
++
++-spec read_regular(string(), non_neg_integer()) -> binary().
++read_regular(Path, Limit) ->
++    read_regular(Path, Limit, fun() -> ok end).
++
++-spec master_db(term()) -> binary().
++master_db(Id) when is_binary(Id), byte_size(Id) =:= 32 ->
++    match = re:run(Id, <<"^[0-9a-f]{32}$">>, [{capture, none}]),
++    kzs_util:format_account_db(Id).
++
++-spec read_regular(string(), non_neg_integer(), fun(() -> term())) -> binary().
++read_regular(Path, Limit, AfterRead) ->
++    safe_ancestors(filename:split(filename:absname(Path)), ""),
++    {ok,Before=#file_info{type=regular,uid=0,links=1,mode=Mode,size=Size}}=file:read_link_info(Path),
++    true = (Mode band 8#022) =:= 0 andalso Size =< Limit,
++    {ok,Bytes}=file:read_file(Path), true = byte_size(Bytes) =:= Size,
++    _ = AfterRead(),
++    %% Ignore only access time, which our own read may legitimately change.
++    %% Two byte reads also reject equal-size in-place changes on filesystems
++    %% whose modification timestamp resolution is coarser than the operation.
++    {ok,After}=file:read_link_info(Path),
++    true = Before#file_info{atime=undefined} =:= After#file_info{atime=undefined},
++    {ok,Bytes}=file:read_file(Path),
++    {ok,Final}=file:read_link_info(Path),
++    true = After#file_info{atime=undefined} =:= Final#file_info{atime=undefined},
++    safe_ancestors(filename:split(filename:absname(Path)), ""),
++    Bytes.
++
++-spec safe_ancestors([string()], string()) -> ok.
++safe_ancestors([],_) -> ok;
++safe_ancestors([Part|Rest],Prefix) ->
++    true = Part =/= ".." andalso Part =/= ".",
++    Next=case Prefix of "" -> Part; _ -> filename:join(Prefix,Part) end,
++    {ok,#file_info{type=Type,uid=0,mode=Mode}}=file:read_link_info(Next),
++    true = Type =/= symlink,
++    true = (Mode band 8#022) =:= 0 orelse (Type =:= directory andalso (Mode band 8#1000) =/= 0 andalso Rest =/= []),
++    safe_ancestors(Rest,Next).
++
++-spec images(string(), term()) -> [{binary(), binary(), binary()}].
++images(Path,Meta) ->
++    Icon=kz_json:get_value(<<"icon">>,Meta), Shots=kz_json:get_value(<<"screenshots">>,Meta,[]),
++    true=is_list(Shots) andalso length(Shots)=<10,
++    Specs=case Icon of undefined -> []; _ -> [{Icon,"icon"}] end ++ [{I,"screenshots"} || I<-Shots],
++    true=length(Specs)=:=length(lists:usort([I || {I,_}<-Specs])),
++    Values=[begin
++        true=is_binary(Name) andalso byte_size(Name)>0 andalso byte_size(Name)=<192,
++        true=filename:basename(Name)=:=Name,
++        nomatch=binary:match(Name,[<<"/">>,<<"\\">>,<<0>>]),
++        Mime=kz_mime:from_filename(Name),
++        true=lists:member(Mime,[<<"image/png">>,<<"image/jpeg">>,<<"image/gif">>,<<"image/svg+xml">>]),
++        Bytes=read_regular(filename:join([Path,"metadata",Kind,binary_to_list(Name)]),5242880),
++        {Name,Mime,Bytes}
++    end || {Name,Kind}<-Specs],
++    true=lists:sum([byte_size(B) || {_,_,B}<-Values])=<16777216, Values.
++
++-spec create_only(binary(), term(), [{binary(),binary(),binary()}], fun((atom(),term())->term())) -> created | preserved | {error,atom()}.
++create_only(Db,Metadata,Images,IO) ->
++    Name=kz_json:get_value(<<"name">>,Metadata),
++    case IO(find,{Db,Name}) of
++        {ok,[_]} -> preserved;
++        {ok,[]} -> create_absent(Db,Metadata,Images,IO);
++        {ok,_} -> {error,ambiguous_existing_apps};
++        _ -> {error,catalog_unavailable}
++    end.
++
++-spec create_absent(binary(), term(), [{binary(),binary(),binary()}], fun((atom(),term())->term())) -> created | {error,atom()}.
++create_absent(Db,Meta,Images,IO) ->
++    Name=kz_json:get_value(<<"name">>,Meta),
++    Id=binary:part(binary:encode_hex(crypto:hash(sha256,term_to_binary({monster_app_v1,Db,Name})),lowercase),0,32),
++    case IO(read,{Db,Id}) of
++        {error,not_found} ->
++            Attachments=kz_json:from_list([{N,kz_json:from_list([{<<"content_type">>,M},{<<"data">>,base64:encode(B)}])} || {N,M,B}<-Images]),
++            Doc=kz_json:set_values([{<<"_id">>,Id},{<<"_attachments">>,Attachments}],kz_doc:public_fields(Meta)),
++            case IO(create,{Db,Doc}) of
++                {ok,_} ->
++                    case IO(verify,{Db,Id,Meta,Images}) of true -> created; _ -> {error,created_unverified} end;
++                {error,conflict} -> {error,concurrent_create};
++                _ -> {error,create_outcome_unknown}
++            end;
++        _ -> {error,target_not_proven_absent}
++    end.
++
++-spec storage(atom(),term()) -> term().
++storage(find,{Db,Name}) ->
++    kz_datamgr:get_results(Db,<<"apps_store/crossbar_listing">>,[{key,Name},{limit,2}]);
++storage(read,{Db,Id}) -> kz_datamgr:open_doc(Db,Id);
++storage(create,{Db,Doc}) -> kzd_app:save(Db,Doc);
++storage(verify,{Db,Id,Meta,Images}) ->
++    case kz_datamgr:open_doc(Db,Id) of
++        {ok,Saved} ->
++            lists:all(fun(K)->kz_json:get_value(K,Meta)=:=kz_json:get_value(K,Saved) end,kz_json:get_keys(Meta))
++            andalso lists:all(fun({N,_,Bytes})->kz_datamgr:fetch_attachment(Db,Id,N)=:={ok,Bytes} end,Images);
++        _ -> false
++    end.
+diff --git a/src/modules/cb_members.erl b/src/modules/cb_members.erl
+new file mode 100644
+index 00000000..5121def6
+--- /dev/null
++++ b/src/modules/cb_members.erl
+@@ -0,0 +1,233 @@
++%%% SPDX-License-Identifier: MPL-2.0
++%%% Account users with bounded, current device/registration evidence.
++%%% api_util treats members as a built-in custom route; its devices suffix
++%%% belongs to this module, not the independent cb_devices resource.
++-module(cb_members).
++-export([init/0, allowed_methods/0, allowed_methods/1, resource_exists/0,
++         resource_exists/1, validate/2]).
++-ifdef(TEST).
++-export([page_size/1, decode_cursor/2, encode_cursor/2, device_status/5,
++         project/5, authorized/1, scoped/2, page/3]).
++-endif.
++-include_lib("crossbar/src/crossbar.hrl").
++-define(DEVICE_LIMIT, 1000).
++-define(REGISTRATION_LIMIT, 10000).
++-define(NOT_REG_TYPES, [<<"application">>, <<"cellphone">>, <<"sip_url">>, <<"landline">>, <<"smartphone">>]).
++
++-spec init() -> ok.
++init() ->
++    _ = crossbar_bindings:bind(<<"*.allowed_methods.members">>, ?MODULE, allowed_methods),
++    _ = crossbar_bindings:bind(<<"*.resource_exists.members">>, ?MODULE, resource_exists),
++    _ = crossbar_bindings:bind(<<"*.validate.members">>, ?MODULE, validate), ok.
++-spec allowed_methods() -> http_methods().
++allowed_methods() -> [].
++-spec allowed_methods(path_token()) -> http_methods().
++allowed_methods(<<"devices">>) -> [?HTTP_GET];
++allowed_methods(_) -> [].
++-spec resource_exists() -> boolean().
++resource_exists() -> false.
++-spec resource_exists(path_token()) -> boolean().
++resource_exists(<<"devices">>) -> true;
++resource_exists(_) -> false.
++
++-spec validate(cb_context:context(), path_token()) -> cb_context:context().
++validate(Context, <<"devices">>) ->
++    try get_members(Context)
++    catch
++        throw:{members_error, Code, Message} -> cb_context:add_system_error(Code, Message, kz_json:new(), Context);
++        _:_ -> cb_context:add_system_error(503, <<"member_devices_unavailable">>, kz_json:new(), Context)
++    end;
++validate(Context, _) -> cb_context:add_system_error(404, <<"not_found">>, kz_json:new(), Context).
++
++get_members(Context) ->
++    Account = cb_context:account_id(Context),
++    need(id(Account) andalso cb_context:is_authenticated(Context), 403, <<"forbidden">>),
++    need(cb_context:req_nouns(Context) =:= [{<<"members">>, [<<"devices">>]}, {<<"accounts">>, [Account]}]
++         andalso cb_context:req_verb(Context) =:= ?HTTP_GET
++         andalso cb_context:db_name(Context) =:= kzs_util:format_account_db(Account), 403, <<"invalid_member_devices_scope">>),
++    need(authorized(Context) andalso authorized(scoped(Context, <<"users">>))
++         andalso authorized(scoped(Context, <<"devices">>)), 403, <<"member_devices_forbidden">>),
++    Query = cb_context:query_string(Context),
++    need(lists:all(fun(K) -> lists:member(K, [<<"page_size">>, <<"cursor">>]) end, kz_json:get_keys(Query)),
++         400, <<"unsupported_member_devices_query">>),
++    Size = page_size(kz_json:get_value(<<"page_size">>, Query)),
++    After = decode_cursor(Account, kz_json:get_value(<<"cursor">>, Query)),
++    UserStart = case After of undefined -> [<<"user">>]; _ -> [<<"user">>, After] end,
++    UserRows = rows(Context, <<"user">>, UserStart, Size + 2),
++    {Users, HasMore} = page(UserRows, After, Size),
++    DeviceRows = rows(Context, <<"device">>, [<<"device">>], ?DEVICE_LIMIT + 1),
++    Complete = length(DeviceRows) =< ?DEVICE_LIMIT,
++    Devices = case Complete of true -> DeviceRows; false -> [] end,
++    Realm = account_realm(Account),
++    Started = erlang:system_time(millisecond),
++    %% Existing collector has a bounded 2s collection window and rejects
++    %% missing peers/parts/correlation. No local cache or persisted online flag.
++    Snapshot = case Complete andalso Users =/= [] andalso Devices =/= [] of
++                   true -> registrations(Realm);
++                   false -> {error, not_requested}
++               end,
++    Finished = erlang:system_time(millisecond),
++    NotRegTypes = kapps_config:get_ne_binaries(<<"crossbar.devices">>, <<"not_registrable_device_types">>, ?NOT_REG_TYPES),
++    Items = [project(U, Devices, Complete, {Realm, Snapshot, NotRegTypes}, Finished) || U <- Users],
++    Next = case HasMore of true -> encode_cursor(Account, kz_doc:id(lists:last(Users))); false -> null end,
++    Evidence = kz_json:from_list([{<<"complete">>, element(1, Snapshot) =:= ok},
++        {<<"reason">>, snapshot_reason(Snapshot)}, {<<"started_at_ms">>, Started}, {<<"observed_at_ms">>, Finished},
++        {<<"expiry_available">>, expiry_available(Snapshot)},
++        {<<"source">>, <<"cluster_registrar_detail">>}, {<<"semantics">>, <<"registration_not_call_reachability">>}]),
++    Data = kz_json:from_list([{<<"items">>, Items}, {<<"count">>, length(Items)}, {<<"page_size">>, Size},
++        {<<"has_more">>, HasMore}, {<<"next_cursor">>, Next}, {<<"total_members">>, null},
++        {<<"device_inventory">>, kz_json:from_list([{<<"complete">>, Complete}, {<<"limit">>, ?DEVICE_LIMIT},
++            {<<"count">>, case Complete of true -> length(Devices); false -> null end},
++            {<<"reason">>, case Complete of true -> <<"complete">>; false -> <<"limit_exceeded">> end}])},
++        {<<"registration_snapshot">>, Evidence}]),
++    cb_context:setters(Context, [{fun cb_context:set_resp_status/2, success},
++        {fun cb_context:set_resp_data/2, Data}, {fun cb_context:set_resp_etag/2, undefined},
++        {fun(C, V) -> cb_context:set_resp_header(C, <<"cache-control">>, V) end, <<"no-store">>}]).
++
++need(true, _, _) -> ok;
++need(false, Code, Message) -> throw({members_error, Code, Message}).
++id(V) when is_binary(V), byte_size(V) =:= 32 ->
++    lists:all(fun(C) -> (C >= $0 andalso C =< $9) orelse (C >= $a andalso C =< $f) end, binary_to_list(V));
++id(_) -> false.
++
++page_size(undefined) -> 25;
++page_size(N) when is_integer(N), N >= 1, N =< 100 -> N;
++page_size(B) when is_binary(B), byte_size(B) =< 3 ->
++    try N = binary_to_integer(B), need(integer_to_binary(N) =:= B, 400, <<"invalid_page_size">>), page_size(N)
++    catch _:_ -> throw({members_error, 400, <<"invalid_page_size">>}) end;
++page_size(_) -> throw({members_error, 400, <<"invalid_page_size">>}).
++
++encode_cursor(Account, LastId) -> kz_base64url:encode(kz_json:encode([1, Account, LastId])).
++decode_cursor(_, undefined) -> undefined;
++decode_cursor(Account, Value) when is_binary(Value), byte_size(Value) =< 256 ->
++    try
++        [1, Account, LastId] = kz_json:decode(kz_base64url:decode(Value)),
++        true = id(LastId), true = encode_cursor(Account, LastId) =:= Value, LastId
++    catch _:_ -> throw({members_error, 400, <<"invalid_member_cursor">>}) end;
++decode_cursor(_, _) -> throw({members_error, 400, <<"invalid_member_cursor">>}).
++
++rows(Context, Type, Start, Limit) ->
++    Options = [{startkey, Start}, {endkey, [Type, kz_json:new()]}, include_docs, {limit, Limit}, {reduce, false}],
++    case kz_datamgr:get_results(cb_context:db_name(Context), <<"crossbar_listings/by_type_id">>, Options) of
++        {ok, Rows} when is_list(Rows), length(Rows) =< Limit ->
++            Docs = [kz_json:get_json_value(<<"doc">>, Row) || Row <- Rows],
++            need(lists:all(fun(D) -> id(kz_doc:id(D)) andalso kz_doc:type(D) =:= Type
++                       andalso kz_doc:account_id(D) =:= cb_context:account_id(Context)
++                       andalso not kz_doc:is_soft_deleted(D) andalso not kz_json:is_true(<<"_deleted">>, D) end, Docs),
++                 503, <<"invalid_member_devices_inventory">>),
++            Ids = [kz_doc:id(D) || D <- Docs],
++            need(Ids =:= lists:usort(Ids), 503, <<"unordered_member_devices_inventory">>), Docs;
++        _ -> throw({members_error, 503, <<"member_devices_inventory_unavailable">>})
++    end.
++
++page(Docs, After, Size) ->
++    Remaining = case After of undefined -> Docs; _ -> [D || D <- Docs, kz_doc:id(D) > After] end,
++    {lists:sublist(Remaining, Size), length(Remaining) > Size}.
++
++account_realm(Account) ->
++    case kzd_accounts:fetch_realm(Account) of
++        B when is_binary(B), byte_size(B) > 0, byte_size(B) =< 253 -> kz_term:to_lower_binary(B);
++        _ -> undefined
++    end.
++registrations(undefined) -> {error, missing_account_realm};
++registrations(Realm) ->
++    Result = try kapi_registration:search_realm_regs(Realm, <<"detail">>)
++             catch _:_ -> {error, registration_unavailable} end,
++    case Result of
++        Values when is_list(Values), length(Values) =< ?REGISTRATION_LIMIT ->
++            %% Detail also carries Contact/Path/Call-ID. Discard every field
++            %% except validated AOR and expiry immediately; none is returned or
++            %% logged. A complete summary alone may include expired DB rows.
++            try {ok, lists:foldl(fun(V, Acc) ->
++                AOR = kz_json:get_ne_binary_value(<<"AOR">>, V),
++                true = is_binary(AOR) andalso byte_size(AOR) =< 512,
++                [Username, Domain] = binary:split(kz_term:to_lower_binary(AOR), <<"@">>, [global]),
++                true = byte_size(Username) > 0 andalso byte_size(Username) =< 256 andalso Domain =:= Realm,
++                Key = <<Username/binary, "@", Domain/binary>>,
++                Expiry = registration_expiry(kz_json:get_value(<<"Expires">>, V)),
++                maps:update_with(Key, fun(Old) -> [Expiry|Old] end, [Expiry], Acc)
++            end, #{}, Values)} catch _:_ -> {error, invalid_registration_response} end;
++        {error, _} -> {error, registration_unavailable};
++        _ -> {error, invalid_registration_response}
++    end.
++snapshot_reason({ok, _}) -> <<"complete">>;
++snapshot_reason({error, Reason}) -> atom_to_binary(Reason, utf8).
++%% Kamailio usrloc stores absolute time_t (sqlops DB1_DATETIME -> integer).
++%% Zero is its documented permanent-binding sentinel, not a guessed TTL.
++registration_expiry(0) -> permanent;
++registration_expiry(Seconds) when is_integer(Seconds), Seconds >= 946684800, Seconds =< 4102444800 -> Seconds * 1000;
++registration_expiry(_) -> unknown.
++expiry_available({ok, Bindings}) -> not lists:member(unknown, lists:append(maps:values(Bindings)));
++expiry_available(_) -> false.
++
++project(User, Devices, Complete, {Realm, Snapshot, NotRegTypes}, Observed) ->
++    UserId = kz_doc:id(User),
++    Owned = [D || D <- Devices, kz_json:get_value(<<"owner_id">>, D) =:= UserId],
++    SafeDevices = [kz_json:from_list([{<<"id">>, kz_doc:id(D)}, {<<"name">>, text(<<"name">>, D)},
++        {<<"type">>, text(<<"device_type">>, D)}, {<<"enabled">>, not kz_json:is_false(<<"enabled">>, D)},
++        {<<"registration">>, kz_json:set_value(<<"observed_at_ms">>, Observed,
++                                             device_status(D, Realm, Snapshot, NotRegTypes, Observed))}]) || D <- Owned],
++    kz_json:from_list([{<<"id">>, UserId}, {<<"name">>, text(<<"name">>, User)},
++        {<<"first_name">>, text(<<"first_name">>, User)}, {<<"last_name">>, text(<<"last_name">>, User)},
++        {<<"enabled">>, not kz_json:is_false(<<"enabled">>, User)}, {<<"devices">>, SafeDevices},
++        {<<"devices_complete">>, Complete}, {<<"device_count">>, case Complete of true -> length(Owned); false -> null end}]).
++text(Key, Doc) ->
++    case kz_json:get_value(Key, Doc) of
++        B when is_binary(B), byte_size(B) =< 256 -> B;
++        _ -> null
++    end.
++
++device_status(Device, AccountRealm, Snapshot, NotRegTypes, Observed) ->
++    Type = kz_json:get_value(<<"device_type">>, Device),
++    Method = kz_json:get_value([<<"sip">>, <<"method">>], Device, <<"password">>),
++    Username = kz_json:get_ne_binary_value([<<"sip">>, <<"username">>], Device),
++    DeviceRealm = kz_json:get_ne_binary_value([<<"sip">>, <<"realm">>], Device, AccountRealm),
++    RegType = not lists:member(Type, NotRegTypes),
++    case {RegType, Method, Username, DeviceRealm, AccountRealm, Snapshot} of
++        {false, _, _, _, _, _} -> status(<<"unknown">>, <<"not_registration_based">>, false);
++        {_, M, _, _, _, _} when M =/= <<"password">> -> status(<<"unknown">>, <<"non_registration_auth">>, false);
++        {_, _, undefined, _, _, _} -> status(<<"unknown">>, <<"missing_registration_identity">>, true);
++        {_, _, _, _, undefined, _} -> status(<<"unknown">>, <<"missing_account_realm">>, true);
++        {_, _, U, _, _, _} when byte_size(U) > 256 -> status(<<"unknown">>, <<"invalid_registration_identity">>, true);
++        {_, _, _, R, A, _} when not is_binary(R); not is_binary(A) -> status(<<"unknown">>, <<"invalid_registration_identity">>, true);
++        {_, _, U, R, A, {ok, Bindings}} ->
++            case kz_term:to_lower_binary(R) =:= A of
++                false -> status(<<"unknown">>, <<"custom_realm_not_queried">>, true);
++                true ->
++                    Key = <<(kz_term:to_lower_binary(U))/binary, "@", A/binary>>,
++                    binding_status(maps:get(Key, Bindings, []), Observed)
++            end;
++        _ -> status(<<"unknown">>, <<"registration_unavailable">>, true)
++    end.
++status(State, Reason, Registrable) ->
++    kz_json:from_list([{<<"status">>, State}, {<<"reason">>, Reason}, {<<"registrable">>, Registrable}, {<<"expires_at_ms">>, null}]).
++binding_status([], _) -> status(<<"offline">>, <<"not_registered">>, true);
++binding_status(Expiries, Observed) ->
++    Future = [E || E <- Expiries, is_integer(E), E > Observed],
++    case {lists:member(permanent, Expiries), Future, lists:member(unknown, Expiries)} of
++        {true, _, _} -> status(<<"online">>, <<"registered_permanent">>, true);
++        {false, [_|_], _} -> kz_json:set_value(<<"expires_at_ms">>, lists:max(Future), status(<<"online">>, <<"registered">>, true));
++        {false, [], true} -> status(<<"unknown">>, <<"expiry_unavailable">>, true);
++        {false, [], false} -> status(<<"offline">>, <<"registration_expired">>, true)
++    end.
++
++scoped(Context, Resource) ->
++    Account = cb_context:account_id(Context),
++    cb_context:setters(Context, [{fun cb_context:set_req_nouns/2, [{Resource, []}, {<<"accounts">>, [Account]}]},
++        {fun cb_context:set_raw_path/2, <<"/", (cb_context:api_version(Context))/binary, "/accounts/", Account/binary, "/", Resource/binary>>},
++        {fun cb_context:set_req_verb/2, ?HTTP_GET}, {fun cb_context:set_query_string/2, kz_json:new()},
++        {fun cb_context:set_req_data/2, kz_json:new()}, {fun cb_context:set_doc/2, kz_json:new()}]).
++authorized(Context) ->
++    [{Resource, Params}|_] = cb_context:req_nouns(Context),
++    Global = crossbar_bindings:pmap(api_util:create_event_name(Context, <<"authorize">>), Context),
++    Module = crossbar_bindings:pmap(api_util:create_event_name(Context, <<"authorize.", Resource/binary>>), [Context|Params]),
++    NoStop = lists:all(fun(true) -> true; (false) -> true; ({true, _}) -> true; ({false, _}) -> true; (_) -> false end, Global ++ Module),
++    Allowed = lists:any(fun(true) -> true; ({true, _}) -> true; (_) -> false end, Global ++ Module),
++    NoStop andalso Allowed andalso scopes_allowed(Context, Resource).
++scopes_allowed(Context, Resource) ->
++    case {cb_context:auth_token_type(Context), kz_json:get_ne_binary_value(<<"method">>, cb_context:auth_doc(Context))} of
++        {'x-auth-token', Method} when is_binary(Method) ->
++            Required = crossbar_bindings:pmap(api_util:create_event_name(Context, <<"allowed_scopes.", Resource/binary>>), Method),
++            lists:all(fun(Scopes) when is_list(Scopes) -> kz_auth_scope:all(cb_context:auth_token(Context), Scopes); (_) -> false end, Required);
++        _ -> true
++    end.

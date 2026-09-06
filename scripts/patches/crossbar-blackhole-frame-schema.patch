@@ -1,0 +1,18 @@
+diff --git a/priv/couchdb/schemas/system_config.blackhole.json b/priv/couchdb/schemas/system_config.blackhole.json
+index 4628f399..d3f53c3e 100644
+--- a/priv/couchdb/schemas/system_config.blackhole.json
++++ b/priv/couchdb/schemas/system_config.blackhole.json
+@@ -84,6 +84,13 @@
+             "description": "blackhole max_connections_per_ip",
+             "type": "integer"
+         },
++        "max_frame_size_bytes": {
++            "default": 65536,
++            "description": "Maximum incoming WebSocket frame or reassembled message size in bytes, applied to new connections. Invalid settings fall back to 65536. Small limits can reject legitimate subscription and legacy API requests.",
++            "maximum": 1048576,
++            "minimum": 1,
++            "type": "integer"
++        },
+         "max_queued_messages": {
+             "default": 50,
+             "description": "blackhole max_queued_messages",

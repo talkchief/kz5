@@ -5,7 +5,8 @@ wire and public-handler checks recorded below. The earlier token-redaction
 checkpoint remains separate evidence. No frame-hardening deployment or live
 WebSocket acceptance is claimed here; connection-lifetime token expiry and
 outbound backpressure remain outside this change. Installer transitions from
-the previous applied patches require the separate upgrade work described below.
+the previous applied patches now have separately verified source-transition
+fixtures; actual deployment remains a separate gate.
 
 ## Pinned source findings
 
@@ -237,8 +238,9 @@ The frozen runner is `64350c095d01231b505ec3eaa460ab75658c61f8812f459cbc7f61e91d
 the fixture is `2c532e07ce4e46059e4602129643817076b0183acd08dbac0896360b46071ed5`.
 The earlier exit-99 attempt remains retained and is not reclassified.
 
-One installer gap remains at this checkpoint: the required-patch helper accepts
-clean and fully current trees, but cannot yet upgrade an earlier applied
-Blackhole redaction patch or the previous Crossbar aggregate. A bounded,
-explicit old-to-new transition with private preflight and negative fixtures is
-being prepared separately; these wire tests do not certify that upgrade path.
+The wire checkpoint originally left an installer gap: the generic patch helper
+could not upgrade an earlier Blackhole redaction patch or Crossbar aggregate.
+The main installer now uses explicit old-to-new transitions for these two
+families. Session `36178` separately passed 42 source-transition fixtures and
+the main installer smoke; see [scope and evidence](installer_source_transitions.md).
+This is not a live checkout upgrade or deployment test.

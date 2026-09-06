@@ -1594,10 +1594,8 @@ ensure_kazoo_sources() {
     # later callback edits must not invalidate reverse checks of earlier OTP
     # and announcement hunks. Feature patches remain review/test provenance.
     # ACDC is already part of kz5; its historical patches are not applied.
-    apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
-        "$SCRIPT_DIR/patches/crossbar-kazoo5-integration.patch"
-    apply_required_source_patch "$KAZOO_ROOT/applications/blackhole" \
-        "$SCRIPT_DIR/patches/blackhole-kazoo5-integration.patch"
+    apply_kazoo_integration_patch crossbar
+    apply_kazoo_integration_patch blackhole
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
@@ -1605,6 +1603,206 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$KAZOO_ROOT/applications/cdr" \
         "$SCRIPT_DIR/patches/cdr-report-timestamp-fallback.patch"
 }
+
+apply_kazoo_integration_patch() (
+    set -euo pipefail
+    [[ $# == 1 ]] || die 'Expected one Kazoo integration family'
+    # Scope every Git command to this function's explicit working directory.
+    # Inherited repository/worktree/config/trace overrides must not redirect
+    # the private preflight or the eventual source write. This is a subshell:
+    # the caller's environment is unchanged.
+    local transition_git_env
+    for transition_git_env in "${!GIT_@}"; do
+        unset -v "$transition_git_env" || die 'Cannot isolate Git environment'
+    done
+    local transition_app=$1 transition_new transition_old transition_delta
+    local transition_source transition_relative transition_path
+    local transition_state transition_stage transition_apply
+    local transition_files=() transition_old_files=() transition_delta_files=()
+    local transition_created_files=()
+    case $transition_app in
+        blackhole)
+            transition_new=blackhole-kazoo5-integration.patch
+            transition_old=blackhole-token-redaction.patch
+            transition_delta=blackhole-redaction-to-integration.patch
+            transition_files=(src/blackhole_bindings.erl src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl)
+            transition_old_files=(src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl)
+            transition_delta_files=(src/blackhole_bindings.erl src/blackhole_socket_handler.erl)
+            ;;
+        crossbar)
+            transition_new=crossbar-kazoo5-integration.patch
+            transition_old=crossbar-kazoo5-before-frame.patch
+            transition_delta=crossbar-blackhole-frame-schema.patch
+            transition_files=(priv/couchdb/schemas/queue_update.json priv/couchdb/schemas/queues.json
+                src/api_util.erl src/crossbar_auth.erl src/modules/cb_channels.erl src/modules/cb_devices.erl
+                priv/couchdb/schemas/channel_monitoring.json src/cb_channel_monitor.erl
+                src/kazoo_monster_catalog.erl src/modules/cb_members.erl
+                priv/couchdb/schemas/system_config.blackhole.json)
+            transition_old_files=("${transition_files[@]:0:10}")
+            transition_delta_files=(priv/couchdb/schemas/system_config.blackhole.json)
+            transition_created_files=(priv/couchdb/schemas/channel_monitoring.json src/cb_channel_monitor.erl
+                src/kazoo_monster_catalog.erl src/modules/cb_members.erl)
+            ;;
+        *) die 'Unknown Kazoo integration family' ;;
+    esac
+    transition_safe_file() {
+        local transition_file=$1
+        [[ -f $transition_file && ! -L $transition_file &&
+           $(realpath -e -- "$transition_file") == "$transition_file" &&
+           $(stat -c %h -- "$transition_file") == 1 ]] ||
+            die 'Required integration input is missing, linked or unsafe'
+    }
+    transition_new="$SCRIPT_DIR/patches/$transition_new"
+    transition_old="$SCRIPT_DIR/patches/$transition_old"
+    transition_delta="$SCRIPT_DIR/patches/$transition_delta"
+    if [[ $DRY_RUN == true ]]; then
+        transition_safe_file "$transition_new"
+        transition_safe_file "$transition_old"
+        transition_safe_file "$transition_delta"
+        log "Would ensure $transition_app integration with private preflight; source state and preflight are unverified"
+        return 0
+    fi
+    # Reject traversal and symlinked ancestors, including above the source root.
+    [[ $KAZOO_ROOT == /* && $KAZOO_ROOT != / &&
+       $(realpath -e -- "$KAZOO_ROOT") == "$KAZOO_ROOT" ]] ||
+        die 'Kazoo source root must be an existing canonical absolute directory'
+    transition_source="$KAZOO_ROOT/applications/$transition_app"
+    [[ -d $transition_source && ! -L $transition_source &&
+       $(realpath -e -- "$transition_source") == "$transition_source" ]] ||
+        die 'Unsafe Kazoo integration source directory'
+    # Match the complete, literal file inventory of each reviewed patch.
+    # Quoted paths, renames, binary numstat and unexpected/deleted paths fail.
+    transition_check_inventory() {
+        local transition_inventory_patch=$1
+        shift
+        local -A transition_inventory=()
+        local transition_inventory_file transition_inventory_rows
+        local transition_inventory_add transition_inventory_remove transition_inventory_path
+        for transition_inventory_file in "$@"; do
+            transition_inventory["$transition_inventory_file"]=1
+        done
+        transition_safe_file "$transition_inventory_patch"
+        transition_inventory_rows=$(git -C "$transition_source" apply --numstat "$transition_inventory_patch") ||
+            die 'Cannot parse integration patch inventory'
+        while IFS=$'\t' read -r transition_inventory_add transition_inventory_remove transition_inventory_path; do
+            [[ $transition_inventory_add =~ ^[0-9]+$ && $transition_inventory_remove =~ ^[0-9]+$ &&
+               $transition_inventory_path =~ ^(src|priv)/[a-zA-Z0-9_./-]+$ &&
+               ${transition_inventory[$transition_inventory_path]:-} == 1 ]] ||
+                die 'Integration patch has an unexpected source path'
+            unset 'transition_inventory[$transition_inventory_path]'
+        done <<<"$transition_inventory_rows"
+        [[ ${#transition_inventory[@]} == 0 ]] ||
+            die 'Integration patch omits a required source path'
+        ! /usr/bin/grep -Eq '^(deleted file mode|rename from|rename to|copy from|copy to|GIT binary patch)' "$transition_inventory_patch" ||
+            die 'Unsupported integration patch operation'
+    }
+    transition_check_inventory "$transition_new" "${transition_files[@]}"
+    transition_check_inventory "$transition_old" "${transition_old_files[@]}"
+    transition_check_inventory "$transition_delta" "${transition_delta_files[@]}"
+    # Only the four additions in the clean Crossbar baseline may be absent.
+    transition_check_sources() {
+        local transition_check_file transition_check_path transition_check_created transition_may_be_absent
+        for transition_check_file in "${transition_files[@]}"; do
+            transition_check_path="$transition_source/$transition_check_file"
+            if [[ -e $transition_check_path || -L $transition_check_path ]]; then
+                transition_safe_file "$transition_check_path"
+            else
+                transition_may_be_absent=false
+                for transition_check_created in "${transition_created_files[@]}"; do
+                    [[ $transition_check_file != "$transition_check_created" ]] || transition_may_be_absent=true
+                done
+                [[ $transition_may_be_absent == true &&
+                   $(realpath -e -- "$(dirname -- "$transition_check_path")") == "$(dirname -- "$transition_check_path")" ]] ||
+                    die 'Required integration source is missing or has unsafe ancestors'
+            fi
+        done
+    }
+    transition_check_sources
+    if git -C "$transition_source" apply --check "$transition_new" 2>/dev/null; then
+        transition_state=clean
+        transition_apply=$transition_new
+    elif git -C "$transition_source" apply --reverse --check "$transition_new" 2>/dev/null; then
+        log "Required $transition_app integration is already current"
+        return 0
+    elif git -C "$transition_source" apply --reverse --check "$transition_old" 2>/dev/null &&
+         git -C "$transition_source" apply --check "$transition_delta" 2>/dev/null; then
+        transition_state=previous
+        transition_apply=$transition_delta
+        for transition_relative in "${transition_files[@]}"; do
+            transition_safe_file "$transition_source/$transition_relative"
+        done
+    else
+        die 'Source is neither the clean, current nor explicitly supported previous integration'
+    fi
+    transition_stage=$(mktemp -d /tmp/kazoo-integration-preflight.XXXXXX) ||
+        die 'Cannot allocate integration preflight directory'
+    [[ $transition_stage =~ ^/tmp/kazoo-integration-preflight\.[a-zA-Z0-9]{6}$ &&
+       -d $transition_stage && ! -L $transition_stage &&
+       $(realpath -e -- "$transition_stage") == "$transition_stage" ]] ||
+        die 'Unsafe integration preflight directory'
+    chmod 0700 "$transition_stage" || die 'Cannot protect integration preflight directory'
+    # Keep the protected original/desired copies for failure recovery and audit.
+    trap 'log "Retained integration preflight: $transition_stage"' EXIT
+    mkdir -m 0700 "$transition_stage/original" "$transition_stage/desired" ||
+        die 'Cannot create integration preflight copies'
+    local -A transition_metadata=()
+    # Owner/group/link metadata is a concurrent-change guard, not an ownership
+    # preservation promise: source writes retain normal git-apply ownership.
+    for transition_relative in "${transition_files[@]}"; do
+        transition_path="$transition_source/$transition_relative"
+        mkdir -p -- "$transition_stage/original/$(dirname -- "$transition_relative")" \
+            "$transition_stage/desired/$(dirname -- "$transition_relative")" ||
+            die 'Cannot create integration preflight source directories'
+        if [[ -f $transition_path ]]; then
+            transition_metadata["$transition_relative"]=$(stat -c '%a:%u:%g:%h' -- "$transition_path") ||
+                die 'Cannot read integration source metadata'
+            cp --preserve=mode,timestamps -- "$transition_path" "$transition_stage/original/$transition_relative" ||
+                die 'Cannot retain original integration source'
+            cp --preserve=mode,timestamps -- "$transition_path" "$transition_stage/desired/$transition_relative" ||
+                die 'Cannot stage desired integration source'
+        else
+            transition_metadata["$transition_relative"]=absent
+        fi
+    done
+    sha256sum "$transition_new" "$transition_old" "$transition_delta" >"$transition_stage/patch-pins.sha256" ||
+        die 'Cannot retain integration patch hashes'
+    git -C "$transition_stage/desired" apply --check "$transition_apply" ||
+        die 'Integration patch cannot apply to private source copies'
+    git -C "$transition_stage/desired" apply "$transition_apply" ||
+        die 'Cannot apply integration patch to private source copies'
+    git -C "$transition_stage/desired" apply --reverse --check "$transition_new" ||
+        die 'Transition does not produce the complete current integration'
+    # All validation above is private. Recheck every real target and patch
+    # immediately before git apply (never --reject/--index). This validates all
+    # hunks, but is not a crash-atomic transaction across multiple source files.
+    transition_check_sources
+    sha256sum --check --status "$transition_stage/patch-pins.sha256" ||
+        die 'Integration patch inputs changed during preflight'
+    for transition_relative in "${transition_files[@]}"; do
+        transition_path="$transition_source/$transition_relative"
+        if [[ ${transition_metadata[$transition_relative]} == absent ]]; then
+            [[ ! -e $transition_path && ! -L $transition_path ]] ||
+                die 'Integration source appeared during preflight'
+        else
+            [[ $(stat -c '%a:%u:%g:%h' -- "$transition_path") == "${transition_metadata[$transition_relative]}" ]] &&
+                cmp -s -- "$transition_stage/original/$transition_relative" "$transition_path" ||
+                die 'Integration source changed during preflight'
+        fi
+    done
+    git -C "$transition_source" apply --check "$transition_apply" ||
+        die 'Integration patch no longer applies to target sources'
+    git -C "$transition_source" apply "$transition_apply" ||
+        die 'Cannot apply integration patch to target sources'
+    git -C "$transition_source" apply --reverse --check "$transition_new" ||
+        die 'Applied integration failed its final current-source check'
+    for transition_relative in "${transition_files[@]}"; do
+        cmp -s -- "$transition_stage/desired/$transition_relative" "$transition_source/$transition_relative" ||
+            die 'Applied integration differs from its private preflight result'
+        [[ $(stat -c %a -- "$transition_stage/desired/$transition_relative") == $(stat -c %a -- "$transition_source/$transition_relative") ]] ||
+            die 'Applied integration mode differs from its private preflight result'
+    done
+    log "Applied $transition_app integration from $transition_state after private preflight"
+)
 
 apply_required_source_patch() {
     local source_dir=$1 patch_file=$2
