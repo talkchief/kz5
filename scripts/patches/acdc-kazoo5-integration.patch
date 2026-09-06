@@ -92,10 +92,79 @@ index f168454..ece2a08 100644
  answered('cast', {'sync_resp', _}, State) ->
      {'next_state', 'answered', State};
 diff --git a/src/acdc_agent_handler.erl b/src/acdc_agent_handler.erl
-index 8eadead..1da3112 100644
+index 8eadead..c9e32b8 100644
 --- a/src/acdc_agent_handler.erl
 +++ b/src/acdc_agent_handler.erl
-@@ -251,24 +251,23 @@ handle_new_channel(JObj, AccountId) ->
+@@ -90,7 +90,13 @@ maybe_agent_queue_change(AccountId, AgentId, <<"logout_queue">>, QueueId, JObj)
+ 
+ -spec maybe_start_agent(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> pid() | 'fail'.
+ maybe_start_agent(AccountId, AgentId, JObj) ->
+-    try maybe_start_agent(AccountId, AgentId) of
++    Start = fun() ->
++                    case kz_json:is_true(<<"Runtime-Only">>, JObj) of
++                        'true' -> maybe_start_selected_queue_agent(AccountId, AgentId, kz_json:get_value(<<"Queue-ID">>, JObj));
++                        'false' -> maybe_start_agent(AccountId, AgentId)
++                    end
++            end,
++    try Start() of
+         {'ok', Sup} ->
+             timer:sleep(100),
+             case erlang:is_process_alive(Sup) of
+@@ -107,14 +113,51 @@ maybe_start_agent(AccountId, AgentId, JObj) ->
+             acdc_agent_fsm:update_presence(FSM, presence_id(JObj), presence_state(JObj, 'undefined')),
+             Sup;
+         {'error', _E} ->
+-            acdc_agent_stats:agent_logged_out(AccountId, AgentId),
++            maybe_record_login_failure(AccountId, AgentId, JObj),
+             'fail'
+     catch
+         _E:_R ->
+-            acdc_agent_stats:agent_logged_out(AccountId, AgentId),
++            maybe_record_login_failure(AccountId, AgentId, JObj),
+             'fail'
+     end.
+ 
++-spec maybe_record_login_failure(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) -> 'ok'.
++maybe_record_login_failure(AccountId, AgentId, JObj) ->
++    case kz_json:is_true(<<"Runtime-Only">>, JObj) of
++        'true' -> 'ok'; % Rejected queue enrollment must not log out a running agent.
++        'false' -> acdc_agent_stats:agent_logged_out(AccountId, AgentId)
++    end.
++
++%% Runtime-only queue login must not enroll an agent or start every saved queue.
++%% Re-read enrollment when consuming the command, and preserve an existing
++%% agent process (including all its other runtime queues and its current state).
++-spec maybe_start_selected_queue_agent(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) ->
++          {'ok', pid()} | {'exists', pid()} | {'error', any()}.
++maybe_start_selected_queue_agent(AccountId, AgentId, QueueId) ->
++    Db = kzs_util:format_account_db(AccountId),
++    case {kz_datamgr:open_doc(Db, AgentId), kz_datamgr:open_doc(Db, QueueId)} of
++        {{'ok', Agent}, {'ok', Queue}} ->
++            Queues = kz_json:get_value(<<"queues">>, Agent, []),
++            case is_binary(QueueId) andalso kz_doc:type(Agent) =:= <<"user">>
++                andalso kz_doc:account_id(Agent) =:= AccountId andalso kzd_users:enabled(Agent)
++                andalso not kz_doc:is_soft_deleted(Agent) andalso is_list(Queues)
++                andalso lists:member(QueueId, Queues) andalso kz_doc:type(Queue) =:= <<"queue">>
++                andalso kz_doc:account_id(Queue) =:= AccountId andalso not kz_doc:is_soft_deleted(Queue)
++            of
++                'false' -> {'error', 'not_enrolled'};
++                'true' ->
++                    case acdc_agents_sup:find_agent_supervisor(AccountId, AgentId) of
++                        'undefined' ->
++                            case acdc_agents_sup:new(kz_json:set_value(<<"queues">>, [QueueId], Agent)) of
++                                {'error', {'already_started', Running}} when is_pid(Running) -> {'exists', Running};
++                                Started -> Started
++                            end;
++                        Sup when is_pid(Sup) -> {'exists', Sup}
++                    end
++            end;
++        _ -> {'error', 'not_enrolled'}
++    end.
++
+ login_fail(JObj) ->
+     login_resp(JObj, <<"failed">>).
+ login_success(JObj) ->
+@@ -251,24 +294,23 @@ handle_new_channel(JObj, AccountId) ->
      handle_new_channel_acct(JObj, AccountId).
  
  -spec handle_new_channel_acct(kz_json:object(), kz_term:api_binary()) -> 'ok'.
@@ -108,10 +177,10 @@ index 8eadead..1da3112 100644
 -
      CallId = kz_json:get_value(<<"Call-ID">>, JObj),
 -    MemberCallId = kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Member-Call-ID">>], JObj),
+-
+-    lager:debug("new channel in acct ~s: from ~s to ~s(~s)", [AccountId, FromUser, ToUser, ReqUser]),
 +    handle_new_channel_acct(JObj, AccountId, CallId).
  
--    lager:debug("new channel in acct ~s: from ~s to ~s(~s)", [AccountId, FromUser, ToUser, ReqUser]),
--
 -    case kz_call_event:call_direction(JObj) of
 -        <<"inbound">> -> gproc:send(?NEW_CHANNEL_REG(AccountId, FromUser), ?NEW_CHANNEL_FROM(CallId));
 +-spec handle_new_channel_acct(kz_json:object(), kz_term:ne_binary(), any()) -> 'ok'.
@@ -133,7 +202,7 @@ index 8eadead..1da3112 100644
  
  %%------------------------------------------------------------------------------
  %% @doc Send event to agent FSM when channels are destroyed. This occurs in
-@@ -280,25 +279,43 @@ handle_new_channel_acct(JObj, AccountId) ->
+@@ -280,25 +322,43 @@ handle_new_channel_acct(JObj, AccountId) ->
  %% @end
  %%------------------------------------------------------------------------------
  -spec handle_destroyed_channel(kz_json:object(), kz_term:api_binary()) -> 'ok'.
@@ -194,7 +263,7 @@ index 8eadead..1da3112 100644
  -spec handle_originate_resp(kz_json:object(), kz_term:proplist()) -> 'ok'.
  handle_originate_resp(JObj, Props) ->
 diff --git a/src/acdc_agent_listener.erl b/src/acdc_agent_listener.erl
-index cb204e9..155b206 100644
+index cb204e9..09831d6 100644
 --- a/src/acdc_agent_listener.erl
 +++ b/src/acdc_agent_listener.erl
 @@ -658,7 +658,7 @@ handle_cast({'member_connect_accepted', ACallId}, #state{msg_queue_id=AmqpQueue
@@ -206,7 +275,18 @@ index cb204e9..155b206 100644
      [send_agent_busy(AcctId, AgentId, QueueId) || QueueId <- Qs],
      {'noreply', State#state{agent_call_ids=ACallIds1}, 'hibernate'};
  
-@@ -815,7 +815,7 @@ handle_cast('logout_agent', #state{acct_id=AcctId
+@@ -768,8 +768,9 @@ handle_cast({'send_sync_resp', Status, ReqJObj, Options}, #state{my_id=MyId
+                                                                 ,acct_id=AcctId
+                                                                 ,agent_id=AgentId
+                                                                 ,my_q=MyQ
++                                                                ,agent_queues=Queues
+                                                                 }=State) ->
+-    send_sync_response(ReqJObj, AcctId, AgentId, MyId, MyQ, Status, Options),
++    send_sync_response(ReqJObj, AcctId, AgentId, MyId, MyQ, Status, [{<<"Queues">>, Queues} | Options]),
+     {'noreply', State};
+ 
+ handle_cast({'send_status_update', Status}, #state{acct_id=AcctId
+@@ -815,7 +816,7 @@ handle_cast('logout_agent', #state{acct_id=AcctId
      lager:debug("published agent logout message"),
      {'noreply', State};
  
@@ -215,7 +295,7 @@ index cb204e9..155b206 100644
      {'noreply', State};
  handle_cast({'presence_id', PresenceId}, #state{agent_presence_id=_Id}=State) ->
      lager:debug("updating presence id from ~s to ~s", [_Id, PresenceId]),
-@@ -962,10 +962,17 @@ send_member_connect_retry(Queue, CallId, MyId, AgentId) ->
+@@ -962,10 +963,17 @@ send_member_connect_retry(Queue, CallId, MyId, AgentId) ->
  
  -spec send_member_connect_accepted(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
  send_member_connect_accepted(Queue, CallId, AcctId, AgentId, MyId) ->
@@ -4230,6 +4310,60 @@ index 6084408..8b6006d 100644
                    ]).
  
  %%%=============================================================================
+diff --git a/src/cb_agents.erl b/src/cb_agents.erl
+index ec4c96b..4e8a156 100644
+--- a/src/cb_agents.erl
++++ b/src/cb_agents.erl
+@@ -198,10 +198,17 @@ validate_agent_action(Context, AgentId, ?STATUS_PATH_TOKEN, ?HTTP_GET) ->
+ validate_agent_action(Context, ?STATUS_PATH_TOKEN, AgentId, ?HTTP_GET) ->
+     fetch_agent_status(AgentId, Context);
+ validate_agent_action(Context, AgentId, ?QUEUE_STATUS_PATH_TOKEN, ?HTTP_POST) ->
+-    OnSuccess = fun (C) -> maybe_queues_change(read(AgentId, C)) end,
+-    cb_context:validate_request_data(<<"queue_update">>, Context, OnSuccess);
++    case cb_acdc_agent_queue:requested(Context) of
++        'true' -> cb_acdc_agent_queue:validate(AgentId, read(AgentId, Context));
++        'false' ->
++            OnSuccess = fun (C) -> maybe_queues_change(read(AgentId, C)) end,
++            cb_context:validate_request_data(<<"queue_update">>, Context, OnSuccess)
++    end;
+ validate_agent_action(Context, AgentId, ?QUEUE_STATUS_PATH_TOKEN, ?HTTP_GET) ->
+-    fetch_agent_queues(read(AgentId, Context));
++    case cb_acdc_agent_queue:requested(Context) of
++        'true' -> cb_acdc_agent_queue:read(AgentId, read(AgentId, Context));
++        'false' -> fetch_agent_queues(read(AgentId, Context))
++    end;
+ validate_agent_action(Context, AgentId, ?RESTART_PATH_TOKEN, ?HTTP_POST) ->
+     read(AgentId, Context).
+ 
+@@ -243,6 +250,16 @@ post(Context, AgentId, ?STATUS_PATH_TOKEN) ->
+     end,
+     crossbar_util:response(<<"status update sent">>, Context);
+ post(Context, AgentId, ?QUEUE_STATUS_PATH_TOKEN) ->
++    case cb_acdc_agent_queue:requested(Context) of
++        'true' -> cb_acdc_agent_queue:post(AgentId, Context);
++        'false' -> post_queue_membership(Context, AgentId)
++    end;
++post(Context, AgentId, ?RESTART_PATH_TOKEN) ->
++    publish_restart(Context, AgentId),
++    crossbar_util:response(kz_json:new(), Context).
++
++-spec post_queue_membership(cb_context:context(), path_token()) -> cb_context:context().
++post_queue_membership(Context, AgentId) ->
+     publish_action(Context, AgentId),
+     Context1 = crossbar_doc:save(Context),
+     case cb_context:resp_status(Context1) of
+@@ -251,10 +268,7 @@ post(Context, AgentId, ?QUEUE_STATUS_PATH_TOKEN) ->
+             cb_context:set_resp_data(Context1, Queues);
+         _Status ->
+             Context1
+-    end;
+-post(Context, AgentId, ?RESTART_PATH_TOKEN) ->
+-    publish_restart(Context, AgentId),
+-    crossbar_util:response(kz_json:new(), Context).
++    end.
+ 
+ -spec publish_action(cb_context:context(), kz_term:ne_binary()) -> 'ok'.
+ publish_action(Context, AgentId) ->
 diff --git a/src/cb_queues.erl b/src/cb_queues.erl
 index 0d65374..70cd231 100644
 --- a/src/cb_queues.erl
@@ -5644,7 +5778,7 @@ index 9cec71a..9bbd420 100644
  max_wait(N) when N < 1 -> 'infinity';
  max_wait(N) -> N.
 diff --git a/src/kapi_acdc_agent.erl b/src/kapi_acdc_agent.erl
-index b36f326..6275bb6 100644
+index b36f326..89569d7 100644
 --- a/src/kapi_acdc_agent.erl
 +++ b/src/kapi_acdc_agent.erl
 @@ -109,7 +109,8 @@ sync_req_routing_key(AcctId, Id) ->
@@ -5653,10 +5787,19 @@ index b36f326..6275bb6 100644
  -define(SYNC_RESP_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>, <<"Status">>]).
 --define(OPTIONAL_SYNC_RESP_HEADERS, [<<"Call-ID">>, <<"Time-Left">>, <<"Process-ID">>]).
 +-define(OPTIONAL_SYNC_RESP_HEADERS, [<<"Call-ID">>, <<"Agent-Call-ID">>
-+                                    ,<<"Time-Left">>, <<"Process-ID">>]).
++                                    ,<<"Time-Left">>, <<"Process-ID">>, <<"Queues">>]).
  -define(SYNC_RESP_VALUES, [{<<"Event-Category">>, <<"agent">>}
                            ,{<<"Event-Name">>, <<"sync_resp">>}
                            ,{<<"Status">>, [<<"init">>
+@@ -279,7 +280,7 @@ login_v(JObj) ->
+           {'error', string()}.
+ login_queue(Props) when is_list(Props) ->
+     case login_queue_v(Props) of
+-        'true' -> kz_api:build_message(Props, ?AGENT_HEADERS, ?OPTIONAL_AGENT_HEADERS);
++        'true' -> kz_api:build_message(Props, ?AGENT_HEADERS, [<<"Runtime-Only">> | ?OPTIONAL_AGENT_HEADERS]);
+         'false' -> {'error', "Proplist failed validation for agent_login_queue"}
+     end;
+ login_queue(JObj) ->
 diff --git a/src/kapi_acdc_queue.erl b/src/kapi_acdc_queue.erl
 index 6dce974..d61f4b2 100644
 --- a/src/kapi_acdc_queue.erl
@@ -10136,6 +10279,155 @@ index 0000000..3ad6f9d
 +        lager:debug("archive table ~p is no longer available", [Table]),
 +        []
 +    end.
+diff --git a/src/cb_acdc_agent_queue.erl b/src/cb_acdc_agent_queue.erl
+new file mode 100644
+index 0000000..d39bc06
+--- /dev/null
++++ b/src/cb_acdc_agent_queue.erl
+@@ -0,0 +1,143 @@
++%%% SPDX-License-Identifier: MPL-2.0
++%%% Opt-in queue login: never changes the saved agent roster. A command receipt
++%%% is pending; only a fresh agent-listener snapshot confirms runtime membership.
++-module(cb_acdc_agent_queue).
++-export([requested/1, validate/2, read/2, post/2]).
++-include_lib("crossbar/src/crossbar.hrl").
++-include("acdc_config.hrl").
++
++-spec requested(cb_context:context()) -> boolean().
++requested(Context) -> cb_context:req_value(Context, <<"runtime_only">>) =/= 'undefined'.
++
++-spec validate(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
++validate(AgentId, Context) ->
++    case cb_context:resp_status(Context) of
++        'success' -> validate_request(AgentId, Context);
++        _ -> Context
++    end.
++
++-spec validate_request(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
++validate_request(AgentId, Context) ->
++    Mode = cb_context:req_value(Context, <<"runtime_only">>),
++    ModeValid = Mode =:= 'true' orelse
++        (cb_context:req_verb(Context) =:= ?HTTP_GET andalso Mode =:= <<"true">>),
++    QueueId = cb_context:req_value(Context, <<"queue_id">>),
++    case ModeValid andalso cb_context:req_value(Context, <<"action">>) =:= <<"login">>
++        andalso is_binary(QueueId) andalso byte_size(QueueId) > 0 andalso byte_size(QueueId) =< 128
++    of
++        'false' -> error_response(400, <<"runtime_only requires explicit login and queue_id">>, Context);
++        'true' -> validate_membership(AgentId, QueueId, Context)
++    end.
++
++-spec validate_membership(kz_term:ne_binary(), kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
++validate_membership(AgentId, QueueId, Context) ->
++    Doc = cb_context:doc(Context),
++    AccountId = cb_context:account_id(Context),
++    Queues = kz_json:get_value(<<"queues">>, Doc, []),
++    case kz_doc:id(Doc) =:= AgentId andalso kz_doc:type(Doc) =:= <<"user">>
++        andalso kz_doc:account_id(Doc) =:= AccountId andalso kzd_users:enabled(Doc)
++        andalso not kz_doc:is_soft_deleted(Doc)
++        andalso is_list(Queues) andalso lists:member(QueueId, Queues)
++    of
++        'false' -> error_response(403, <<"agent is not an enabled member of the selected queue">>, Context);
++        'true' ->
++            case kz_datamgr:open_doc(cb_context:db_name(Context), QueueId) of
++                {'ok', Queue} ->
++                    case kz_doc:type(Queue) =:= <<"queue">> andalso kz_doc:account_id(Queue) =:= AccountId
++                        andalso not kz_doc:is_soft_deleted(Queue)
++                    of
++                        'true' -> Context;
++                        'false' -> error_response(404, <<"selected queue not found">>, Context)
++                    end;
++                {'error', 'not_found'} -> error_response(404, <<"selected queue not found">>, Context);
++                _ -> error_response(503, <<"selected queue could not be read">>, Context)
++            end
++    end.
++
++-spec post(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
++post(AgentId, Context) ->
++    %% Re-read membership at execution, not only in the validation phase.
++    Fresh = crossbar_doc:load(AgentId, Context, ?TYPE_CHECK_OPTION(kzd_users:type())),
++    Checked = validate(AgentId, Fresh),
++    case cb_context:resp_status(Checked) of
++        'success' -> publish_login(AgentId, Checked);
++        _ -> Checked
++    end.
++
++-spec publish_login(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
++publish_login(AgentId, Context) ->
++    QueueId = cb_context:req_value(Context, <<"queue_id">>),
++    Props = [{<<"Account-ID">>, cb_context:account_id(Context)}
++            ,{<<"Agent-ID">>, AgentId}, {<<"Queue-ID">>, QueueId}
++            ,{<<"Runtime-Only">>, 'true'}
++            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
++    case catch kz_amqp_worker:cast(Props, fun kapi_acdc_agent:publish_login_queue/1) of
++        'ok' -> crossbar_util:response_202(<<"queue login requested; runtime confirmation pending">>
++                                          ,snapshot(cb_context:account_id(Context), AgentId, QueueId, 'false', 'false', <<"unknown">>)
++                                          ,no_cache(Context));
++        _ -> error_response(503, <<"queue login could not be published">>, Context)
++    end.
++
++-spec read(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
++read(AgentId, Context) ->
++    Checked = validate(AgentId, Context),
++    case cb_context:resp_status(Checked) of
++        'success' -> read_runtime(AgentId, Checked);
++        _ -> Checked
++    end.
++
++-spec read_runtime(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
++read_runtime(AgentId, Context) ->
++    AccountId = cb_context:account_id(Context),
++    QueueId = cb_context:req_value(Context, <<"queue_id">>),
++    MsgId = kz_binary:rand_hex(16),
++    Request = [{<<"Account-ID">>, AccountId}, {<<"Agent-ID">>, AgentId}
++              ,{<<"Msg-ID">>, MsgId}, {<<"Process-ID">>, <<"queue-status-", MsgId/binary>>}
++              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
++    Validator = fun(Reply) -> valid_snapshot(Reply, AccountId, AgentId, MsgId) end,
++    Data = case catch kz_amqp_worker:call(Request, fun kapi_acdc_agent:publish_sync_req/1, Validator, 2000) of
++               {'ok', Reply} ->
++                   %% Recheck even if an alternate worker/adapter skips its validator.
++                   case Validator(Reply) of
++                       'true' -> snapshot(AccountId, AgentId, QueueId, 'true'
++                                          ,lists:member(QueueId, kz_json:get_value(<<"Queues">>, Reply))
++                                          ,kz_json:get_value(<<"Status">>, Reply));
++                       'false' -> snapshot(AccountId, AgentId, QueueId, 'false', 'false', <<"unknown">>)
++                   end;
++               _ -> snapshot(AccountId, AgentId, QueueId, 'false', 'false', <<"unknown">>)
++           end,
++    crossbar_util:response(Data, no_cache(Context)).
++
++-spec valid_snapshot(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
++valid_snapshot(Reply, AccountId, AgentId, MsgId) ->
++    try valid_snapshot_fields(Reply, AccountId, AgentId, MsgId)
++    catch _:_ -> 'false'
++    end.
++
++-spec valid_snapshot_fields(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> boolean().
++valid_snapshot_fields(Reply, AccountId, AgentId, MsgId) ->
++    Queues = kz_json:get_value(<<"Queues">>, Reply),
++    kapi_acdc_agent:sync_resp_v(Reply)
++        andalso kz_json:get_value(<<"Account-ID">>, Reply) =:= AccountId
++        andalso kz_json:get_value(<<"Agent-ID">>, Reply) =:= AgentId
++        andalso kz_api:msg_id(Reply) =:= MsgId
++        andalso is_list(Queues)
++        andalso length(Queues) =< 1024
++        andalso lists:all(fun(Q) -> is_binary(Q) andalso byte_size(Q) > 0 andalso byte_size(Q) =< 128 end, Queues)
++        andalso length(Queues) =:= length(lists:usort(Queues)).
++
++-spec snapshot(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), boolean(), boolean(), kz_term:ne_binary()) -> kz_json:object().
++snapshot(AccountId, AgentId, QueueId, Observed, Member, Status) ->
++    Confirmed = Observed andalso Member,
++    State = case Confirmed of 'true' -> <<"confirmed">>; 'false' -> <<"pending">> end,
++    kz_json:from_list([{<<"account_id">>, AccountId}, {<<"agent_id">>, AgentId}, {<<"queue_id">>, QueueId}
++                     ,{<<"action">>, <<"login">>}, {<<"runtime_only">>, 'true'}
++                     ,{<<"state">>, State}, {<<"confirmed">>, Confirmed}
++                     ,{<<"runtime_member">>, Member}, {<<"runtime_observed">>, Observed}
++                     ,{<<"agent_status">>, Status}]).
++
++-spec no_cache(cb_context:context()) -> cb_context:context().
++no_cache(Context) -> cb_context:set_resp_header(Context, <<"cache-control">>, <<"no-store">>).
++
++-spec error_response(pos_integer(), kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
++error_response(Code, Message, Context) -> crossbar_util:response('error', Message, Code, no_cache(Context)).
 diff --git a/src/cb_acdc_queue_editor.erl b/src/cb_acdc_queue_editor.erl
 new file mode 100644
 index 0000000..bcf252a
