@@ -22448,7 +22448,7 @@
                 "type": "object",
                 "properties": {
                   "data": {
-                    "$ref": "#/components/schemas/QueueEditorWrite"
+                    "$ref": "#/components/schemas/QueueEditorCreateWrite"
                   }
                 },
                 "required": [
@@ -22735,6 +22735,34 @@
                 "required": [
                   "data"
                 ]
+              },
+              "examples": {
+                "builtinQueueLanguage": {
+                  "summary": "Adopt the ready built-in queue language without deleting recordings",
+                  "description": "Replace revisions with the entire fresh GET editor snapshot and generate a new request_id for this operation. Empty revision maps below are illustrative only. Null roster/route preserves those resources; null prompt maps removes overrides. Check language readiness before saving.",
+                  "value": {
+                    "data": {
+                      "queue": {
+                        "announcements": {
+                          "language": "en-us",
+                          "media": null
+                        },
+                        "callback": {
+                          "media": null,
+                          "return_confirmation_prompt": null
+                        }
+                      },
+                      "roster": null,
+                      "route": null,
+                      "revisions": {
+                        "queue": "3-0123456789abcdef0123456789abcdef",
+                        "users": {},
+                        "callflows": {}
+                      },
+                      "request_id": "0123456789abcdef0123456789abcdef"
+                    }
+                  }
+                }
               }
             }
           }
@@ -48472,7 +48500,7 @@
           },
           "missing_prompt_ids": {
             "type": "array",
-            "maxItems": 44,
+            "maxItems": 57,
             "uniqueItems": true,
             "items": {
               "type": "string"
@@ -48486,7 +48514,7 @@
           "limit"
         ],
         "additionalProperties": false,
-        "description": "Incomplete catalogs must not be treated as empty selections. A limit-exceeded catalog returns an empty list with complete=false and reason=limit_exceeded, never a silently truncated list. Other reasons include forbidden, invalid_scope, unavailable and unverified_language_manifest. In legacy English mode, missing or provenance-invalid fixed media returns complete=false, reason=english_media_prerequisites_incomplete, and exact missing_prompt_ids. The bounded prerequisites are 29 immutable Gemini fixed records, 12 official queue phrases and three official callback auxiliary prompts, fetched in one batch. This does not verify resolver caches, downloaded audio bytes, native speech modules or external routing."
+        "description": "Incomplete catalogs must not be treated as empty selections. A limit-exceeded catalog returns an empty list with complete=false and reason=limit_exceeded, never a silently truncated list. Other reasons include forbidden, invalid_scope, unavailable and unverified_language_manifest. In legacy English mode, missing or provenance-invalid media returns complete=false, reason=english_media_prerequisites_incomplete, and exact missing_prompt_ids. The bounded prerequisites are 32 immutable Gemini fixed records, ten immutable telephone-digit recordings, 12 official queue phrases and three official callback auxiliary prompts, fetched in one batch. The ten digits are required by canonical built-in callbacks; fixed-only proof is insufficient. This does not verify resolver caches, downloaded audio bytes, native position speech or external routing."
       },
       "QueueEditorUser": {
         "type": "object",
@@ -49462,7 +49490,422 @@
         "additionalProperties": false
       },
       "QueueEditorSettings": {
-        "description": "Queue settings only (encoded JSON at most 65536 bytes). Do not include id, agents, keys beginning with pvt_, or keys beginning with _. Identity and roster are server-owned. A create request must satisfy the ordinary queues create schema; PATCH merges the supplied settings.",
+        "description": "Queue settings only (encoded JSON at most 65536 bytes). Do not include id, agents, keys beginning with pvt_, or keys beginning with _. Identity and roster are server-owned. A create request must satisfy the ordinary queues create schema; PATCH merges the supplied settings. Built-in language adoption uses announcements.language plus announcements.media=null, callback.media=null and callback.return_confirmation_prompt=null. The server consumes null as a deletion marker before validating/saving the merged queue. Use a supported ready locale from GET editor; changing references does not certify playback readiness.",
+        "properties": {
+          "agent_ring_timeout": {
+            "default": 15,
+            "description": "In seconds, how long to ring an agent before progressing to the next agent available",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "agent_wrapup_time": {
+            "default": 0,
+            "description": "Pre-defined wait period applied after an agent handles a customer call",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "announce": {
+            "description": "Media ID (or appropriate media URI) of media to play when caller is about to be connected.",
+            "type": "string"
+          },
+          "announcements": {
+            "description": "Configuration for periodic announcements to callers waiting in the queue",
+            "properties": {
+              "initial_delay": {
+                "default": 30,
+                "description": "Seconds to wait after queue entry before the first position or wait-time announcement",
+                "minimum": 1,
+                "maximum": 3600,
+                "type": "integer"
+              },
+              "interval": {
+                "default": 30,
+                "description": "Time between announcements",
+                "minimum": 15,
+                "type": "integer"
+              },
+              "language": {
+                "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used.",
+                "maxLength": 35,
+                "minLength": 2,
+                "pattern": "^[a-z]{2,3}(-[a-z0-9]{2,8})*$",
+                "type": "string"
+              },
+              "media": {
+                "description": "Custom prompts to be played for the announcements For PATCH only, null removes this entire override map from the persisted queue. Omission preserves it; an empty object does not remove existing nested overrides. No media documents or recordings are deleted.",
+                "properties": {
+                  "in_the_queue": {
+                    "description": "Played after the numeric position",
+                    "type": "string"
+                  },
+                  "increase_in_call_volume": {
+                    "description": "Played if the estimated wait time has increased since the previous wait time announcement",
+                    "type": "string"
+                  },
+                  "the_estimated_wait_time_is": {
+                    "description": "Played before the estimated wait time media",
+                    "type": "string"
+                  },
+                  "you_are_at_position": {
+                    "description": "Played before the numeric position",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "in_the_queue",
+                  "increase_in_call_volume",
+                  "the_estimated_wait_time_is",
+                  "you_are_at_position"
+                ],
+                "type": "object",
+                "nullable": true
+              },
+              "position_announcements_enabled": {
+                "description": "Whether announcements of the caller's position in the queue should be played",
+                "type": "boolean"
+              },
+              "wait_time_announcements_enabled": {
+                "description": "Whether announcements of the estimated wait time in the queue should be played",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
+          "callback": {
+            "description": "Authenticated virtual callback configuration. Registrations are created only by a live queue member flow.",
+            "properties": {
+              "announcement": {
+                "description": "Independent schedule for announcing the callback option while waiting. Disabling this announcement does not disable callback registration with entry_key.",
+                "properties": {
+                  "enabled": {
+                    "default": true,
+                    "description": "Announce the callback option when virtual callback is enabled",
+                    "type": "boolean"
+                  },
+                  "initial_delay": {
+                    "default": 30,
+                    "description": "Seconds before the first callback option announcement, independent of position and estimated-wait announcements",
+                    "maximum": 3600,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "interval": {
+                    "default": 60,
+                    "description": "Seconds between callback option announcements, independent of position and estimated-wait announcements",
+                    "maximum": 3600,
+                    "minimum": 15,
+                    "type": "integer"
+                  }
+                },
+                "type": "object"
+              },
+              "allow_alternate_number": {
+                "default": false,
+                "description": "Allow a caller to enter and explicitly reconfirm a return number other than the current caller ID",
+                "type": "boolean"
+              },
+              "use_local_resources": {
+                "default": false,
+                "description": "Restrict callback origination to resources owned by the authenticated account",
+                "type": "boolean"
+              },
+              "enabled": {
+                "default": false,
+                "description": "Offer durable virtual callback registration to callers waiting in this queue",
+                "type": "boolean"
+              },
+              "entry_key": {
+                "default": "6",
+                "description": "Single DTMF digit that opens the callback menu while the caller is waiting",
+                "pattern": "^[0-9]$",
+                "type": "string"
+              },
+              "handoff_timeout": {
+                "default": 5,
+                "description": "Seconds allowed for the queue worker to accept a confirmed returned caller",
+                "maximum": 10,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "max_attempts": {
+                "default": 3,
+                "description": "Maximum outbound callback attempts before the registration fails",
+                "maximum": 10,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "media": {
+                "description": "Optional account media IDs or prompt names overriding generated callback menu audio For PATCH only, null removes this entire override map from the persisted queue. Omission preserves it; an empty object does not remove existing nested overrides. No media documents or recordings are deleted.",
+                "properties": {
+                  "confirmation": {
+                    "description": "Played after the inbound caller confirms the callback number",
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "menu": {
+                    "description": "Callback menu choices played after the initial offer",
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "number_readback": {
+                    "description": "Played before speaking the selected callback number",
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "offer": {
+                    "description": "Initial callback option offer played while the caller waits",
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "returned_confirmation": {
+                    "description": "Played to a returned caller before requiring DTMF 1 confirmation and agent connection",
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "success": {
+                    "description": "Played only after durable callback registration is acknowledged",
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "type": "object",
+                "nullable": true
+              },
+              "menu_timeout_ms": {
+                "default": 30000,
+                "description": "Absolute milliseconds allowed for inbound callback menu input and durable registration acknowledgement",
+                "maximum": 120000,
+                "minimum": 1000,
+                "type": "integer"
+              },
+              "originate_timeout": {
+                "default": 60,
+                "description": "Seconds allowed for each outbound callback originate request",
+                "maximum": 300,
+                "minimum": 5,
+                "type": "integer"
+              },
+              "outbound_authority": {
+                "description": "Enabled account-owned callback user (or legacy device) whose outbound identity and restrictions authorize callback origination",
+                "properties": {
+                  "id": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "type": "string"
+                  },
+                  "type": {
+                    "enum": [
+                      "device",
+                      "user"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "type"
+                ],
+                "type": "object"
+              },
+              "outbound_caller_id": {
+                "description": "Optional account-owned caller-ID override; when name is omitted it inherits the current callback authority/account name. Ignored when caller_id_source is inherit.",
+                "properties": {
+                  "name": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "number": {
+                    "pattern": "^\\+?[0-9]{1,15}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "number"
+                ],
+                "type": "object"
+              },
+              "caller_id_source": {
+                "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
+                "enum": [
+                  "inherit",
+                  "custom"
+                ],
+                "type": "string"
+              },
+              "ready_ack_timeout": {
+                "default": 5,
+                "description": "Seconds allowed to retain an outbound originate cancellation handle before execution",
+                "maximum": 10,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "retry_delay": {
+                "default": 60,
+                "description": "Seconds before an eligible failed callback attempt may be retried",
+                "maximum": 3600,
+                "minimum": 15,
+                "type": "integer"
+              },
+              "confirmation_timeout": {
+                "default": 10,
+                "description": "Seconds allowed for the returned caller to press DTMF 1",
+                "maximum": 30,
+                "minimum": 3,
+                "type": "integer"
+              },
+              "success_timeout_ms": {
+                "default": 10000,
+                "description": "Milliseconds allowed to finish the inbound success prompt after registration acknowledgement",
+                "maximum": 30000,
+                "minimum": 1000,
+                "type": "integer"
+              },
+              "ttl": {
+                "default": 3600,
+                "description": "Maximum lifetime of a callback registration in seconds",
+                "maximum": 86400,
+                "minimum": 60,
+                "type": "integer"
+              },
+              "return_confirmation_prompt": {
+                "type": "string",
+                "nullable": true,
+                "minLength": 1,
+                "maxLength": 256,
+                "deprecated": true,
+                "description": "Legacy returned-call prompt override. Send null in PATCH when adopting built-in queue voices, so this field is absent in storage. A stored explicit null is not a valid runtime prompt."
+              }
+            },
+            "type": "object"
+          },
+          "caller_exit_key": {
+            "default": "#",
+            "description": "Key caller can press while on hold to exit the queue and continue in the callflow",
+            "enum": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5",
+              "6",
+              "7",
+              "8",
+              "9",
+              "*",
+              "0",
+              "#"
+            ],
+            "type": "string"
+          },
+          "cdr_url": {
+            "description": "An optional HTTP URL to POST the CDR",
+            "format": "uri",
+            "minLength": 6,
+            "type": "string"
+          },
+          "connection_timeout": {
+            "default": 3600,
+            "description": "In seconds, how long to try to connect the caller before progressing past the queue callflow action",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enter_when_empty": {
+            "default": true,
+            "description": "Allows a caller to enter a queue and wait when no agents are available",
+            "type": "boolean"
+          },
+          "max_priority": {
+            "description": "Maximum possible priority level queue will support. Can not be redefined for existing queue.",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "max_queue_size": {
+            "default": 0,
+            "description": "How many callers are allowed to wait on hold in the queue (0 for no limit)",
+            "type": "integer"
+          },
+          "moh": {
+            "description": "Media ID (or appropriate media URI) of media to play while caller is on hold.",
+            "type": "string"
+          },
+          "name": {
+            "description": "A friendly name for the queue",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "record_caller": {
+            "default": false,
+            "description": "When enabled, a caller's audio will be recorded",
+            "type": "boolean"
+          },
+          "recording_url": {
+            "description": "An optional HTTP URL to PUT the call recording after the call ends (and should respond to GET for retrieving the audio data)",
+            "format": "uri",
+            "minLength": 6,
+            "type": "string"
+          },
+          "ring_simultaneously": {
+            "default": 1,
+            "description": "Legacy setting preserved for compatibility; currently not used by agent selection. Use strategy ring_all for all eligible agents, or another strategy for one at a time.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "strategy": {
+            "default": "round_robin",
+            "description": "The queue strategy for connecting agents to callers",
+            "enum": [
+              "ring_all",
+              "round_robin",
+              "most_idle",
+              "in_order"
+            ],
+            "type": "string"
+          },
+          "agent_order": {
+            "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
+            "type": "array",
+            "default": [],
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        },
+        "type": "object",
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "id"
+              ]
+            },
+            {
+              "required": [
+                "agents"
+              ]
+            }
+          ]
+        },
+        "x-max-encoded-json-bytes": 65536,
+        "x-forbidden-key-prefixes": [
+          "_",
+          "pvt_"
+        ]
+      },
+      "QueueEditorCreateSettings": {
+        "description": "New queue settings; satisfy the ordinary queues create schema. For built-in voice defaults select announcements.language and omit announcements.media and callback.media. Null prompt deletion markers apply to PATCH, not creation.",
         "properties": {
           "agent_ring_timeout": {
             "default": 15,
@@ -49845,6 +50288,9 @@
             }
           }
         },
+        "required": [
+          "name"
+        ],
         "type": "object",
         "not": {
           "anyOf": [
@@ -49871,6 +50317,57 @@
         "properties": {
           "queue": {
             "$ref": "#/components/schemas/QueueEditorSettings"
+          },
+          "roster": {
+            "type": "array",
+            "nullable": true,
+            "uniqueItems": true,
+            "maxItems": 500,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{32}$"
+            },
+            "description": "Desired full roster; null preserves current membership."
+          },
+          "route": {
+            "type": "object",
+            "properties": {
+              "extension": {
+                "type": "string",
+                "pattern": "^(?:\\+?[0-9*#]+)?$",
+                "maxLength": 32
+              }
+            },
+            "required": [
+              "extension"
+            ],
+            "additionalProperties": false,
+            "nullable": true,
+            "description": "null preserves routing. A nonempty extension creates/updates a managed route. Empty string requests removal of the eligible managed route, subject to ownership/conflict checks; it does not authorize broad callflow deletion."
+          },
+          "revisions": {
+            "$ref": "#/components/schemas/QueueEditorRevisions"
+          },
+          "request_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        },
+        "required": [
+          "queue",
+          "roster",
+          "route",
+          "revisions",
+          "request_id"
+        ],
+        "additionalProperties": false,
+        "description": "All five fields are required for both PUT and PATCH. The request_id is a fresh client-generated 32-character lowercase hexadecimal idempotency key, stable for retries of this exact operation. Never reuse it with different content, account, verb, target, or authenticated owner."
+      },
+      "QueueEditorCreateWrite": {
+        "type": "object",
+        "properties": {
+          "queue": {
+            "$ref": "#/components/schemas/QueueEditorCreateSettings"
           },
           "roster": {
             "type": "array",

@@ -75,6 +75,23 @@ fixed_defaults_are_localized_and_immutable_test() ->
     ?assertEqual({error,unsupported_gemini_prompt},
         acdc_gemini_prompts:default_with(<<"unknown">>,<<"en-us">>,?ACCOUNT,absent,fun(_,_) -> none end,fun read/1)).
 
+callback_editor_projection_requires_every_digit_test() ->
+    lists:foreach(fun(Language) ->
+        Ids = acdc_gemini_prompts:callback_media_ids(Language),
+        ?assertEqual(42,length(Ids)),
+        Docs = [begin {ok,Doc}=read(Id), Doc end || Id <- Ids],
+        Media = acdc_gemini_prompts:verified_callback_media(Language,Docs),
+        ?assertEqual(42,length(Media)),
+        ?assert(acdc_gemini_prompts:callback_media_complete(Language,Media)),
+        Fixed = acdc_gemini_prompts:verified_fixed_media(Language,Docs),
+        ?assert(acdc_gemini_prompts:fixed_media_complete(Language,Fixed)),
+        ?assertNot(acdc_gemini_prompts:callback_media_complete(Language,Fixed)),
+        lists:foreach(fun(Missing) ->
+            ?assertNot(acdc_gemini_prompts:callback_media_complete(Language,lists:delete(Missing,Media)))
+        end,Media)
+    end,[<<"en-us">>,<<"he-il">>,<<"fr-fr">>,<<"es-es">>,<<"ar-sa">>]),
+    ?assertNot(acdc_gemini_prompts:callback_media_complete(<<"unsupported">>,[])).
+
 every_explicit_override_preserved_without_io_test() ->
     Fail=fun(_) -> error(unexpected_io) end,
     lists:foreach(fun(V) ->

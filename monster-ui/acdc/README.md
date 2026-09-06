@@ -43,12 +43,22 @@ media; backend activation and publication of `apps/acdc/language-capabilities.js
 are not yet wired in. That artifact must only be published
 after runtime verification; builds must never manufacture it. The UI checks the version 1 capability proof
 and the required fixed prompt attachments. In legacy capability mode, incremental
-English readiness requires 29 provenance-verified immutable Gemini projections
-plus 15 attached official English prompts, not 29 name-only aliases. Internal `acdc-number-*` audio chunks are
+English readiness requires 42 provenance-verified immutable Gemini projections
+(32 fixed messages plus all ten recorded telephone digits)
+plus 15 attached official English prompts, not name-only aliases. Internal `acdc-number-*` audio chunks are
 excluded from editable media choices and per-prompt browser requests. Missing
-capabilities allow only the existing verified English fallback; corrupt or
+capabilities never imply readiness; corrupt or
 unreachable capability data disables language editing. Synthetic packs lacking
 native-speaker review are explicitly labeled, not presented as native-approved.
+
+The queue language selector has exactly five choices and explicitly defaults new
+queues to English, with no inherit/custom prompt or voice picker. Saving a
+ready selected language adopts built-in prompts, even without changing its value:
+editor PATCH null tombstones remove the
+queue's announcement/callback media maps and old returned-confirmation alias
+before storage. No media document or attachment is deleted. Existing legacy
+settings survive unrelated edits when the selected language is unavailable; an unavailable
+pack is never enabled just because it was previously selected.
 
 It uses the account-scoped Crossbar resources implemented by `cb_queues`,
 `cb_agents`, `cb_acdc_call_stats`, and `cb_callflows`; it does not include mock
@@ -67,9 +77,9 @@ deferred reloads, overlapping Save/duplicate-read prevention, failed-read retry
 and stale-response suppression. Its API responses were mocked; it made zero
 network requests and is not live backend or compiled-artifact acceptance.
 
-The announcement language is a lowercase BCP 47 locale such as `en-us`. When
-it is blank, ACDC retains the incoming call/account prompt language and Kazoo's
-system prompt default is English (`en-us`). Callback configuration and
+The queue language is one of the five supported lowercase locales. New queues
+explicitly select English (`en-us`); the editor does not offer a blank/inherit
+choice. Historical unavailable settings survive unrelated edits. Callback configuration and
 inventory/cancellation source are present but must not be deployed or described
 as working until the trusted caller menu, Crossbar API, durable coordinator,
 returned-caller confirmation, recovery, and live SIP/DTMF gates all pass.

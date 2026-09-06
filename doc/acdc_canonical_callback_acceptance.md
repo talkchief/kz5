@@ -17,7 +17,10 @@ patches or replacing running application BEAMs.
   it is not proof of built-in voice readiness.
 - `cf_acdc_member` uses localized auxiliary recordings for unavailable action,
   invalid input and alternate-number entry. Feedback has a 20-second playback
-  limit and a 21-second outer bound, further limited by the remaining menu time.
+  limit and a 21-second feedback deadline, further limited by remaining menu time.
+  **Review found that synchronous metadata lookup before the receive can exceed
+  that deadline.** Moving auxiliary paths into the preflight contract is still
+  required; the existing timeout tests do not cover slow real datastore reads.
   Completion is correlated; stale/foreign events cannot complete feedback.
   Failed feedback resumes the original queue instead of claiming registration.
 - `acdc_callback_caller` resolves built-in returned-call confirmation using the
@@ -40,6 +43,8 @@ checks private loaded paths, production test-hook absence and input hashes.
 | `78039`, exit 1 | New editor-projection regression failed as expected: complete32-recording inventory was rejected by the stale29-recording requirement. Other19 focused tests passed. |
 | `15466`, exit 0 | All20 focused helper/contract tests passed after sharing one32-fixed-asset constant across callback, capabilities and editor completeness checks. Covers all five locales, every missing fixed entry, old29-entry lists, tampered hash and unsupported locale. Input SHA-256 `e201d08269876816d97c762465dcf8c6bc4456ee6c4ef5809ef96caf3cd85e30`. This is a focused rerun, not a second all-suite result. |
 | `90582`, exit 0 | All63 current production ACDC modules compiled with-Werror, noTEST options and unchanged bundled inputs after the count fix. No application BEAM was loaded or installed. |
+| `28251`, exit 0 | All21 focused tests passed after adding the editor's complete42-entry callback projection. Tests cover all five locales, reject fixed-only proof, and reject every individually missing entry. Input SHA-256 `6133495ec01d8a9d76214524acba1cf7a1651fcb7d235d10acbd8b98b250461c`. |
+| `62912`, exit 0 | Current63-module production compilation passed again after complete42-entry projection integration; generated OpenAPI/schema/deterministic rebuild tests passed in the same guarded run. |
 
 Earlier agent run30693 had64 passing tests and16 failures from a legacy mock
 arity mismatch; it lacked the external resource guard. The fixture was corrected
@@ -80,6 +85,23 @@ UI adoption must remove obsolete queue prompt references without deleting media
 documents. Normal editor/Crossbar PATCH uses null deletion markers on the wire;
 the persisted returned-prompt field must be absent, not explicitly null. Tests
 for that UI/editor change are a separate acceptance boundary.
+
+The editor must project the same42 immutable callback entries used at runtime,
+not only the32 fixed recordings. Otherwise missing telephone digits can leave
+the editor claiming a selectable built-in language while callback configuration
+fails closed. The complete callback projection helpers are
+`callback_media_ids/1`, `verified_callback_media/2` and `callback_media_complete/2`;
+the original fixed-only helpers retain their narrower32-recording contract.
+The legacy English editor adds15 official position/auxiliary prerequisites,
+giving57 bounded entries. This transitional readiness is not all-Gemini queue
+position speech or a five-language listening certificate.
+
+UI30215 passed the contract and20 queue-login groups, including rejection when
+any telephone digit is missing. Editor71128 passed all42 in-memory pipeline and
+manifest tests, including every missing prerequisite and persistence of deletion
+markers as absent fields with unchanged recording documents. Evidence:
+`/tmp/kazoo-queue-editor-test.xE5ClX/`. Earlier47-entry runs are narrower historical
+evidence, not substitutes for this57-entry rerun. No real browser/queue was changed.
 
 See [engineering handoff](../PROJECT_HANDOFF.md),
 [task register](../PROJECT_TASKS.md),

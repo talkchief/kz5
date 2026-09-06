@@ -13,7 +13,7 @@ define(function(require) {
 		kazooEpochOffsetSeconds: 62167219200,
 		managedRouteFlag: 'talkchief-acdc-managed',
 		managedRouteQueueFlagPrefix: 'talkchief-acdc-queue:',
-		announcementLocales: ['en-us', 'ar-sa', 'he-il', 'es-es', 'fr-fr'],
+		announcementLocales: ['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa'],
 
 		css: ['app'],
 
@@ -428,8 +428,8 @@ define(function(require) {
 		// These records are projected only after server-side immutable document
 		// provenance checks. A purpose name by itself is never an alias or proof.
 		verifiedGeminiEnglishPurposes: function(media) {
-			var self = this, required = self.requiredLanguagePromptIds(),
-				mapHash = '36665a8916e18503ae3214c5fd77748a7739c300b8989e24cc26b3214d2f8aa0';
+			var self = this, required = self.requiredBuiltinCallbackPromptIds(),
+				mapHash = 'a316e74ff278ae53750781e57fe49fca0e61f50c626ef84278afc470fb02f974';
 
 			return _.map(_.filter(media, function(item) {
 				return _.isPlainObject(item) && item.language === 'en-us' && item.has_attachments === true
@@ -441,6 +441,25 @@ define(function(require) {
 					&& item.prompt_id === item.canonical_prompt_id + '-gemini-sulafat-' + item.sha256.slice(0, 16)
 					&& item.id === 'en-us/' + item.prompt_id;
 			}), 'canonical_prompt_id');
+		},
+
+		requiredBuiltinFixedPromptIds: function() {
+			return this.requiredLanguagePromptIds().concat(['acdc-callback-unavailable',
+				'acdc-callback-invalid-entry', 'acdc-callback-enter-number']);
+		},
+
+		requiredBuiltinCallbackPromptIds: function() {
+			return this.requiredBuiltinFixedPromptIds().concat(_.map(_.range(10), function(digit) {
+				return 'acdc-number-' + digit;
+			}));
+		},
+
+		editableSystemMedia: function(media) {
+			// Keep all ten digit projections available to readiness checks, but
+			// never offer internal numeric chunks in hold/pre-connect selectors.
+			return _.filter(media, function(item) {
+				return !/\/acdc-number-/.test(item.id || '') && !/^acdc-number-/.test(item.canonical_prompt_id || '');
+			});
 		},
 
 		languageCapabilityOptions: function(manifest, media, loadError) {
@@ -461,7 +480,7 @@ define(function(require) {
 				var entry = valid ? manifest.languages[locale] : null,
 					ready = !loadError && valid && (legacy ? locale === 'en-us' && _.every(legacyRequired, function(id) {
 						return legacyIds.indexOf('en-us/' + id) >= 0;
-					}) && _.every(fixedRequired, function(id) { return geminiPurposes.indexOf(id) >= 0; })
+					}) && _.every(self.requiredBuiltinCallbackPromptIds(), function(id) { return geminiPurposes.indexOf(id) >= 0; })
 						: entry.ready && _.every(entry.required_prompt_ids, function(id) {
 						return ids.indexOf(locale + '/' + id) >= 0;
 					})),
@@ -490,6 +509,24 @@ define(function(require) {
 			});
 		},
 
+		queueLanguageOptions: function(items, current) {
+			var selected = this.announcementLocales.indexOf(current) >= 0 ? current : 'en-us';
+			// Never add an inherit/custom sixth option or re-enable an unready pack.
+			return _.map(this.announcementLocales, function(locale) {
+				return _.assign({ label: locale, ready: false, disabled: true },
+					_.find(items, { value: locale }), { value: locale, selected: locale === selected });
+			});
+		},
+
+		queueLanguageSelection: function(items, current, original) {
+			var options = this.queueLanguageOptions(items, current),
+				selected = _.find(options, { selected: true }).value,
+				ready = _.map(_.filter(options, function(item) {
+					return item.ready === true && item.disabled === false;
+				}), 'value');
+			return { original: original, selected: selected, ready: ready, adopt: ready.indexOf(selected) >= 0 };
+		},
+
 		populateQueueDropdowns: function(view, queue, results, errors, isEdit) {
 			var self = this,
 				labels = self.i18n.active().acdc.dropdowns,
@@ -497,7 +534,7 @@ define(function(require) {
 				systemMedia = results.verifiedSystemMedia || [],
 				media = _.map(results.media || [], function(item) {
 					return { value: item.id, label: labels.accountMedia + ': ' + (item.name || item.id) };
-				}).concat(_.chain(systemMedia)
+				}).concat(_.chain(self.editableSystemMedia(systemMedia))
 					.groupBy(function(item) { return item.id.split('/').slice(1).join('/'); })
 					.map(function(entries, id) {
 						return { value: id,
@@ -534,8 +571,17 @@ define(function(require) {
 
 				setSelect(name, media, _.get(queue, name), labels.useDefault, errors.media || errors.systemMedia);
 			});
-			setSelect('announcements.language', languages, _.get(queue, 'announcements.language'), labels.inheritLanguage,
-				errors.systemMedia || errors.languageCapabilities);
+			var languageSelect = form.find('[name="announcements.language"]'),
+				languageOptions = self.queueLanguageOptions(languages, _.get(queue, 'announcements.language'));
+
+			languageSelect.empty();
+			_.each(languageOptions, function(item) {
+				$('<option>').val(item.value).text(item.label).prop('selected', item.selected)
+					.prop('disabled', Boolean(item.disabled)).appendTo(languageSelect);
+			});
+			languageSelect.prop('disabled', Boolean(errors.systemMedia || errors.languageCapabilities));
+			form.data('queue-language-selection', self.queueLanguageSelection(languages,
+				_.get(queue, 'announcements.language'), _.get(results.queue, 'announcements.language')));
 			if (authority.type === 'device' && authority.id) {
 				users.push({ value: authority.id, label: labels.legacyDevice, authorityType: 'device' });
 			}
@@ -1244,6 +1290,10 @@ define(function(require) {
 				view.data('owned-route', ownedRoute);
 				view.data('editor-revisions', editorRevisions);
 				self.populateQueueDropdowns(view, queue, results, errors, Boolean(queueId));
+				if (_.get(draft, 'queue.announcements.media') === null && _.get(draft, 'queue.callback.media') === null) {
+					var draftLanguage = view.find('.acdc-queue-form').data('queue-language-selection');
+					draftLanguage.adopt = draftLanguage.ready.indexOf(draftLanguage.selected) >= 0;
+				}
 				self.renderAgentOrder(view, queue.agent_order || []);
 				self.bindQueueForm(view, queueId, generation, accountId);
 				self.getContentContainer().empty().append(view);
@@ -1406,6 +1456,13 @@ define(function(require) {
 				self.renderAgentOrder(view, order);
 			});
 			self.syncCallbackForm(form);
+			form.find('[name="announcements.language"]').on('change', function() {
+				var selection = form.data('queue-language-selection'), value = $(this).val();
+				if (selection && selection.ready.indexOf(value) >= 0) {
+					selection.selected = value;
+					selection.adopt = true;
+				}
+			});
 			form.find('[name="callback.enabled"], [name="callback.caller_id_source"], [name="callback.announcement.enabled"]').on('change', function() {
 				self.syncCallbackForm(form);
 			});
@@ -1439,7 +1496,8 @@ define(function(require) {
 					form[0].reportValidity && form[0].reportValidity();
 					return;
 				}
-				callbackError = self.callbackKeyError(form) || self.callbackSelectionError(form);
+				callbackError = self.queueLanguageSelectionError(form, Boolean(view.data('queue-id') || queueId))
+					|| self.callbackKeyError(form) || self.callbackSelectionError(form);
 				if (callbackError) {
 					self.showFormError(view, callbackError);
 					return;
@@ -1512,6 +1570,12 @@ define(function(require) {
 				return labels.chooseNumber;
 			}
 			return null;
+		},
+
+		queueLanguageSelectionError: function(form, isEdit) {
+			var selection = form.data('queue-language-selection');
+			return selection && !isEdit && selection.ready.indexOf(selection.selected) < 0
+				? this.i18n.active().acdc.dropdowns.languageNotInstalled : null;
 		},
 
 		serializeQueue: function(form, isEdit) {
@@ -1640,6 +1704,28 @@ define(function(require) {
 			}
 			if (announcementLanguage !== undefined) {
 				payload.announcements.language = announcementLanguage;
+			}
+			var languageSelection = form.data('queue-language-selection');
+			if (languageSelection) {
+				// Saving a ready selected language adopts built-ins, including the
+				// same language. Unready legacy settings survive unrelated edits.
+				var queueLanguage = languageSelection.adopt || !isEdit
+					? languageSelection.selected : languageSelection.original;
+				if (queueLanguage === undefined) { delete payload.announcements.language; }
+				else { payload.announcements.language = queueLanguage; }
+				if (languageSelection.adopt && languageSelection.ready.indexOf(queueLanguage) >= 0) {
+					// PATCH null is a deletion tombstone, consumed by Crossbar before
+					// validation/storage; it is not a stored prompt value. No media
+					// document or attachment is deleted, only obsolete queue references.
+					if (isEdit) {
+						payload.announcements.media = null;
+						callbackConfig.media = null;
+						callbackConfig.return_confirmation_prompt = null;
+					} else {
+						delete payload.announcements.media;
+						delete callbackConfig.media;
+					}
+				}
 			}
 			if (payload.strategy === 'in_order' && !form.data('agent-order-read-only')) {
 				payload.agent_order = (form.data('agent-order') || []).slice();

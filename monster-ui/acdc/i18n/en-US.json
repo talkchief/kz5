@@ -154,10 +154,10 @@
 			"preConnectMediaHelp": "Optional audio played once to the caller after an agent is selected and before connection.",
 			"intervalHelp": "Announcements repeat at this interval; Kazoo requires at least 15 seconds.",
 			"initialDelayHelp": "Wait this many seconds before the first position or estimated-wait announcement. For example, 30 waits half a minute after entering the queue. Repeats use the announcement interval independently.",
-			"languageHelp": "Choose a ready installed language, or use the call or account language. Unavailable packs cannot be selected. Synthetic voice readiness does not imply native-speaker pronunciation approval; the system default is English (en-us).",
+			"languageHelp": "One queue language controls position announcements and every callback offer, menu, number readback, confirmation and error response, using its built-in female voice. New queues default to English. Saving a ready language uses its built-in prompts. Unavailable languages cannot be selected; existing unavailable settings survive unrelated edits. Synthetic voice availability does not imply native-speaker pronunciation approval.",
 			"promptsTitle": "Announcement prompts",
 			"promptsDescription": "Choose audio used around the spoken queue position and estimated wait time. Only verified installed system prompts and account media are offered.",
-			"legacyPromptsPreserved": "This queue has existing custom announcement or callback audio. Those recordings are preserved when you save; changing the language does not replace them."
+			"legacyPromptsPreserved": "This queue has custom announcement or callback audio. Saving with a ready queue language replaces those queue prompt overrides with its built-in voice, even when the language is unchanged. Your recordings are not deleted. If the selected language is unavailable, unrelated edits preserve the current settings."
 		},
 		"callbacks": {
 			"title": "Callback registrations",
@@ -240,7 +240,7 @@
 			"waitAnnouncements": "Speak the estimated wait time",
 			"announcementInterval": "Announcement interval (seconds)",
 			"announcementInitialDelay": "First announcement delay (seconds)",
-			"announcementLanguage": "Prompt language override",
+			"announcementLanguage": "Queue language",
 			"positionPrefixPrompt": "Position prefix prompt",
 			"positionSuffixPrompt": "Position suffix prompt",
 			"waitTimePrompt": "Estimated wait-time prompt",

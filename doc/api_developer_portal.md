@@ -291,3 +291,37 @@ The verified previous catalog is retained at
 were restarted or backend code loaded. This updates static documentation only;
 HTTPS, real principals, callback audio and the new backend deployment remain
 separate acceptance gates.
+
+## Built-in queue voice adoption reference — 2026-09-06
+
+The editor PATCH schema now explicitly allows null deletion markers for
+`announcements.media`, `callback.media`, and the obsolete
+`callback.return_confirmation_prompt`. An example under the queue-editor PATCH
+operation shows the complete envelope, preserved roster/route, revision snapshot
+and idempotency key. Replace example revisions with the full fresh GET snapshot;
+do not reuse illustrative IDs. These markers remove queue references, not media
+documents. Create settings use a separate schema without nullable prompt maps.
+
+The legacy English readiness catalog now describes57 prerequisites:32 immutable
+fixed recordings, ten recorded telephone digits and15 official legacy prompts.
+The missing-ID array bound is57. Fixed-only metadata is not enough to admit the
+canonical callback menu. This transitional readiness does not certify prerecorded
+queue-position speech or native-speaker approval.
+
+Guarded62912 passed generation, schema tests, deterministic rebuild, tamper and
+target-safety checks, followed by all63 production ACDC module compilation.
+The reference contains356 paths,651 operations and487 schemas. New tests cover
+the PATCH markers for all five locales, invalid media types, separate create
+validation, the complete example and the57-entry catalog bound.
+
+Actual installer publication28926 exited0. All12 deployed files (including the
+manifest) matched repository bytes over loopback HTTP with Host
+`kz5.talkchief.io`; no-store headers,308 `/apis` redirect and unknown-asset404
+were checked. OpenAPI SHA-256:
+`0a04f98a9bc8211c533c3607795d7e8cdd44e69f10afba0488b12eacd93b3d48`.
+Manifest SHA-256:
+`a1ef6744e47c92007d0f43ebe399d61d1c397ea3165602295e3b389366c3c45f`.
+The previous verified portal remains at
+`/usr/local/src/kazoo5-installer/api-docs-rollback.VafWMp/previous`.
+No backend/UI bundle was deployed and no service restarted. This is static HTTP
+publication, not HTTPS, live API, browser or callback acceptance.

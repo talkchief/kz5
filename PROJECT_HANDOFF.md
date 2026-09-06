@@ -163,6 +163,9 @@ Update this section with final outcomes rather than deleting failed evidence.
 1. The installer210 regression passed; run the main installer smoke again after
    final integration changes. Never restart a still-running job just because an
    observation timed out.
+   Next callback fix: P0-12. The21-second feedback deadline does not cancel a
+   synchronous metadata lookup before the receive. Cache the three auxiliary
+   paths during configuration and prove no timed branch performs datastore IO.
 2. Preserve/review the accepted canonical callback changes and rerun
    `scripts/test-acdc-gemini-canonical-callback.sh`, callback feedback/menu,
    caller/announcement regressions and production compilation after further
@@ -247,6 +250,9 @@ call/account data: summarize relevant errors rather than publishing raw dumps.
   `/apis` includes implemented contracts and clearly marked proposals. The
   register reports 356 paths /651 operations; verify fresh source/output before
   quoting it as the current release. Dashboard proposals are not live endpoints.
+  Latest static publication28926 includes the built-in-language PATCH deletion
+  example, separate create schema and57-entry prerequisite bound. Twelve files
+  matched HTTP bytes; no backend/UI bundle deployment or TLS claim is implied.
 - `/opt/kz5/dashboards design/`: supplied design references. Dashboard/WFM tasks
   remain open; do not mistake this voice work for their completion.
 

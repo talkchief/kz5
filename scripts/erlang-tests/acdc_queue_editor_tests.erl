@@ -80,6 +80,7 @@ pipeline_test_() -> {foreach, fun setup/0, fun teardown/1,
      fun(_T) -> fun bounded_get/0 end,
      fun(_T) -> fun no_validation_side_effects/0 end,
      fun(_T) -> fun successful_single_request_and_replay/0 end,
+     fun(_T) -> fun builtin_language_tombstones_remove_references_only/0 end,
      fun(_T) -> fun receipt_race/0 end,
      fun(_T) -> fun partial_bulk_and_safe_retry/0 end,
      fun(_T) -> fun lost_queue_reply/0 end,
@@ -261,6 +262,32 @@ no_validation_side_effects() ->
     ForbiddenBody = prepared(kz_json:set_value([<<"queue">>, <<"_id">>], ?R, B), ?Q),
     ?assertEqual(400, cb_context:resp_error_code(ForbiddenBody)),
     ?assertEqual([], lookup(writes)).
+
+builtin_language_tombstones_remove_references_only() ->
+    MediaId = <<"customer-recording">>,
+    Media = doc(MediaId, <<"media">>, [{<<"_attachments">>,j([{<<"voice.wav">>,j([{<<"length">>,16000}])}])}]),
+    Original = kz_json:set_values([
+        {[<<"announcements">>,<<"language">>],<<"en-us">>},
+        {[<<"announcements">>,<<"media">>],j([{<<"you_are_at_position">>,MediaId}])},
+        {[<<"callback">>,<<"media">>],j([{<<"offer">>,MediaId},{<<"returned_confirmation">>,MediaId}])},
+        {[<<"callback">>,<<"return_confirmation_prompt">>],MediaId}],queue()),
+    ets:insert(editor_test,[{?Q,Original},{MediaId,Media}]),
+    Patch = j([{<<"announcements">>,j([{<<"language">>,<<"en-us">>},{<<"media">>,null}])},
+              {<<"callback">>,j([{<<"media">>,null},{<<"return_confirmation_prompt">>,null}])}]),
+    %% Check both the editor validation merge and Crossbar's actual PATCH
+    %% merge primitive. Null is consumed, never persisted as prompt media.
+    ?assertEqual(cb_acdc_queue_editor:digest(cb_acdc_queue_editor:merge_patch(Original,Patch)),
+                 cb_acdc_queue_editor:digest(kz_json:merge(fun kz_json:merge_left/2,Patch,Original))),
+    B = kz_json:set_value(<<"queue">>,Patch,body(?Q)),
+    Result = cb_acdc_queue_editor:execute(prepared(B,?Q)),
+    ?assertEqual(success,cb_context:resp_status(Result)),
+    Stored = lookup(?Q),
+    lists:foreach(fun(Key) -> ?assertEqual(undefined,kz_json:get_value(Key,Stored)) end,
+        [[<<"announcements">>,<<"media">>],[<<"callback">>,<<"media">>],
+         [<<"callback">>,<<"return_confirmation_prompt">>]]),
+    ?assertEqual(<<"en-us">>,kz_json:get_value([<<"announcements">>,<<"language">>],Stored)),
+    ?assertEqual(Media,lookup(MediaId)),
+    ?assertNot(lists:member(MediaId,lookup(writes))).
 
 successful_single_request_and_replay() ->
     B = body(?Q), Result = cb_acdc_queue_editor:execute(prepared(B, ?Q)),
@@ -634,17 +661,19 @@ legacy_language_readiness_batch() ->
          kz_json:set_value(<<"private_extra">>, <<"must_not_leak">>, M),
          kz_json:set_value(<<"backend_mode">>, <<"unknown">>, M)]),
     meck:expect(kz_datamgr, open_docs, fun(<<"system_media">>, Ids) ->
-        ?assertEqual(44, length(Ids)),
+        ?assertEqual(57, length(Ids)),
         ?assert(lists:member(<<"en-us/queue-about_5_minutes">>, Ids)),
         ?assertNot(lists:member(<<"en-us/acdc-queue-your-current-position-is">>, Ids)),
         ?assertNot(lists:member(<<"en-us/acdc-callback-success">>, Ids)),
         ?assert(lists:member(<<"en-us/agent-invalid_choice">>, Ids)),
-        ?assertEqual(29, length(acdc_gemini_prompts:fixed_media_ids(<<"en-us">>))),
+        ?assertEqual(32, length(acdc_gemini_prompts:fixed_media_ids(<<"en-us">>))),
+        ?assertEqual(42, length(acdc_gemini_prompts:callback_media_ids(<<"en-us">>))),
+        ?assertEqual(10,length([Id || Id <- Ids, binary:match(Id,<<"/acdc-number-">>) =/= nomatch])),
         ?assert(lists:all(fun(<<"en-us/", _/binary>>) -> true; (_) -> false end, Ids)),
         {ok, [j([{<<"key">>, Id}, {<<"doc">>, english_media_doc(Id)}]) || Id <- Ids]}
     end),
     {Verified, Media} = cb_acdc_queue_editor:verified_manifest_media(M),
-    ?assertEqual(M, Verified), ?assertEqual(44, length(Media)),
+    ?assertEqual(M, Verified), ?assertEqual(57, length(Media)),
     ?assertEqual(1, meck:num_calls(kz_datamgr, open_docs, '_')),
     Catalog = j([{<<"language_capabilities">>, Verified}, {<<"system_media">>, Media},
                  {<<"catalogs">>, j([{<<"system_media">>, j([{<<"complete">>, true}])}])}]),
@@ -663,11 +692,14 @@ legacy_language_readiness_batch() ->
           kz_json:set_value([<<"language_capabilities">>, <<"languages">>, <<"en-us">>, <<"ready">>], true, Catalog)]),
     ?assertEqual(false, kz_json:get_value([<<"language_capabilities">>, <<"languages">>, <<"en-us">>, <<"ready">>], Catalog)),
     ?assert(kz_json:is_true(<<"complete">>, cb_acdc_queue_editor:system_media_state(M, Media))),
-    %% Every fresh-install prerequisite is necessary, including all 29 mapped
-    %% recordings. Actual immutable IDs are never replaced with canonical IDs.
+    %% Every fresh-install prerequisite is necessary, including all 32 fixed
+    %% recordings and each of the ten telephone digits. No native SAY fallback.
+    DigitMedia = [D || D <- Media, binary:match(kz_json:get_value(<<"id">>,D),<<"/acdc-number-">>) =/= nomatch],
+    ?assertEqual(10,length(DigitMedia)),
     lists:foreach(fun(Entry) ->
         Id = kz_json:get_value(<<"id">>, Entry),
         Partial = lists:delete(Entry, Media),
+        ?assertEqual(56,length(Partial)),
         ?assertNot(cb_acdc_queue_editor:language_selection_ready(<<"en-us">>,
             kz_json:set_value(<<"system_media">>, Partial, Catalog))),
         State = cb_acdc_queue_editor:system_media_state(M, Partial),
@@ -690,7 +722,7 @@ legacy_language_readiness_batch() ->
             {ok, [j([{<<"key">>, Id}, {<<"doc">>, case Id of GeminiId -> BadDoc; _ -> english_media_doc(Id) end}]) || Id <- Ids]}
         end),
         {M, Partial} = cb_acdc_queue_editor:verified_manifest_media(M),
-        ?assertEqual(43, length(Partial)),
+        ?assertEqual(56, length(Partial)),
         ?assertNot(cb_acdc_queue_editor:language_selection_ready(<<"en-us">>,
             kz_json:set_value(<<"system_media">>, Partial, Catalog)))
     end, [kz_json:set_value(<<"source_type">>, <<"customer">>, ValidDoc),

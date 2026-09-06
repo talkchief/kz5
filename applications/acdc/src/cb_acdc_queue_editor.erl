@@ -212,7 +212,7 @@ system_media(Context) ->
 system_media_state(Manifest, Media) ->
     case kz_json:get_value(<<"backend_mode">>, Manifest) of
         <<"legacy">> ->
-            Required = legacy_official_ids() ++ acdc_gemini_prompts:fixed_media_ids(<<"en-us">>),
+            Required = legacy_official_ids() ++ acdc_gemini_prompts:callback_media_ids(<<"en-us">>),
             Present = [kz_json:get_value(<<"id">>, M) || M <- Media],
             case Required -- Present of
                 [] -> catalog_state(true, <<"complete">>, length(Media));
@@ -231,14 +231,15 @@ verified_manifest_media(Manifest) ->
 
 %% The deployed English baseline resolves fixed defaults to immutable Gemini
 %% media, not obsolete canonical callback aliases. Keep its official legacy
-%% phrases/auxiliary branches and all 29 actual fixed defaults in one batch.
+%% phrases/auxiliary branches and all 42 callback prerequisites (32 fixed plus
+%% ten recorded telephone digits) in one bounded batch.
 %% This does not promote the all-false multilingual capability manifest.
 verified_legacy_media(Manifest) ->
     Official = legacy_official_ids(),
-    Ids = Official ++ acdc_gemini_prompts:fixed_media_ids(<<"en-us">>),
+    Ids = Official ++ acdc_gemini_prompts:callback_media_ids(<<"en-us">>),
     {Docs, Media} = verified_media(Ids),
     Canonical = [M || M <- Media, lists:member(kz_json:get_value(<<"id">>, M), Official)],
-    {Manifest, Canonical ++ acdc_gemini_prompts:verified_fixed_media(<<"en-us">>, Docs)}.
+    {Manifest, Canonical ++ acdc_gemini_prompts:verified_callback_media(<<"en-us">>, Docs)}.
 
 legacy_official_ids() ->
     [<<"en-us/", (legacy_prompt(P))/binary>> || P <- required_prompts(),
@@ -513,7 +514,7 @@ language_selection_ready(Language, Catalog) ->
                               kz_json:is_true(<<"has_attachments">>, M)],
                     Language =:= <<"en-us">> andalso
                         lists:all(fun(Id) -> lists:member(Id, Ids) end, legacy_official_ids())
-                        andalso acdc_gemini_prompts:fixed_media_complete(<<"en-us">>,
+                        andalso acdc_gemini_prompts:callback_media_complete(<<"en-us">>,
                             kz_json:get_list_value(<<"system_media">>, Catalog, []));
                 undefined -> kz_json:is_true([<<"languages">>, Language, <<"ready">>], Manifest)
             end

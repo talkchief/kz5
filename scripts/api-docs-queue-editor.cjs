@@ -15,9 +15,9 @@ function applyQueueEditor({spec, operation, request, response, envelope, object,
     schemas.QueueEditorRevisions = strict({queue: {type: 'string', nullable: true}, users: {type: 'object', additionalProperties: str}, callflows: {type: 'object', additionalProperties: str}});
     schemas.QueueEditorRevisions.description = 'Copy the entire revisions object from a fresh GET editor snapshot. users and callflows map every returned catalog document ID to its revision, not only selected items. queue is null when creating. The backend compares the applicable maps before writes.';
     schemas.QueueEditorCatalogState = strict({complete: {type: 'boolean'}, reason: str, count: {type: 'integer', minimum: 0}, limit: {type: 'integer', enum: [500]},
-        missing_prompt_ids: {type: 'array', maxItems: 44, uniqueItems: true, items: str}}, ['complete', 'reason', 'count', 'limit']);
+        missing_prompt_ids: {type: 'array', maxItems: 57, uniqueItems: true, items: str}}, ['complete', 'reason', 'count', 'limit']);
     schemas.QueueEditorCatalogState.description = 'Incomplete catalogs must not be treated as empty selections. A limit-exceeded catalog returns an empty list with complete=false and reason=limit_exceeded, never a silently truncated list. Other reasons include forbidden, invalid_scope, unavailable and unverified_language_manifest.';
-    schemas.QueueEditorCatalogState.description += ' In legacy English mode, missing or provenance-invalid fixed media returns complete=false, reason=english_media_prerequisites_incomplete, and exact missing_prompt_ids. The bounded prerequisites are 29 immutable Gemini fixed records, 12 official queue phrases and three official callback auxiliary prompts, fetched in one batch. This does not verify resolver caches, downloaded audio bytes, native speech modules or external routing.';
+    schemas.QueueEditorCatalogState.description += ' In legacy English mode, missing or provenance-invalid media returns complete=false, reason=english_media_prerequisites_incomplete, and exact missing_prompt_ids. The bounded prerequisites are 32 immutable Gemini fixed records, ten immutable telephone-digit recordings, 12 official queue phrases and three official callback auxiliary prompts, fetched in one batch. The ten digits are required by canonical built-in callbacks; fixed-only proof is insufficient. This does not verify resolver caches, downloaded audio bytes, native position speech or external routing.';
     schemas.QueueEditorUser = strict({id: hex, name: str, first_name: str, last_name: str, enabled: {type: 'boolean'}}, ['id']);
     schemas.QueueEditorMedia = strict({id: str, name: str, language: str, media_type: str, media_source: str}, ['id']);
     schemas.QueueEditorSystemMedia = strict({id: str, name: str, language: str, has_attachments: {type: 'boolean', enum: [true]},
@@ -38,9 +38,23 @@ function applyQueueEditor({spec, operation, request, response, envelope, object,
     schemas.QueueEditorSnapshot.required = schemas.QueueEditorSnapshot.required.filter(key => key !== 'language_capabilities');
     schemas.QueueEditorSettings = {...schemas.QueuePatch, description: 'Queue settings only (encoded JSON at most 65536 bytes). Do not include id, agents, keys beginning with pvt_, or keys beginning with _. Identity and roster are server-owned. A create request must satisfy the ordinary queues create schema; PATCH merges the supplied settings.',
         not: {anyOf: [{required: ['id']}, {required: ['agents']}]}, 'x-max-encoded-json-bytes': 65536, 'x-forbidden-key-prefixes': ['_', 'pvt_']};
+    schemas.QueueEditorCreateSettings = {...schemas.QueueEditorSettings, required: schemas.queues.required,
+        description: 'New queue settings; satisfy the ordinary queues create schema. For built-in voice defaults select announcements.language and omit announcements.media and callback.media. Null prompt deletion markers apply to PATCH, not creation.'};
+    const patchProperties = JSON.parse(JSON.stringify(schemas.QueueEditorSettings.properties));
+    for (const section of ['announcements', 'callback']) {
+        patchProperties[section].properties.media.nullable = true;
+        patchProperties[section].properties.media.description += ' For PATCH only, null removes this entire override map from the persisted queue. Omission preserves it; an empty object does not remove existing nested overrides. No media documents or recordings are deleted.';
+    }
+    patchProperties.callback.properties.return_confirmation_prompt = {type: 'string', nullable: true,
+        minLength: 1, maxLength: 256, deprecated: true,
+        description: 'Legacy returned-call prompt override. Send null in PATCH when adopting built-in queue voices, so this field is absent in storage. A stored explicit null is not a valid runtime prompt.'};
+    schemas.QueueEditorSettings.properties = patchProperties;
+    schemas.QueueEditorSettings.description += ' Built-in language adoption uses announcements.language plus announcements.media=null, callback.media=null and callback.return_confirmation_prompt=null. The server consumes null as a deletion marker before validating/saving the merged queue. Use a supported ready locale from GET editor; changing references does not certify playback readiness.';
     schemas.QueueEditorWrite = strict({queue: ref('QueueEditorSettings'), roster: {type: 'array', nullable: true, uniqueItems: true, maxItems: 500, items: hex, description: 'Desired full roster; null preserves current membership.'},
         route: {...strict({extension: {type: 'string', pattern: '^(?:\\+?[0-9*#]+)?$', maxLength: 32}}), nullable: true, description: 'null preserves routing. A nonempty extension creates/updates a managed route. Empty string requests removal of the eligible managed route, subject to ownership/conflict checks; it does not authorize broad callflow deletion.'}, revisions: ref('QueueEditorRevisions'), request_id: hex});
     schemas.QueueEditorWrite.description = 'All five fields are required for both PUT and PATCH. The request_id is a fresh client-generated 32-character lowercase hexadecimal idempotency key, stable for retries of this exact operation. Never reuse it with different content, account, verb, target, or authenticated owner.';
+    schemas.QueueEditorCreateWrite = {...schemas.QueueEditorWrite,
+        properties: {...schemas.QueueEditorWrite.properties, queue: ref('QueueEditorCreateSettings')}};
     const operationId = {type: 'string', pattern: '^acdc_queue_editor_[a-f0-9]{64}$'};
     schemas.QueueEditorSuccess = strict({queue_id: hex, operation_id: operationId, state: {type: 'string', enum: ['complete']}, atomic: {type: 'boolean', enum: [false]}, roster_preserved: {type: 'boolean'}, route_preserved: {type: 'boolean'}, reload_required: {type: 'boolean', enum: [true]}});
     const extensionPhases = ['reserve_extensions', 'queue', 'roster', 'route', 'finalize_extensions'];
@@ -55,11 +69,22 @@ function applyQueueEditor({spec, operation, request, response, envelope, object,
         const get = operation(url, 'get', writeMethod === 'put' ? 'Load create-queue editor catalogs' : 'Load queue settings, roster, routes and safe catalogs', source, {description, responses: {200: response('Editor snapshot', envelope(ref('QueueEditorSnapshot'))), 401: response('Invalid authentication', ref('CrossbarError')), 403: response('Forbidden by account or resource permissions', ref('CrossbarError')), 404: response('Queue not found', ref('CrossbarError')), 503: response('Editor unavailable', ref('CrossbarError'))}});
         get['x-implementation-status'] = 'implemented-in-source; latest-revision-not-live-verified';
         get['x-live-verification'] = {host: 'kz5.talkchief.io', date: '2026-09-05', coverage: 'Historical checkpoint, not certification of the latest source revision. Authenticated live browser: one editor GET, zero catalog fanout, zero JS/HTTP errors. This records one host/date, not every deployment.'};
-        const write = operation(url, writeMethod, writeMethod === 'put' ? 'Create queue, roster and extension with an operation receipt' : 'Update queue, roster and extension with revision checks', source, {description, requestBody: request(ref('QueueEditorWrite')), responses: {
+        const write = operation(url, writeMethod, writeMethod === 'put' ? 'Create queue, roster and extension with an operation receipt' : 'Update queue, roster and extension with revision checks', source, {description, requestBody: request(ref(writeMethod === 'put' ? 'QueueEditorCreateWrite' : 'QueueEditorWrite')), responses: {
             200: response('Complete operation receipt; reload editor', envelope(ref('QueueEditorSuccess'))), 400: response('Invalid body, queue settings, or selections', ref('CrossbarError')), 401: response('Invalid authentication', ref('CrossbarError')), 403: response('Embedded resource operation forbidden', ref('CrossbarError')), 404: response('Queue not found', ref('CrossbarError')),
             409: response('Revision/idempotency conflict or incomplete operation. Recovery details are present when an operation receipt exists.', object({status: str, error: str, message: str, data: {oneOf: [ref('QueueEditorRecovery'), {type: 'object', maxProperties: 0}]}, request_id: str})),
             503: response('Catalog, storage, or receipt unavailable. Some writes may already have committed; reload before recovery.', ref('CrossbarError'))}});
         if (writeMethod === 'put') write.responses['201'] = response('Created complete operation receipt; reload editor', envelope(ref('QueueEditorSuccess')));
+        if (writeMethod === 'patch') write.requestBody.content['application/json'].examples = {
+            builtinQueueLanguage: {
+                summary: 'Adopt the ready built-in queue language without deleting recordings',
+                description: 'Replace revisions with the entire fresh GET editor snapshot and generate a new request_id for this operation. Empty revision maps below are illustrative only. Null roster/route preserves those resources; null prompt maps removes overrides. Check language readiness before saving.',
+                value: {data: {queue: {announcements: {language: 'en-us', media: null},
+                    callback: {media: null, return_confirmation_prompt: null}},
+                    roster: null, route: null,
+                    revisions: {queue: '3-0123456789abcdef0123456789abcdef', users: {}, callflows: {}},
+                    request_id: '0123456789abcdef0123456789abcdef'}}
+            }
+        };
         write['x-implementation-status'] = 'implemented-in-source; latest-revision-not-live-verified';
         write['x-live-verification'] = {host: 'kz5.talkchief.io', date: '2026-09-05', coverage: 'Historical checkpoint, not certification of the latest source revision or the later bulk-acknowledgement repair. Isolated test tenant: create/edit including explicit English selection, exact replay, changed-request-ID conflict, stale revision rejection, managed route removal and exact-CAS fixture cleanup. No agent changes. Restricted-token, cross-node and partial-write recovery coverage remain separate.'};
     }

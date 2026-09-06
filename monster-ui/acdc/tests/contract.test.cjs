@@ -206,6 +206,52 @@ const blankCreate = app.serializeQueue(queueForm(Object.assign({}, formValues, {
 assert.strictEqual(Object.hasOwn(blankCreate, 'moh'), false);
 assert.strictEqual(Object.hasOwn(blankCreate, 'announce'), false);
 assert.strictEqual(Object.hasOwn(blankCreate.announcements, 'language'), false);
+
+// Production forms always carry an explicit five-choice language state. There
+// is no inherit/empty choice, and readiness never resurrects a disabled option.
+const queueLanguageChoices = app.announcementLocales.map(value => ({ value, ready: value === 'en-us', disabled: value !== 'en-us', label: value }));
+assert(app.queueLanguageOptions([], 'en-us').every(item => item.disabled && !item.ready && item.label),
+	'Missing readiness descriptors must be labeled and disabled');
+for (const current of [undefined, '', 'fr-ca', 'en-us', 'he-il']) {
+	const choices = app.queueLanguageOptions(queueLanguageChoices, current);
+	assert.deepStrictEqual(Array.from(choices, item => item.value), ['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa']);
+	assert.strictEqual(choices.filter(item => item.selected).length, 1);
+	assert.strictEqual(choices.find(item => item.selected).value, current === 'he-il' ? 'he-il' : 'en-us');
+	assert(choices.filter(item => item.value !== 'en-us').every(item => item.disabled));
+}
+for (const language of app.announcementLocales) {
+	const languageState = app.queueLanguageSelection(app.announcementLocales.map(value =>
+		({ value, ready: true, disabled: false, label: value })), language, 'en-us');
+	assert.strictEqual(languageState.adopt, true, 'Ready initial selection adopts without a change event');
+	const adopted = app.serializeQueue(queueForm(formValues, formChecks, { 'queue-language-selection': languageState }), true);
+	assert.strictEqual(adopted.announcements.language, language);
+	assert.strictEqual(adopted.announcements.media, null);
+	assert.strictEqual(adopted.callback.media, null);
+	assert.strictEqual(adopted.callback.return_confirmation_prompt, null);
+	if (language === 'en-us') {
+		assert.strictEqual(adopted.callback.media, null, 'Same-language EN save must remove old overrides without a change event');
+	}
+	assert.strictEqual(adopted.moh, formValues.moh, 'Language adoption must preserve hold media');
+	assert.strictEqual(adopted.announce, formValues.announce, 'Language adoption must preserve pre-connect media');
+}
+assert.strictEqual(app.queueLanguageSelection(queueLanguageChoices, 'en-us', 'en-us').adopt, true,
+	'Same-language ready EN adoption must be initialized even when EN is the only enabled choice');
+assert.strictEqual(app.queueLanguageSelection(queueLanguageChoices, 'he-il', 'he-il').adopt, false);
+assert.strictEqual(app.queueLanguageSelection([], 'en-us', 'en-us').adopt, false);
+assert.strictEqual(app.queueLanguageSelection([{ value: 'en-us', ready: true, disabled: true }], 'en-us', 'en-us').adopt, false);
+const newBuiltin = app.serializeQueue(queueForm(formValues, formChecks, { 'queue-language-selection':
+	{ selected: 'en-us', ready: ['en-us'], adopt: true } }), false);
+assert.strictEqual(newBuiltin.announcements.language, 'en-us');
+assert.strictEqual(Object.hasOwn(newBuiltin.announcements, 'media'), false);
+assert.strictEqual(Object.hasOwn(newBuiltin.callback, 'media'), false);
+assert.strictEqual(Object.hasOwn(newBuiltin.callback, 'return_confirmation_prompt'), false);
+const legacyUnchanged = app.serializeQueue(queueForm(formValues, formChecks, { 'queue-language-selection':
+	{ original: 'fr-ca', selected: 'en-us', ready: [], adopt: false } }), true);
+assert.strictEqual(legacyUnchanged.announcements.language, 'fr-ca');
+assert.strictEqual(legacyUnchanged.callback.media.offer, formValues['callback.media.offer']);
+assert.strictEqual(legacyUnchanged.announcements.media.you_are_at_position, formValues['announcements.media.you_are_at_position']);
+assert.strictEqual(app.queueLanguageSelectionError(queueForm({}, {}, { 'queue-language-selection':
+	{ selected: 'en-us', ready: [], adopt: false } }), true), null, 'Unrelated legacy edits remain possible');
 const inheritedValues = Object.assign({}, formValues, {
 	'callback.outbound_authority.id': 'named-user-id',
 	'callback.outbound_authority.type': 'user',
@@ -450,36 +496,49 @@ assert.strictEqual(app.validLanguageCapabilities(unavailable), true);
 assert.doesNotThrow(() => capabilityValidator.assertLanguageCapabilities(unavailable));
 const unavailableOptions = app.languageCapabilityOptions(unavailable, fixedMedia);
 assert.strictEqual(unavailableOptions.find(option => option.value === 'he-il').disabled, true);
-const preservedHebrew = app.selectionOptions(unavailableOptions, 'he-il', 'Default', 'Keep current').find(option => option.selected);
+const preservedHebrew = app.queueLanguageOptions(unavailableOptions, 'he-il').find(option => option.selected);
 assert.strictEqual(preservedHebrew.value, 'he-il');
-assert.strictEqual(preservedHebrew.disabled, false, 'Existing unavailable selections must remain serializable');
-assert.strictEqual(preservedHebrew.preserved, true);
+assert.strictEqual(preservedHebrew.disabled, true, 'Existing unavailable packs must never be re-enabled');
 assert.strictEqual(preservedHebrew.ready, false);
 // Legacy capability flags stay false. Incremental English readiness now needs
-//29 immutable, provenance-verified Gemini projections plus15 attached official
+//42 immutable, provenance-verified Gemini projections plus15 attached official
 //English prompts, not the obsolete29 name-only aliases in the old fixture.
-const englishMap = [...fs.readFileSync(path.join(projectRoot, 'applications/acdc/src/acdc_gemini_map.hrl'), 'utf8')
+const geminiMapSource = fs.readFileSync(path.join(projectRoot, 'applications/acdc/src/acdc_gemini_map.hrl'), 'utf8');
+const geminiMapHash = geminiMapSource.match(/GEMINI_MAP_SHA256, <<"([a-f0-9]{64})">>/)[1];
+const englishMap = [...geminiMapSource
 	.matchAll(/\{<<"en-us">>,<<"([^"]+)">>,<<"([^"]+)">>,<<"([a-f0-9]{64})">>/g)];
-assert.strictEqual(englishMap.length, 29);
-assert.deepStrictEqual(englishMap.map(match => match[1]).sort(), Array.from(app.requiredLanguagePromptIds()).sort());
+assert.strictEqual(englishMap.length, 42);
+assert.strictEqual(app.requiredBuiltinFixedPromptIds().length, 32);
+assert.deepStrictEqual(englishMap.map(match => match[1]).sort(), Array.from(app.requiredBuiltinCallbackPromptIds()).sort());
 const geminiEnglish = englishMap.map(match => ({id: 'en-us/' + match[2], language: 'en-us', has_attachments: true,
 	canonical_prompt_id: match[1], prompt_id: match[2], sha256: match[3], import_metadata_verified: true,
-	source_type: 'kazoo5_acdc_gemini_voice_installer', source_map_sha256: '36665a8916e18503ae3214c5fd77748a7739c300b8989e24cc26b3214d2f8aa0'}));
+	source_type: 'kazoo5_acdc_gemini_voice_installer', source_map_sha256: geminiMapHash}));
 const officialEnglish = app.requiredLanguagePromptIds().filter(id => id.startsWith('acdc-queue-') && id !== 'acdc-queue-your-current-position-is')
 	.map(id => id.slice(5)).concat(['agent-invalid_choice', 'menu-invalid_entry', 'cf-enter_number'])
 	.map(id => ({id: 'en-us/' + id, language: 'en-us', has_attachments: true}));
 assert.strictEqual(officialEnglish.length, 15);
 const legacyEnglish = geminiEnglish.concat(officialEnglish);
-assert.strictEqual(legacyEnglish.length, 44);
-assert.strictEqual(new Set(legacyEnglish.map(item => item.id)).size, 44);
+assert.strictEqual(legacyEnglish.length, 57);
+assert.strictEqual(new Set(legacyEnglish.map(item => item.id)).size, 57);
 const legacyCapabilities = capabilityValidator.legacyLanguageCapabilities();
 assert.strictEqual(app.validLanguageCapabilities(legacyCapabilities), true);
 assert.deepStrictEqual(Array.from(app.languageCapabilityOptions(legacyCapabilities, legacyEnglish).filter(option => option.ready), option => option.value), ['en-us']);
 assert(app.languageCapabilityOptions(legacyCapabilities, legacyEnglish.slice(1)).every(option => option.disabled),
-	'Explicit legacy mode still requires every one of the44 verified English prompts');
+	'Explicit legacy mode still requires every one of the57 verified English prompts');
+const telephoneDigits = geminiEnglish.filter(item => item.canonical_prompt_id.startsWith('acdc-number-'));
+assert.strictEqual(telephoneDigits.length, 10);
+assert.strictEqual(app.editableSystemMedia(legacyEnglish).length, 47,
+	'Telephone digits must remain readiness-only metadata, not selectable hold/pre-connect audio');
+assert(app.editableSystemMedia(legacyEnglish).every(item => !item.id.includes('/acdc-number-')));
+for (const digit of telephoneDigits) {
+	const missingDigit = legacyEnglish.filter(item => item !== digit);
+	assert.strictEqual(missingDigit.length, 56);
+	assert(app.languageCapabilityOptions(legacyCapabilities, missingDigit).every(option => option.disabled),
+		'Missing recorded telephone digit ' + digit.canonical_prompt_id + ' must not use native SAY readiness');
+}
 for (let missing = 0; missing < legacyEnglish.length; missing++) {
 	assert(app.languageCapabilityOptions(legacyCapabilities, legacyEnglish.filter((_item, index) => index !== missing)).every(option => option.disabled),
-		'Missing any one of the29 Gemini or15 official projections must disable incremental English');
+		'Missing any one of the42 Gemini or15 official projections must disable incremental English');
 }
 for (const alter of [item => { delete item.import_metadata_verified; }, item => { item.import_metadata_verified = false; },
 	item => { item.source_type = 'unknown'; }, item => { item.source_map_sha256 = '0'.repeat(64); },
@@ -491,7 +550,7 @@ for (const alter of [item => { delete item.import_metadata_verified; }, item => 
 		'A named Gemini purpose without complete verified provenance is not readiness');
 }
 for (const alter of [item => { item.has_attachments = false; }, item => { item.language = 'fr-fr'; }, item => { item.id = 'en-us/not-required'; }]) {
-	const corrupt = JSON.parse(JSON.stringify(legacyEnglish)); alter(corrupt[29]);
+	const corrupt = JSON.parse(JSON.stringify(legacyEnglish)); alter(corrupt[42]);
 	assert(app.languageCapabilityOptions(legacyCapabilities, corrupt).every(option => option.disabled),
 		'Official English projection identity, locale and attachment are all required');
 }

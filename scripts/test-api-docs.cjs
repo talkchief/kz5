@@ -89,6 +89,34 @@ async function offline() {
         {...editorBody, route: {extension: '100', extra: true}}, {...editorBody, unexpected: true},
         {...editorBody, queue: {id: device_id}}, {...editorBody, queue: {agents: []}}]) assert.equal(editorWrite(invalid), false);
     for (const field of Object.keys(editorBody)) {const missing = {...editorBody}; delete missing[field]; assert.equal(editorWrite(missing), false);}
+    const editorSettings = validate('QueueEditorSettings');
+    const builtinAdoption = {announcements: {language: 'en-us', media: null},
+        callback: {media: null, return_confirmation_prompt: null}};
+    assert(editorSettings(builtinAdoption), 'PATCH must accept prompt deletion markers');
+    for (const locale of ['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa']) {
+        assert(editorSettings({...builtinAdoption, announcements: {language: locale, media: null}}));
+    }
+    for (const media of [false, 42, 'recording', []]) {
+        assert.equal(editorSettings({callback: {media}}), false);
+        assert.equal(editorSettings({announcements: {media}}), false);
+    }
+    const editorCreate = validate('QueueEditorCreateSettings');
+    assert(editorCreate({name: 'New queue', announcements: {language: 'en-us'}}));
+    assert.equal(editorCreate({name: 'New queue', ...builtinAdoption}), false,
+        'Creation must not inherit PATCH-only nullable prompt maps');
+    assert.equal(spec.components.schemas.queues.properties.callback.properties.media.nullable, undefined,
+        'PATCH overlay must not mutate the persisted/create queue schema');
+    assert.equal(spec.components.schemas.QueueEditorCatalogState.properties.missing_prompt_ids.maxItems, 57);
+    const catalogState = validate('QueueEditorCatalogState');
+    const incompleteMedia = {complete: false, reason: 'english_media_prerequisites_incomplete',
+        count: 0, limit: 500, missing_prompt_ids: Array.from({length: 57}, (_,i) => 'missing-' + i)};
+    assert(catalogState(incompleteMedia));
+    assert.equal(catalogState({...incompleteMedia, missing_prompt_ids: [...incompleteMedia.missing_prompt_ids, 'extra']}), false);
+    assert(spec.components.schemas.QueueEditorSettings.description.includes('deletion marker'));
+    const editorPatch = spec.paths['/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/editor'].patch;
+    assert(editorWrite(editorPatch.requestBody.content['application/json'].examples.builtinQueueLanguage.value.data));
+    assert.equal(spec.paths['/accounts/{ACCOUNT_ID}/queues/editor'].put.requestBody.content['application/json'].schema.properties.data.$ref,
+        '#/components/schemas/QueueEditorCreateWrite');
     const editorRecovery = validate('QueueEditorRecovery');
     const recovery = {queue_id: device_id, operation_id: 'acdc_queue_editor_' + '0'.repeat(64), state: 'running', phase: 'reserve_extensions',
         committed: [], in_flight: [], remaining: ['reserve_extensions', 'queue', 'roster', 'route', 'finalize_extensions'], extension_claims: [], atomic: false, reload_required: true};

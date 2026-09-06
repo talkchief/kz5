@@ -3,6 +3,7 @@
 -export([canonical/1, default/4, default_alias/5, selection/2,
          auxiliary/2, builtin/2,
          callback/5, callback_readback/2, telephone/3, capabilities/1,
+         callback_media_ids/1, verified_callback_media/2, callback_media_complete/2,
          fixed_media_ids/1, verified_fixed_media/2, fixed_media_complete/2]).
 -ifdef(TEST).
 -export([default_with/6, telephone_with/5, capabilities_with/2, asset/2, imported/2,
@@ -247,13 +248,35 @@ fixed_media_ids(Language) -> [media_id(A) || A <- fixed_assets(Language)].
 
 -spec verified_fixed_media(binary(), list()) -> list().
 verified_fixed_media(Language, Docs) ->
-    [fixed_projection(A) || A <- fixed_assets(Language),
+    verified_media(fixed_assets(Language), Docs).
+
+%% The editor must check the same fixed AND telephone inventory as callback/5.
+%% Fixed-only evidence cannot admit a menu whose number readback is unavailable.
+-spec callback_media_ids(binary()) -> list().
+callback_media_ids(Language) -> [media_id(A) || A <- callback_assets(Language)].
+
+-spec verified_callback_media(binary(), list()) -> list().
+verified_callback_media(Language, Docs) -> verified_media(callback_assets(Language), Docs).
+
+-spec callback_media_complete(binary(), list()) -> boolean().
+callback_media_complete(Language, Media) ->
+    media_complete(callback_assets(Language), Media, ?FIXED_ASSET_COUNT + 10).
+
+-spec callback_assets(binary()) -> list().
+callback_assets(Language) -> [A || A <- ?GEMINI_ASSETS, element(1,A) =:= Language].
+
+-spec verified_media(list(), list()) -> list().
+verified_media(Assets, Docs) ->
+    [fixed_projection(A) || A <- Assets,
         lists:any(fun(Doc) -> safe(fun() -> imported(A, {ok, Doc}) end) =:= true end, Docs)].
 
 -spec fixed_media_complete(binary(), list()) -> boolean().
 fixed_media_complete(Language, Media) ->
-    Assets = fixed_assets(Language),
-    length(Assets) =:= ?FIXED_ASSET_COUNT andalso
+    media_complete(fixed_assets(Language), Media, ?FIXED_ASSET_COUNT).
+
+-spec media_complete(list(), list(), pos_integer()) -> boolean().
+media_complete(Assets, Media, Expected) ->
+    length(Assets) =:= Expected andalso
         lists:all(fun(A) -> lists:any(fun(M) ->
             lists:all(fun({K,V}) -> get(K,M) =:= V end, element(1, fixed_projection(A)))
         end, Media) end, Assets).
