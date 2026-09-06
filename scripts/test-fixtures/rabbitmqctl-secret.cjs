@@ -4,7 +4,11 @@
 const fs = require('node:fs'), crypto = require('node:crypto'), assert = require('node:assert/strict');
 const args = process.argv.slice(2), env = process.env;
 const append = item => fs.appendFileSync(env.KAZOO_TEST_TRACE, JSON.stringify(item) + '\n');
-if (args[0] === '-q' && args[1] === 'list_users') {
+if (args[0] === '-q' && args[1] === 'list_permissions') {
+  assert.deepEqual(args, ['-q', 'list_permissions', '-p', env.KAZOO_RABBITMQ_VHOST, '--formatter', 'json']);
+  append({operation: 'list_permissions'});
+  console.log(JSON.stringify([{user: env.KAZOO_RABBITMQ_USER, configure: '.*', write: '.*', read: '.*'}]));
+} else if (args[0] === '-q' && args[1] === 'list_users') {
   assert.equal(args.length, 2); append({operation: 'list_users'});
   if (env.KAZOO_TEST_SCENARIO === 'update') console.log(env.KAZOO_RABBITMQ_USER + '\t[]');
 } else if (args[0] === '-q' && args[1] === 'list_vhosts') {

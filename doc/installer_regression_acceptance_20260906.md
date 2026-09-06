@@ -3,7 +3,7 @@
 All five serialized offline phases passed before recovery merge `8548b98`:
 24 suite invocations, with parent HEAD `860ce46` and the pending installer
 changes whose exact hashes are recorded below. This verifies
-the current installer changes, not a completed production deployment or a
+the installer bytes identified below, not later edits, a completed production deployment or a
 clean-server installation. ACDC remains ordinary tracked source in kz5.
 
 | Phase | Terminal session | Suites | Retained evidence directory |
@@ -53,8 +53,70 @@ Build and isolated-browser scope are recorded separately in
 The subsequent recovery merge changed ACDC source and replay tests, so the
 129-input manifest is historical evidence of those five phases, not a claim
 that every input still matches after the merge. The installer and catalog patch
-hashes above remain unchanged. Combined recovery evidence is recorded in
+hashes above identify that checkpoint; subsequent endpoint/RabbitMQ validation
+changes need their own regression evidence. Combined recovery evidence is recorded in
 [agent recovery](acdc_agent_recovery.md).
+
+Coverage correction from the subsequent standalone-role audit: the 24-suite
+plan did **not** include `scripts/test-install-kazoo5.sh`. That entrypoint's
+ALL dry-run expectation used an obsolete Monster UI log string and was repaired
+and passed separately (session `29889`). The earlier phases must not be cited as a
+pass of that omitted script or of every installer test in the repository.
+The queue editor source also changed in `8c11030`; its 15 source-only browser
+cases passed, but the older compiled artifact above does not include that fix.
+
+## Standalone-role verification follow-up
+
+The verifier now checks RabbitMQ access to the configured vhost, not just the
+user's password. It requires the installer-granted configure/write/read
+permissions and an AMQP listener on the exact configured interface and port.
+Both new inspections are read-only and bounded to 30 seconds plus a 5-second
+termination grace; they are not independently byte-bounded. The installed
+RabbitMQ 3.13.7 CLI's BEAM code was inspected offline (session `7497`) to establish
+its real JSON envelope before constructing the test doubles.
+
+Session `4354` passed 65 runtime-verification scenarios and all 32 existing
+password-handling scenarios under a network namespace and the same resource
+limits. The Rabbit verifier function and four focused test/fixture hashes were
+identical before/after; concurrent endpoint edits elsewhere mean there is no
+whole-installer unchanged claim for that run. Retained evidence:
+`/tmp/kazoo-rabbitmq-verification-proof.rIg8PF/receipt.json`, SHA-256
+`484c1fb58bc4f42bad34b25ee7602d2635710139c1c24608ff25fb4b68860c19`.
+This is not a live broker permissions or connection test.
+
+API/WebSocket settings now reject embedded credentials, queries, fragments,
+invalid ports, invalid numeric IPv4 hosts and dot path segments before endpoint
+logging or package/source effects. An external public API must return one
+Crossbar-style JSON document, rather than arbitrary JSON or multiple documents.
+Dry runs explicitly state that they did not install services or run live checks.
+
+The first network-isolated combined attempt (`74102`) passed its 61 endpoint
+cases, then stopped with exit 2 in the main smoke script. Inspection confirmed
+that route discovery failed under `errexit/pipefail` before the intended
+loopback fallback on a node with no external route. Correcting that code made
+the same combined run pass (`8028`). Dedicated successful-route/no-route
+fixtures were then added so this behavior is tested even on a host with a route.
+These tests do not establish fresh-server package/dependency installation.
+
+Final focused run `45471` exited zero: 71 endpoint/route/external-response
+cases, followed by the main installer smoke suite including ALL. It also
+covers browser-numeric host interpretation and uses a sanitized child
+environment. Both ran under `unshare --net`, 120 seconds, 384 MiB and 768 MiB
+reserve. The full-entrypoint portion targets Rocky Linux 9 explicitly.
+Run the committed fixtures with:
+
+```sh
+bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 --runtime-sec 120 -- \
+  /usr/bin/unshare --net -- /usr/bin/bash -e -c '
+    /usr/bin/node /opt/kz5/scripts/test-monster-endpoint-preflight.cjs
+    /usr/bin/bash /opt/kz5/scripts/test-install-kazoo5.sh'
+```
+
+Separate session `17657` exited zero for the read-only installer checks,
+modular endpoint/service-gate suite, runtime configuration tests and all 12
+Monster installer wiring/patch groups. It used the same isolated limits and
+the locally retained pinned framework source. This is focused regression
+coverage, not a rerun of the historical five-phase artifact checkpoint.
 
 The initial fast phase (36132) exited 127 because the private runner's PATH
 omitted `/usr/sbin/ip`; its evidence remains at

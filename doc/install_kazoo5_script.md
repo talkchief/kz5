@@ -397,7 +397,7 @@ acceptance check.
 | `KAZOO_HAPROXY_BIND` | `127.0.0.1` |
 | `KAZOO_PUBLIC_IP` | primary IPv4 route source address |
 | `KAZOO_ERLANG_DIST_IP` | `127.0.0.1`; set the node's private IP for distributed ecallmgr |
-| `KAZOO_API_URL` | `http://<primary-ip>:8000/v2/` |
+| `KAZOO_API_URL` | `http://<primary-ip>/v2/` through nginx, or `https://<public-hostname>/v2/` when configured |
 | `KAZOO_FREESWITCH_NODES` | none; comma-separated nodes when remote |
 | `KAZOO_REQUIRE_MEDIA_CONNECTION` | `auto` |
 | `KAZOO_DEPLOYMENT_CONFIG` | `/etc/kazoo/deployment.env`; root-owned `0600` saved settings used by safe reruns |
@@ -412,6 +412,14 @@ acceptance check.
 Run `./scripts/install-kazoo5.sh --help` for the complete interface. Version
 and source-ref variables are overrides for controlled testing; change them as a
 compatibility set and re-run all acceptance checks.
+
+API and explicit WebSocket URLs are checked before endpoint logging or package
+installation. These installer settings support DNS/IPv4 hosts, optional ports
+1–65535 and plain URL paths, without userinfo, query strings, fragments or
+whitespace. Public API paths must end in `/v2/`; nginx API/WebSocket upstreams
+must use exactly `/v2/` and `/websocket`. IPv6 URL literals are not supported by
+this installer. An external public API is checked separately from the local
+nginx proxy and must return a Crossbar-style JSON envelope, not arbitrary JSON.
 
 ### Optional browser integrations
 

@@ -52,6 +52,8 @@ grep -Fq 'Erlang 10.20.0.13:11500-11999' <<<"$dist_output" || \
     fail 'distributed Erlang bind address was not accepted'
 
 all_output=$($INSTALLER --dry-run ALL 2>&1)
+grep -Fq 'Dry run complete; no components were installed or live health checks performed' <<<"$all_output" || \
+    fail 'ALL dry run must not claim live installation/health acceptance'
 for expected in \
     'Installing Apache CouchDB' \
     'Installing RabbitMQ' \
@@ -59,7 +61,7 @@ for expected in \
     'Compiling Kazoo' \
     'Installing Kazoo FreeSWITCH' \
     'Installing Kazoo Kamailio' \
-    'Installing and building Monster UI'; do
+    'Installing pinned Monster UI'; do
     grep -Fq "$expected" <<<"$all_output" || fail "ALL dry run omits: $expected"
 done
 

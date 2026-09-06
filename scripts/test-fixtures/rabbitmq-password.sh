@@ -18,6 +18,22 @@ write_file() { [[ $2 == /etc/rabbitmq/rabbitmq.conf ]]; local ignored; ignored=$
 service_enable_restart() { [[ $1 == rabbitmq-server.service ]]; record restart; }
 timeout() {
     if [[ $1 == 120 ]]; then record health; return 0; fi
+    if [[ $# == 10 && $1 == --signal=TERM && $2 == --kill-after=5 && $3 == 30 &&
+          $4 == rabbitmqctl && $5 == -q && $6 == list_permissions && $7 == -p &&
+          $8 == "$KAZOO_RABBITMQ_VHOST" && $9 == --formatter && ${10} == json ]]; then
+        record permissions-timeout
+        shift 3
+        command "$@"
+        return
+    fi
+    if [[ $# == 8 && $1 == --signal=TERM && $2 == --kill-after=5 && $3 == 30 &&
+          $4 == rabbitmq-diagnostics && $5 == -q && $6 == listeners &&
+          $7 == --formatter && $8 == json ]]; then
+        record listeners-timeout
+        shift 3
+        "$@"
+        return
+    fi
     [[ $# == 6 && $1 == --signal=TERM && $2 == --kill-after=5 && $3 == 30 && $4 == rabbitmqctl ]]
     record password-timeout
     shift 3
@@ -35,6 +51,11 @@ rpm() {
         erlang) printf '%s\n' "$ERLANG_VERSION" ;; *) return 1 ;; esac
 }
 rabbitmq-diagnostics() {
+    if [[ $* == '-q listeners --formatter json' ]]; then
+        printf '{"result":"ok","node":"rabbit@fixture","listeners":[{"node":"rabbit@fixture","interface":"%s","port":%s,"protocol":"amqp"}]}\n' \
+            "$KAZOO_RABBITMQ_BIND" "$KAZOO_AMQP_PORT"
+        return
+    fi
     case ${*: -1} in ping) record diagnostics ;;
         listeners) printf 'Interface: 10.20.0.12, port: 5679, protocol: amqp\n' ;; *) return 1 ;; esac
 }

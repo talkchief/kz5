@@ -939,6 +939,52 @@ check_build_disk_space() {
     fi
 }
 
+detect_primary_ipv4() {
+    local address
+    # Private-only nodes may have no external route. Do not exit under
+    # errexit/pipefail before reaching the intended loopback fallback.
+    address=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}') || address=
+    printf '%s\n' "${address:-127.0.0.1}"
+}
+
+validate_monster_endpoint() {
+    # Pure Bash preflight: no downloaded runtime is needed, and rejected values
+    # are never echoed (they may contain accidentally supplied credentials).
+    local name=$1 value=$2 schemes=$3 suffix=$4 authority host last_label port
+    local pattern="^(${schemes})://([a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\\.?(:[0-9]{1,5})?)(/[a-zA-Z0-9._~/-]*)?$"
+    [[ $value =~ $pattern ]] || die "${name} must be a credentials-free URL with a DNS/IPv4 host and no query or fragment"
+    authority=${BASH_REMATCH[2]}
+    host=${authority%%:*}
+    last_label=${host%.}
+    last_label=${last_label##*.}
+    # Browser URL parsers treat numeric final labels as IPv4, including short
+    # and hexadecimal forms. Accept only our normal dotted-decimal contract.
+    if [[ $last_label =~ ^([0-9]+|0[xX][0-9a-fA-F]+)$ ]]; then
+        [[ $host != *. ]] || die "${name} has an invalid IPv4 host"
+        is_ipv4_address "$host" || die "${name} has an invalid IPv4 host"
+    fi
+    if [[ $authority == *:* ]]; then
+        port=${authority##*:}
+        (( 10#$port >= 1 && 10#$port <= 65535 )) || die "${name} has an invalid port"
+    fi
+    [[ ! ${value#*://} =~ /\.\.?(/|$) ]] || die "${name} must not contain dot path segments"
+    [[ -z $suffix || $value == *"$suffix" ]] || die "${name} has an invalid endpoint path"
+}
+
+validate_monster_endpoints() {
+    validate_monster_endpoint KAZOO_API_URL "$KAZOO_API_URL" 'http|https' '/v2/'
+    validate_monster_endpoint KAZOO_API_UPSTREAM "$KAZOO_API_UPSTREAM" 'http|https' '/v2/'
+    validate_monster_endpoint KAZOO_WEBSOCKET_UPSTREAM "$KAZOO_WEBSOCKET_UPSTREAM" 'http|https' '/websocket'
+    # nginx proxy paths are deliberately exact, not arbitrary URL prefixes.
+    [[ $KAZOO_API_UPSTREAM =~ ^https?://[^/]+/v2/$ ]] || die 'KAZOO_API_UPSTREAM must use /v2/'
+    [[ $KAZOO_WEBSOCKET_UPSTREAM =~ ^https?://[^/]+/websocket$ ]] || die 'KAZOO_WEBSOCKET_UPSTREAM must use /websocket'
+    case $MONSTER_UI_WEBSOCKET_URL in
+        auto|same-origin|disabled) ;;
+        *) validate_monster_endpoint MONSTER_UI_WEBSOCKET_URL "$MONSTER_UI_WEBSOCKET_URL" 'ws|wss' ''
+           [[ ! $MONSTER_UI_WEBSOCKET_URL =~ ^wss?://[^/]+/undefined$ ]] || die 'MONSTER_UI_WEBSOCKET_URL must not use /undefined' ;;
+    esac
+}
+
 preflight() {
     [[ -r /etc/os-release ]] || die '/etc/os-release is missing'
     # shellcheck disable=SC1091
@@ -977,8 +1023,7 @@ preflight() {
     fi
     resolve_amqp_uri
     if [[ -z $KAZOO_PUBLIC_IP ]]; then
-        KAZOO_PUBLIC_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}')
-        KAZOO_PUBLIC_IP=${KAZOO_PUBLIC_IP:-127.0.0.1}
+        KAZOO_PUBLIC_IP=$(detect_primary_ipv4)
     fi
     if [[ -n $KAZOO_PUBLIC_HOSTNAME ]]; then
         KAZOO_API_URL=${KAZOO_API_URL:-https://${KAZOO_PUBLIC_HOSTNAME}/v2/}
@@ -987,6 +1032,7 @@ preflight() {
         # saved external API endpoints remain the operator's configuration.
         KAZOO_API_URL=${KAZOO_API_URL:-http://${KAZOO_PUBLIC_IP}/v2/}
     fi
+    validate_monster_endpoints
     KAZOO_MASTER_ACCOUNT_REALM=${KAZOO_MASTER_ACCOUNT_REALM:-master.${KAZOO_HOSTNAME//_/-}}
     validate_port KAZOO_COUCHDB_PORT "$KAZOO_COUCHDB_PORT"
     validate_port KAZOO_COUCHDB_ADMIN_PORT "$KAZOO_COUCHDB_ADMIN_PORT"
@@ -1012,10 +1058,6 @@ preflight() {
         die 'KAZOO_ERLANG_DIST_IP must name a loopback or explicit private interface, not 0.0.0.0'
     fi
     resolve_kazoo_cookie
-    [[ $KAZOO_API_URL =~ ^https?://[^[:space:]]+/$ ]] || \
-        die 'KAZOO_API_URL must be an http(s) URL ending in /'
-    [[ $KAZOO_API_URL != *\'* && $KAZOO_API_URL != *'"'* && $KAZOO_API_URL != *\\* ]] || \
-        die 'KAZOO_API_URL must not contain quotes or backslashes'
     [[ $KAZOO_APPS_LIST =~ ^[a-zA-Z0-9_,-]+$ ]] || \
         die 'KAZOO_APPS_LIST must be a comma-separated list of application names'
     [[ $MONSTER_UI_APPS_LIST =~ ^[a-z0-9,-]+$ ]] || \
@@ -1326,7 +1368,7 @@ EOF
 }
 
 verify_rabbitmq() {
-    local installed_version installed_erlang listener
+    local installed_version installed_erlang listener permissions amqp_listeners
     if [[ $DRY_RUN == true ]]; then log 'Would verify RabbitMQ'; return 0; fi
     assert_service rabbitmq-server.service
     listener=$(ss -H -ltn 'sport = :25672')
@@ -1348,9 +1390,38 @@ verify_rabbitmq() {
         die 'rabbitmq_consistent_hash_exchange is not enabled'
     rabbitmqctl_password authenticate_user || \
         die "RabbitMQ user ${KAZOO_RABBITMQ_USER} failed authentication"
-    rabbitmq-diagnostics -q listeners | grep -E "Interface: .* port: ${KAZOO_AMQP_PORT}, protocol: amqp" >/dev/null || \
-        die "RabbitMQ is not listening for AMQP on port ${KAZOO_AMQP_PORT}"
-    log "PASS RabbitMQ ${installed_version} on Erlang ${installed_erlang}: ping, listener, authentication, and consistent-hash plugin checks"
+    # Authentication alone does not prove access to the configured vhost.
+    # The vhost-scoped command fails for an absent vhost; require exactly one
+    # selected user row with the same permissions that installation grants.
+    permissions=$(timeout --signal=TERM --kill-after=5 30 \
+        rabbitmqctl -q list_permissions -p "$KAZOO_RABBITMQ_VHOST" --formatter json 2>/dev/null) || \
+        die 'RabbitMQ configured-vhost permissions inspection failed'
+    jq -e -s --arg user "$KAZOO_RABBITMQ_USER" '
+        length == 1 and (.[0] | type == "array" and
+            all(.[]; type == "object" and
+                (.user | type) == "string" and (.configure | type) == "string" and
+                (.write | type) == "string" and (.read | type) == "string") and
+            ([.[] | select(.user == $user)] |
+                length == 1 and .[0].configure == ".*" and
+                .[0].write == ".*" and .[0].read == ".*"))
+    ' <<<"$permissions" >/dev/null 2>&1 || \
+        die 'RabbitMQ configured user lacks exact configure/write/read permissions on the configured vhost'
+    # RabbitMQ 3.13 JSON listener rows bind interface, port and protocol in one
+    # record. A wildcard or another interface must not satisfy a private bind.
+    amqp_listeners=$(timeout --signal=TERM --kill-after=5 30 \
+        rabbitmq-diagnostics -q listeners --formatter json 2>/dev/null) || \
+        die 'RabbitMQ AMQP listener inspection failed'
+    jq -e -s --arg interface "$KAZOO_RABBITMQ_BIND" --argjson port "$KAZOO_AMQP_PORT" '
+        length == 1 and (.[0] | type == "object" and .result == "ok" and
+            (.node | type) == "string" and (.node | length) > 0 and
+            (.listeners | type) == "array" and
+            (.listeners | all(.[]; type == "object" and (.interface | type) == "string" and
+                    (.protocol | type) == "string" and (.port | type) == "number" and
+                    .port == (.port | floor)) and
+                any(.[]; .interface == $interface and .port == $port and .protocol == "amqp")))
+    ' <<<"$amqp_listeners" >/dev/null 2>&1 || \
+        die "RabbitMQ is not listening for AMQP on its configured interface ${KAZOO_RABBITMQ_BIND}:${KAZOO_AMQP_PORT}"
+    log "PASS RabbitMQ ${installed_version} on Erlang ${installed_erlang}: ping, exact AMQP listener, authentication, configured-vhost permissions, and consistent-hash plugin checks"
 }
 
 install_haproxy() {
@@ -4468,9 +4539,21 @@ install_monster_ui() {
     )
 }
 
+verify_monster_ui_api_endpoint() {
+    local api_result api_body api_status
+    api_result=$(curl --disable --connect-timeout 10 --max-time 30 --silent --show-error \
+        --write-out $'\n%{http_code}' "$KAZOO_API_URL") || \
+        die 'Configured Monster UI API is unreachable'
+    api_status=${api_result##*$'\n'}
+    api_body=${api_result%$'\n'*}
+    [[ $api_status =~ ^[24][0-9][0-9]$ ]] && \
+        jq -e -s 'length == 1 and (.[0] | type == "object" and (.status == "success" or .status == "error"))' <<<"$api_body" >/dev/null 2>&1 || \
+        die 'Configured Monster UI API must return a Crossbar JSON response with HTTP 2xx/4xx'
+}
+
 verify_monster_ui() {
     if [[ $DRY_RUN == true ]]; then log 'Would verify Monster UI'; return 0; fi
-    local api_result api_body api_status app expected_build installed_build
+    local app expected_build installed_build
     assert_service nginx.service
     expected_build=$(monster_ui_build_fingerprint)
     [[ -r /usr/local/share/kazoo5-installer/monster-ui-build ]] || \
@@ -4493,15 +4576,7 @@ verify_monster_ui() {
                 die 'Deployed ACDC metadata has an incorrect API URL'
         fi
     done
-    api_result=$(curl --connect-timeout 10 --max-time 30 --silent --show-error \
-        --write-out $'\n%{http_code}' "$KAZOO_API_URL") || \
-        die "Monster UI API is unreachable: ${KAZOO_API_URL}"
-    api_status=${api_result##*$'\n'}
-    api_body=${api_result%$'\n'*}
-    [[ $api_status =~ ^[234][0-9][0-9]$ ]] || \
-        die "Monster UI API returned HTTP ${api_status}: ${KAZOO_API_URL}"
-    jq -e . <<<"$api_body" >/dev/null || \
-        die "Monster UI API did not return JSON: ${KAZOO_API_URL}"
+    verify_monster_ui_api_endpoint
     verify_monster_app_registration
     log 'PASS Monster UI, stable app bundle, API reachability, and nginx checks'
 }
@@ -4542,7 +4617,11 @@ main() {
         install_requested
         save_deployment_config
     fi
-    log 'All requested Kazoo 5 components passed validation'
+    if [[ $DRY_RUN == true ]]; then
+        log 'Dry run complete; no components were installed or live health checks performed'
+    else
+        log 'All requested Kazoo 5 components passed validation'
+    fi
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
