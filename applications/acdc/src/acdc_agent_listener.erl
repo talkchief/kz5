@@ -95,6 +95,10 @@
                }).
 -type state() :: #state{}.
 
+-ifdef(TEST).
+-export([maybe_connect_to_agent/7]).
+-endif.
+
 -type agent() :: kapps_call:call() | kz_json:object().
 
 %%%=============================================================================
@@ -576,7 +580,8 @@ handle_cast({'bridge_to_member', Call, WinJObj, EPs, CDRUrl, RecordingUrl}, #sta
                                           ,kz_json:is_true(<<"Record-Caller">>, WinJObj, 'false')
                                           ),
 
-    AgentCallIds = lists:append(maybe_connect_to_agent(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl)
+    AgentCallIds = lists:append(maybe_connect_to_agent(MyQ, EPs, Call, RingTimeout, AgentId, CDRUrl
+                                                      ,kz_api:msg_id(WinJObj))
                                ,ACallIds),
 
     lager:debug("originate sent, waiting on successful bridge now"),
@@ -1036,13 +1041,12 @@ call_id(Call) ->
                         end, 'undefined', Keys)
     end.
 
--spec maybe_connect_to_agent(kz_term:ne_binary(), kz_json:objects(), kapps_call:call(), kz_term:api_integer(), kz_term:ne_binary(), kz_term:api_binary()) ->
+-spec maybe_connect_to_agent(kz_term:ne_binary(), kz_json:objects(), kapps_call:call(), kz_term:api_integer(), kz_term:ne_binary(), kz_term:api_binary(), kz_term:ne_binary()) ->
           kz_term:proplist().
-maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
+maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl, ConnectId) ->
     MCallId = kapps_call:call_id(Call),
     kz_log:put_callid(MCallId),
 
-    ReqId = kz_binary:rand_hex(6),
     AcctId = kapps_call:account_id(Call),
 
     {CIDNumber, CIDName} = acdc_util:caller_id(Call),
@@ -1050,7 +1054,7 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
 
     CCVs = props:filter_undefined([{<<"Account-ID">>, AcctId}
                                   ,{<<"Authorizing-ID">>, kapps_call:authorizing_id(Call)}
-                                  ,{<<"Request-ID">>, ReqId}
+                                  ,{<<"Request-ID">>, ConnectId}
                                   ,{<<"Retain-CID">>, <<"true">>}
                                   ,{<<"Agent-ID">>, AgentId}
                                   ,{<<"Member-Call-ID">>, MCallId}
@@ -1072,7 +1076,7 @@ maybe_connect_to_agent(MyQ, EPs, Call, Timeout, AgentId, _CdrUrl) ->
                                         end, {[], []}, EPs),
 
     Prop = props:filter_undefined(
-             [{<<"Msg-ID">>, kz_binary:rand_hex(6)}
+             [{<<"Msg-ID">>, ConnectId}
              ,{<<"Custom-Channel-Vars">>, kz_json:from_list(CCVs)}
              ,{<<"Timeout">>, Timeout}
              ,{<<"Endpoints">>, Endpoints}

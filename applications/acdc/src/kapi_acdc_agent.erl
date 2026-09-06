@@ -441,7 +441,7 @@ fsm_shared_routing_key(AcctId, AgentId) ->
     <<?FSM_SHARED_KEY, AcctId/binary, ".", AgentId/binary>>.
 
 -define(SHARED_FAILURE_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>]).
--define(OPTIONAL_SHARED_FAILURE_HEADERS, [<<"Blame">>]).
+-define(OPTIONAL_SHARED_FAILURE_HEADERS, [<<"Blame">>, <<"Member-Call-ID">>, <<"Connect-ID">>]).
 -define(SHARED_FAILURE_VALUES, [{<<"Event-Category">>, <<"agent">>}
                                ,{<<"Event-Name">>, <<"shared_failure">>}
                                ,{<<"Blame">>, [<<"member">>]}
@@ -467,7 +467,7 @@ shared_originate_failure_v(JObj) -> shared_originate_failure_v(kz_json:to_propli
 %% Sharing of answered call id to all agent FSMs
 %%------------------------------------------------------------------------------
 -define(SHARED_CALL_ID_HEADERS, [<<"Account-ID">>, <<"Agent-ID">>]).
--define(OPTIONAL_SHARED_CALL_ID_HEADERS, [<<"Agent-Call-ID">>, <<"Member-Call-ID">>]).
+-define(OPTIONAL_SHARED_CALL_ID_HEADERS, [<<"Agent-Call-ID">>, <<"Member-Call-ID">>, <<"Connect-ID">>]).
 -define(SHARED_CALL_ID_VALUES, [{<<"Event-Category">>, <<"agent">>}
                                ,{<<"Event-Name">>, <<"shared_call_id">>}
                                ]).

@@ -20,8 +20,8 @@ from kz5 rather than silently replaced with upstream code.
 
 `scripts/refresh-kazoo-integration-patches.cjs` manages only the remaining
 external checkouts. The existing ACDC patch files remain historical fixtures.
-The Gemini compatibility suite reconstructs its historical baseline privately
-from bundled source by reversing the language/atomic layers; it no longer
+The Gemini compatibility suite reconstructs its historical media baseline privately
+from bundled source by reversing the language layer; it no longer
 requires ACDC Git metadata. That suite does not establish acceptance of all
 current bundled behavior.
 
@@ -31,9 +31,13 @@ Run source regressions separately to avoid competing Erlang mock compilation:
 python3 scripts/test-acdc-source-ownership.py
 bash scripts/test-acdc-unit.sh
 bash scripts/test-acdc-strategies.sh
+bash scripts/test-acdc-agent-recovery.sh
 ```
 
 The outbound-agent regression covers a delayed queue satisfaction event during
 multiple direct calls, readiness after the final hangup, preservation of an
 existing pause and application of a pending logout. These checks run in
 isolated processes and do not deploy or replace live BEAMs.
+
+The agent recovery changes and their production acceptance steps are described
+in [acdc_agent_recovery.md](acdc_agent_recovery.md).

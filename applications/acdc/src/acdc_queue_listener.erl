@@ -517,6 +517,7 @@ send_member_connect_win(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts) ->
     CallJSON = kapps_call:to_json(Call),
     Win = props:filter_undefined(
             [{<<"Call">>, CallJSON}
+            ,{<<"Msg-ID">>, kz_api:msg_id(RespJObj)}
             ,{<<"Process-ID">>, MyId}
             ,{<<"Agent-Process-IDs">>, kz_json:get_value(<<"Agent-Process-IDs">>, RespJObj)}
             ,{<<"Queue-ID">>, QueueId}
@@ -531,6 +532,7 @@ send_member_connect_satisfied(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts) ->
     Q = kz_json:get_value(<<"Server-ID">>, RespJObj),
     Satisfied = props:filter_undefined(
                   [{<<"Call">>, CallJSON}
+                  ,{<<"Connect-ID">>, kz_api:msg_id(RespJObj)}
                   ,{<<"Process-ID">>, MyId}
                   ,{<<"Agent-Process-IDs">>, kz_json:get_list_value(<<"Agent-Process-IDs">>, RespJObj)}
                   ,{<<"Queue-ID">>, QueueId}
@@ -542,6 +544,7 @@ send_member_connect_satisfied(RespJObj, Call, QueueId, MyQ, MyId, QueueOpts) ->
 send_agent_timeout(RespJObj, Call, QueueId) ->
     Prop = [{<<"Queue-ID">>, QueueId}
            ,{<<"Call-ID">>, kapps_call:call_id(Call)}
+           ,{<<"Connect-ID">>, kz_api:msg_id(RespJObj)}
            ,{<<"Agent-Process-IDs">>, kz_json:get_value(<<"Agent-Process-IDs">>, RespJObj)}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
