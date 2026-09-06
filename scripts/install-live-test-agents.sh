@@ -57,9 +57,13 @@ case ${1:---dry-run} in
     --install)
         [[ $# == 1 && $EUID == 0 ]] || { printf '%s\n' 'Root is required for --install' >&2; exit 1; }
         [[ $SCRIPT_DIR =~ ^/opt/[A-Za-z0-9._/-]+/scripts$ && $SCRIPT_DIR != *..* ]] || exit 1
-        for file in run-live-test-agents.sh provision-live-test-agents.cjs sip-tests/live-agent-register.xml sip-tests/agent-answer.xml sip-tests/register.xml; do
+        for file in run-live-test-agents.sh provision-live-test-agents.cjs phone-process-identity.py sip-tests/live-agent-register.xml sip-tests/agent-answer.xml sip-tests/register.xml; do
             [[ -f $SCRIPT_DIR/$file && ! -L $SCRIPT_DIR/$file ]] || { printf '%s\n' 'A required service source file is missing' >&2; exit 1; }
         done
+        if ! command -v python3 >/dev/null || ! python3 -I "$SCRIPT_DIR/phone-process-identity.py" --probe >/dev/null 2>&1; then
+            printf '%s\n' 'Python/kernel pidfd support is required; no PID-only fallback' >&2
+            exit 1
+        fi
         [[ ! -L $UNIT_PATH ]] || { printf '%s\n' 'Refusing a symlinked unit path' >&2; exit 1; }
         unit_text >"$UNIT_PATH"
         chmod 0644 "$UNIT_PATH"

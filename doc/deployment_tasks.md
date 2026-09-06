@@ -8,7 +8,10 @@ items below have the specific evidence stated; unchecked items are not finished.
   at 2026-09-06 00:12–00:14 with exact contacts, 30-online/1-offline directory
   results and unchanged one-agent roster/statuses; only the stalled fixture
   supervisor restarted. Serialized resource controls and the current 62-test
-  callback/Gemini suite pass. Post-incident live call/load acceptance remains; see
+  callback/Gemini suite pass. Post-incident isolated callback retry
+  `20260906T004339Z` passed full Gemini confirmation, ignored first attempt,
+  successful retry/two-way media, scoped cleanup and zero new errors/cores.
+  Broader live call/load acceptance remains; see
   [the incident evidence](host_memory_incident_20260905.md).
 
 - [ ] Unified account-scoped queue editor API: one initial read and consolidated
@@ -88,7 +91,7 @@ items below have the specific evidence stated; unchecked items are not finished.
 - [ ] Package source patches, deploy reviewed artifacts with rollback backups,
   verify browser/API/SIP behavior and fresh logs, and give the user test steps.
 - [ ] Commit/push completed changes with a credential scan and verified remote SHA.
-  Local checkpoints through `20e76d8` include recordings/transcripts, source
+  Local checkpoints through `c023d33` include recordings/transcripts, source
   repairs and scoped test evidence. Actual connector writes return403; remote master remains
   `57560824`. No successful push of that checkpoint has been claimed.
 - [x] Contain the 30 existing test-phone UDP control sockets without restarting

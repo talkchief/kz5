@@ -96,7 +96,9 @@ unset -f timeout
 # shellcheck disable=SC2317
 owned_helper() { printf '%s\n' 'Unexpected login/logout/ownership helper during phone repair' >&2; exit 1; }
 for index in {1..30}; do PHONE_PIDS[index-1]=$((10000+index)); done
-kill() { [[ ${ALL_DEAD:-false} != true && $1 == -0 && $2 != 10002 ]]; }
+phone_process_state() {
+    if [[ ${ALL_DEAD:-false} == true || $1 == 2 ]]; then printf '%s\n' dead; else printf '%s\n' alive; fi
+}
 contact_present() { [[ $1 != 2 ]]; }
 no_active_calls() { [[ ${ZERO_CALLS:-false} == true ]]; }
 start_phone() { REPAIRS+=("$1"); }
@@ -118,7 +120,7 @@ REPAIRS=()
 monitor_phones
 [[ ${#REPAIRS[@]} == 0 && $REGISTERED_PHONES == 0 && $PHONE_HEALTH_STATUS == 'DEGRADED: 0/30'* ]]
 ALL_DEAD=false
-kill() { [[ $1 == -0 ]]; }
+phone_process_state() { printf '%s\n' alive; }
 contact_present() { return 0; }
 OWNERSHIP_VERIFIED=true
 monitor_phones

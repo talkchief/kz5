@@ -42,6 +42,15 @@ the exact one-agent roster and 31 reported agent statuses/memberships stayed
 unchanged. No core platform service restarted. See
 [the recovery scope and protected receipts](kazoo_test_phone_recovery.md).
 
+The post-incident isolated callback retry `20260906T004339Z` subsequently exited
+zero: full received Gemini confirmation, unanswered first attempt, durable
+backoff, successful second native bridge and two-way audio. Checked service
+PIDs/restarts remained unchanged, test-window error/core counts were zero and
+native calls returned to zero after scoped cleanup. See
+[the exact callback evidence and limits](kazoo5_acceptance_status.md).
+This adds a bounded call-handling recovery observation; lost-message analysis,
+broader load/failover and complete incident closure remain open.
+
 At midnight the normal log rotation retained the exact prior crash records as
 `crash.log.0`; the new crash logs were empty during the recovery checks. No
 manual truncation or deletion removed the incident evidence.

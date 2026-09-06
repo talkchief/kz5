@@ -50,7 +50,7 @@ unset -f timeout
 # One dead phone must not tear down or log out the healthy 29. In-call repair
 # is deferred, then only that child restarts after a complete zero-call proof.
 for index in {1..30}; do PHONE_PIDS[index-1]=$((10000+index)); done
-kill() { [[ $2 != 10002 ]]; }
+phone_process_state() { if [[ $1 == 2 ]]; then printf '%s\n' dead; else printf '%s\n' alive; fi; }
 contact_present() { [[ $1 != 2 ]]; }
 no_active_calls() { return 1; }
 start_phone() { repaired_index=$1; }
@@ -61,7 +61,7 @@ monitor_phones >/dev/null 2>&1
 no_active_calls() { return 0; }
 monitor_phones >/dev/null 2>&1
 [[ $repaired_index == 2 ]]
-unset -f kill contact_present no_active_calls start_phone owned_helper
+unset -f phone_process_state contact_present no_active_calls start_phone owned_helper
 
 write_input 1 600 "$test_dir/input.csv"
 [[ $(stat -c '%a' "$test_dir/input.csv") == 600 ]]

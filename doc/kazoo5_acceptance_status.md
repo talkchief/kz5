@@ -1,6 +1,6 @@
 # Kazoo 5 acceptance status
 
-Latest progress review: 2026-09-06 00:14 UTC. **Acceptance is incomplete. Do not treat
+Latest progress review: 2026-09-06 00:50 UTC. **Acceptance is incomplete. Do not treat
 active services or this document as production certification.**
 
 ## Host memory incident and deployment hold
@@ -11,15 +11,49 @@ reconnected clients without platform restarts. Serialized, verified cgroup
 controls are now in place and the current-source 62-test Gemini/callback suite
 passes under them. The thirty test phones are registered again; actual contacts,
 30-online/1-offline directory results and unchanged one-agent roster/statuses
-passed after the isolated test-supervisor recovery. Recovery is not a call-test pass.
+passed after the isolated test-supervisor recovery. A subsequent isolated live
+callback retry also passed; its scope is recorded below, not load certification.
 See [the incident evidence and remaining gates](host_memory_incident_20260905.md).
 
 A real resource-capped private Monster UI `npm ci` failed on the pinned upstream
 lock's inconsistency. The initial narrow repair subsequently passed clean CI,
 native Sass/RE2 rebuild and native smoke, but Gulp then failed on incorrectly
-resolved dependencies. Lock ordering and forced-package metadata are under
-review. The live UI was not replaced. A usable clean build remains required;
+resolved dependencies. A corrected private lock passed clean CI with 1,130
+required dependency nodes, native rebuild and smoke. Full Gulp progressed to
+JavaScript minification but failed V8 heap limits at both 192 and 256 MiB. Neither
+failure was a cgroup OOM. A separate-process minification build is being tested
+within the unchanged hard resource cap. The live UI was not replaced. A usable clean build remains required;
 no provenance marker is being changed to hide these failed build gates.
+
+## Post-incident callback retry — 2026-09-06 00:43–00:49 UTC
+
+Run `20260906T004339Z` exited 0 after its scoped cleanup. The initially busy agent
+remained bridged while the second caller pressed 6 at 4.985898 seconds after
+answer. The complete 5.491-second installed Gemini/Sulafat confirmation arrived
+before server BYE, with correlation 0.999993 and zero missing phrase samples.
+This is received PCM evidence, not human transcription or native listening approval.
+
+After the explicit two-second post-proof wait, the first conversation was released
+6.927460 seconds after confirmation (including capture/proof work). The first
+callback attempt was deliberately unanswered for 15.204356 seconds. Durable
+`retry_wait` was observed. The second INVITE arrived 17.737096 seconds after
+cancellation, 0.763160 seconds after the recorded retry due time. The confirmed
+second attempt formed the reciprocal native bridge and delivered 4,912 PCMU
+packets in each agent direction.
+
+The harness recorded zero new errors/cores and unchanged checked service
+PIDs/restart counts. Native calls were zero after cleanup; both current Kazoo
+crash logs remained empty and the persistent test supervisor still reported
+30/30 registered phones with its same PID. Historical unresolved fixture state
+remains retained. This does not prove MASTER/MicroSIP/PSTN routing, full fixture
+cleanup, multi-node behavior, sustained load or production readiness.
+
+The preceding `20260906T003353Z` attempt failed during isolated setup, before
+SIP, because the bounded validation environment omitted the account home needed
+by Erlang/SUP. That failure and its possible setup writes are retained. The
+[guard repair and read-only verification](validation_resource_guard.md) are
+committed in `c023d33`; the callback pass is the subsequent run, not a relabeling
+of the failed attempt.
 
 ## Queue editor and standalone-apps checkpoint
 

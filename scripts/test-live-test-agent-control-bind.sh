@@ -18,6 +18,9 @@ trap cleanup_test EXIT
 # shellcheck disable=SC2034
 STATE='{"sip_proxy_host":"127.0.0.1","sip_proxy_port":5060}'
 write_input() { :; }
+# The mocked SIPp function can exit before /proc birth capture; process
+# identity is exercised separately, never inferred from this argument mock.
+record_phone_identity() { PHONE_START_TICKS[$1-1]=12345; }
 sipp() {
     local arguments=("$@") index port=
     for ((index=0; index<${#arguments[@]}; index++)); do

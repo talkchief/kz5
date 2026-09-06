@@ -16,6 +16,8 @@ readonly RTP_BASE=46000
 readonly COUNT=30
 readonly HELPER="$SCRIPT_DIR/provision-live-test-agents.cjs"
 readonly FS_CLI=/usr/local/freeswitch/bin/fs_cli
+readonly PHONE_PROCESS_HELPER="$SCRIPT_DIR/phone-process-identity.py"
+readonly SUPERVISOR_PID=$BASHPID
 MODE=dry-run
 STATE=
 RUN_STARTED=false
@@ -27,6 +29,8 @@ PHONE_HEALTH_STATUS=
 REGISTERED_PHONES=0
 CLEANING=false
 declare -a PHONE_PIDS=()
+declare -a PHONE_START_TICKS=()
+PHONE_PROC_STAT=
 declare -a STAT_COLUMNS=()
 declare -a PHONE_WARNED=()
 
@@ -133,11 +137,45 @@ failed_registrations() {
     ((value > 0))
 }
 
+read_phone_stat() {
+    PHONE_PROC_STAT=
+    [[ $1 =~ ^[1-9][0-9]*$ && $1 != 1 ]] || return 1
+    IFS= read -r PHONE_PROC_STAT <"/proc/$1/stat" 2>/dev/null
+}
+
+record_phone_identity() {
+    local index=$1 pid=${PHONE_PIDS[$(($1 - 1))]:-}
+    local -a fields=()
+    PHONE_START_TICKS[index-1]=
+    # This read is in the spawning Bash, before launching another helper:
+    # capture the fork's birth identity even if SIPp has not exec'd yet.
+    read_phone_stat "$pid" || return 1
+    [[ $PHONE_PROC_STAT == "$pid ("* && $PHONE_PROC_STAT == *') '* ]] || return 1
+    read -r -a fields <<<"${PHONE_PROC_STAT##*) }"
+    [[ ${#fields[@]} -ge 20 && ${fields[1]} == "$SUPERVISOR_PID" &&
+       ${fields[19]} =~ ^[1-9][0-9]*$ ]] || return 1
+    PHONE_START_TICKS[index-1]=${fields[19]}
+}
+
+phone_process_action() {
+    local index=$1 operation=$2 pid=${PHONE_PIDS[$(($1 - 1))]:-} ticks=${PHONE_START_TICKS[$(($1 - 1))]:-} result
+    if [[ ! $pid =~ ^[1-9][0-9]*$ || ! $ticks =~ ^[1-9][0-9]*$ || ! -f $PHONE_PROCESS_HELPER || -L $PHONE_PROCESS_HELPER ]]; then
+        printf '%s\n' unknown
+        return 0
+    fi
+    # Never fall back to kill(PID): the pidfd pins the task through validation
+    # and signal delivery, including exit/PID-reuse races after the stat read.
+    result=$(python3 -I "$PHONE_PROCESS_HELPER" "$operation" "$pid" "$ticks" "$SUPERVISOR_PID" 2>/dev/null 9>&-) || result=unknown
+    case $result in alive|dead|foreign|unknown|sent) printf '%s\n' "$result" ;; *) printf '%s\n' unknown ;; esac
+}
+
+phone_process_state() { phone_process_action "$1" check; }
+signal_phone() { phone_process_action "$1" "$2" >/dev/null; }
+
 check_children() {
-    local index pid
+    local index
     for ((index=1; index<=${#PHONE_PIDS[@]}; index++)); do
-        pid=${PHONE_PIDS[$((index - 1))]}
-        kill -0 "$pid" 2>/dev/null || die "Phone $index exited; restarting the supervised fixture set"
+        [[ $(phone_process_state "$index") == alive ]] || die "Phone $index child identity unavailable or exited; restarting the supervised fixture set"
         failed_registrations "$index" && die "Phone $index registration failed; restarting the supervised fixture set"
     done
     return 0
@@ -168,6 +206,7 @@ start_phone() {
             -trace_stat -fd 5s -stf "$RUNTIME_DIR/agent-$index-stats.csv" \
             >/dev/null 2>&1 9>&- &
         PHONE_PIDS[index-1]=$!
+        record_phone_identity "$index" || die "Phone $index birth identity unavailable; refusing PID-only supervision"
         unset 'STAT_COLUMNS[index]'
 }
 
@@ -183,10 +222,11 @@ valid_zero_channels() {
 }
 
 monitor_phones() {
-    local index pid healthy=0
+    local index pid process_state healthy=0
     for ((index=1; index<=COUNT; index++)); do
         pid=${PHONE_PIDS[index-1]}
-        if kill -0 "$pid" 2>/dev/null && contact_present "$index"; then
+        process_state=$(phone_process_state "$index")
+        if [[ $process_state == alive ]] && contact_present "$index"; then
             healthy=$((healthy + 1))
             if [[ ${PHONE_WARNED[index]:-false} == true ]]; then
                 log "Phone $index registration recovered; existing agent status preserved"
@@ -202,7 +242,9 @@ monitor_phones() {
         # carrying an inbound user call. Never kill it over a refresh failure.
         # Restart ONLY a dead child, with fresh global zero-call evidence and
         # verified fixture ownership; never change login/pause/resume statuses.
-        if ! kill -0 "$pid" 2>/dev/null && [[ $OWNERSHIP_VERIFIED == true ]] && no_active_calls; then
+        # Foreign or unreadable identity is not proof of a dead owned child.
+        if [[ $process_state == dead && $OWNERSHIP_VERIFIED == true ]] && no_active_calls &&
+           [[ $(phone_process_state "$index") == dead ]]; then
             wait "$pid" 2>/dev/null || true
             start_phone "$index"
             log "Restarted only phone $index after zero-call proof; agent statuses unchanged"
@@ -230,19 +272,25 @@ report_phone_health() {
 }
 
 stop_phones() {
-    local pid deadline=$((SECONDS + 5)) remaining
-    for pid in "${PHONE_PIDS[@]}"; do kill -INT "$pid" 2>/dev/null || true; done
+    local index pid deadline=$((SECONDS + 5)) remaining
+    for index in "${!PHONE_PIDS[@]}"; do signal_phone "$((index + 1))" INT; done
     while ((SECONDS < deadline)); do
         remaining=false
-        for pid in "${PHONE_PIDS[@]}"; do kill -0 "$pid" 2>/dev/null && remaining=true; done
+        for index in "${!PHONE_PIDS[@]}"; do
+            [[ $(phone_process_state "$((index + 1))") == alive ]] && remaining=true
+        done
         [[ $remaining == false ]] && break
         sleep 0.2
     done
-    for pid in "${PHONE_PIDS[@]}"; do
-        kill -KILL "$pid" 2>/dev/null || true
-        wait "$pid" 2>/dev/null || true
+    for index in "${!PHONE_PIDS[@]}"; do
+        pid=${PHONE_PIDS[index]}
+        signal_phone "$((index + 1))" KILL
+        # wait is not a signal, but avoid blocking cleanup on any task whose
+        # ownership/death cannot be proved. Bash/systemd reap remaining tasks.
+        if [[ $(phone_process_state "$((index + 1))") == dead ]]; then wait "$pid" 2>/dev/null || true; fi
     done
     PHONE_PIDS=()
+    PHONE_START_TICKS=()
 }
 
 clear_fixture_calls() {
@@ -335,7 +383,11 @@ on_exit() {
 
 run_service() {
     local index deadline next_check last_owned_check=0 file size version
-    for command in sipp jq node kamcmd flock timeout; do command -v "$command" >/dev/null || die "Missing dependency: $command"; done
+    for command in sipp jq node kamcmd flock timeout python3; do command -v "$command" >/dev/null || die "Missing dependency: $command"; done
+    if [[ ! -f $PHONE_PROCESS_HELPER || -L $PHONE_PROCESS_HELPER ]] ||
+       ! python3 -I "$PHONE_PROCESS_HELPER" --probe >/dev/null 2>&1; then
+        die 'Python/kernel pidfd support is required; no PID-only fallback'
+    fi
     version=$(sipp -v 2>&1 || true)
     [[ $version == *'SIPp v3.7.7-TLS-PCAP-SHA256'* ]] || die 'Pinned SIPp 3.7.7 is required'
     load_state
