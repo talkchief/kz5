@@ -18,9 +18,11 @@ patches or replacing running application BEAMs.
 - `cf_acdc_member` uses localized auxiliary recordings for unavailable action,
   invalid input and alternate-number entry. Feedback has a 20-second playback
   limit and a 21-second feedback deadline, further limited by remaining menu time.
-  **Review found that synchronous metadata lookup before the receive can exceed
-  that deadline.** Moving auxiliary paths into the preflight contract is still
-  required; the existing timeout tests do not cover slow real datastore reads.
+  **Review found that synchronous metadata lookup before the receive could exceed
+  that deadline in the preceding committed implementation.** The P0-12 fix
+  moves auxiliary paths into the preflight contract; its validation checkpoint
+  is recorded separately below. This is not a bound on arbitrary custom AMQP
+  publishing functions or native playback execution.
   Completion is correlated; stale/foreign events cannot complete feedback.
   Failed feedback resumes the original queue instead of claiming registration.
 - `acdc_callback_caller` resolves built-in returned-call confirmation using the
@@ -51,6 +53,45 @@ arity mismatch; it lacked the external resource guard. The fixture was corrected
 before53629. Keep that failed checkpoint distinct from the successful rerun.
 Expected supervisor reports in the private suite come from deliberately killed
 temporary workers, not live service crashes.
+
+## P0-12: remove metadata IO from timed feedback
+
+The built-in callback preflight already verified42 assets but discarded the
+three auxiliary paths. The fix retains them under `auxiliary` in the
+callback contract. Legacy fully explicit custom menus preflight only the three
+optional auxiliary assets before queue entry; missing assets do not disable the
+legacy menu or trigger a global English fallback.
+
+Unavailable-action feedback, invalid-entry feedback and alternate-number entry
+now use only the cached map. A missing/malformed cache fails quietly through the
+existing resume/media-failed handling. No timed branch lazily resolves metadata.
+This avoids CouchDB/cache wait and retry time consuming the remaining callback
+menu budget while delaying hangup or ownership events.
+
+Focused run `6821` exited0 with all22 helper/canonical contract tests passing,
+plus current production/TEST compilation and stable input pins. Digest:
+`5bcd7e76678f42988001ad768c391fd272401d2ec8b6d4b48eab975a73759ea8`.
+It verifies exactly42 built-in reads including the retained auxiliary map,
+exactly three optional legacy preflight reads per supported locale, and missing
+legacy auxiliary behavior. It does not execute the full timer/lifecycle suites.
+
+Full guarded run `75590` exited0: **all87 tests passed across all seven suites**,
+with production/TEST compilation and stable source pins. Its input digest is
+the same as6821 above. It used256MiB,768MiB reserve, a600-second outer deadline
+and a private network namespace. The added tests poison both the helper resolver and datastore reads, exercise
+30-ms remaining budgets for built-in and legacy cached contracts, and cover
+missing maps without false registration or ownership changes. Existing
+20-second playback/21-second feedback and correlated completion/terminal-event
+tests remain and passed, including the actual21-second receive deadline. The
+large suite wall time includes repeated meck compilation under a half-core CPU
+cap, not a measured live-call latency. This closes the scoped source-level
+metadata-IO regression, not native audio, arbitrary synchronous command publishing
+or real callback acceptance. No source from this checkpoint has been deployed.
+
+Root integration run `7787` then exited0: all63 production ACDC modules compiled
+with `-Werror`, no `TEST` build options or agent test exports, and unchanged
+bundled source/header inputs. It used the256-MiB/768-MiB-reserve offline guard
+with a180-second deadline. No application BEAM was loaded or installed.
 
 ## Reproduce
 

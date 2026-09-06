@@ -130,7 +130,11 @@ callback_defaults(Entry, Alternate, Media, Language, Account) ->
                 {ok, All} ->
                     Resolved = maps:from_list([{Name,maps:get(Prompt,All)} || {Name,Prompt} <- Defaults]),
                     Digits = maps:from_list([{D,{play,maps:get(<<"acdc-number-",D>>,All)}} || D <- "0123456789"]),
+                    Auxiliary = #{unavailable=>maps:get(<<"acdc-callback-unavailable">>,All),
+                                  invalid_entry=>maps:get(<<"acdc-callback-invalid-entry">>,All),
+                                  enter_number=>maps:get(<<"acdc-callback-enter-number">>,All)},
                     {ok,#{media=>Resolved, readback=>Digits, builtin_gemini=>true,
+                          auxiliary=>Auxiliary,
                           non_gemini_numeric_dependency=>false}};
                 Error -> Error
             end

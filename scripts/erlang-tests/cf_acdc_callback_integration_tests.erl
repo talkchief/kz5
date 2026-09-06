@@ -108,7 +108,7 @@ alternate_wrapper_bounds_prompt_wait_and_observes_hangup_test_() ->
     {timeout, 30, fun() -> with_callback_commands(fun() ->
         {ok, Initial, _} = acdc_callback_menu:new(menu_config(), undefined, erlang:monotonic_time(millisecond)),
         Expired = Initial#{deadline_ms => erlang:monotonic_time(millisecond) - 1},
-        ?assertEqual(timeout, cf_acdc_member:callback_test_collect_alternate(fixture_call, Expired)),
+        ?assertEqual(timeout, cf_acdc_member:callback_test_collect_alternate(fixture_call, callback(), Expired)),
         ?assertEqual(0, meck:num_calls(kapps_call_command, send_command, '_')),
         %% Use the real wait_for_dtmf/1 and real mailbox. A missing playback
         %% noop is bounded, and unrelated/noop events cannot renew the budget.
@@ -118,26 +118,30 @@ alternate_wrapper_bounds_prompt_wait_and_observes_hangup_test_() ->
         self() ! {amqp_msg, Noop},
         _ = erlang:send_after(30, self(), {amqp_msg, Noop}),
         _ = erlang:send_after(60, self(), {amqp_msg, Noop}),
-        ?assertEqual(timeout, cf_acdc_member:callback_test_collect_alternate(fixture_call, Waiting)),
+        ?assertEqual(timeout, cf_acdc_member:callback_test_collect_alternate(fixture_call, callback(), Waiting)),
         ?assert(erlang:monotonic_time(millisecond) >= Deadline),
         ?assert(erlang:monotonic_time(millisecond) < Deadline + 200),
         {Aborted, [{resume_live_queue, deadline}]} =
             acdc_callback_menu:event(tick, erlang:monotonic_time(millisecond), Waiting),
         ?assertEqual(aborted, acdc_callback_menu:status(Aborted)),
         self() ! {amqp_msg, call_event(<<"CHANNEL_DESTROY">>, [])},
-        ?assertEqual(hangup, cf_acdc_member:callback_test_collect_alternate(fixture_call, Initial)),
+        ?assertEqual(hangup, cf_acdc_member:callback_test_collect_alternate(fixture_call, callback(), Initial)),
         ?assertEqual(2, meck:num_calls(kapps_call_command, send_command, '_'))
     end) end}.
 
 with_callback_commands(Fun) ->
     meck:new(kapps_call_command, [passthrough, no_link]),
-    meck:new([acdc_gemini_prompts,kapps_call], [non_strict,no_link]),
+    meck:new([acdc_gemini_prompts,kapps_call,kz_datamgr], [non_strict,no_link]),
     try
         Media = <<"/system_media/en-us/acdc-callback-enter-number-gemini-sulafat-0123456789abcdef">>,
         meck:expect(kapps_call, language, fun(fixture_call) -> <<"en-us">> end),
         meck:expect(kapps_call, call_id, fun(fixture_call) -> ?CALL end),
         meck:expect(acdc_gemini_prompts, auxiliary,
-                    fun(enter_number,<<"en-us">>) -> {ok,Media} end),
+                    fun(_,_) -> error(timed_auxiliary_lookup_forbidden) end),
+        lists:foreach(fun(Function) ->
+            meck:expect(kz_datamgr,Function,fun(_,_) -> error(timed_datastore_call_forbidden) end),
+            meck:expect(kz_datamgr,Function,fun(_,_,_) -> error(timed_datastore_call_forbidden) end)
+        end,[open_cache_doc,open_doc]),
         meck:expect(kapps_call_command, send_command,
                     fun(Play,fixture_call) ->
                         ?assertEqual(Media,kz_json:get_value(<<"Media-Name">>,Play)),
@@ -145,23 +149,42 @@ with_callback_commands(Fun) ->
                         ?assert(Timeout>0 andalso Timeout=<20000),
                         ok
                     end),
-        Fun()
-    after meck:unload([kapps_call_command,acdc_gemini_prompts,kapps_call]) end.
+        Fun(),
+        ?assertEqual(0,meck:num_calls(acdc_gemini_prompts,auxiliary,'_')),
+        ?assertEqual([],meck:history(kz_datamgr))
+    after meck:unload([kapps_call_command,acdc_gemini_prompts,kapps_call,kz_datamgr]) end.
 
 missing_alternate_auxiliary_never_uses_legacy_prompt_test_() ->
     {timeout,30,fun() -> with_callback_commands(fun() ->
         {ok,State,_}=acdc_callback_menu:new(menu_config(),undefined,erlang:monotonic_time(millisecond)),
-        meck:expect(acdc_gemini_prompts,auxiliary,
-                    fun(enter_number,<<"en-us">>) -> {error,gemini_media_unavailable} end),
-        ?assertEqual(media_failed,cf_acdc_member:callback_test_collect_alternate(fixture_call,State)),
+        lists:foreach(fun(Config) ->
+            ?assertEqual(media_failed,cf_acdc_member:callback_test_collect_alternate(fixture_call,Config,State))
+        end,[#{},#{auxiliary=>#{}},#{auxiliary=>undefined},#{auxiliary=>#{enter_number=>undefined}},
+              #{legacy_custom_media=>true},#{builtin_gemini=>true}]),
         ?assertEqual(0,meck:num_calls(kapps_call_command,send_command,'_')),
         ?assertEqual(0,meck:num_calls(kapps_call_command,prompt,'_'))
     end) end}.
 
 collect_and_reduce(Digit, State) ->
     self() ! {amqp_msg, call_event(<<"DTMF">>, [{<<"DTMF-Digit">>, Digit}])},
-    {ok, Received} = cf_acdc_member:callback_test_collect_alternate(fixture_call, State),
+    {ok, Received} = cf_acdc_member:callback_test_collect_alternate(fixture_call, callback(), State),
     acdc_callback_menu:event({dtmf, Received}, erlang:monotonic_time(millisecond), State).
+
+callback() -> #{builtin_gemini=>true,auxiliary=>#{enter_number=>
+    <<"/system_media/en-us/acdc-callback-enter-number-gemini-sulafat-0123456789abcdef">>}}.
+
+cached_alternate_bounds_budget_with_poisoned_resolver_test_() ->
+    {timeout,30,fun() -> with_callback_commands(fun() ->
+        meck:expect(acdc_gemini_prompts,auxiliary,fun(_,_) -> timer:sleep(300),error(forbidden_lookup) end),
+        lists:foreach(fun(Config) ->
+            Now=erlang:monotonic_time(millisecond),
+            {ok,Initial,_}=acdc_callback_menu:new(menu_config(),undefined,Now),
+            State=Initial#{deadline_ms=>Now+30},
+            ?assertEqual(timeout,cf_acdc_member:callback_test_collect_alternate(fixture_call,Config,State)),
+            Elapsed=erlang:monotonic_time(millisecond)-Now,
+            ?assert(Elapsed>=25), ?assert(Elapsed<150)
+        end,[callback(),(maps:remove(builtin_gemini,callback()))#{legacy_custom_media=>true}])
+    end) end}.
 
 call_event(Name, Extra) ->
     kz_json:from_list([{<<"Event-Category">>, <<"call_event">>}, {<<"Event-Name">>, Name} | Extra]).

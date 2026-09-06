@@ -26,7 +26,7 @@
         ,callback_test_media/2
         ,callback_test_request/3
         ,callback_test_response/2
-        ,callback_test_collect_alternate/2
+        ,callback_test_collect_alternate/3
         ,callback_test_paused/3
         ,callback_test_unavailable/4
         ,callback_test_retry/4
@@ -247,7 +247,8 @@ callback_config(QueueJObj, Call) ->
                     lager:warning("callback menu disabled: language ~p requires all callback media", [Language]),
                     'undefined';
                 {'ok', Resolved} ->
-                    Resolved#{entry_key => Entry
+                    Prepared = preflight_callback_auxiliary(Resolved, Language),
+                    Prepared#{entry_key => Entry
                      ,allow_alternate_number => AllowAlternate
                      ,timeout_ms => kz_json:get_integer_value([<<"callback">>, <<"menu_timeout_ms">>]
                                                                   ,QueueJObj, 30000)
@@ -255,6 +256,29 @@ callback_config(QueueJObj, Call) ->
                                                                           ,QueueJObj, 10000)}
             end
     end.
+
+-spec preflight_callback_auxiliary(map(), binary()) -> map().
+preflight_callback_auxiliary(#{builtin_gemini := true}=Callback, _Language) -> Callback;
+preflight_callback_auxiliary(#{legacy_custom_media := true}=Callback, Language) ->
+    %% Legacy custom menus do not require the generated pack. Resolve optional
+    %% exact built-in feedback once, before queue entry/pause, and retain only
+    %% available paths. Missing auxiliary audio never disables custom menus.
+    Auxiliary = lists:foldl(fun(Name, Acc) ->
+        try acdc_gemini_prompts:auxiliary(Name, Language) of
+            {ok, Path} when is_binary(Path), byte_size(Path) > 0 -> maps:put(Name, Path, Acc);
+            _ -> Acc
+        catch _:_ -> Acc
+        end
+    end, #{}, [unavailable, invalid_entry, enter_number]),
+    Callback#{auxiliary => Auxiliary}.
+
+-spec cached_callback_auxiliary(atom(), any()) -> binary().
+cached_callback_auxiliary(Name, #{auxiliary := Auxiliary}) when is_map(Auxiliary) ->
+    case maps:get(Name, Auxiliary, undefined) of
+        Path when is_binary(Path), byte_size(Path) > 0 -> Path;
+        _ -> error(missing_cached_callback_auxiliary)
+    end;
+cached_callback_auxiliary(_, _) -> error(missing_cached_callback_auxiliary).
 
 callback_entry(_Digit, 'undefined', _Pending) -> 'false';
 callback_entry(_Digit, _Callback, Pending) when is_map(Pending) -> 'false';
@@ -412,13 +436,14 @@ callback_unavailable(MC, Context, TimeoutMs) ->
         _ -> 'resume'
     end.
 
-callback_auxiliary_feedback(Name, #member_call{call=Call}=MC, Context, TimeoutMs) ->
+callback_auxiliary_feedback(Name, #member_call{call=Call, callback=Callback}=MC, Context, TimeoutMs) ->
     Deadline = monotonic_ms() + min(?CALLBACK_UNAVAILABLE_TIMEOUT_MS, max(0, TimeoutMs)),
     %% The generated message may last twenty seconds. Bound this file handle and
     %% retain an absolute wrapper deadline; no inherited channel timeout changes.
     PromptResult = try
                        true = Deadline > monotonic_ms(),
-                       {ok, Media} = acdc_gemini_prompts:auxiliary(Name, kapps_call:language(Call)),
+                       %% This paused/timed branch must never fetch metadata.
+                       Media = cached_callback_auxiliary(Name, Callback),
                        Remaining = Deadline - monotonic_ms(),
                        true = Remaining > 0,
                        Noop = kapps_call_command:noop_id(),
@@ -617,24 +642,24 @@ reduce_callback_event(MC, Context, State, Event, Prefix) ->
     {Next, Actions} = acdc_callback_menu:event(Event, monotonic_ms(), State),
     run_callback_actions(MC, Context, Next, Prefix ++ Actions).
 
-collect_callback_alternate(#member_call{call=Call}, State) ->
+collect_callback_alternate(MC, State) ->
     case acdc_callback_menu:remaining_ms(monotonic_ms(), State) of
         0 -> 'timeout';
         _ ->
             %% Entering directly without usable caller ID and pressing the
             %% alternate key must both be audible. Re-prompt after invalid
             %% input clears the buffer, but never between valid digits.
-            case callback_enter_number(Call, State) of
+            case callback_enter_number(MC, State) of
                 'error' -> 'media_failed';
                 'ok' -> wait_callback_alternate(State)
             end
     end.
 
-callback_enter_number(Call, State) ->
+callback_enter_number(#member_call{call=Call, callback=Callback}, State) ->
     case maps:get(digits, State) of
         <<>> ->
             try
-                {ok, Media} = acdc_gemini_prompts:auxiliary(enter_number, kapps_call:language(Call)),
+                Media = cached_callback_auxiliary(enter_number, Callback),
                 Remaining = acdc_callback_menu:remaining_ms(monotonic_ms(), State),
                 true = Remaining > 0,
                 Play = kz_json:set_value(<<"Playback-Timeout-Ms">>,
@@ -886,10 +911,10 @@ callback_test_request(Context, Operation, Extra) ->
 -spec callback_test_response(kz_json:object(), map()) -> tuple() | 'nomatch'.
 callback_test_response(JObj, Context) -> callback_response(JObj, Context).
 
--spec callback_test_collect_alternate(kapps_call:call(), map()) ->
+-spec callback_test_collect_alternate(kapps_call:call(), map(), map()) ->
           {'ok', binary()} | 'timeout' | 'hangup' | 'media_failed'.
-callback_test_collect_alternate(Call, State) ->
-    collect_callback_alternate(#member_call{call=Call}, State).
+callback_test_collect_alternate(Call, Callback, State) ->
+    collect_callback_alternate(#member_call{call=Call, callback=Callback}, State).
 
 -spec callback_test_paused(kapps_call:call(), map(), map()) -> 'ok'.
 callback_test_paused(Call, Callback, Context) ->

@@ -29,7 +29,7 @@ sip_request_feedback_case() ->
             deliver(kz_json:set_value(<<"Request">>, <<"sip:queue@example.invalid">>, complete(?NOOP)))
         end),
         ?assertEqual(resume, feedback(200)),
-        ?assertEqual([prompt_lookup, play], actions())
+        ?assertEqual([play], actions())
     end).
 
 non_object_request_metadata_case() ->
@@ -49,7 +49,7 @@ non_object_request_metadata_case() ->
             Started = now_ms(),
             ?assertEqual(resume, feedback(200)),
             ?assert(now_ms() - Started >= 25),
-            ?assertEqual([prompt_lookup, play], actions())
+            ?assertEqual([play], actions())
         end, [<<"sip:queue@example.invalid">>, <<>>, null, true, 42, [<<"not-an-object">>]])
     end).
 
@@ -67,7 +67,7 @@ request_call_identity_precedence_case() ->
         Started = now_ms(),
         ?assertEqual(resume, feedback(200)),
         ?assert(now_ms() - Started >= 25),
-        ?assertEqual([prompt_lookup, play], actions())
+        ?assertEqual([play], actions())
     end).
 
 invalid_number_plays_truthful_feedback_then_resumes_same_member_test_() ->
@@ -92,7 +92,7 @@ invalid_number_plays_truthful_feedback_then_resumes_same_member_test_() ->
             deliver(event(<<"CHANNEL_BRIDGE">>, []))
         end),
         ?assertEqual(ok, cf_acdc_member:callback_test_paused(fixture_call, callback(), context())),
-        ?assertEqual([prompt_lookup, play, resume, usurped], actions()),
+        ?assertEqual([play, resume, usurped], actions()),
         ?assertEqual(0, meck:num_calls(kapi_acdc_queue, publish_member_call_cancel, '_')),
         ?assertEqual(0, meck:num_calls(cf_exe, stop, '_'))
     end) end}.
@@ -101,28 +101,28 @@ hangup_case() ->
     with_mocks(fun() ->
         put(play_action, fun() -> deliver(event(<<"CHANNEL_DESTROY">>, [])) end),
         ?assertEqual(ok, cf_acdc_member:callback_test_paused(fixture_call, callback(), context())),
-        ?assertEqual([prompt_lookup, play, abandon, cancel_member, stop], actions())
+        ?assertEqual([play, abandon, cancel_member, stop], actions())
     end).
 
 disconnect_case() ->
     with_mocks(fun() ->
         put(play_action, fun() -> deliver(event(<<"CHANNEL_DISCONNECTED">>, [])) end),
         ?assertEqual(finished, feedback(100)),
-        ?assertEqual([prompt_lookup, play, abandon, cancel_member, stop], actions())
+        ?assertEqual([play, abandon, cancel_member, stop], actions())
     end).
 
 bridge_case() ->
     with_mocks(fun() ->
         put(play_action, fun() -> deliver(event(<<"CHANNEL_BRIDGE">>, [])) end),
         ?assertEqual(ok, cf_acdc_member:callback_test_paused(fixture_call, callback(), context())),
-        ?assertEqual([prompt_lookup, play, usurped], actions())
+        ?assertEqual([play, usurped], actions())
     end).
 
 foreign_usurp_case() ->
     with_mocks(fun() ->
         put(play_action, fun() -> deliver(event(<<"usurp_control">>, [{<<"Fetch-ID">>, <<"new-fetch">>}])) end),
         ?assertEqual(finished, feedback(100)),
-        ?assertEqual([prompt_lookup, play, usurped], actions())
+        ?assertEqual([play, usurped], actions())
     end).
 
 own_usurp_case() ->
@@ -139,7 +139,7 @@ own_usurp_case() ->
         Started = now_ms(),
         ?assertEqual(resume, feedback(200)),
         ?assert(now_ms() - Started >= 25),
-        ?assertEqual([prompt_lookup, play], actions())
+        ?assertEqual([play], actions())
     end).
 
 member_success_case() ->
@@ -150,7 +150,7 @@ member_success_case() ->
             deliver(member_success())
         end),
         ?assertEqual(finished, feedback(100)),
-        ?assertEqual([prompt_lookup, play, usurped], actions())
+        ?assertEqual([play, usurped], actions())
     end).
 
 deadline_case() ->
@@ -163,7 +163,7 @@ deadline_case() ->
         Elapsed = now_ms() - Started,
         ?assert(Elapsed >= 75),
         ?assert(Elapsed < 180),
-        ?assertEqual([prompt_lookup, play], actions())
+        ?assertEqual([play], actions())
     end).
 
 feedback_timeout_is_capped_at_twenty_one_seconds_test_() ->
@@ -181,7 +181,7 @@ media_error_case() ->
     with_mocks(fun() ->
         put(play_action, fun() -> deliver(event(<<"CHANNEL_EXECUTE_ERROR">>, [{<<"Msg-ID">>, ?NOOP}])) end),
         ?assertEqual(resume, feedback(200)),
-        ?assertEqual([prompt_lookup, play], actions())
+        ?assertEqual([play], actions())
     end).
 
 request_error_case() ->
@@ -193,21 +193,18 @@ request_error_case() ->
         Started = now_ms(),
         ?assertEqual(resume, feedback(200)),
         ?assert(now_ms() - Started >= 25),
-        ?assertEqual([prompt_lookup, play], actions())
+        ?assertEqual([play], actions())
     end).
 
 lookup_failure_case() ->
     with_mocks(fun() ->
-        meck:expect(acdc_gemini_prompts, auxiliary, fun(unavailable, <<"en-us">>) -> {error,gemini_media_unavailable} end),
+        put(cached_auxiliary,#{}),
         ?assertEqual(resume, feedback(100)),
         ?assertEqual([], actions())
     end).
 
 retry_auxiliary_observes_completion_and_ownership_test_() ->
     {timeout,30,fun() -> with_mocks(fun() ->
-        meck:expect(acdc_gemini_prompts,auxiliary,fun(invalid_entry,<<"en-us">>) ->
-            record(prompt_lookup),{ok,<<"/system_media/en-us/acdc-callback-invalid-entry-gemini-sulafat-0123456789abcdef">>}
-        end),
         State=#{phase=>complete,deadline_ms=>now_ms()+1000},
         put(play_action,fun() ->
             deliver(complete(<<"stale">>)),
@@ -217,18 +214,17 @@ retry_auxiliary_observes_completion_and_ownership_test_() ->
         Started=now_ms(),
         ?assertEqual(finished,cf_acdc_member:callback_test_retry(fixture_call,callback(),context(),State)),
         ?assert(now_ms()-Started>=25),
-        ?assertEqual([prompt_lookup,play],actions()),
+        ?assertEqual([play],actions()),
         put(actions,[]),
         put(play_action,fun() -> deliver(event(<<"CHANNEL_BRIDGE">>,[])) end),
         ?assertEqual(finished,cf_acdc_member:callback_test_retry(fixture_call,callback(),context(),State)),
-        ?assertEqual([prompt_lookup,play,usurped],actions()),
+        ?assertEqual([play,usurped],actions()),
         ?assertEqual(0,meck:num_calls(kapps_call_command,b_prompt,'_'))
     end) end}.
 
 retry_auxiliary_failure_resumes_original_queue_test_() ->
     {timeout,30,fun() -> with_mocks(fun() ->
-        meck:expect(acdc_gemini_prompts,auxiliary,
-                    fun(invalid_entry,<<"en-us">>) -> {error,unsupported_gemini_prompt} end),
+        put(cached_auxiliary,#{}),
         put(resume_action,fun(_) -> deliver(response()) end),
         State=#{phase=>menu,deadline_ms=>now_ms()+1000},
         ?assertEqual(resume,cf_acdc_member:callback_test_retry(fixture_call,callback(),context(),State)),
@@ -245,6 +241,46 @@ expired_auxiliary_deadline_never_starts_media_test_() ->
         ?assertEqual(0,meck:num_calls(acdc_gemini_prompts,auxiliary,'_'))
     end) end}.
 
+cached_feedback_budget_and_legacy_ownership_with_poisoned_resolver_test_() ->
+    {timeout,30,fun() -> with_mocks(fun() ->
+        meck:expect(acdc_gemini_prompts,auxiliary,fun(_,_) -> timer:sleep(300),error(forbidden_lookup) end),
+        Legacy=(maps:remove(builtin_gemini,callback()))#{legacy_custom_media=>true},
+        lists:foreach(fun(Config) ->
+            put(actions,[]), Started=now_ms(),
+            ?assertEqual(resume,cf_acdc_member:callback_test_unavailable(fixture_call,Config,context(),30)),
+            ?assert(now_ms()-Started>=25), ?assert(now_ms()-Started<150),
+            ?assertEqual([play],actions()),
+            put(actions,[]), put(resume_action,fun(_) -> deliver(response()) end),
+            RetryStarted=now_ms(), ShortState=#{phase=>menu,deadline_ms=>RetryStarted+30},
+            ?assertEqual(resume,cf_acdc_member:callback_test_retry(fixture_call,Config,context(),ShortState)),
+            ?assert(now_ms()-RetryStarted>=25), ?assert(now_ms()-RetryStarted<150),
+            ?assertEqual([play,resume],actions()),
+            put(actions,[]),
+            put(play_action,fun() -> deliver(event(<<"CHANNEL_BRIDGE">>,[])) end),
+            State=#{phase=>complete,deadline_ms=>now_ms()+1000},
+            ?assertEqual(finished,cf_acdc_member:callback_test_retry(fixture_call,Config,context(),State)),
+            ?assertEqual([play,usurped],actions()),
+            put(play_action,fun() -> ok end)
+        end,[callback(),Legacy])
+    end) end}.
+
+missing_cached_feedback_never_resolves_or_changes_ownership_test_() ->
+    {timeout,30,fun() -> with_mocks(fun() ->
+        lists:foreach(fun(Config) ->
+            put(actions,[]), Started=now_ms(),
+            ?assertEqual(resume,cf_acdc_member:callback_test_unavailable(fixture_call,Config,context(),30)),
+            ?assert(now_ms()-Started<100), ?assertEqual([],actions()),
+            put(resume_action,fun(_) -> deliver(response()) end),
+            State=#{phase=>menu,deadline_ms=>now_ms()+1000},
+            ?assertEqual(resume,cf_acdc_member:callback_test_retry(fixture_call,Config,context(),State)),
+            ?assertEqual([resume],actions())
+        end,[#{},#{auxiliary=>#{}},#{auxiliary=>undefined},
+              #{auxiliary=>#{unavailable=>undefined,invalid_entry=>null}},
+              #{legacy_custom_media=>true},#{builtin_gemini=>true}]),
+        ?assertEqual(0,meck:num_calls(kapps_call_command,send_command,'_')),
+        ?assertEqual(0,meck:num_calls(kapi_acdc_queue,publish_member_call_cancel,'_'))
+    end) end}.
+
 late_completion_case() ->
     with_mocks(fun() ->
         ?assertEqual(resume, feedback(10)),
@@ -255,7 +291,7 @@ late_completion_case() ->
         Started = now_ms(),
         ?assertEqual(resume, feedback(200)),
         ?assert(now_ms() - Started >= 25),
-        ?assertEqual([prompt_lookup, play, prompt_lookup, play], actions())
+        ?assertEqual([play, play], actions())
     end).
 
 bounded_command_preserves_prompt_provenance_case() ->
@@ -265,8 +301,7 @@ bounded_command_preserves_prompt_provenance_case() ->
         %% aliases; no global English or account recording fallback is used.
         CustomMedia = <<"/system_media/fr-fr/acdc-callback-unavailable-gemini-sulafat-0123456789abcdef">>,
         meck:expect(kapps_call, language, fun(fixture_call) -> <<"fr-fr">> end),
-        meck:expect(acdc_gemini_prompts, auxiliary, fun(unavailable, <<"fr-fr">>) ->
-            record(prompt_lookup), {ok,CustomMedia} end),
+        put(cached_auxiliary,#{unavailable=>CustomMedia}),
         meck:expect(kapps_call, is_call, fun(fixture_call) -> true end),
         meck:expect(kapps_call, control_queue, fun(fixture_call) -> undefined end),
         meck:expect(kapps_call, custom_publish_function, fun(fixture_call) ->
@@ -297,7 +332,7 @@ bounded_command_preserves_prompt_provenance_case() ->
         Started = now_ms(),
         ?assertEqual(resume, feedback(30000)),
         ?assert(now_ms() - Started >= 25),
-        ?assertEqual([prompt_lookup, play], actions())
+        ?assertEqual([play], actions())
     end).
 
 feedback(Timeout) -> cf_acdc_member:callback_test_unavailable(fixture_call, callback(), context(), Timeout).
@@ -307,7 +342,8 @@ later(Ms, Event) -> erlang:send_after(Ms, self(), {amqp_msg, Event}), ok.
 record(Action) -> put(actions, [Action | get(actions)]), ok.
 actions() -> lists:reverse(get(actions)).
 
-callback() -> #{allow_alternate_number => false, timeout_ms => 30000, success_timeout_ms => 10000}.
+callback() -> #{allow_alternate_number => false, timeout_ms => 30000, success_timeout_ms => 10000,
+                builtin_gemini=>true, auxiliary=>get(cached_auxiliary)}.
 context() -> #{account_id => ?ACCOUNT, queue_id => ?QUEUE, call_id => ?CALL,
                request_id => ?REQUEST, pause_id => ?PAUSE}.
 event(Name, Extra) -> kz_json:from_list([{<<"Event-Category">>, <<"call_event">>},
@@ -326,8 +362,10 @@ response() -> kz_json:from_list([{<<"Event-Category">>, <<"acdc_callback">>}, {<
 
 with_mocks(Fun) ->
     put(actions, []), put(play_action, fun() -> ok end),
+    put(cached_auxiliary,#{unavailable=><<"/system_media/en-us/acdc-callback-unavailable-gemini-sulafat-0123456789abcdef">>,
+                           invalid_entry=><<"/system_media/en-us/acdc-callback-invalid-entry-gemini-sulafat-0123456789abcdef">>}),
     put(resume_action, fun(_) -> error(unexpected_resume) end),
-    meck:new([kapps_call, cf_exe, kapi_acdc_queue, acdc_gemini_prompts], [non_strict, no_link]),
+    meck:new([kapps_call, cf_exe, kapi_acdc_queue, acdc_gemini_prompts, kz_datamgr], [non_strict, no_link]),
     meck:new(kapps_call_command, [passthrough, non_strict, no_link]),
     try
         meck:expect(kapps_call, call_id, fun(fixture_call) -> ?CALL end),
@@ -336,8 +374,11 @@ with_mocks(Fun) ->
         meck:expect(kapps_call, language, fun(fixture_call) -> <<"en-us">> end),
         meck:expect(kapps_call, kvs_find, fun(queue_id, fixture_call) -> {ok, ?QUEUE} end),
         meck:expect(kapps_call, custom_channel_var, fun(<<"Fetch-ID">>, fixture_call) -> <<"original-fetch">> end),
-        meck:expect(acdc_gemini_prompts, auxiliary, fun(unavailable, <<"en-us">>) ->
-            record(prompt_lookup), {ok,<<"/system_media/en-us/acdc-callback-unavailable-gemini-sulafat-0123456789abcdef">>} end),
+        meck:expect(acdc_gemini_prompts, auxiliary, fun(_,_) -> error(timed_auxiliary_lookup_forbidden) end),
+        lists:foreach(fun(Function) ->
+            meck:expect(kz_datamgr,Function,fun(_,_) -> error(timed_datastore_call_forbidden) end),
+            meck:expect(kz_datamgr,Function,fun(_,_,_) -> error(timed_datastore_call_forbidden) end)
+        end,[open_cache_doc,open_doc]),
         meck:expect(kapps_call_command, noop_id, fun() -> ?NOOP end),
         meck:expect(kapps_call_command, send_command, fun(_, fixture_call) ->
             record(play), (get(play_action))(), ok end),
@@ -353,10 +394,12 @@ with_mocks(Fun) ->
         meck:expect(cf_exe, stop, fun(fixture_call) -> record(stop) end),
         meck:expect(kapi_acdc_queue, publish_member_call_cancel, fun(Props) ->
             ?assertEqual(?CALL, proplists:get_value(<<"Call-ID">>, Props)), record(cancel_member) end),
-        Fun()
+        Fun(),
+        ?assertEqual(0,meck:num_calls(acdc_gemini_prompts,auxiliary,'_')),
+        ?assertEqual([],meck:history(kz_datamgr))
     after
-        meck:unload([kapps_call, cf_exe, kapi_acdc_queue, kapps_call_command, acdc_gemini_prompts]),
-        erase(actions), erase(play_action), erase(resume_action), flush_mailbox()
+        meck:unload([kapps_call, cf_exe, kapi_acdc_queue, kapps_call_command, acdc_gemini_prompts, kz_datamgr]),
+        erase(actions), erase(play_action), erase(resume_action), erase(cached_auxiliary), flush_mailbox()
     end.
 
 flush_mailbox() -> receive {amqp_msg, _} -> flush_mailbox() after 0 -> ok end.

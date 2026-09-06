@@ -7,11 +7,14 @@
 all_five_callback_contracts_have_exact_fixed_and_digit_paths_test() -> with_store(fun() ->
     lists:foreach(fun(Language) ->
         Call=call(Language),
+        Before=get(reads),
         Config=cf_acdc_member:callback_config(queue(),Call),
+        ?assertEqual(Before+42,get(reads)),
         ?assert(maps:get(builtin_gemini,Config)),
         ?assertNot(maps:get(non_gemini_numeric_dependency,Config)),
         ?assertEqual(6,map_size(maps:get(media,Config))),
         ?assertEqual(10,map_size(maps:get(readback,Config))),
+        ?assertEqual(auxiliary_paths(Language),maps:get(auxiliary,Config)),
         ?assertEqual(path(Language,<<"acdc-callback-offer-6">>),maps:get(offer,maps:get(media,Config))),
         Reads=get(reads),
         {ok,Prompts}=cf_acdc_member:callback_confirmation_prompts(Config,Call,<<"00129">>),
@@ -23,6 +26,34 @@ all_five_callback_contracts_have_exact_fixed_and_digit_paths_test() -> with_stor
         ?assertEqual({error,invalid_readback},cf_acdc_member:callback_confirmation_prompts(Config,Call,<<"+12">>)),
         ?assertEqual(Reads,get(reads))
     end,locales())
+end).
+
+legacy_auxiliary_is_preflighted_once_without_requiring_complete_pack_test() -> with_store(fun() ->
+    Media=kz_json:from_list([{K,<<"customer-",K/binary>>} || K <-
+        [<<"offer">>,<<"menu">>,<<"number_readback">>,<<"confirmation">>,<<"success">>]]),
+    Queue=kz_json:set_value([<<"callback">>,<<"media">>],Media,queue()),
+    {ok,Legacy}=acdc_gemini_prompts:callback(<<"6">>,false,Media,<<"en-us">>,?ACCOUNT),
+    ?assertEqual(0,get(reads)),
+    ?assert(maps:get(legacy_custom_media,Legacy)),
+    lists:foreach(fun(Language) ->
+        Before=get(reads), Config=cf_acdc_member:callback_config(Queue,call(Language)),
+        ?assertEqual(Before+3,get(reads)),
+        ?assertEqual(auxiliary_paths(Language),maps:get(auxiliary,Config)),
+        ?assertEqual(maps:get(media,Legacy),maps:get(media,Config))
+    end,locales()),
+    lists:foreach(fun(Missing) ->
+        put({fake_datamgr,open},fun(<<"system_media">>,Id) ->
+            case <<"/system_media/",Id/binary>> =:= maps:get(Missing,auxiliary_paths(<<"en-us">>)) of
+                true -> {error,not_found}; false -> acdc_gemini_prompts_tests:read(Id)
+            end
+        end),
+        Config=cf_acdc_member:callback_config(Queue,call(<<"en-us">>)),
+        ?assert(maps:get(legacy_custom_media,Config)),
+        ?assertEqual(maps:remove(Missing,auxiliary_paths(<<"en-us">>)),maps:get(auxiliary,Config))
+    end,[unavailable,invalid_entry,enter_number]),
+    put({fake_datamgr,open},fun(_,_) -> error(datastore_unavailable) end),
+    ?assertEqual(#{},maps:get(auxiliary,cf_acdc_member:callback_config(Queue,call(<<"en-us">>)))),
+    ?assertEqual(#{},maps:get(auxiliary,cf_acdc_member:callback_config(Queue,call(<<"fr-ca">>))))
 end).
 
 every_missing_asset_blocks_callback_and_offer_test() -> with_store(fun() ->
@@ -100,6 +131,9 @@ with_store(Fun) ->
     end.
 
 locales() -> [<<"en-us">>,<<"he-il">>,<<"fr-fr">>,<<"es-es">>,<<"ar-sa">>].
+auxiliary_paths(Language) -> #{unavailable=>path(Language,<<"acdc-callback-unavailable">>),
+    invalid_entry=>path(Language,<<"acdc-callback-invalid-entry">>),
+    enter_number=>path(Language,<<"acdc-callback-enter-number">>)}.
 call(Language) -> kapps_call:set_language(Language,kapps_call:set_account_id(?ACCOUNT,
                     kapps_call:set_call_id(<<"canonical-callback-test">>,kapps_call:new()))).
 queue() -> kz_json:from_list([{<<"callback">>,kz_json:from_list([{<<"enabled">>,true}])}]).

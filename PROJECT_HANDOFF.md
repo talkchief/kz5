@@ -16,7 +16,7 @@ release. Recheck Git and live state before acting.
 | --- | --- | --- |
 | Source ownership | ACDC is tracked directly in kz5; team recovery changes merged | Live failure/recovery acceptance |
 | Queue voices | 210 immutable assets /420 WAVs packaged; actual installer verified all210 installed assets | Full natural position speech, native-speaker approval and matching runtime activation |
-| Callback backend | Current-source81-test checkpoint, later21-test media checkpoint, all63 production modules compile | P0-12 deadline fix under validation; coherent deployment and real callback/retry audio |
+| Callback backend | P0-12 full87-test suite passed75590; all63 production modules compiled7787 | Coherent deployment and real callback/retry audio |
 | Queue language UI/editor | Five choices, obsolete-reference deletion,42-entry callback/57-entry transitional readiness checks tested in `61bf505` | Fresh compiled UI publication and real browser/live queue acceptance |
 | Developer reference | Updated static `/apis/` publication verified against all12 HTTP-served files | Documentation is not proof its backend is deployed; proposed dashboards are not callable APIs |
 | Installer/services | Modular installer and offline main smoke pass; `kazoo-applications.service` resolves to active `kazoo-apps.service` | Fresh separate-server/ALL installation, reboot, interoperability and sustained load acceptance |
@@ -188,6 +188,9 @@ the Kazoo apps node, not as three independent systemd services.
 | Session62912, exit0 | API generation/schema/deterministic build validation and fresh63-module production compilation |
 | Session28926, exit0 | Actual static `/apis` publication: all12 files matched loopback HTTP bytes and cache policy; redirect/404 checked. Backup: `/usr/local/src/kazoo5-installer/api-docs-rollback.VafWMp/previous` |
 | Session71503, exit0 | Main installer smoke after `61bf505`: syntax, pins, aliases, modular paths, security gates, ALL path and error handling. Guarded/offline; no installation or service restart |
+| Sessions6821/75590, exit0 | P0-12 cached auxiliary metadata:22 focused then all87 current-source tests, production/TEST compilation and stable matching input digest. No timed metadata calls under poisoned resolver/store assertions; see canonical acceptance |
+| Session19058, exit0 | Pure EN/ES/FR cardinal catalog: nine groups /44,040 composition checks;161 French recording roles, full range and8-token bound. No new audio generated or runtime integration |
+| Session7787, exit0 | Root combined-source production compile after P0-12: all63 ACDC modules,-Werror/noTEST and stable inputs. No installed BEAM changes |
 
 Temporary receipt paths are local evidence and may not survive a new server.
 The durable test implementations and explanatory documents are in Git/worktree.
@@ -195,11 +198,10 @@ Update this section with final outcomes rather than deleting failed evidence.
 
 ## 5. Immediate next work
 
-1. Finish review and validation of P0-12. The committed21-second feedback deadline
-   does not cancel a synchronous metadata lookup before the receive. An uncommitted
-   candidate caches the three auxiliary paths during configuration; prove no timed
-   branch performs datastore IO. Its results must be recorded separately from the
-   committed81-test checkpoint. Main installer smoke71503 already passed; rerun
+1. Integrate/deploy P0-12 coherently. Its source review, full87-test suite75590
+   and all63-module production compile7787 passed: the three auxiliary paths are
+   cached before queue entry and timed feedback performs no metadata IO. Keep
+   this evidence separate from the older81-test checkpoint. Main installer smoke71503 already passed; rerun
    after further installer integration changes. Never restart a still-running job
    just because an observation timed out.
 2. Preserve/review the accepted canonical callback changes and rerun
@@ -226,8 +228,8 @@ Update this section with final outcomes rather than deleting failed evidence.
    languages, generate missing release artifacts once, and verify natural
    playback. `doc/acdc_prerecorded_cardinal_design.md` records the finite catalog
    design and unresolved linguistic gates. `scripts/acdc-cardinal-catalog.cjs`
-   is a tested pure EN/ES full-range building block, not runtime integration or
-   recorded assets; FR/HE/AR remain required. Do not enable a full-language
+   is now a tested pure EN/ES/FR full-range building block, not runtime integration
+   or recorded assets; HE/AR remain required. Do not enable a full-language
    capability based on native SAY.
 5. Verify the imported receipt and activate the targeted mappings with validated
    node/hostname settings; deploy the coherent backend/UI
@@ -242,12 +244,13 @@ P0-12 helper/member and related canonical/feedback/integration tests. Installer
 with22 media/helper/contract tests passing, production/TEST compilation and
 source pins checked. Input digest:
 `5bcd7e76678f42988001ad768c391fd272401d2ec8b6d4b48eab975a73759ea8`.
-The full lifecycle/timer suite was authorized next; its terminal outcome is not
-yet recorded here. This focused pass is not full P0-12 acceptance.
+The full lifecycle/timer suite75590 subsequently exited0 with all87 tests and
+the same digest. The serialized test window was released for French validation,
+then root's production compile. These are source checks, not live acceptance.
 `media_prerequisites` owns the French
 finite-cardinal addition in `scripts/acdc-cardinal-catalog.cjs`, its test, and
-`doc/acdc_prerecorded_cardinal_design.md`; EN/ES are already committed/tested,
-French is work in progress, Arabic/Hebrew grammar remains open. These agent names
+`doc/acdc_prerecorded_cardinal_design.md`; French validation19058 passed all nine
+groups and is ready for integration, Arabic/Hebrew grammar remains open. These agent names
 are coordination hints, not durable jobs: inspect current messages/processes
 before overlapping edits or starting another memory-heavy test. Root owns this
 guide, review and release integration. Never blanket-stage another agent's
