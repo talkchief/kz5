@@ -14,12 +14,12 @@ const hash = (bytes, algorithm = 'sha256', encoding = 'hex') => crypto.createHas
 const identity = p => `${p.locale}/${p.id}`;
 const revision = value => typeof value === 'string' && /^[1-9][0-9]*-[a-f0-9]{32}$/.test(value);
 
-function loadPlan(fixedDirectory, completionDirectory, locales) {
+function loadPlan(fixedDirectory, completionDirectory, locales, supplementalDirectory) {
   assert(Array.isArray(locales) && locales.length > 0 && new Set(locales).size === locales.length && locales.every(l => LOCALES.includes(l)), 'Invalid voice locale selection');
   const original = fixed.readManifest(fixedDirectory);
   const completed = completionDirectory ? extra.readManifest(completionDirectory) : {prompts: []};
   const wanted = [...fixed.FIXED, ...extra.DIGITS].filter(p => locales.includes(p.locale));
-  return wanted.map(expected => {
+  const plan = wanted.map(expected => {
     let entry = original.prompts.find(p => identity(p) === identity(expected) && p.generation_status === 'GENERATED_QA_PASSED');
     let directory = fixedDirectory;
     if (entry) fixed.verifyEntry(directory, entry);
@@ -29,6 +29,23 @@ function loadPlan(fixedDirectory, completionDirectory, locales) {
       assert(directory && entry, 'Selected locale has incomplete fixed or callback-digit audio');
       extra.verifyEntry(directory, entry);
     }
+    return assetFromEntry(directory, entry);
+  });
+  if (supplementalDirectory) {
+    const supplemental = require('./generate-acdc-gemini-supplemental-pack.cjs');
+    const manifest = supplemental.readManifest(supplementalDirectory);
+    for (const expected of supplemental.plan().filter(p => locales.includes(p.locale))) {
+      const entry = manifest.prompts.find(p => identity(p) === identity(expected));
+      assert(entry, 'Selected locale has incomplete supplemental callback audio');
+      supplemental.verifyEntry(supplementalDirectory, entry);
+      plan.push(assetFromEntry(supplementalDirectory, entry));
+    }
+  }
+  assert(new Set(plan.map(p => p.locale + '/' + p.canonical_id)).size === plan.length,
+    'Duplicate canonical voice identity');
+  return plan;
+}
+function assetFromEntry(directory, entry) {
     const bytes = fixed.regularBytes(path.join(directory, entry.telephony.file));
     const sha256 = hash(bytes), promptId = `${entry.id}-gemini-sulafat-${sha256.slice(0, 16)}`;
     assert(/^[A-Za-z0-9_-]+$/.test(promptId) && promptId.length <= 128, 'Invalid versioned prompt identity');
@@ -36,7 +53,6 @@ function loadPlan(fixedDirectory, completionDirectory, locales) {
       attachment: `${promptId}.wav`, sha256, md5: 'md5-' + hash(bytes, 'md5', 'base64'), bytes,
       source_file: path.relative(path.join(__dirname, '..'), path.join(directory, entry.telephony.file)),
       transcript_sha256: entry.transcript_sha256, duration_seconds: entry.telephony.duration_seconds};
-  });
 }
 function document(asset, timestamp = Date.now()) {
   const now = Math.floor(timestamp / 1000) + 62167219200;
@@ -77,7 +93,7 @@ async function rows(client, assets) {
   return map;
 }
 async function install(plan, client, allowWrite = false) {
-  assert(plan.length > 0 && plan.length <= 165 && new Set(plan.map(a => a.id)).size === plan.length, 'Invalid bounded voice import plan');
+  assert(plan.length > 0 && plan.length <= 210 && new Set(plan.map(a => a.id)).size === plan.length, 'Invalid bounded voice import plan');
   let created = 0, preserved = 0;
   const records = [];
   for (let offset = 0; offset < plan.length; offset += 10) {
@@ -125,14 +141,16 @@ async function main(argv) {
     if (['--plan', '--import', '--verify-only'].includes(arg)) o.mode = arg.slice(2);
     else if (arg === '--all-locales') o.locales = LOCALES;
     else {
-      const key = {'--fixed-pack': 'fixedDirectory', '--completion-pack': 'completionDirectory', '--locale': 'locale'}[arg];
+      const key = {'--fixed-pack': 'fixedDirectory', '--completion-pack': 'completionDirectory',
+        '--supplemental-pack': 'supplementalDirectory', '--locale': 'locale'}[arg];
       assert(key && i + 1 < argv.length && !argv[i + 1].startsWith('--'), 'Unknown or incomplete voice import option'); o[key] = argv[++i];
     }
   }
   if (o.locale) o.locales = [o.locale];
   assert(o.fixedDirectory && path.isAbsolute(o.fixedDirectory), 'An absolute fixed pack directory is required');
   if (o.completionDirectory) assert(path.isAbsolute(o.completionDirectory), 'An absolute completion pack directory is required');
-  const plan = loadPlan(o.fixedDirectory, o.completionDirectory, o.locales);
+  if (o.supplementalDirectory) assert(path.isAbsolute(o.supplementalDirectory), 'An absolute supplemental pack directory is required');
+  const plan = loadPlan(o.fixedDirectory, o.completionDirectory, o.locales, o.supplementalDirectory);
   console.log(JSON.stringify(o.mode === 'plan' ? publicPlan(plan) : await install(plan, couchClient(process.env), o.mode === 'import'), null, 2));
 }
 module.exports = {OWNER, loadPlan, document, verifyDocument, install, publicPlan, main};

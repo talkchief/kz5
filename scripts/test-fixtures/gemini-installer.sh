@@ -21,12 +21,14 @@ node() {
         validate-acdc-gemini-receipt.cjs)
             "$KAZOO_TEST_NODE" "$KAZOO_TEST_SOURCE_ROOT/scripts/test-install-kazoo5-gemini.cjs" --fixture-validator "$@" ;;
         refresh-acdc-gemini-mappings.cjs)
-            [[ $# == 9 && ( $1 == --check || $1 == --activate ) &&
+            [[ $# == 11 && ( $1 == --check || $1 == --activate ) &&
                $2 == --node && $3 == kazoo_apps@kazoo-fixture.example.invalid &&
                $4 == --receipt && $6 == --fixed-pack &&
                $7 == "$KAZOO_TEST_SOURCE_ROOT/scripts/assets/acdc-gemini-fixed-20260905" &&
                $8 == --completion-pack &&
-               $9 == "$KAZOO_TEST_SOURCE_ROOT/scripts/assets/acdc-gemini-completion-20260905" ]] || return 1
+               $9 == "$KAZOO_TEST_SOURCE_ROOT/scripts/assets/acdc-gemini-completion-20260905" &&
+               ${10} == --supplemental-pack &&
+               ${11} == "$KAZOO_TEST_SOURCE_ROOT/scripts/assets/acdc-gemini-supplemental-20260906" ]] || return 1
             record "cache-${1#--}"
             [[ $KAZOO_TEST_CASE != cache-failure ]] || return 1 ;;
         ensure-acdc-language-capabilities.cjs)
@@ -53,7 +55,8 @@ write_file() {
     [[ $1 == 0644 && $2 == /usr/local/share/kazoo5-installer/acdc-gemini-media.json ]]
     node "$SCRIPT_DIR/validate-acdc-gemini-receipt.cjs" \
         --fixed-pack "$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905" \
-        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905"
+        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" \
+        --supplemental-pack "$SCRIPT_DIR/assets/acdc-gemini-supplemental-20260906"
     record receipt-published
 }
 dnf_install() { printf 'Unexpected direct dependency installation\n' >&2; return 1; }

@@ -4,7 +4,8 @@ try
     true = <<"@@NODE@@">> =:= atom_to_binary(node(), utf8),
     Mode = '@@MODE@@',
     Expected = kz_json:decode(base64:decode(<<"@@EXPECTED_BASE64@@">>)),
-    165 = length(Expected),
+    Count = length(Expected),
+    true = lists:member(Count, [165, 210]),
     Modules = [media_map, kz_media_map],
     true = lists:all(fun(M) -> is_pid(whereis(M)) andalso ets:info(M) =/= undefined end, Modules),
     Db = <<"system_media">>,
@@ -31,7 +32,7 @@ try
         true = Get(<<"length">>, Att) =:= Get(<<"content_length">>, E),
         ok
     end,
-    %% All 165 preflight reads and existing mapping checks precede any mutation.
+    %% Every preflight read and existing mapping check precedes any mutation.
     Docs = [begin
         {ok, D} = kz_datamgr:open_doc(Db, Get(<<"_id">>, E), [{conflicts, true}]),
         ok = Check(E, D), {E, D}
@@ -70,5 +71,5 @@ try
         {ok, Final} = kz_datamgr:open_doc(Db, Get(<<"_id">>, E), [{conflicts, true}]),
         ok = Check(E, Final)
     end, Docs),
-    {ok, {gemini_mapping_verified, Mode, 165, 330, length([X || X <- Before, X =:= missing]), no_database_writes}}
+    {ok, {gemini_mapping_verified, Mode, Count, Count * length(Modules), length([X || X <- Before, X =:= missing]), no_database_writes}}
 catch _:_ -> {error, gemini_mapping_verification_failed_safely} end.

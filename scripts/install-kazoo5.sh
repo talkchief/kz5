@@ -2557,8 +2557,9 @@ ensure_system_media_database() (
 install_acdc_language_packs() (
     local fixed_dir="$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905"
     local completion_dir="$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" receipt
+    local supplemental_dir="$SCRIPT_DIR/assets/acdc-gemini-supplemental-20260906"
     if [[ $DRY_RUN == true ]]; then
-        log "Would create-only import and verify 165 checked-in Gemini EN/AR/HE/ES/FR fixed/callback-digit assets into configured CouchDB ${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}; preserve official and customer recordings"
+        log "Would create-only import and verify 210 checked-in Gemini EN/AR/HE/ES/FR fixed/callback-digit assets into configured CouchDB ${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}; preserve official and customer recordings"
         log 'Voice media import requires no provider key, generation call, eSpeak, or local FreeSWITCH; it does not publish runtime or full-position readiness'
         return 0
     fi
@@ -2569,8 +2570,8 @@ install_acdc_language_packs() (
     trap 'rm -f -- "$receipt"' EXIT
     # Verify every checked-in source before any database or application effect.
     node "$SCRIPT_DIR/import-acdc-gemini-voices.cjs" --plan --all-locales \
-        --fixed-pack "$fixed_dir" --completion-pack "$completion_dir" >"$receipt"
-    jq -e '.mode == "PLAN_ONLY_NO_DATABASE_ACCESS" and .count == 165
+        --fixed-pack "$fixed_dir" --completion-pack "$completion_dir" --supplemental-pack "$supplemental_dir" >"$receipt"
+    jq -e '.mode == "PLAN_ONLY_NO_DATABASE_ACCESS" and .count == 210
         and .creates_only_versioned_ids == true and .preserves_legacy_and_custom_media == true
         and .runtime_ready == false' "$receipt" >/dev/null || die 'Incomplete immutable voice source plan'
     ensure_system_media_database
@@ -2578,24 +2579,25 @@ install_acdc_language_packs() (
     # receipts, or public capability artifacts. CouchDB may be a separate host.
     export KAZOO_COUCHDB_HOST KAZOO_COUCHDB_PORT KAZOO_COUCHDB_USER KAZOO_COUCHDB_PASSWORD
     node "$SCRIPT_DIR/import-acdc-gemini-voices.cjs" --import --all-locales \
-        --fixed-pack "$fixed_dir" --completion-pack "$completion_dir" >"$receipt"
+        --fixed-pack "$fixed_dir" --completion-pack "$completion_dir" --supplemental-pack "$supplemental_dir" >"$receipt"
     validate_acdc_language_receipt <"$receipt" || die 'Incomplete or inconsistent immutable Gemini media import receipt'
     # Do not restart mapped applications based only on a create acknowledgement.
     # Re-fetch and byte-verify all targets through the importer's read-only mode.
     # Publish this latest verification receipt, not earlier create revisions.
     node "$SCRIPT_DIR/import-acdc-gemini-voices.cjs" --verify-only --all-locales \
-        --fixed-pack "$fixed_dir" --completion-pack "$completion_dir" >"$receipt"
+        --fixed-pack "$fixed_dir" --completion-pack "$completion_dir" --supplemental-pack "$supplemental_dir" >"$receipt"
     validate_acdc_language_receipt <"$receipt" || die 'Immutable Gemini media failed final prestart verification'
     # This receipt is not the language-capabilities runtime manifest. Leave
     # legacy receipts and existing prompt/queue/account documents untouched.
     write_file 0644 /usr/local/share/kazoo5-installer/acdc-gemini-media.json <"$receipt"
-    log 'PASS 165 immutable Gemini voice assets verified; existing audio preserved; runtime and full-position readiness are separate gates'
+    log 'PASS 210 immutable Gemini voice assets verified; existing audio preserved; runtime and full-position readiness are separate gates'
 )
 
 validate_acdc_language_receipt() {
     node "$SCRIPT_DIR/validate-acdc-gemini-receipt.cjs" \
         --fixed-pack "$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905" \
-        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905"
+        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" \
+        --supplemental-pack "$SCRIPT_DIR/assets/acdc-gemini-supplemental-20260906"
 }
 
 run_acdc_voice_mapping_check() {
@@ -2608,13 +2610,14 @@ run_acdc_voice_mapping_check() {
     node "$SCRIPT_DIR/refresh-acdc-gemini-mappings.cjs" "$mode" \
         --node "kazoo_apps@${KAZOO_HOSTNAME}" --receipt "$receipt" \
         --fixed-pack "$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905" \
-        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" || \
+        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" \
+        --supplemental-pack "$SCRIPT_DIR/assets/acdc-gemini-supplemental-20260906" || \
         die 'Immutable Gemini prompt mappings could not be verified on the running apps node'
 }
 
 activate_acdc_voice_mappings() {
     if [[ $DRY_RUN == true ]]; then
-        log 'Would activate/verify only the 165 immutable Gemini prompts in both running media caches; no database or custom recording changes'
+        log 'Would activate/verify only the 210 immutable Gemini prompts in both running media caches; no database or custom recording changes'
         return 0
     fi
     # Imports happen before services start. Existing nodes/reruns also need
@@ -2622,7 +2625,7 @@ activate_acdc_voice_mappings() {
     # configuration events. This is safe while initial map loading completes.
     verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
     run_acdc_voice_mapping_check --activate /usr/local/share/kazoo5-installer/acdc-gemini-media.json
-    log 'PASS 165 owned Gemini prompts resolve in both active media maps; no language capability was published'
+    log 'PASS 210 owned Gemini prompts resolve in both active media maps; no language capability was published'
 }
 
 verify_acdc_language_packs() (
@@ -2633,13 +2636,14 @@ verify_acdc_language_packs() (
     export KAZOO_COUCHDB_HOST KAZOO_COUCHDB_PORT KAZOO_COUCHDB_USER KAZOO_COUCHDB_PASSWORD
     node "$SCRIPT_DIR/import-acdc-gemini-voices.cjs" --verify-only --all-locales \
         --fixed-pack "$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905" \
-        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" >"$receipt" || \
+        --completion-pack "$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" \
+        --supplemental-pack "$SCRIPT_DIR/assets/acdc-gemini-supplemental-20260906" >"$receipt" || \
         die 'Immutable Gemini voice media could not be verified; install kazoo-apps'
     validate_acdc_language_receipt <"$receipt" || die 'Immutable Gemini voice verification receipt is inconsistent'
     # Verification must never repair caches or turn on incomplete languages.
     # Fresh byte verification supplies exact current revisions for this check.
     run_acdc_voice_mapping_check --check "$receipt"
-    log 'PASS 165 Gemini assets, installed audio bytes and both running prompt maps; no full-position readiness claim'
+    log 'PASS 210 Gemini assets, installed audio bytes and both running prompt maps; no full-position readiness claim'
 )
 
 configure_kazoo_api_modules() {

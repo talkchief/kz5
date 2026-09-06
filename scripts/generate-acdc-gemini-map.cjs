@@ -8,9 +8,10 @@ function render(projectRoot) {
   const importer=require(path.join(projectRoot,'scripts/import-acdc-gemini-voices.cjs'));
   const assets=importer.loadPlan(
     path.join(projectRoot,'scripts/assets/acdc-gemini-fixed-20260905'),
-    path.join(projectRoot,'scripts/assets/acdc-gemini-completion-20260905'),locales)
+    path.join(projectRoot,'scripts/assets/acdc-gemini-completion-20260905'),locales,
+    path.join(projectRoot,'scripts/assets/acdc-gemini-supplemental-20260906'))
     .sort((a,b)=>a.id.localeCompare(b.id,'en'));
-  assert.equal(assets.length,165,'Expected the fixed165-asset release');
+  assert.equal(assets.length,210,'Expected the fixed and supplemental210-asset release');
   const rows=assets.map(a=>[a.locale,a.canonical_id,a.prompt_id,a.sha256,a.md5,a.bytes.length,a.transcript_sha256]);
   const hash=crypto.createHash('sha256').update(JSON.stringify(rows)).digest('hex');
   const erl=value=>Number.isInteger(value)?String(value):'<<'+JSON.stringify(value)+'>>';
@@ -35,7 +36,7 @@ function main(args) {
   const o=options(args),text=render(o.projectRoot);
   if(o.generate) fs.writeFileSync(o.output,text,{flag:'wx',mode:0o644});
   else assert.equal(fs.readFileSync(o.output,'utf8'),text,'Generated asset table differs from the replayed installer source');
-  console.log('PASS deterministic165-asset map; no provider, credential or runtime operations');
+  console.log('PASS deterministic210-asset map; no provider, credential or runtime operations');
 }
 module.exports={render,options,main};
 if(require.main===module)main(process.argv.slice(2));

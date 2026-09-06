@@ -12,21 +12,22 @@ const {validateReceipt} = require('./validate-acdc-gemini-receipt.cjs');
 const locales = ['en-us', 'ar-sa', 'he-il', 'es-es', 'fr-fr'];
 const fixed = path.join(ROOT, 'scripts/assets/acdc-gemini-fixed-20260905');
 const completion = path.join(ROOT, 'scripts/assets/acdc-gemini-completion-20260905');
+const supplemental = path.join(ROOT, 'scripts/assets/acdc-gemini-supplemental-20260906');
 const revision = '1-' + 'a'.repeat(32);
 const clone = value => JSON.parse(JSON.stringify(value));
 let cachedPlan;
-const plan = () => cachedPlan || (cachedPlan = importer.loadPlan(fixed, completion, locales));
+const plan = () => cachedPlan || (cachedPlan = importer.loadPlan(fixed, completion, locales, supplemental));
 const record = value => fs.appendFileSync(process.env.KAZOO_TEST_TRACE, value + '\n');
 
-function receipt(assets = plan(), created = 165) {
-  return {schema_version: 1, owner: importer.OWNER, created, preserved: 165 - created, verified: 165,
+function receipt(assets = plan(), created = 210) {
+  return {schema_version: 1, owner: importer.OWNER, created, preserved: 210 - created, verified: 210,
     queue_configuration_changed: false, runtime_ready: false, full_position_language_ready: false,
     prompts: assets.map(p => ({locale: p.locale, canonical_id: p.canonical_id, prompt_id: p.prompt_id,
       document_id: p.id, attachment: p.attachment, sha256: p.sha256, revision}))};
 }
 
 function assertPaths(args) {
-  assert.deepEqual(args, ['--fixed-pack', fixed, '--completion-pack', completion]);
+  assert.deepEqual(args, ['--fixed-pack', fixed, '--completion-pack', completion, '--supplemental-pack', supplemental]);
 }
 
 async function fixture(kind, args) {
@@ -46,7 +47,7 @@ async function fixture(kind, args) {
     assert.equal(process.env.KAZOO_COUCHDB_PASSWORD, 'fixture-password');
     if (phase === 'import') assert.notEqual(scenario, 'import-failure');
     if (phase === 'verify-only') assert.notEqual(scenario, 'verify-failure');
-    const output = receipt(plan(), phase === 'import' ? 165 : 0);
+    const output = receipt(plan(), phase === 'import' ? 210 : 0);
     if (scenario === 'invalid-receipt') output.runtime_ready = true;
     console.log(JSON.stringify(output)); return;
   }
@@ -96,9 +97,9 @@ function fakeDatabase() {
 
 async function main() {
   const assets = plan();
-  assert.equal(assets.length, 165);
+  assert.equal(assets.length, 210);
   assert.deepEqual(Object.fromEntries(locales.map(locale => [locale, assets.filter(p => p.locale === locale).length])),
-    {'en-us': 29, 'ar-sa': 39, 'he-il': 39, 'es-es': 29, 'fr-fr': 29});
+    {'en-us': 42, 'ar-sa': 42, 'he-il': 42, 'es-es': 42, 'fr-fr': 42});
   const good = receipt(); assert.equal(validateReceipt(good, assets), true);
   for (const mutate of [p => { p.runtime_ready = true; }, p => { p.full_position_language_ready = true; },
     p => { p.queue_configuration_changed = true; }, p => { p.prompts.pop(); }, p => { p.prompts[1] = clone(p.prompts[0]); },
@@ -109,14 +110,14 @@ async function main() {
     const broken = clone(good); mutate(broken); assert.throws(() => validateReceipt(broken, assets));
   }
   assert.throws(() => importer.loadPlan('/tmp/definitely-missing-kazoo-voice-source', completion, locales));
-  console.log('PASS exact165 inventory and13 negative receipt cases; missing source fails offline');
+  console.log('PASS exact210 inventory and13 negative receipt cases; missing source fails offline');
 
   const database = fakeDatabase();
   const customer = {custom: 'customer-owned recording'}, official = {official: 'ordinary prompt'};
   database.docs.set('en-us/acdc-callback-success', customer);
   database.docs.set('en-us/ivr-thank_you', official);
   const imported = await importer.install(assets, database.client, true);
-  assert.equal(validateReceipt(imported, assets), true); assert.equal(imported.created, 165);
+  assert.equal(validateReceipt(imported, assets), true); assert.equal(imported.created, 210);
   assert.deepEqual(database.docs.get('en-us/acdc-callback-success'), customer);
   assert.deepEqual(database.docs.get('en-us/ivr-thank_you'), official);
   const writes = database.calls.filter(c => c.method === 'PUT').length;
@@ -126,7 +127,7 @@ async function main() {
   database.docs.get(assets[0].id).source_type = 'customer-took-versioned-id';
   await assert.rejects(importer.install(assets, database.client, true));
   assert.equal(database.calls.filter(c => c.method === 'PUT').length, writes);
-  console.log('PASS create-only165 import, byte-verified zero-write rerun, and existing official/customer media preserved');
+  console.log('PASS create-only210 import, byte-verified zero-write rerun, and existing official/customer media preserved');
 
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'kazoo-gemini-installer-tests.'));
   for (const scenario of ['success', 'database-exists', 'missing-assets', 'database-forbidden',
@@ -157,7 +158,7 @@ async function main() {
         assert(!steps.includes(forbidden), 'Unsafe capability state must block application deployment');
     } else if (scenario === 'dry-run') {
       assert.equal(run.status, 0, logs); assert.deepEqual(steps, []);
-      assert(logs.includes('database.example.invalid:15984') && logs.includes('165 checked-in Gemini'));
+      assert(logs.includes('database.example.invalid:15984') && logs.includes('210 checked-in Gemini'));
       assert(logs.includes('does not publish runtime or full-position readiness'));
     } else {
       assert.notEqual(run.status, 0, `${scenario}: failure did not abort installation`);
