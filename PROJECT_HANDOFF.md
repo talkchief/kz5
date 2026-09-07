@@ -6,6 +6,23 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Live detail reconnect PASS (September 7):** standalone
+`KAZOO_TEST_RECONNECT=true` in `scripts/test-monster-live-deployed.cjs` now
+tests actual close/disconnected-stale/new-socket-ACK/snapshot/render/cleanup.
+Final same-account `4a10d5` passed nine checks (2780ms), receipt
+`/tmp/kazoo-monster-live-deployed.9C6AgQ/receipt.json`. Final normal company
+switch `20c816` passed 12 checks (3278ms), receipt
+`/tmp/kazoo-monster-live-deployed.3J492k/receipt.json`. Visible call counters
+and ordered rows are compared independently with the schema-validated DTO.
+Both runs had zero browser/HTTP/scope errors and no supplemental detail reads.
+Fourteen pure reconnect groups and 17 scoped harness groups passed. Final
+snapshot comparison `52c1c7` preserved the exact roster/31 reported states and
+memberships; all 30 simulated phones were restored after their temporary pause.
+All eight platform services stayed up. No app/backend deployment or call was
+performed. See `doc/monster_live_reconnect_acceptance.md` for limits and paths.
+Restricted-user isolation, summary reconnect, cross-node/load and TLS remain
+open; historical/ClickHouse work is postponed.
+
 **Summary live PASS (September7):** opt-in
 `test-acdc-strategies-live.cjs --dashboard-browser-summary-live` passed f965e9fb.
 Receipt `/tmp/kazoo-monster-live-deployed.4jYi2Y/receipt.json` (9checks) and

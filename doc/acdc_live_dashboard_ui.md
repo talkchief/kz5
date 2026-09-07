@@ -1,5 +1,37 @@
 # Live queue summary/detail — development deployment
 
+## Current live-only acceptance — September 7, 2026
+
+The deployed summary and clicked-queue detail have both passed actual browser
+call-transition checks: waiting → handled → gone, driven by native Blackhole
+hints followed by authorized snapshot GETs. Summary evidence is
+`/tmp/kazoo-monster-live-deployed.4jYi2Y/receipt.json`; the final shared-source
+detail recheck is `/tmp/kazoo-monster-live-deployed.IBFBXo/receipt.json`.
+See [the browser/call acceptance guide](monster_browser_call_acceptance.md)
+for exact scope, call proof and cleanup evidence. Restricted-user isolation,
+cross-node failure and load/soak acceptance remain open.
+
+The deployed detail now also passes controlled connection-loss recovery under
+the same account and after normal company switching: visible stale state,
+new native ACK, fresh no-store GET, independently matched call counts/rows and
+normal unsubscribe cleanup. See [reconnect acceptance](monster_live_reconnect_acceptance.md).
+Summary-page reconnect and restricted-user isolation remain separate tests.
+
+Live-only scope recheck on September 7 passed all 46 offline UI groups with the
+current patched framework (completion `b0c8ae`). This was network-isolated,
+192MiB-capped validation with a 512MiB reserve, not a new browser or call test.
+Initial invocations lacked dependency resolution (`c233c1`) and then the
+required lifecycle source input (`cd1fd5`); the explicit inputs below resolved
+both harness setup errors without application changes or service restarts.
+
+Only the live queue summary and selected queue detail are current delivery
+work. Agent observations inside queue detail remain included; separate agent
+dashboards, history, workforce reports and ClickHouse integration are postponed.
+Existing historical storage is unchanged. The earlier deployment checkpoint
+below is retained as evidence, not the latest acceptance status.
+
+## Earlier deployment checkpoint
+
 September 7, 2026. The corrected single-GET adapter and sequential native
 subscriptions passed 46 offline and 24 Chromium fixture groups (root24147).
 The fresh production build in `monster-owned-build.Fd3cY7/source` passed and
@@ -275,14 +307,22 @@ From a test workspace with compatible Lodash and Handlebars installed, set
 `KAZOO_MONSTER_LIFECYCLE_SOURCE` to the absolute `src/js/lib/monster.socket.js`
 path in a source stage prepared with the repository's current framework patches.
 The lifecycle regression intentionally fails if this input is absent; an
-unpatched upstream checkout is not a substitute. For the September 7 build:
+unpatched upstream checkout is not a substitute. For the current September 7
+development build, run from `/opt/kz5` with explicit dependency paths inside
+the guard (which intentionally strips the caller's environment):
 
 ```bash
-KAZOO_MONSTER_LIFECYCLE_SOURCE=/usr/local/src/kazoo5-installer/monster-owned-build.Fd3cY7/source/src/js/lib/monster.socket.js \
-  node /opt/kz5/monster-ui/acdc/tests/live-dashboard.test.cjs
-node /opt/kz5/monster-ui/acdc/tests/queue-login.test.cjs
+bash scripts/run-kazoo-validation.sh \
+  --memory-mib 192 --reserve-mib 512 --runtime-sec 90 -- \
+  /usr/bin/unshare --net /usr/bin/env \
+  NODE_PATH=/usr/local/src/kazoo5-installer/monster-owned-build.nUolDS/source/node_modules \
+  KAZOO_MONSTER_LIFECYCLE_SOURCE=/usr/local/src/kazoo5-installer/monster-owned-build.nUolDS/source/src/js/lib/monster.socket.js \
+  /tmp/kazoo-ui-browser.eXdEqS/node_modules/node/bin/node \
+  /opt/kz5/monster-ui/acdc/tests/live-dashboard.test.cjs
 ```
 
+These build/runtime paths are local evidence locations, not portable installer
+defaults; a new test host must provide its own reviewed patched stage and runtime.
 Use the repository resource guard for tests on the shared development server.
 Browser execution additionally needs the compatible runtime and explicit
 `KAZOO_PLAYWRIGHT_MODULE` environment setting. Do not automatically stop services

@@ -231,6 +231,26 @@ scope change. Existing Kazoo archives are left intact. Agent rows/state inside
 the selected queue remain in scope. This override takes precedence over the
 older OPEN labels and broad requirements retained below for future reference.
 
+**Reconfirmed live-only priority — September 7, 2026:** finish the summary and
+clicked-queue detail, their authorized snapshot APIs and native Blackhole
+updates. Do not resume history/ClickHouse or separate workforce/agent dashboard
+work to close this slice. Actual browser call transitions for both screens have
+passed; remaining live acceptance work is restricted-principal isolation,
+reconnect/scope changes against the deployed system, and cross-node/load checks.
+The current guide is `doc/acdc_live_dashboard_ui.md`; earlier chronological
+entries below are not a reason to repeat already completed implementation.
+
+**Deployed selected-detail reconnect — verified September 7:** final
+same-account and normal switched-company browser runs passed 9/12 checks
+(`4a10d5` / `20c816`), including actual disconnection/stale display, new exact
+queue subscription ACK, subsequent no-store GET, independently matched visible
+call counts/rows, new-socket unsubscribe and home restoration. Recovery was
+2780/3278ms. Offline14 reconnect and17 scope groups passed; final exact
+roster/31-state comparison passed `52c1c7`. See
+`doc/monster_live_reconnect_acceptance.md`. This closes that bounded detail
+reconnect check, not restricted-user isolation, summary-page reconnect,
+cross-node failure/load or TLS acceptance. History remains postponed.
+
 Latest live-only checkpoint (September7): production ACDC74/Blackhole30 modules
 are deployed, including the dynamic local-registration capability. Native
 `bh_queue_live` registration is persisted while preserving existing modules.

@@ -111,6 +111,16 @@ function homeBrowser() {
     return b;
 }
 (async () => {
+    await test('reconnect fault injection is explicit standalone and requires native sockets', () => {
+        assert.equal(h.reconnectOptions({}, false), false);
+        assert.equal(h.reconnectOptions({KAZOO_TEST_RECONNECT: 'false'}, true), false);
+        assert.equal(h.reconnectOptions({KAZOO_TEST_RECONNECT: 'true', KAZOO_TEST_REQUIRE_WEBSOCKET: 'true'}, false), true);
+        for (const value of ['', 'yes', true, 1, null]) {
+            assert.throws(() => h.reconnectOptions({KAZOO_TEST_RECONNECT: value}, false), /invalid_reconnect_mode/);
+        }
+        assert.throws(() => h.reconnectOptions({KAZOO_TEST_RECONNECT: 'true'}, false), /standalone_native_reconnect_required/);
+        assert.throws(() => h.reconnectOptions({KAZOO_TEST_RECONNECT: 'true', KAZOO_TEST_REQUIRE_WEBSOCKET: 'true'}, {}), /standalone_native_reconnect_required/);
+    });
     await test('page-error diagnostics omit messages, unknown paths and URL secrets', () => {
         const error = {name: 'TypeError', message: 'SECRET is not a function', stack: 'TypeError: SECRET\n at f (http://ui.invalid/js/main.js?token=SECRET:84:120)\n at g (http://foreign.invalid/js/main.js:3:2)\n at h (http://ui.invalid/private/SECRET.js:3:2)'};
         const d = h.browserErrorDiagnostic(error, 'http://ui.invalid');

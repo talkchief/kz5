@@ -4,6 +4,7 @@
 // native subscribe/unsubscribe frames are forwarded unchanged to the real server.
 // No stage overlays, fake API/socket replies, events, calls, screenshots, HAR,
 // traces, saved browser state, payload dumps or raw exception logging.
+// Optional standalone reconnect probe closes only its own browser/server socket.
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const crypto = require('node:crypto'), dns = require('node:dns').promises;
 const ID = /^[a-f0-9]{32}$/, HASH = /^[a-f0-9]{64}$/;
@@ -11,6 +12,12 @@ const ACCOUNT_BROWSER_ASSET = 'apps/common/submodules/accountBrowser/accountBrow
 const ACCOUNT_TOGGLE = '#main_topbar_account_toggle_container';
 class Failure extends Error {}
 function check(ok, code) { if (!ok) throw new Failure(code); }
+function reconnectOptions(env, natural) {
+    check([undefined, 'true', 'false'].includes(env.KAZOO_TEST_RECONNECT), 'invalid_reconnect_mode');
+    const enabled = env.KAZOO_TEST_RECONNECT === 'true';
+    check(!enabled || (!natural && env.KAZOO_TEST_REQUIRE_WEBSOCKET === 'true'), 'standalone_native_reconnect_required');
+    return enabled;
+}
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 function browserErrorDiagnostic(error, uiOrigin) {
     const name = ['TypeError', 'ReferenceError', 'SyntaxError', 'RangeError', 'Error'].includes(error.name) ? error.name : 'other';
@@ -217,6 +224,7 @@ async function main(natural) {
     const scope = accountScopeOptions(env), {account, queue, loginAccount, loginName} = scope;
     const admission = socketAdmission(scope);
     const requiredSocket = env.KAZOO_TEST_REQUIRE_WEBSOCKET === 'true';
+    const reconnectMode = reconnectOptions(env, natural);
     check([undefined, 'true', 'false'].includes(env.KAZOO_TEST_REQUIRE_WEBSOCKET), 'invalid_websocket_mode');
     const web = process.env.KAZOO_TEST_WEB_ROOT || '/var/www/html/monster-ui';
     check(path.isAbsolute(web) && fs.realpathSync(web) === web, 'unsafe_web_root');
@@ -230,8 +238,9 @@ async function main(natural) {
     const assets = ['index.html', 'js/main.js', 'js/templates.js', 'js/config.js', 'build-config.json',
         'css/style.css', 'apps/acdc/style/app.css', ...(preloadedAcdc ? [] : ['apps/acdc/app.js']),
         ...(scope.switching ? [ACCOUNT_BROWSER_ASSET, 'apps/common/style/app.css'] : [])];
-    const helperFiles = natural ? ['test-fixtures/monster-live-call-observer.cjs',
-        'test-fixtures/queue-live-observer.cjs', 'api-docs-queue-live.cjs'].map(p => path.join(__dirname, p)) : [];
+    const helperFiles = natural || reconnectMode ? ['test-fixtures/monster-live-call-observer.cjs',
+        'test-fixtures/queue-live-observer.cjs', 'api-docs-queue-live.cjs',
+        ...(reconnectMode ? ['test-fixtures/monster-live-reconnect.cjs'] : [])].map(p => path.join(__dirname, p)) : [];
     const pins = () => Object.fromEntries([__filename, ...helperFiles, ...assets.map(p => path.join(web, p))].map(p => [p, digest(readFile(p))]));
     const before = pins();
     check(before[path.join(web, 'build-config.json')] === digest(buildBytes), 'preload_manifest_changed');
@@ -269,6 +278,13 @@ async function main(natural) {
     let firstDetailAck = null, firstDetailOrder = null, detailStarted = 0, detailInFlight = 0, maxDetailInFlight = 0;
     let firstOverviewAck = null, firstOverviewOrder = null, overviewStarted = 0, overviewInFlight = 0, maxOverviewInFlight = 0;
     let overviewGeneration = null;
+    let connectionSequence = 0, currentWire = null, reconnectProbe, reconnectActive = false;
+    let reconnectGate = null, releaseReconnect = null, reconnectSnapshot = null, reconnectErrorClass, reconnectAckAt = null;
+    if (reconnectMode) {
+        const {createReconnectTracker, ReconnectError} = require('./test-fixtures/monster-live-reconnect.cjs');
+        reconnectProbe = createReconnectTracker({accountId: account, queueId: queue});
+        reconnectErrorClass = ReconnectError;
+    }
     let disposalStartOrder = null, disposalSendOrder = null, disposalAckOrder = null;
     const detailLedger = [], overviewLedger = [], pending = new Set(), requests = new Map(), scopedRequests = new Set();
     const summaryBindings = new Map();
@@ -368,11 +384,18 @@ async function main(natural) {
                     return route.continue();
                 } catch (_) { fail('http_guard_failed'); return route.abort('blockedbyclient'); }
             });
-            await context.routeWebSocket('**/*', route => {
+            await context.routeWebSocket('**/*', async route => {
                 try {
                     const u = new URL(route.url());
                     if (u.href !== socket.href) { result.counts.external++; route.close(); return; }
+                    const connection = ++connectionSequence;
+                    if (reconnectMode) check(connection <= 2, 'unexpected_extra_socket_connection');
+                    // Delay only the replacement transport until the real close
+                    // has been observed in the DOM. No fake ACK/event is sent.
+                    if (reconnectGate) await reconnectGate;
+                    if (stopping) { await route.close(); return; }
                     const server = route.connectToServer(), wire = new Map(), seenRequestIds = new Set();
+                    currentWire = {connection, route, server, wire};
                     route.onMessage(message => {
                         let frame;
                         try {
@@ -402,10 +425,12 @@ async function main(natural) {
                                 binding.sent = order;
                             }
                             const sent = {action: j.action, binding: j.data.binding, account: j.data.account_id,
-                                requestId: j.request_id, role, phase, order,
+                                requestId: j.request_id, role, phase, order, connection,
                                 disposal, afterDetailGet: firstDetailOrder !== null && order > firstDetailOrder,
                                 afterOverviewGet: firstOverviewOrder !== null && order > firstOverviewOrder};
                             recordHomeCommand(admission, sent);
+                            if (reconnectActive) reconnectProbe.sent({connection, order, requestId: j.request_id,
+                                action: j.action, accountId: j.data.account_id, binding: j.data.binding});
                             seenRequestIds.add(j.request_id);
                             wire.set(j.request_id, sent);
                             server.send(message); // Actual bytes, token stays only in memory.
@@ -431,6 +456,8 @@ async function main(natural) {
                                 const order = timeline('socket_reply', sent.role === 'home' ? 'home_queue_subscription'
                                     : selected ? 'selected_queue_subscription' : 'other_page_queue_subscription',
                                     null, sent.order, j.status === 'success' ? 'success' : j.status === 'error' ? 'error' : 'invalid');
+                                if (reconnectActive && reconnectProbe.reply({connection, order, requestId: j.request_id,
+                                    status: j.status, data: j.data})) reconnectAckAt = Date.now();
                                 if (observeHomeReply(admission, sent, j, order)) {
                                     if (sent.action === 'subscribe') result.account_switch.home_subscribe_ack = true;
                                     else result.account_switch.home_unsubscribe_ack = true;
@@ -445,7 +472,7 @@ async function main(natural) {
                                         summaryBindings.set(sent.binding, {sent: null, ack: null});
                                     }
                                     if (sent.phase === 'detail' && sent.afterDetailGet && selected && firstDetailAck === null) {
-                                        firstDetailAck = {order, time: Date.now()}; result.native.detail_ack = true;
+                                        firstDetailAck = {order, time: Date.now(), connection}; result.native.detail_ack = true;
                                     }
                                     if (summaryMode && sent.phase === 'overview' && sent.afterOverviewGet && selected && firstOverviewAck === null) {
                                         firstOverviewAck = {order, time: Date.now()};
@@ -464,6 +491,8 @@ async function main(natural) {
                                         summaryFinalSubscriptionsEmpty = j.data.subscriptions.length === 0;
                                     }
                                     if (sent.disposal && sent.order === disposalSendOrder) {
+                                        if (reconnectMode) check(sent.connection === reconnectProbe.evidence().newConnection,
+                                            'cleanup_not_on_reconnected_socket');
                                         if (!accepted) fail('selected_disposal_unsubscribe_rejected');
                                         else { disposalAckOrder = order; result.native.disposal_unsubscribe_ack = true; }
                                     }
@@ -539,6 +568,16 @@ async function main(natural) {
                 if (item) item.status = response.status();
                 const responseOrder = same(u, api) && u.pathname.startsWith('/v2/')
                     ? timeline('http_response', category(u), response.status(), httpOrders.get(response.request()) || null) : null;
+                if (reconnectActive && item && !item.overview && response.status() === 200 && !reconnectSnapshot) track((async () => {
+                    const bytes = await response.body();
+                    check(bytes.length <= 2 * 1024 * 1024, 'reconnect_detail_body_limit');
+                    const {validateDetail} = require('./test-fixtures/queue-live-observer.cjs');
+                    const dto = validateDetail(JSON.parse(bytes.toString('utf8')), account, queue);
+                    if (!reconnectSnapshot && reconnectProbe.snapshot({requestOrder: item.order, responseOrder,
+                        noStore: response.headers()['cache-control'] === 'no-store'})) {
+                        reconnectSnapshot = {dto: JSON.stringify(dto), requestAt: item.time};
+                    }
+                })(), 'reconnect_snapshot_validation_failed');
                 if (callObserver && item && Boolean(item.overview) === summaryMode && response.status() === 200) track((async () => {
                     const bytes = await response.body(); check(bytes.length <= 2 * 1024 * 1024, summaryMode ? 'natural_overview_body_limit' : 'natural_detail_body_limit');
                     callObserver.recordResponse({body: JSON.parse(bytes.toString('utf8')), requestOrder: item.order,
@@ -731,6 +770,59 @@ async function main(natural) {
             check(maxDetailInFlight === 1 && result.counts.supplemental_gets === 0, 'detail_fanout_or_overlap');
             check(result.counts.auth === 1, 'exactly_one_normal_auth_required');
             checkClean();
+            if (reconnectMode) {
+                checkpoint('closing_only_test_socket_for_reconnect');
+                await Promise.all([...pending]); checkClean();
+                const {readRenderedCall} = require('./test-fixtures/monster-live-call-observer.cjs');
+                const baseline = await page.evaluate(readRenderedCall, {accountId: account, queueId: queue});
+                check(baseline.valid && currentWire && currentWire.wire.size === 0
+                    && currentWire.connection === firstDetailAck.connection && connectionSequence === 1,
+                    'reconnect_baseline_not_quiescent');
+                const oldWire = currentWire, started = Date.now();
+                reconnectProbe.begin({connection: oldWire.connection, order: timeline('socket_test_close', 'selected_queue_subscription')});
+                reconnectActive = true;
+                reconnectGate = new Promise(resolve => { releaseReconnect = resolve; });
+                await Promise.all([oldWire.server.close({code: 1012}), oldWire.route.close({code: 1012})]);
+                checkpoint('waiting_visible_disconnected_stale_state');
+                await page.waitForFunction(({account, queue, generation, dto}) => {
+                    const app = window.require('monster').apps.acdc, c = app.appFlags.acdc.liveDashboardController;
+                    const s = app.appFlags.acdc.liveDashboardSnapshot, root = document.querySelector('.acdc-live-dashboard');
+                    const note = root?.querySelector('.acdc-live-stale-note');
+                    return c && s && root && c.view?.[0] === root && root.getClientRects().length > 0
+                        && c.generation === generation && c.accountId === account && c.queueId === queue
+                        && s.accountId === account && s.queueId === queue && JSON.stringify(s.results.live) === dto
+                        && app.liveTransportState(c) === 'disconnected' && root.querySelector('.acdc-live-freshness.is-stale')
+                        && note && !note.hidden;
+                }, {account, queue, generation: baseline.generation, dto: baseline.dto}, {timeout: 2000, polling: 20});
+                result.checks.push('actual_disconnect_retains_snapshot_and_marks_visible_detail_stale');
+                releaseReconnect(); releaseReconnect = null; reconnectGate = null;
+                checkpoint('waiting_new_socket_ack_and_fresh_detail');
+                while (Date.now() < started + 12000 && !reconnectSnapshot && !fatal) await page.waitForTimeout(50);
+                await Promise.all([...pending]); checkClean();
+                check(reconnectSnapshot && reconnectProbe.evidence().complete && connectionSequence === 2
+                    && Date.now() < started + 12000 && reconnectAckAt !== null
+                    && reconnectSnapshot.requestAt >= reconnectAckAt && reconnectSnapshot.requestAt <= reconnectAckAt + 5000,
+                    'reconnect_ack_snapshot_deadline');
+                await page.waitForFunction(({account, queue, generation, dto}) => {
+                    const app = window.require('monster').apps.acdc, c = app.appFlags.acdc.liveDashboardController;
+                    const s = app.appFlags.acdc.liveDashboardSnapshot;
+                    return c && s && c.generation === generation && c.accountId === account && c.queueId === queue
+                        && s.accountId === account && s.queueId === queue && !c.inFlight
+                        && app.liveTransportState(c) === 'acknowledged' && JSON.stringify(s.results.live) === dto;
+                }, {account, queue, generation: baseline.generation, dto: reconnectSnapshot.dto},
+                {timeout: Math.max(1, Math.min(3000, started + 12000 - Date.now()))});
+                const recovered = await page.evaluate(readRenderedCall, {accountId: account, queueId: queue});
+                check(recovered.valid && recovered.generation === baseline.generation
+                    && recovered.dto === reconnectSnapshot.dto && recovered.receivedAt >= reconnectSnapshot.requestAt
+                    && maxDetailInFlight === 1 && Date.now() < started + 12000, 'reconnect_rendered_snapshot_mismatch');
+                require('./test-fixtures/monster-live-reconnect.cjs').matchReconnectCallRendering(
+                    recovered, JSON.parse(reconnectSnapshot.dto));
+                result.reconnect = {...reconnectProbe.evidence(), disconnected_stale_observed: true,
+                    rendered_call_counts_rows_match: true, same_controller: true, elapsed_ms: Date.now() - started,
+                    periodic_causality_excluded: false};
+                result.checks.push('new_socket_exact_ack_then_no_store_get_matches_visible_detail');
+                reconnectActive = false;
+            }
             if (natural) {
                 checkpoint('waiting_empty_detail_before_owned_call');
                 await Promise.all([...pending]); checkClean();
@@ -789,11 +881,14 @@ async function main(natural) {
         } finally { clearTimeout(deadline); }
     } catch (e) {
         result.failure = fatal || (e instanceof Failure || (observerErrorClass && e instanceof observerErrorClass)
+            || (reconnectErrorClass && e instanceof reconnectErrorClass)
             ? e.message : 'browser_or_input_step_failed');
         result.failure_phase = phase; result.failure_checkpoint = result.checkpoints.at(-1) || 'preflight';
     }
     finally {
         stopping = true;
+        if (releaseReconnect) releaseReconnect();
+        if (reconnectProbe && !result.reconnect) result.reconnect = reconnectProbe.evidence();
         if (context) await context.close().catch(() => fail('context_cleanup_failed'));
         if (browser) await browser.close().catch(() => fail('browser_cleanup_failed'));
         await Promise.all([...pending]);
@@ -836,7 +931,7 @@ async function runWithNaturalSummaryCall(options) { return runNaturalBrowser(opt
 module.exports = {accountScopeOptions, accountScopeInBrowser, targetAccountResponse,
     verifyTargetAccountResponse, switchTargetAccount, restoreHomeAccount, browserErrorDiagnostic, ACCOUNT_BROWSER_ASSET,
     socketAdmission, socketScopeRole, recordHomeCommand, observeHomeReply, beginHomeDisposal, closeHomeAdmission,
-    homeOverviewInBrowser, queuesDisposedInBrowser, runWithNaturalCall, runWithNaturalSummaryCall};
+    homeOverviewInBrowser, queuesDisposedInBrowser, runWithNaturalCall, runWithNaturalSummaryCall, reconnectOptions};
 if (require.main === module) main().catch(e => {
     process.stderr.write(JSON.stringify({status: 'FAIL', failure: e instanceof Failure ? e.message : 'preflight_failed'}) + '\n');
     process.exitCode = 1;

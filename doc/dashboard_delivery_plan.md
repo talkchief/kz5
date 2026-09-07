@@ -20,8 +20,15 @@ on reconnect.
 Matching UI source `220b37b` passed46 offline/24 Chromium fixtures24147, and the
 fresh production UI was deployed32580. Actual deployed browser65670 passed
 summary/detail rendering, native ACK/refetch and acknowledged navigation cleanup
-with no console/page/HTTP errors. Natural call transitions and isolation/load
-remain separate acceptance gates. Follow the current
+with no console/page/HTTP errors. Subsequent actual browser call tests passed
+for both live summary and clicked detail, including waiting → handled → gone,
+natural native hints, later authorized GETs and acknowledged subscription cleanup.
+The final summary/detail receipts are
+`/tmp/kazoo-monster-live-deployed.4jYi2Y/receipt.json` and
+`/tmp/kazoo-monster-live-deployed.IBFBXo/receipt.json`; see
+[actual browser call acceptance](monster_browser_call_acceptance.md).
+Restricted-user isolation and cross-node/load/soak remain open; single-call
+development checks do not establish production readiness. Follow the current
 [snapshot/backend guide](acdc_live_snapshot.md),
 [Blackhole wire/rollout guide](blackhole_queue_live.md),
 [wire-smoke scope](queue_live_wire_smoke.md), and
