@@ -1,0 +1,56 @@
+diff --git a/kazoo_couch/src/kz_couch_doc.erl b/kazoo_couch/src/kz_couch_doc.erl
+index 2f15ee982..7b3c0f108 100644
+--- a/kazoo_couch/src/kz_couch_doc.erl
++++ b/kazoo_couch/src/kz_couch_doc.erl
+@@ -85,7 +85,8 @@ ensure_saved(#server{}=Conn, DbName, Doc, Opts) ->
+           doc_return().
+ del_doc(#server{}=Conn, DbName, Doc, Options) ->
+     Db = get_db(Conn, DbName),
+-    ?RETRY_504(couchbeam:delete_doc(Db, Doc, Options)).
++    Result = ?RETRY_504(couchbeam:delete_doc(Db, Doc, Options)),
++    single_delete_result(Result, kz_doc:id(Doc)).
+ 
+ -spec del_docs(server(), kz_term:ne_binary(), kz_json:objects(), kz_term:proplist()) ->
+           {'ok', kz_json:objects()} |
+@@ -96,6 +97,41 @@ del_docs(#server{}=Conn, DbName, Doc, Options) ->
+ 
+ %% Internal Doc functions
+ 
++%% Couchbeam implements single deletion through _bulk_docs. HTTP 201 does not
++%% imply that its one document succeeded; never admit success hooks on a row
++%% carrying a conflict/error. Keep the valid legacy single-row return shape.
++single_delete_result({'error', _}=Error, _Id) -> Error;
++single_delete_result({'ok', [{Fields}=Row]}=Result, Id)
++  when is_list(Fields), is_binary(Id), byte_size(Id) > 0 ->
++    try
++        Keys = [Key || {Key, _} <- Fields, is_binary(Key)],
++        true = length(Keys) =:= length(Fields),
++        true = length(lists:usort(Keys)) =:= length(Keys),
++        case lists:keyfind(<<"id">>, 1, Fields) of
++            {_, Id} ->
++                case lists:keyfind(<<"error">>, 1, Fields) of
++                    {_, <<"conflict">>} -> {'error', 'conflict'};
++                    {_, <<"not_found">>} -> {'error', 'not_found'};
++                    'false' -> single_delete_success(Row, Result);
++                    _ -> {'error', 'failed'}
++                end;
++            _ -> {'error', 'failed'}
++        end
++    catch
++        _:_ -> {'error', 'failed'}
++    end;
++single_delete_result(_, _Id) -> {'error', 'failed'}.
++
++single_delete_success({Fields}=Row, Result) ->
++    Ok = case lists:keyfind(<<"ok">>, 1, Fields) of
++             'false' -> 'true';
++             {_, Value} -> Value
++         end,
++    case {Ok, kz_json:get_value(<<"rev">>, Row)} of
++        {'true', Rev} when is_binary(Rev), byte_size(Rev) > 0 -> Result;
++        _ -> {'error', 'failed'}
++    end.
++
+ -spec do_ensure_saved(couchbeam_db(), kz_json:object(), kz_term:proplist()) ->
+           doc_return().
+ do_ensure_saved(#db{}=Db, Doc, Opts) ->

@@ -6,13 +6,26 @@ umask 077
 unset ERL_AFLAGS ERL_ZFLAGS ERL_COMPILER_OPTIONS ERL_INETRC
 delete_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 delete_mode=${1:-current}
-[[ $# -le 1 && ( $delete_mode == current || $delete_mode == --baseline ) ]] || exit 64
+[[ $# -le 1 && ( $delete_mode == current || $delete_mode == --baseline || $delete_mode == --http || $delete_mode == --http-baseline ) ]] || exit 64
 delete_output=$(mktemp -d /tmp/kazoo-soft-delete-revision.XXXXXX)
 cd "$delete_root"
 export ERL_LIBS="$delete_root/deps:$delete_root/core:$delete_root/applications"
 export ERL_FLAGS='+S 1:1 +SDcpu 1 +SDio 1 +A 1 -no_dot_erlang'
 export ERL_CRASH_DUMP="$delete_output/erl_crash.dump"
 export KAZOO_SOFT_DELETE_OUTPUT="$delete_output"
+export KAZOO_SOFT_DELETE_TEST_MODULE=crossbar_soft_delete_revision_tests
+delete_fixtures=(scripts/erlang-tests/crossbar_soft_delete_revision_tests.erl)
+delete_wire_inputs=()
+if [[ $delete_mode == --http* ]]; then
+    [[ $(readlink /proc/self/ns/net) != "$(readlink /proc/1/ns/net)" ]] || exit 65
+    /usr/sbin/ip link set lo up
+    export KAZOO_SOFT_DELETE_TEST_MODULE=crossbar_soft_delete_http_tests
+    delete_fixtures=(scripts/erlang-tests/crossbar_soft_delete_http_tests.erl
+        scripts/erlang-tests/crossbar_soft_delete_http_handler.erl)
+    while IFS= read -r delete_wire_file; do delete_wire_inputs+=("$delete_wire_file"); done < <(
+        /usr/bin/find deps/cowboy/ebin deps/ranch/ebin deps/cowlib/ebin -type f \( -name '*.beam' -o -name '*.app' \) | LC_ALL=C sort)
+    [[ ${#delete_wire_inputs[@]} -gt 10 ]]
+fi
 delete_exit() {
     local delete_code=$?
     trap - EXIT
@@ -32,7 +45,7 @@ delete_sources=(applications/crossbar/src/crossbar_doc.erl applications/crossbar
     core/kazoo_stdlib/src/props.erl core/kazoo_stdlib/src/kz_time.erl
     core/kazoo_data/src/kzs_util.erl core/kazoo_schemas/src/kz_json_schema.erl)
 delete_inputs=("${delete_sources[@]}" "$delete_patch" scripts/install-kazoo5.sh
-    scripts/test-crossbar-soft-delete-revision.sh scripts/erlang-tests/crossbar_soft_delete_revision_tests.erl)
+    scripts/test-crossbar-soft-delete-revision.sh "${delete_fixtures[@]}" "${delete_wire_inputs[@]}")
 /usr/bin/find applications/crossbar/src core/kazoo_stdlib/include core/kazoo_documents/include \
     core/kazoo_amqp/include core/kazoo_data/src core/kazoo_schemas/src \
     core/kazoo_numbers/include core/kazoo_web/include -type f -name '*.hrl' | LC_ALL=C sort > "$delete_output/headers.list"
@@ -61,11 +74,14 @@ sed -n '/^apply_required_source_patch() {$/,/^}$/p' scripts/install-kazoo5.sh > 
     if (apply_required_source_patch "$delete_output/conflict" "$delete_patch"); then exit 66; fi
 )
 sha256sum "$delete_output/baseline/crossbar_doc.erl" >> "$delete_output/inputs.sha256"
-if [[ $delete_mode == --baseline ]]; then delete_sources[0]="$delete_output/baseline/crossbar_doc.erl"; fi
+if [[ $delete_mode == *baseline ]]; then delete_sources[0]="$delete_output/baseline/crossbar_doc.erl"; fi
 printf '%s\n' 'Scope: public production crossbar_doc delete with real document/context transforms and controlled datastore seams. Ten modules rebuilt without TEST/export_all. Other dependencies are prebuilt/unpinned. No actual Cowboy/HTTP/CouchDB, secondary replication, cascade transaction, service or live isolation proof.' | tee "$delete_output/scope.log"
+if [[ $delete_mode == --http* ]]; then
+    printf '%s\n' 'HTTP mode additionally exercises real TCP/Cowboy REST preconditions in private network loopback, with pinned prebuilt Cowboy/Ranch/Cowlib. Explicit fixture ETag and response adapters, not api_resource authorization/etag bindings or real CouchDB.' | tee -a "$delete_output/scope.log"
+fi
 erlc -Werror +debug_info -I applications/crossbar/src \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$delete_output" "${delete_sources[@]}"
-erlc -Werror +debug_info -o "$delete_output" scripts/erlang-tests/crossbar_soft_delete_revision_tests.erl
+erlc -Werror +debug_info -o "$delete_output" "${delete_fixtures[@]}"
 erl -noshell -pa "$delete_output" -eval '
     lists:foreach(fun(M) ->
         {module,M}=code:ensure_loaded(M),
@@ -74,5 +90,18 @@ erl -noshell -pa "$delete_output" -eval '
         Options=proplists:get_value(options,M:module_info(compile),[]),
         false=lists:any(fun({d,'\''TEST'\''})->true;({d,'\''TEST'\'',_})->true;(export_all)->true;(_)->false end,Options)
     end,[crossbar_doc,cb_context,crossbar_util,kz_doc,kz_json,kz_term,props,kz_time,kzs_util,kz_json_schema]),
-    case eunit:test(crossbar_soft_delete_revision_tests,[verbose]) of ok->halt(0);_->halt(1) end.' \
+    Module=list_to_existing_atom(os:getenv("KAZOO_SOFT_DELETE_TEST_MODULE")),
+    case Module of
+        crossbar_soft_delete_http_tests ->
+            lists:foreach(fun(App) ->
+                {ok,[{application,App,Props}]}=file:consult(filename:join(["deps",atom_to_list(App),"ebin",atom_to_list(App)++".app"])),
+                lists:foreach(fun(M) ->
+                    {module,M}=code:ensure_loaded(M),
+                    Expected=filename:absname(filename:join(["deps",atom_to_list(App),"ebin",atom_to_list(M)++".beam"])),
+                    Expected=filename:absname(code:which(M))
+                end,proplists:get_value(modules,Props))
+            end,[cowboy,ranch,cowlib]);
+        crossbar_soft_delete_revision_tests -> ok
+    end,
+    case eunit:test(Module,[verbose]) of ok->halt(0);_->halt(1) end.' \
     | tee "$delete_output/eunit.log"

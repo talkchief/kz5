@@ -6,6 +6,22 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Primary cleanup fixes verified, NOT DEPLOYED — September 7:** P0-19 private
+Cowboy wire suite passes10 cases (`51f026`), with two204→409 race reproducers on
+baseline. Actual native primary CouchDB checks exposed P0-20: single hard-delete
+bulk conflict rows were reported as success. New required installer patch
+`kazoo-couch-single-delete-result.patch` fixes that boundary; nine focused groups
+pass, baseline fails six, and real primary probe `b3c7e1`/`2a0330` passes soft/hard
+CAS, unchanged concurrent bodies and no success publication/cache insertion on
+conflict. Receipt `/tmp/kazoo-soft-delete-couch.Sm4MLU`; two exact owned test docs
+removed/absence verified. Three synthetic databases remain as evidence, including
+two failed-baseline fixtures; names and limitations are in
+`doc/couch_single_delete_result.md`. All eight platform services/test phones
+remain running (`ba33c6`); no runtime module was replaced or service restarted.
+Next: controlled deployment and actual Crossbar resource/authorization checks,
+then restricted-dashboard fixture admission only after cleanup/token gates.
+The live dashboard UI artifact remains OxxzgK. History/ClickHouse/WFM postponed.
+
 **Live-only scope / cleanup prerequisite — September 7:** history, ClickHouse
 integration, separate agent dashboard and workforce reporting remain postponed.
 The live summary/detail browser and reconnect proofs below remain current.

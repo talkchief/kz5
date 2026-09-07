@@ -116,9 +116,13 @@ success nor an HTTP precondition alone opens that gate. Ambiguous outcomes are
 still retained without automatic retries or destructive rollback.
 
 P0-19 now has an installer-owned source candidate preserving the validated
-revision. Nine controlled production-module regression groups pass; the pinned
-baseline reproduces the concurrent overwrite. This is **not deployed** and does
-not establish actual HTTP/CouchDB cleanup safety. Source ownership, reproduction,
+revision. Nine controlled groups, ten private-Cowboy HTTP cases and isolated
+native primary CouchDB checks pass; the pinned baseline reproduces the overwrite.
+The CouchDB check also exposed P0-20 single hard-delete false success, now fixed
+in a second installer-owned candidate and verified against real primary CAS.
+Both changes are **not deployed**. Controlled HTTP adapters and data routing/
+cache/publication seams do not prove the full deployed API authorization path,
+cluster behavior or token invalidation. Source ownership, reproduction,
 evidence and remaining gates are in
 [the soft-delete guidance](crossbar_soft_delete_revision.md).
 

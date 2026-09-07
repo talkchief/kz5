@@ -73,12 +73,43 @@ Shell syntax and `git diff --check` pass. Final read-only service check `89e910`
 found all eight platform services and the simulated-phone service running.
 No service or deployment operation was performed in this work slice.
 
+## HTTP and primary-datastore follow-up
+
+`scripts/test-crossbar-soft-delete-revision.sh --http` now runs ten real
+TCP/Cowboy REST cases in a private network namespace with loopback enabled by
+the runner. All passed `51f026`/`2b97f1` at
+`/tmp/kazoo-soft-delete-revision.9s6mRC`. The `--http-baseline` variant failed six
+and passed four (`37edf1`/`a6150b`, `/tmp/kazoo-soft-delete-revision.XyH6Fk`): both
+competing-write requests incorrectly returned204 instead of409, and the other
+four failures detected revision refresh. Stale/weak/list/malformed rejections
+remained unchanged. This is ten HTTP cases, not ten live-platform scenarios.
+
+The runner pins prebuilt Cowboy/Ranch/Cowlib beams/app files and checks loaded
+module paths. The explicit REST fixture substitutes document loading, strong
+revision ETag generation and error-context response adaptation; it does not
+exercise `api_resource` authorization, custom ETag bindings, actual user/queue
+routes or CouchDB. It calls real public `crossbar_doc:delete`. Native malformed
+header handling returns400 and exits that private request process without its
+REST terminate callback. The fixture now observes process death; the expected
+local crash report is not a deployed Crossbar service crash.
+
+Run using the same guarded command above with `--http` or `--http-baseline` as
+the final argument. The network namespace check rejects host-network listeners.
+
+The separate real CouchDB probe traverses native delete/data-manager/save/driver
+code with controlled routing/cache/publication. Both initial runs passed the
+soft-delete conflict/body-preservation checks, but discovered a hard-delete
+false-success defect in the original Couch driver. See
+[P0-20 and its reproduction](couch_single_delete_result.md). Neither follow-up
+deployed a production module or opened restricted-dashboard fixture admission.
+
 ## Gates still open
 
-- Actual HTTP precondition acceptance: stale/weak `If-Match` must fail412 before
-  execute; a race after a matching precondition must fail409 at primary save.
-- Real datastore concurrency and transport behavior; the controlled datastore
-  seam is not CouchDB acceptance or secondary-replication proof.
+- Full deployed Crossbar HTTP precondition/route acceptance. The private Cowboy
+  fixture proves412 versus409 behavior through its explicit adapters, not the
+  complete API resource/bindings/authorization path.
+- Transport fault behavior and secondary replication; the combined P0-19/P0-20
+  native primary CAS probe now passes, but isolated primary CAS is not cluster proof.
 - Revision-preserving cleanup of exact owned users, policies and queues. Queue
   activation and user cascade deletion have separate earlier side effects;
   no multi-document transaction guarantee is claimed. The fixture uses plain
