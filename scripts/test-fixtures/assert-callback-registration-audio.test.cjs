@@ -26,12 +26,12 @@ function digit(event, start) {
         return {time: start + (end ? 0.2 : 0), payload, src: local, dst: peer, sport: 43000, dport: 30000};
     });
 }
-function records() {
+function records(mode = 'confirm-current') {
     const result = [
         signalling(99.9, message('INVITE sip:2000@acceptance.invalid SIP/2.0', 'INVITE', sdp(96, local, 43000)), true),
         signalling(100, message('SIP/2.0 200 OK', 'INVITE', sdp(96, peer, 30000))),
         signalling(100.01, message('ACK sip:fixture@127.0.0.1 SIP/2.0', 'ACK'), true),
-        ...digit(6, 105), ...digit(1, 107.5)
+        ...digit(6, 105), ...(mode === 'confirm-current' ? digit(1, 107.5) : [])
     ];
     const audio = Buffer.alloc(15 * 8000, 255); reference.copy(audio, 8 * 8000);
     for (let start = 0; start < audio.length; start += 160) {
@@ -45,12 +45,26 @@ function records() {
     return result.sort((a, b) => a.time - b.time);
 }
 let count = 0;
-for (const link of [1, 113, 276]) for (const little of [false, true]) {
-    const result = inspect(capture(records(), link, little), reference, callId);
+for (const mode of ['confirm-current', 'entry-only']) for (const link of [1, 113, 276]) for (const little of [false, true]) {
+    const result = inspect(capture(records(mode), link, little), reference, callId, local, 15064, 43000, mode);
     assert.equal(result.correlation, 1); assert.equal(result.confirmation_start_epoch_seconds, 108);
     assert.equal(result.confirmation_end_epoch_seconds, 108 + reference.length / 8000);
     assert.equal(result.original_bye_epoch_seconds, 115); assert.equal(result.entry_after_answer_seconds, 5); count++;
+    assert.equal(result.registration_mode, mode);
+    assert.deepEqual(result.expected_registration_digits, mode === 'entry-only' ? [6] : [6, 1]);
+    assert.deepEqual(result.observed_registration_digits, result.expected_registration_digits);
 }
+for (const mode of ['confirm-current', 'entry-only']) {
+    const other = mode === 'entry-only' ? 'confirm-current' : 'entry-only';
+    assert.throws(() => inspect(capture(records(other)), reference, callId, local, 15064, 43000, mode),
+        undefined, 'Cross-mode capture must fail'); count++;
+}
+assert.throws(() => inspect(capture(records()), reference, callId, local, 15064, 43000, 'auto')); count++;
+const extraEntry = digit(6, 106).map(packet => {
+    packet.payload.writeUInt32BE(56000, 4); return packet;
+});
+assert.throws(() => inspect(capture([...records('entry-only'), ...extraEntry].sort((a, b) => a.time - b.time)),
+    reference, callId, local, 15064, 43000, 'entry-only')); count++;
 const sipIs = (r, first) => r.payload.toString('latin1').startsWith(first);
 const incomingAudio = r => r.sport === 30000;
 const dtmf = r => r.sport === 43000;
@@ -86,8 +100,9 @@ const negative = [
     r => {const p = r.find(p => sipIs(p, 'SIP/2.0 200 OK')); p.payload = Buffer.from(p.payload.toString().replace('Content-Length: ', 'Content-Length: 9')); return r;},
     r => {const p = r.find(p => sipIs(p, 'BYE ')); p.payload = Buffer.from(p.payload.toString().replace('Call-ID: ', 'Call-ID: duplicate\r\nCall-ID: ')); return r;}
 ];
-for (const [index, alter] of negative.entries()) {
-    assert.throws(() => inspect(capture(alter(records())), reference, callId), undefined, 'False pass in fault ' + index); count++;
+for (const mode of ['confirm-current', 'entry-only']) for (const [index, alter] of negative.entries()) {
+    assert.throws(() => inspect(capture(alter(records(mode))), reference, callId, local, 15064, 43000, mode),
+        undefined, 'False pass in ' + mode + ' fault ' + index); count++;
 }
 assert.throws(() => inspect(capture(records()), reference.subarray(0, 24000), callId)); count++;
 assert.throws(() => inspect(capture(records()), reference, '1-999@127.0.0.40')); count++;

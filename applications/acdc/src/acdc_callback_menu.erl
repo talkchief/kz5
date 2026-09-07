@@ -28,7 +28,17 @@ new(Config, CurrentNumber, NowMs) when is_map(Config), is_integer(NowMs) ->
                              ,deadline_ms => NowMs + maps:get(timeout_ms, Settings)
                              ,registration_emitted => 'false'
                              },
-            {'ok', State, [{'play_menu', Number, maps:get(allow_alternate_number, Settings)}]};
+            case maps:get(allow_alternate_number, Settings) of
+                'false' ->
+                    %% The caller already selected callback with the queue's
+                    %% entry key and the wrapper obtained a correlated pause.
+                    %% With no destination choice, do not ask for a second key.
+                    %% This is only a registration request: the queue still
+                    %% authorizes/persists it before success audio or hangup.
+                    {Waiting, Actions} = request_registration(State, Number),
+                    {'ok', Waiting, Actions};
+                'true' -> {'ok', State, [{'play_menu', Number, 'true'}]}
+            end;
         {{'error', _}, {'ok', #{allow_alternate_number := 'true'}=Settings}} ->
             %% An unavailable caller ID is not a callback target. When the
             %% queue explicitly permits alternatives, collect a new number

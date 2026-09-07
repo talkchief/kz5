@@ -6,6 +6,27 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Development helper restored:** after zero native channels and the temporary
+validation-memory pause, `93f4d5/146ae7` confirms kazoo-live-test-agents active/
+running (PID1941334) and apps/ecallmgr/FreeSWITCH/Kamailio/CouchDB/RabbitMQ/
+HAProxy/nginx all active. No callback candidate BEAM was deployed. The preceding
+reviewed artifacts/bridge/voice-policy checkpoint b782dba74ac38161f3db76091e7445c283a63e1d
+is pushed to master and independently read back (`3e2562`).
+
+**Single-key6 source fix, not deployed:** `acdc_callback_menu:new/3` now uses
+the existing authorized durable-registration action immediately after entry/
+correlated pause when alternatives are disabled.17 reducer and22 wrapper tests
+pass; strict entry-only/confirm-current harness80+79 checks and actual fixture
+policy checks pass. All8 focused production modules compile into
+`/tmp/kazoo-callback-media-build.2YgHe7`; private OpenAPI358paths/653operations
+validates at `/tmp/kazoo-single-key-openapi.EDdgLJ`, not published. Combined
+control+canonical run reached600s before all87 canonical cases/final hash check;
+rerun canonical alone, not both suites in the same600s unit. Earlier128MiB
+control test OOM was contained;192MiB completed all22 wrappers. See
+`doc/acdc_single_key_callback.md` for exact evidence and explicit entry-only
+live test. Prior runtime parity refers to pre-single-key source; do not claim
+the new menu is already deployed or reuse6+1 evidence for6-only.
+
 **Partial Spanish cardinal authoring, not deployed:** `b6a104/b29f10` made32
 initial requests:14 technical-QA passes,18 incomplete OTHER responses rejected.
 One bounded retry of number4 also failed (`95ec3f/06a97a`); its two-attempt

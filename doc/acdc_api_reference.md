@@ -247,6 +247,25 @@ permission to call a destination that the user/account forbids.
 
 ### Return destination is separate from the callback user
 
+The current source contract distinguishes registration from returned-call
+acceptance. With `allow_alternate_number=false` (default), pressing the queue's
+`entry_key` (default **6**) requests registration of the valid current caller-ID
+destination after a correlated queue pause. There is **no additional 1** on
+the original call. The queue must authorize and durably persist the reservation
+before success audio; the original leg ends after that audio's correlated
+completion or its bounded failure/timeout path. Publication alone is not success.
+
+With `allow_alternate_number=true`, the caller instead hears the destination
+menu: **1** selects the valid current number, or **2** collects an alternate,
+followed by **#**, audible readback and **1** to confirm. On the returned call,
+**1** remains a separate acceptance step before the agent connection in either
+mode. An older **6 then 1** acceptance receipt does not prove the new single-key
+behavior; deployment and live verification are recorded separately.
+
+All built-in audio uses prerecorded release WAVs in EN, HE, FR, ES or AR.
+Gemini is a one-time authoring tool only, never a provider dependency during
+installation, service startup, queue/account creation or a live call.
+
 | Value | Purpose |
 | --- | --- |
 | Callback user / outbound authority | The account-owned identity authorizing the outgoing attempt and supplying restrictions/defaults. It is not automatically the recipient. |
@@ -274,7 +293,7 @@ created by enabling the queue setting.
 | DELETE | `/queues/{queue_id}/callbacks/{callback_id}` | Request idempotent cancellation. |
 
 There is intentionally no public create-callback API. Only the trusted live
-queue-member confirmation workflow may reserve a position. This prevents an
+queue-member selection and authorized durable-registration workflow may reserve a position. This prevents an
 arbitrary API caller from inserting requests ahead of waiting callers.
 
 When the list envelope contains `next_cursor`, pass it unchanged as the next

@@ -946,8 +946,8 @@ callback_test_registration(Call, Context, TimeoutMs) ->
     Now = monotonic_ms(),
     Config = #{request_id => maps:get(request_id, Context), queue_id => maps:get(queue_id, Context),
                original_call_id => maps:get(call_id, Context)},
-    {ok, Menu, _} = acdc_callback_menu:new(Config, <<"1001">>, Now),
-    {Awaiting, _} = acdc_callback_menu:event({dtmf, <<"1">>}, Now, Menu),
+    {ok, Awaiting, [{register_callback, _, _, _, <<"1001">>}]} =
+        acdc_callback_menu:new(Config, <<"1001">>, Now),
     MC = #member_call{call=Call, queue_id=maps:get(queue_id, Context)},
     wait_callback_registration(MC, Context, Awaiting#{deadline_ms => Now + TimeoutMs}, []).
 
@@ -956,8 +956,8 @@ callback_test_success(Call, Callback, Context, TimeoutMs) ->
     Now = monotonic_ms(),
     Config = #{request_id => maps:get(request_id, Context), queue_id => maps:get(queue_id, Context),
                original_call_id => maps:get(call_id, Context)},
-    {ok, Menu, _} = acdc_callback_menu:new(Config, <<"1001">>, Now),
-    {Awaiting, _} = acdc_callback_menu:event({dtmf, <<"1">>}, Now, Menu),
+    {ok, Awaiting, [{register_callback, _, _, _, <<"1001">>}]} =
+        acdc_callback_menu:new(Config, <<"1001">>, Now),
     CallbackId = <<"acdc-callback-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>,
     Ack = {trusted_queue_ack, maps:get(queue_id, Context), maps:get(call_id, Context),
            maps:get(request_id, Context), {ok, CallbackId}},

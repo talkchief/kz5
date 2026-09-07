@@ -5,6 +5,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const {modeReceipt, expectedDigits} = require('./create-callback-retry-scenarios.cjs');
 const media = require('./assert-callback-confirmation-pcap.cjs');
 const ACCOUNT = '7807ad61761269a1ccec833dde63f621';
 const GREGORIAN_UNIX_OFFSET = 62167219200;
@@ -81,12 +83,29 @@ function safeRead(directory, name, limit = 64 * 1024 * 1024) {
         && stat.size > 0 && stat.size <= limit, 'Unsafe or missing protected retry evidence');
     return fs.readFileSync(file);
 }
-function inspect(directory) {
+function registrationModeProof(mode, receipt, policy, audio) {
+    const expected = expectedDigits(mode);
+    assert.deepEqual(receipt, modeReceipt(mode), 'Registration mode or source inputs changed since scenario creation');
+    assert.deepEqual(policy, {registration_mode: mode, account_id: ACCOUNT, entry_key: '6',
+        allow_alternate_number: false, fixture_verified: true}, 'Registration fixture policy does not match explicit mode');
+    assert.equal(audio.result, 'PASS', 'Registration audio was not accepted');
+    assert.equal(audio.registration_mode, mode, 'Registration audio belongs to another mode');
+    assert.deepEqual(audio.expected_registration_digits, expected, 'Audio expected digits disagree with run mode');
+    assert.deepEqual(audio.observed_registration_digits, expected, 'Audio observed digits disagree with run mode');
+    return {registration_mode: mode, expected_registration_digits: expected, observed_registration_digits: expected};
+}
+function inspect(directory, mode = 'confirm-current') {
     const json = name => JSON.parse(safeRead(directory, name, 128 * 1024));
     const evidence = {registered: json('callback-registration-evidence.json'), first: json('retry-first-attempt.json'),
         backoff: json('retry-backoff-evidence.json'), bridged: json('retry-bridge-evidence.json'),
         busy: json('retry-busy-before-release.json'), audio: json('retry-registration-audio.json'),
         release: Number(safeRead(directory, 'retry-busy-release-epoch.txt', 128).toString().trim())};
+    const selectionReceipt = json('retry-registration-mode.json');
+    const selection = registrationModeProof(mode, selectionReceipt, json('retry-registration-policy.json'), evidence.audio);
+    for (const [name, hash] of Object.entries(selectionReceipt.scenario_sha256)) {
+        assert.equal(crypto.createHash('sha256').update(safeRead(directory, name, 128 * 1024)).digest('hex'), hash,
+            'Scenario bytes differ from explicit registration-mode receipt');
+    }
     const proof = lifecycle(evidence);
     const busyDown = json('retry-busy-both-down.json');
     assert(Array.isArray(busyDown.rows) && busyDown.rows.every(row => typeof row.uuid === 'string'
@@ -113,6 +132,7 @@ function inspect(directory) {
     const second = media.inspect(secondCapture, proof,
         media.negotiatedPayload(safeRead(directory, 'callback-carrier-negotiation.log', 8192).toString()));
     return {scenario: 'busy-agent-unanswered-first-callback-retry', account_id: ACCOUNT,
+        ...selection, registration_input_sha256: selectionReceipt.input_sha256,
         retained_fixture: true, full_cleanup_acceptance: false, original_registration_audio: evidence.audio,
         confirmation_voice_family: voiceFamily,
         confirmation_prompt_id: receipt.document_id,
@@ -122,11 +142,11 @@ function inspect(directory) {
         first_call_release_after_confirmation_seconds: evidence.release - evidence.audio.confirmation_end_epoch_seconds,
         second_attempt: second};
 }
-module.exports = {lifecycle, retryTiming, firstOffer, inspect, GREGORIAN_UNIX_OFFSET};
+module.exports = {lifecycle, retryTiming, firstOffer, inspect, registrationModeProof, GREGORIAN_UNIX_OFFSET};
 if (require.main === module) {
     try {
-        assert.equal(process.argv.length, 3, 'Usage: assert-callback-retry.cjs protected-run-directory');
-        const result = inspect(process.argv[2]);
+        assert([3, 4].includes(process.argv.length), 'Usage: assert-callback-retry.cjs protected-run-directory [entry-only|confirm-current]');
+        const result = inspect(process.argv[2], process.argv[3] || 'confirm-current');
         fs.writeFileSync(path.join(process.argv[2], 'retry-packet-evidence.json'), JSON.stringify(result, null, 2) + '\n', {mode: 0o600, flag: 'wx'});
         console.log('PASS exact busy/confirmation/retry lifecycle and phase-scoped SIP/RTP evidence; fixture retained');
     } catch (error) {console.error('Callback retry evidence FAIL: ' + error.message); process.exitCode = 1;}

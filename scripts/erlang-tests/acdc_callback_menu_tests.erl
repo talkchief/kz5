@@ -154,13 +154,57 @@ negative_monotonic_origin_keeps_absolute_deadline_test() ->
 
 alternate_is_opt_in_and_main_star_cancels_test() ->
     DisabledConfig = maps:remove(allow_alternate_number, config()),
-    {ok, Initial, [{play_menu, <<"1000">>, false}]} =
+    {ok, Waiting, [{register_callback, ?QUEUE, ?CALL, ?REQUEST, <<"1000">>}]} =
         acdc_callback_menu:new(DisabledConfig, <<"1000">>, 0),
-    {Retried, [{retry, 2}]} = acdc_callback_menu:event({dtmf, <<"2">>}, 1, Initial),
-    ?assertEqual(menu, acdc_callback_menu:status(Retried)),
+    ?assertEqual(awaiting_ack, acdc_callback_menu:status(Waiting)),
+    ?assertEqual({Waiting, []}, acdc_callback_menu:event({dtmf, <<"2">>}, 1, Waiting)),
+    %% Alternatives remain opt-in; the destination-choice menu still offers
+    %% cancellation before a registration has been requested.
+    {ok, Initial, [{play_menu, <<"1000">>, true}]} =
+        acdc_callback_menu:new(config(), <<"1000">>, 0),
     {Aborted, [{resume_live_queue, caller_cancelled}]} =
-        acdc_callback_menu:event({dtmf, <<"*">>}, 2, Retried),
+        acdc_callback_menu:event({dtmf, <<"*">>}, 2, Initial),
     ?assertEqual(aborted, acdc_callback_menu:status(Aborted)).
+
+single_key_current_number_requires_durable_correlated_ack_test() ->
+    {ok, Waiting, [{register_callback, ?QUEUE, ?CALL, ?REQUEST, <<"+12025550123">>}]} =
+        acdc_callback_menu:new((config())#{allow_alternate_number => false}, <<"+12025550123">>, 0),
+    ?assertEqual(awaiting_ack, acdc_callback_menu:status(Waiting)),
+    ?assertEqual(true, maps:get(registration_emitted, Waiting)),
+    %% No extra digit, stale/forged response, or premature playback completion
+    %% can register twice, play success, or disconnect the queued caller.
+    lists:foreach(fun(Event) ->
+        ?assertEqual({Waiting, []}, acdc_callback_menu:event(Event, 1, Waiting))
+    end, [{dtmf, <<"6">>}, {dtmf, <<"1">>}, {dtmf, <<"2">>},
+          {callback_registered, ?REQUEST, ?CALLBACK},
+          {trusted_queue_ack, <<"other-queue">>, ?CALL, ?REQUEST, {ok, ?CALLBACK}},
+          {trusted_queue_ack, ?QUEUE, <<"other-call">>, ?REQUEST, {ok, ?CALLBACK}},
+          {trusted_queue_ack, ?QUEUE, ?CALL, <<"other-request">>, {ok, ?CALLBACK}},
+          {trusted_queue_ack, ?QUEUE, ?CALL, ?REQUEST, {ok, <<"invalid-id">>}},
+          {trusted_announcement_complete, ?QUEUE, ?CALL, ?CALLBACK}]),
+    Ack = {trusted_queue_ack, ?QUEUE, ?CALL, ?REQUEST, {ok, ?CALLBACK}},
+    {Announcing, [{handoff_to_callback, ?CALLBACK}, {play_success_announcement, ?CALLBACK}]} =
+        acdc_callback_menu:event(Ack, 2, Waiting),
+    ?assertEqual({Announcing, []}, acdc_callback_menu:event(Ack, 3, Announcing)),
+    ?assertEqual({Announcing, []}, acdc_callback_menu:event(
+        {trusted_announcement_complete, ?QUEUE, <<"other-call">>, ?CALLBACK}, 3, Announcing)),
+    {Complete, [hangup]} = acdc_callback_menu:event(
+        {trusted_announcement_complete, ?QUEUE, ?CALL, ?CALLBACK}, 4, Announcing),
+    ?assertEqual(complete, acdc_callback_menu:status(Complete)).
+
+single_key_rejection_deadline_and_hangup_keep_existing_recovery_test() ->
+    {ok, Waiting, [_]} = acdc_callback_menu:new(
+        (config())#{allow_alternate_number => false}, <<"1001">>, 0),
+    {Rejected, [{resume_live_queue, registration_failed}]} = acdc_callback_menu:event(
+        {trusted_queue_ack, ?QUEUE, ?CALL, ?REQUEST, {error, unauthorized}}, 1, Waiting),
+    ?assertEqual(aborted, acdc_callback_menu:status(Rejected)),
+    {Expired, [{resume_live_queue, deadline}]} = acdc_callback_menu:event(tick, 30000, Waiting),
+    {Dead, [abandon_paused_queue]} = acdc_callback_menu:event(caller_hangup, 1, Waiting),
+    Ack = {trusted_queue_ack, ?QUEUE, ?CALL, ?REQUEST, {ok, ?CALLBACK}},
+    lists:foreach(fun(State) ->
+        {Cancelled, [{cancel_callback, ?CALLBACK}]} = acdc_callback_menu:event(Ack, 30001, State),
+        ?assertEqual({Cancelled, []}, acdc_callback_menu:event(Ack, 30002, Cancelled))
+    end, [Rejected, Expired, Dead]).
 
 registration_failure_and_late_success_never_hang_up_live_call_test() ->
     {ok, Initial, _} = acdc_callback_menu:new(config(), <<"1000">>, 1000),

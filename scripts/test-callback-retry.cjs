@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {spawnSync} = require('node:child_process');
-const {scenarios} = require('./test-fixtures/create-callback-retry-scenarios.cjs');
-const {lifecycle, retryTiming, GREGORIAN_UNIX_OFFSET} = require('./test-fixtures/assert-callback-retry.cjs');
+const {scenarios, expectedDigits, modeReceipt} = require('./test-fixtures/create-callback-retry-scenarios.cjs');
+const {lifecycle, retryTiming, registrationModeProof, GREGORIAN_UNIX_OFFSET} = require('./test-fixtures/assert-callback-retry.cjs');
 let checks = 0;
 const generated = scenarios();
 assert(generated['callback-retry-request.xml'].includes('<pause milliseconds="4200"/>'));
@@ -23,6 +23,35 @@ for (const xml of Object.values(generated)) {
 }
 checks++;
 const account = '7807ad61761269a1ccec833dde63f621';
+const entryOnly = scenarios(undefined, 'entry-only');
+assert.equal((entryOnly['callback-retry-request.xml'].match(/play_dtmf=/g) || []).length, 1);
+assert(entryOnly['callback-retry-request.xml'].includes('play_dtmf="[field5],200"'));
+assert(!entryOnly['callback-retry-request.xml'].includes('play_dtmf="1,200"'));
+assert(!entryOnly['callback-retry-request.xml'].includes('milliseconds="2500"'));
+assert(entryOnly['callback-retry-request.xml'].includes('milliseconds="4200"'));
+assert(entryOnly['callback-retry-request.xml'].includes('<recv request="BYE" timeout="30000"'));
+assert.equal(entryOnly['callback-busy-caller.xml'], generated['callback-busy-caller.xml']); checks++;
+assert.throws(() => scenarios(undefined, 'auto')); checks++;
+for (const mode of ['entry-only', 'confirm-current']) {
+    const receipt = modeReceipt(mode), policy = {registration_mode: mode, account_id: account,
+        entry_key: '6', allow_alternate_number: false, fixture_verified: true};
+    const audio = {result: 'PASS', registration_mode: mode, expected_registration_digits: expectedDigits(mode),
+        observed_registration_digits: expectedDigits(mode)};
+    assert.deepEqual(registrationModeProof(mode, receipt, policy, audio), {
+        registration_mode: mode, expected_registration_digits: expectedDigits(mode), observed_registration_digits: expectedDigits(mode)}); checks++;
+    for (const mutate of [
+        r => {r.receipt.registration_mode = mode === 'entry-only' ? 'confirm-current' : 'entry-only';},
+        r => {r.receipt.input_sha256['../test-acdc-callback-fixture.sh'] = '0'.repeat(64);},
+        r => {r.receipt.scenario_sha256['callback-retry-request.xml'] = '0'.repeat(64);},
+        r => {r.policy.allow_alternate_number = true;}, r => {r.policy.fixture_verified = false;},
+        r => {r.policy.account_id = 'other';}, r => {r.policy.entry_key = '1';},
+        r => {r.audio.result = 'FAIL';}, r => {r.audio.registration_mode = 'auto';},
+        r => {r.audio.expected_registration_digits = [];}, r => {r.audio.observed_registration_digits = [6, 1, 1];}
+    ]) {
+        const copy = structuredClone({receipt, policy, audio}); mutate(copy);
+        assert.throws(() => registrationModeProof(mode, copy.receipt, copy.policy, copy.audio)); checks++;
+    }
+}
 const base = {id: 'acdc-callback-' + 'a'.repeat(64), account_id: account, queue_id: 'b'.repeat(32),
     original_call_id: '1-123@127.0.0.20', number: '+12025550101', enqueued_at: 100, enqueue_sequence: 1,
     max_attempts: 2, retry_delay: 15, reconciliation_required: false};
@@ -93,6 +122,12 @@ for (const [signal, status] of [['INT', 130], ['TERM', 143]]) {
 assert(source.includes('[[ $reply == \'+OK\' ]]'));
 assert(!source.includes('uuid_kill all') && !source.includes('hupall') && !source.includes('callback_fixture cleanup'));
 assert(source.includes('callback_fixture setup-retry') && source.includes('flock -n 9'));
+assert(source.includes('RETRY_REGISTRATION_MODE=confirm-current'));
+assert(source.includes('--registration-mode)'));
+assert(source.includes('create-callback-retry-scenarios.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE"'));
+assert(source.includes('"$CALLBACK_ORIGINAL_MEDIA_PORT" "$RETRY_REGISTRATION_MODE"'));
+assert(source.includes('assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE"'));
+assert(source.indexOf('callback_fixture verify') < source.indexOf('retry-registration-policy.json'));
 assert(source.indexOf('assert-callback-registration-audio.cjs" \\\n') < source.indexOf("log 'Busy call bridged"));
 assert(source.includes('sleep 2\n    retry_clear_busy'));
 assert(source.includes('retry_capture returned\n    # Start the answering endpoint'));
@@ -125,7 +160,8 @@ try {
     fs.writeFileSync(captureLog, '1 packets dropped by kernel\n');
     assert.notEqual(normalize('retry-original.pcap').status, 0); checks++;
     if (process.argv.includes('--parse')) {
-        for (const [index, [name, xml]] of Object.entries(Object.entries(generated))) {
+        const parsing = {...generated, 'entry-only-callback-retry-request.xml': entryOnly['callback-retry-request.xml']};
+        for (const [index, [name, xml]] of Object.entries(Object.entries(parsing))) {
             const file = path.join(temporary, name), csv = path.join(temporary, name + '.csv');
             fs.writeFileSync(file, xml, {mode: 0o600});
             fs.writeFileSync(csv, 'SEQUENTIAL\ndummy;[authentication username=dummy password=dummy];example.invalid;2000;120000;0\n', {mode: 0o600});

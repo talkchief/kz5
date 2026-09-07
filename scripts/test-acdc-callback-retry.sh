@@ -9,6 +9,7 @@ readonly RETRY_ACCOUNT_ID=7807ad61761269a1ccec833dde63f621
 readonly RETRY_BUSY_PORT=15066
 readonly RETRY_BUSY_MEDIA=43020
 RETRY_REFERENCE=
+RETRY_REGISTRATION_MODE=confirm-current
 RETRY_BUSY_PID=
 RETRY_BUSY_CALL_ID=
 RETRY_BUSY_PROOF=
@@ -20,6 +21,7 @@ retry_usage() {
     printf '%s\n' \
         'Usage: test-acdc-callback-retry.sh --prepare-only --confirmation-reference FILE' \
         '       test-acdc-callback-retry.sh --live --keep-fixture --confirmation-reference FILE' \
+        '       [--registration-mode entry-only|confirm-current] (default: confirm-current)' \
         'Only the exact isolated local fixture is allowed. MASTER and PSTN are excluded.' \
         'Busy agent -> queued caller waits5s -> callback registration/audio proof ->' \
         'wait2s -> release busy call -> unanswered first attempt -> answered retry.' \
@@ -33,11 +35,13 @@ retry_args() {
             --live) CALLBACK_LIVE=true ;;
             --keep-fixture) KEEP_FIXTURE=true ;;
             --confirmation-reference) (($# >= 2)) || die 'Missing reference'; RETRY_REFERENCE=$2; shift ;;
+            --registration-mode) (($# >= 2)) || die 'Missing registration mode'; RETRY_REGISTRATION_MODE=$2; shift ;;
             -h|--help) retry_usage; exit 0 ;;
             *) die 'Unsupported callback retry option' ;;
         esac
         shift
     done
+    [[ $RETRY_REGISTRATION_MODE == entry-only || $RETRY_REGISTRATION_MODE == confirm-current ]] || die 'Invalid registration mode'
     [[ $CALLBACK_PREPARE != "$CALLBACK_LIVE" ]] || die 'Choose exactly prepare-only or live'
     [[ $CALLBACK_LIVE != true || $KEEP_FIXTURE == true ]] || die 'Historical fixture is retained: --keep-fixture is mandatory'
     [[ -n $RETRY_REFERENCE && -f $RETRY_REFERENCE && ! -L $RETRY_REFERENCE ]] || die 'A verified local confirmation reference is required'
@@ -309,6 +313,11 @@ retry_run() {
     [[ $(grep -c '^ActiveState=active$' <<<"$before") == 5 ]] || die 'Required services are not active'
     callback_fixture setup-retry
     callback_fixture verify
+    # verify_fixture reads the actual queue and fails unless callback is enabled,
+    # entry_key is6, alternatives are false, and tenant/authority/routing match.
+    jq -n --arg mode "$RETRY_REGISTRATION_MODE" --arg account "$RETRY_ACCOUNT_ID" \
+        '{registration_mode:$mode,account_id:$account,entry_key:"6",allow_alternate_number:false,fixture_verified:true}' \
+        > "$RUN_DIR/retry-registration-policy.json"
     FIXTURE_CREATED=true
     STATUS_AGENT_MAX=${STATE[ACCEPTANCE_AGENT_COUNT]}
     agent_status logout 1 "$STATUS_AGENT_MAX"
@@ -330,7 +339,7 @@ retry_run() {
     wait_callback_registered || die 'Busy-agent callback did not remain queued with zero attempts'
     retry_stop_capture
     node "$retry_script_dir/test-fixtures/assert-callback-registration-audio.cjs" \
-        "$RUN_DIR/retry-original.pcap" "$RETRY_REFERENCE" "$CALLBACK_ORIGINAL_CALL_ID" "$LOCAL_IP" "$CALLER_PORT" "$CALLBACK_ORIGINAL_MEDIA_PORT" \
+        "$RUN_DIR/retry-original.pcap" "$RETRY_REFERENCE" "$CALLBACK_ORIGINAL_CALL_ID" "$LOCAL_IP" "$CALLER_PORT" "$CALLBACK_ORIGINAL_MEDIA_PORT" "$RETRY_REGISTRATION_MODE" \
         > "$RUN_DIR/retry-registration-audio.json" || die 'Received callback registration confirmation audio is unproven'
     retry_busy_pair > "$RUN_DIR/retry-busy-before-release.json" || die 'First call did not remain bridged through callback confirmation'
     retry_capture unanswered
@@ -356,7 +365,7 @@ retry_run() {
     assert_agent_stats callback 1 2
     retry_stop_capture
     stop_monitor
-    node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" || die 'Strict unanswered/retry packet, media or timing gate failed'
+    node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" || die 'Strict unanswered/retry packet, media or timing gate failed'
     agent_status verify 1 1
     wait_agent_ready 1 || die 'Agent did not return ready after retry'
     [[ $(systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p ActiveState -p MainPID -p NRestarts) == "$before" ]] || die 'A service changed during the retry diagnostic'
@@ -385,7 +394,7 @@ main_retry() {
     trap 'exit 143' TERM
     sha256sum "$RETRY_REFERENCE" | awk '{print $1}' > "$RUN_DIR/retry-registration-reference-sha256.txt"
     cp -- "${RETRY_REFERENCE%/*}/reference-receipt.json" "$RUN_DIR/retry-registration-reference-receipt.json"
-    node "$retry_script_dir/test-fixtures/create-callback-retry-scenarios.cjs" "$RUN_DIR"
+    node "$retry_script_dir/test-fixtures/create-callback-retry-scenarios.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE"
     retry_run
 }
 

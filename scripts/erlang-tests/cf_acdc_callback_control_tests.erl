@@ -125,6 +125,78 @@ repeated_unrelated_events_do_not_extend_control_budget_case() -> with_mocks(fun(
     ?assert(now_ms() - Started >= 60), ?assert(now_ms() - Started < 160)
 end).
 
+single_key_paused_wrapper_registers_without_menu_digit_test_() ->
+    {timeout, 30, fun() -> with_mocks(fun() ->
+        meck:new(kapps_call_command, [non_strict, no_link]),
+        try
+            meck:expect(kapps_call, caller_id_number, fun(fixture_call) -> <<"+12025550123">> end),
+            meck:expect(kapps_call_command, flush_dtmf, fun(fixture_call) -> ok end),
+            %% A menu/collect call has deliberately no mock implementation:
+            %% this case supplies no registration confirmation DTMF at all.
+            put(send_action, fun(Props) ->
+                ?assertEqual([register], actions()),
+                ?assertEqual(?ACCOUNT, proplists:get_value(<<"Account-ID">>, Props)),
+                ?assertEqual(?QUEUE, proplists:get_value(<<"Queue-ID">>, Props)),
+                ?assertEqual(?CALL, proplists:get_value(<<"Call-ID">>, Props)),
+                ?assertEqual(?REQUEST, proplists:get_value(<<"Request-ID">>, Props)),
+                ?assertEqual(?PAUSE, proplists:get_value(<<"Pause-ID">>, Props)),
+                ?assertEqual(<<"+12025550123">>, proplists:get_value(<<"Number">>, Props)),
+                %% Reject a stale pause capability before accepting the durable
+                %% response; neither request publication nor that stale ACK
+                %% may start success playback.
+                Ack = response(<<"register">>, <<"registered">>, [{<<"Callback-ID">>, ?CALLBACK}]),
+                deliver(kz_json:set_value(<<"Pause-ID">>, binary:copy(<<"b">>, 48), Ack)),
+                deliver(Ack)
+            end),
+            Success = <<"/system_media/en-us/acdc-callback-success-gemini-sulafat-0123456789abcdef">>,
+            meck:expect(kapps_call_command, play, fun(Path, fixture_call) ->
+                ?assertEqual(Success, Path),
+                ?assertEqual([register], actions()),
+                record(play_success),
+                deliver(event(<<"CHANNEL_EXECUTE_COMPLETE">>, [{<<"Application-Name">>, <<"noop">>},
+                    {<<"Application-Response">>, <<"success-noop">>}])),
+                <<"success-noop">>
+            end),
+            meck:expect(kapps_call_command, hangup, fun(fixture_call) -> record(hangup) end),
+            Callback = #{allow_alternate_number => false, timeout_ms => 30000,
+                         success_timeout_ms => 10000, builtin_gemini => true,
+                         media => #{success => Success}},
+            ?assertEqual(ok, cf_acdc_member:callback_test_paused(fixture_call, Callback, context())),
+            ?assertEqual([register, play_success, hangup, stop], actions()),
+            ?assertEqual(0, meck:num_calls(kapps_call_command, collect_digits, '_')),
+            ?assertEqual(0, meck:num_calls(kapi_acdc_queue, publish_member_call_cancel, '_'))
+        after meck:unload(kapps_call_command) end
+    end) end}.
+
+single_key_registration_rejection_resumes_without_success_or_hangup_test_() ->
+    {timeout, 30, fun() -> with_mocks(fun() ->
+        meck:new(kapps_call_command, [non_strict, no_link]),
+        try
+            meck:expect(kapps_call, caller_id_number, fun(fixture_call) -> <<"+12025550123">> end),
+            meck:expect(kapps_call_command, flush_dtmf, fun(fixture_call) -> ok end),
+            put(send_action, fun(Props) ->
+                case proplists:get_value(<<"Operation">>, Props) of
+                    <<"register">> ->
+                        Registered = response(<<"register">>, <<"registered">>, [{<<"Callback-ID">>, ?CALLBACK}]),
+                        Rejected = kz_json:set_values([{<<"Status">>, <<"rejected">>},
+                            {<<"Failure-Reason">>, <<"policy_denied">>}],
+                            kz_json:delete_key(<<"Pause-ID">>, kz_json:delete_key(<<"Callback-ID">>, Registered))),
+                        ?assert(kapi_acdc_callback:response_v(Rejected)),
+                        deliver(Rejected);
+                    <<"resume">> ->
+                        deliver(response(<<"resume">>, <<"resumed">>, [])),
+                        deliver(event(<<"CHANNEL_BRIDGE">>, []))
+                end
+            end),
+            Callback = #{allow_alternate_number => false, timeout_ms => 30000, success_timeout_ms => 10000},
+            ?assertEqual(ok, cf_acdc_member:callback_test_paused(fixture_call, Callback, context())),
+            ?assertEqual([register, resume, usurped], actions()),
+            ?assertEqual(0, meck:num_calls(kapps_call_command, play, '_')),
+            ?assertEqual(0, meck:num_calls(kapps_call_command, hangup, '_')),
+            ?assertEqual(0, meck:num_calls(kapi_acdc_queue, publish_member_call_cancel, '_'))
+        after meck:unload(kapps_call_command) end
+    end) end}.
+
 full_unavailable_wrapper_propagates_resume_terminal_test_() ->
     [{binary_to_list(Name), {timeout, 20, fun() -> with_mocks(fun() ->
         meck:new(kapps_call_command, [non_strict, no_link]),

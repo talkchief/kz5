@@ -86,8 +86,18 @@ Source and private timer/browser tests do not establish live deployment or
 received-audio timing. Record that acceptance separately before calling the
 controls operational.
 
-With entry digit 6, the normal flow is **6 → audible menu → 1 to confirm the
-current caller-ID number → durable registration → success audio → hang-up**.
+With `allow_alternate_number=false` (the default), the current source flow is
+**6 → correlated queue pause → authorize and durably register the current
+caller-ID destination → success audio → hang-up**. No additional registration
+digit is required. This source contract must not be confused with acceptance
+of an older deployed build that required **6 then 1**; record single-key live
+acceptance separately.
+
+With `allow_alternate_number=true`, 6 still opens the destination-choice menu:
+1 confirms the valid current caller-ID number; 2 starts alternate-number entry,
+then `#`, audible readback and 1 confirm that alternate. If current caller ID
+is unusable, this opt-in mode starts alternate entry directly. The returned
+outgoing call separately requires 1 before connecting to an agent in both modes.
 An alphabetic SIP username is not a valid numeric callback destination. If
 alternate-number entry is disabled, it cannot be registered as a return number.
 Allowing alternate entry does not provision outbound caller ID or a carrier route.
@@ -220,16 +230,19 @@ queue or queue-owned callback is absent, `409` for a revision conflict or an
 attempt to cancel an already finished reservation, and `503` for unavailable
 storage. Parent queue lookup must succeed before any callback store operation.
 
-The pure menu reducer defaults to confirmation key `1`, alternate-number key
-`2`, three input retries, a 30-second absolute menu/registration deadline, and
-a separate 10-second success-playback deadline. Alternate-number collection is
-disabled by default and must be deliberately enabled; when enabled it accepts
+The pure reducer emits a registration request immediately after the entry-key
+and pause workflow when the current number is valid and alternatives are
+disabled (the default). There is no second registration confirmation key in
+this mode. Destination-choice menus retain confirmation key `1`, alternate-number
+key `2`, three input retries, a 30-second absolute menu/registration deadline,
+and a separate 10-second success-playback deadline. Alternate-number collection
+must be deliberately enabled; when enabled it accepts
 at most 15 digits, `#` finishes collection and reads the number back, a second
 confirmation is required, and `*` cancels. Success requires a trusted durable
 ack correlated by queue, original call and request; the accepted reservation is
 handed off before success playback and the original leg ends only after the
 correlated playback completion (or its bounded failure/timeout path). The caller
-flow does not open the menu until the queue FSM acknowledges its pause, and it
+flow does not register or open a menu until the queue FSM acknowledges its pause, and it
 resumes the same queue slot after invalid input, timeout, or registration
 failure. Queue ordering, restart recovery, actual returned calls and human DTMF
 remain live gates; the persistence probe never originates a call.

@@ -74,7 +74,8 @@ function fullPhrase(audio, reference) {
     }
     return matches;
 }
-function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, mediaPort = LOCAL.rtp) {
+function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, mediaPort = LOCAL.rtp, mode = 'confirm-current') {
+    const expected = require('./create-callback-retry-scenarios.cjs').expectedDigits(mode);
     assert(ip === LOCAL.ip && sipPort === LOCAL.sip && mediaPort === LOCAL.rtp
         && /^1-[1-9][0-9]*@127\.0\.0\.20$/.test(callId), 'Not the exact original synthetic callback endpoint');
     assert(buffer.length <= 64 * 1024 * 1024, 'Oversized original capture');
@@ -127,7 +128,7 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
         const event = packet.payload[0], duration = packet.payload.readUInt16BE(2);
         // SIPp starts a legitimate RFC2833 event at duration0. Completion must
         // still demonstrate increasing duration and a nonzero end packet.
-        assert([1, 6].includes(event), 'Unexpected original telephone-event digit');
+        assert(expected.includes(event), 'Unexpected original telephone-event digit for registration mode');
         const key = [packet.ssrc, packet.stamp, event].join(':');
         const group = events.get(key) || []; group.push({...packet, event, duration, end: !!(packet.payload[1] & 128)}); events.set(key, group);
     }
@@ -138,8 +139,8 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
             'Original digit was not completely sent');
         return {event: group[0].event, start: group[0].time, end: end.time};
     }).sort((a, b) => a.start - b.start);
-    assert(digits.length === 2 && digits[0].event === 6 && digits[1].event === 1
-        && digits[0].end < digits[1].start, 'Missing exact entry6 then same-number1');
+    assert.deepEqual(digits.map(digit => digit.event), expected, 'Registration digits do not match explicit mode');
+    assert(digits.every((digit, i) => i === 0 || digits[i - 1].end < digit.start), 'Registration digits overlap');
     assert(digits[0].start - answer.time >= 4.75 && digits[0].start - answer.time <= 5.75,
         'Callback entry digit was not sent about5seconds after answer');
     assert(received.length >= 200 && new Set(received.map(p => p.ssrc)).size === 1, 'Missing or ambiguous received PCMU');
@@ -161,10 +162,12 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
     const match = matches[0], endSample = match.sample + reference.length;
     assert(present.subarray(match.sample, endSample).every(Boolean), 'Success audio contains uncaptured samples');
     const start = times[match.sample], end = times[endSample - 1] + 1 / 8000;
-    assert(start >= digits[1].end && end <= bye.time && bye.time - end <= 2,
+    assert(start >= digits[digits.length - 1].end && end <= bye.time && bye.time - end <= 2,
         'Full registration success was not received after selection and before server BYE');
     assert(Math.abs((end - start) - reference.length / 8000) <= 0.25, 'Success RTP wall-clock duration does not match complete phrase');
     return {result: 'PASS', proof_kind: 'installed_prompt_pcm_delivery_not_human_transcription',
+        registration_mode: mode, expected_registration_digits: expected,
+        observed_registration_digits: digits.map(digit => digit.event),
         reference_sha256: crypto.createHash('sha256').update(reference).digest('hex'),
         reference_duration_seconds: reference.length / 8000, correlation: match.correlation,
         sip_answer_epoch_seconds: answer.time, entry_digit_epoch_seconds: digits[0].start,
@@ -176,12 +179,12 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
 module.exports = {inspect, fullPhrase};
 if (require.main === module) {
     try {
-        assert(process.argv.length === 8, 'Usage: assert-callback-registration-audio.cjs PCAP REFERENCE_ULAW CALL_ID 127.0.0.20 15064 43000');
-        const [pcap, reference, callId, ip, sipPort, mediaPort] = process.argv.slice(2);
+        assert([8, 9].includes(process.argv.length), 'Usage: assert-callback-registration-audio.cjs PCAP REFERENCE_ULAW CALL_ID 127.0.0.20 15064 43000 [entry-only|confirm-current]');
+        const [pcap, reference, callId, ip, sipPort, mediaPort, mode = 'confirm-current'] = process.argv.slice(2);
         for (const [file, max] of [[pcap, 64 * 1024 * 1024], [reference, 160000]]) {
             const stat = fs.lstatSync(file);
             assert(stat.isFile() && !stat.isSymbolicLink() && stat.size > 0 && stat.size <= max, 'Unsafe or oversized original evidence file');
         }
-        process.stdout.write(JSON.stringify(inspect(fs.readFileSync(pcap), fs.readFileSync(reference), callId, ip, Number(sipPort), Number(mediaPort))) + '\n');
+        process.stdout.write(JSON.stringify(inspect(fs.readFileSync(pcap), fs.readFileSync(reference), callId, ip, Number(sipPort), Number(mediaPort), mode)) + '\n');
     } catch (error) {process.stderr.write('Callback registration audio FAIL: ' + error.message + '\n'); process.exitCode = 1;}
 }
