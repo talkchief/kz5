@@ -11,6 +11,18 @@ prerecorded Gemini voices, deployment-script issues **and the mobile bridge**
 are critical and active. Only dashboard work is postponed. Keep all other
 mandatory release requirements tracked. No install/runtime/provider synthesis.
 
+**Bridge remains part of the deployment stack:** not a separate manual add-on.
+The sanitized import is tracked in kz5. Latest bounded fix moves ACKs from worker
+threads to the broker owner and never acknowledges failed/uncertain delivery;
+stale generations cannot settle or submit into a successor. Root `219760/1a2178`
+passes8 config+19 runtime/payload+14 settlement fixtures, no real broker/provider
+or service action. First admission e5a68b refused before execution; later admitted
+run passed without reducing512MiB reserve or stopping a service. The safety slice
+fails closed with manual-recovery status78, **not** a complete retry/availability
+policy. Keep durable retry/DLQ, bounded provider transport/deadlines, dependency
+pins, protected config, main-SH option/unit enable/start/reboot and real mobile
+ringing acceptance open. See `services/push-bridge/README.md`.
+
 **Single-key callback module DEPLOYED:** `cd4e17/6fbfad` verifies
 `acdc_callback_menu` on disk and the apps VM at MD5
 `f2395173bdf3183659ac45fc0b7fa6c5`; old code released, no service restart or

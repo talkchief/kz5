@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from push_payload import InvalidPush, apns_payload, normalize
 from validate_config import NUMBERS, PREFIX, validate
+from delivery_settlement import OwnerSettlements, SettlementFailure
 
 
 RECONNECT_DELAY = 5
@@ -197,64 +198,94 @@ class BridgeRuntime:
         self.mark_progress()
         self.start_self_watchdog()
 
-        def on_message(message):
-            def work():
-                try:
-                    self.deliver(message.body)
-                finally:
-                    # Imported behavior, NOT accepted reliability semantics:
-                    # provider failures are acknowledged, not redelivered.
+        try:
+            while not self._stop.is_set():
+                connection = None
+                settlements = None
+                generation = {"settlements": None, "failed": False}
+
+                def on_message(message, generation=generation):
+                    # Bind this dictionary to the callback's generation. A late
+                    # callback from a closed channel cannot use its successor's
+                    # settlement controller or acquire a new worker slot.
+                    if generation["failed"]:
+                        return
                     try:
-                        message.ack()
+                        body = message.body
+                        target = pool
+                        try:
+                            if normalize(body).provider == "apns":
+                                target = apns_pool
+                        except InvalidPush:
+                            pass
+                        generation["settlements"].submit(target, self.deliver, message, body)
+                    except Exception:
+                        # Libraries may catch callback exceptions internally;
+                        # retain a fixed owner-loop failure instead of relying
+                        # on exception propagation or logging a raw traceback.
+                        generation["failed"] = True
+
+                try:
+                    connection = self.amqpstorm.Connection(
+                        settings["AMQP_HOST"], settings["AMQP_USER"], settings["AMQP_PASS"],
+                        port=settings["AMQP_PORT"], virtual_host=settings["AMQP_VHOST"],
+                        heartbeat=HEARTBEAT, timeout=10)
+                    channel = connection.channel()
+                    self._conn = connection
+                    try:
+                        channel.exchange.declare(exchange=settings["EXCHANGE"], passive=True)
+                    except self.amqpstorm.AMQPChannelError:
+                        channel = connection.channel()
+                        channel.exchange.declare(exchange=settings["EXCHANGE"], exchange_type="topic")
+                    channel.queue.declare(queue=settings["QUEUE"], durable=True)
+                    channel.queue.bind(queue=settings["QUEUE"], exchange=settings["EXCHANGE"],
+                                       routing_key=settings["BINDING_KEY"])
+                    limit = settings["WORKERS"] * 2
+                    settlements = OwnerSettlements(limit)
+                    generation["settlements"] = settlements
+                    channel.basic.qos(prefetch_count=limit)
+                    channel.basic.consume(on_message, queue=settings["QUEUE"], no_ack=False)
+                    log.info("consumer_started workers=%d apns_workers=%d",
+                             settings["WORKERS"], settings["APNS_WORKERS"])
+                    while not self._stop.is_set() and channel.is_open:
+                        settlements.drain()
+                        channel.process_data_events(to_tuple=False)
+                        if generation["failed"]:
+                            raise SettlementFailure()
+                        # Even a completed provider acceptance cannot be ACKed
+                        # through a channel that disappeared during dispatch.
+                        if not channel.is_open and settlements.pending_count:
+                            raise SettlementFailure()
+                        settlements.drain()
+                        self.mark_progress()
+                        self._stop.wait(0.5)
+                    if not self._stop.is_set() and settlements.pending_count:
+                        raise SettlementFailure()
+                except SettlementFailure:
+                    self._stop.set()
+                    raise
+                except Exception:
+                    # Do not replay an uncertain generation while its workers
+                    # can still reach providers. No unconditional requeue or
+                    # automatic reconnect is safe for these pending messages.
+                    if settlements is not None and settlements.pending_count:
+                        self._stop.set()
+                        raise SettlementFailure() from None
+                    if not self._stop.is_set():
+                        log.error("amqp_loop_failed reconnect_seconds=%d", RECONNECT_DELAY)
+                        self.mark_progress()
+                        self._stop.wait(RECONNECT_DELAY)
+                finally:
+                    if settlements is not None:
+                        settlements.invalidate()
+                    try:
+                        if connection and connection.is_open:
+                            connection.close()
                     except Exception:
                         pass
-
-            target = pool
-            try:
-                if normalize(message.body).provider == "apns":
-                    target = apns_pool
-            except InvalidPush:
-                pass
-            target.submit(work)
-
-        while not self._stop.is_set():
-            connection = None
-            try:
-                connection = self.amqpstorm.Connection(
-                    settings["AMQP_HOST"], settings["AMQP_USER"], settings["AMQP_PASS"],
-                    port=settings["AMQP_PORT"], virtual_host=settings["AMQP_VHOST"],
-                    heartbeat=HEARTBEAT, timeout=10)
-                self._conn = connection
-                channel = connection.channel()
-                try:
-                    channel.exchange.declare(exchange=settings["EXCHANGE"], passive=True)
-                except self.amqpstorm.AMQPChannelError:
-                    channel = connection.channel()
-                    channel.exchange.declare(exchange=settings["EXCHANGE"], exchange_type="topic")
-                channel.queue.declare(queue=settings["QUEUE"], durable=True)
-                channel.queue.bind(queue=settings["QUEUE"], exchange=settings["EXCHANGE"],
-                                   routing_key=settings["BINDING_KEY"])
-                channel.basic.qos(prefetch_count=settings["WORKERS"] * 2)
-                channel.basic.consume(on_message, queue=settings["QUEUE"], no_ack=False)
-                log.info("consumer_started workers=%d apns_workers=%d",
-                         settings["WORKERS"], settings["APNS_WORKERS"])
-                while not self._stop.is_set() and channel.is_open:
-                    channel.process_data_events(to_tuple=False)
-                    self.mark_progress()
-                    self._stop.wait(0.5)
-            except Exception:
-                if not self._stop.is_set():
-                    log.error("amqp_loop_failed reconnect_seconds=%d", RECONNECT_DELAY)
-                    self.mark_progress()
-                    self._stop.wait(RECONNECT_DELAY)
-            finally:
-                try:
-                    if connection and connection.is_open:
-                        connection.close()
-                except Exception:
-                    pass
-        pool.shutdown(wait=False)
-        apns_pool.shutdown(wait=False)
+        finally:
+            pool.shutdown(wait=False)
+            apns_pool.shutdown(wait=False)
 
     def handle_term(self, *_):
         log.info("shutdown_requested")
@@ -269,7 +300,7 @@ class BridgeRuntime:
     def close(self):
         # shutdown(wait=False) leaves workers in flight. Do not close their
         # session underneath them or allow queued work to start a new send.
-        # This fence does not wait for workers or fix the imported ACK policy.
+        # This fence does not wait for workers or implement delivery recovery.
         self._stop.set()
         with self._lifecycle_lock:
             self._closing = True
@@ -314,6 +345,11 @@ def main(argv=None, environment=None):
         signal.signal(signal.SIGINT, runtime.handle_term)
         runtime.run()
         return 0
+    except SettlementFailure:
+        log.error("push_delivery_unsettled_manual_recovery_required")
+        # A future service unit must prevent automatic restarts for this status
+        # until durable bounded retry/dead-letter policy is implemented.
+        return 78
     except Exception:
         log.error("bridge_startup_or_runtime_failed")
         return 2

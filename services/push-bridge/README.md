@@ -1,12 +1,20 @@
 # Mobile push bridge: sanitized source import
 
+Latest root checkpoint September7: `219760/1a2178` passes8 configuration,
+19 startup/payload/lifecycle and14 owner-thread settlement tests, in a network-
+isolated128MiB validation unit. Provider, broker and executor integrations are
+fixtures; no real credentials, pushes, service changes or deployment occurred.
+This verifies the bounded ACK-safety source change, not durable retries, mobile
+ringing or installer readiness. The bridge remains a required component of the
+main modular deployment SH, both standalone and co-located; not a manual add-on.
+
 Root checkpoint September 7: sanitized source reviewed; the standalone offline
 configuration validator passes eight tests (`71f4f8`) under an isolated network
 namespace with128MiB memory and512MiB reserve. No sender was imported/executed,
 no credential file was read and no broker/provider was contacted by those tests.
 This is source/configuration progress only; all activation blockers below remain.
 
-This directory is an **unvalidated, non-activation-ready source import** from internal, user-provided production files. It is not a new service design, a deployment, or evidence of reliable provider delivery. Installer activation is paused pending the gates below. No production unit, credential file, token, project/team/key identifier, bundle identifier, broker address or provider endpoint has been copied into the repository.
+This directory is a **partially offline-tested, non-activation-ready source import** from internal, user-provided production files. It is not a deployment or evidence of reliable provider delivery. Installer activation is paused pending the gates below. No production unit, credential file, token, project/team/key identifier, bundle identifier, broker address or provider endpoint has been copied into the repository.
 
 The original licensing and redistribution permissions have not been established. Treat this as internal user-provided source; do not assume an open-source license.
 
@@ -16,7 +24,7 @@ The supplied `bridge.py` SHA-256 was `33f651f3ee0e895bbcf609c98a08219404a5a1d311
 
 Kazoo's pusher role publishes native `notification/push_req` events on the `pushes` AMQP exchange. This is not an integration with the SaaS product named Pusher. The operator must verify the exact broker binding and authority before configuring this consumer.
 
-The candidate retains separate FCM/APNs thread pools, broker reconnect/prefetch behavior, payload mapping, manual ACK behavior, FCM's two-attempt policy, per-send APNs HTTP/2 connection, provider JWT caching and the original watchdog/shutdown strategy. The watchdog elapsed clock is now monotonic; its limitations remain. The old minute-bucket call UUID has been replaced with the stable identity described below. `Payload` maps native call/caller/registration/proxy fields to mobile data. `apple`, `apns`, `ios`, `apple_dev`, and `apple_sandbox` select APNs; `firebase`, `android`, `fcm`, or a missing type select FCM.
+The candidate retains separate FCM/APNs thread pools, payload mapping, FCM's two-attempt policy, per-send APNs HTTP/2 connection, provider JWT caching and the original watchdog/shutdown strategy. Worker-thread unconditional ACK has been replaced by the owner-thread safety slice below; reconnect is now forbidden while a generation has unsettled deliveries. The watchdog elapsed clock is monotonic; its limitations remain. The old minute-bucket call UUID has been replaced with stable identity. `Payload` maps native call/caller/registration/proxy fields to mobile data. `apple`, `apns`, `ios`, `apple_dev`, and `apple_sandbox` select APNs; `firebase`, `android`, `fcm`, or a missing type select FCM.
 
 Intentional sanitization changes:
 
@@ -180,8 +188,52 @@ Source self-review also added a startup configuration snapshot (the runtime uses
 exactly the mapping it validated) and an HTTP-session closing fence: closing the
 runtime rejects new FCM sends and lets the final already-active send release the
 session, without waiting or closing underneath an active request. This is not
-worker draining, cancellation, delivery assurance or a fix for the existing
-unconditional ACK; those remain separate activation blockers below.
+worker draining, cancellation or delivery assurance; those remain activation
+blockers below. The later settlement slice replaces unconditional ACK separately.
+
+## Owner-thread settlement safety candidate (not complete retry)
+
+`delivery_settlement.py` tracks at most the configured consumer prefetch count
+of futures (twice FCM worker count, bounded by 128). Workers receive the immutable
+body argument, not an AMQP message/channel argument or worker-side ACK callback.
+The same broker owner thread that consumes messages inspects completed futures
+and ACKs only the sender's exact `(True, 200, "provider_response")` result. Other
+results, malformed messages, worker exceptions/cancellation, and ACK exceptions
+remain unacknowledged. ACK exceptions are uncertain, so the controller cannot
+blindly retry an ACK on a second drain. This does not turn the currently flawed
+APNs partial-response success check into trustworthy provider acceptance.
+
+Each broker generation owns its controller and a separately bound callback.
+Invalidation prevents late completion/callback activity from settling a prior
+message or attaching work to a new generation. Pending deliveries also prevent
+automatic broker reconnection, avoiding immediate replay while old workers can
+still reach providers. Idle connection failures retain the existing reconnect
+behavior. Accepted completed deliveries are settled before a discovered provider
+failure terminates the generation; failed/uncertain deliveries are left for the
+broker to retain according to its topology/durability policy. No message is
+rejected, requeued or republished by this slice.
+
+Fatal settlement uncertainty returns status **78** from the main entrypoint and
+logs only `push_delivery_unsettled_manual_recovery_required`. Any future unit
+must prevent automatic restart for that status until a reviewed durable bounded
+retry/dead-letter policy exists. Manual restarts can redeliver messages and
+duplicate already accepted pushes when ACK outcome was uncertain; do not treat
+them as an automatic recovery policy. A poison message currently stops this
+candidate deliberately instead of being silently acknowledged or endlessly
+requeued. This is **not activation-ready**, not a production availability policy,
+and not proof of broker persistence or mobile delivery.
+
+Root-owned offline fixture command (not executed by the editing agent):
+
+```sh
+python3 -B -I scripts/test-push-bridge-settlement.py
+```
+
+The fixtures cover exact positive acceptance, pending futures, invalid results,
+worker failure/cancellation, uncertain ACK, capacity, cross-thread ownership,
+invalidated generations, and actual bridge owner-loop integration using fake
+executors/connections. The two earlier config/runtime test commands must also
+be rerun. Tests against the pinned real AMQP client and broker remain mandatory.
 
 ## Dependencies observed, not newly pinned or verified
 
@@ -199,9 +251,9 @@ Other imports are Python standard-library modules (`base64`, `binascii`, `concur
 
 ## Activation blockers and minimum next fixes
 
-1. **Delivery loss and duplicates:** worker `finally` ACKs every message, including provider errors, malformed payloads, missing APNs configuration and unexpected exceptions; ACK exceptions are swallowed. The future is not observed. Conversely, a lost ACK/reconnect or FCM retry can duplicate a push. Define terminal rejection versus transient failure, bounded expiry-aware retry/dead-letter behavior and delivery identity; prove broker ACK/channel ownership and reconnect behavior with the real library before activation. An HTTP 200 only means provider acceptance, not delivery to the phone.
-2. **Bounded work and shutdown:** executor queues are unbounded; broker prefetch only bounds one live consumer, not retained tasks across reconnects. Google token refresh has no explicitly supplied timeout. Shared `requests.Session` thread behavior is unproven. The watchdog measures broker-loop progress, not worker completion. Shutdown stops without draining and force-exits after three seconds. Add bounded admission, total operation deadlines, observed worker results, explicit channel-generation fences and bounded shutdown tests. Do not solve loss with an unbounded requeue loop.
-3. **Input and response limits:** candidate strict input normalization and outgoing payload caps are implemented above, awaiting root and mobile compatibility acceptance. Malformed messages are still ACKed by the unaccepted worker-finally behavior. APNs accumulates response data without a cap; requests eagerly buffers FCM responses. Add provider response caps and protocol error cases.
+1. **Delivery loss and duplicates:** owner-thread positive-result-only ACK is now a source candidate, not full delivery acceptance. Define terminal rejection versus transient failure, bounded expiry-aware durable retry/dead-letter behavior and stable delivery identity; prove broker durability, ACK/channel ownership, reconnect and duplicate behavior with the pinned real library before activation. The current fail-closed/manual-recovery policy is not production availability. An HTTP 200 only means provider acceptance, not delivery to the phone.
+2. **Bounded work and shutdown:** per-generation admission is now capped and unsettled generations cannot reconnect automatically, but worker completion still lacks a total deadline. Google token refresh has no explicitly supplied timeout. Shared `requests.Session` thread behavior is unproven. The watchdog measures broker-loop progress, not worker completion. Signal shutdown stops without draining and force-exits after three seconds; a fatal settlement return can still wait for hung executor threads at interpreter shutdown. Add total operation deadlines, bounded cancellation/drain and shutdown tests. Do not solve loss with an unbounded requeue loop.
+3. **Input and response limits:** strict input normalization and outgoing payload caps are implemented above, awaiting root and mobile compatibility acceptance. Malformed messages now fail closed unacknowledged and require a reviewed poison-message policy. APNs accumulates response data without a cap; requests eagerly buffers FCM responses. Add provider response caps and protocol error cases.
 4. **Transport/configuration security:** AMQP TLS is not configured and FCM requests follow redirects. Candidate startup now bounds numeric settings and constrains initial provider endpoints, but credential permissions are not checked. Define trusted broker/network authority, TLS/redirect policy, protected credential loading and a least-privilege service account/unit before enabling an installer option. Do not reuse inline production credentials or the supplied production unit.
 5. **APNs lifecycle:** a failed lazy initialization is cached permanently until process restart. JWT and APNs request deadlines still use wall-clock time. The call UUID is now stable, but duplicate/retry behavior still needs acceptance. APNs connection close is currently treated as stream termination even if the response was incomplete; there is no end-to-end delivery evidence. Test initialization recovery, correct key curve/JWT shape, sandbox selection, partial responses/GOAWAY, deadline bounds and duplicate semantics. `_open()` also needs socket cleanup if TLS wrapping fails.
 
