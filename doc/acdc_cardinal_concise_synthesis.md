@@ -1,5 +1,17 @@
 # One-time cardinal synthesis recovery experiment
 
+Current checkpoint:412/584 technical QA,697 historical requests/113 retries,
+EN31/HE92/FR160/ES25/AR104;172 FAILED, none PENDING/REQUESTING. Diagnostic request
+`f28770/session40949/deaca8` recovered Hebrew joined-masculine18; bounded batch
+`a878f9/session76034/ba1b64` recovered feminine18 and tens20, while joined-tens20
+and tens30 again returned OTHER with zero parts. The new diagnostics report no
+prompt block reason and no finishMessage for either failure; no specific cause
+was identified. Receipts `run-0ca6bf93-6a32-4e04-86e7-5708dc5a64b7.json` and
+`run-2773115e-c63d-4b85-929a-65e9dfb9df75.json` and six new WAVs are checked in.
+Whole-ledger/WAV/actual-SoX validation, private/repo equality and every historical
+success/attempt prefix from `ec59f31` pass `77739d/session24853/e2d87d`.
+Older counts below are historical. Runtime activation/listening remain open.
+
 Latest bounded batch `ae1af9/session14124/7926c4` made12 Hebrew attempt2 requests
 with concise-v2 and recovered masculine13, masculine15 and joined-masculine15.
 Nine requests remain failed. Inventory is409/584 technical QA,692 historical

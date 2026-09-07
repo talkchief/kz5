@@ -1,13 +1,24 @@
 # Kazoo 5 project task register
 
-Current voice inventory: **409/584 technical QA**,692 historical requests and
-108 retries; EN31/HE89/FR160/ES25/AR104. Twelve bounded HE concise-v2 retries
-recovered three recordings (six WAVs); nine still incomplete. No pending provider
-job or initial identities remain. Failed175; listening/complete cardinal runtime open.
+Current voice inventory: **412/584 technical QA**,697 historical requests and
+113 retries; EN31/HE92/FR160/ES25/AR104. Five bounded HE concise-v2 requests
+recovered three recordings (six WAVs); two still incomplete. No pending provider
+job or initial identities remain. Failed172; listening/complete cardinal runtime open.
 See `doc/acdc_cardinal_concise_synthesis.md`. Older counts below are historical.
 Authoring diagnostics now retain only allowlisted prompt-block categories and
 finish-message presence, never raw provider text.19 groups/377 checks pass
-`a40011/893835`; no new real provider request. Voice completion remains open.
+`a40011/893835`; that offline test made no provider request. Voice completion remains open.
+
+Exact Spanish whole-word reuse is integrated in the separate staging importer:
+19 groups / 5,962 checks and installer adapter regression pass. Actual resolution
+is 412 generated + 2 reused, 170 unresolved; no complete-language deployment is
+claimed. See `doc/acdc_cardinal_reuse_import_integration.md`.
+Separate model-trial results are in `doc/acdc_cardinal_31_model_trial.md`.
+Additional trial calls never reset the original ledger or its failed histories.
+Gemini3.1 format compatibility is fixed in the isolated authoring tool;526
+offline checks pass and HE30/AR4/ES13 now pass actual WAV/SoX QA. Six candidate
+WAVs and both trial receipts are saved separately. Four total trial requests;
+no runtime deployment or listening approval, legacy412 count unchanged.
 
 INST-13 producer/consumer freshness is implemented in code and the main-SH file
 lists/patch sequence.166 offline bridge tests,35 producer checks, actual isolated
@@ -495,13 +506,15 @@ proof before promotion; the handoff does not waive those safety gates.
 
 ### Important UI regression — Callflows → Users entitlements lookup
 
-**UI-02 — OPEN, reported September7 at13:54:21UTC.** Opening the Callflows app
+**UI-03 — OPEN, reported September7 at13:54:21UTC.** Opening the Callflows app
 and then Users requests `GET /v2/accounts/302ae5a70c403124f764cbc54229cfcd/entitlements`.
 The server returns404 `not_found` with `data.message: not found`; the frontend
 shows “An unknown error happened, please try again in a few seconds!”
 Correlation request ID: `cb1c717e99cab3b78e149d081d312652`.
 The supplied response contains a login token: deliberately excluded from this
 register and all repository evidence.
+This issue was previously mislabeled UI-02, which already identifies the closed
+dashboard wording fix. UI-03 is the unique entitlement-regression identifier.
 
 Investigate the served Users component, endpoint availability/registration and
 actual account authorization. Fix the backend contract or explicitly handle an

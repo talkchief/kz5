@@ -5,6 +5,7 @@
 // it, synthesize, retry, trim audio, overwrite media or publish runtime readiness.
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const pack = require('./acdc-cardinal-pack.cjs');
+const reuse = require('./acdc-cardinal-reuse.cjs');
 const media = require('./import-acdc-gemini-voices.cjs');
 const {couchClient} = require('./import-acdc-language-packs.cjs');
 const OWNER = 'kazoo5-acdc-cardinal-import', LOCALE = 'en-us', COUNT = 31;
@@ -42,6 +43,18 @@ function exactKeys(value, wanted) {
   check(value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
     && Object.keys(value).sort().join(',') === [...wanted].sort().join(','), 'INVALID_CARDINAL_OPTIONS');
 }
+function sourceOptions(value) {
+  const required = ['cardinalDirectory', 'introFile', 'approvalSha256', 'locale'];
+  const optional = ['supplementalDirectory', 'aliasFile', 'aliasSha256'];
+  const aliases = value !== null && typeof value === 'object' && optional.some(k => Object.hasOwn(value, k));
+  exactKeys(value, [...required, ...(aliases ? optional : [])]);
+  if (aliases) {
+    check(sha(value.aliasSha256), 'INDEPENDENT_ALIAS_PIN_REQUIRED');
+    for (const k of ['supplementalDirectory', 'aliasFile']) check(typeof value[k] === 'string'
+      && path.isAbsolute(value[k]) && path.resolve(value[k]) === value[k], 'PINNED_ALIAS_SOURCE_REQUIRED');
+  }
+  return aliases;
+}
 function directory(root) {
   check(typeof root === 'string' && path.isAbsolute(root) && path.resolve(root) === root
     && root.split(path.sep).filter(Boolean).length >= 2, 'INVALID_CARDINAL_DIRECTORY');
@@ -77,7 +90,7 @@ function asset(locale, id, transcriptHash, bytes, file, duration) {
     transcript_sha256: transcriptHash, duration_seconds: duration};
 }
 function openPlan(options) {
-  exactKeys(options, ['cardinalDirectory', 'introFile', 'approvalSha256', 'locale']);
+  const aliases = sourceOptions(options);
   const {cardinalDirectory, introFile, approvalSha256, locale} = options;
   // Reject unsupported scopes before opening any source or database connection.
   check(typeof locale === 'string' && Object.hasOwn(COUNTS, locale), 'CARDINAL_LOCALE_NOT_STAGED');
@@ -107,8 +120,39 @@ function openPlan(options) {
   const expected = pack.plan(locale), selected = manifest.prompts.filter(e => e.locale === locale);
   check(expected.length === count && selected.length === count && new Set(selected.map(e => e.id)).size === count,
     locale === LOCALE ? 'EXACT_EN31_REQUIRED' : 'EXACT_LOCALE_INVENTORY_REQUIRED');
+  const resolver = aliases ? reuse.openResolution({cardinalDirectory,
+    supplementalDirectory: options.supplementalDirectory, aliasFile: options.aliasFile, aliasSha256: options.aliasSha256}) : null;
   const proof = [], assets = expected.map(wanted => {
     const entry = selected.find(e => e.id === wanted.id);
+    if (resolver) {
+      // Resolve the whole selected inventory before a client can be opened. A
+      // reused whole word is not a successful generation attempt in the ledger.
+      check(entry, 'CARDINAL_LOCALE_INCOMPLETE');
+      const resolved = resolver.resolve(locale, wanted.id), p = resolved.provenance;
+      check(resolved.transcript === entry.transcript && p.transcript_sha256 === entry.transcript_sha256
+        && p.catalog_record_sha256 === entry.catalog_record_sha256 && p.context_sha256 === entry.context_sha256
+        && p.cardinal_manifest_sha256 === manifestHash, 'CARDINAL_RESOLUTION_CHANGED');
+      let file;
+      if (resolved.source_kind === 'generated_cardinal') {
+        const attempt = entry.attempts.at(-1);
+        remember(cardinalDirectory, attempt.master.file, MAX_WAV, p.master_sha256);
+        file = path.join(cardinalDirectory, attempt.telephony.file);
+        remember(cardinalDirectory, attempt.telephony.file, MAX_WAV, p.telephony_sha256);
+      } else {
+        check(resolved.source_kind === 'reused_supplemental_master', 'CARDINAL_RESOLUTION_CHANGED');
+        const relative = `${p.source_locale}/${p.source_id}.master-24000.wav`;
+        remember(options.supplementalDirectory, relative, MAX_WAV, p.master_sha256);
+        file = path.join(options.supplementalDirectory, relative);
+      }
+      // Whole-ledger bytes are a per-operation audit pin, not immutable media
+      // lineage: unrelated locales may legitimately finish later. Retain the
+      // selected entry/failed-history and exact alias/source/content pins.
+      const {cardinal_manifest_sha256, ...lineage} = p;
+      const resolution = {schema_version: 1, owner: OWNER, source_kind: resolved.source_kind, ...lineage,
+        listening_verified: false, provider_provenance_authenticated: false, runtime_ready: false};
+      proof.push({id: entry.id, resolution});
+      return {...asset(locale, entry.id, entry.transcript_sha256, resolved.telephony, file, p.duration_seconds), resolution};
+    }
     check(entry && entry.generation_status === 'QA_PASSED', 'CARDINAL_LOCALE_INCOMPLETE');
     const attempt = entry.attempts.at(-1);
     remember(cardinalDirectory, attempt.master.file, MAX_WAV, attempt.master.sha256);
@@ -123,11 +167,21 @@ function openPlan(options) {
   }).sort((a, b) => a.id.localeCompare(b.id, 'en'));
   const rows = assets.map(a => [a.locale, a.canonical_id, a.prompt_id, a.sha256, a.md5, a.bytes.length, a.transcript_sha256]);
   const mapHash = hash(JSON.stringify(rows));
+  const generatedAssetSetHash = pack.assetSetHash(manifest, locale);
+  const resolvedAssetSetHash = resolver ? pack.digest({schema_version: 1, kind: 'cardinal-resolved-assets-v1',
+    locale, intro, prompts: [...proof].sort((a, b) => a.id.localeCompare(b.id, 'en'))}) : null;
+  const resolutions = new Map(assets.filter(a => a.resolution).map(a => [a.id,
+    {...a.resolution, resolved_asset_set_sha256: resolvedAssetSetHash}]));
   const summary = {schema_version: 1, owner: OWNER, locale, count,
     catalog_sha256: pack.CATALOG_HASH, locale_catalog_sha256: pack.LOCALE_HASHES[locale],
     context_sha256: approval.context_sha256, approval_sha256: approvalSha256,
     locale_approval_sha256: pack.digest(approval), cardinal_manifest_sha256: manifestHash,
-    selected_asset_set_sha256: pack.assetSetHash(manifest, locale), map_sha256: mapHash,
+    selected_asset_set_sha256: resolvedAssetSetHash || generatedAssetSetHash, map_sha256: mapHash,
+    ...(resolver ? {asset_set_kind: 'cardinal-resolved-assets-v1', resolved_asset_set_sha256: resolvedAssetSetHash,
+      historical_generated_asset_set_sha256: generatedAssetSetHash, alias_manifest_sha256: options.aliasSha256,
+      selected_generated: assets.filter(a => a.resolution.source_kind === 'generated_cardinal').length,
+      selected_reused: assets.filter(a => a.resolution.source_kind === 'reused_supplemental_master').length,
+      selected_unresolved: 0, resolved_listening_approval_declared: false} : {}),
     resampling_recipe_sha256: pack.digest(pack.RESAMPLING), resampling_provenance_verified: true,
     intro: {...intro, document_id: introAsset.id, source_bytes_verified: true},
     authoring_approval_declared: true, listening_approval_declared: approval.listening.status === 'APPROVED',
@@ -139,6 +193,7 @@ function openPlan(options) {
   check(sha(summary.selected_asset_set_sha256), 'CARDINAL_LOCALE_INCOMPLETE');
   function stable() {
     for (const pin of inputPins) check(hash(read(pin.root, pin.relative, pin.maximum)) === pin.sha256, 'CARDINAL_INPUT_CHANGED');
+    if (resolver) resolver.summary();
   }
   stable();
   return Object.freeze({
@@ -187,12 +242,16 @@ function openPlan(options) {
           if (Array.isArray(response?.body?.rows)) for (const row of response.body.rows) if (row.doc) {
             check(row.doc._conflicts === undefined || Array.isArray(row.doc._conflicts) && row.doc._conflicts.length === 0,
               'CARDINAL_MEDIA_CONFLICT');
+            if (resolutions.has(row.key)) check(row.doc.source_cardinal_resolution
+              && pack.digest(row.doc.source_cardinal_resolution) === pack.digest(resolutions.get(row.key)),
+            'CARDINAL_RESOLUTION_PROVENANCE_MISMATCH');
           }
           return response;
         }
         check(allowWrite && method === 'PUT' && body && writable.has(body._id)
           && resource === encodeURIComponent(body._id) && body._rev === undefined, 'CARDINAL_IMPORT_SCOPE');
-        return client(method, resource, body);
+        return client(method, resource, resolutions.has(body._id)
+          ? {...body, source_cardinal_resolution: clone(resolutions.get(body._id))} : body);
       };
       // Historical EN/FR/ES intros remain in the fixed210 import contract.
       // Only the two new versioned introductions can be created here.
@@ -217,14 +276,15 @@ function options(argv) {
       check(out.mode === undefined, 'EXACTLY_ONE_CARDINAL_MODE'); out.mode = arg.slice(2);
     } else {
       const key = {'--cardinal-pack': 'cardinalDirectory', '--intro-file': 'introFile',
-        '--approval-sha256': 'approvalSha256', '--locale': 'locale'}[arg];
+        '--approval-sha256': 'approvalSha256', '--locale': 'locale', '--supplemental-pack': 'supplementalDirectory',
+        '--alias-file': 'aliasFile', '--alias-sha256': 'aliasSha256'}[arg];
       check(key && i + 1 < argv.length && !argv[i + 1].startsWith('--'), 'INVALID_CARDINAL_OPTIONS');
       out[key] = argv[++i];
     }
   }
   check(out.mode !== undefined && typeof out.locale === 'string' && Object.hasOwn(COUNTS, out.locale), 'CARDINAL_LOCALE_NOT_STAGED');
   const {mode, ...source} = out;
-  exactKeys(source, ['cardinalDirectory', 'introFile', 'approvalSha256', 'locale']);
+  sourceOptions(source);
   return {mode, source};
 }
 async function main(argv) {

@@ -17,10 +17,18 @@ const introSources = Object.freeze(Object.fromEntries(['en-us', 'es-es', 'fr-fr'
       'acdc-cardinal-intro-v1-current-position-number.attempt-1.telephony-8000.wav')
     : path.join(__dirname, 'assets/acdc-gemini-fixed-20260905', locale,
       'acdc-queue-your-current-position-is.telephony-8000.wav')])));
+const reuseSources = {
+  cardinal: path.join(__dirname, 'assets/acdc-gemini-cardinals-20260907/manifest.json'),
+  supplemental: path.join(__dirname, 'assets/acdc-gemini-supplemental-20260906'),
+  aliases: path.join(__dirname, 'acdc-cardinal-reuse-es-20260907.json')
+};
 const inputs = [__filename, path.join(__dirname, 'import-acdc-gemini-cardinals.cjs'),
   path.join(__dirname, 'acdc-cardinal-pack.cjs'), path.join(__dirname, 'acdc-cardinal-catalog.cjs'),
   path.join(__dirname, 'import-acdc-gemini-voices.cjs'), path.join(__dirname, 'import-acdc-language-packs.cjs'),
-  path.join(root, 'applications/acdc/src/acdc_gemini_map.hrl'), ...Object.values(introSources), '/usr/bin/sox'];
+  path.join(root, 'applications/acdc/src/acdc_gemini_map.hrl'), ...Object.values(introSources), '/usr/bin/sox',
+  reuseSources.cardinal, reuseSources.aliases, path.join(reuseSources.supplemental, 'manifest.json'),
+  ...[4, 9].map(n => path.join(reuseSources.supplemental, `es-es/acdc-number-${n}.master-24000.wav`)),
+  path.join(root, 'doc/acdc_cardinal_exact_word_reuse.md')];
 const pins = () => Object.fromEntries([...new Set([...inputs, ...Object.keys(require.cache).filter(f => f.startsWith(__dirname + '/'))])]
   .sort().map(file => [file, hash(fs.readFileSync(file))]));
 const output = fs.mkdtempSync(path.join(os.tmpdir(), 'acdc-cardinal-import-proof.'));
@@ -63,7 +71,9 @@ function fixture(name) {
   const manifest = JSON.parse(fs.readFileSync(path.join(cardinalDirectory, 'manifest.json')));
   return {location, cardinalDirectory, introFile, approvalSha256: manifest.approvals_sha256, locale: 'en-us', manifest};
 }
-function source(f) { return {cardinalDirectory: f.cardinalDirectory, introFile: f.introFile, approvalSha256: f.approvalSha256, locale: f.locale}; }
+function source(f) { return {cardinalDirectory: f.cardinalDirectory, introFile: f.introFile, approvalSha256: f.approvalSha256,
+  locale: f.locale, ...(f.aliasSha256 ? {supplementalDirectory: f.supplementalDirectory,
+    aliasFile: f.aliasFile, aliasSha256: f.aliasSha256} : {})}; }
 function save(f) { write(path.join(f.cardinalDirectory, 'manifest.json'), f.manifest); }
 function open(f) { return importer.openPlan(source(f)); }
 function localeFixture(locale) {
@@ -84,8 +94,11 @@ function localeFixture(locale) {
   f.manifest.approvals_sha256 = f.approvalSha256 = pack.digest(f.manifest.approvals);
   save(f); return f;
 }
+function document(asset, timestamp) {
+  return {...media.document(asset, timestamp), ...(asset.resolution ? {source_cardinal_resolution: clone(asset.resolution)} : {})};
+}
 function nativeDoc(asset) {
-  const doc = media.document(asset, 0); doc._rev = '1-' + 'a'.repeat(32);
+  const doc = document(asset, 0); doc._rev = '1-' + 'a'.repeat(32);
   const attachment = doc._attachments[asset.attachment];
   attachment.digest = asset.md5; attachment.length = asset.bytes.length;
   return doc;
@@ -98,6 +111,22 @@ function assets(f) {
   };
   const definition = importer.INTROS[f.locale];
   const intro = build(definition.canonical_id, definition.transcript_sha256, fs.readFileSync(f.introFile), f.introFile);
+  if (f.aliasSha256) {
+    const resolver = require('./acdc-cardinal-reuse.cjs').openResolution({cardinalDirectory: f.cardinalDirectory,
+      supplementalDirectory: f.supplementalDirectory, aliasFile: f.aliasFile, aliasSha256: f.aliasSha256});
+    const summary = open(f).summary();
+    const cardinal = pack.plan(f.locale).map(entry => {
+      const resolved = resolver.resolve(f.locale, entry.id), p = resolved.provenance;
+      const retained = f.manifest.prompts.find(e => e.locale === f.locale && e.id === entry.id);
+      const file = resolved.source_kind === 'generated_cardinal'
+        ? path.join(f.cardinalDirectory, retained.attempts.at(-1).telephony.file)
+        : path.join(f.supplementalDirectory, `${p.source_locale}/${p.source_id}.master-24000.wav`);
+      return {...build(entry.id, entry.transcript_sha256, resolved.telephony, file),
+        resolution: {...summary.prompts.find(p => p.id === entry.id).resolution,
+          resolved_asset_set_sha256: summary.resolved_asset_set_sha256}};
+    }).sort((a, b) => a.id.localeCompare(b.id, 'en'));
+    return {intro, cardinal};
+  }
   const cardinal = f.manifest.prompts.filter(e => e.locale === f.locale && e.generation_status === 'QA_PASSED').map(e => {
     const file = path.join(f.cardinalDirectory, e.attempts.at(-1).telephony.file);
     return build(e.id, e.transcript_sha256, fs.readFileSync(file), file);
@@ -121,12 +150,31 @@ function database(f, {installed = false, hook = () => undefined} = {}) {
     equal(method, 'PUT'); equal(body._rev, undefined); equal(decodeURIComponent(resource), body._id);
     const asset = [...plan.cardinal, ...(['he-il', 'ar-sa'].includes(f.locale) ? [plan.intro] : [])].find(a => a.id === body._id);
     assert(asset, 'Only selected cardinal identities and new HE/AR intros may be created');
-    equal(body, media.document(asset, (body.pvt_created - 62167219200) * 1000));
+    equal(body, document(asset, (body.pvt_created - 62167219200) * 1000));
     if (docs.has(asset.id)) return {status: 409, body: {error: 'conflict'}};
     docs.set(asset.id, nativeDoc(asset));
     return {status: 201, body: {ok: true, id: asset.id, rev: docs.get(asset.id)._rev}};
   };
   return {client, calls, docs, plan};
+}
+function reuseFixture(name) {
+  const f = localeFixture('es-es');
+  const retained = JSON.parse(fs.readFileSync(reuseSources.cardinal));
+  for (const n of [4, 9]) {
+    const id = `acdc-cardinal-v1-number-${n}`;
+    const index = f.manifest.prompts.findIndex(e => e.locale === f.locale && e.id === id);
+    f.manifest.prompts[index] = clone(retained.prompts.find(e => e.locale === f.locale && e.id === id));
+  }
+  f.manifest.requests_reserved = f.manifest.prompts.reduce((n, e) => n + e.attempts.length, 0);
+  f.supplementalDirectory = path.join(f.location, 'supplemental-' + name);
+  f.aliasFile = path.join(f.location, 'aliases.json');
+  write(f.aliasFile, fs.readFileSync(reuseSources.aliases)); f.aliasSha256 = hash(fs.readFileSync(f.aliasFile));
+  write(path.join(f.supplementalDirectory, 'manifest.json'), fs.readFileSync(path.join(reuseSources.supplemental, 'manifest.json')));
+  for (const n of [4, 9]) {
+    const file = `es-es/acdc-number-${n}.master-24000.wav`;
+    write(path.join(f.supplementalDirectory, file), fs.readFileSync(path.join(reuseSources.supplemental, file)));
+  }
+  save(f); return f;
 }
 function treePins(directory, relative = '') {
   const result = {};
@@ -328,6 +376,133 @@ async function run() {
     equal(db.calls.some(c => c.method === 'PUT'), false);
     f.manifest.prompts.find(e => e.locale === 'fr-fr').context_sha256 = '0'.repeat(64); save(f);
     rejects(() => open(f), 'CATALOG_TRANSCRIPT_OR_CONTEXT_CHANGED');
+  });
+  const reused = reuseFixture('valid'), reusedTree = treePins(reused.location);
+  await group('aliases require explicit complete options and an independent exact byte pin', () => {
+    const s = source(reused), args = ['--plan', '--locale', s.locale, '--cardinal-pack', s.cardinalDirectory,
+      '--intro-file', s.introFile, '--approval-sha256', s.approvalSha256, '--supplemental-pack', s.supplementalDirectory,
+      '--alias-file', s.aliasFile, '--alias-sha256', s.aliasSha256];
+    equal(importer.options(args).source, s);
+    for (const key of ['supplementalDirectory', 'aliasFile', 'aliasSha256']) {
+      const partial = {...s}; delete partial[key];
+      rejects(() => importer.openPlan(partial), 'INVALID_CARDINAL_OPTIONS');
+    }
+    rejects(() => importer.options(args.slice(0, -2)), 'INVALID_CARDINAL_OPTIONS');
+    rejects(() => importer.options([...args, '--alias-file', s.aliasFile]), 'DUPLICATE_CARDINAL_OPTION');
+    rejects(() => importer.openPlan({...s, aliasSha256: 'not-a-pin', cardinalDirectory: '/missing/source'}), 'INDEPENDENT_ALIAS_PIN_REQUIRED');
+    rejects(() => importer.openPlan({...s, aliasSha256: '0'.repeat(64)}), 'ALIAS_PIN_MISMATCH');
+    const {supplementalDirectory, aliasFile, aliasSha256, ...generatedOnly} = s;
+    rejects(() => importer.openPlan(generatedOnly), 'CARDINAL_LOCALE_INCOMPLETE');
+  });
+  const reusedPlan = open(reused), reusedSummary = reusedPlan.summary();
+  await group('complete ES51 generated plus two exact-word aliases has distinct resolved proof and no listening claim', () => {
+    const s = reusedSummary;
+    equal(s.count, 53); equal(s.selected_generated, 51); equal(s.selected_reused, 2); equal(s.selected_unresolved, 0);
+    equal(s.asset_set_kind, 'cardinal-resolved-assets-v1'); equal(s.historical_generated_asset_set_sha256, null);
+    equal(s.selected_asset_set_sha256, s.resolved_asset_set_sha256);
+    equal(s.resolved_asset_set_sha256, pack.digest({schema_version: 1, kind: s.asset_set_kind, locale: s.locale,
+      intro: importer.INTROS[s.locale], prompts: s.prompts}));
+    equal(s.alias_manifest_sha256, reused.aliasSha256);
+    for (const k of ['listening_approval_declared', 'resolved_listening_approval_declared', 'listening_verified',
+      'runtime_ready', 'full_position_language_ready', 'five_language_release_ready', 'historical_artifact_complete']) equal(s[k], false);
+    for (const n of [4, 9]) {
+      const id = `acdc-cardinal-v1-number-${n}`, entry = reused.manifest.prompts.find(e => e.locale === 'es-es' && e.id === id);
+      const p = s.prompts.find(e => e.id === id).resolution;
+      equal(entry.generation_status, 'FAILED'); equal(entry.attempts.length, n === 4 ? 2 : 1);
+      equal(p.source_kind, 'reused_supplemental_master'); equal(p.failed_entry_sha256, pack.digest(entry));
+      equal(p.alias_manifest_sha256, reused.aliasSha256); equal(p.transcript_sha256, entry.transcript_sha256);
+      equal(p.master_sha256, hash(fs.readFileSync(path.join(reused.supplementalDirectory,
+        `es-es/acdc-number-${n}.master-24000.wav`))));
+      equal(p.attempt, undefined); equal(p.request_body_sha256, undefined);
+    }
+    equal((reusedPlan.renderMap().match(/    \{<<"es-es">>/g) || []).length, 53);
+    equal(treePins(reused.location), reusedTree);
+  });
+  await group('resolved create-only records bind full provenance and audio hashes with exact idempotent readback', async () => {
+    const db = database(reused), r = await reusedPlan.install(db.client, true);
+    equal(r.created, 53); equal(r.verified, 53); equal(r.selected_reused, 2);
+    for (const a of db.plan.cardinal) {
+      const doc = db.docs.get(a.id), p = doc.source_cardinal_resolution;
+      equal(p, a.resolution); equal(p.telephony_sha256, a.sha256);
+      equal(p.resolved_asset_set_sha256, reusedSummary.resolved_asset_set_sha256);
+      equal(p.cardinal_manifest_sha256, undefined);
+      equal(p.runtime_ready, false); equal(p.listening_verified, false);
+    }
+    equal(db.docs.get(db.plan.intro.id).source_cardinal_resolution, undefined);
+    const original = clone([...db.docs]); db.calls.length = 0;
+    const again = await reusedPlan.install(db.client, true); equal(again.created, 0); equal(again.preserved, 53);
+    equal(db.calls.every(c => c.method === 'POST'), true); equal([...db.docs], original);
+    equal((await reusedPlan.install(db.client, false)).verified, 53);
+    equal(treePins(reused.location), reusedTree);
+  });
+  await group('unrelated locale progress preserves resolved identity while selected lineage drift cannot overwrite', async () => {
+    const f = reuseFixture('unrelated-progress'), first = open(f), previous = first.summary(), db = database(f);
+    await first.install(db.client, true); const documents = clone([...db.docs]);
+    const other = f.manifest.prompts.find(e => e.locale === 'fr-fr');
+    other.generation_status = 'FAILED'; other.attempts = [attempt(other, 'FAILED', 1)];
+    f.manifest.requests_reserved++; save(f);
+    rejects(() => first.summary(), 'CARDINAL_INPUT_CHANGED');
+    const next = open(f), current = next.summary();
+    equal(current.cardinal_manifest_sha256 === previous.cardinal_manifest_sha256, false);
+    equal(current.resolved_asset_set_sha256, previous.resolved_asset_set_sha256);
+    equal(current.prompts, previous.prompts); equal(current.map_sha256, previous.map_sha256);
+    db.calls.length = 0; const receipt = await next.install(db.client, true);
+    equal(receipt.created, 0); equal(receipt.preserved, 53); equal(db.calls.every(c => c.method === 'POST'), true);
+    equal([...db.docs], documents);
+    const selected = f.manifest.prompts.find(e => e.locale === 'es-es' && e.id === 'acdc-cardinal-v1-number-5');
+    selected.attempts[0].reserved_at = '2026-09-06T00:00:00.000Z'; save(f);
+    const changed = open(f); equal(changed.summary().resolved_asset_set_sha256 === current.resolved_asset_set_sha256, false);
+    db.calls.length = 0;
+    await rejectsAsync(() => changed.install(db.client, true), 'CARDINAL_RESOLUTION_PROVENANCE_MISMATCH');
+    equal(db.calls.some(c => c.method === 'PUT'), false); equal([...db.docs], documents);
+  });
+  await group('resolved missing/altered provenance and 409 winners cannot bypass create-only verification', async () => {
+    for (const kind of ['missing', 'digest', 'extra', 'readiness', '409']) {
+      const db = database(reused, {installed: kind !== '409', hook: ({method, body, docs, plan}) => {
+        if (kind !== '409' || method !== 'PUT') return;
+        const a = plan.cardinal.find(a => a.id === body._id), doc = nativeDoc(a);
+        delete doc.source_cardinal_resolution; docs.set(a.id, doc);
+        return {status: 409, body: {error: 'conflict'}};
+      }});
+      if (kind !== '409') {
+        const doc = db.docs.get(db.plan.cardinal[0].id);
+        if (kind === 'missing') delete doc.source_cardinal_resolution;
+        if (kind === 'digest') doc.source_cardinal_resolution.resolved_asset_set_sha256 = '0'.repeat(64);
+        if (kind === 'extra') doc.source_cardinal_resolution.extra = true;
+        if (kind === 'readiness') doc.source_cardinal_resolution.runtime_ready = true;
+      }
+      await rejectsAsync(() => reusedPlan.install(db.client, true), 'CARDINAL_RESOLUTION_PROVENANCE_MISMATCH');
+      equal(db.calls.filter(c => c.method === 'PUT').length, kind === '409' ? 1 : 0);
+    }
+  });
+  await group('one unresolved selected role, forged listening approval and modified failure history remain fatal', () => {
+    for (const kind of ['pending', 'listening', 'history']) {
+      const f = reuseFixture(kind);
+      if (kind === 'pending') {
+        const e = f.manifest.prompts.find(e => e.locale === 'es-es' && e.id === 'acdc-cardinal-v1-number-5');
+        f.manifest.requests_reserved -= e.attempts.length; e.attempts = []; e.generation_status = 'PENDING';
+      }
+      if (kind === 'listening') {
+        const a = f.manifest.approvals.find(a => a.locale === f.locale);
+        Object.assign(a.listening, {status: 'APPROVED', evidence_sha256: '1'.repeat(64),
+          asset_set_sha256: reusedSummary.resolved_asset_set_sha256});
+        f.manifest.approvals_sha256 = f.approvalSha256 = pack.digest(f.manifest.approvals);
+      }
+      if (kind === 'history') f.manifest.prompts.find(e => e.locale === 'es-es'
+        && e.id === 'acdc-cardinal-v1-number-4').attempts[0].reserved_at = '2026-09-06T00:00:00.000Z';
+      save(f); rejects(() => open(f), {pending: 'CARDINAL_AUDIO_UNRESOLVED', listening: 'LISTENING_ASSETS_CHANGED', history: 'FAILED_HISTORY_CHANGED'}[kind]);
+    }
+  });
+  await group('alias, supplemental manifest and master mutations after planning prevent all database access', async () => {
+    for (const kind of ['alias', 'manifest', 'master']) {
+      const f = reuseFixture('post-open-' + kind), snapshot = open(f);
+      const file = kind === 'alias' ? f.aliasFile : path.join(f.supplementalDirectory,
+        kind === 'manifest' ? 'manifest.json' : 'es-es/acdc-number-4.master-24000.wav');
+      fs.appendFileSync(file, ' ');
+      rejects(() => snapshot.summary()); rejects(() => snapshot.renderMap());
+      let contacted = false;
+      await rejectsAsync(() => snapshot.install(async () => { contacted = true; }, true)); equal(contacted, false);
+    }
   });
   await group('final readback catches earlier mutation and exact source pins survive every operation', async () => {
     const db = database(base, {hook: ({method, body, docs, plan}) => {

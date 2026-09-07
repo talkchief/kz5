@@ -63,7 +63,7 @@ fixture cleanup, real PSTN acceptance, or a test of the operator's MicroSIP1000.
 ## Boundaries
 
 The 210 fixed/digit clips above are distinct from the incomplete expanded
-cardinal pack: 409/584 cardinal recordings pass technical QA. Do not represent
+cardinal pack: 412/584 cardinal recordings pass technical QA. Do not represent
 that number inventory as a deployed, listening-approved five-language release.
 
 The current bridge consumer uses isolated development routing. Synthetic broker

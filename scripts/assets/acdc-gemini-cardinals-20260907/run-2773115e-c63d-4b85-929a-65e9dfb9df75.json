@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "owner": "kazoo5-cardinal-authoring-run",
+  "catalog_sha256": "5703e649a1f5a2bcd0c00e9e19bf4424e024c85648452dba0d190bcf73088134",
+  "approvals_sha256": "452b815a65f726e4d221b2585f61162fae0a1c43d6fb1370a0f27bb3a37b8ea5",
+  "selected_locales": [
+    "he-il"
+  ],
+  "request_limit": 4,
+  "concurrency": 2,
+  "explicit_retry": true,
+  "retry_budget": 113,
+  "attempt_limit": 2,
+  "explicit_attempt_limit": false,
+  "requests_before": 693,
+  "requested": 4,
+  "status": "FAILED",
+  "started_at": "2026-09-07T18:18:59.858Z",
+  "events": [
+    {
+      "locale": "he-il",
+      "id": "acdc-cardinal-v1-tens-20",
+      "attempt": 2,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 1,
+        "inline_audio_parts": 1,
+        "text_parts": 0,
+        "finish_reason": "STOP",
+        "prompt_block_reason": null,
+        "first_candidate_finish_message_present": false
+      },
+      "telephony_sha256": "e9275a33b425b74d3a8767cd44640e8dee1104cdd5d1cee47c5ad189f0e43d24"
+    },
+    {
+      "locale": "he-il",
+      "id": "acdc-cardinal-v1-feminine-18",
+      "attempt": 2,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 1,
+        "inline_audio_parts": 1,
+        "text_parts": 0,
+        "finish_reason": "STOP",
+        "prompt_block_reason": null,
+        "first_candidate_finish_message_present": false
+      },
+      "telephony_sha256": "cca81f54480834346f196775a8bdc3d3a6f21bb0eca5f46f95c58032a9fe7fae"
+    },
+    {
+      "locale": "he-il",
+      "id": "acdc-cardinal-v1-joined-tens-20",
+      "attempt": 2,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER",
+        "prompt_block_reason": null,
+        "first_candidate_finish_message_present": false
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "he-il",
+      "id": "acdc-cardinal-v1-tens-30",
+      "attempt": 2,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER",
+        "prompt_block_reason": null,
+        "first_candidate_finish_message_present": false
+      },
+      "telephony_sha256": null
+    }
+  ],
+  "runtime_ready": false,
+  "deployed": false,
+  "synthesis_recipe": "cardinal-concise-v2",
+  "finished_at": "2026-09-07T18:19:15.041Z",
+  "failure_code": "INCOMPLETE_RESPONSE_REQUIRES_EXPLICIT_RETRY"
+}

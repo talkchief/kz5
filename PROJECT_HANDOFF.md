@@ -6,11 +6,20 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
-**Current voice inventory:**409/584 technical QA (EN31/HE89/FR160/ES25/AR104),
-692 requests,108 retries,175 failed and no pending/indeterminate identity. Twelve
-bounded concise-v2 Hebrew retries recovered three recordings; six WAVs saved.
+**Current voice inventory:**412/584 technical QA (EN31/HE92/FR160/ES25/AR104),
+697 requests,113 retries,172 failed and no pending/indeterminate identity. Five
+bounded concise-v2 Hebrew requests recovered three recordings; six WAVs saved.
 See `doc/acdc_cardinal_concise_synthesis.md`; older counts below are historical.
 No new cardinal runtime activation or listening approval is implied.
+Exact-word Spanish reuse now passes 5,962 importer checks and installer adapter
+regression; actual resolved inventory is 412 generated + 2 reused, 170 missing.
+See `doc/acdc_cardinal_reuse_import_integration.md`; staging is not deployment.
+The separate 3.1 model experiment and exact private receipts are documented in
+`doc/acdc_cardinal_31_model_trial.md`; trial calls do not alter the legacy counts.
+Trial-only MIME compatibility passed526 offline checks and three actual clips
+(HE30/AR4/ES13), with six WAVs saved under the separate model-trial assets.
+Four total trial requests include the initial rejected-format response. Do not
+regenerate these successes or relabel them as 2.5/runtime-approved recordings.
 Safe prompt-feedback diagnostics are implemented and pass19 groups/377 checks
 (`a40011/893835`) without real provider calls. No speculative transcript change
 or additional identical retry batch was started.
@@ -319,7 +328,7 @@ external identity unchanged; account-local transport still needs live acceptance
 See `doc/acdc_internal_extension_callbacks.md`. Mobile provider credentials/test
 device paths were requested asynchronously; no production queue was contacted.
 
-**New important bug UI-02:** Callflows → Users gets404 from the account
+**New important bug UI-03:** Callflows → Users gets404 from the account
 `/entitlements` endpoint and displays a generic error. Full sanitized report,
 request ID and acceptance requirements are in PROJECT_TASKS.md. Do not copy the
 operator's session token into source or logs.
