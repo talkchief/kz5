@@ -6,6 +6,25 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Post-resize checkpoint September 7:** server has7488MiB usable memory,
+5970MiB available at initial check, no swap; synthetic test-agent service is
+active/running PID1991 after reboot. Named Kazoo apps/ecallmgr/freeswitch/kamailio
+and data/web services are active. Earlier helper pause/PIDs below are historical.
+Extension1000 resolves to MicroSIP user12d1a51ac7fddbbc552c693215eda876;
+device b9765af7b7ce1e740263900e3fb11bb9 still has no numeric caller ID.
+Internal-extension callback routing is actively being fixed; current transport
+is offnet-only, and setting caller ID alone cannot resolve that limitation.
+
+**EN cardinal staging verified:** compositor passes5 EUnit tests including14648
+parity cases (`0db88b/dc3041`). Importer passes10 groups/605 checks with real SoX,
+zero network/provider calls (`0ae241/2ebcc3`). Separate generated map SHA:
+`290ce69c163729cf567d2353982066f0518d42045a89b4dfc2125953494c5406`.
+Actual configured-CouchDB import (`de5fda/eeb8e2`) created31 immutable EN cardinal
+documents, verified31 plus existing intro,74 scoped requests, no queue change.
+Runtime position integration remains in progress, not playback-approved.
+APNs transport fixtures pass23 tests (`943db9`); all prior41 bridge fixtures pass
+again (`76b36d`). These are offline tests, not mobile push delivery acceptance.
+
 **Latest operator scope correction:** callbacks, built-in EN/HE/FR/ES/AR
 prerecorded Gemini voices, deployment-script issues **and the mobile bridge**
 are critical and active. Only dashboard work is postponed. Keep all other

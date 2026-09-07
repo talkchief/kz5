@@ -17,6 +17,22 @@ PORT = 443
 TOKEN_TTL = 2700
 CONNECT_TIMEOUT = 8
 REQUEST_TIMEOUT = 8
+MAX_RESPONSE_BYTES = 16 * 1024
+MAX_RESPONSE_WIRE_BYTES = 64 * 1024
+MAX_RESPONSE_HEADER_BYTES = 16 * 1024
+
+
+def _remaining(deadline, cap=None):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("apns_deadline_exceeded")
+    return min(remaining, cap) if cap is not None else remaining
+
+
+def _sendall(sock, data, deadline):
+    sock.settimeout(_remaining(deadline))
+    sock.sendall(data)
+    _remaining(deadline)
 
 
 def _b64(raw):
@@ -35,19 +51,28 @@ class _ProviderToken(object):
         self._token = None
         self._minted = 0
 
-    def get(self):
-        with self._lock:
+    def get(self, deadline=None):
+        if deadline is None:
+            deadline = time.monotonic() + REQUEST_TIMEOUT
+        if not self._lock.acquire(timeout=_remaining(deadline)):
+            raise TimeoutError("apns_deadline_exceeded")
+        try:
+            _remaining(deadline)
             now = time.time()
-            if self._token and (now - self._minted) < TOKEN_TTL:
+            minted = time.monotonic()
+            if self._token and (minted - self._minted) < TOKEN_TTL:
                 return self._token
             header = _b64(json.dumps({"alg": "ES256", "kid": self._key_id}, separators=(",", ":")).encode())
             claims = _b64(json.dumps({"iss": self._team_id, "iat": int(now)}, separators=(",", ":")).encode())
             signing_input = header + b"." + claims
             import hashlib
             signature = self._key.sign_deterministic(signing_input, hashfunc=hashlib.sha256)
+            _remaining(deadline)
             self._token = (signing_input + b"." + _b64(signature)).decode()
-            self._minted = now
+            self._minted = minted
             return self._token
+        finally:
+            self._lock.release()
 
 
 class ApnsSender(object):
@@ -82,15 +107,32 @@ class ApnsSender(object):
         except InvalidPush:
             return None
 
-    def _open(self, host):
+    def _open(self, host, deadline):
         ctx = ssl.create_default_context()
         ctx.set_alpn_protocols(["h2"])
-        sock = ctx.wrap_socket(socket.create_connection((host, PORT), timeout=CONNECT_TIMEOUT), server_hostname=host)
-        if sock.selected_alpn_protocol() != "h2":
-            sock.close()
-            raise IOError("apns_http2_negotiation_failed")
-        sock.settimeout(REQUEST_TIMEOUT)
-        return sock
+        raw, sock = None, None
+        try:
+            # create_connection's DNS lookup is not governed by its timeout.
+            # Recheck the shared budget immediately after it returns; this is
+            # not a hard cancellation deadline for the platform resolver.
+            raw = socket.create_connection((host, PORT), timeout=_remaining(deadline, CONNECT_TIMEOUT))
+            raw.settimeout(_remaining(deadline))
+            sock = ctx.wrap_socket(raw, server_hostname=host, do_handshake_on_connect=False)
+            sock.settimeout(_remaining(deadline))
+            sock.do_handshake()
+            _remaining(deadline)
+            if sock.selected_alpn_protocol() != "h2":
+                raise IOError("apns_http2_negotiation_failed")
+            return sock
+        except Exception:
+            # TLS wrapping can fail before the caller receives a socket.
+            owned = sock if sock is not None else raw
+            if owned is not None:
+                try:
+                    owned.close()
+                except Exception:
+                    pass
+            raise
 
     def send(self, device_token, payload, sandbox=False):
         token = self.normalize_token(device_token)
@@ -110,40 +152,71 @@ class ApnsSender(object):
             return False, 0, "invalid_push_payload"
         sock = None
         try:
-            sock = self._open(host)
+            deadline = time.monotonic() + REQUEST_TIMEOUT
+            authorization = self._provider_token.get(deadline=deadline)
+            _remaining(deadline)
+            sock = self._open(host, deadline)
             conn = self._h2_connection.H2Connection()
             conn.initiate_connection()
-            sock.sendall(conn.data_to_send())
+            _sendall(sock, conn.data_to_send(), deadline)
             headers = [
                 (":method", "POST"), (":scheme", "https"), (":authority", host),
-                (":path", "/3/device/%s" % token), ("authorization", "bearer %s" % self._provider_token.get()),
+                (":path", "/3/device/%s" % token), ("authorization", "bearer %s" % authorization),
                 ("apns-topic", self._topic), ("apns-push-type", "voip"), ("apns-priority", "10"),
                 ("apns-expiration", "0"), ("content-length", str(len(body))),
             ]
             stream_id = conn.get_next_available_stream_id()
             conn.send_headers(stream_id, headers)
             conn.send_data(stream_id, body, end_stream=True)
-            sock.sendall(conn.data_to_send())
-            status, response = None, b""
-            deadline = time.time() + REQUEST_TIMEOUT
-            while time.time() < deadline:
-                chunk = sock.recv(65535)
+            _sendall(sock, conn.data_to_send(), deadline)
+            status, response_bytes, wire_bytes = None, 0, 0
+            while True:
+                sock.settimeout(_remaining(deadline))
+                chunk = sock.recv(min(16384, MAX_RESPONSE_WIRE_BYTES - wire_bytes + 1))
+                _remaining(deadline)
                 if not chunk:
-                    break
+                    return False, (status or 0), "apns_incomplete_response"
+                wire_bytes += len(chunk)
+                if wire_bytes > MAX_RESPONSE_WIRE_BYTES:
+                    return False, (status or 0), "apns_response_too_large"
                 for event in conn.receive_data(chunk):
+                    _remaining(deadline)
+                    if isinstance(event, self._h2_events.ConnectionTerminated):
+                        # GOAWAY is not proof that our response stream ended.
+                        return False, (status or 0), "apns_incomplete_response"
+                    if isinstance(event, (self._h2_events.ResponseReceived, self._h2_events.DataReceived,
+                                          self._h2_events.StreamEnded, self._h2_events.StreamReset)):
+                        if event.stream_id != stream_id:
+                            return False, (status or 0), "apns_protocol_error"
                     if isinstance(event, self._h2_events.ResponseReceived):
-                        status = int(dict(event.headers)[b":status"])
+                        if status is not None:
+                            return False, status, "apns_protocol_error"
+                        header_bytes = sum(len(key) + len(value) for key, value in event.headers)
+                        if header_bytes > MAX_RESPONSE_HEADER_BYTES:
+                            return False, 0, "apns_response_too_large"
+                        values = [value for key, value in event.headers if key == b":status"]
+                        if (len(values) != 1 or len(values[0]) != 3 or not values[0].isdigit()
+                                or not 200 <= int(values[0]) <= 599):
+                            return False, 0, "apns_protocol_error"
+                        status = int(values[0])
                     elif isinstance(event, self._h2_events.DataReceived):
-                        response += event.data
+                        if status is None:
+                            return False, 0, "apns_protocol_error"
+                        response_bytes += len(event.data)
+                        if response_bytes > MAX_RESPONSE_BYTES:
+                            return False, status, "apns_response_too_large"
                         conn.acknowledge_received_data(event.flow_controlled_length, event.stream_id)
-                    elif isinstance(event, (self._h2_events.StreamEnded, self._h2_events.ConnectionTerminated)):
-                        deadline = 0
-                        break
+                    elif isinstance(event, self._h2_events.StreamReset):
+                        return False, (status or 0), "apns_incomplete_response"
+                    elif isinstance(event, self._h2_events.StreamEnded):
+                        if status is None:
+                            return False, 0, "apns_protocol_error"
+                        # Only the requested stream's actual END_STREAM proves
+                        # a complete response. Never expose the provider body.
+                        return status == 200, status, "provider_response"
                 out = conn.data_to_send()
                 if out:
-                    sock.sendall(out)
-            # Preserve success/status tuple, never return raw provider content.
-            return status == 200, (status or 0), "provider_response"
+                    _sendall(sock, out, deadline)
         except Exception:
             return False, -1, "apns_transport_error"
         finally:

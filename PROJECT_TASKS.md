@@ -1,5 +1,15 @@
 # Kazoo 5 project task register
 
+Latest execution checkpoint: September7 server resized to8GB; named core services
+and synthetic test phones active after reboot. EN cardinal compositor5 tests/
+14648 cases and importer10 groups/605 checks pass. Actual immutable EN31 media
+import verified, no queue configuration change; runtime integration still open.
+APNs transport23 and prior bridge41 offline tests pass, not real mobile acceptance.
+Extension1000 routes correctly to MicroSIP user, but its caller ID is absent and
+callback transport lacks account-local extension routing. This is an active
+callback fix, not a reason to weaken PSTN restrictions. Bridge main-SH integration
+is in progress. See latest PROJECT_HANDOFF.md checkpoint for evidence handles.
+
 New or returning contributors: read [the engineering handoff](PROJECT_HANDOFF.md)
 first for achieved work, deployment status, source locations and next steps.
 
