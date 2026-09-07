@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "owner": "kazoo5-cardinal-authoring-run",
+  "catalog_sha256": "5703e649a1f5a2bcd0c00e9e19bf4424e024c85648452dba0d190bcf73088134",
+  "approvals_sha256": "452b815a65f726e4d221b2585f61162fae0a1c43d6fb1370a0f27bb3a37b8ea5",
+  "selected_locales": [
+    "he-il"
+  ],
+  "request_limit": 1,
+  "concurrency": 1,
+  "explicit_retry": true,
+  "retry_budget": 87,
+  "attempt_limit": 3,
+  "explicit_attempt_limit": true,
+  "requests_before": 543,
+  "requested": 1,
+  "status": "BATCH_COMPLETE",
+  "started_at": "2026-09-07T16:51:38.559Z",
+  "events": [
+    {
+      "locale": "he-il",
+      "id": "acdc-cardinal-v1-joined-feminine-1",
+      "attempt": 3,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 1,
+        "inline_audio_parts": 1,
+        "text_parts": 0,
+        "finish_reason": "STOP"
+      },
+      "telephony_sha256": "9c49478f7fb702a78fdf8f9d0b4d57a03c948bda9714391c905f7f6b9f0e35de"
+    }
+  ],
+  "runtime_ready": false,
+  "deployed": false,
+  "synthesis_recipe": "cardinal-concise-v2",
+  "finished_at": "2026-09-07T16:51:40.968Z"
+}

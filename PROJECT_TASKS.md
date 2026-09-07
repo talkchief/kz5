@@ -1,5 +1,30 @@
 # Kazoo 5 project task register
 
+Latest September7 checkpoint: prerecorded cardinal inventory is339/584 QA
+(EN31 HE84 FR160 ES25 AR39),553 historical requests and92 cumulative retries.
+New concise-recipe experiment saved4 HE recordings/8 WAVs;2 HE and4 AR attempts
+still returned incomplete output. Diagnostic HE attempt2 returned OTHER with
+zero audio/text parts. No provider root cause or listening/runtime completion
+is claimed. Failed: HE47/FR1/ES28/AR46; AR123 still initial-PENDING. Preserve
+FR89's six failures; no seventh request/history reset is permitted by current
+policy. See `doc/acdc_cardinal_concise_synthesis.md`.
+
+All-locale installer adapter is implemented and offline-tested, not activated by
+main SH: all five complete sources/maps are required before writes, then fresh
+584-role verification. Guard `6a52f3/e5dc60` passes15 verifier groups/4926
+assertions,18 generator groups/299 checks and retained/new adapter cases.
+Importer3890 checks and actual unchanged EN plan pass `6302ed/15cc5d`.
+Missing nonEN recordings/maps, listening, runtime integration and deployment
+remain OPEN. See `doc/acdc_cardinal_all_locale_adapter.md`.
+
+Production10.1.0.28 remains read-only; its FCM/APNs configuration is already
+stored outside Git. Dev bridge active/running, NRestarts0. Remaining durable
+delivery/freshness work now has a concrete plan in
+`doc/push_bridge_delivery_recovery_plan.md`; this is not an implemented quorum
+queue/retry/expiry policy or proof of Android/iOS phone delivery.
+
+The snapshots below are historical where superseded by this checkpoint.
+
 Bridge AMQPS support is deployed through main SH (`1ff54f/02ae6d`) and separately
 verified (`9f2d32/f1ad28`). All112 bridge tests plus installer dispatch pass;
 active consumer PID323748, zero automatic restarts. Production untouched;

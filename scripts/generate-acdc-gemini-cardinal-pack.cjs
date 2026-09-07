@@ -103,6 +103,19 @@ function finishReason(response) {
     'MALFORMED_FUNCTION_CALL', 'IMAGE_SAFETY', 'UNEXPECTED_TOOL_CALL', 'TOO_MANY_TOOL_CALLS', 'IMAGE_PROHIBITED_CONTENT',
     'NO_IMAGE', 'IMAGE_RECITATION', 'IMAGE_OTHER', 'FINISH_REASON_UNSPECIFIED'].includes(reason) ? reason : 'UNKNOWN';
 }
+// Persist only bounded structural diagnostics, never provider text, raw audio,
+// response IDs, error messages or credentials. A non-STOP candidate is still
+// rejected by extractPcm; metadata must not turn rejection into audio approval.
+function responseDiagnostics(response) {
+  const candidates = Array.isArray(response?.candidates) ? response.candidates : [];
+  const parts = Array.isArray(candidates[0]?.content?.parts) ? candidates[0].content.parts : [];
+  const cap = n => Math.min(n, 1000);
+  return {candidate_count: cap(candidates.length), first_candidate_part_count: cap(parts.length),
+    inline_audio_parts: cap(parts.filter(p => typeof p?.inlineData?.mimeType === 'string'
+      && /^audio\//.test(p.inlineData.mimeType)).length),
+    text_parts: cap(parts.filter(p => typeof p?.text === 'string').length),
+    finish_reason: finishReason(response)};
+}
 function options(argv) {
   const o = {mode: 'plan', locales: [...locales], concurrency: 1, resume: false, retryFailed: false}, seen = new Set();
   for (let i = 0; i < argv.length; i++) {
@@ -114,7 +127,7 @@ function options(argv) {
     else {
       const key = {'--output': 'output', '--key-file': 'keyFile', '--approval-file': 'approvalFile', '--approval-sha256': 'approvalHash',
         '--locales': 'locales', '--concurrency': 'concurrency', '--request-limit': 'requestLimit', '--retry-budget': 'retryBudget',
-        '--attempt-limit': 'attemptLimit'}[arg];
+        '--attempt-limit': 'attemptLimit', '--synthesis-recipe': 'synthesisRecipe'}[arg];
       check(key && argv[i + 1] && !argv[i + 1].startsWith('--'), 'UNKNOWN_OR_INCOMPLETE_OPTION'); o[key] = argv[++i];
     }
   }
@@ -134,6 +147,10 @@ function options(argv) {
       'ATTEMPT_LIMIT_REQUIRES_EXPLICIT_RECOVERY');
   }
   if (o.mode !== 'plan') check(absolute(o.output), 'ABSOLUTE_OUTPUT_REQUIRED');
+  if (o.synthesisRecipe !== undefined) {
+    check(pack.SYNTHESIS_RECIPES.includes(o.synthesisRecipe), 'INVALID_SYNTHESIS_RECIPE');
+    check(o.mode === 'generate', 'SYNTHESIS_RECIPE_REQUIRES_GENERATE');
+  }
   if (o.mode === 'generate') check(o.requestLimit !== undefined, 'EXPLICIT_REQUEST_LIMIT_REQUIRED');
   return o;
 }
@@ -147,6 +164,8 @@ function summary(manifest, selected, requested = 0) {
     intro_audio_verified: false, full_position_numeric_range_ready: false};
 }
 async function generate(o, deps = {}) {
+  if (o.synthesisRecipe !== undefined)
+    check(pack.SYNTHESIS_RECIPES.includes(o.synthesisRecipe), 'INVALID_SYNTHESIS_RECIPE');
   check(o.mode === 'generate' && Number.isInteger(o.requestLimit) && o.requestLimit >= 1 && o.requestLimit <= 584
     && [1, 2].includes(o.concurrency) && Array.isArray(o.locales) && o.locales.length > 0
     && new Set(o.locales).size === o.locales.length && o.locales.every(l => locales.includes(l)), 'INVALID_GENERATION_OPTIONS');
@@ -217,6 +236,7 @@ async function generate(o, deps = {}) {
       attempt_limit: attemptLimit, explicit_attempt_limit: o.attemptLimit !== undefined,
       requests_before: m.requests_reserved, requested: 0, status: 'PREPARED', started_at: new Date().toISOString(),
       events: [], runtime_ready: false, deployed: false};
+    if (o.synthesisRecipe !== undefined) run.synthesis_recipe = o.synthesisRecipe;
     save(); saveRun();
     provider = (deps.loadProvider || (() => require('./generate-acdc-gemini-samples.cjs')))();
     check(provider.MODEL === pack.MODEL && provider.VOICE === pack.VOICE, 'PROVIDER_HELPER_VERSION_CHANGED');
@@ -225,7 +245,7 @@ async function generate(o, deps = {}) {
     const out = deps.output || (value => console.log(JSON.stringify(value)));
     async function worker() {
       while (!stopped && next < jobs.length) {
-        const entry = jobs[next++], body = pack.requestBody(entry), number = entry.attempts.length + 1;
+        const entry = jobs[next++], body = pack.requestBody(entry, o.synthesisRecipe), number = entry.attempts.length + 1;
         check(number <= attemptLimit && (entry.generation_status === 'PENDING' && number === 1
           || o.retryFailed && entry.generation_status === 'FAILED' && entry.attempts.at(-1)?.status === 'FAILED'),
         'ATTEMPT_NOT_ELIGIBLE');
@@ -233,16 +253,18 @@ async function generate(o, deps = {}) {
           synthesis_instruction: body.contents[0].parts[0].text, instruction_sha256: hash(body.contents[0].parts[0].text),
           request_body_sha256: hash(JSON.stringify(body)), failure_code: null, provider_finish_reason: null,
           raw_pcm_sha256: null, master: null, telephony: null};
+        if (o.synthesisRecipe !== undefined) a.synthesis_recipe = o.synthesisRecipe;
         checkLocale(entry.locale);
         for (const variant of ['master', 'telephony']) check(absent(path.join(o.output, pack.fileName(entry, number, variant))), 'ATTEMPT_AUDIO_ALREADY_EXISTS');
         entry.attempts.push(a); entry.generation_status = 'REQUESTING'; m.requests_reserved++; run.requested++;
         check(run.requested <= o.requestLimit && m.requests_reserved <= m.initial_request_budget + m.retry_request_budget, 'REQUEST_BUDGET_EXHAUSTED');
         save(); // File AND parent directory fsynced before provider transport.
         run.status = 'IN_PROGRESS'; saveRun();
-        let returnedModelVersion = null;
+        let returnedModelVersion = null, diagnostics = null;
         try {
           const response = await provider.requestSpeech(body, key); a.provider_finish_reason = finishReason(response);
-          if (typeof response.modelVersion === 'string' && /^gemini-[A-Za-z0-9._-]{1,120}$/.test(response.modelVersion)) returnedModelVersion = response.modelVersion;
+          diagnostics = responseDiagnostics(response);
+          if (typeof response?.modelVersion === 'string' && /^gemini-[A-Za-z0-9._-]{1,120}$/.test(response.modelVersion)) returnedModelVersion = response.modelVersion;
           const pcm = provider.extractPcm(response); a.raw_pcm_sha256 = hash(pcm);
           const master = provider.makeWave(pcm, 24000); checkLocale(entry.locale);
           const masterFile = pack.fileName(entry, number, 'master'); writeNew(path.join(o.output, masterFile), master);
@@ -259,6 +281,7 @@ async function generate(o, deps = {}) {
         save();
         run.events.push({locale: entry.locale, id: entry.id, attempt: number, status: a.status,
           failure_code: a.failure_code, finish_reason: a.provider_finish_reason, returned_model_version: returnedModelVersion,
+          response_diagnostics: diagnostics,
           telephony_sha256: a.telephony?.sha256 || null}); saveRun();
         out({locale: entry.locale, id: entry.id, attempt: number, status: a.status,
           requests_this_run: run.requested, requests_reserved: m.requests_reserved});
@@ -295,7 +318,7 @@ async function main(argv) {
     prompts: pack.plan().filter(p => o.locales.includes(p.locale)), approvals: pack.createManifest().approvals,
     initial_request_capacity: 584, automatic_retries: 0, runtime_ready: false, deployed: false}));
 }
-module.exports = Object.freeze({options, readApprovals, outputTarget, generate, main});
+module.exports = Object.freeze({options, readApprovals, outputTarget, responseDiagnostics, generate, main});
 if (require.main === module) main(process.argv.slice(2)).catch(e => {
   console.error(`Cardinal authoring stopped: ${e instanceof pack.PackError ? e.code : 'LOCAL_OPERATION_FAILED'}. No live media was imported.`);
   process.exitCode = 1;

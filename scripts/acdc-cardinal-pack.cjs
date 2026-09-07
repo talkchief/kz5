@@ -11,6 +11,9 @@ const cp = require('node:child_process');
 const catalog = require('./acdc-cardinal-catalog.cjs');
 const OWNER = 'kazoo5-acdc-gemini-cardinal-pack';
 const MODEL = 'gemini-2.5-pro-preview-tts', VOICE = 'Sulafat';
+const DEFAULT_SYNTHESIS_RECIPE = 'cardinal-verbatim-v1';
+const CONCISE_SYNTHESIS_RECIPE = 'cardinal-concise-v2';
+const SYNTHESIS_RECIPES = Object.freeze([DEFAULT_SYNTHESIS_RECIPE, CONCISE_SYNTHESIS_RECIPE]);
 const MAX_MANIFEST_BYTES = 8 * 1024 * 1024, MAX_WAV_BYTES = 2 * 1024 * 1024;
 // Two remains the default authoring policy. The verifier can read the bounded
 // extended ledger produced only by an explicitly opted-in recovery invocation.
@@ -94,7 +97,8 @@ function fileName(entry, number, variant) {
 }
 // Pure request-shape pin for later authoring. Constructing this data performs
 // no request; keeping it here makes provenance verification provider-free.
-function requestBody(entry) {
+function requestBody(entry, recipe = DEFAULT_SYNTHESIS_RECIPE) {
+  check(SYNTHESIS_RECIPES.includes(recipe), 'INVALID_SYNTHESIS_RECIPE');
   const wanted = byIdentity.get(entry.locale + '/' + entry.id);
   check(wanted && Object.keys(wanted).every(k => same(entry[k], wanted[k])), 'CATALOG_TRANSCRIPT_OR_CONTEXT_CHANGED');
   const language = {'en-us': 'American English', 'es-es': 'Spanish from Spain', 'fr-fr': 'French from France',
@@ -102,7 +106,13 @@ function requestBody(entry) {
   const delivery = entry.locale === 'ar-sa'
     ? 'This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. '
     : 'This is one complete prerecorded cardinal-number chunk. ';
-  const text = `Read the transcript below verbatim in native ${language}. `
+  // Preserve the historical v1 request byte-for-byte. V2 changes only the
+  // speech instruction, not catalog text, pausal intent, voice or audio QA.
+  const text = recipe === CONCISE_SYNTHESIS_RECIPE
+    ? `Speak the following transcript verbatim in ${language} with a professional, warm, natural adult female voice.`
+      + (entry.locale === 'ar-sa' ? ' This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause.' : '')
+      + `\n\nTranscript:\n${wanted.transcript}`
+    : `Read the transcript below verbatim in native ${language}. `
     + 'Use a professional, warm, natural adult female call-center voice. ' + delivery
     + 'Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. '
     + `Do not rush or omit words; the complete chunk must fit within ${MAX_DURATION_SECONDS} seconds.\n\nTranscript:\n${wanted.transcript}`;
@@ -225,12 +235,16 @@ const finishReasons = new Set(['STOP', 'MAX_TOKENS', 'SAFETY', 'RECITATION', 'LA
   'TOO_MANY_TOOL_CALLS', 'IMAGE_PROHIBITED_CONTENT', 'NO_IMAGE', 'IMAGE_RECITATION', 'IMAGE_OTHER',
   'FINISH_REASON_UNSPECIFIED', 'UNKNOWN']);
 function validateAttempt(entry, attempt, index, directory, scope) {
+  const hasRecipe = plain(attempt) && Object.prototype.hasOwnProperty.call(attempt, 'synthesis_recipe');
   keys(attempt, ['number', 'status', 'reserved_at', 'synthesis_instruction', 'instruction_sha256',
-    'request_body_sha256', 'failure_code', 'provider_finish_reason', 'raw_pcm_sha256', 'master', 'telephony']);
+    'request_body_sha256', 'failure_code', 'provider_finish_reason', 'raw_pcm_sha256', 'master', 'telephony',
+    ...(hasRecipe ? ['synthesis_recipe'] : [])]);
+  // Absence alone means legacy v1; malformed explicit markers never fall back.
+  check(!hasRecipe || SYNTHESIS_RECIPES.includes(attempt.synthesis_recipe), 'INVALID_SYNTHESIS_RECIPE');
   check(attempt.number === index + 1 && ['REQUESTING', 'FAILED', 'QA_PASSED'].includes(attempt.status), 'INVALID_ATTEMPT_SEQUENCE');
   check(typeof attempt.reserved_at === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(attempt.reserved_at)
     && Number.isFinite(Date.parse(attempt.reserved_at)), 'INVALID_RESERVATION_TIME');
-  const body = requestBody(entry);
+  const body = requestBody(entry, hasRecipe ? attempt.synthesis_recipe : DEFAULT_SYNTHESIS_RECIPE);
   check(attempt.synthesis_instruction === body.contents[0].parts[0].text
     && attempt.instruction_sha256 === hash(attempt.synthesis_instruction)
     && attempt.request_body_sha256 === hash(JSON.stringify(body)), 'INVALID_REQUEST_PROVENANCE');
@@ -375,6 +389,7 @@ function main(argv) {
   console.log(JSON.stringify(verifyPack(argv[1], argv[3])));
 }
 module.exports = Object.freeze({OWNER, MODEL, VOICE, CATALOG_HASH, LOCALE_HASHES, MAX_ATTEMPTS, HARD_MAX_ATTEMPTS, RESAMPLING,
+  DEFAULT_SYNTHESIS_RECIPE, CONCISE_SYNTHESIS_RECIPE, SYNTHESIS_RECIPES,
   MAX_DURATION_SECONDS, PackError, digest, contexts, plan, pendingApproval, createManifest,
   fileName, requestBody, inspectWave, technicalQa, resampleMaster, verifyEntry, validateManifest, readManifest,
   assetSetHash, requireAuthoringApproval, verifyPack, main});

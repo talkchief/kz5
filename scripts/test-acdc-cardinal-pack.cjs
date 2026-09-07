@@ -45,9 +45,10 @@ function wrapPcm(data, rate) {
   header.writeUInt16LE(2, 32); header.writeUInt16LE(16, 34); header.write('data', 36); header.writeUInt32LE(data.length, 40);
   return Buffer.concat([header, data]);
 }
-function attempt(entry, number = 1, status = 'REQUESTING') {
-  const body = pack.requestBody(entry), instruction = body.contents[0].parts[0].text;
+function attempt(entry, number = 1, status = 'REQUESTING', recipe) {
+  const body = pack.requestBody(entry, recipe), instruction = body.contents[0].parts[0].text;
   return {number, status, reserved_at: '2026-09-06T00:00:00.000Z', synthesis_instruction: instruction,
+    ...(recipe === undefined ? {} : {synthesis_recipe: recipe}),
     instruction_sha256: hash(instruction), request_body_sha256: hash(JSON.stringify(body)),
     failure_code: status === 'FAILED' ? 'AUDIO_GENERATION_NOT_COMPLETE' : null,
     provider_finish_reason: status === 'FAILED' ? 'MAX_TOKENS' : null,
@@ -55,8 +56,8 @@ function attempt(entry, number = 1, status = 'REQUESTING') {
 }
 const waves = {master: fixtureWave(24000), telephony: null};
 const measured = {master: pack.inspectWave(waves.master, 24000), telephony: null};
-function completedEntry(dir, entry, number = 1) {
-  const a = attempt(entry, number, 'QA_PASSED'); a.provider_finish_reason = 'STOP'; a.raw_pcm_sha256 = measured.master.pcm_sha256;
+function completedEntry(dir, entry, number = 1, recipe) {
+  const a = attempt(entry, number, 'QA_PASSED', recipe); a.provider_finish_reason = 'STOP'; a.raw_pcm_sha256 = measured.master.pcm_sha256;
   const localeDir = path.join(dir, entry.locale);
   if (!fs.existsSync(localeDir)) fs.mkdirSync(localeDir, {mode: 0o700});
   for (const variant of ['master', 'telephony']) {
@@ -98,6 +99,42 @@ try {
     equal(pack.readManifest(pendingDir), pending);
     rejects(() => pack.verifyEntry(pendingDir, pending.prompts[0]), 'ENTRY_TECHNICAL_QA_INCOMPLETE');
     rejects(() => pack.verifyPack(pendingDir), 'CARDINAL_PACK_INCOMPLETE');
+  });
+  group('versioned speech recipes preserve every legacy request and exact transcript', () => {
+    equal(pack.DEFAULT_SYNTHESIS_RECIPE, 'cardinal-verbatim-v1');
+    equal(pack.CONCISE_SYNTHESIS_RECIPE, 'cardinal-concise-v2');
+    equal(pack.SYNTHESIS_RECIPES, ['cardinal-verbatim-v1', 'cardinal-concise-v2']);
+    equal(Object.isFrozen(pack.SYNTHESIS_RECIPES), true);
+    const languages = {'en-us': 'American English', 'es-es': 'Spanish from Spain', 'fr-fr': 'French from France',
+      'he-il': 'Israeli Hebrew', 'ar-sa': 'Modern Standard Arabic'};
+    for (const entry of pack.plan()) {
+      // Independent literal legacy oracle: changes to the v1 implementation
+      // cannot silently re-pin all historical provider request hashes.
+      const legacyText = `Read the transcript below verbatim in native ${languages[entry.locale]}. `
+        + 'Use a professional, warm, natural adult female call-center voice. '
+        + (entry.locale === 'ar-sa'
+          ? 'This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. '
+          : 'This is one complete prerecorded cardinal-number chunk. ')
+        + 'Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. '
+        + `Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\n${entry.transcript}`;
+      const body = {contents: [{parts: [{text: legacyText}]}], generationConfig: {responseModalities: ['AUDIO'],
+        speechConfig: {voiceConfig: {prebuiltVoiceConfig: {voiceName: 'Sulafat'}}}}};
+      equal(JSON.stringify(pack.requestBody(entry)), JSON.stringify(body));
+      equal(pack.requestBody(entry, pack.DEFAULT_SYNTHESIS_RECIPE), body);
+      const concise = pack.requestBody(entry, pack.CONCISE_SYNTHESIS_RECIPE);
+      const conciseText = `Speak the following transcript verbatim in ${languages[entry.locale]} with a professional, warm, natural adult female voice.`
+        + (entry.locale === 'ar-sa' ? ' This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause.' : '')
+        + `\n\nTranscript:\n${entry.transcript}`;
+      equal(concise, {...body, contents: [{parts: [{text: conciseText}]}]});
+      equal(conciseText.length < legacyText.length, true);
+    }
+    for (const recipe of [null, false, 2, '', 'unknown', 'CARDINAL-CONCISE-V2', {}, [], ['cardinal-concise-v2']])
+      rejects(() => pack.requestBody(pending.prompts[0], recipe), 'INVALID_SYNTHESIS_RECIPE');
+    for (const recipe of pack.SYNTHESIS_RECIPES) {
+      const changed = {...pending.prompts[0], transcript: 'different words'};
+      rejects(() => pack.requestBody(changed, recipe), 'CATALOG_TRANSCRIPT_OR_CONTEXT_CHANGED');
+    }
+    equal(pack.MODEL, 'gemini-2.5-pro-preview-tts'); equal(pack.VOICE, 'Sulafat'); equal(pack.MAX_DURATION_SECONDS, 10);
   });
   group('manifest/schema/catalog/context mutations fail closed', () => {
     const mutations = [
@@ -198,6 +235,62 @@ try {
     }
     const retrySuccess = copy(complete.prompts[0]); retrySuccess.attempts.push(attempt(retrySuccess, 2)); retrySuccess.generation_status = 'REQUESTING';
     rejects(() => pack.verifyEntry(completeDir, retrySuccess), 'RETRY_OF_SUCCESS_OR_INDETERMINATE_REQUEST');
+  });
+  group('mixed recipe ledgers require exact provenance without resetting history or retry limits', () => {
+    const dir = directory('mixed-recipes'), m = copy(pending), v2 = pack.CONCISE_SYNTHESIS_RECIPE;
+    const e = completedEntry(dir, m.prompts[0], 2, v2), legacy = copy(e.attempts[0]);
+    m.prompts[0] = e; m.requests_reserved = 2; m.retry_request_budget = 1;
+    m.retries_explicitly_enabled = true; m.conversion.version = pack.RESAMPLING.version;
+    equal(pack.validateManifest(dir, m), m); equal(pack.verifyEntry(dir, e), e);
+    save(dir, m); equal(pack.readManifest(dir).prompts[0].attempts[0], legacy);
+    equal(Object.hasOwn(legacy, 'synthesis_recipe'), false);
+    const explicitLegacy = copy(e); explicitLegacy.attempts[0].synthesis_recipe = pack.DEFAULT_SYNTHESIS_RECIPE;
+    equal(pack.verifyEntry(dir, explicitLegacy), explicitLegacy);
+    for (const value of [undefined, null, '', 'unknown', 2, false, {}, []]) {
+      const bad = copy(e); bad.attempts[1].synthesis_recipe = value;
+      rejects(() => pack.verifyEntry(dir, bad), 'INVALID_SYNTHESIS_RECIPE');
+    }
+    for (const mutate of [
+      a => { delete a.synthesis_recipe; }, a => { a.synthesis_recipe = pack.DEFAULT_SYNTHESIS_RECIPE; },
+      a => { a.synthesis_instruction += ' extra'; a.instruction_sha256 = hash(a.synthesis_instruction); },
+      a => { a.request_body_sha256 = legacy.request_body_sha256; }
+    ]) {
+      const bad = copy(e); mutate(bad.attempts[1]);
+      rejects(() => pack.verifyEntry(dir, bad), 'INVALID_REQUEST_PROVENANCE');
+    }
+    const relabeled = copy(e); relabeled.attempts[0].synthesis_recipe = v2;
+    rejects(() => pack.verifyEntry(dir, relabeled), 'INVALID_REQUEST_PROVENANCE');
+    const extra = copy(e); extra.attempts[1].recipe = v2;
+    rejects(() => pack.verifyEntry(dir, extra), 'UNEXPECTED_FIELDS');
+    // Recomputing both hashes cannot bless changed words, Arabic delivery or
+    // another voice: verification reconstructs the exact allowlisted body.
+    const ar = pending.prompts.find(p => p.locale === 'ar-sa');
+    for (const mutate of [
+      b => { b.contents[0].parts[0].text += ' extra words'; },
+      b => { b.contents[0].parts[0].text = b.contents[0].parts[0].text.replace('preserve its written internal inflection', 'omit internal inflection'); },
+      b => { b.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName = 'other'; }
+    ]) {
+      const bad = {...ar, generation_status: 'FAILED', attempts: [attempt(ar, 1, 'FAILED', v2)]};
+      const body = copy(pack.requestBody(ar, v2)); mutate(body);
+      Object.assign(bad.attempts[0], {synthesis_instruction: body.contents[0].parts[0].text,
+        instruction_sha256: hash(body.contents[0].parts[0].text), request_body_sha256: hash(JSON.stringify(body))});
+      rejects(() => pack.verifyEntry(dir, bad), 'INVALID_REQUEST_PROVENANCE');
+    }
+    equal(pack.MAX_ATTEMPTS, 2); equal(pack.HARD_MAX_ATTEMPTS, 6);
+    const six = copy(m); six.prompts[0] = {...pending.prompts[0], generation_status: 'FAILED',
+      attempts: Array.from({length: 6}, (_, i) => attempt(pending.prompts[0], i + 1, 'FAILED', i ? v2 : undefined))};
+    six.requests_reserved = 6; six.retry_request_budget = 5;
+    equal(pack.validateManifest(dir, six), six);
+    const seven = copy(six); seven.prompts[0].attempts.push(attempt(pending.prompts[0], 7, 'FAILED', v2));
+    seven.requests_reserved = 7; seven.retry_request_budget = 6;
+    rejects(() => pack.validateManifest(dir, seven), 'INVALID_ATTEMPT_HISTORY');
+    const requesting = copy(e); requesting.attempts[0] = attempt(e, 1, 'REQUESTING');
+    rejects(() => pack.verifyEntry(dir, requesting), 'RETRY_OF_SUCCESS_OR_INDETERMINATE_REQUEST');
+    const success = copy(e); success.attempts.push(attempt(e, 3, 'REQUESTING', v2)); success.generation_status = 'REQUESTING';
+    rejects(() => pack.verifyEntry(dir, success), 'RETRY_OF_SUCCESS_OR_INDETERMINATE_REQUEST');
+    const budget = copy(six); budget.retry_request_budget = 585;
+    rejects(() => pack.validateManifest(dir, budget));
+    equal(e.attempts[0], legacy);
   });
   group('partial output from failed attempts remains byte-pinned and never becomes QA', () => {
     const e = copy(complete.prompts[0]); e.generation_status = e.attempts[0].status = 'FAILED';

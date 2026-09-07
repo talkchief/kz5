@@ -92,6 +92,22 @@ function inputFiles(dir) {
 async function main() {
   let exit = 1;
   try {
+    await group('structural response diagnostics cannot leak text or approve incomplete audio', async () => {
+      const metadata={candidate_count:1,first_candidate_part_count:2,inline_audio_parts:1,text_parts:1,finish_reason:'OTHER'};
+      const rejected=response();rejected.candidates[0].finishReason='OTHER';
+      rejected.candidates[0].content.parts.push({text:SENTINEL});rejected.responseId=SENTINEL;
+      equal(generator.responseDiagnostics(rejected),metadata);
+      equal(generator.responseDiagnostics(null),{candidate_count:0,first_candidate_part_count:0,inline_audio_parts:0,text_parts:0,finish_reason:'UNKNOWN'});
+      equal(generator.responseDiagnostics({candidates:Array(1001).fill({finishReason:SENTINEL})}).candidate_count,1000);
+      const dir=nextPath('diagnostics'), deps=providerDeps(dir,async()=>rejected);
+      await rejects(()=>generator.generate(opts(dir),deps),'INCOMPLETE_RESPONSE_REQUIRES_EXPLICIT_RETRY');
+      const manifest=pack.readManifest(dir), attempt=manifest.prompts[0].attempts[0];
+      equal(attempt.status,'FAILED');equal(attempt.master,null);equal(attempt.telephony,null);
+      equal(attempt.provider_finish_reason,'OTHER');
+      const run=JSON.parse(fs.readFileSync(path.join(dir,fs.readdirSync(dir).find(f=>/^run-.*\.json$/.test(f)))));
+      equal(run.events[0].response_diagnostics,metadata);
+      equal(JSON.stringify(run).includes(SENTINEL),false);
+    });
     await group('strict options and authoring-only output boundaries', async () => {
       equal(generator.options([]).mode, 'plan'); equal(generator.options(['--plan']).mode, 'plan');
       for (const args of [['--generate'], ['--plan', '--generate'], ['--plan', '--plan'], ['--resume'],
@@ -213,6 +229,32 @@ async function main() {
       equal(after.prompts[1].generation_status, 'FAILED'); equal(after.requests_reserved, 64);
       equal(after.prompts[1].attempts.slice(0, 2), original.prompts[1].attempts);
       equal(after.prompts[0], e); equal(names.map(f => hash(fs.readFileSync(f))), hashes);
+    });
+    await group('explicit concise recipe preserves legacy attempts and never resets retry limits', async () => {
+      const dir = mkdir('concise-recovery'), original = failedHistory(dir, 2);
+      const recipe = pack.CONCISE_SYNTHESIS_RECIPE;
+      const retry = opts(dir, ['--resume', '--retry-failed', '--retry-budget', '33',
+        '--attempt-limit', '3', '--synthesis-recipe', recipe]);
+      equal(retry.synthesisRecipe, recipe);
+      for (const args of [['--synthesis-recipe', recipe], ['--generate', '--synthesis-recipe', 'unknown']]) {
+        checks++; assert.throws(() => generator.options(args), pack.PackError);
+      }
+      await rejects(() => generator.generate({...retry, synthesisRecipe: 'unknown'}, noProvider), 'INVALID_SYNTHESIS_RECIPE');
+      equal(read(dir), original);
+      const deps = providerDeps(dir);
+      await generator.generate(retry, deps);
+      const verified = pack.readManifest(dir), entry = verified.prompts[0];
+      equal(entry.attempts.slice(0, 2), original.prompts[0].attempts);
+      equal(verified.prompts.slice(1), original.prompts.slice(1));
+      equal(entry.attempts[2].synthesis_recipe, recipe);
+      equal(entry.attempts[2].request_body_sha256, hash(JSON.stringify(pack.requestBody(entry, recipe))));
+      equal(entry.attempts[2].request_body_sha256 === entry.attempts[0].request_body_sha256, false);
+      equal(verified.requests_reserved, 63); equal(deps.counts.requests, 1);
+      const run = JSON.parse(fs.readFileSync(path.join(dir, fs.readdirSync(dir).find(f => /^run-.*\.json$/.test(f)))));
+      equal(run.synthesis_recipe, recipe);
+      const capped = mkdir('concise-capped'); failedHistory(capped, 6);
+      await rejects(() => generator.generate({...retry, output: capped, attemptLimit: 6, retryBudget: 156}, noProvider),
+        'INCOMPLETE_SELECTION_REQUIRES_EXPLICIT_RETRY');
     });
     await group('sixth attempt is finite and seventh history or filenames are rejected', async () => {
       const dir = mkdir('sixth-recovery'), original = failedHistory(dir, 5);

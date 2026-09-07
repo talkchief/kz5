@@ -6,6 +6,31 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Latest voice/installer checkpoint:**339/584 cardinal recordings pass technical
+QA (EN31/HE84/FR160/ES25/AR39);553 requests,92 retries. New optional versioned
+`cardinal-concise-v2` authoring instruction keeps exact text/model/Sulafat and
+immutable old history. Four HE recordings were saved;2 HE and4 AR experiments
+still failed, so this is not a proven provider fix. Diagnostic old-style HE
+attempt2 returned OTHER with no audio/text parts. Failed HE47/FR1/ES28/AR46;
+AR123 initial-PENDING. FR89 remains capped at6 failures. No live provider job,
+listening approval or new cardinal deployment is implied by this checkpoint.
+See `doc/acdc_cardinal_concise_synthesis.md`.
+
+Guard `6a52f3/session77127/e5dc60` passes15 pack groups/4926 assertions,
+18 generator groups/299 checks and EN/five-locale adapter cases. The new
+`--all-locales` adapter requires complete fixed-path sources/maps before writes
+and final read-only584-role verification. Main SH retains its EN31 call; missing
+nonEN maps are not fabricated. Importer3890 regressions and actual EN plan pass
+`6302ed/session41803/15cc5d`. See `doc/acdc_cardinal_all_locale_adapter.md`.
+
+Bridge remains running, NRestarts0; production FCM/APNs source configuration
+already exists in protected files outside Git. Do not recopy/publish secrets or
+modify production to test it. Native freshness/durable delivery recovery is
+planned, not implemented: `doc/push_bridge_delivery_recovery_plan.md`. Actual
+designated-device delivery and all broader release gates remain open.
+
+The older working snapshots below remain historical evidence.
+
 **Bridge deployment follow-up:** source now supports explicit verified AMQPS,
 TLS1.2 minimum, certificate/hostname verification and protected CA parsing in
 main-SH preflight. All112 bridge tests and dispatch pass `0d2bfe/b60ebe`.
