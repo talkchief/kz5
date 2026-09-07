@@ -1,0 +1,40 @@
+diff --git a/src/js/lib/monster.apps.js b/src/js/lib/monster.apps.js
+--- a/src/js/lib/monster.apps.js
++++ b/src/js/lib/monster.apps.js
+@@ -872,9 +872,12 @@
+ 				if (err) {
+ 					return mainCallback && mainCallback(err);
+ 				}
+-				monster.apps.lastLoadedApp = app.name;
+-
+-				self.changeAppShortcuts(app);
++				// Loading a background plugin does not activate its UI or replace
++				// the current foreground app's shortcuts, even if it finishes late.
++				if (!options || options.background !== true) {
++					monster.apps.lastLoadedApp = app.name;
++					self.changeAppShortcuts(app);
++				}
+ 
+ 				mainCallback && mainCallback(null, app);
+ 			});
+diff --git a/src/apps/core/app.js b/src/apps/core/app.js
+--- a/src/apps/core/app.js
++++ b/src/apps/core/app.js
+@@ -258,7 +258,7 @@
+ 			monster.parallel(_.map(loggedInAppsToLoad, function(name) {
+ 				return function(callback) {
+ 					if (name !== 'common') {
+-						return monster.apps.load(name, callback);
++						return monster.apps.load(name, callback, { background: true });
+ 					}
+ 					var completed = false;
+ 
+@@ -281,7 +281,7 @@
+ 							self._setAccountBrowserState(validCommon ? 'ready' : 'failed');
+ 						}
+ 						callback(err, loadedApp);
+-					});
++					}, { background: true });
+ 				};
+ 			}), function afterBaseAppsLoad(err, result) {
+ 				// If admin with no app, go to app store, otherwite, oh well...

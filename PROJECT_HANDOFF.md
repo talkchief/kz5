@@ -6,6 +6,28 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Current deployed UI — September 7:** OxxzgK production build/artifact checks
+`e175b8` and guarded deployment `e8e212` passed. Installer-owned P0-18 background
+load patch preserves the active app/shortcuts;12 targeted tests pass and the
+baseline reproduces the defect. Only main/templates changed,1942 files were
+preserved and none removed. Backup is
+`/usr/local/src/kazoo5-installer/monster-owned-build.OxxzgK/deployment-backup`.
+All four actual reconnect paths pass (summary/detail × same-account/company
+switch), preserving controller/data/subscription cleanup. New real summary call
+`d7a65b` passed9 browser checks with2 visible queues/3 natural hints/7 overview
+GETs and no detail/supplemental reads. Receipt
+`/tmp/kazoo-monster-live-deployed.1bmROU/receipt.json`; one offer/bridge and12 stable
+samples at `/var/log/kazoo-strategy-acceptance-73777r/`. Exact final MASTER
+roster/31-state comparison279769 passes, all nine services active, zero calls/no
+ledger; owned artifact verification9144a5 passes. Build temporarily paused
+ecallmgr/test phones; browsers kept all eight platform services running. One
+test-phone restoration hit the manual-start rate limit and was restored by
+exact-unit reset/start, without changing restart policy. Source/checkpoint and
+failure-to-fix guidance: `doc/monster_background_app_load.md` and
+`doc/monster_live_reconnect_acceptance.md`. These supersede the older current-UI
+labels below. Restricted-user/no-default non-admin, cross-node/load/TLS gates
+remain open; history/ClickHouse/WFM remain postponed. No master push claim.
+
 **Live detail reconnect PASS (September 7):** standalone
 `KAZOO_TEST_RECONNECT=true` in `scripts/test-monster-live-deployed.cjs` now
 tests actual close/disconnected-stale/new-socket-ACK/snapshot/render/cleanup.
@@ -45,13 +67,15 @@ snapshot equals the pre-first-call roster/31 states/memberships, all nine servic
 active,30 phones restored, zero calls and no strategy ledger. No crash-report,
 OOM or service-failure journal markers since04:18 UTC; no wider stability claim.
 
-**P0-16 source checkpoint:** binding exception logger fix is captured by the
-installer-owned `kazoo-bindings-exception-diagnostics.patch`, not a nested core
-commit. Current599852 passed8 groups; pinned baseline35d013 failed8 with actual
-integer-arity logging exceptions and disclosure cases. Production transformed
-compilation and exact installer replay passed; runtime sink assertions are
-offline and untransformed. No deployment. See
-`doc/kazoo_bindings_exception_diagnostics.md` for paths, scope and next gate.
+**P0-16 deployed checkpoint:** the binding logger fix remains an installer-owned
+patch, not a nested core commit. Current063784 passed12 tests (8 sink and4 real
+production-Lager runtime); baseline20b15f failed12. Three noTEST/-Werror modules
+compiled. Deployment be1cb5 verified installed SHA and loaded MD5 on both nodes;
+initial verifier-permissions failure99329b rolled back before the corrected retry.
+Postdeploy isolated call befb40 passed13 snapshots/3 hints, one bridge and12 stable
+samples with exact cleanup and unchanged MASTER state. See
+`doc/kazoo_bindings_exception_diagnostics.md` for evidence/backup paths and the
+limited post-restart log check; no whole-log or production-readiness claim.
 
 **Latest live PASS (September7):** guarded job a0d26078 passed the combined
 actual-browser/call mode on the deployed nUolDS build. Evidence:

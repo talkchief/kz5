@@ -111,15 +111,52 @@ function homeBrowser() {
     return b;
 }
 (async () => {
+    await test('native startup route must finish before harness navigation', () => {
+        const monster = {apps: {auth: {defaultApp: 'voip'}, core: {_defaultApp: 'appstore', appFlags: {accountBrowserState: 'loading'}},
+            getActiveApp: () => active}, routing: {getUrl: () => url}, util: {isAdmin: () => true}};
+        let active = 'auth', url = '';
+        const context = {window: {require: () => monster}, args: {switching: false}};
+        const read = () => vm.runInNewContext('(' + h.startupRouteReadyInBrowser.toString() + ')(args)', context);
+        assert.equal(read(), false);
+        active = 'voip'; url = 'apps/voip'; assert.equal(read(), false);
+        monster.apps.core.appFlags.accountBrowserState = 'ready'; assert.equal(read(), true);
+        active = 'myaccount'; assert.equal(read(), false);
+        monster.apps.auth.defaultApp = 'acdc'; active = 'acdc'; url = 'apps/acdc'; assert.equal(read(), true);
+        delete monster.apps.auth.defaultApp; active = 'appstore'; url = 'apps/appstore'; assert.equal(read(), true);
+        context.args.switching = true; assert.equal(read(), false);
+        active = 'acdc'; url = 'apps/acdc'; assert.equal(read(), true);
+        assert(source.indexOf('await page.waitForFunction(startupRouteReadyInBrowser') < source.indexOf("checkpoint('routing_to_acdc')"));
+        assert(source.includes("if (switching || monster.apps.getActiveApp() !== 'acdc') monster.routing.goTo('apps/acdc');"));
+        assert(source.includes("['bootstrap', 'overview'].includes(sent.phase) && sent.afterOverviewGet && selected"));
+    });
+    await test('Core alert refresh is separate from forbidden dashboard supplemental reads', () => {
+        for (const phase of ['summary_call', 'summary_reconnect', 'detail']) {
+            assert.equal(h.supplementalLiveGet(phase, 'framework_alerts'), false);
+            assert.equal(h.supplementalLiveGet(phase, 'live_overview'), false);
+            for (const category of ['queue_roster', 'agent_names', 'agent_global_status', 'user_names', 'other_api', 'queue_catalog', 'home_live_overview']) {
+                assert.equal(h.supplementalLiveGet(phase, category), true);
+            }
+        }
+        assert.equal(h.supplementalLiveGet('summary_reconnect', 'live_detail'), true);
+        assert.equal(h.supplementalLiveGet('detail', 'live_detail'), false);
+        assert.equal(h.supplementalLiveGet('detail_transition', 'queue_roster'), true);
+        assert(source.includes("u.pathname === '/v2/accounts/' + account + '/alerts'"));
+        assert(source.includes("} else if (supplementalLiveGet(phase, category(u)))"));
+    });
     await test('reconnect fault injection is explicit standalone and requires native sockets', () => {
         assert.equal(h.reconnectOptions({}, false), false);
         assert.equal(h.reconnectOptions({KAZOO_TEST_RECONNECT: 'false'}, true), false);
         assert.equal(h.reconnectOptions({KAZOO_TEST_RECONNECT: 'true', KAZOO_TEST_REQUIRE_WEBSOCKET: 'true'}, false), true);
+        for (const view of ['detail', 'summary']) assert.equal(h.reconnectOptions({KAZOO_TEST_RECONNECT: 'true',
+            KAZOO_TEST_REQUIRE_WEBSOCKET: 'true', KAZOO_TEST_RECONNECT_VIEW: view}, false), true);
         for (const value of ['', 'yes', true, 1, null]) {
             assert.throws(() => h.reconnectOptions({KAZOO_TEST_RECONNECT: value}, false), /invalid_reconnect_mode/);
         }
         assert.throws(() => h.reconnectOptions({KAZOO_TEST_RECONNECT: 'true'}, false), /standalone_native_reconnect_required/);
         assert.throws(() => h.reconnectOptions({KAZOO_TEST_RECONNECT: 'true', KAZOO_TEST_REQUIRE_WEBSOCKET: 'true'}, {}), /standalone_native_reconnect_required/);
+        for (const view of ['', 'all', true, null, 'queue']) assert.throws(() => h.reconnectOptions({KAZOO_TEST_RECONNECT: 'true',
+            KAZOO_TEST_REQUIRE_WEBSOCKET: 'true', KAZOO_TEST_RECONNECT_VIEW: view}, false), /invalid_reconnect_view/);
+        assert.throws(() => h.reconnectOptions({KAZOO_TEST_RECONNECT_VIEW: 'summary'}, false), /invalid_reconnect_view/);
     });
     await test('page-error diagnostics omit messages, unknown paths and URL secrets', () => {
         const error = {name: 'TypeError', message: 'SECRET is not a function', stack: 'TypeError: SECRET\n at f (http://ui.invalid/js/main.js?token=SECRET:84:120)\n at g (http://foreign.invalid/js/main.js:3:2)\n at h (http://ui.invalid/private/SECRET.js:3:2)'};
@@ -290,7 +327,7 @@ function homeBrowser() {
         assert(source.indexOf('await page.waitForFunction(homeOverviewInBrowser, scope') < source.indexOf('beginHomeDisposal(admission, timeline('));
         assert(source.indexOf('closeHomeAdmission(admission, await page.evaluate(queuesDisposedInBrowser))') < source.indexOf('result.account_switch.target_verified = await switchTargetAccount'));
         assert(source.indexOf("checkpoint('clicking_switched_dashboard_tab')") < source.indexOf("checkpoint('waiting_overview_grid')"));
-        assert(source.includes("if (!scope.switching) {\n                checkpoint('clicking_dashboard_tab')"));
+        assert(source.includes("if (!scope.switching && !summaryMode) {\n                checkpoint('clicking_dashboard_tab')"));
         assert(source.includes("...(scope.switching ? [['KAZOO_TEST_EXPECT_ACCOUNT_BROWSER_SHA256', ACCOUNT_BROWSER_ASSET]] : [])"));
         assert(source.includes('(!scope.switching || result.production_assets[ACCOUNT_BROWSER_ASSET])'));
         assert(source.includes('auth.data?.account_id === loginAccount'));

@@ -11,11 +11,19 @@ See [the browser/call acceptance guide](monster_browser_call_acceptance.md)
 for exact scope, call proof and cleanup evidence. Restricted-user isolation,
 cross-node failure and load/soak acceptance remain open.
 
-The deployed detail now also passes controlled connection-loss recovery under
-the same account and after normal company switching: visible stale state,
-new native ACK, fresh no-store GET, independently matched call counts/rows and
-normal unsubscribe cleanup. See [reconnect acceptance](monster_live_reconnect_acceptance.md).
-Summary-page reconnect and restricted-user isolation remain separate tests.
+Both deployed views now pass controlled connection-loss recovery under the same
+account and after normal company switching on the OxxzgK build: visible stale
+state, new native ACK, fresh no-store GET, independently matched cards or call
+counts/rows, and normal unsubscribe cleanup. See
+[reconnect acceptance](monster_live_reconnect_acceptance.md). Restricted-user,
+cross-node and load/soak acceptance remain open.
+
+The new build also passed a fresh actual summary call (`d7a65b`), receipt
+`/tmp/kazoo-monster-live-deployed.1bmROU/receipt.json`:9 checks, two visible queues,
+7 overview GETs/0 detail or supplemental reads,3 natural hints and complete
+native cleanup. Call proof `/var/log/kazoo-strategy-acceptance-73777r/` verifies
+one offer/bridge and12 stable samples. Final exact31-agent state/roster comparison
+279769 passed; all nine services restored, zero calls and no strategy ledger.
 
 Live-only scope recheck on September 7 passed all 46 offline UI groups with the
 current patched framework (completion `b0c8ae`). This was network-isolated,

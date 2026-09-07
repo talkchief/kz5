@@ -16,7 +16,25 @@ function reconnectOptions(env, natural) {
     check([undefined, 'true', 'false'].includes(env.KAZOO_TEST_RECONNECT), 'invalid_reconnect_mode');
     const enabled = env.KAZOO_TEST_RECONNECT === 'true';
     check(!enabled || (!natural && env.KAZOO_TEST_REQUIRE_WEBSOCKET === 'true'), 'standalone_native_reconnect_required');
+    check([undefined, 'detail', 'summary'].includes(env.KAZOO_TEST_RECONNECT_VIEW)
+        && (env.KAZOO_TEST_RECONNECT_VIEW === undefined || enabled), 'invalid_reconnect_view');
     return enabled;
+}
+function supplementalLiveGet(phase, category) {
+    // Exact current-account Core alert refreshes are shell traffic, not a
+    // dashboard data source. They remain in HTTP/error/scope observation.
+    if (category === 'framework_alerts') return false;
+    if (['summary_call', 'summary_reconnect'].includes(phase)) return category !== 'live_overview';
+    if (phase === 'detail') return !['live_overview', 'live_detail'].includes(category);
+    return phase === 'detail_transition'
+        && ['queue_roster', 'agent_names', 'agent_global_status', 'user_names'].includes(category);
+}
+function startupRouteReadyInBrowser({switching}) {
+    const monster = window.require('monster'), core = monster.apps.core, auth = monster.apps.auth;
+    const expected = switching ? 'acdc' : auth.defaultApp || (monster.util.isAdmin() ? core._defaultApp : null);
+    return typeof expected === 'string' && /^[a-z]+(?:-[a-z]+)*$/.test(expected)
+        && core.appFlags.accountBrowserState === 'ready'
+        && monster.routing.getUrl() === 'apps/' + expected && monster.apps.getActiveApp() === expected;
 }
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 function browserErrorDiagnostic(error, uiOrigin) {
@@ -212,7 +230,8 @@ function endpoint(value, protocols, pathname) {
 }
 async function main(natural) {
     const env = natural ? natural.env : process.env;
-    const summaryMode = natural?.overview === true;
+    const reconnectMode = reconnectOptions(env, natural);
+    const summaryMode = natural?.overview === true || (reconnectMode && env.KAZOO_TEST_RECONNECT_VIEW === 'summary');
     process.umask(0o077);
     check(process.getuid() === 0 && Number(process.versions.node.split('.')[0]) >= 20, 'root_and_node20_required');
     check((natural || process.argv.length === 2) && !env.KAZOO_TEST_WEB_STAGE && !env.KAZOO_TEST_ACDC_STAGE,
@@ -224,7 +243,6 @@ async function main(natural) {
     const scope = accountScopeOptions(env), {account, queue, loginAccount, loginName} = scope;
     const admission = socketAdmission(scope);
     const requiredSocket = env.KAZOO_TEST_REQUIRE_WEBSOCKET === 'true';
-    const reconnectMode = reconnectOptions(env, natural);
     check([undefined, 'true', 'false'].includes(env.KAZOO_TEST_REQUIRE_WEBSOCKET), 'invalid_websocket_mode');
     const web = process.env.KAZOO_TEST_WEB_ROOT || '/var/www/html/monster-ui';
     check(path.isAbsolute(web) && fs.realpathSync(web) === web, 'unsafe_web_root');
@@ -279,10 +297,10 @@ async function main(natural) {
     let firstOverviewAck = null, firstOverviewOrder = null, overviewStarted = 0, overviewInFlight = 0, maxOverviewInFlight = 0;
     let overviewGeneration = null;
     let connectionSequence = 0, currentWire = null, reconnectProbe, reconnectActive = false;
-    let reconnectGate = null, releaseReconnect = null, reconnectSnapshot = null, reconnectErrorClass, reconnectAckAt = null;
+    let reconnectGate = null, releaseReconnect = null, reconnectSnapshot = null, reconnectErrorClass, reconnectAckAt = null, summaryReceipt;
     if (reconnectMode) {
         const {createReconnectTracker, ReconnectError} = require('./test-fixtures/monster-live-reconnect.cjs');
-        reconnectProbe = createReconnectTracker({accountId: account, queueId: queue});
+        if (!summaryMode) reconnectProbe = createReconnectTracker({accountId: account, queueId: queue});
         reconnectErrorClass = ReconnectError;
     }
     let disposalStartOrder = null, disposalSendOrder = null, disposalAckOrder = null;
@@ -421,6 +439,7 @@ async function main(natural) {
                             if (summaryMode && role === 'target' && j.action === 'unsubscribe') {
                                 const binding = summaryBindings.get(j.data.binding);
                                 check(phase === 'cleanup' && binding && binding.sent === null
+                                    && binding.connection === connection
                                     && disposalStartOrder !== null && order > disposalStartOrder, 'unexpected_summary_unsubscribe');
                                 binding.sent = order;
                             }
@@ -469,13 +488,13 @@ async function main(natural) {
                                         check(Array.isArray(j.data.subscribed) && j.data.subscribed.length === 1
                                             && j.data.subscribed[0] === sent.binding && !summaryBindings.has(sent.binding)
                                             && summaryBindings.size < 100, 'exact_summary_subscribe_ack_required');
-                                        summaryBindings.set(sent.binding, {sent: null, ack: null});
+                                        summaryBindings.set(sent.binding, {sent: null, ack: null, connection});
                                     }
                                     if (sent.phase === 'detail' && sent.afterDetailGet && selected && firstDetailAck === null) {
                                         firstDetailAck = {order, time: Date.now(), connection}; result.native.detail_ack = true;
                                     }
-                                    if (summaryMode && sent.phase === 'overview' && sent.afterOverviewGet && selected && firstOverviewAck === null) {
-                                        firstOverviewAck = {order, time: Date.now()};
+                                    if (summaryMode && ['bootstrap', 'overview'].includes(sent.phase) && sent.afterOverviewGet && selected && firstOverviewAck === null) {
+                                        firstOverviewAck = {order, time: Date.now(), connection};
                                     }
                                 }
                                 if (sent.role === 'target' && sent.action === 'unsubscribe') {
@@ -555,8 +574,7 @@ async function main(natural) {
                     if (firstDetailOrder === null) firstDetailOrder = order;
                     result.counts.detail_gets++; detailInFlight++; maxDetailInFlight = Math.max(maxDetailInFlight, detailInFlight);
                     const item = {order, time: Date.now(), status: null}; detailLedger.push(item); requests.set(request, item);
-                } else if ((phase === 'summary_call' && u.pathname !== overviewPath) || (phase === 'detail' && !livePath(u)) || (phase === 'detail_transition'
-                    && ['queue_roster', 'agent_names', 'agent_global_status', 'user_names'].includes(category(u)))) result.counts.supplemental_gets++;
+                } else if (supplementalLiveGet(phase, category(u))) result.counts.supplemental_gets++;
             });
             page.on('requestfinished', r => { if (requests.has(r)) { if (requests.get(r).overview) overviewInFlight--; else detailInFlight--; } });
             page.on('requestfailed', r => {
@@ -568,11 +586,12 @@ async function main(natural) {
                 if (item) item.status = response.status();
                 const responseOrder = same(u, api) && u.pathname.startsWith('/v2/')
                     ? timeline('http_response', category(u), response.status(), httpOrders.get(response.request()) || null) : null;
-                if (reconnectActive && item && !item.overview && response.status() === 200 && !reconnectSnapshot) track((async () => {
+                if (reconnectActive && item && Boolean(item.overview) === summaryMode && response.status() === 200 && !reconnectSnapshot) track((async () => {
                     const bytes = await response.body();
-                    check(bytes.length <= 2 * 1024 * 1024, 'reconnect_detail_body_limit');
-                    const {validateDetail} = require('./test-fixtures/queue-live-observer.cjs');
-                    const dto = validateDetail(JSON.parse(bytes.toString('utf8')), account, queue);
+                    check(bytes.length <= 2 * 1024 * 1024, 'reconnect_snapshot_body_limit');
+                    const validate = summaryMode ? require('./test-fixtures/monster-live-call-observer.cjs').validateOverview
+                        : require('./test-fixtures/queue-live-observer.cjs').validateDetail;
+                    const dto = validate(JSON.parse(bytes.toString('utf8')), account, queue);
                     if (!reconnectSnapshot && reconnectProbe.snapshot({requestOrder: item.order, responseOrder,
                         noStore: response.headers()['cache-control'] === 'no-store'})) {
                         reconnectSnapshot = {dto: JSON.stringify(dto), requestAt: item.time};
@@ -609,6 +628,11 @@ async function main(natural) {
             delete auth.auth_token;
             checkpoint('waiting_authenticated_shell'); await page.locator('#login').waitFor({state: 'hidden', timeout: 25000});
             await page.waitForFunction(() => window.require('monster').apps.auth.appsStore !== undefined);
+            // appsStore exists before Core's parallel plugins finish. Wait for
+            // its native final/default route before initiating another route;
+            // otherwise late startup routing itself recreates the controller.
+            checkpoint('waiting_native_startup_route');
+            await page.waitForFunction(startupRouteReadyInBrowser, {switching: scope.switching}, {timeout: 20000});
             await page.waitForLoadState('networkidle', {timeout: 15000});
             result.checks.push('normal_web_login_expected_account');
             await page.evaluate(() => window.require('monster').pub('myaccount.hide'));
@@ -645,7 +669,12 @@ async function main(natural) {
             }
             phase = 'overview';
             checkpoint('routing_to_acdc');
-            await page.evaluate(() => window.require('monster').routing.goTo('apps/acdc'));
+            await page.evaluate(({switching}) => {
+                const monster = window.require('monster');
+                // Native startup may already have opened ACDC. Reopening it
+                // would deliberately retire the page being observed.
+                if (switching || monster.apps.getActiveApp() !== 'acdc') monster.routing.goTo('apps/acdc');
+            }, {switching: scope.switching});
             if (scope.switching) await page.waitForFunction(accountScopeInBrowser,
                 {...scope, requireAcdc: true}, {timeout: 10000});
             // A real company switch preserves the Queues tab used for home
@@ -656,7 +685,10 @@ async function main(natural) {
             }
             checkpoint('waiting_overview_grid'); await page.locator('.acdc-live-queue-grid').waitFor({state: 'visible'});
             // Normal dashboard tab and queue controls, never app request/mock seams.
-            if (!scope.switching) {
+            // The summary proof observes one controller/page lifecycle. Routing
+            // already opened its dashboard; clicking the active tab again would
+            // intentionally dispose/rebind it before reconnect even begins.
+            if (!scope.switching && !summaryMode) {
                 checkpoint('clicking_dashboard_tab'); await page.locator('.acdc-tab[data-tab="dashboard"]').click();
             }
             checkpoint('waiting_valid_overview_snapshot');
@@ -696,19 +728,22 @@ async function main(natural) {
                         && app.liveSnapshotValid(s.results.live, account, undefined, s.page);
                 }, {account, ackAt: firstOverviewAck.time}, {timeout: 3000});
                 result.native.supported = true;
-                result.natural_summary = {selected_subscribe_ack: true, ack_refetch: true};
+                summaryReceipt = {selected_subscribe_ack: true, ack_refetch: true};
+                result[natural ? 'natural_summary' : 'summary_reconnect'] = summaryReceipt;
                 await Promise.all([...pending]); checkClean();
                 check(maxOverviewInFlight === 1 && result.counts.detail_gets === 0, 'summary_request_fanout');
-                result.natural_summary.baseline = await callObserver.ready();
+                if (natural) {
+                summaryReceipt.baseline = await callObserver.ready();
                 callObserver.assertSummaryBindings([...summaryBindings.keys()]);
                 phase = 'summary_call';
                 checkpoint('observing_owned_call_in_visible_overview');
                 await natural.runCall(Object.freeze({waitForPhase: callObserver.waitForPhase}));
-                result.natural_summary.observation = callObserver.finish();
+                summaryReceipt.observation = callObserver.finish();
                 callObserver.assertSummaryBindings([...summaryBindings.keys()]);
                 check(maxOverviewInFlight === 1 && result.counts.detail_gets === 0 && result.counts.supplemental_gets === 0, 'summary_request_fanout');
                 check(result.counts.auth === 1, 'exactly_one_normal_auth_required'); checkClean();
                 result.checks.push('natural_summary_waiting_handled_zero_card_counts_and_page_dto_match');
+                }
             } else {
             phase = 'detail_transition';
             checkpoint('clicking_selected_queue');
@@ -770,59 +805,6 @@ async function main(natural) {
             check(maxDetailInFlight === 1 && result.counts.supplemental_gets === 0, 'detail_fanout_or_overlap');
             check(result.counts.auth === 1, 'exactly_one_normal_auth_required');
             checkClean();
-            if (reconnectMode) {
-                checkpoint('closing_only_test_socket_for_reconnect');
-                await Promise.all([...pending]); checkClean();
-                const {readRenderedCall} = require('./test-fixtures/monster-live-call-observer.cjs');
-                const baseline = await page.evaluate(readRenderedCall, {accountId: account, queueId: queue});
-                check(baseline.valid && currentWire && currentWire.wire.size === 0
-                    && currentWire.connection === firstDetailAck.connection && connectionSequence === 1,
-                    'reconnect_baseline_not_quiescent');
-                const oldWire = currentWire, started = Date.now();
-                reconnectProbe.begin({connection: oldWire.connection, order: timeline('socket_test_close', 'selected_queue_subscription')});
-                reconnectActive = true;
-                reconnectGate = new Promise(resolve => { releaseReconnect = resolve; });
-                await Promise.all([oldWire.server.close({code: 1012}), oldWire.route.close({code: 1012})]);
-                checkpoint('waiting_visible_disconnected_stale_state');
-                await page.waitForFunction(({account, queue, generation, dto}) => {
-                    const app = window.require('monster').apps.acdc, c = app.appFlags.acdc.liveDashboardController;
-                    const s = app.appFlags.acdc.liveDashboardSnapshot, root = document.querySelector('.acdc-live-dashboard');
-                    const note = root?.querySelector('.acdc-live-stale-note');
-                    return c && s && root && c.view?.[0] === root && root.getClientRects().length > 0
-                        && c.generation === generation && c.accountId === account && c.queueId === queue
-                        && s.accountId === account && s.queueId === queue && JSON.stringify(s.results.live) === dto
-                        && app.liveTransportState(c) === 'disconnected' && root.querySelector('.acdc-live-freshness.is-stale')
-                        && note && !note.hidden;
-                }, {account, queue, generation: baseline.generation, dto: baseline.dto}, {timeout: 2000, polling: 20});
-                result.checks.push('actual_disconnect_retains_snapshot_and_marks_visible_detail_stale');
-                releaseReconnect(); releaseReconnect = null; reconnectGate = null;
-                checkpoint('waiting_new_socket_ack_and_fresh_detail');
-                while (Date.now() < started + 12000 && !reconnectSnapshot && !fatal) await page.waitForTimeout(50);
-                await Promise.all([...pending]); checkClean();
-                check(reconnectSnapshot && reconnectProbe.evidence().complete && connectionSequence === 2
-                    && Date.now() < started + 12000 && reconnectAckAt !== null
-                    && reconnectSnapshot.requestAt >= reconnectAckAt && reconnectSnapshot.requestAt <= reconnectAckAt + 5000,
-                    'reconnect_ack_snapshot_deadline');
-                await page.waitForFunction(({account, queue, generation, dto}) => {
-                    const app = window.require('monster').apps.acdc, c = app.appFlags.acdc.liveDashboardController;
-                    const s = app.appFlags.acdc.liveDashboardSnapshot;
-                    return c && s && c.generation === generation && c.accountId === account && c.queueId === queue
-                        && s.accountId === account && s.queueId === queue && !c.inFlight
-                        && app.liveTransportState(c) === 'acknowledged' && JSON.stringify(s.results.live) === dto;
-                }, {account, queue, generation: baseline.generation, dto: reconnectSnapshot.dto},
-                {timeout: Math.max(1, Math.min(3000, started + 12000 - Date.now()))});
-                const recovered = await page.evaluate(readRenderedCall, {accountId: account, queueId: queue});
-                check(recovered.valid && recovered.generation === baseline.generation
-                    && recovered.dto === reconnectSnapshot.dto && recovered.receivedAt >= reconnectSnapshot.requestAt
-                    && maxDetailInFlight === 1 && Date.now() < started + 12000, 'reconnect_rendered_snapshot_mismatch');
-                require('./test-fixtures/monster-live-reconnect.cjs').matchReconnectCallRendering(
-                    recovered, JSON.parse(reconnectSnapshot.dto));
-                result.reconnect = {...reconnectProbe.evidence(), disconnected_stale_observed: true,
-                    rendered_call_counts_rows_match: true, same_controller: true, elapsed_ms: Date.now() - started,
-                    periodic_causality_excluded: false};
-                result.checks.push('new_socket_exact_ack_then_no_store_get_matches_visible_detail');
-                reconnectActive = false;
-            }
             if (natural) {
                 checkpoint('waiting_empty_detail_before_owned_call');
                 await Promise.all([...pending]); checkClean();
@@ -834,6 +816,132 @@ async function main(natural) {
                 checkClean();
                 result.checks.push('natural_waiting_handled_gone_native_hints_gets_and_rendered_rows');
             }
+            }
+            if (reconnectMode) {
+                checkpoint('closing_only_test_socket_for_reconnect');
+                await Promise.all([...pending]); checkClean();
+                const {readRenderedCall} = require('./test-fixtures/monster-live-call-observer.cjs');
+                if (summaryMode) await page.waitForFunction(() => {
+                    const app = window.require('monster').apps.acdc, c = app.appFlags.acdc.liveDashboardController;
+                    return c && !c.queueId && !c.inFlight && !c.dirty && !c.coalesceTimer && !c.admitting && !c.admissionTimer
+                        && app.liveTransportState(c) === 'acknowledged';
+                }, null, {timeout: 10000});
+                const baseline = await page.evaluate(readRenderedCall, {accountId: account, queueId: queue, overview: summaryMode});
+                if (!baseline.valid) result.reconnect_readiness = await page.evaluate(({account, queue, overview}) => {
+                    const m = window.require('monster'), a = m.apps.acdc, f = a.appFlags.acdc;
+                    const c = f.liveDashboardController, s = f.liveDashboardSnapshot, root = document.querySelector('.acdc-live-dashboard');
+                    const visible = node => {
+                        if (!node?.isConnected || !node.getClientRects().length) return false;
+                        for (let e = node; e && e.nodeType === 1; e = e.parentElement) {
+                            const style = window.getComputedStyle(e);
+                            if (e.hidden || style.display === 'none' || ['hidden', 'collapse'].includes(style.visibility) || style.opacity === '0') return false;
+                        }
+                        return true;
+                    };
+                    const articles = Array.from(root?.querySelectorAll('.acdc-live-queue-card') || []);
+                    return {active_app: m.apps.getActiveApp() === 'acdc',
+                        active_app_kind: ['acdc', 'common', 'core', 'auth', 'voip', 'myaccount', 'appstore', 'apploader'].includes(m.apps.getActiveApp())
+                            ? m.apps.getActiveApp() : 'other',
+                        account_scope: a.accountId === account && m.apps.auth.currentAccount?.id === account,
+                        controller_scope: !!c && !!s && c.accountId === account && s.accountId === account
+                            && (overview ? !c.queueId && !s.queueId : c.queueId === queue && s.queueId === queue),
+                        mounted: !!root && c?.view?.[0] === root, visible: visible(root), tab: f.currentTab === 'dashboard',
+                        stopped: !!c?.stopped, in_flight: !!c?.inFlight, dirty: !!c?.dirty, coalescing: !!c?.coalesceTimer,
+                        admitting: !!c?.admitting, admission_timer: !!c?.admissionTimer,
+                        acknowledged: !!c && a.liveTransportState(c) === 'acknowledged', not_busy: root?.getAttribute('aria-busy') === 'false',
+                        refresh_error: !!root?.querySelector('.acdc-live-refresh-error'), stale: !!root?.querySelector('.acdc-live-freshness.is-stale'),
+                        valid_dto: !!s && a.liveSnapshotValid(s.results.live, account, overview ? undefined : queue, s.page),
+                        total_visible: visible(root?.querySelector('.acdc-live-toolbar p strong')), card_count: articles.length,
+                        selected_cards: articles.filter(e => e.querySelector('.acdc-open-live-queue')?.getAttribute('data-queue-id') === queue).length,
+                        cards_visible: articles.every(e => visible(e) && visible(e.querySelector('.acdc-live-waiting strong'))
+                            && visible(e.querySelector('.acdc-live-handling strong')) && visible(e.querySelector('.acdc-open-live-queue')))};
+                }, {account, queue, overview: summaryMode});
+                check(baseline.valid && currentWire && currentWire.wire.size === 0
+                    && currentWire.connection === (summaryMode ? firstOverviewAck : firstDetailAck).connection && connectionSequence === 1,
+                    'reconnect_baseline_not_quiescent');
+                if (summaryMode) {
+                    const {createSummaryReconnectTracker, matchReconnectSummaryRendering} = require('./test-fixtures/monster-live-reconnect.cjs');
+                    const dto = JSON.parse(baseline.dto);
+                    require('./test-fixtures/monster-live-call-observer.cjs').validateOverview({status: 'success', data: dto}, account, queue);
+                    matchReconnectSummaryRendering({...baseline, selectedQueueId: queue}, dto);
+                    const queueIds = dto.queues.map(q => q.id);
+                    check(JSON.stringify([...summaryBindings.keys()].sort()) === JSON.stringify(queueIds.map(id => 'queue_live.changed.' + id).sort()),
+                        'reconnect_baseline_page_bindings_mismatch');
+                    reconnectProbe = createSummaryReconnectTracker({accountId: account, queueIds});
+                    // This is observer bookkeeping only: old connection ACKs
+                    // cannot stand in for the replacement's entire page scope.
+                    summaryBindings.clear(); summaryFinalSubscriptionsEmpty = false;
+                    phase = 'summary_reconnect';
+                }
+                const oldWire = currentWire, started = Date.now();
+                reconnectProbe.begin({connection: oldWire.connection, order: timeline('socket_test_close', 'selected_queue_subscription')});
+                reconnectActive = true;
+                reconnectGate = new Promise(resolve => { releaseReconnect = resolve; });
+                await Promise.all([oldWire.server.close({code: 1012}), oldWire.route.close({code: 1012})]);
+                checkpoint('waiting_visible_disconnected_stale_state');
+                await page.waitForFunction(({account, queue, generation, dto, overview}) => {
+                    const app = window.require('monster').apps.acdc, c = app.appFlags.acdc.liveDashboardController;
+                    const s = app.appFlags.acdc.liveDashboardSnapshot, root = document.querySelector('.acdc-live-dashboard');
+                    const note = root?.querySelector('.acdc-live-stale-note');
+                    return c && s && root && c.view?.[0] === root && root.getClientRects().length > 0
+                        && c.generation === generation && c.accountId === account && s.accountId === account
+                        && (overview ? !c.queueId && !s.queueId : c.queueId === queue && s.queueId === queue)
+                        && JSON.stringify(s.results.live) === dto
+                        && app.liveTransportState(c) === 'disconnected' && root.querySelector('.acdc-live-freshness.is-stale')
+                        && note && !note.hidden;
+                }, {account, queue, generation: baseline.generation, dto: baseline.dto, overview: summaryMode}, {timeout: 2000, polling: 20});
+                result.checks.push(summaryMode ? 'actual_disconnect_retains_snapshot_and_marks_visible_summary_stale'
+                    : 'actual_disconnect_retains_snapshot_and_marks_visible_detail_stale');
+                releaseReconnect(); releaseReconnect = null; reconnectGate = null;
+                checkpoint(summaryMode ? 'waiting_all_new_page_acks_and_fresh_summary' : 'waiting_new_socket_ack_and_fresh_detail');
+                while (Date.now() < started + 12000 && !reconnectSnapshot && !fatal) await page.waitForTimeout(50);
+                await Promise.all([...pending]); checkClean();
+                check(reconnectSnapshot && reconnectProbe.evidence().complete && connectionSequence === 2
+                    && Date.now() < started + 12000 && reconnectAckAt !== null
+                    && reconnectSnapshot.requestAt >= reconnectAckAt && reconnectSnapshot.requestAt <= reconnectAckAt + 5000,
+                    'reconnect_ack_snapshot_deadline');
+                checkpoint('waiting_reconnected_snapshot_render');
+                try { await page.waitForFunction(({account, queue, generation, dto, overview}) => {
+                    const app = window.require('monster').apps.acdc, c = app.appFlags.acdc.liveDashboardController;
+                    const s = app.appFlags.acdc.liveDashboardSnapshot;
+                    return c && s && c.generation === generation && c.accountId === account && s.accountId === account
+                        && (overview ? !c.queueId && !s.queueId : c.queueId === queue && s.queueId === queue) && !c.inFlight
+                        && app.liveTransportState(c) === 'acknowledged' && JSON.stringify(s.results.live) === dto;
+                }, {account, queue, generation: baseline.generation, dto: reconnectSnapshot.dto, overview: summaryMode},
+                {timeout: Math.max(1, Math.min(3000, started + 12000 - Date.now()))});
+                } catch (error) {
+                    result.reconnect_render_readiness = await page.evaluate(({account, queue, generation, dto, overview}) => {
+                        const monster = window.require('monster'), a = monster.apps.acdc;
+                        const c = a.appFlags.acdc.liveDashboardController, s = a.appFlags.acdc.liveDashboardSnapshot;
+                        return {active_app: monster.apps.getActiveApp() === 'acdc', controller_present: !!c, snapshot_present: !!s,
+                            same_controller: c?.generation === generation, controller_account: c?.accountId === account,
+                            snapshot_account: s?.accountId === account,
+                            scope: !!c && !!s && (overview ? !c.queueId && !s.queueId : c.queueId === queue && s.queueId === queue),
+                            in_flight: !!c?.inFlight, dirty: !!c?.dirty, stopped: !!c?.stopped,
+                            acknowledged: !!c && a.liveTransportState(c) === 'acknowledged',
+                            snapshot_matches: !!s && JSON.stringify(s.results.live) === dto,
+                            snapshot_valid: !!s && a.liveSnapshotValid(s.results.live, account, overview ? undefined : queue, s.page)};
+                    }, {account, queue, generation: baseline.generation, dto: reconnectSnapshot.dto, overview: summaryMode});
+                    throw error;
+                }
+                const recovered = await page.evaluate(readRenderedCall, {accountId: account, queueId: queue, overview: summaryMode});
+                check(recovered.valid && recovered.generation === baseline.generation
+                    && recovered.dto === reconnectSnapshot.dto && recovered.receivedAt >= reconnectSnapshot.requestAt
+                    && (summaryMode ? maxOverviewInFlight === 1 && result.counts.detail_gets === 0 : maxDetailInFlight === 1)
+                    && Date.now() < started + 12000, 'reconnect_rendered_snapshot_mismatch');
+                const matchRendering = require('./test-fixtures/monster-live-reconnect.cjs')[summaryMode
+                    ? 'matchReconnectSummaryRendering' : 'matchReconnectCallRendering'];
+                matchRendering({...recovered, selectedQueueId: queue}, JSON.parse(reconnectSnapshot.dto));
+                if (summaryMode) check(JSON.stringify(recovered.cards.map(c => c.id).sort())
+                    === JSON.stringify([...summaryBindings.keys()].map(k => k.slice('queue_live.changed.'.length)).sort()),
+                'reconnect_recovered_page_bindings_mismatch');
+                result.reconnect = {...reconnectProbe.evidence(), disconnected_stale_observed: true,
+                    ...(summaryMode ? {rendered_page_cards_match: true} : {rendered_call_counts_rows_match: true}),
+                    view: summaryMode ? 'summary' : 'detail', same_controller: true, elapsed_ms: Date.now() - started,
+                    periodic_causality_excluded: false};
+                result.checks.push(summaryMode ? 'new_socket_all_page_acks_then_no_store_get_matches_every_visible_card'
+                    : 'new_socket_exact_ack_then_no_store_get_matches_visible_detail');
+                reconnectActive = false;
             }
             // Normal navigation retires the local controller, then closing the
             // ephemeral context removes the session. No persistent logout write.
@@ -857,7 +965,7 @@ async function main(natural) {
                     const allUntil = Date.now() + 5000;
                     while (Date.now() < allUntil && !allDisposed() && !fatal) await page.waitForTimeout(50);
                     check(allDisposed(), 'all_summary_unsubscribe_acks_required');
-                    result.natural_summary.disposal = {bindings: summaryBindings.size,
+                    summaryReceipt.disposal = {bindings: summaryBindings.size,
                         exact_page_bindings_verified: true, all_unsubscribe_acks: true, final_subscriptions_empty: true};
                 }
             }
@@ -931,7 +1039,8 @@ async function runWithNaturalSummaryCall(options) { return runNaturalBrowser(opt
 module.exports = {accountScopeOptions, accountScopeInBrowser, targetAccountResponse,
     verifyTargetAccountResponse, switchTargetAccount, restoreHomeAccount, browserErrorDiagnostic, ACCOUNT_BROWSER_ASSET,
     socketAdmission, socketScopeRole, recordHomeCommand, observeHomeReply, beginHomeDisposal, closeHomeAdmission,
-    homeOverviewInBrowser, queuesDisposedInBrowser, runWithNaturalCall, runWithNaturalSummaryCall, reconnectOptions};
+    homeOverviewInBrowser, queuesDisposedInBrowser, runWithNaturalCall, runWithNaturalSummaryCall, reconnectOptions, supplementalLiveGet,
+    startupRouteReadyInBrowser};
 if (require.main === module) main().catch(e => {
     process.stderr.write(JSON.stringify({status: 'FAIL', failure: e instanceof Failure ? e.message : 'preflight_failed'}) + '\n');
     process.exitCode = 1;

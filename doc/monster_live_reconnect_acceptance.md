@@ -1,20 +1,22 @@
 # Deployed live queue reconnect acceptance
 
-September 7, 2026: the actual development queue-detail browser passed a
-controlled connection-loss/recovery check. This covers the live summary/detail
-delivery, not historical reporting or ClickHouse integration.
+September 7, 2026: both deployed views passed controlled connection-loss recovery,
+with same-account login and normal company switching, after the P0-18 fix.
+This covers live summary/detail delivery, not history or ClickHouse integration.
 
 ## Tested behavior
 
 `scripts/test-monster-live-deployed.cjs` accepts the opt-in environment flag
 `KAZOO_TEST_RECONNECT=true`. It requires `KAZOO_TEST_REQUIRE_WEBSOCKET=true`
-and standalone execution; natural-call and summary-call modes reject this
-combination before browser or credential work. Without the flag the existing
-browser/call modes retain their behavior.
+and standalone execution. `KAZOO_TEST_RECONNECT_VIEW` defaults to `detail`;
+set it to `summary` to test the visible overview page instead. An explicit view
+requires reconnect mode, and other view values are rejected. Natural-call and
+summary-call modes reject reconnect mode before browser or credential work.
+Without the flag the existing browser/call modes retain their behavior.
 
-The browser uses normal login, the deployed production assets, the overview,
-and a normal click into the selected queue. After the initial real native ACK
-and snapshot, the probe:
+In detail mode, the browser uses normal login, the deployed production assets,
+the overview, and a normal click into the selected queue. After the initial
+real native ACK and snapshot, the probe:
 
 1. Closes only its own two-sided routed connection with WebSocket code 1012.
    It does not restart Blackhole or alter any other client's connection.
@@ -40,7 +42,99 @@ The observer keeps scope and request identifiers only in memory. Persisted
 reconnect evidence contains ordinals, booleans and elapsed milliseconds; no
 tokens, DTOs, names, raw frames, screenshots or browser storage are saved.
 
-## Evidence
+### Summary mode
+
+Summary mode stays on one visible overview page; it does not click into queue
+detail or run a call. Before closing the socket, it requires a quiescent,
+acknowledged controller, a valid overview DTO, and exactly the page's unique
+queue bindings. It compares independently captured DOM cards, their queue IDs,
+waiting/handled counts, page count and selected-queue values to that DTO.
+Unavailable metrics must display a dash, not zero. The active-app and account
+guards remain required.
+
+The replacement connection must be exactly the next generation and subscribe
+sequentially, with at most one request pending, to every original page binding
+exactly once. Each real correlated ACK must report the newly subscribed
+singleton and a `subscriptions` set equal to all page bindings acknowledged so
+far. Only the final page ACK opens the snapshot acceptance barrier. A GET
+started before it cannot prove recovery, even if its response arrives later.
+The accepted overview GET must start within five seconds after that final ACK;
+its schema-valid, no-store response and every recovered visible card must agree
+under the same controller generation within the overall 12-second bound. Page
+membership changes during this probe fail the comparison.
+
+Closing and reconnecting affect only the test's socket. The harness clears its
+own old-connection binding ledger, not application state. Normal navigation
+must then send every page unsubscribe on the replacement connection and receive
+every correlated ACK plus an empty final subscription set before any home
+account restoration. This proves ACK-following resnapshot, not exclusive
+causality: periodic reconciliation may also trigger a GET. It does not prove
+lost-event replay or event completeness.
+
+## Current deployed evidence
+
+Fresh production stage `monster-owned-build.OxxzgK/source` passed build/artifact
+checks `e175b8`. Deployment `e8e212` changed only main/templates, removed nothing
+and preserved 1,942 files, including configuration, capabilities and API docs.
+Backup: `/usr/local/src/kazoo5-installer/monster-owned-build.OxxzgK/deployment-backup`.
+
+| View / login | Browser result | Recovery | Receipt under `/tmp/` |
+| --- | --- | --- | --- |
+| Summary / same account | `0cfeb5`, 7 checks | 1412ms | `kazoo-monster-live-deployed.FfHvIy/receipt.json` |
+| Summary / company switch | `f7f21e`, 10 checks | 1388ms | `kazoo-monster-live-deployed.ZAKfFq/receipt.json` |
+| Detail / same account | `fd684b`, 9 checks | 3123ms | `kazoo-monster-live-deployed.xVlVEO/receipt.json` |
+| Detail / company switch | `138a89`, 12 checks | 2708ms | `kazoo-monster-live-deployed.HGRoBP/receipt.json` |
+
+All four retained the controller, matched visible data, acknowledged disposal,
+and had zero browser/HTTP/scope errors or supplemental dashboard reads. Both
+summary reconnect pages contained one queue; 100 sequential subscriptions are
+offline coverage, not a live scale result. Final test-source checks
+`f369da`/`03a1c2` passed 19 scope, 24 reconnect and 18 call-observer groups.
+
+The build temporarily paused ecallmgr and simulated phones under the unchanged
+384MiB/512MiB-reserve guard; both were restored. Browser tests kept all eight
+platform services running and paused only simulated phones. After the detail
+same-account browser PASS, phone restoration hit systemd's start-rate limit
+because of repeated test pauses (`fd684b` wrapper exit1). Logs showed clean
+shutdowns, not a crash; exact-unit reset-failed/start restored it (`adda12`).
+No restart policy was changed; the subsequent switched-detail wrapper passed.
+
+The harness waits for native startup routing before initiating navigation,
+and does not reopen an already-active default ACDC page. Earlier probes
+`rTdBWD`/`e7DYM4` recovered correct snapshots but raced Core's final startup
+route, replacing the controller; `ydQzX9` detected redundant routing cleanup.
+The first postdeploy `8Ctj8a` probe also counted a Core alerts refresh as a
+supplemental dashboard read. Exact current-account `/alerts` reads now remain
+in HTTP/error/scope accounting but are excluded from that data-fetch metric.
+Active-app, controller, schema, binding and cleanup assertions were retained.
+Admin/default-app and explicit switched-hash startup are covered; non-admin
+users with no default app opening the app launcher are not covered here.
+
+Deployed SHA256 values:
+
+```text
+main.js      5ae7035f5bb4cc963c8f85419c602db76f17297134b257b3d78cb6e237b657c3
+templates.js b4affe1d06358720f7bf424f32083cab1e06849c3ba385bffbe3d282e53e993d
+config.js    cd4a12cae81ed6cdeda9eb718be47af4f010e23399bd8f4bda9520a2d1484d13
+```
+
+## Earlier evidence
+
+Switched-company summary run `45e8a1` passed ten actual browser checks:
+`/tmp/kazoo-monster-live-deployed.O0lCKR/receipt.json`. Its visible page contained
+one real queue. Recovery took 1314ms, with a replacement-connection ACK, fresh
+overview GET, page cleanup and normal home restoration; no errors were
+reported. This is not live multi-queue or 100-queue acceptance. The summary
+tracker's 100 sequential subscriptions are offline fixture coverage only.
+
+Earlier default-login summary run
+(`/tmp/kazoo-monster-live-deployed.QRTECM/receipt.json`) failed its active-app
+guard: `myaccount` had replaced ACDC's foreground marker while the other
+readiness checks passed. P0-18's focused offline baseline `ef9a77`
+(`/tmp/monster-background-app-proof.gFLwnE`) reproduced that overwrite; candidate
+`f43e08` (`/tmp/monster-background-app-proof.PVeswA`) passed all 12 groups.
+The current deployed retests above supersede that source-only checkpoint; see
+[P0-18 source and regression guidance](monster_background_app_load.md).
 
 Same-account run `4a10d5` passed nine actual browser checks:
 `/tmp/kazoo-monster-live-deployed.9C6AgQ/receipt.json`.

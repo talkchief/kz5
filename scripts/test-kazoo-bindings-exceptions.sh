@@ -29,7 +29,13 @@ binding_patch="$binding_root/scripts/patches/kazoo-bindings-exception-diagnostic
 printf '%s\n' "$binding_core_ref" > "$binding_output/baseline-commit.txt"
 binding_sources=("$binding_source" core/kazoo_bindings/src/kazoo_bindings_rt.erl)
 binding_inputs=("${binding_sources[@]}" scripts/test-kazoo-bindings-exceptions.sh
-    scripts/erlang-tests/kazoo_bindings_exception_tests.erl "$binding_patch" scripts/install-kazoo5.sh)
+    scripts/erlang-tests/kazoo_bindings_exception_tests.erl
+    scripts/erlang-tests/kazoo_bindings_lager_tests.erl core/kazoo_stdlib/src/kz_log.erl
+    "$binding_patch" scripts/install-kazoo5.sh)
+# Actual Lager is used in a separate runtime VM; pin its loaded prebuilt inputs.
+binding_lager_beams=(deps/lager/ebin/*.beam)
+[[ ${#binding_lager_beams[@]} -gt 0 && -f ${binding_lager_beams[0]} ]]
+binding_inputs+=("${binding_lager_beams[@]}")
 if command -v rg >/dev/null 2>&1; then
     rg --files --hidden --no-ignore core/kazoo_bindings/src core/kazoo_stdlib/include -g '*.hrl' > "$binding_output/headers.list"
 else
@@ -73,20 +79,23 @@ if [[ $binding_mode == --baseline ]]; then binding_sources[0]="$binding_output/b
 sha256sum "$binding_output/baseline/kazoo_bindings.erl" \
     "$binding_output/replay/kazoo_bindings/src/kazoo_bindings.erl" >> "$binding_output/inputs.sha256"
 mkdir "$binding_output/production" "$binding_output/capture"
-printf 'Scope: two production modules compile with -Werror, without TEST, and with the real Lager transform. A separate no-TEST/no-transform build of the same sources executes real registry/map/pmap/fold with logger sinks substituted, so exact unformatted logging arguments can be checked. No service, broker, HTTP or real credential proof. Other OTP/ERL_LIBS dependencies are prebuilt, unrebuilt and unpinned. Baseline must fail.\n' | tee "$binding_output/scope.log"
+printf 'Scope: bindings/runtime and kz_log production modules compile with -Werror, without TEST, with the real Lager transform. Eight existing groups use separate no-TEST/no-transform bindings and mocked logging sinks. Four additional groups execute production transformed bindings and real pinned prebuilt Lager, real formatter and private in-memory gen_event backend; no meck in that VM. No Lager application/file handlers, service, broker, HTTP or real credential proof. Other OTP/ERL_LIBS dependencies are prebuilt, unrebuilt and unpinned. Both suites run even if one fails; baseline must fail.\n' | tee "$binding_output/scope.log"
 erlc -Werror +debug_info -I core/kazoo_bindings/src -pa deps/lager/ebin \
-    '+{parse_transform,lager_transform}' -o "$binding_output/production" "${binding_sources[@]}"
+    '+{parse_transform,lager_transform}' -o "$binding_output/production" "${binding_sources[@]}" core/kazoo_stdlib/src/kz_log.erl
 erlc -Werror +debug_info -I core/kazoo_bindings/src -o "$binding_output/capture" "${binding_sources[@]}"
 erlc -Werror +debug_info -o "$binding_output/capture" scripts/erlang-tests/kazoo_bindings_exception_tests.erl
+erlc -Werror +debug_info -o "$binding_output/production" scripts/erlang-tests/kazoo_bindings_lager_tests.erl
 erl -pa "$binding_output/production" -noshell -eval '
     Root=os:getenv("KAZOO_BINDINGS_EXCEPTION_OUTPUT"),
     lists:foreach(fun(M)->
         {module,M}=code:ensure_loaded(M),
         Expected=filename:join([Root,"production",atom_to_list(M)++".beam"]),Expected=code:which(M),
+        {ok,{M,ArtifactMD5}}=beam_lib:md5(Expected),ArtifactMD5=M:module_info(md5),
         Options=proplists:get_value(options,M:module_info(compile),[]),
         true=lists:member({parse_transform,lager_transform},Options),
         false=lists:any(fun({d,'\''TEST'\''})->true;({d,'\''TEST'\'',_})->true;(export_all)->true;(_)->false end,Options)
-    end,[kazoo_bindings,kazoo_bindings_rt]),halt(0).'
+    end,[kazoo_bindings,kazoo_bindings_rt,kz_log]),halt(0).'
+binding_capture_status=0
 erl -pa "$binding_output/capture" -noshell -eval '
     Root=os:getenv("KAZOO_BINDINGS_EXCEPTION_OUTPUT"),
     lists:foreach(fun(M)->
@@ -97,4 +106,24 @@ erl -pa "$binding_output/capture" -noshell -eval '
             proplists:get_value(options,M:module_info(compile),[]))
     end,[kazoo_bindings,kazoo_bindings_rt]),
     case eunit:test(kazoo_bindings_exception_tests,[verbose,{scale_timeouts,4}]) of ok->halt(0);_->halt(1) end.' \
-    | tee "$binding_output/eunit.log"
+    | tee "$binding_output/eunit.log" || binding_capture_status=$?
+binding_runtime_status=0
+erl -pa "$binding_output/production" -noshell -eval '
+    Root=os:getenv("KAZOO_BINDINGS_EXCEPTION_OUTPUT"),
+    lists:foreach(fun(M)->
+        {module,M}=code:ensure_loaded(M),
+        Expected=filename:join([Root,"production",atom_to_list(M)++".beam"]),Expected=code:which(M),
+        {ok,{M,ArtifactMD5}}=beam_lib:md5(Expected),ArtifactMD5=M:module_info(md5),
+        Options=proplists:get_value(options,M:module_info(compile),[]),
+        true=lists:member({parse_transform,lager_transform},Options),
+        false=lists:any(fun({d,'\''TEST'\''})->true;({d,'\''TEST'\'',_})->true;(export_all)->true;(_)->false end,Options)
+    end,[kazoo_bindings,kazoo_bindings_rt,kz_log]),
+    lists:foreach(fun(M)->
+        {module,M}=code:ensure_loaded(M),
+        Expected=filename:absname(filename:join(["deps","lager","ebin",atom_to_list(M)++".beam"])),
+        Expected=filename:absname(code:which(M))
+    end,[lager,lager_config,lager_util,lager_msg,lager_default_formatter,lager_trunc_io]),
+    case eunit:test(kazoo_bindings_lager_tests,[verbose,{scale_timeouts,4}]) of ok->halt(0);_->halt(1) end.' \
+    | tee "$binding_output/lager-runtime-eunit.log" || binding_runtime_status=$?
+printf 'Existing sink groups exit %s; transformed runtime groups exit %s\n' "$binding_capture_status" "$binding_runtime_status"
+[[ $binding_capture_status == 0 && $binding_runtime_status == 0 ]]
