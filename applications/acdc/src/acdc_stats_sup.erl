@@ -31,6 +31,7 @@
                                          ]).
 -define(CHILDREN, [?WORKER_NAME_ARGS('kazoo_etsmgr_srv', 'acdc_stats_call', [?ETSMGR_OPTS(acdc_stats:call_table_id(), acdc_stats:call_table_opts())])
                   ,?WORKER_NAME_ARGS('kazoo_etsmgr_srv', 'acdc_stats_status', [?ETSMGR_OPTS(acdc_agent_stats:status_table_id(), acdc_agent_stats:status_table_opts())])
+                  ,?WORKER('acdc_dashboard_events')
                   ,{'acdc_stats', {'acdc_stats', 'start_link', []}, 'permanent', 15000, 'worker', ['acdc_stats']}
                   ]).
 

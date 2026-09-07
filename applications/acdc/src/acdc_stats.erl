@@ -287,7 +287,10 @@ handle_call(_Req, _From, State) ->
 -spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
 handle_cast({'create_call', #call_stat{id=_Id}=Stat}, State) ->
     lager:debug("creating new call stat ~s", [_Id]),
-    ets:insert_new(call_table_id(), Stat),
+    case ets:insert_new(call_table_id(), Stat) of
+        'true' -> dashboard_call_changed([], [Stat]);
+        'false' -> 'ok'
+    end,
     {'noreply', State};
 handle_cast({'create_status', #status_stat{id=_Id, status=_Status}=Stat}, State) ->
     lager:debug("creating new status stat ~s: ~s", [_Id, _Status]),
@@ -300,15 +303,22 @@ handle_cast({'create_status', #status_stat{id=_Id, status=_Status}=Stat}, State)
     end;
 handle_cast({'update_call', Id, Updates}, State) ->
     lager:debug("updating call stat ~s: ~p", [Id, Updates]),
-    ets:update_element(call_table_id(), Id, Updates ++ [{#call_stat.is_archived, 'false'}]),
+    Before = ets:lookup(call_table_id(), Id),
+    case ets:update_element(call_table_id(), Id, Updates ++ [{#call_stat.is_archived, 'false'}]) of
+        'true' -> dashboard_call_changed(Before, ets:lookup(call_table_id(), Id));
+        'false' -> 'ok'
+    end,
     {'noreply', State};
 handle_cast({'flush_call', Id}, State) ->
     lager:debug("flushing call stat ~s", [Id]),
+    Before = ets:lookup(call_table_id(), Id),
     ets:delete(call_table_id(), Id),
+    dashboard_call_changed(Before, []),
     {'noreply', State};
 handle_cast({'remove_call', [{M, P, _}]}, State) ->
     Match = [{M, P, ['true']}],
     N = ets:select_delete(call_table_id(), Match),
+    _ = acdc_dashboard_events:bulk_removed(N),
     N > 1
         andalso lager:debug("removed calls: ~p", [N]),
     {'noreply', State};
@@ -337,6 +347,26 @@ handle_cast({'gen_listener',{'is_consuming',_IsConsuming}}, State) ->
 handle_cast(_Req, State) ->
     lager:debug("unhandled cast: ~p", [_Req]),
     {'noreply', State}.
+
+%% Only the ETS owner calls this, after a successful mutation. Archive-only
+%% bookkeeping is not a dashboard change. Hints contain no call/agent data.
+-spec dashboard_call_changed([#call_stat{}], [#call_stat{}]) -> 'ok'.
+dashboard_call_changed([Before], [After]) ->
+    case Before#call_stat{is_archived='false'} =:= After#call_stat{is_archived='false'} of
+        'true' -> 'ok';
+        'false' ->
+            dashboard_call_changed([Before], []),
+            case {Before#call_stat.account_id,Before#call_stat.queue_id} =:=
+                {After#call_stat.account_id,After#call_stat.queue_id} of
+                'true' -> 'ok';
+                'false' -> dashboard_call_changed([], [After])
+            end
+    end;
+dashboard_call_changed([#call_stat{account_id=A,queue_id=Q}], []) ->
+    _ = acdc_dashboard_events:changed(A,Q), 'ok';
+dashboard_call_changed([], [#call_stat{account_id=A,queue_id=Q}]) ->
+    _ = acdc_dashboard_events:changed(A,Q), 'ok';
+dashboard_call_changed([], []) -> 'ok'.
 
 -spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
 handle_info({'ETS-TRANSFER', _TblId, _From, _Data}, State) ->

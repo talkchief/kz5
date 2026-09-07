@@ -90,12 +90,40 @@ handle_callback_request(JObj, Props) ->
 
 -spec handle_config_change(kz_json:object(), kz_term:proplist()) -> any().
 handle_config_change(JObj, _Props) ->
-    'true' = kapi_conf:doc_update_v(JObj),
-    handle_queue_change(kz_json:get_value(<<"Database">>, JObj)
+    'true' = dashboard_config_valid(JObj),
+    Result = handle_queue_change(kz_json:get_value(<<"Database">>, JObj)
                        ,kz_json:get_value(<<"Account-ID">>, JObj)
                        ,kz_json:get_value(<<"ID">>, JObj)
                        ,kz_json:get_value(<<"Event-Name">>, JObj)
-                       ).
+                       ),
+    %% The configuration event represents a persisted document change. Mark
+    %% only after successful existing handling; no new DB or broker work here.
+    case Result of
+        'ok' -> dashboard_config_changed(JObj);
+        {'ok', _} -> dashboard_config_changed(JObj);
+        {'ok', _, _} -> dashboard_config_changed(JObj);
+        _ -> 'ok'
+    end,
+    Result.
+
+%% The legacy kz_api validator recurses on an empty proplist. Keep malformed
+%% input away from it here; do not change validation for ordinary documents.
+-spec dashboard_config_valid(any()) -> boolean().
+dashboard_config_valid(JObj) ->
+    try
+        kz_json:is_json_object(JObj) andalso
+            case kz_json:to_proplist(JObj) of
+                [] -> 'false';
+                P -> lists:all(fun({K,_}) -> is_binary(K); (_) -> 'false' end,P)
+                    andalso kapi_conf:doc_update_v(JObj)
+            end
+    catch _:_ -> 'false' end.
+
+-spec dashboard_config_changed(kz_json:object()) -> 'ok'.
+dashboard_config_changed(JObj) ->
+    _ = acdc_dashboard_events:changed(kz_json:get_value(<<"Account-ID">>,JObj),
+                                    kz_json:get_value(<<"ID">>,JObj)),
+    'ok'.
 
 -spec handle_queue_change(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 handle_queue_change(_, AccountId, QueueId, ?DOC_CREATED) ->
