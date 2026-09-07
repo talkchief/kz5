@@ -7,7 +7,11 @@ was deployed32580 with exact ownership/configuration readback. Real browser65670
 passed all seven checks against the served production bytes and native socket,
 with zero console/page/HTTP errors, supplemental reads or late overview GETs.
 Historical screens and workforce reporting remain postponed for future
-ClickHouse work. No actual call-transition/load or production-readiness claim.
+ClickHouse work. A separate real-call HTTP/native-WebSocket test79231 now
+passes waiting → handled → removed against the deployed backend, with15 valid
+snapshots,3 natural invalidations and verified single-agent media bridge. See
+`doc/acdc_ordinary_bridge_proof.md`. This does not yet prove browser rendering
+during a call, restricted-user isolation, load or production readiness.
 
 ## Files and behavior
 

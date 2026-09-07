@@ -60,8 +60,9 @@ caused a hint. The observer does not inject broker events or change state.
 
 This mode is not the full strategy suite, browser call-transition testing,
 PSTN/media-quality acceptance, cross-node failure testing or load/soak evidence.
-The source addition has guarded offline validation; the actual live run below
-failed handled-state observation. Do not treat the mode's presence as a PASS. Ownership-marked test resources are
+The source addition has guarded offline validation; actual run79231 below
+passed after the handled-state failure43165 was corrected. The mode's presence
+alone is not acceptance. Ownership-marked test resources are
 deleted only after cleanup is verified; failures retain the protected recovery
 ledger rather than broadening cleanup.
 
@@ -78,6 +79,29 @@ read-only preflight. These are not live-call PASS receipts.
 
 ## Live-dashboard result (2026-09-07)
 
+**Latest actual run79231: PASS.** Root2519 first compiled74 ACDC and30 Blackhole
+production modules in
+`/usr/local/src/kazoo5-installer/live-dashboard-backend.0KplKA`. Root29023 deployed
+only the matching corrected FSM; backup:
+`/tmp/kazoo-live-rollout.OYdOqh/acdc_queue_fsm.before-native-proof.beam`.
+Focused6 bridge-proof tests86399 and16 existing channel-I/O tests26126 passed;
+all31 strategy groups passed in16+15 shards before the sixth focused positive
+retry test was added. See [the correction and limits](acdc_ordinary_bridge_proof.md).
+
+The isolated `--dashboard-live` run produced15 HTTP requests/15valid snapshots,
+three native invalidations and zero timeouts. Waiting → handled → gone each
+required a fresh hint and later GET. One offer, one bridge and12 stable FS
+samples verified the actual single-winner call. Exact subscribe/unsubscribe
+ACKs passed. Cleanup restored all three original agent states, removed owned
+resources/contacts, left no recovery ledger or FS calls, and all eight services
+were active. Private receipts:
+`/var/log/kazoo-strategy-acceptance-ZYctqU/dashboard-evidence.json` and
+`/var/log/kazoo-strategy-acceptance-ZYctqU/dashboard-natural-call-evidence.json`.
+This is not browser call-transition rendering, restricted-user authorization,
+cross-node failure, full-strategy or load/soak proof.
+
+### Earlier failures retained as baseline evidence
+
 Initial setup exposed a status POST authorization regression (HTTP500).
 Two baseline failures90610 and six candidate passes93704 establish the narrow
 `cb_agents` abstention fix, compiled in production build4341 and deployed59362.
@@ -89,7 +113,8 @@ Natural-call run43165 observed waiting with a native invalidation, then proved
 one answered agent bridge with12stable FreeSWITCH samples and one bridge event.
 However,51valid HTTP snapshots never advanced to handled. The ordinary queue
 proof requires a caller-leg bridge event, while native intercept emits it on
-the initiating agent leg. This is P0-15, not a passing dashboard test.
+the initiating agent leg. This is the valid failing P0-15 baseline, superseded
+by79231 above rather than reclassified as a passing dashboard test.
 Evidence: `/var/log/kazoo-strategy-acceptance-BMBtU4`. Scoped cleanup succeeded;
 original agents were restored, owned contacts/queue/callflow removed, and zero
 calls remained. No callback, full-strategy, load or browser-transition proof.

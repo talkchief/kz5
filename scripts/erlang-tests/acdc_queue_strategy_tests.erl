@@ -79,7 +79,7 @@ one_broadcast_per_agent_with_process_correlation_test() ->
     ?assertNot(acdc_queue_strategy:process_matches(j([]),j([]))).
 
 with_mocks(Fun) ->
-    Mods=[acdc_queue_listener,acdc_stats,acdc_agent_listener,acdc_agent_stats,webseq],
+    Mods=[acdc_queue_listener,acdc_stats,acdc_agent_listener,acdc_agent_stats,webseq,acdc_callback_recovery_io],
     [meck:new(M,[non_strict,no_link]) || M <- Mods],
     try
         meck:expect(acdc_queue_listener,timeout_agent,fun(_,_) -> ok end),
@@ -87,6 +87,9 @@ with_mocks(Fun) ->
         meck:expect(acdc_queue_listener,finish_member_call,fun(_) -> ok end),
         meck:expect(acdc_stats,call_handled,fun(_,_,_,_) -> ok end),
         meck:expect(acdc_stats,call_missed,fun(_,_,_,_,_) -> ok end),
+        meck:expect(acdc_stats,call_abandoned,fun(_,_,_,_) -> ok end),
+        meck:expect(acdc_queue_listener,cancel_member_call,fun(_,_) -> ok end),
+        meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) -> {error,unknown} end),
         meck:expect(acdc_agent_listener,channel_hungup,fun(_,_) -> ok end),
         meck:expect(acdc_agent_listener,member_connect_retry,fun(_,_) -> ok end),
         meck:expect(acdc_agent_listener,member_connect_accepted,fun(_,_) -> ok end),
@@ -184,6 +187,7 @@ accept_requires_selected_process_and_cancels_losers_only_test() -> with_mocks(fu
     {next_state,connecting,Pending}=acdc_queue_fsm:connecting(cast,{accepted,Accept},S),
     ?assertEqual(0,meck:num_calls(acdc_queue_listener,finish_member_call,'_')),
     {next_state,ready,_,hibernate}=acdc_queue_fsm:connecting(cast,{channel_bridged,bridge(<<"a-leg">>)},Pending),
+    probe_stopped(Pending),
     ?assertEqual(1,meck:num_calls(acdc_queue_listener,member_connect_satisfied,'_')),
     ?assert(meck:called(acdc_queue_listener,member_connect_satisfied,['_',B,[]]))
 end).
@@ -197,6 +201,7 @@ bridge_before_accept_and_losing_accept_first_test() -> with_mocks(fun() ->
     S=bridge_state(),
     {next_state,connecting,S1}=acdc_queue_fsm:connecting(cast,{accepted,accepted(r(<<"a">>),<<"losing-leg">>)},S),
     {next_state,connecting,S2}=acdc_queue_fsm:connecting(cast,{channel_bridged,bridge(<<"winning-leg">>)},S1),
+    probe_stopped(S1),
     ?assertEqual(0,meck:num_calls(acdc_queue_listener,finish_member_call,'_')),
     ?assertEqual({keep_state,S2},acdc_queue_fsm:connecting(cast,{retry,r(<<"b">>)},S2)),
     ?assertEqual({keep_state,S2},acdc_queue_fsm:connecting(info,{timeout,make_ref(),agent_timer_expired},S2)),
@@ -214,7 +219,8 @@ bridge_wrong_account_call_empty_leg_and_duplicate_accept_test() -> with_mocks(fu
     {next_state,connecting,S1}=acdc_queue_fsm:connecting(cast,{accepted,A},S),
     ?assertEqual({next_state,connecting,S1},acdc_queue_fsm:connecting(cast,{accepted,A},S1)),
     ?assertEqual(1,maps:size(maps:get(accepts,qfield(bridge_ctx,S1)))),
-    {next_state,ready,_,hibernate}=acdc_queue_fsm:connecting(cast,{channel_bridged,bridge(<<"a-leg">>)},S1)
+    {next_state,ready,_,hibernate}=acdc_queue_fsm:connecting(cast,{channel_bridged,bridge(<<"a-leg">>)},S1),
+    probe_stopped(S1)
 end).
 
 lost_acceptance_deadline_never_cancels_actual_bridge_test() -> with_mocks(fun() ->
@@ -226,6 +232,155 @@ lost_acceptance_deadline_never_cancels_actual_bridge_test() -> with_mocks(fun() 
     ?assertEqual(0,meck:num_calls(acdc_queue_listener,finish_member_call,'_')),
     ?assertEqual(0,meck:num_calls(acdc_queue_listener,timeout_agent,'_'))
 end).
+
+%% No caller-side CHANNEL_BRIDGE is injected: this reproduces native intercept,
+%% whose agent-side event never reaches the caller-only queue listener.
+ordinary_agent_only_bridge_uses_fresh_snapshot_test() -> with_mocks(fun() ->
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(<<"account">>,[<<"caller">>]) ->
+        reciprocal_snapshot(<<"a-leg">>) end),
+    {next_state,connecting,Pending}=acdc_queue_fsm:connecting(cast,{accepted,accepted(r(<<"a">>),<<"a-leg">>)},bridge_state()),
+    ?assertEqual(0,meck:num_calls(acdc_stats,call_handled,'_')),
+    ?assertEqual(undefined,qfield(agent_ring_timer_ref,Pending)),
+    Msg=probe_message(Pending),
+    {next_state,ready,Done,hibernate}=acdc_queue_fsm:connecting(cast,Msg,Pending),
+    ?assertEqual(1,meck:num_calls(acdc_stats,call_handled,'_')),
+    ?assert(meck:called(acdc_stats,call_handled,[<<"account">>,<<"queue">>,<<"caller">>,<<"a">>])),
+    ?assertEqual(1,meck:num_calls(acdc_queue_listener,finish_member_call,'_')),
+    ?assert(meck:called(acdc_queue_listener,member_connect_satisfied,['_',r(<<"b">>),[]])),
+    ?assertEqual(#{},qfield(bridge_ctx,Done)),
+    {next_state,ready,Done}=acdc_queue_fsm:ready(cast,Msg,Done),
+    ?assertEqual(1,meck:num_calls(acdc_stats,call_handled,'_'))
+end).
+
+ordinary_probe_unknown_deadline_never_reroutes_or_handles_test() -> with_mocks(fun() ->
+    S=bridge_state(), Ring=qfield(agent_ring_timer_ref,S),
+    Accept=accepted(r(<<"a">>),<<"a-leg">>),
+    {next_state,connecting,Pending}=acdc_queue_fsm:connecting(cast,{accepted,Accept},S),
+    ?assertEqual({next_state,connecting,Pending},acdc_queue_fsm:connecting(cast,{accepted,Accept},Pending)),
+    ?assertEqual({keep_state,Pending},acdc_queue_fsm:connecting(cast,{retry,r(<<"a">>)},Pending)),
+    ?assertEqual({keep_state,Pending},acdc_queue_fsm:connecting(info,{timeout,Ring,agent_timer_expired},Pending)),
+    ?assertEqual({keep_state,Pending},acdc_queue_fsm:connecting(info,{timeout,make_ref(),connection_timer_expired},Pending)),
+    {next_state,connecting,Retry}=acdc_queue_fsm:connecting(cast,probe_message(Pending),Pending),
+    Ctx=qfield(bridge_ctx,Retry), Ref=maps:get(timer_ref,Ctx), RetryRef=maps:get(probe_retry_ref,Ctx),
+    {keep_state,Unresolved}=acdc_queue_fsm:connecting(info,{timeout,Ref,ordinary_bridge_proof_timeout},Retry),
+    erlang:cancel_timer(Ref),
+    ?assertEqual(unresolved,maps:get(proof_status,qfield(bridge_ctx,Unresolved))),
+    ?assertEqual({keep_state,Unresolved},acdc_queue_fsm:connecting(info,{timeout,RetryRef,ordinary_bridge_snapshot_retry},Unresolved)),
+    ?assertEqual({keep_state,Unresolved},acdc_queue_fsm:connecting(cast,{retry,r(<<"a">>)},Unresolved)),
+    ?assertEqual({next_state,connecting,Unresolved},acdc_queue_fsm:connecting(cast,{accepted,Accept},Unresolved)),
+    ?assertEqual(1,meck:num_calls(acdc_callback_recovery_io,observe_channels,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_stats,call_handled,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,timeout_agent,'_')),
+    acdc_queue_fsm:terminate(normal,connecting,Unresolved)
+end).
+
+ordinary_probe_rejects_nonreciprocal_or_unselected_evidence_test() -> with_mocks(fun() ->
+    {ok,Good}=reciprocal_snapshot(<<"a-leg">>),
+    [Caller,Agent]=maps:get(channels,Good),
+    Bad=[{unknown,Good}, {ok,Good#{complete=>false}}, reciprocal_snapshot(<<"outsider-leg">>),
+         {ok,Good#{channels=>[Caller,Agent#{answered=>false}]}},
+         {ok,Good#{channels=>[Caller,Agent#{other_leg_call_id=><<"other">>}]}},
+         {ok,Good#{channels=>[Caller,Agent#{switch_node=><<"other-switch">>}]}},
+         {ok,Good#{channels=>[Caller,Caller,Agent]}}],
+    lists:foreach(fun(Result)->
+        meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) -> Result end),
+        {next_state,connecting,Pending}=acdc_queue_fsm:connecting(cast,{accepted,accepted(r(<<"a">>),<<"a-leg">>)},bridge_state()),
+        {next_state,connecting,Retry}=acdc_queue_fsm:connecting(cast,probe_message(Pending),Pending),
+        ?assertNot(maps:is_key(leg,qfield(bridge_ctx,Retry))),
+        Ref=maps:get(timer_ref,qfield(bridge_ctx,Retry)),erlang:cancel_timer(Ref),
+        acdc_queue_fsm:terminate(normal,connecting,Retry)
+    end,Bad),
+    ?assertEqual(0,meck:num_calls(acdc_stats,call_handled,'_'))
+end).
+
+ordinary_probe_worker_killed_on_deadline_hangup_and_termination_test() -> with_mocks(fun() ->
+    Parent=self(),
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) ->
+        Parent!{ordinary_probe_started,self()},receive never_release -> {error,unknown} end end),
+    lists:foreach(fun(Action)->
+        {next_state,connecting,Pending}=acdc_queue_fsm:connecting(cast,{accepted,accepted(r(<<"a">>),<<"a-leg">>)},bridge_state()),
+        Pid=maps:get(probe_pid,qfield(bridge_ctx,Pending)), Monitor=monitor(process,Pid),
+        receive {ordinary_probe_started,Pid}->ok after 1000->?assert(false) end,
+        Ref=maps:get(timer_ref,qfield(bridge_ctx,Pending)),
+        case Action of
+            deadline -> {keep_state,_}=acdc_queue_fsm:connecting(info,{timeout,Ref,ordinary_bridge_proof_timeout},Pending);
+            hangup -> {next_state,ready,_,hibernate}=acdc_queue_fsm:connecting(cast,{member_hungup,j([{<<"Call-ID">>,<<"caller">>}])},Pending);
+            terminate -> acdc_queue_fsm:terminate(normal,connecting,Pending)
+        end,
+        erlang:cancel_timer(Ref),
+        receive {'DOWN',Monitor,process,Pid,killed}->ok after 1000->?assert(false) end
+    end,[deadline,hangup,terminate]),
+    ?assertEqual(0,meck:num_calls(acdc_stats,call_handled,'_'))
+end).
+
+ordinary_probe_stale_ref_caller_attempt_and_expired_sample_test() -> with_mocks(fun() ->
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) -> reciprocal_snapshot(<<"a-leg">>) end),
+    {next_state,connecting,Pending}=acdc_queue_fsm:connecting(cast,{accepted,accepted(r(<<"a">>),<<"a-leg">>)},bridge_state()),
+    Msg={ordinary_bridge_snapshot,Ref,Caller,Result}=probe_message(Pending),
+    ?assertEqual({next_state,connecting,Pending},acdc_queue_fsm:connecting(cast,{ordinary_bridge_snapshot,make_ref(),Caller,Result},Pending)),
+    ?assertEqual({keep_state,Pending},acdc_queue_fsm:connecting(cast,{ordinary_bridge_snapshot,Ref,<<"other">>,Result},Pending)),
+    FreshAttempt=bridge_state(),
+    ?assertEqual({next_state,connecting,FreshAttempt},acdc_queue_fsm:connecting(cast,Msg,FreshAttempt)),
+    Ctx=qfield(bridge_ctx,Pending), Expired=acdc_queue_fsm:callback_test_state([{bridge_ctx,Ctx#{proof_deadline=>erlang:monotonic_time(millisecond)-1}},
+        {member_call,qfield(member_call,Pending)},{connect_wins,qfield(connect_wins,Pending)}]),
+    {next_state,connecting,_}=acdc_queue_fsm:connecting(cast,Msg,Expired),
+    ?assertEqual(0,meck:num_calls(acdc_stats,call_handled,'_')),
+    erlang:cancel_timer(maps:get(timer_ref,Ctx)),acdc_queue_fsm:terminate(normal,connecting,Pending)
+end).
+
+ordinary_probe_retry_succeeds_without_extending_deadline_test() -> with_mocks(fun() ->
+    Parent=self(),
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) ->
+        Parent!{ordinary_retry_started,self()},
+        receive {ordinary_retry_result,R}->R end
+    end),
+    Accept=accepted(r(<<"a">>),<<"a-leg">>),
+    {next_state,connecting,P1}=acdc_queue_fsm:connecting(cast,{accepted,Accept},bridge_state()),
+    C1=qfield(bridge_ctx,P1), W1=maps:get(probe_pid,C1),
+    receive {ordinary_retry_started,W1}->ok after 1000->?assert(false) end,
+    W1!{ordinary_retry_result,{error,unknown}},
+    {next_state,connecting,Retry}=acdc_queue_fsm:connecting(cast,probe_message(P1),P1),
+    probe_stopped(P1),
+    RetryRef=maps:get(probe_retry_ref,qfield(bridge_ctx,Retry)),
+    {next_state,connecting,P2}=acdc_queue_fsm:connecting(info,{timeout,RetryRef,ordinary_bridge_snapshot_retry},Retry),
+    C2=qfield(bridge_ctx,P2), W2=maps:get(probe_pid,C2),
+    try
+        receive {ordinary_retry_started,W2}->ok after 1000->?assert(false) end,
+        ?assertNotEqual(W1,W2),
+        ?assertEqual(maps:get(timer_ref,C1),maps:get(timer_ref,C2)),
+        ?assertEqual(maps:get(proof_deadline,C1),maps:get(proof_deadline,C2)),
+        ?assertNot(maps:is_key(probe_retry_ref,C2)),
+        ?assertEqual({keep_state,P2},acdc_queue_fsm:connecting(info,{timeout,RetryRef,ordinary_bridge_snapshot_retry},P2)),
+        ?assertEqual({next_state,connecting,P2},acdc_queue_fsm:connecting(cast,{accepted,Accept},P2)),
+        ?assertEqual(0,meck:num_calls(acdc_stats,call_handled,'_')),
+        W2!{ordinary_retry_result,reciprocal_snapshot(<<"a-leg">>)},
+        {next_state,ready,_,hibernate}=acdc_queue_fsm:connecting(cast,probe_message(P2),P2),
+        probe_stopped(P2),
+        ?assertEqual(2,meck:num_calls(acdc_callback_recovery_io,observe_channels,'_')),
+        ?assertEqual(1,meck:num_calls(acdc_stats,call_handled,'_')),
+        ?assert(meck:called(acdc_stats,call_handled,[<<"account">>,<<"queue">>,<<"caller">>,<<"a">>])),
+        ?assertEqual(1,meck:num_calls(acdc_queue_listener,finish_member_call,'_')),
+        ?assert(meck:called(acdc_queue_listener,member_connect_satisfied,['_',r(<<"b">>),[]]))
+    after acdc_queue_fsm:terminate(normal,connecting,P2),probe_stopped(P2) end
+end).
+
+reciprocal_snapshot(Leg) ->
+    {ok,#{complete=>true,bridge=>#{state=>bridged,call_ids=>[<<"caller">>,Leg]},
+          channels=>[#{call_id=><<"caller">>,state=>active,answered=>true,other_leg_call_id=>Leg,switch_node=><<"fs">>},
+                     #{call_id=>Leg,state=>active,answered=>true,other_leg_call_id=><<"caller">>,switch_node=><<"fs">>}]}}.
+probe_stopped(State) ->
+    case maps:get(probe_pid,qfield(bridge_ctx,State),undefined) of
+        Pid when is_pid(Pid) ->
+            Monitor=monitor(process,Pid),
+            receive {'DOWN',Monitor,process,Pid,_}->ok after 1000->?assert(false) end;
+        _ -> ok
+    end.
+
+probe_message(State) ->
+    Ctx=qfield(bridge_ctx,State),
+    ?assert(maps:is_key(probe_ref,Ctx)),
+    Ref=maps:get(probe_ref,Ctx),
+    receive {'$gen_cast',{ordinary_bridge_snapshot,Ref,_,_}=Msg}->Msg after 1000->?assert(false) end.
 
 media_loser_ringing_and_answered_never_logout_or_wrapup_test() -> with_mocks(fun() ->
     S=acdc_agent_fsm:strategy_test_state([{member_call_id,<<"caller">>},{agent_call_id,<<"a-leg">>},{statem_call_id,<<"test">>},{connect_failures,2},{max_connect_failures,3}]),

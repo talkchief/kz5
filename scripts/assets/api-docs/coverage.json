@@ -2299,7 +2299,7 @@
     },
     {
       "file": "applications/acdc/src/cb_agents.erl",
-      "sha256": "c00ed6ce0fd864bc3b7f9247f6684c62c9502d67d993e51e9eccbda2723c722d",
+      "sha256": "d9a3533b601bb9f639a4d9bb21047dc5106821000498d0f7455cd4ab3631083d",
       "literal_binding_nouns": [
         "agents"
       ]
@@ -2393,11 +2393,11 @@
     },
     {
       "file": "applications/acdc/src/cb_agents.erl",
-      "sha256": "c00ed6ce0fd864bc3b7f9247f6684c62c9502d67d993e51e9eccbda2723c722d"
+      "sha256": "d9a3533b601bb9f639a4d9bb21047dc5106821000498d0f7455cd4ab3631083d"
     },
     {
       "file": "applications/acdc/src/cb_agents.erl",
-      "sha256": "c00ed6ce0fd864bc3b7f9247f6684c62c9502d67d993e51e9eccbda2723c722d"
+      "sha256": "d9a3533b601bb9f639a4d9bb21047dc5106821000498d0f7455cd4ab3631083d"
     },
     {
       "file": "applications/acdc/src/cb_queues.erl",

@@ -7,12 +7,25 @@ file nor a green unit test means the platform is production-ready.
 ## Latest working snapshot — read before resuming
 
 **Latest continuation (September7):** live-only scope remains unchanged;
-history/WFM/ClickHouse are postponed. Actual isolated call43165 exposed P0-15:
-the caller connected to one agent, but live snapshots stayed waiting because
-ordinary ACDC bridge proof misses native agent-leg-only bridge events. A strict
-reciprocal-channel proof fix is in progress; do not claim natural transition
-acceptance. Evidence `/var/log/kazoo-strategy-acceptance-BMBtU4`; scoped cleanup
-succeeded and zero calls remained. Preceding status POST HTTP500 regression
+history/WFM/ClickHouse are postponed. **P0-15 is fixed and the isolated natural
+call transition passed79231**: waiting → handled → gone, each with a fresh
+native hint and subsequent GET. All15 HTTP snapshots were valid, three native
+invalidations arrived, and zero timeouts occurred. One offer/bridge and12 stable
+FreeSWITCH samples establish the actual single call; exact subscribe/unsubscribe
+ACKs and cleanup passed. All three original agent states were restored, owned
+resources/contacts removed, no recovery ledger remained, zero calls remained
+and all eight services were active. Private evidence is in
+`/var/log/kazoo-strategy-acceptance-ZYctqU/dashboard-evidence.json` and
+`dashboard-natural-call-evidence.json` in that same directory. Earlier43165
+(`/var/log/kazoo-strategy-acceptance-BMBtU4`) remains the valid failing baseline.
+Fresh production build2519 compiled74 ACDC/30 Blackhole modules in
+`/usr/local/src/kazoo5-installer/live-dashboard-backend.0KplKA`; deployment29023
+changed only the matching FSM, backed up at
+`/tmp/kazoo-live-rollout.OYdOqh/acdc_queue_fsm.before-native-proof.beam`.
+Focused6 tests86399 and existing channel-I/O16 tests26126 passed; all31 strategy
+groups passed in16+15 shards before the sixth focused positive-retry test was
+added. See `doc/acdc_ordinary_bridge_proof.md`. Browser call-transition rendering,
+cross-node/soak and restricted-user proof remain open. Preceding status POST HTTP500 regression
 P0-14 is fixed in canonical `cb_agents`, six focused tests passed93704 versus
 two baseline failures90610. Production build
 `/usr/local/src/kazoo5-installer/live-dashboard-backend.a0U2gU` compiled74/30
@@ -22,8 +35,20 @@ Fix committed locally as `a7c82b1`; all14 combined live-authorization groups1916
 passed afterward. Status restoration74067 and preflight10698 passed. Snapshot
 77653 exactly matches the original master roster and31 reported agent states;
 all eight services are active and zero calls remain. Observer diagnostic fixes
-passed all12 offline groups12490; these do not waive the live failure.
+passed all12 offline groups12490; the later79231 call pass supersedes the live failure.
 See task register P0-14–16 and `doc/acdc_strategy_live_acceptance.md`.
+
+Final readback22000 saved `phone-snapshot-natural-pass.json` in the private
+rollout directory; comparison with the original snapshot passed for the exact
+master roster and all31 reported agent states/memberships, without restoration.
+All eight services were active; apps/ecallmgr reported zero automatic restarts.
+Current `/apis` assets were regenerated50258 and passed the complete offline,
+deterministic and tamper suite32709. Actual installer publication52790 passed
+all11 HTTP asset hashes, no-store,308 redirect and missing404 checks. Recoverable
+previous assets: `/usr/local/src/kazoo5-installer/api-docs-rollback.UW8oYV/previous`.
+Earlier publication attempts rolled back after a private verifier used Node
+fetch, which did not preserve the intended Host header; the successful verifier
+uses a bounded native HTTP request with the explicit virtual-host header.
 
 **Authoritative live-only checkpoint — September 7, 2026:** supersedes the
 older chronological checkpoints below. Historical queue/agent dashboards,
@@ -62,15 +87,16 @@ overview/detail, exact served bytes, one initial detail GET followed by a native
 ACK-triggered GET before periodic repair, and acknowledged unsubscribe on
 navigation. Console/page/HTTP errors, supplemental reads and new overview
 requests after detail entry were all zero. Optional external fonts were omitted;
-application/API/socket replies were not mocked. Natural call-event delivery,
-restricted-token isolation and load/soak remain unverified. Wire30446 separately
+application/API/socket replies were not mocked. That browser receipt did not
+test call transitions; the later79231 wire/call pass above does not establish
+browser transition rendering, restricted-token isolation or load/soak. Wire30446 separately
 passed available/consensus snapshots, scoped native invalidation/refetch and
 negative controls. Exact roster and31 agent states/memberships remained unchanged;
 all eight services were active. `/apis` is published (8385); full offline catalog,
 deterministic rebuild and tamper checks82241 passed. Installer module migration
 `b52988c` passed37 isolated cases and actual idempotent readback58155; it handles
 the native maintenance-command exit-2 convention without accepting failed reads.
-Next: real call-transition and isolation/load
+Next: browser call-transition rendering and restricted-user/cross-node/load
 checks. Root owns serialized jobs and service windows. No master push or
 enterprise-readiness claim; all ACDC source remains directly in kz5.
 

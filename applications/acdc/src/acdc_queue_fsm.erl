@@ -523,6 +523,7 @@ connecting('cast', {'accepted', AcceptJObj}, State) -> ordinary_accept(AcceptJOb
 connecting('cast', {'channel_bridged', Event}, State) -> ordinary_bridge(Event, State);
 
 connecting('cast', {'retry', _}, #state{bridge_ctx=#{'leg' := _}}=State) -> {'keep_state', State};
+connecting('cast', {'retry', _}, #state{bridge_ctx=#{'proof_status' := _}}=State) -> {'keep_state', State};
 connecting('cast', {'retry', _RetryJObj}, #state{callback_ctx=#{'mode' := 'native', 'bridge_agent_leg' := _}}=State) ->
     %% A real bridge has crossed the ringing boundary. Late retry messages
     %% cannot start another agent while completion proofs are converging.
@@ -595,6 +596,7 @@ connecting({'call', From}, 'status', #state{member_call=Call
                                            ,agent_ring_timer_ref=AgentRef
                                            ,cdr_url=Url
                                            ,recording_url=RecordingUrl
+                                           ,bridge_ctx=BridgeContext
                                            }=State) ->
     {'next_state', 'connecting', State
     ,{'reply', From, [{<<"state">>, <<"connecting">>}
@@ -608,6 +610,7 @@ connecting({'call', From}, 'status', #state{member_call=Call
                      ,{<<"agent_wait_left">>, elapsed(AgentRef)}
                      ,{<<"cdr_url">>, Url}
                      ,{<<"recording_url">>, RecordingUrl}
+                     ,{<<"bridge_proof">>, maps:get('proof_status', BridgeContext, 'undefined')}
                      ]}};
 connecting({'call', From}, 'current_call', #state{member_call=Call
                                                  ,member_call_start=Start
@@ -621,6 +624,8 @@ connecting({'call', From}, Event, State) ->
 
 connecting('info', {'timeout', _AgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}
             ,#state{bridge_ctx=#{'leg' := _}}=State) -> {'keep_state', State};
+connecting('info', {'timeout', _AgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}
+            ,#state{bridge_ctx=#{'proof_status' := _}}=State) -> {'keep_state', State};
 connecting('info', {'timeout', _AgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}
             ,#state{callback_ctx=#{'mode' := 'native', 'bridge_agent_leg' := _}}=State) -> {'keep_state', State};
 connecting('info', {'timeout', AgentRef, ?AGENT_RING_TIMEOUT_MESSAGE}
@@ -662,13 +667,20 @@ connecting('info', {'timeout', _Ref, ?ANNOUNCE_TIMEOUT_MESSAGE}, State) ->
 connecting('info', {'timeout', ConnRef, ?CONNECTION_TIMEOUT_MESSAGE}, State) ->
     case State#state.bridge_ctx of
         #{'leg' := _} -> {'keep_state', State};
+        #{'proof_status' := _} -> {'keep_state', State};
         _ -> handle_connection_timeout(ConnRef, State)
     end;
+connecting('info', {'timeout', Ref, 'ordinary_bridge_snapshot_retry'}
+            ,#state{bridge_ctx=#{'probe_retry_ref' := Ref}=Ctx}=State) ->
+    ordinary_start_bridge_probe(State#state{bridge_ctx=maps:remove('probe_retry_ref', Ctx)});
+connecting('info', {'timeout', _, 'ordinary_bridge_snapshot_retry'}, State) -> {'keep_state', State};
 connecting('info', {'timeout', Ref, 'ordinary_bridge_proof_timeout'}, #state{bridge_ctx=#{'timer_ref' := Ref}=Ctx}=State) ->
     %% Preserve an actually bridged caller; do not claim handling, cancel its
     %% partner, or start a second originate because an AMQP proof was lost.
-    lager:error("ACDC bridge observed without correlated selected-agent acceptance"),
-    {'keep_state', State#state{bridge_ctx=maps:remove('timer_ref', Ctx)}};
+    lager:error("ACDC selected-agent/reciprocal-bridge proof unresolved; preserving caller without rerouting"),
+    ordinary_stop_bridge_probe(Ctx),
+    {'keep_state', State#state{bridge_ctx=(maps:without(['timer_ref', 'probe_ref', 'probe_pid', 'probe_retry_ref'], Ctx))#{'proof_status' => 'unresolved'}}};
+connecting('info', {'timeout', _, 'ordinary_bridge_proof_timeout'}, State) -> {'keep_state', State};
 connecting('info', {'timeout', Ref, 'callback_commit_retry'}
             ,#state{callback_ctx=#{'timer_ref' := Ref, 'mode' := 'native'}}=State) -> callback_complete(State);
 connecting('info', Event, State) -> callback_native_info(Event, 'connecting', State).
@@ -681,6 +693,14 @@ connecting('info', Event, State) -> callback_native_info(Event, 'connecting', St
 handle_event({'refresh', QueueJObj}, StateName, State) ->
     lager:debug("refreshing queue configs"),
     {'next_state', StateName, update_properties(QueueJObj, State), 'hibernate'};
+handle_event({'ordinary_bridge_snapshot', Ref, Caller, Result}, 'connecting'
+             ,#state{bridge_ctx=#{'probe_ref' := Ref}=Context, member_call=Call}=State) ->
+    case Caller =:= kapps_call:call_id(Call) of
+        'true' ->
+            ordinary_bridge_snapshot(Result, State#state{bridge_ctx=maps:without(['probe_ref', 'probe_pid'], Context)});
+        'false' -> {'keep_state', State}
+    end;
+handle_event({'ordinary_bridge_snapshot', _, _, _}, StateName, State) -> {'next_state', StateName, State};
 handle_event({'channel_bridged', Event}, 'connecting', #state{callback_ctx=#{'mode' := 'native'}}=State) ->
     callback_bridge(Event, State);
 handle_event({'channel_bridged', _}, StateName, #state{callback_ctx=#{'mode' := 'native'}}=State) ->
@@ -751,7 +771,9 @@ handle_sync_event(_Event, From, StateName, State) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec terminate(any(), atom(), state()) -> 'ok'.
-terminate(_Reason, _StateName, _State) ->
+terminate(_Reason, _StateName, State) ->
+    maybe_stop_timer(maps:get('timer_ref', State#state.bridge_ctx, 'undefined')),
+    ordinary_stop_bridge_probe(State#state.bridge_ctx),
     lager:debug("acdc queue statem terminating: ~p", [_Reason]).
 
 %%------------------------------------------------------------------------------
@@ -881,6 +903,7 @@ clear_member_call(#state{connection_timer_ref=ConnRef
     maybe_stop_timer(maps:get('lease_timer_ref', Callback, 'undefined')),
     maybe_stop_timer(maps:get('bridge_probe_ref', Callback, 'undefined')),
     maybe_stop_timer(maps:get('timer_ref', State#state.bridge_ctx, 'undefined')),
+    ordinary_stop_bridge_probe(State#state.bridge_ctx),
     State#state{connect_resps=[]
                ,connect_wins=[]
                ,collect_ref='undefined'
@@ -1111,7 +1134,10 @@ callback_clear_proofs(Context) ->
 
 callback_reset_selection(#state{callback_ctx=#{'mode' := 'native'}=Context}=State) ->
     State#state{callback_ctx=callback_clear_proofs(Context), connect_wins=[]};
-callback_reset_selection(State) -> State#state{connect_wins=[], bridge_ctx=#{}}.
+callback_reset_selection(State) ->
+    maybe_stop_timer(maps:get('timer_ref', State#state.bridge_ctx, 'undefined')),
+    ordinary_stop_bridge_probe(State#state.bridge_ctx),
+    State#state{connect_wins=[], bridge_ctx=#{}}.
 
 callback_remove_winner(AgentId, ProcessId, #state{callback_ctx=#{'mode' := 'native'}=Context, connect_wins=Wins}=State) ->
     Matches = fun(Win) -> kz_json:get_value(<<"Agent-ID">>, Win) =:= AgentId
@@ -2074,12 +2100,13 @@ ordinary_accept(Accept, #state{member_call=Call, account_id=AccountId
     case accept_is_for_call(Accept, Call)
         andalso kz_json:get_value(<<"Account-ID">>, Accept) =:= AccountId
         andalso is_binary(Leg) andalso Leg =/= kapps_call:call_id(Call)
-        andalso (is_reference(State#state.agent_ring_timer_ref) orelse maps:is_key('leg', Context))
+        andalso (is_reference(State#state.agent_ring_timer_ref) orelse maps:is_key('leg', Context)
+                 orelse maps:is_key('proof_status', Context))
         andalso lists:any(fun(W) -> acdc_queue_strategy:process_matches(Accept, W) end, Wins) of
         'true' ->
             Key = {kz_json:get_value(<<"Agent-ID">>, Accept), kz_json:get_value(<<"Process-ID">>, Accept)},
             Accepts = maps:get('accepts', Context, #{}),
-            ordinary_complete(State#state{bridge_ctx=Context#{'accepts' => Accepts#{Key => Accept}}});
+            ordinary_complete(ordinary_proof_wait(State#state{bridge_ctx=Context#{'accepts' => Accepts#{Key => Accept}}}));
         'false' -> {'next_state', 'connecting', State}
     end.
 
@@ -2091,17 +2118,77 @@ ordinary_bridge(Event, #state{member_call=Call, account_id=AccountId
         andalso kz_json:get_value([<<"Custom-Channel-Vars">>, <<"Account-ID">>], Event) =:= AccountId
         andalso is_binary(Leg) andalso byte_size(Leg) > 0 andalso Leg =/= kapps_call:call_id(Call)
         andalso maps:get('leg', Context, Leg) =:= Leg
-        andalso (is_reference(State#state.agent_ring_timer_ref) orelse maps:is_key('leg', Context)) of
+        andalso (is_reference(State#state.agent_ring_timer_ref) orelse maps:is_key('leg', Context)
+                 orelse maps:is_key('proof_status', Context)) of
         'true' ->
-            maybe_stop_timer(State#state.connection_timer_ref),
-            maybe_stop_timer(State#state.agent_ring_timer_ref),
-            Ref = case maps:find('leg', Context) of
-                'error' -> erlang:start_timer(15000, self(), 'ordinary_bridge_proof_timeout');
-                _ -> maps:get('timer_ref', Context, 'undefined')
-            end,
-            ordinary_complete(State#state{bridge_ctx=Context#{'leg' => Leg, 'timer_ref' => Ref}
-                                            ,connection_timer_ref='undefined', agent_ring_timer_ref='undefined'});
+            ordinary_record_bridge(Leg, State);
         'false' -> {'next_state', 'connecting', State}
+    end.
+
+%% Native intercept emits the bridge on the AGENT leg, while this listener is
+%% bound to the caller only. A selected acceptance therefore starts an existing
+%% account-scoped channel-status proof, never a synthetic handled transition.
+%% Freeze retry/connection timers before probing: the caller may already be
+%% physically bridged. Unknown at the fixed deadline is explicitly unresolved,
+%% not permission to originate again or hang up the caller/partner.
+ordinary_proof_wait(#state{bridge_ctx=Context}=State) ->
+    maybe_stop_timer(State#state.connection_timer_ref),
+    maybe_stop_timer(State#state.agent_ring_timer_ref),
+    Next = case maps:is_key('proof_status', Context) of
+        'true' -> Context;
+        'false' -> Context#{'proof_status' => 'pending',
+                            'proof_deadline' => erlang:monotonic_time(millisecond) + 15000,
+                            'timer_ref' => erlang:start_timer(15000, self(), 'ordinary_bridge_proof_timeout')}
+    end,
+    State#state{bridge_ctx=Next, connection_timer_ref='undefined', agent_ring_timer_ref='undefined'}.
+
+ordinary_record_bridge(Leg, State) ->
+    Next = ordinary_proof_wait(State),
+    ordinary_stop_bridge_probe(Next#state.bridge_ctx),
+    Context = maps:without(['probe_ref', 'probe_pid', 'probe_retry_ref'], Next#state.bridge_ctx),
+    ordinary_complete(Next#state{bridge_ctx=Context#{'leg' => Leg}}).
+
+ordinary_start_bridge_probe(#state{bridge_ctx=Context, member_call=Call, account_id=AccountId}=State) ->
+    Deadline = maps:get('proof_deadline', Context, 0),
+    Remaining = Deadline - erlang:monotonic_time(millisecond),
+    case {maps:get('proof_status', Context, 'undefined'), maps:is_key('leg', Context),
+          maps:is_key('probe_ref', Context) orelse maps:is_key('probe_retry_ref', Context), Remaining > 0} of
+        {'pending', 'false', 'false', 'true'} ->
+            Parent = self(), Ref = make_ref(), Caller = kapps_call:call_id(Call),
+            Pid = spawn(fun() ->
+                Result = case Deadline - erlang:monotonic_time(millisecond) of
+                    Budget when Budget > 0 ->
+                        {ok, Watchdog} = timer:kill_after(Budget, self()),
+                        Observed = try acdc_callback_recovery_io:observe_channels(AccountId, [Caller])
+                                   catch _:_ -> {'error', 'unknown'} end,
+                        timer:cancel(Watchdog), Observed;
+                    _ -> {'error', 'deadline'}
+                end,
+                gen_statem:cast(Parent, {'ordinary_bridge_snapshot', Ref, Caller, Result})
+            end),
+            {'next_state', 'connecting', State#state{bridge_ctx=Context#{'probe_ref' => Ref, 'probe_pid' => Pid}}};
+        _ -> {'next_state', 'connecting', State}
+    end.
+
+ordinary_bridge_snapshot(Result, #state{bridge_ctx=Context, member_call=Call, connect_wins=Wins}=State) ->
+    Fresh = maps:get('proof_status', Context, 'undefined') =:= 'pending'
+        andalso erlang:monotonic_time(millisecond) < maps:get('proof_deadline', Context, 0),
+    Accepts = maps:values(maps:get('accepts', Context, #{})),
+    Candidates = lists:usort([kz_json:get_value(<<"Agent-Call-ID">>, A) || A <- Accepts,
+                            lists:any(fun(W) -> acdc_queue_strategy:process_matches(A, W) end, Wins)]),
+    case {Fresh, callback_observed_agent(Result, kapps_call:call_id(Call), Candidates)} of
+        {'true', {'ok', Leg}} -> ordinary_record_bridge(Leg, State);
+        {'true', 'unknown'} ->
+            Ref = erlang:start_timer(250, self(), 'ordinary_bridge_snapshot_retry'),
+            {'next_state', 'connecting', State#state{bridge_ctx=Context#{'probe_retry_ref' => Ref}}};
+        _ -> {'next_state', 'connecting', State}
+    end.
+
+ordinary_stop_bridge_probe(Context) ->
+    maybe_stop_timer(maps:get('probe_retry_ref', Context, 'undefined')),
+    case maps:get('probe_pid', Context, 'undefined') of
+        Pid when is_pid(Pid), Pid =/= self() -> exit(Pid, kill), 'ok';
+        _ -> 'ok'
     end.
 
 ordinary_complete(#state{bridge_ctx=Context, member_call=Call, listener_proc=Listener
@@ -2118,7 +2205,7 @@ ordinary_complete(#state{bridge_ctx=Context, member_call=Call, listener_proc=Lis
             acdc_queue_listener:finish_member_call(Listener),
             acdc_stats:call_handled(AccountId, QueueId, kapps_call:call_id(Call), Agent),
             {'next_state', 'ready', clear_member_call(State), 'hibernate'};
-        _ -> {'next_state', 'connecting', State}
+        _ -> ordinary_start_bridge_probe(State)
     end.
 
 callback_accept(Accept, #state{member_call=Call, callback_ctx=Context
