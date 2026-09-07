@@ -2745,6 +2745,120 @@ configure_kazoo_api_modules() {
         [[ $output != *'failed to start'* ]] || die "Kazoo Crossbar module ${module} failed to start"
     done
     log 'Registered and persisted ACDC and Monster UI Crossbar APIs'
+    configure_kazoo_queue_live_module
+}
+
+kazoo_queue_live_selected() {
+    local app
+    for app in acdc blackhole crossbar; do
+        [[ ",${KAZOO_APPS_LIST}," == *",${app},"* ]] || return 1
+    done
+}
+
+# Parse only the bounded native SUP list/maintenance formats, never evaluate
+# Erlang text. A substring match would accept bh_queue_live_other as ready.
+kazoo_blackhole_module_output() {
+    node - "$1" "$2" <<'NODE'
+'use strict';
+const [kind, raw] = process.argv.slice(2);
+function reject() { process.stderr.write('Invalid Blackhole module readback\n'); process.exit(1); }
+if (typeof raw !== 'string' || Buffer.byteLength(raw) > 65536) reject();
+if (kind === 'start') {
+    const lines = raw.trim().split(/\r?\n/).map(line => line.trim());
+    if (lines.shift() !== 'starting bh_queue_live:' || lines.pop() !== 'ok') reject();
+    let groups = 0, fields;
+    for (const line of lines) {
+        if (/^node [^\s\x00-\x1f]{1,256} returned:$/.test(line)) {
+            if (fields && fields.size !== 2) reject();
+            if (++groups > 1024) reject();
+            fields = new Set();
+        } else {
+            const match = /^(Persisted|Started): true$/.exec(line);
+            if (!fields || !match || fields.has(match[1])) reject();
+            fields.add(match[1]);
+        }
+    }
+    if (!groups || fields.size !== 2) reject();
+    process.exit(0);
+}
+if (kind !== 'running' && kind !== 'autoload') reject();
+let text = raw.trim(), names = [];
+if (!text.startsWith('[') || !text.endsWith(']')) reject();
+text = text.slice(1, -1).trim();
+const item = kind === 'autoload' ? /^<<"([A-Za-z0-9_@.-]{1,128})">>/ :
+    /^(?:([a-z][A-Za-z0-9_@]{0,127})|'([A-Za-z0-9_@.-]{1,128})')/;
+while (text) {
+    const match = item.exec(text);
+    if (!match || names.length >= 1024) reject();
+    names.push(match[1] || match[2]);
+    text = text.slice(match[0].length).trim();
+    if (!text) break;
+    if (text[0] !== ',' || !text.slice(1).trim()) reject();
+    text = text.slice(1).trim();
+}
+// Duplicate configured entries are preserved by the native migration, but
+// membership verification only needs their distinct names.
+process.stdout.write([...new Set(names)].sort().join('\n'));
+NODE
+}
+
+configure_kazoo_queue_live_module() {
+    local before_autoload before_running after_autoload after_running output module
+    kazoo_queue_live_selected || return 0
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would ensure bh_queue_live with native preserving autoload migration and exact readback'
+        return 0
+    fi
+    if ! monster_registration_available; then
+        log 'No local Kazoo applications authority; queue-live Blackhole configuration is delegated'
+        return 0
+    fi
+    verify_erlang_applications kazoo_apps acdc,blackhole,crossbar || die 'Required local queue-live applications are not active'
+    output=$(timeout 30 sup blackhole_config autoload_modules </dev/null) || die 'Could not read effective Blackhole autoload modules'
+    before_autoload=$(kazoo_blackhole_module_output autoload "$output") || die 'Invalid effective Blackhole autoload list'
+    # The maintenance alias returns this same list, but SUP deliberately exits
+    # 2 for non-ok maintenance results. Use the non-maintenance read API.
+    output=$(timeout 30 sup blackhole_bindings modules_loaded </dev/null) || die 'Could not read running Blackhole modules'
+    before_running=$(kazoo_blackhole_module_output running "$output") || die 'Invalid running Blackhole module list'
+    if [[ $'\n'"$before_autoload"$'\n' == *$'\n'bh_queue_live$'\n'* &&
+          $'\n'"$before_running"$'\n' == *$'\n'bh_queue_live$'\n'* ]]; then
+        log 'PASS bh_queue_live already running and present in effective autoload modules'
+        return 0
+    fi
+    # start_module/1 defaults Persist=true and adds to the effective list via
+    # the native listener. Never set/replace all modules or erase node overrides.
+    output=$(timeout 30 sup blackhole_maintenance start_module bh_queue_live </dev/null) || die 'Could not start/persist bh_queue_live'
+    kazoo_blackhole_module_output start "$output" || die 'Blackhole did not confirm every start/persist response'
+    output=$(timeout 30 sup blackhole_config autoload_modules </dev/null) || die 'Could not verify effective Blackhole autoload modules'
+    after_autoload=$(kazoo_blackhole_module_output autoload "$output") || die 'Invalid effective Blackhole autoload readback'
+    output=$(timeout 30 sup blackhole_bindings modules_loaded </dev/null) || die 'Could not verify running Blackhole modules'
+    after_running=$(kazoo_blackhole_module_output running "$output") || die 'Invalid running Blackhole readback'
+    [[ $'\n'"$after_autoload"$'\n' == *$'\n'bh_queue_live$'\n'* &&
+       $'\n'"$after_running"$'\n' == *$'\n'bh_queue_live$'\n'* ]] || die 'bh_queue_live is not running/effective; a node override may mask persistence'
+    while IFS= read -r module; do
+        [[ -z $module || $'\n'"$after_autoload"$'\n' == *$'\n'"$module"$'\n'* ]] || die 'Blackhole migration did not preserve an existing effective autoload module'
+    done <<<"$before_autoload"
+    while IFS= read -r module; do
+        [[ -z $module || $'\n'"$after_running"$'\n' == *$'\n'"$module"$'\n'* ]] || die 'Blackhole migration lost a running module'
+    done <<<"$before_running"
+    log 'PASS bh_queue_live running and effective; existing Blackhole modules preserved'
+}
+
+verify_kazoo_queue_live_module() {
+    local kind output modules
+    kazoo_queue_live_selected || return 0
+    [[ $DRY_RUN != true ]] || return 0
+    monster_registration_available || return 0
+    for kind in autoload running; do
+        if [[ $kind == autoload ]]; then
+            output=$(timeout 30 sup blackhole_config autoload_modules </dev/null) || die 'Could not verify Blackhole autoload modules'
+        else
+            output=$(timeout 30 sup blackhole_bindings modules_loaded </dev/null) || die 'Could not verify running Blackhole modules'
+        fi
+        modules=$(kazoo_blackhole_module_output "$kind" "$output") || die 'Invalid Blackhole module verification output'
+        [[ $'\n'"$modules"$'\n' == *$'\n'bh_queue_live$'\n'* ]] || die "bh_queue_live missing from ${kind} modules; install kazoo-apps to migrate safely"
+    done
+    log 'PASS bh_queue_live running and effective autoload membership (read-only)'
 }
 
 verify_acdc_interfaces() {
@@ -2754,6 +2868,7 @@ verify_acdc_interfaces() {
     for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers cb_members; do
         [[ $modules == *"$module"* ]] || die "Kazoo Crossbar module ${module} is not registered"
     done
+    verify_kazoo_queue_live_module
     if [[ -z $KAZOO_MASTER_ADMIN_PASSWORD && ! -r $KAZOO_INSTALLER_SECRETS ]]; then
         log 'PASS ACDC API registrations; authenticated API probe requires existing master credentials'
         return 0
