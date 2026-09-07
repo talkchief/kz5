@@ -237,6 +237,16 @@ See `doc/acdc_live_dashboard_ui.md`, `doc/acdc_live_auth.md` and
 `doc/monster_socket_lifecycle.md`. Native queue event publication/delivery,
 runtime queue-agent state and coherent deployment/live acceptance remain OPEN.
 
+September7 continuation: `a011934` adds the native lifecycle UI controller;
+32 offline groups passed64066,18 Chromium fixture groups and20 queue-login
+groups passed55555. `5e6a3b6` adds the local bounded runtime-agent collector;
+17 protocol tests and three production compiles passed64066. The latter still
+needs authorized federated/public DTO integration, while dedicated Blackhole
+server delivery/publishing and installer replay are work in progress. Neither
+source checkpoint is deployed/live accepted. Same-scope search/focus retention
+is a follow-up UI task so automatic updates do not disrupt operators. No new
+historical/ClickHouse work was started; all eight services are active afterward.
+
 Earlier selected-call extension: collector42 tests, transport28 tests,
 production HTTP9 groups plus2 helpers, and private OpenAPI13 groups/214 schema
 cases passed. Detail now returns at most200 observed active calls, with explicit
@@ -262,9 +272,9 @@ a new deployed dashboard. Historical/WFM work remains postponed.
 
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
-| DASH-01 | ACTIVE — UI source tested; not deployed | Live queue overview using `Queues Live Dashboard Main.png`: sortable queue cards, SLA, waiting/handled/abandoned counts, wait/handle durations, queue administration actions. Source summary/detail navigation passes22 dashboard groups and20 queue-login groups in11055; see doc/acdc_live_dashboard_ui.md. Still legacy observed-stat subset; bounded snapshot/Blackhole wiring and full design/live acceptance open. |
-| DASH-02 | ACTIVE — UI source tested; not deployed | Clicking a queue opens its live detail using `Queues Live Dashboard.png`: KPI cards, queue-scoped agent/call states, search/filter/sort, performance and authorized spy/whisper/barge/join controls. Source summary/detail navigation passes22 dashboard groups and20 queue-login groups in11055; see doc/acdc_live_dashboard_ui.md. Still legacy observed-stat subset; bounded snapshot/Blackhole wiring and full design/live acceptance open. |
-| DASH-03 | ACTIVE — projection and local collector tested; API open | Bounded account/queue dashboard snapshots with source timestamps, completeness, pagination and authorization. acdc_dashboard_projection now consumes actual call_stat records with bounded queues/rows, separate occupancy/cohort counts, conflict/scope/timeline rejection and explicit incomplete/identity limits;38 tests passed60072. See doc/acdc_dashboard_projection.md. Local collector now passes35 actual ETS tests in7720, bounds all visited keys and time, retains older active calls, releases fixation and rejects table replacement. Authenticated source/API integration, cluster coverage, queue runtime eligibility, HTTP/OpenAPI and live UI still required; no full historical visit claims. Existing stats ignores Limit and its recent-entry filter can omit older active calls; wrapping that API is not a complete snapshot. |
+| DASH-01 | ACTIVE — bounded snapshot UI tested; not deployed | Live queue overview using `Queues Live Dashboard Main.png`. UI `900efa8` consumes the new authorized paged snapshot, not the legacy stats fan-out. Baseline passes22 offline dashboard groups and12 Chromium fixture groups. Native Blackhole controller is now being integrated; full visual/live acceptance and deployment remain open. Unsupported SLA/handle metrics must not be invented. |
+| DASH-02 | ACTIVE — selected-call UI tested; runtime agents open | Clicking a queue opens live detail using `Queues Live Dashboard.png`. Bounded snapshot includes up to200 observed active calls with completeness/freshness metadata. Saved roster/global status are currently supplemental reads, not runtime queue membership or endpoint reachability. Implement bounded runtime agent observations, native updates and authorized supervision controls; then verify actual call transitions, isolation and design/deployment acceptance. |
+| DASH-03 | ACTIVE — HTTP/AMQP contracts tested; deployment open | Authorized `/queues/live` and `/queues/{QUEUE_ID}/live` routes use bounded local ETS collection and federated source comparison. Latest scoped proof:42 collector tests,28 transport tests,9 route groups,2 helpers and17 actual-handler/OpenAPI checks; see doc/acdc_live_snapshot.md. Missing/conflicting sources yield unavailable metrics, not zero. Runtime queue-agent collection is under implementation; coherent deployment and real broker/HTTP acceptance remain open. No full historical visit claims. |
 | DASH-04 | OPEN — events | Reuse native Blackhole for authenticated account/queue-scoped WebSocket updates, not a duplicate transport server. Snapshot/event ordering, duplicate/gap handling, reconnect/resubscribe/resync, server-side token expiry/revocation, stale indicators, bounded buffers and multi-node ownership. Native delivery is best effort and has no durable replay cursor; account-hierarchy checks are not queue permissions. No silent polling-only substitution. |
 | DASH-05 | OPEN — API + docs | Define/version dashboard request, response and event schemas. Publish HTTP contracts in OpenAPI at `/apis`, link WebSocket message/subscription/lifecycle documentation; distinguish proposals from deployed endpoints. Test schema conformance and tenant isolation. |
 | DASH-06 | POSTPONED — UI + reporting | Queue historical dashboard using `Queue Historical Dashboard.png`: time/queue filters, call outcomes, SLA, wait/handle/talk metrics, details and export. Reconcile counts, timezone boundaries and late events. |

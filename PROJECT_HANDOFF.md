@@ -1,6 +1,6 @@
 # Kazoo 5 — start here / engineering handoff
 
-Last updated: **2026-09-06**. This is the navigation and current-state guide;
+Last updated: **2026-09-07**. This is the navigation and current-state guide;
 `PROJECT_TASKS.md` is the detailed requirement/acceptance register. Neither this
 file nor a green unit test means the platform is production-ready.
 
@@ -14,6 +14,27 @@ and native Blackhole updates. Do not build historical storage, ingestion,
 reports or ClickHouse integration now. Agent state within queue detail remains
 in scope; a separate agent dashboard is deferred. Neither live screen is yet
 accepted/deployed. See the scope override in `PROJECT_TASKS.md`.
+
+**Latest live-only checkpoint — September 7:** local `a011934` adds the
+capability-gated native subscription controller. Root64066 passed32 offline UI
+groups; root55555 passed18 Chromium fixture groups and20 unchanged queue-login
+groups (`/tmp/kazoo-monster-live-dashboard.u5WbOa`). Local `5e6a3b6` adds bounded
+runtime queue-agent observations: root64066 passed17 protocol tests and three
+production compiles (`/tmp/kazoo-dashboard-agents.XzPtgX`). See
+`doc/acdc_dashboard_runtime_agents.md` and `doc/acdc_live_dashboard_ui.md`.
+These are source/protocol checkpoints, not live broker/agent/call acceptance.
+All eight services were active after trapped development test windows. Nothing
+new was deployed or pushed to master.
+
+Current owners supersede older assignments below: root owns runtime-agent
+federated/public DTO integration and validation; native agent owns dedicated
+`bh_queue_live` authorization/delivery and canonical patch replay; media agent
+owns post-mutation bounded invalidation publishing; browser agent owns the
+live UI controller and same-scope search/focus preservation. Server event work
+is still untested work in progress. Hints are explicitly lossy, with mandatory
+15-second snapshot reconciliation; no broad cross-tenant resync event or new
+historical storage is being added. The public WebSocket/runtime-agent capability
+flags remain false until matching backend integration is ready.
 
 **Latest tested integration:** UI commit `900efa8` uses the new bounded summary
 and selected-call DTOs. It passed 22 offline dashboard groups, 20 queue-login
