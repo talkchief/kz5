@@ -125,4 +125,28 @@ for(const bad of ['', captureLog.replace('0 packets dropped','1 packets dropped'
     captureLog+'0 packets dropped by kernel\n', 'x'.repeat(65537)]) {
     assert.throws(()=>assertCaptureLog(bad));groups++;
 }
-console.log('PASS '+groups+' synthetic dual-schedule SIP/RTP gates; full phrases, exact peer, no DTMF, loss and timing negatives');
+// New profile retains the same exact-dialog/coverage/DTMF/teardown checks.
+// References are synthetic waveforms, not listening or deployed-audio evidence.
+const positionParts=[reference(14000,79),reference(8000,101)],prerecordedOffer=reference(60000,91);
+const combinedPosition=Buffer.concat([positionParts[0],Buffer.alloc(800,255),positionParts[1]]);
+const prerecordedRefs={offer:prerecordedOffer,position_parts:positionParts};
+const prerecordedCapture=options=>capture({refs:{offer:prerecordedOffer,position:combinedPosition},
+    offer:[30,60],position:[45,75],duration:86,...options});
+const prerecordedExpected={...expected,audio_mode:'prerecorded',timing_profile:'dual-prerecorded',locale:'en-us'};
+const prerecordedValid=prerecordedCapture();
+for(const locale of ['en-us','he-il','fr-fr','es-es','ar-sa']) {
+    const got=inspect(prerecordedValid,prerecordedRefs,{...prerecordedExpected,locale});
+    assert.equal(got.locale,locale);assert.equal(got.scope,'position-one-and-offer-six');assert.equal(got.spoken_position,1);
+    assert.equal(got.wait_time_verified,false);assert.equal(got.native_listening_approved,false);assert.equal(got.full_language_ready,false);
+    assert.deepEqual(got.offer.map(m=>m.after_queue_entry_seconds),[30,60]);
+    assert.deepEqual(got.position.map(m=>m.after_queue_entry_seconds),[45,75]);
+    assert(got.position.every(p=>p.components.length===2));assert.equal(got.entry_silence.end_after_queue_entry_seconds,29);
+}groups++;
+for(const [caseIndex,options] of [{dtmf:true},{foreign:true},{lossAt:20},{lossAt:46},{earlySpeech:true},
+    {noByeAck:true},{position:[44,76.1]},{offer:[30,60,81]},
+    {refs:{offer:prerecordedOffer,position:Buffer.concat([positionParts[1],positionParts[0]])}},
+    {refs:{offer:prerecordedOffer,position:Buffer.concat([positionParts[0],Buffer.alloc(16000,255),positionParts[1]])}}].entries()) {
+    assert.throws(()=>inspect(prerecordedCapture(options),prerecordedRefs,prerecordedExpected), 'prerecorded negative case '+caseIndex);
+}groups++;
+assert.throws(()=>inspect(prerecordedValid,prerecordedRefs,{...prerecordedExpected,locale:'en-gb'}));groups++;
+console.log('PASS '+groups+' synthetic dual-schedule SIP/RTP gates; full ordered prerecorded position, exact peer, no DTMF, loss and timing negatives');

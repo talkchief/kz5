@@ -4,6 +4,7 @@ const fs = require('node:fs'), assert = require('node:assert/strict'), crypto = 
 const {packets, audioSdp} = require('./assert-callback-confirmation-pcap.cjs');
 const {phraseMatches} = require('./assert-announcement-audio.cjs');
 const {timingProfile} = require('./callback-offer-profile.cjs');
+const prerecorded = require('./callback-prerecorded-reference.cjs');
 const sha = data => crypto.createHash('sha256').update(data).digest('hex');
 function assertCaptureLog(text) {
     assert(typeof text === 'string' && text.length <= 65536, 'Invalid capture completion log');
@@ -18,8 +19,9 @@ function assertCaptureLog(text) {
     assert(values['dropped by kernel'] === 0, 'Capture loss makes absence evidence inconclusive');
 }
 function decode(byte) { const x = ~byte & 255, s = (((x & 15) << 3) + 132) << ((x >> 4) & 7); return x & 128 ? 132 - s : s - 132; }
-function completeMatches(audio, reference) {
-    assert(reference.length >= 512 && reference.length < 7 * 8000, 'Installed reference must be audible and shorter than7seconds');
+function completeMatches(audio, reference, maximumSeconds = 7) {
+    assert([7,12].includes(maximumSeconds) && reference.length >= 512 && reference.length < maximumSeconds * 8000,
+        maximumSeconds===7?'Installed reference must be audible and shorter than7seconds':'Installed reference exceeds the finite twelve-second bound');
     const candidates = phraseMatches(audio, reference.subarray(0, 24000));
     return candidates.filter(match => {
         if (match.sample + reference.length > audio.length) return false;
@@ -80,7 +82,8 @@ function sip(packet) {
 }
 function inspect(buffer, refs, expected) {
     const mode=expected.audio_mode===undefined?'legacy':expected.audio_mode;
-    assert(['legacy','gemini'].includes(mode),'Unexpected offer audio mode');
+    assert(['legacy','gemini','prerecorded'].includes(mode),'Unexpected offer audio mode');
+    if(mode==='prerecorded')assert(prerecorded.LOCALES.includes(expected.locale),'Missing explicit audible locale');
     const timing=timingProfile(mode,expected.timing_profile);
     if(mode==='gemini')assert(refs.offer.length>5*8000&&refs.offer.length<7*8000,
         'Gemini probe requires the complete longer-than-five-second offer');
@@ -144,11 +147,11 @@ function inspect(buffer, refs, expected) {
     assert(covered.every(Boolean), 'Missing RTP in observed announcement timeline');
     const anchor = expected.queue_entry;
     assert(Number.isFinite(anchor) && Math.abs(anchor-answer.time)<5, 'Missing exact queue-entry anchor');
-    const entrySilence=mode==='gemini'?assertGeminiEntrySilence(audio,times,anchor,timing.silenceUntil):undefined;
+    const entrySilence=mode==='gemini'||mode==='prerecorded'?assertGeminiEntrySilence(audio,times,anchor,timing.silenceUntil):undefined;
     const result = {};
-    const targetsByName=mode==='gemini'?[['offer',timing.offers]]:[['offer',timing.offers], ['position',[11,26,41]]];
+    const targetsByName=mode==='gemini'||mode==='prerecorded'?[['offer',timing.offers]]:[['offer',timing.offers], ['position',[11,26,41]]];
     for (const [name, targets] of targetsByName) {
-        const reference = refs[name], matches = completeMatches(audio,reference);
+        const reference = refs[name], matches = completeMatches(audio,reference,mode==='prerecorded'?12:7);
         assert(matches.length === targets.length, 'Expected exactly'+targets.length+' complete '+name+' phrases, found'+matches.length);
         result[name] = matches.map((m,i) => {
             assert(covered.subarray(m.sample,m.sample+reference.length).every(Boolean), 'Missing RTP inside full '+name+' phrase');
@@ -160,15 +163,84 @@ function inspect(buffer, refs, expected) {
         });
         result[name+'_reference_sha256'] = sha(reference);
     }
-    return {result:'PASS',...result, audio_mode:mode,scope:mode==='gemini'?'offer_only_silence_hold':'legacy_dual_schedule',
-        ...(mode==='gemini'?{entry_silence:entrySilence}:{}),
-        position_verified:mode==='legacy',offer_duration_seconds:refs.offer.length/8000,
-        timing_profile:timing.name,expected_offer_seconds:timing.offers, expected_position_seconds:mode==='gemini'?[]:[11,26,41],
+    if(mode==='prerecorded') {
+        result.position=orderedPosition(audio,times,covered,anchor,refs.position_parts,timing.positions);
+        result.position_reference_sha256=refs.position_parts.map(sha);
+        // Complete phrase counts alone miss an extra offer cut off by BYE.
+        // This fixture selects silence MOH: outside the exact matched clips,
+        // allow only quiet comfort noise and two brief 20ms transients.
+        const allowed=new Uint8Array(audio.length);
+        for(const reference of [refs.offer,...refs.position_parts]) {
+            for(const match of completeMatches(audio,reference,12)) {
+                allowed.fill(1,Math.max(0,match.sample-160),Math.min(audio.length,match.sample+reference.length+160));
+            }
+        }
+        let energetic=0, observed=0;
+        for(let start=0;start<audio.length;start+=160) {
+            const end=Math.min(start+160,audio.length);
+            if(allowed.subarray(start,end).some(Boolean))continue;
+            let energy=0;
+            for(let i=start;i<end;i++)energy+=decode(audio[i])**2;
+            observed++;
+            if(Math.sqrt(energy/(end-start))>256)energetic++;
+        }
+        assert(observed>0&&energetic<=2,'Unexpected audio outside complete prerecorded phrases');
+        result.inter_phrase_silence={window_ms:20,rms_limit_pcm16:256,
+            observed_windows:observed,observed_energetic_windows:energetic,allowed_energetic_windows:2};
+    }
+    return {result:'PASS',...result, audio_mode:mode,scope:mode==='prerecorded'?'position-one-and-offer-six':mode==='gemini'?'offer_only_silence_hold':'legacy_dual_schedule',
+        ...(mode==='gemini'||mode==='prerecorded'?{entry_silence:entrySilence}:{}),
+        ...(mode==='prerecorded'?{locale:expected.locale,spoken_position:1,wait_time_verified:false,native_listening_approved:false,full_language_ready:false}:{}),
+        position_verified:mode!=='gemini',offer_duration_seconds:refs.offer.length/8000,
+        timing_profile:timing.name,expected_offer_seconds:timing.offers,
+        expected_position_seconds:mode==='prerecorded'?timing.positions:mode==='gemini'?[]:[11,26,41],
         delivery_tolerance_seconds:1, no_offer_on_entry:true, exact_negotiated_received_pcmu:true, complete_audio_coverage:true,
         call_duration_seconds:Number((bye.time-answer.time).toFixed(3)), normal_sip_teardown:true};
 }
-function assertReferenceReceipt(receipt,refs,mode='legacy') {
-    assert(['legacy','gemini'].includes(mode),'Unexpected offer audio mode');
+function orderedPosition(audio,times,covered,anchor,parts,targets) {
+    assert(Array.isArray(parts)&&parts.length>=2&&parts.length<=4&&parts.every(Buffer.isBuffer)
+        &&parts.reduce((sum,b)=>sum+b.length,0)<10*8000,'Bounded ordered position reference required');
+    assert.deepEqual(targets,[45,75]);
+    const matches=parts.map(part=>completeMatches(audio,part,12));
+    assert(matches.every(m=>m.length===targets.length),'Missing, extra or truncated position component');
+    return targets.map((target,i)=>{
+        const first=matches[0][i].sample, sequence=parts.map((part,p)=>{
+            const m=matches[p][i], end=m.sample+part.length;
+            assert(covered.subarray(m.sample,end).every(Boolean),'Missing RTP inside full ordered position component');
+            assert(Math.abs(times[end-1]-times[m.sample]-(part.length-1)/8000)<.3,'Position component wall-clock discontinuity');
+            if(p) {
+                const prior=matches[p-1][i].sample+parts[p-1].length;
+                assert(m.sample>=prior-160 && m.sample<=prior+8000,'Position components reordered, overlapping or excessively separated');
+            }
+            return {component:p,after_queue_entry_seconds:Number((times[m.sample]-anchor).toFixed(3)),correlation:Number(m.correlation.toFixed(6))};
+        });
+        assert(Math.abs(times[first]-anchor-target)<=1,'Wrong ordered position schedule');
+        const last=matches.at(-1)[i].sample+parts.at(-1).length;
+        assert(times[last-1]-times[first]<12,'Position sentence exceeds independent schedule window');
+        return {after_queue_entry_seconds:Number((times[first]-anchor).toFixed(3)),components:sequence};
+    });
+}
+function assertReferenceReceipt(receipt,refs,mode='legacy',expected={},indexBytes,sourceRoot) {
+    assert(['legacy','gemini','prerecorded'].includes(mode),'Unexpected offer audio mode');
+    if(mode==='prerecorded') {
+        assert(receipt.schema_version===1&&receipt.audio_mode===mode&&receipt.scope==='position-one-and-offer-six'
+            &&prerecorded.LOCALES.includes(receipt.locale)&&receipt.locale===expected.locale
+            &&receipt.reference_index_sha256===expected.reference_index_sha256
+            &&typeof receipt.reference_index_sha256==='string'&&/^[a-f0-9]{64}$/.test(receipt.reference_index_sha256)
+            &&receipt.wait_time_verified===false&&receipt.native_listening_approved===false&&receipt.full_language_ready===false);
+        prerecorded.verifyReceiptIndex(receipt,indexBytes,expected.reference_index_sha256,expected.locale,sourceRoot);
+        const assets=receipt.assets;
+        assert(Array.isArray(assets)&&assets.length>=3&&assets.length<=5&&assets[0].key==='offer'
+            &&assets[0].expected.source_voice.canonical_prompt_id==='acdc-callback-offer-6');
+        assert.equal(refs.position_parts.length,assets.length-1);
+        for(let i=0;i<assets.length;i++) {
+            const a=assets[i], raw=i?refs.position_parts[i-1]:refs.offer;
+            assert(a.key===(i?'position-'+(i-1):'offer')&&a.expected.language===receipt.locale
+                &&a.expected._id===receipt.locale+'/'+a.expected.prompt_id&&sha(raw)===a.ulaw_sha256&&raw.length===a.samples,
+                'Uncorrelated ordered reference');
+        }
+        return;
+    }
     if(mode==='gemini') {
         assert(receipt.audio_mode==='gemini'&&receipt.scope==='offer_only_silence_hold'&&receipt.position_verified===false);
         const r=receipt.offer;
@@ -182,7 +254,7 @@ function assertReferenceReceipt(receipt,refs,mode='legacy') {
     for(const key of mode==='gemini'?['offer']:['offer','position'])
         assert(sha(refs[key])===receipt[key].ulaw_sha256,'Installed reference receipt mismatch');
 }
-module.exports = {inspect, completeMatches, assertCaptureLog,assertReferenceReceipt,assertGeminiEntrySilence};
+module.exports = {inspect, completeMatches, orderedPosition, assertCaptureLog,assertReferenceReceipt,assertGeminiEntrySilence};
 if (require.main === module) {
     try {
         const run = process.argv[2], read = name => { const p=run+'/'+name,s=fs.lstatSync(p); assert(s.isFile()&&!s.isSymbolicLink()&&s.uid===0&&(s.mode&511)===384); return fs.readFileSync(p); };
@@ -191,12 +263,18 @@ if (require.main === module) {
         assert(expected.queue_id===fixture.queue_id && expected.account===fixture.account);
         expected.audio_mode=fixture.audio_mode===undefined?'legacy':fixture.audio_mode;
         expected.timing_profile=fixture.timing_profile;
+        if(expected.audio_mode==='prerecorded') {expected.locale=fixture.language;expected.reference_index_sha256=fixture.reference_index_sha256;}
         const evidence=JSON.parse(read('offer-queue-entry.json')); assert(evidence.call_id===expected.call_id && evidence.queue_id===expected.queue_id);
         expected.queue_entry=Date.parse(evidence.entry_at)/1000;
         expected.local_engine_ips=Object.values(require('node:os').networkInterfaces()).flat().filter(x=>x.family==='IPv4').map(x=>x.address);
         const receipt=JSON.parse(read('offer-reference-receipt.json')),refs={offer:read('offer-reference.ulaw')};
         if(expected.audio_mode==='legacy')refs.position=read('position-reference.ulaw');
-        assertReferenceReceipt(receipt,refs,expected.audio_mode);
+        if(expected.audio_mode==='prerecorded') {
+            assert(Array.isArray(receipt.assets)&&receipt.assets.length>=3&&receipt.assets.length<=5);
+            refs.position_parts=receipt.assets.slice(1).map((_,i)=>read('position-'+i+'-reference.ulaw'));
+        }
+        const indexBytes=expected.audio_mode==='prerecorded'?read('offer-reference-index.json'):undefined;
+        assertReferenceReceipt(receipt,refs,expected.audio_mode,expected,indexBytes);
         console.log(JSON.stringify(inspect(read('offer-rtp.pcap'),refs,expected)));
     } catch(error) {console.error('Callback offer audio FAIL: '+error.message);process.exitCode=1;}
 }

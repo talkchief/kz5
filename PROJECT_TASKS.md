@@ -2,6 +2,25 @@
 
 ## Current focused release checkpoint — 2026-09-07 21:41 UTC
 
+- **Pre-deployment verifier and live-audio harness fixes:** build-order fix
+  `36876c3` is pushed. The following normal installer attempt
+  `dc71ad/session30156` was deliberately stopped during media preparation when
+  read-only review found a guaranteed native probe bug: OTP returns
+  `{ok, {Module, MD5}}`, not a singleton list. Corrected production template
+  passes its actual `CheckBeams` closure against a real compiled/loaded module,
+  including wrong path/hash and loaded-code mismatch refusals
+  (`022310/031fb5`, private fixture `/root/kazoo-runtime-reader.aSXaUC`).
+  No service activation occurred in that stopped attempt.
+- **Five-language call-test harness integrated and offline-tested:** explicit
+  position-one/offer-six profiles, installed-byte/model/index binding and exact
+  SIP/RTP checks pass52 audio,10 reference and33 fixture groups
+  (`7ac1fc/session14947/d39a06`). Prior synthetic failures found an incorrect
+  2.5Flash allowlist (actual saved originals are2.5Pro), and an extra offer
+  truncated by BYE escaping complete-phrase counting. Both are fixed without
+  changing saved audio or relaxing readiness. Live runs remain open. See
+  `doc/acdc_five_language_live_audio_acceptance.md`; wait-time/native listening
+  and callback registration/retry are separate gates.
+
 - **Next deployment attempt, 22:10 UTC:** tested integration code is committed
   and pushed to master as `99eafe5` (80 files; staged secret/whitespace checks
   passed). Normal main-SH run `8a1b8e/session36819` passed both complete voice

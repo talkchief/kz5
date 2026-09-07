@@ -1,4 +1,4 @@
-%%% Execute only the actual template's pure bounded-reader closures offline.
+%%% Execute the actual template's bounded-reader and BEAM-check closures offline.
 -module(acdc_runtime_probe_reader_tests).
 -export([run/1]).
 
@@ -37,5 +37,37 @@ run(Directory) ->
     Data = Read(File, 100, beam, Hash(Data)),
     ok = file:change_mode(File, 8#640), ok = file:change_mode(Directory, 8#777),
     Failure(fun() -> Read(File, 100, beam, Hash(Data)) end), ok = file:change_mode(Directory, 8#750),
-    io:format("PASS actual template bounded-reader success and 9 refusal cases; no native runtime/SUP execution~n"),
+
+    %% Evaluate the actual CheckBeams expression, not a duplicated expected
+    %% beam_lib return pattern. The current module is a real compiled/loaded
+    %% BEAM; no production module, RPC, datastore or media worker is involved.
+    [CheckExpression] = [E || E = {match, _, {var, _, 'CheckBeams'}, _} <- Body],
+    BeamFile = filename:join(Directory, atom_to_list(?MODULE) ++ ".beam"),
+    BeamFile = code:which(?MODULE),
+    {ok, BeamBytes} = file:read_file(BeamFile),
+    Beam = #{<<"module">> => atom_to_binary(?MODULE, utf8),
+             <<"path">> => list_to_binary(BeamFile), <<"sha256">> => Hash(BeamBytes)},
+    Check = fun(Entry) ->
+        WithGet = erl_eval:add_binding('Get', fun maps:get/2, Bindings),
+        WithGuard = erl_eval:add_binding('Guard', fun() -> ok end, WithGet),
+        WithBeams = erl_eval:add_binding('Beams', [Entry], WithGuard),
+        {value, CheckFun, _} = erl_eval:expr(CheckExpression, WithBeams),
+        CheckFun()
+    end,
+    ok = Check(Beam),
+    Failure(fun() -> Check(Beam#{<<"path">> => list_to_binary(File)}) end),
+    Failure(fun() -> Check(Beam#{<<"sha256">> => Hash(<<"wrong beam hash">>)}) end),
+    %% Same module name and exact on-disk hash are insufficient: a different
+    %% valid compiled body must fail against the still-loaded module's MD5.
+    Forms = [{attribute, 1, module, ?MODULE},
+             {attribute, 2, export, [{fixture_identity, 0}]},
+             {function, 3, fixture_identity, 0,
+                 [{clause, 3, [], [], [{atom, 3, different_unloaded_body}]}]}],
+    {ok, ?MODULE, DifferentBeam, []} = compile:forms(Forms, [binary, return_errors, return_warnings]),
+    try
+        ok = file:write_file(BeamFile, DifferentBeam),
+        Failure(fun() -> Check(Beam#{<<"sha256">> => Hash(DifferentBeam)}) end)
+    after ok = file:write_file(BeamFile, BeamBytes) end,
+    ok = Check(Beam),
+    io:format("PASS actual template bounded-reader success and 9 refusal cases; BEAM closure success and 3 refusals (path/hash/loaded MD5); no native runtime/SUP execution~n"),
     halt(0).

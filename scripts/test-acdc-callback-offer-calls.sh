@@ -72,6 +72,7 @@ offer_cleanup() {
 offer_main() {
     local mode=${1:-} expected_md5='' live_md5 before_cores since log_errors file_errors caller_exit=0
     local gemini=false interval30=false hold_ms=46000
+    local prerecorded_locale='' reference_index='' reference_sha=''
     local -a fixture_audio_options=()
     umask 077
     ((EUID==0)) || die 'Root required'
@@ -79,18 +80,34 @@ offer_main() {
     shift
     while (($#)); do
         case $1 in
-            --gemini) [[ $gemini == false ]] || die 'Duplicate Gemini option'; gemini=true; fixture_audio_options=(--gemini); shift ;;
-            --gemini-30) [[ $gemini == false ]] || die 'Duplicate Gemini option'; gemini=true; interval30=true; hold_ms=76000; fixture_audio_options=(--gemini-30); shift ;;
+            --gemini) [[ $gemini == false && -z $prerecorded_locale ]] || die 'Duplicate Gemini option'; gemini=true; fixture_audio_options=(--gemini); shift ;;
+            --gemini-30) [[ $gemini == false && -z $prerecorded_locale ]] || die 'Duplicate Gemini option'; gemini=true; interval30=true; hold_ms=76000; fixture_audio_options=(--gemini-30); shift ;;
+            --prerecorded-locale)
+                [[ $# -ge 2 && $gemini == false && -z $prerecorded_locale ]] || die 'Conflicting prerecorded locale'
+                case $2 in en-us|he-il|fr-fr|es-es|ar-sa) prerecorded_locale=$2 ;; *) die 'Unsupported explicit locale' ;; esac
+                shift 2 ;;
+            --reference-index) [[ $# -ge 2 && -z $reference_index && $2 == /* ]] || die 'Invalid reference index'; reference_index=$2; shift 2 ;;
+            --reference-index-sha256) [[ $# -ge 2 && -z $reference_sha && $2 =~ ^[a-f0-9]{64}$ ]] || die 'Invalid reference index pin'; reference_sha=$2; shift 2 ;;
             --runtime-md5) [[ $# -ge 2 && -z $expected_md5 && $2 =~ ^[a-f0-9]{32}$ ]] || die 'Invalid runtime MD5'; expected_md5=$2; shift 2 ;;
             *) die 'Unexpected options' ;;
         esac
     done
+    if [[ -n $prerecorded_locale ]]; then
+        [[ -n $reference_index && -n $reference_sha ]] || die 'Pinned all-five reference index required'
+        hold_ms=86000
+        fixture_audio_options=(--prerecorded-locale "$prerecorded_locale" --reference-index "$reference_index" --reference-index-sha256 "$reference_sha")
+    else
+        [[ -z $reference_index && -z $reference_sha ]] || die 'Reference options require explicit prerecorded locale'
+    fi
     [[ $mode == --live || -z $expected_md5 ]] || die 'Runtime MD5 applies only to live mode'
     load_state; validate_state; resolve_local_ip; ensure_sipp
     [[ ${STATE[ACCEPTANCE_ACCOUNT_ID]} == 7807ad61761269a1ccec833dde63f621 && $LOCAL_IP == 127.0.0.20 ]] || die 'Wrong isolated local fixture'
     ip -o route get "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}" | grep -Eq '(^| )local .* dev lo( |$)' || die 'SIP proxy must route locally'
     command -v sox >/dev/null; command -v tcpdump >/dev/null
     node --check "$offer_fixture"; node --check "$offer_audio"; node --check "$offer_scenario"
+    if [[ -n $prerecorded_locale ]]; then
+        node "$SCRIPT_DIR/test-fixtures/callback-prerecorded-reference.cjs" check "$reference_index" "$reference_sha" "$prerecorded_locale"
+    fi
     if [[ $mode == --prepare-only ]]; then log 'PASS prepare only; no API writes, reference fetch or SIP traffic'; return; fi
     [[ -n $expected_md5 ]] || die 'Live run requires root-approved loaded scheduler module MD5'
     exec {offer_lock_fd}>/etc/kazoo/monitor-acceptance.lock
@@ -130,7 +147,9 @@ offer_main() {
         '{call_id:$call,queue_id:$queue,account:$account,ip:"127.0.0.20",sip_port:15064,media_port:47200}' > "$RUN_DIR/offer-call.json"
     wait_answered_calls "$RUN_DIR/offer-caller-stats.csv" 1 || die 'Caller was not answered'
     sup -e supervisor which_children acdc_announcements_sup > "$RUN_DIR/offer-workers-during.txt"
-    if [[ $interval30 == true ]]; then
+    if [[ -n $prerecorded_locale ]]; then
+        log "Owned2098 $prerecorded_locale: callback offer30/60, ordered position1 at45/75; wait-time disabled/unverified; no DTMF"
+    elif [[ $interval30 == true ]]; then
         log 'Owned2098 Gemini offer at30/60 seconds; silent hold before29s, generic interval15 remains separate; no position/DTMF proof'
     elif [[ $gemini == true ]]; then
         log 'Owned2098 Gemini offer-only: complete >5s phrase at3/18/33, silence hold, no position/DTMF proof'

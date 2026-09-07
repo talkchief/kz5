@@ -4,6 +4,7 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
 const {spawnSync}=require('node:child_process');
 const {timingProfile}=require('./callback-offer-profile.cjs');
+const prerecorded=require('./callback-prerecorded-reference.cjs');
 const ACCOUNT='7807ad61761269a1ccec833dde63f621', id=v=>/^[a-f0-9]{32}$/.test(v||'');
 const sha=v=>crypto.createHash('sha256').update(v).digest('hex');
 const canonical=v=>JSON.stringify(v,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)
@@ -14,18 +15,20 @@ const ENCODED_DATABASE=encodeURIComponent(DATABASE);
 const fingerprint=document=>sha(canonical(document));
 const contentFingerprint=document=>fingerprint(Object.fromEntries(Object.entries(document).filter(([key])=>key!=='_rev')));
 function audioMode(value='legacy') {
-    assert(['legacy','gemini'].includes(value),'Unexpected offer audio mode');return value;
+    assert(['legacy','gemini','prerecorded'].includes(value),'Unexpected offer audio mode');return value;
 }
-function plan(state,user,marker,mode='legacy',profile='default') {
+function plan(state,user,marker,mode='legacy',profile='default',locale='en-us') {
     audioMode(mode);
     const timing=timingProfile(mode,profile);
+    assert(mode==='prerecorded'?prerecorded.LOCALES.includes(locale):locale==='en-us','Invalid explicit fixture language');
     assert(state.ACCEPTANCE_ACCOUNT_ID===ACCOUNT && /^acceptance-[a-f0-9]{12}\.invalid$/.test(state.ACCEPTANCE_REALM)
         && /^Kazoo5 Acceptance [a-f0-9]{12}$/.test(state.ACCEPTANCE_ACCOUNT_NAME),'Not the isolated acceptance tenant');
     assert(id(state.ACCEPTANCE_AGENT_1_USER_ID) && user.id===state.ACCEPTANCE_AGENT_1_USER_ID && user.enabled!==false,'Callback authority must be the existing enabled fixture user');
     assert(/^acdc-offer-[a-f0-9]{24}$/.test(marker),'Invalid fixture marker');
     const queue={name:marker,kazoo_acceptance_fixture:marker,enter_when_empty:true,connection_timeout:90,
-        strategy:'round_robin',moh:'silence_stream://-1',announcements:{position_announcements_enabled:mode==='legacy',
-            wait_time_announcements_enabled:false,initial_delay:11,interval:15,language:'en-us'},
+        strategy:'round_robin',moh:'silence_stream://-1',announcements:{position_announcements_enabled:mode!=='gemini',
+            wait_time_announcements_enabled:false,initial_delay:mode==='prerecorded'?timing.positionInitial:11,
+            interval:mode==='prerecorded'?timing.interval:15,language:locale},
         callback:{enabled:true,entry_key:'6',allow_alternate_number:false,use_local_resources:true,
             caller_id_source:'inherit',outbound_authority:{type:'user',id:user.id},max_attempts:1,
             announcement:{enabled:true,initial_delay:timing.initial,interval:timing.interval}}};
@@ -43,7 +46,19 @@ function assertOwned(document,fixture,collection) {
         assert.equal(document.callback.enabled,true);assert.equal(document.callback.entry_key,'6');
         const timing=timingProfile(audioMode(fixture.audio_mode),fixture.timing_profile);
         assert.deepEqual(document.callback.announcement,{enabled:true,initial_delay:timing.initial,interval:timing.interval});
-        assert.equal(document.announcements.initial_delay,11);assert.equal(document.announcements.interval,15);
+        assert.equal(document.announcements.initial_delay,fixture.audio_mode==='prerecorded'?timing.positionInitial:11);
+        assert.equal(document.announcements.interval,fixture.audio_mode==='prerecorded'?timing.interval:15);
+        if(fixture.audio_mode==='prerecorded') {
+            assert(prerecorded.LOCALES.includes(fixture.language),'Missing explicit fixture locale');
+            assert.equal(document.announcements.language,fixture.language);
+            assert.equal(document.announcements.position_announcements_enabled,true);
+            assert.equal(document.announcements.wait_time_announcements_enabled,false);
+            assert.equal(document.moh,'silence_stream://-1');
+            assert(document.callback.media===undefined || (document.callback.media && !Array.isArray(document.callback.media)
+                && Object.keys(document.callback.media).length===0),'Prererecorded callback defaults only');
+            assert(document.announcements.media===undefined || (document.announcements.media && !Array.isArray(document.announcements.media)
+                && Object.keys(document.announcements.media).length===0),'Prerecorded position defaults only');
+        }
         if(audioMode(fixture.audio_mode)==='gemini') {
             assert.equal(document.moh,'silence_stream://-1');
             assert.equal(document.announcements.language,'en-us');
@@ -239,11 +254,19 @@ async function references(run,mode='legacy') {
     }
     fs.writeFileSync(path.join(run,'offer-reference-receipt.json'),JSON.stringify(receipt,null,2)+'\n',{mode:384});
 }
-async function runtime(action,run,option) {
-    assert(option===undefined||option==='--gemini'||option==='--gemini-30','Unexpected fixture option');
+function referenceOptions(option,extra=[]) {
+    assert(option===undefined||option==='--gemini'||option==='--gemini-30'||option==='--prerecorded-locale','Unexpected fixture option');
+    if(option!=='--prerecorded-locale') {assert.equal(extra.length,0);return {};}
+    assert(extra.length===5 && prerecorded.LOCALES.includes(extra[0]) && extra[1]==='--reference-index'
+        && path.isAbsolute(extra[2]) && path.resolve(extra[2])===extra[2] && extra[3]==='--reference-index-sha256'
+        && typeof extra[4]==='string' && extra[4].length===64 && /^[a-f0-9]{64}$/.test(extra[4]),'Complete pinned prerecorded options required');
+    return {locale:extra[0],index:extra[2],sha256:extra[4]};
+}
+async function runtime(action,run,option,...extra) {
+    const selectedReference=referenceOptions(option,extra);
     assert(option===undefined||action==='setup','Audio option applies only to setup; cleanup uses the protected receipt');
-    const mode=option==='--gemini'||option==='--gemini-30'?'gemini':'legacy';
-    const profile=option==='--gemini-30'?'interval-30':'default';
+    const mode=option==='--prerecorded-locale'?'prerecorded':option==='--gemini'||option==='--gemini-30'?'gemini':'legacy';
+    const profile=mode==='prerecorded'?'dual-prerecorded':option==='--gemini-30'?'interval-30':'default';
     assert(['setup','cleanup','recover','entry'].includes(action)&&path.isAbsolute(run));
     const s=fs.lstatSync(run);assert(s.isDirectory()&&!s.isSymbolicLink()&&s.uid===0&&(s.mode&511)===448);
     assert(fs.realpathSync(run)===run&&run.startsWith('/var/log/kazoo-acceptance/'));
@@ -300,13 +323,19 @@ async function runtime(action,run,option) {
     const baseline=async omit=>{const hashes={};for(const collection of ['users','queues','callflows'])for(const summary of await inventory(collection)){
         assert(id(summary.id));if(omit.includes(summary.id))continue;const d=(await api('GET',collection+'/'+summary.id)).data;hashes[collection+'/'+summary.id]=sha(canonical(d));}return hashes;};
     if(action==='setup') {
-        assert(!fs.existsSync(file),'Fixture already exists');await references(run,mode);
+        assert(!fs.existsSync(file),'Fixture already exists');
+        if(mode==='prerecorded') await prerecorded.capture(run,selectedReference.index,selectedReference.sha256,selectedReference.locale);
+        else await references(run,mode);
         assert(!(await inventory('callflows')).some(flow=>(flow.numbers||[]).includes('2098')),'Extension2098 occupied');
         const user=(await api('GET','users/'+state.ACCEPTANCE_AGENT_1_USER_ID)).data;
         const fixture={account:ACCOUNT,marker:'acdc-offer-'+crypto.randomBytes(12).toString('hex'),extension:'2098',baseline:await baseline([])};
-        if(mode==='gemini')fixture.audio_mode=mode;
+        if(mode==='gemini'||mode==='prerecorded')fixture.audio_mode=mode;
+        if(mode==='prerecorded') {
+            fixture.language=selectedReference.locale;
+            fixture.reference_index_sha256=selectedReference.sha256;
+        }
         if(profile!=='default')fixture.timing_profile=profile;
-        const desired=plan(state,user,fixture.marker,mode,profile);persist(fixture);
+        const desired=plan(state,user,fixture.marker,mode,profile,selectedReference.locale||'en-us');persist(fixture);
         for(const collection of ['queues','callflows']) {
             const key=collection==='queues'?'queue_id':'callflow_id',body=collection==='queues'?desired.queue:desired.route(fixture.queue_id);
             const created=(await api('PUT',collection,body)).data;assert(id(created.id));fixture[key]=created.id;persist(fixture);
@@ -351,7 +380,7 @@ async function runtime(action,run,option) {
             // Explicit receipt repair only, never a delete or refreshed CAS.
             // Reconstruct the original fixture body; retain altered documents.
             assert.deepEqual(await baseline([fixture.queue_id,fixture.callflow_id].filter(Boolean)),fixture.baseline,'Unrelated documents changed before recovery');
-            const desired=plan(state,(await api('GET','users/'+state.ACCEPTANCE_AGENT_1_USER_ID)).data,fixture.marker,audioMode(fixture.audio_mode),fixture.timing_profile);
+            const desired=plan(state,(await api('GET','users/'+state.ACCEPTANCE_AGENT_1_USER_ID)).data,fixture.marker,audioMode(fixture.audio_mode),fixture.timing_profile,fixture.language||'en-us');
             for(const collection of ['callflows','queues']) {
                 const documentId=fixture[collection==='queues'?'queue_id':'callflow_id'];
                 if(!documentId||fixture[collection+'_couch'])continue;
@@ -374,5 +403,5 @@ async function runtime(action,run,option) {
     }
 }
 module.exports={plan,assertOwned,assertRawOwned,assertExpectedConfiguration,captureOwned,deleteOwned,assertNoReferences,conditionalSaveArguments,
-    erlangTerm,fingerprint,contentFingerprint,audioMode,geminiAssets,geminiReferences,getReference,referenceDocument,ACCOUNT,DATABASE,ENCODED_DATABASE};
+    erlangTerm,fingerprint,contentFingerprint,audioMode,referenceOptions,geminiAssets,geminiReferences,getReference,referenceDocument,ACCOUNT,DATABASE,ENCODED_DATABASE};
 if(require.main===module)runtime(...process.argv.slice(2)).catch(error=>{console.error('Callback offer fixture FAIL: '+error.message);process.exitCode=1;});

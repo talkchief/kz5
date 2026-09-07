@@ -75,7 +75,7 @@ try
         Guard(), M = binary_to_existing_atom(Get(<<"module">>, B), utf8),
         Path = binary_to_list(Get(<<"path">>, B)), Path = code:which(M),
         Bytes = BoundedRead(Path, 8388608, beam, Get(<<"sha256">>, B)),
-        {ok, [{M, Digest}]} = beam_lib:md5(Bytes), Digest = M:module_info(md5),
+        {ok, {M, Digest}} = beam_lib:md5(Bytes), Digest = M:module_info(md5),
         false = lists:any(fun({d, 'TEST'}) -> true; ({d, 'TEST', _}) -> true; (_) -> false end,
             proplists:get_value(options, M:module_info(compile), [])),
         Guard()

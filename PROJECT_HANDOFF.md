@@ -6,6 +6,16 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+Most recent verified code fixes: `36876c3` is pushed; direct application build
+ordering passes. Second run `dc71ad/session30156` was stopped during media
+preparation to repair the runtime probe's wrong OTP `beam_lib:md5/1` return
+shape before activation. Actual-template BEAM checks now pass against real
+compiled code, not only synthetic JavaScript fixtures (`022310/031fb5`).
+The five-language2098 position/offer harness is integrated and passes52 audio,
+10 reference and33 fixture groups (`7ac1fc/d39a06`); its guide is
+`doc/acdc_five_language_live_audio_acceptance.md`. All live five-language proof
+and matched deployment remain pending until a subsequent installer succeeds.
+
 Latest continuation: `99eafe5` is pushed to master and contains the tested
 prerecorded/runtime/bridge integration checkpoint. Normal installer attempt
 `8a1b8e/session36819` was deliberately stopped before service activation after

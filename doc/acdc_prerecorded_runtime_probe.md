@@ -1,7 +1,8 @@
 # DEV prerecorded runtime-function proof
 
-The new probe is a **source-only, unexecuted implementation** until the root
-operator runs the guarded tests and deployed-node probe. It proves function
+The probe's offline contracts, bounded reads and actual-template BEAM checks
+have passed guarded tests; deployed-node execution is still a separate gate.
+It proves function
 testability, not audible SIP delivery, listening quality, or production approval.
 The separate publisher can produce v2 `selection_ready: true`; `ready`, native
 review, and live-SIP verification stay false. No existing capability file is
