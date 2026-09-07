@@ -2195,8 +2195,12 @@ build_kazoo() {
     FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT" \
         JOBS="$KAZOO_MAKE_JOBS" KAZOO_FORCE_RECOMPILE=1 core fetch-apps
     make -C "$KAZOO_ROOT/applications/webhooks" KAZOO_FORCE_RECOMPILE=1 all
-    FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT" \
-        JOBS="$KAZOO_MAKE_JOBS" KAZOO_FORCE_RECOMPILE=1 apps
+    # Core and app dependencies were already built/fetched above. The root
+    # `apps` target depends on `core` and would force that entire build twice.
+    # Use its exact applications aggregate recipe while retaining a fresh
+    # compilation of every application and the webhooks-before-skel ordering.
+    FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT/applications" \
+        ROOT="$KAZOO_ROOT" -j"$KAZOO_MAKE_JOBS" KAZOO_FORCE_RECOMPILE=1 all
     FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT" JOBS="$KAZOO_MAKE_JOBS" build-dev-release
     prepare_kazoo_runtime_artifact_permissions
     verify_kazoo_production_beams

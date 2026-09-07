@@ -15,7 +15,10 @@ set -euo pipefail
 log(){ :; }
 die(){ printf '%s\\n' "$*" >&2; exit 1; }
 run(){ :; }
-make(){ printf 'make %s\\n' "$*"; }
+make(){
+    printf 'make %s\\n' "$*"
+    if [[ -n "\${MAKE_FAIL_ARGS:-}" && "$*" == "$MAKE_FAIL_ARGS" ]]; then return 71; fi
+}
 rm(){ :; }
 sleep(){ :; }
 install_kazoo_build_dependencies(){ printf 'build-start\\n'; }
@@ -24,7 +27,7 @@ configure_kazoo(){ :; }
 remove_test_compiled_kazoo_beams(){ :; }
 prepare_kazoo_runtime_artifact_permissions(){ :; }
 verify_kazoo_production_beams(){ printf 'production-verify\\n'; return "$VERIFY_EXIT"; }
-kazoo_build_snapshot(){ printf '%s\\n' "\${SNAPSHOT_DIGEST:-${'1'.repeat(64)}}"; }
+kazoo_build_snapshot(){ printf 'snapshot-called\\n' >&2; printf '%s\\n' "\${SNAPSHOT_DIGEST:-${'1'.repeat(64)}}"; }
 install_kazoo_systemd_units(){ printf 'units\\n'; }
 install_sup_cli(){ :; }
 service_enable_restart(){ printf 'service\\n'; }
@@ -42,11 +45,32 @@ verify_ecallmgr(){ printf 'runtime-verify\\n'; }
     assert(result.stdout.indexOf('source-patches')<result.stdout.indexOf('production-verify'));
     assert(result.stdout.indexOf('production-verify')<result.stdout.indexOf('service'));
     const builds=result.stdout.split('\n').filter(line=>line.startsWith('make '));
-    for(const ending of [' core fetch-apps',' apps',' all']) {
-        const commands=builds.filter(line=>line.endsWith(ending));
-        assert.equal(commands.length,1,'exact compilation command '+ending);
-        assert(commands[0].includes('KAZOO_FORCE_RECOMPILE=1'),'force fresh modules '+ending);
+    const compileArgs=[
+        `-C ${temp} JOBS=1 KAZOO_FORCE_RECOMPILE=1 core fetch-apps`,
+        `-C ${temp}/applications/webhooks KAZOO_FORCE_RECOMPILE=1 all`,
+        `-C ${temp}/applications ROOT=${temp} -j1 KAZOO_FORCE_RECOMPILE=1 all`,
+    ];
+    const releaseArgs=`-C ${temp} JOBS=1 build-dev-release`;
+    const forced=builds.filter(line=>line.includes('KAZOO_FORCE_RECOMPILE='));
+    assert.deepEqual(forced,compileArgs.map(args=>'make '+args),'exact forced core, webhooks, direct aggregate order');
+    assert(!builds.some(line=>line.startsWith(`make -C ${temp} `)&&line.endsWith(' apps')),'never reenter top-level apps/core dependency');
+    assert.equal(builds.filter(line=>line==='make '+releaseArgs).length,1,'one release assembly');
+    assert(builds.indexOf('make '+compileArgs[2])<builds.indexOf('make '+releaseArgs),'release follows full application compilation');
+    assert(result.stdout.indexOf('make '+releaseArgs)<result.stdout.indexOf('production-verify'));
+    assert(result.stderr.includes('snapshot-called'),'successful build records its source/artifact snapshot');
+    for(let stage=0;stage<compileArgs.length;stage++) {
+        const failed=run('',{MAKE_FAIL_ARGS:compileArgs[stage]});
+        assert.equal(failed.status,71,'compile failure propagates at stage '+stage);
+        assert(failed.stdout.includes('make '+compileArgs[stage]));
+        for(const later of compileArgs.slice(stage+1))assert(!failed.stdout.includes('make '+later),'no later compile after stage '+stage);
+        assert(!failed.stdout.includes('build-dev-release'),'no release after compile failure');
+        assert(!failed.stdout.includes('production-verify'),'no production success gate after compile failure');
+        assert(!failed.stderr.includes('snapshot-called'),'no successful build snapshot after compile failure');
+        for(const marker of ['units','service','runtime-verify'])assert(!failed.stdout.includes(marker),'no activation after compile failure');
     }
+    const parallel=run('',{KAZOO_MAKE_JOBS:'3'});assert.equal(parallel.status,0,parallel.stderr);
+    assert(parallel.stdout.includes(`make -C ${temp} JOBS=3 KAZOO_FORCE_RECOMPILE=1 core fetch-apps`));
+    assert(parallel.stdout.includes(`make -C ${temp}/applications ROOT=${temp} -j3 KAZOO_FORCE_RECOMPILE=1 all`),'direct aggregate consumes bounded parallelism, not unused JOBS');
     assert(builds.some(line=>line.includes('--eval=.PHONY: src/kz_mime.erl')),'force local MIME regeneration');
     assert(builds.some(line=>line.includes('--eval=.PHONY: src/knm_iso3166a2_itu.erl src/knm_iso3166_util.erl')),'force local number regeneration');
     result=run('build_kazoo');assert.equal(result.status,0,result.stderr);assert.equal(result.stdout.split('build-start').length,2,'All-in-one reuses this invocation successful build');
@@ -55,5 +79,5 @@ verify_ecallmgr(){ printf 'runtime-verify\\n'; }
     result=run('build_kazoo\nSNAPSHOT_DIGEST='+ '2'.repeat(64));assert.equal(result.status,1);assert.match(result.stderr,/changed after compilation/);assert(!result.stdout.includes('units'));assert(!result.stdout.includes('service'));
     result=run('build_kazoo\nKAZOO_BUILD_SNAPSHOT_THIS_RUN=invalid');assert.equal(result.status,1);assert(!result.stdout.includes('service'));
     result=run('',{SNAPSHOT_DIGEST:'invalid'});assert.equal(result.status,1);assert.match(result.stderr,/Invalid Kazoo build snapshot/);assert(!result.stdout.includes('service'));
-    console.log('PASS stale app/environment refusal, current-invocation reuse, source/artifact drift refusal, invalid snapshot rejection, failed verification stops activation, and dry-run build behavior');
+    console.log('PASS exact single-core/direct-app build ordering, bounded parallelism, compile failures stop release/snapshot/activation, stale app/environment refusal, current-invocation reuse, source/artifact drift refusal, invalid snapshot rejection, failed verification stops activation, and dry-run build behavior');
 } finally {fs.rmSync(temp,{recursive:true,force:true});}

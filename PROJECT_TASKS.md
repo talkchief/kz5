@@ -2,6 +2,22 @@
 
 ## Current focused release checkpoint — 2026-09-07 21:41 UTC
 
+- **Next deployment attempt, 22:10 UTC:** tested integration code is committed
+  and pushed to master as `99eafe5` (80 files; staged secret/whitespace checks
+  passed). Normal main-SH run `8a1b8e/session36819` passed both complete voice
+  packs, source reconciliation, and the first core/webhooks compilation. It was
+  deliberately stopped before any service activation when the top-level `apps`
+  target began a redundant second forced core build. This is not a successful
+  installer result despite the explicitly stopped transient unit returning zero.
+  Apps/eCallMgr/FreeSWITCH PIDs remained1983/1982/809116. A focused installer
+  change now calls the applications aggregate directly after core/webhooks,
+  retaining forced application compilation. Ordering/failure tests, real Erlang
+  forced-rebuild checks (12 commands), and modular installer checks pass
+  `9e8c1e/session49848`. The subsequent isolated live-audio draft test failed
+  because its new fixture used a default pro-model document against flash-model
+  expectations; that draft is not deployed. The next full installer run must
+  pass before claiming deployment.
+
 - **Atomic installer blocker repaired and native prerequisite deployed:** all81
   source-transition cases and exact eCallMgr patch replay pass `37fef8/3ba923`.
   The same run freshly compiles the updated mod_kazoo. Module-only promotion

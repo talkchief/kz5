@@ -6,6 +6,15 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+Latest continuation: `99eafe5` is pushed to master and contains the tested
+prerecorded/runtime/bridge integration checkpoint. Normal installer attempt
+`8a1b8e/session36819` was deliberately stopped before service activation after
+both voice packs and the first core/webhooks build passed: top-level `apps`
+started a redundant second forced core traversal. Do not classify its manual
+systemd stop/zero wrapper status as acceptance. Services retained their existing
+PIDs. A minimal direct-applications-aggregate ordering fix is being validated
+before the next normal main-SH run; details are at the top of PROJECT_TASKS.md.
+
 Focused checkpoint, 2026-09-07 21:41 UTC: native atomic interception is now
 deployed: module-only `012ab4/805728`, installed SHA256
 `4ac9d4af50deca7a4163bb158befaecbbdcd59f23e137fe49aaf9d213810cfec`,
