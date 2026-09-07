@@ -2,6 +2,24 @@
 
 ## Main installer integration (development installation verified)
 
+Latest FCM concurrency change: each send exclusively leases an HTTP session
+through both attempts, then returns it for connection reuse. The pool cannot
+exceed the configured FCM worker count; excess direct calls return a fixed
+capacity failure instead of allocating indefinitely. Closing rejects new work
+and waits for the last active send before closing every retained session, even
+if closing an earlier session fails. FCM sessions ignore ambient proxy/netrc
+configuration and keep normal certificate verification enabled.
+
+All88 bridge tests plus installer dispatch pass (`0f958e/5f962f`), including
+real pinned-Requests adapters with simultaneous workers, capacity rejection,
+session reuse, exception release and deferred shutdown. The old shared-session
+implementation fails the concurrent-send and multi-session-close cases
+(`5a4c73/2c5540`, two focused baseline regressions). This is not
+real provider delivery or proof of bounded OAuth/whole-operation latency.
+Main-SH deployment `01728e/abcc83` passes; release
+`c36d971f6f8a1630af942cc1e8b7ee51c3adced67d6d124c500caea329a04db2`, enabled
+active consumer PID259472, automatic restarts0. Previous release retained.
+
 September7 root acceptance: the main SH installed Python3.11 and all18
 hash-locked packages, passed dependency/version checks, enabled and started
 `kazoo-push-bridge.service`, and verified actual consumer registration

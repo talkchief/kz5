@@ -1,5 +1,50 @@
 # French prerecorded cardinal authoring checkpoint
 
+## Latest checkpoint: all initial roles attempted, one bounded retry
+
+September7, approximately15:50UTC: French now has138 QA-passed recordings and
+23 rejected identities, with no never-requested or indeterminate FR jobs.
+Since the prior38-recording checkpoint,109 missing initial roles were attempted
+in32/32/32/13 batches;77 succeeded. The46 failures were each explicitly retried
+once in32/14 batches;23 recovered. No successful recording was regenerated and
+no identity exceeded two attempts. The complete authoring ledger records292
+requests across locales; retry budget47 includes the preexisting one retry.
+
+All200 new master/telephony WAV files, six receipts and the complete ledger
+were copied to `scripts/assets/acdc-gemini-cardinals-20260907`. Offline exact
+manifest/hash/SoX verification passes `2bf797/session65307/f06077` with network
+disabled. EN31, ES25 generated and the separate ES reuse layer are unchanged;
+HE131 and AR208 remain pending review/authoring. No new cardinal media was
+imported or activated, and listening approval remains pending.
+
+| Run receipt suffix (all start `run-`) | Requests | QA passed | Rejected |
+| --- | ---: | ---: | ---: |
+| b64c3d73-4968-458a-9912-4477edf25268.json | 32 initial | 27 | 5 |
+| 0bf613a0-6bc8-4d82-b143-7da32d600f4e.json | 32 initial | 12 | 20 |
+| 4632ad5d-529c-4885-afb4-7e955a3a4040.json | 32 initial | 26 | 6 |
+| 100dae08-ed24-45df-9e5b-0818b81e4b1f.json | 13 initial | 12 | 1 |
+| 3818991c-5723-4fed-83b1-b2fa62cdc54f.json | 32 retry | 17 | 15 |
+| 09689304-13f7-4b42-bd74-c9e2ec87d2b9.json | 14 retry | 6 | 8 |
+
+Execution handles: initial `7b7d91/950125`, `46cf73/ec3f9a`,
+`5a5172/57e0cf`, `66f630/eb61e7`; retry `de065c/f1d9e6`,
+`ce6421/a1f966`. All exited1 because incomplete responses remain; successful
+artifacts and terminal receipts were preserved. No authoring process is running.
+
+The remaining failed IDs use prefix `acdc-cardinal-v1-`, followed by
+`terminal-N` for N=12,33,35,36,37,39,51,55,59,86,87,89,97,99;
+`hundred-one-N` for N=2,4,6,9; `hundreds-N` for N=7,8,9;
+`scaled-tail-1000-36` and `scaled-tail-1000-38`. Their retained failure code is
+`AUDIO_GENERATION_NOT_COMPLETE`, provider finish reason `OTHER`.
+[Google's API reference](https://ai.google.dev/api/generate-content#FinishReason)
+defines OTHER as an unspecified reason, not successful completion. The ledger
+does not establish a quota, safety, timeout or exact provider-root-cause finding.
+Do not weaken completion checks, erase history, regenerate successes or start
+third attempts through the current two-attempt format. Remaining authoring
+requires a reviewed recovery approach; it is not runtime TTS or a complete pack.
+
+## Earlier checkpoint: first52 initial roles
+
 Latest batch September7: `422e91/session3932/df710f` made32 bounded initial
 requests (two workers, no retries). Twenty-four additional recordings passed
 technical WAV QA; eight incomplete results were rejected. French totals are now

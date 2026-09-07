@@ -85,6 +85,12 @@ class BridgeRuntime:
         self._http_closed = False
         # Last startup operation: later failures in main always close it.
         self.http = requests.Session()
+        self.http.trust_env = False
+        # Lease a session exclusively for the whole send (including retry).
+        # Worker threads must never mutate/use one Requests Session together.
+        # Bound retained connections by the configured FCM worker count.
+        self._http_sessions = [self.http]
+        self._idle_http = [self.http]
 
     def mark_progress(self):
         self._last_progress = time.monotonic()
@@ -122,6 +128,25 @@ class BridgeRuntime:
                 self._close_http()
 
     def _send_fcm(self, token_id, data):
+        with self._lifecycle_lock:
+            if self._closing:
+                return False, 0, "bridge_closing"
+            if self._idle_http:
+                http = self._idle_http.pop()
+            elif len(self._http_sessions) < self._settings["WORKERS"]:
+                http = self.requests.Session()
+                http.trust_env = False
+                self._http_sessions.append(http)
+            else:
+                # Do not queue an unbounded number of public/direct sends.
+                return False, 0, "provider_capacity_exhausted"
+        try:
+            return self._send_fcm_with_session(http, token_id, data)
+        finally:
+            with self._lifecycle_lock:
+                self._idle_http.append(http)
+
+    def _send_fcm_with_session(self, http, token_id, data):
         message = {
             "message": {
                 "token": token_id,
@@ -132,7 +157,7 @@ class BridgeRuntime:
         last_status, last_text = 0, ""
         for attempt in (1, 2):
             try:
-                response = self.http.post(
+                response = http.post(
                     self.fcm_url,
                     headers={"Authorization": "Bearer {}".format(self.get_access_token())},
                     json=message, timeout=5, allow_redirects=False, stream=True,
@@ -337,10 +362,13 @@ class BridgeRuntime:
             self._close_http()
 
     def _close_http(self):
-        try:
-            self.http.close()
-        except Exception:
-            log.error("bridge_http_close_failed")
+        # Called exactly once after the closing fence and the last active send.
+        # No session can be borrowed/created while this snapshot is closed.
+        for session in self._http_sessions:
+            try:
+                session.close()
+            except Exception:
+                log.error("bridge_http_close_failed")
 
 
 def main(argv=None, environment=None):

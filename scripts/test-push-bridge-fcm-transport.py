@@ -6,6 +6,7 @@ Unlike a mocked Session.post, these tests exercise Requests' redirect/body logic
 """
 
 import json
+import queue
 from pathlib import Path
 import socket
 import sys
@@ -83,6 +84,9 @@ class FcmTransportTests(unittest.TestCase):
         runtime._active_sends = 0
         runtime._closing = False
         runtime._http_closed = False
+        runtime._http_sessions = [runtime.http]
+        runtime._idle_http = [runtime.http]
+        runtime._settings = {"WORKERS": 2}
         adapter = Adapter(statuses)
         runtime.http.mount("https://", adapter)
         result = runtime.send_fcm("fixture-device", {"call_id": "fixture-call", "absent": None})
@@ -136,6 +140,119 @@ class FcmTransportTests(unittest.TestCase):
                                            requests.ConnectionError("secret-provider-url")])
         self.assertEqual(result, (False, -1, "provider_transport_error"))
         self.assertEqual(len(adapter.calls), 2)
+
+    def isolated_runtime(self, session, workers=2):
+        runtime = bridge.BridgeRuntime.__new__(bridge.BridgeRuntime)
+        runtime.requests = requests
+        runtime.http = session
+        runtime._http_sessions = [session]
+        runtime._idle_http = [session]
+        runtime._settings = {"WORKERS": workers}
+        runtime.get_access_token = Mock(return_value="fixture-token")
+        runtime.fcm_url = "https://fcm.googleapis.com/v1/projects/fixture-project/messages:send"
+        runtime._stop = threading.Event()
+        runtime._lifecycle_lock = threading.Lock()
+        runtime._active_sends = 0
+        runtime._closing = False
+        runtime._http_closed = False
+        self.addCleanup(runtime.close)
+        return runtime
+
+    def test_concurrent_sessions_are_exclusive_bounded_and_closed_after_last_send(self):
+        entered = threading.Barrier(3)
+        release = threading.Event()
+        results = queue.Queue()
+
+        class GatedAdapter(Adapter):
+            def __init__(self):
+                super().__init__([200])
+                self.gate_lock = threading.Lock()
+                self.in_use = False
+
+            def send(self, request, **kwargs):
+                with self.gate_lock:
+                    if self.in_use:
+                        raise AssertionError("concurrent session reuse")
+                    self.in_use = True
+                try:
+                    entered.wait(timeout=5)
+                    if not release.wait(5):
+                        raise AssertionError("test release missing")
+                    return super().send(request, **kwargs)
+                finally:
+                    with self.gate_lock:
+                        self.in_use = False
+
+        sessions = [requests.Session(), requests.Session()]
+        for session in sessions:
+            session.trust_env = False
+            session.mount("https://", GatedAdapter())
+            session.close = Mock(wraps=session.close)
+            self.addCleanup(session.close)
+        runtime = self.isolated_runtime(sessions[0])
+
+        def send():
+            try:
+                results.put(runtime.send_fcm("fixture-device", {}))
+            except BaseException as error:
+                results.put(error)
+
+        threads = [threading.Thread(target=send) for _ in range(2)]
+        try:
+            with patch.object(requests, "Session", return_value=sessions[1]) as factory:
+                for thread in threads:
+                    thread.start()
+                entered.wait(timeout=5)
+                factory.assert_called_once_with()
+                self.assertEqual(runtime._active_sends, 2)
+                self.assertEqual(runtime.send_fcm("excess-fixture", {}),
+                                 (False, 0, "provider_capacity_exhausted"))
+                self.assertEqual(len(runtime._http_sessions), 2)
+                runtime.close()
+                runtime.close()
+                for session in sessions:
+                    session.close.assert_not_called()
+                self.assertEqual(runtime.send_fcm("queued-fixture", {}),
+                                 (False, 0, "bridge_closing"))
+        finally:
+            release.set()
+            for thread in threads:
+                if thread.ident is not None:
+                    thread.join(timeout=6)
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual([results.get_nowait() for _ in range(2)],
+                         [(True, 200, "provider_response")] * 2)
+        self.assertEqual(runtime._active_sends, 0)
+        for session in sessions:
+            session.close.assert_called_once_with()
+
+    def test_pool_reuses_idle_session_and_returns_it_after_exception(self):
+        session = requests.Session()
+        session.trust_env = False
+        adapter = Adapter([200, 200])
+        session.mount("https://", adapter)
+        runtime = self.isolated_runtime(session, workers=1)
+        with patch.object(requests, "Session", side_effect=AssertionError("unneeded session")):
+            with patch.object(runtime, "get_access_token", side_effect=ValueError("fixture")):
+                with self.assertRaises(ValueError):
+                    runtime.send_fcm("fixture-device", {})
+            self.assertEqual(runtime._idle_http, [session])
+            self.assertEqual(runtime._active_sends, 0)
+            for _ in range(2):
+                self.assertEqual(runtime.send_fcm("fixture-device", {}), (True, 200, "provider_response"))
+        self.assertEqual(len(adapter.calls), 2)
+        self.assertEqual(runtime._http_sessions, [session])
+        self.assertEqual(runtime._idle_http, [session])
+
+    def test_one_session_close_failure_does_not_skip_remaining_sessions(self):
+        first, second = Mock(), Mock()
+        first.close.side_effect = RuntimeError("private-provider-error")
+        runtime = self.isolated_runtime(first)
+        runtime._http_sessions.append(second)
+        with self.assertLogs("push_bridge", level="ERROR") as messages:
+            runtime.close()
+        second.close.assert_called_once_with()
+        self.assertEqual(messages.output, ["ERROR:push_bridge:bridge_http_close_failed"])
 
 
 if __name__ == "__main__":

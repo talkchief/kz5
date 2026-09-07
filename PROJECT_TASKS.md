@@ -1,5 +1,23 @@
 # Kazoo 5 project task register
 
+Latest voice follow-up: FR138/161 recordings pass technical QA;23 failed after
+two bounded attempts, no FR jobs remain unattempted or indeterminate. All200 new
+WAV files since fdb88cd and six authoring receipts are preserved in the repo.
+Offline manifest/hash/SoX verification passes `2bf797/f06077`. Exact failed
+IDs and evidence are in `doc/acdc_cardinal_fr_authoring_20260907.md`. EN31/ES25
+unchanged; HE131/AR208 review and authoring, FR/ES recovery, listening, complete
+five-language packaging and cardinal runtime deployment remain OPEN. Existing
+210 fixed/digit clips and callback playback are unchanged. No runtime Gemini.
+
+Latest bridge follow-up: exclusive reusable FCM HTTP leases and worker-count
+pool cap are implemented/tested/deployed. All88 bridge tests plus installer
+dispatch pass `0f958e/5f962f`; main-SH deployment `01728e/abcc83` and separate
+verify-only phase `5a5172/b0c93a` pass. Enabled active consumer PID259472,
+automatic restarts0; old release retained. No production or mobile-send changes.
+The shared-session concurrency gap is closed for FCM sends. OAuth/whole-send
+deadlines, durable retries/recovery, AMQP TLS and real test-device ringing
+remain mandatory INST-13 gates.
+
 External-route compatibility rerun also PASS on the same updated harness:
 `c26844/session62944/efcaac`, `/var/log/kazoo-acceptance/20260907T153203Z`.
 This is the isolated loopback carrier, not actual PSTN. Fixture remains retained.

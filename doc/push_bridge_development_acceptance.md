@@ -6,6 +6,19 @@ acceptance. No notification was published or sent during these checks.
 
 ## Installation and evidence
 
+FCM session-pool deployment `01728e/session59026/abcc83` passed through the
+main SH. Current release is
+`/usr/local/lib/kazoo-push-bridge/releases/c36d971f6f8a1630af942cc1e8b7ee51c3adced67d6d124c500caea329a04db2`.
+Each FCM send exclusively leases one reusable session; total sessions are capped
+at WORKERS. Shutdown defers all session closing until active sends finish.
+All88 bridge tests and installer dispatch pass `0f958e/5f962f`, including nine
+real pinned-Requests/fake-adapter tests. Enabled/active PID259472 with registered
+local consumer and automatic restarts0 (`46b546`). Previous release retained;
+no production change, broker-binding change or provider push. OAuth refresh and
+whole-operation time bounds, durable recovery and real delivery remain open.
+The independent `--verify-only push-bridge` phase in `5a5172/b0c93a` also
+passed before the next voice-authoring process started in that guard.
+
 Latest focused FCM source deployment: `515d94/1f29eb` passed through the main
 SH, using all18 hash-locked dependencies and the existing protected config.
 It adds redirect rejection before Requests redirect/body processing and closes
@@ -72,8 +85,9 @@ claim mobile integration is finished because this idle consumer is ready.
    and its controlled bridge restart now pass on this development host.
 2. Finish bounded durable retry/dead-letter/expiry and failure recovery. Current
    uncertain-delivery exit78 requires manual recovery; it is not high availability.
-3. Complete OAuth refresh/total deadlines, shared-session concurrency and AMQP
-   TLS controls. FCM redirects/body downloads now have six passing pinned-Requests
+3. Complete OAuth refresh/total deadlines and AMQP TLS controls. FCM sessions
+   now have tested exclusive leases bounded by worker count. Redirect/body
+   controls remain tested in the expanded nine pinned-Requests
    adapter tests (`be4d36`); no provider was contacted. Validate real
    pinned HTTP/2 behavior, APNs initialization recovery and worker shutdown.
 4. Use an explicitly designated test mobile device/token with the correct app

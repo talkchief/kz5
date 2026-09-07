@@ -6,6 +6,28 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Latest French artifact checkpoint:** all161 initial roles attempted and each
+of46 first-attempt failures retried once. FR138 QA/23 failed, no pending or
+indeterminate FR requests. Added100 accepted recordings/200 WAVs since fdb88cd,
+plus six run receipts and full ledger; total292 historical requests, retry
+budget47. Offline copy verification and current pinned-Requests9 tests pass
+`2bf797/f06077`. EN31/ES25 unchanged, HE131/AR208 still pending. No new cardinal
+deployment or listening approval. Failed FR identities reached the existing
+two-attempt cap with OTHER; see `doc/acdc_cardinal_fr_authoring_20260907.md`
+for exact IDs, receipts and recovery boundary. Do not erase history or bypass
+completion checks. All six authoring handles finished; none remains running.
+
+**FCM concurrency/installer checkpoint:** the bridge now leases HTTP sessions
+exclusively per send/retry and reuses them from a pool capped at configured FCM
+WORKERS. Shutdown waits for active sends before closing all retained sessions;
+overflow direct sends return a fixed capacity failure. All88 bridge tests and
+installer dispatch pass `0f958e/5f962f`. Main-SH deployment `01728e/abcc83`
+and subsequent independent verify-only phase `5a5172/b0c93a` pass. Current
+release `/usr/local/lib/kazoo-push-bridge/releases/c36d971f6f8a1630af942cc1e8b7ee51c3adced67d6d124c500caea329a04db2`,
+enabled active consumer PID259472, automatic restarts0 (`46b546`); prior release
+retained. No production change or provider push. OAuth refresh, total deadlines,
+durable retry/recovery, AMQP TLS and designated-device ringing remain OPEN.
+
 **External-route regression on the same harness:** `c26844/session62944/efcaac`
 finished exit0, evidence `/var/log/kazoo-acceptance/20260907T153203Z`. The full
 single6/audio/unanswered-first/retry/second-agent-bridge packet/media diagnostic
