@@ -6,6 +6,33 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Idle viewer load — September 7:** root14 offline groups passed c3b213/5709e0.
+Actual2/10/30 viewer cohorts each held30 seconds after all viewers were ready,
+passing fresh complete snapshots, exact subscribe/unsubscribe ACKs and zero
+errors. The30-viewer run returned91 valid snapshots, HTTP p95=106.23ms and
+max=1,002.42ms (`91df3e`/`e967fb`). No service restart, call control, synthetic
+event or account/queue write was used; the wrapper performs normal admin auth.
+Evidence: `doc/queue_live_viewer_load_acceptance.md`, private receipts under
+`/tmp/kazoo-live-viewer-acceptance.HVcF2T`. These are idle native HTTP/WebSocket
+viewers, not browser rendering or30-call capacity acceptance. Extended30 viewers
+also passed180 seconds with391 fresh snapshots, zero errors/incomplete results
+and97.5ms HTTP p95 (`2fbd95`/`90d1e4`). All four jobs are terminal. Post-run check:
+all nine scoped services active, zero calls; the same application error/crash
+log files did not grow during the measured interval. Source-only agents are working on caller
+privacy provenance (DASH-10) and controlled browser HTTP-stall acceptance
+(P0-25); neither candidate is deployed or accepted yet. DASH-10 appends the
+call_stat record: all record consumers and retained ETS migration require
+coordinated validation/deployment; do not hot-load this partial source work.
+
+**Tracker maintenance — September 7:** the operator requested an up-to-date,
+handover-ready task list. The concise current queue of work is now at
+`PROJECT_TASKS.md#handover-checkpoint--2026-09-07`; detailed task IDs and
+acceptance criteria remain in that register. Update both documents when status
+changes, preserving evidence and distinguishing implementation, deployment,
+acceptance and push status. Current Git checkpoint is `208695f` on
+`fix/acdc-outbound-agent-availability`; the tracker update itself is not a new
+runtime deployment or release acceptance result.
+
 **Startup loader deployed — September 7:** installer-owned singleflight patch
 passes16 actual-loader regression groups (`fe213e`/`d8fe85`), including old-source
 reproduction of missing ACDC translations. Fresh full installer patch preparation

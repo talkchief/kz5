@@ -3,6 +3,46 @@
 New or returning contributors: read [the engineering handoff](PROJECT_HANDOFF.md)
 first for achieved work, deployment status, source locations and next steps.
 
+## Handover checkpoint — 2026-09-07
+
+Keep this register current whenever implementation, deployment, testing or a
+blocker changes. Each task must retain its stable ID, requested behavior,
+source/document locations, evidence, remaining acceptance and next action.
+Distinguish source complete, deployed, verified and remotely delivered; do not
+close a task on a unit-test pass alone. Older snapshots below are historical;
+the latest engineering handoff takes precedence for current deployment state.
+
+- **UI-02 complete:** removed user-facing “observed” wording; progress labels
+  and duration heading read “In Progress.” Deployed and browser verified.
+- **P0-25 deployed, acceptance incomplete:** bounded reads and app-loader race
+  fixes pass initial view, account switching and four reconnect scenarios.
+  Next: controlled HTTP stalls/late replies and loader-delivery failure tests.
+- **P0-26 deployed, acceptance incomplete:** actual queue creation returned201;
+  saved settings were read back and the exact test queue was removed. Next:
+  browser edit/PATCH, validation failures and uncertain-operation recovery.
+- **P0-22:** actual queue membership confirmation now passes in the browser;
+  error recovery remains to be accepted. Preserve the working login mutation.
+- **DASH-10 next implementation:** privacy-safe caller Name/Number through the
+  selected-queue API, UI and OpenAPI, with isolation and rendering tests.
+- **Live idle viewer acceptance passed; soak/failure acceptance pending:** harnesses are at
+  `scripts/test-queue-live-load.cjs` and
+  `scripts/test-queue-live-load-offline.cjs`. Root14 offline groups pass
+  c3b213/5709e0; actual2/10/30 viewers each pass30 seconds full cohort, with
+  fresh complete snapshots and exact subscription cleanup. See
+  `doc/queue_live_viewer_load_acceptance.md`. Viewer load does not prove call
+  capacity. Extended30 viewers also pass180 seconds/391 fresh snapshots/zero
+  errors, HTTP p95=97.5ms (2fbd95/90d1e4). All load jobs are terminal; real
+  call/event load, cross-node failure and sustained soak remain open.
+- **UI-01 storage404 remains open.** Callback/voice issues remain recorded but
+  paused under the live-dashboard priority; historical/WFM work is postponed.
+- **Delivery pending:** local branch `fix/acdc-outbound-agent-availability`,
+  checkpoint commit `208695f`; no final master push. Untracked bridge source
+  under `services/push-bridge/` is not an accepted installable service (INST-13).
+  Fresh standalone/distributed/ALL installer acceptance and release gates remain.
+
+See [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md) for exact build/deployment evidence,
+rollback locations, protected fixture holds and safe resumption instructions.
+
 **Current priority — 2026-09-07:** only the live queue summary and selected-queue
 detail dashboard are being finalized. Callback/voice work is paused; the
 reported key-6 and30-second announcement failures are unresolved. History,
@@ -39,7 +79,7 @@ These are existing voice/P0-03/installer workstreams, not additional completed
 features. No backend/UI/native deployment or final master push accompanies this
 documentation update.
 
-Updated: 2026-09-06. This is the project-wide priority/status index. Detailed
+Updated: 2026-09-07. This is the project-wide priority/status index. Detailed
 incident evidence remains in [deployment tasks](doc/deployment_tasks.md) and
 [acceptance status](doc/kazoo5_acceptance_status.md); earlier passes are scoped
 evidence, not proof that later regressions or production acceptance are closed.
@@ -412,7 +452,8 @@ a new deployed dashboard. Historical/WFM work remains postponed.
 | DASH-02 | ACTIVE — deployed detail; actual browser call transitions PASS | One bounded response includes authorized roster/names, observed runtime states/membership and up to200 active calls. Root79231 passed natural HTTP/native transitions. Guarded a0d26078 then passed actual visible waiting→handled→gone:11 browser checks,3 natural hints,6 detail GETs, no supplemental/global reads or console/page/HTTP/scope errors, acknowledged cleanup and normal company restoration. One-agent reciprocal bridge and12 stable samples verified. MASTER roster/31 states preserved and30 test phones restored. Unknown/incomplete limits remain explicit; all17 restricted HTTP/native WebSocket cases pass573eb1/0d57c2. Restricted-browser/cross-node/soak remain open; supervision is outside current live-only scope. See doc/monster_browser_call_acceptance.md. |
 | DASH-03 | ACTIVE — deployed; real HTTP/wire/call passed | Fresh production build2519 compiled74ACDC/30Blackhole;29023 deployed only the corrected FSM. Public27/actual DTO28/helper2, transport34 and schema297 cases passed. HTTP32168 reported available/consensus;79231 adds15/15valid natural-call snapshots and0timeouts through waiting/handled/gone. Missing/conflicting sources remain unavailable, not zero. All17 restricted HTTP/native WebSocket cases pass573eb1/0d57c2. Multi-node failure/load and restricted-browser acceptance remain open. |
 | DASH-04 | ACTIVE — native scoped natural-call delivery verified | Exact subscribe/unsubscribe and anonymous/wildcard rejection passed wire32168. Root79231 adds3native invalidations during one actual call, each phase followed by a fresh GET, plus exact ACKs and successful cleanup. Hints have no causal call nonce and do not guarantee delivery. UI15s reconciliation/sequential admission fixtures and persisted registration/readback58155 passed. Browser call rendering/reconnect and all17 restricted-token matrix cases now pass (latest573eb1/0d57c2); cross-node/load remain open. |
-| DASH-05 | ACTIVE — current specs published | Versioned summary/detail DTOs and native Blackhole message/lifecycle/account/queue contracts refreshed at `/apis` (52790), with11 exact HTTP asset hashes, no-store, redirect308 and missing404 verified. Catalog50258 includes358 paths/653 operations; complete offline/deterministic/tamper suite32709 passed. Publication rollback remains recoverable at `/usr/local/src/kazoo5-installer/api-docs-rollback.UW8oYV/previous`. Actual detail/summary browser call transitions passed a0d26078/f965e9fb; all17 restricted-token cases pass573eb1/0d57c2. Latest reference publicationf93301/0a3f65 verifies all11 served hashes; previous assets retained at api-docs-rollback.obvYfs/previous. Planned history is not callable. |
+| DASH-05 | ACTIVE — current specs published | Versioned summary/detail DTOs and native Blackhole message/lifecycle/account/queue contracts are served at `/apis`. Latest source catalog1811a9/5199cf and regeneration159801/40e94d include the deployed cb_queues handler fix. Publicatione1a4e3/c4a478 verifies11 exact HTTP asset hashes, no-store, redirect308 and missing404:358 paths/653 operations/504 schemas/1601 references. Previous assets retained at `/usr/local/src/kazoo5-installer/api-docs-rollback.woSddd/previous`; latest UI rollout preserved them. Earlier offline/deterministic/tamper, call-transition and restricted-token evidence remains scoped as documented. DASH-10 caller fields are not implemented/published yet; planned history is not callable. HTTPS remains SEC-01, not implied by HTTP publication. |
+| DASH-11 | ACTIVE — idle viewer load passed; broader load open | Reproducible read-only HTTP/native WebSocket harness passes14 offline fault/bounds groups and actual2/10/30 viewer cohorts for30 seconds with the full cohort ready. Extended30 viewers pass180 seconds with391 fresh/complete snapshots, exact30/30 ACK cleanup, zero errors/incomplete snapshots and97.5ms HTTP p95 (2fbd95/90d1e4). All jobs terminal; nine services active, zero calls and measured application error/crash logs unchanged. See `doc/queue_live_viewer_load_acceptance.md` for scripts, receipts and source hashes. No natural events occurred; this is not30-call capacity, browser rendering, sustained soak, backpressure or cross-node/failure proof. Next: separately coordinated natural call/event load and failure acceptance without weakening scope/freshness checks. |
 | DASH-06 | POSTPONED — UI + reporting | Queue historical dashboard using `Queue Historical Dashboard.png`: time/queue filters, call outcomes, SLA, wait/handle/talk metrics, details and export. Reconcile counts, timezone boundaries and late events. |
 | DASH-07 | POSTPONED — UI + reporting | Agent historical dashboard using `Agent Historical Dashboard.png`: agent/queue/date filters, last activity, outcomes, talk/break/idle durations, details and export. Define attribution for transfers/multiple queues. |
 | DASH-08 | OPEN — API + Next.js acceptance | Explicit company/account, queue and agent filtering contracts for snapshots and native Blackhole subscriptions. Company means Kazoo ACCOUNT_ID, not a free-text company name; enforce tenant and queue/agent permissions on the server, including wildcards and reseller/sub-account access. Document selected-queue and selected-agent examples, supported filters, unauthorized/unknown IDs and switching scope without leaking old events. Existing generic call bindings are not queue dashboard bindings. Test isolation, reconnect/resnapshot and filter changes with a real Next.js integration before marking ready. |
