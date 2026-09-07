@@ -13,7 +13,8 @@ readonly cleanup_ref=4e3f02a5ab01c09a44c287f4f93b15d2782f5614
 cd "$cleanup_root"
 cleanup_sources=(src/bh_context.erl src/bh_events.erl src/blackhole_bindings.erl
     src/blackhole_listener.erl src/blackhole_data_emitter.erl)
-cleanup_replay_sources=("${cleanup_sources[@]}" src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl)
+cleanup_archive_sources=("${cleanup_sources[@]}" src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl)
+cleanup_replay_sources=("${cleanup_archive_sources[@]}" src/modules/bh_queue_live.erl)
 cleanup_deps=(core/kazoo_bindings/ebin/kazoo_bindings.beam core/kazoo_bindings/ebin/kazoo_bindings_rt.beam
     core/kazoo_stdlib/ebin/kz_json.beam core/kazoo_stdlib/ebin/kz_log.beam
     core/kazoo_stdlib/ebin/kz_term.beam core/kazoo_stdlib/ebin/kz_binary.beam
@@ -31,6 +32,7 @@ cleanup_deps=(core/kazoo_bindings/ebin/kazoo_bindings.beam core/kazoo_bindings/e
 cleanup_inputs=(scripts/test-blackhole-binding-cleanup.sh
     scripts/erlang-tests/blackhole_binding_cleanup_tests.erl
     scripts/patches/blackhole-kazoo5-integration.patch scripts/patches/blackhole-binding-cleanup.patch
+    scripts/patches/blackhole-queue-live.patch
     scripts/install-kazoo5.sh applications/blackhole/src/blackhole.hrl
     core/kazoo_amqp/src/api/kapi_websockets.hrl
     core/kazoo_stdlib/include/kz_types.hrl core/kazoo_stdlib/include/kz_records.hrl
@@ -58,12 +60,17 @@ finish() {
 trap finish EXIT
 [[ $(git -C "$cleanup_repo" rev-parse HEAD) == "$cleanup_ref" ]] || exit 2
 mkdir -m 0700 "$cleanup_replay" "$cleanup_output/production"
-git -C "$cleanup_repo" archive "$cleanup_ref" "${cleanup_replay_sources[@]}" src/blackhole.hrl |
+git -C "$cleanup_repo" archive "$cleanup_ref" "${cleanup_archive_sources[@]}" src/blackhole.hrl |
     tar -xf - -C "$cleanup_replay"
 git -C "$cleanup_replay" apply --check "$cleanup_patch"
 git -C "$cleanup_replay" apply "$cleanup_patch"
 git -C "$cleanup_replay" apply --reverse --check "$cleanup_patch"
+# The older cleanup hunk shares context with the new private session field.
+# Verify its retained predecessor after reversing only the queue-live delta,
+# then restore the complete candidate before equality/pins/compilation.
+git -C "$cleanup_replay" apply --reverse "$cleanup_root/scripts/patches/blackhole-queue-live.patch"
 git -C "$cleanup_replay" apply --reverse --check "$cleanup_root/scripts/patches/blackhole-binding-cleanup.patch"
+git -C "$cleanup_replay" apply "$cleanup_root/scripts/patches/blackhole-queue-live.patch"
 cleanup_compile_sources=()
 cleanup_replay_inputs=()
 for cleanup_source in "${cleanup_replay_sources[@]}" src/blackhole.hrl; do

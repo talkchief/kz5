@@ -13,6 +13,7 @@ blackhole_test_patch="$blackhole_test_root/scripts/patches/blackhole-kazoo5-inte
 cd "$blackhole_test_root"
 blackhole_test_sources=(
     applications/blackhole/src/modules/bh_token_auth.erl
+    applications/blackhole/src/modules/bh_queue_live.erl
     applications/blackhole/src/bh_context.erl
     applications/blackhole/src/bh_events.erl
     applications/blackhole/src/blackhole_bindings.erl
@@ -116,18 +117,22 @@ for blackhole_test_hook in "${blackhole_test_hooks[@]}"; do
 done
 mkdir -m 0700 "$blackhole_test_replay" "$blackhole_test_production"
 blackhole_test_relative_sources=()
+blackhole_test_archive_sources=()
 blackhole_test_replayed_sources=()
 blackhole_test_artifacts=("$blackhole_test_output/blackhole_auth_redaction_tests.beam")
 for blackhole_test_source in "${blackhole_test_sources[@]}"; do
     blackhole_test_relative=${blackhole_test_source#applications/blackhole/}
     blackhole_test_relative_sources+=("$blackhole_test_relative")
+    if [[ $blackhole_test_relative != src/modules/bh_queue_live.erl ]]; then
+        blackhole_test_archive_sources+=("$blackhole_test_relative")
+    fi
     blackhole_test_replayed_sources+=("$blackhole_test_replay/$blackhole_test_relative")
     blackhole_test_module=${blackhole_test_relative##*/}
     blackhole_test_artifacts+=("$blackhole_test_production/${blackhole_test_module%.erl}.beam"
                               "$blackhole_test_output/${blackhole_test_module%.erl}.beam")
 done
 git -C "$blackhole_test_repo" archive "$blackhole_test_ref" \
-    "${blackhole_test_relative_sources[@]}" src/blackhole.hrl | tar -xf - -C "$blackhole_test_replay"
+    "${blackhole_test_archive_sources[@]}" src/blackhole.hrl | tar -xf - -C "$blackhole_test_replay"
 git -C "$blackhole_test_replay" apply --check "$blackhole_test_patch"
 git -C "$blackhole_test_replay" apply "$blackhole_test_patch"
 git -C "$blackhole_test_replay" apply --reverse --check "$blackhole_test_patch"
@@ -152,7 +157,7 @@ export KAZOO_BLACKHOLE_TEST_ROOT="$blackhole_test_root" KAZOO_BLACKHOLE_TEST_OUT
 erlc -Werror +debug_info -I "$blackhole_test_replay/src" -pa deps/lager/ebin \
     +'{parse_transform,lager_transform}' -o "$blackhole_test_production" \
     "${blackhole_test_replayed_sources[@]}" 2>&1 | tee "$blackhole_test_output/production-compile.log"
-printf 'PASS seven production Blackhole modules compiled with -Werror and Lager transform\n' \
+printf 'PASS eight production Blackhole modules compiled with -Werror and Lager transform\n' \
     | tee -a "$blackhole_test_output/production-compile.log"
 # No Lager transform: the mock must observe raw format strings and arguments,
 # regardless of backend configuration/log level. No TEST or export_all defines.

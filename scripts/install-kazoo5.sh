@@ -1629,6 +1629,7 @@ apply_kazoo_integration_patch() (
     local transition_app=$1 transition_new transition_old transition_delta
     local transition_source transition_relative transition_path
     local transition_state transition_stage transition_intercept='' transition_cleanup=''
+    local transition_pre_queue='' transition_queue_live=''
     local transition_apply=()
     local transition_files=() transition_old_files=() transition_delta_files=()
     local transition_created_files=()
@@ -1638,10 +1639,13 @@ apply_kazoo_integration_patch() (
             transition_old=blackhole-token-redaction.patch
             transition_delta=blackhole-redaction-to-integration.patch
             transition_files=(src/blackhole_bindings.erl src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl
-                              src/bh_context.erl src/bh_events.erl)
+                              src/bh_context.erl src/bh_events.erl src/blackhole.hrl src/modules/bh_queue_live.erl)
             transition_old_files=(src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl)
             transition_delta_files=(src/blackhole_bindings.erl src/blackhole_socket_handler.erl)
             transition_cleanup=blackhole-binding-cleanup.patch
+            transition_pre_queue=blackhole-pre-queue-live-integration.patch
+            transition_queue_live=blackhole-queue-live.patch
+            transition_created_files=(src/modules/bh_queue_live.erl)
             ;;
         crossbar)
             transition_new=crossbar-kazoo5-integration.patch
@@ -1685,12 +1689,16 @@ apply_kazoo_integration_patch() (
     transition_delta="$SCRIPT_DIR/patches/$transition_delta"
     [[ ! $transition_intercept ]] || transition_intercept="$SCRIPT_DIR/patches/$transition_intercept"
     [[ ! $transition_cleanup ]] || transition_cleanup="$SCRIPT_DIR/patches/$transition_cleanup"
+    [[ ! $transition_pre_queue ]] || transition_pre_queue="$SCRIPT_DIR/patches/$transition_pre_queue"
+    [[ ! $transition_queue_live ]] || transition_queue_live="$SCRIPT_DIR/patches/$transition_queue_live"
     if [[ $DRY_RUN == true ]]; then
         transition_safe_file "$transition_new"
         transition_safe_file "$transition_old"
         transition_safe_file "$transition_delta"
         [[ ! $transition_intercept ]] || transition_safe_file "$transition_intercept"
         [[ ! $transition_cleanup ]] || transition_safe_file "$transition_cleanup"
+        [[ ! $transition_pre_queue ]] || transition_safe_file "$transition_pre_queue"
+        [[ ! $transition_queue_live ]] || transition_safe_file "$transition_queue_live"
         log "Would ensure $transition_app integration with private preflight; source state and preflight are unverified"
         return 0
     fi
@@ -1737,6 +1745,9 @@ apply_kazoo_integration_patch() (
     transition_check_inventory "$transition_delta" "${transition_delta_files[@]}"
     if [[ $transition_cleanup ]]; then
         transition_check_inventory "$transition_cleanup" src/bh_context.erl src/bh_events.erl
+        transition_check_inventory "$transition_pre_queue" "${transition_files[@]:0:5}"
+        transition_check_inventory "$transition_queue_live" src/bh_context.erl src/blackhole_socket_handler.erl \
+            src/blackhole.hrl src/modules/bh_queue_live.erl
     fi
     if [[ $transition_intercept ]]; then
         transition_check_inventory "$transition_intercept" kazoo_intercept.h kazoo_dptools.c mod_kazoo.h mod_kazoo.c
@@ -1767,18 +1778,9 @@ apply_kazoo_integration_patch() (
         log "Required $transition_app integration is already current"
         return 0
     elif [[ $transition_app == blackhole ]]; then
-        # The historical redaction->frame delta and callback cleanup affect
-        # disjoint files. Accept only whole reviewed deltas; private full-series
-        # reverse verification below still proves the token/base source state.
-        for transition_path in "$transition_delta" "$transition_cleanup"; do
-            if git -C "$transition_source" apply --check "$transition_path" 2>/dev/null; then
-                transition_apply+=("$transition_path")
-            elif ! git -C "$transition_source" apply --reverse --check "$transition_path" 2>/dev/null; then
-                die 'Source is neither the clean, current nor explicitly supported previous integration'
-            fi
-        done
-        [[ ${#transition_apply[@]} -gt 0 ]] ||
-            die 'Source is neither the clean, current nor explicitly supported previous integration'
+        # Queue-live overlaps the frame and cleanup files. Classify and apply
+        # older steps in private copies, proving the complete pre-queue baseline
+        # before trying the queue-live delta. Never infer independent deltas here.
         transition_state=previous
     elif [[ $transition_app == mod_kazoo ]]; then
         # Namespace and atomic interception touch disjoint file sets. Existing
@@ -1841,17 +1843,39 @@ apply_kazoo_integration_patch() (
     sha256sum "$transition_new" "$transition_old" "$transition_delta" >"$transition_stage/patch-pins.sha256" ||
         die 'Cannot retain integration patch hashes'
     if [[ $transition_cleanup ]]; then
-        sha256sum "$transition_cleanup" >>"$transition_stage/patch-pins.sha256" ||
-            die 'Cannot retain Blackhole cleanup patch hash'
+        sha256sum "$transition_cleanup" "$transition_pre_queue" "$transition_queue_live" \
+            >>"$transition_stage/patch-pins.sha256" ||
+            die 'Cannot retain Blackhole transition patch hashes'
     fi
     if [[ $transition_intercept ]]; then
         sha256sum "$transition_intercept" >>"$transition_stage/patch-pins.sha256" ||
             die 'Cannot retain intercept patch hash'
     fi
-    git -C "$transition_stage/desired" apply --check "${transition_apply[@]}" ||
-        die 'Integration patch cannot apply to private source copies'
-    git -C "$transition_stage/desired" apply "${transition_apply[@]}" ||
-        die 'Cannot apply integration patch to private source copies'
+    if [[ $transition_app == blackhole && $transition_state == previous ]]; then
+        if ! git -C "$transition_stage/desired" apply --reverse --check "$transition_pre_queue" 2>/dev/null; then
+            for transition_path in "$transition_delta" "$transition_cleanup"; do
+                if git -C "$transition_stage/desired" apply --check "$transition_path" 2>/dev/null; then
+                    git -C "$transition_stage/desired" apply "$transition_path" ||
+                        die 'Cannot normalize previous Blackhole source privately'
+                    transition_apply+=("$transition_path")
+                elif ! git -C "$transition_stage/desired" apply --reverse --check "$transition_path" 2>/dev/null; then
+                    die 'Source is neither the clean, current nor explicitly supported previous integration'
+                fi
+            done
+        fi
+        git -C "$transition_stage/desired" apply --reverse --check "$transition_pre_queue" ||
+            die 'Previous Blackhole source is not the complete pre-queue integration'
+        git -C "$transition_stage/desired" apply --check "$transition_queue_live" ||
+            die 'Queue-live transition cannot apply to the previous Blackhole integration'
+        git -C "$transition_stage/desired" apply "$transition_queue_live" ||
+            die 'Cannot apply queue-live transition to private source copies'
+        transition_apply+=("$transition_queue_live")
+    else
+        git -C "$transition_stage/desired" apply --check "${transition_apply[@]}" ||
+            die 'Integration patch cannot apply to private source copies'
+        git -C "$transition_stage/desired" apply "${transition_apply[@]}" ||
+            die 'Cannot apply integration patch to private source copies'
+    fi
     git -C "$transition_stage/desired" apply --reverse --check "$transition_new" ||
         die 'Transition does not produce the complete current integration'
     # All validation above is private. Recheck every real target and patch
@@ -1871,10 +1895,21 @@ apply_kazoo_integration_patch() (
                 die 'Integration source changed during preflight'
         fi
     done
-    git -C "$transition_source" apply --check "${transition_apply[@]}" ||
-        die 'Integration patch no longer applies to target sources'
-    git -C "$transition_source" apply "${transition_apply[@]}" ||
-        die 'Cannot apply integration patch to target sources'
+    if [[ $transition_app == blackhole && $transition_state == previous ]]; then
+        # These overlapping steps were already rehearsed in order against the
+        # exact original bytes above. Keep that order; this is not crash-atomic.
+        for transition_path in "${transition_apply[@]}"; do
+            git -C "$transition_source" apply --check "$transition_path" ||
+                die 'Blackhole transition no longer applies to target sources'
+            git -C "$transition_source" apply "$transition_path" ||
+                die 'Cannot apply ordered Blackhole transition to target sources'
+        done
+    else
+        git -C "$transition_source" apply --check "${transition_apply[@]}" ||
+            die 'Integration patch no longer applies to target sources'
+        git -C "$transition_source" apply "${transition_apply[@]}" ||
+            die 'Cannot apply integration patch to target sources'
+    fi
     git -C "$transition_source" apply --reverse --check "$transition_new" ||
         die 'Applied integration failed its final current-source check'
     for transition_relative in "${transition_files[@]}"; do

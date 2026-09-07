@@ -16,6 +16,7 @@ blackhole_frame_patch="$blackhole_frame_root/scripts/patches/blackhole-kazoo5-in
 cd "$blackhole_frame_root"
 blackhole_frame_sources=(
     applications/blackhole/src/modules/bh_token_auth.erl
+    applications/blackhole/src/modules/bh_queue_live.erl
     applications/blackhole/src/bh_context.erl
     applications/blackhole/src/blackhole_bindings.erl
     applications/blackhole/src/blackhole_socket_callback.erl
@@ -131,18 +132,22 @@ for blackhole_frame_hook in "${blackhole_frame_hooks[@]}"; do
 done
 mkdir -m 0700 "$blackhole_frame_replay" "$blackhole_frame_production" "$blackhole_frame_schema_replay"
 blackhole_frame_relative_sources=()
+blackhole_frame_archive_sources=()
 blackhole_frame_replayed_sources=()
 blackhole_frame_artifacts=("$blackhole_frame_output/blackhole_frame_wire_tests.beam")
 for blackhole_frame_source in "${blackhole_frame_sources[@]}"; do
     blackhole_frame_relative=${blackhole_frame_source#applications/blackhole/}
     blackhole_frame_relative_sources+=("$blackhole_frame_relative")
+    if [[ $blackhole_frame_relative != src/modules/bh_queue_live.erl ]]; then
+        blackhole_frame_archive_sources+=("$blackhole_frame_relative")
+    fi
     blackhole_frame_replayed_sources+=("$blackhole_frame_replay/$blackhole_frame_relative")
     blackhole_frame_module=${blackhole_frame_relative##*/}
     blackhole_frame_artifacts+=("$blackhole_frame_production/${blackhole_frame_module%.erl}.beam"
                               "$blackhole_frame_output/${blackhole_frame_module%.erl}.beam")
 done
 git -C "$blackhole_frame_repo" archive "$blackhole_frame_ref" \
-    "${blackhole_frame_relative_sources[@]}" src/blackhole.hrl | tar -xf - -C "$blackhole_frame_replay"
+    "${blackhole_frame_archive_sources[@]}" src/blackhole.hrl | tar -xf - -C "$blackhole_frame_replay"
 git -C "$blackhole_frame_replay" apply --check "$blackhole_frame_patch"
 git -C "$blackhole_frame_replay" apply "$blackhole_frame_patch"
 git -C "$blackhole_frame_replay" apply --reverse --check "$blackhole_frame_patch"
@@ -192,7 +197,7 @@ export KAZOO_BLACKHOLE_FRAME_SCHEMA_BASELINE="$blackhole_frame_output/schema-bas
 erlc -Werror +debug_info -I "$blackhole_frame_replay/src" -pa deps/lager/ebin \
     +'{parse_transform,lager_transform}' -o "$blackhole_frame_production" \
     "${blackhole_frame_replayed_sources[@]}" 2>&1 | tee "$blackhole_frame_output/production-compile.log"
-printf 'PASS eight production Blackhole modules compiled with -Werror and Lager transform\n' \
+printf 'PASS nine production Blackhole modules compiled with -Werror and Lager transform\n' \
     | tee -a "$blackhole_frame_output/production-compile.log"
 # No Lager transform: the mock must observe raw format strings and arguments,
 # regardless of backend configuration/log level. No TEST or export_all defines.

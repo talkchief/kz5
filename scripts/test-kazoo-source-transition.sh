@@ -22,6 +22,8 @@ transition_fixture_inputs=(
     "$transition_fixture_patches/crossbar-kazoo5-before-frame.patch"
     "$transition_fixture_patches/crossbar-blackhole-frame-schema.patch"
     "$transition_fixture_patches/blackhole-binding-cleanup.patch"
+    "$transition_fixture_patches/blackhole-pre-queue-live-integration.patch"
+    "$transition_fixture_patches/blackhole-queue-live.patch"
 )
 finish() {
     local status=$?
@@ -135,7 +137,7 @@ prepare_baseline() {
 select_app blackhole
 prepare_baseline "$transition_fixture_blackhole_ref" \
     src/blackhole_bindings.erl src/blackhole_socket_handler.erl src/modules/bh_token_auth.erl \
-    src/bh_context.erl src/bh_events.erl
+    src/bh_context.erl src/bh_events.erl src/blackhole.hrl
 select_app crossbar
 # The other four permitted Crossbar paths are genuinely absent in this commit;
 # the integration adds them. Do not manufacture placeholder files in baseline.
@@ -170,6 +172,10 @@ new_case() {
         clean) ;;
         legacy) git -C "$source_dir" apply "$script_dir/patches/$old_patch" ;;
         current) git -C "$source_dir" apply "$script_dir/patches/$new_patch" ;;
+        pre-queue)
+            [[ $app == blackhole ]] || fail 'pre-queue state is Blackhole only'
+            git -C "$source_dir" apply "$script_dir/patches/blackhole-pre-queue-live-integration.patch"
+            ;;
         *) fail "unknown fixture state: $state" ;;
     esac
     configured_root="$root"
@@ -439,6 +445,60 @@ new_case missing-binding-cleanup legacy
 mv -- "$script_dir/patches/blackhole-binding-cleanup.patch" "$work/withheld-cleanup.patch"
 expect_rejection missing-binding-cleanup
 
-[[ $transition_fixture_count == 46 ]] || fail "unexpected case count: $transition_fixture_count"
+new_case previous-complete-pre-queue pre-queue
+[[ ! -e $source_dir/src/modules/bh_queue_live.erl ]] || fail 'pre-queue baseline must not contain the new module'
+expect_success previous-complete-pre-queue
+
+# Queue-live overlaps the older socket/context deltas. Every partial queue-live
+# state must be rejected, not mistaken for another independently installed step.
+for queue_path in src/bh_context.erl src/blackhole_socket_handler.erl src/blackhole.hrl src/modules/bh_queue_live.erl; do
+    queue_label="partial-queue-${queue_path##*/}"
+    new_case "$queue_label" pre-queue
+    git -C "$source_dir" apply --include="$queue_path" "$script_dir/patches/blackhole-queue-live.patch"
+    expect_rejection "$queue_label"
+done
+
+new_case missing-blackhole-header pre-queue
+mv -- "$source_dir/src/blackhole.hrl" "$work/withheld-header.fixture"
+expect_rejection missing-blackhole-header
+
+new_case unrelated-new-module pre-queue
+printf 'unrelated module sentinel\n' >"$source_dir/src/modules/bh_queue_live.erl"
+expect_rejection unrelated-new-module
+
+new_case missing-current-queue-module current
+mv -- "$source_dir/src/modules/bh_queue_live.erl" "$work/withheld-queue-module.fixture"
+expect_rejection missing-current-queue-module
+
+for queue_patch in blackhole-pre-queue-live-integration.patch blackhole-queue-live.patch; do
+    new_case "missing-$queue_patch" pre-queue
+    mv -- "$script_dir/patches/$queue_patch" "$work/withheld-queue-patch.fixture"
+    expect_rejection "missing-$queue_patch"
+done
+
+new_case dry-run-missing-queue-transition clean
+fixture_dry_run=true
+configured_root="$work/not-created"
+mv -- "$script_dir/patches/blackhole-queue-live.patch" "$work/withheld-queue-patch.fixture"
+expect_rejection dry-run-missing-queue-transition
+
+new_case out-of-scope-queue-transition pre-queue
+printf '\ndiff --git a/src/fixture-out-of-scope b/src/fixture-out-of-scope\nnew file mode 100644\n--- /dev/null\n+++ b/src/fixture-out-of-scope\n@@ -0,0 +1 @@\n+unexpected mutation\n' \
+    >>"$script_dir/patches/blackhole-queue-live.patch"
+expect_rejection out-of-scope-queue-transition
+
+new_case wrong-queue-transition-content pre-queue
+replace_once "$script_dir/patches/blackhole-queue-live.patch" \
+    'queue_live requires fresh asynchronous authorization' 'fixture-inconsistent-queue-authorization'
+git -C "$source_dir" apply --check "$script_dir/patches/blackhole-queue-live.patch"
+expect_rejection wrong-queue-transition-content
+
+new_case wrong-pre-queue-baseline legacy
+replace_once "$script_dir/patches/blackhole-pre-queue-live-integration.patch" \
+    '+    lager:debug("trying to authenticate with token"),' \
+    '+    lager:debug("fixture-inconsistent-pre-queue-baseline"),'
+expect_rejection wrong-pre-queue-baseline
+
+[[ $transition_fixture_count == 60 ]] || fail "unexpected case count: $transition_fixture_count"
 printf 'PASS all %s bounded source-transition cases (no builds, services or network)\n' "$transition_fixture_count" \
     | tee -a "$transition_fixture_output/results.log"
