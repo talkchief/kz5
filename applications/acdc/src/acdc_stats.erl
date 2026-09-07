@@ -53,6 +53,7 @@
         ,handle_event/2
         ,terminate/2
         ,code_change/3
+        ,format_status/2
         ]).
 
 -include("acdc.hrl").
@@ -202,12 +203,12 @@ call_table_opts() ->
 
 -spec start_link() -> kz_types:startlink_ret().
 start_link() ->
-    gen_listener:start_link(?SERVER
-                           ,[{'bindings', ?BINDINGS}
-                            ,{'responders', ?RESPONDERS}
-                            ,{'queue_name', ?QUEUE_NAME}
-                            ],
-                            []).
+    %% Do not consume or start record readers until retained ETS has been
+    %% acquired, migrated and verified by its actual owner.
+    gen_listener:start_link(?SERVER, [], []).
+
+listener_params() ->
+    [{'bindings', ?BINDINGS}, {'responders', ?RESPONDERS}, {'queue_name', ?QUEUE_NAME}].
 
 -spec handle_call_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_call_stat(JObj, Props) ->
@@ -268,8 +269,15 @@ get_recent_stat_for_call(Stats) ->
 sort_by_entered_timestamp(#call_stat{entered_timestamp=ATimestamp}, #call_stat{entered_timestamp=BTimestamp}) ->
     ATimestamp > BTimestamp.
 
--record(state, {archive_ref :: reference()
-               ,cleanup_ref :: reference()
+-record(state, {archive_ref :: reference() | undefined
+               ,cleanup_ref :: reference() | undefined
+               ,phase = waiting_tables :: waiting_tables | migrating | ready | failed
+               ,startup_token :: reference()
+               ,startup_ref :: reference()
+               ,call_tid :: ets:tid() | undefined
+               ,status_tid :: ets:tid() | undefined
+               ,migration :: term()
+               ,reason :: atom() | undefined
                }).
 -type state() :: #state{}.
 
@@ -279,9 +287,79 @@ init([]) ->
     kz_datamgr:suppress_change_notice(),
     lager:debug("started new acdc stats collector"),
 
-    {'ok', #state{archive_ref=start_archive_timer()
-                 ,cleanup_ref=start_cleanup_timer()
-                 }}.
+    Token = make_ref(),
+    Ref = erlang:send_after(30000, self(), {stats_startup_timeout, Token}),
+    {'ok', #state{startup_token=Token, startup_ref=Ref}}.
+
+%% Migration is performed only in this owner mailbox. No listener, archive or
+%% cleanup work is admitted between the preflight and verification passes.
+startup_transfer(Table, #state{phase=waiting_tables}=State) ->
+    CallTid = ets:whereis(call_table_id()),
+    StatusTid = ets:whereis(acdc_agent_stats:status_table_id()),
+    %% OTP sends the name for named-table transfers. Resolve only our two
+    %% expected names here, then retain the opaque incarnation throughout
+    %% migration; never resolve a name again to replace a stored table ID.
+    Tid = case Table of
+              CallName when CallName =:= acdc_stats_call -> CallTid;
+              StatusName when StatusName =:= acdc_stats_status -> StatusTid;
+              Reference when is_reference(Reference) -> Reference;
+              _ -> undefined
+          end,
+    case owned_table(Tid) andalso (Tid =:= CallTid orelse Tid =:= StatusTid) of
+        false -> State;
+        true ->
+            Next = case Tid =:= CallTid of
+                       true -> State#state{call_tid=Tid};
+                       false -> State#state{status_tid=Tid}
+                   end,
+            maybe_start_migration(Next)
+    end;
+startup_transfer(_, State) -> State.
+
+owned_table(undefined) -> false;
+owned_table(Tid) ->
+    try ets:info(Tid, owner) =:= self() catch _:_ -> false end.
+
+startup_tables_current(#state{call_tid=Call, status_tid=Status}) ->
+    owned_table(Call) andalso owned_table(Status) andalso
+        ets:whereis(call_table_id()) =:= Call andalso
+        ets:whereis(acdc_agent_stats:status_table_id()) =:= Status.
+
+maybe_start_migration(#state{call_tid=undefined}=State) -> State;
+maybe_start_migration(#state{status_tid=undefined}=State) -> State;
+maybe_start_migration(#state{call_tid=Tid, startup_token=Token}=State) ->
+    case startup_tables_current(State) of
+        false -> startup_failed(table_changed, State);
+        true ->
+            case acdc_stats_migration:start(Tid, #{}) of
+                {ok, Migration} ->
+                    self() ! {stats_migration_step, Token},
+                    State#state{phase=migrating, migration=Migration};
+                {error, Code} -> startup_failed(Code, State)
+            end
+    end.
+
+startup_step(#state{migration=Migration, startup_token=Token}=State) ->
+    case startup_tables_current(State) of
+        false -> startup_failed(table_changed, State);
+        true ->
+            case acdc_stats_migration:step(Migration) of
+                {continue, Next} ->
+                    self() ! {stats_migration_step, Token},
+                    State#state{migration=Next};
+                {done, _Receipt} ->
+                    _ = erlang:cancel_timer(State#state.startup_ref),
+                    gen_listener:start_listener(self(), listener_params()),
+                    State#state{phase=ready, migration=undefined,
+                                archive_ref=start_archive_timer(), cleanup_ref=start_cleanup_timer()};
+                {error, Code} -> startup_failed(Code, State)
+            end
+    end.
+
+startup_failed(Code, State) ->
+    _ = erlang:cancel_timer(State#state.startup_ref),
+    lager:error("ACDC stats startup unavailable: ~p; retained tables preserved", [Code]),
+    State#state{phase=failed, reason=Code, migration=undefined}.
 
 -spec start_archive_timer() -> reference().
 start_archive_timer() ->
@@ -292,10 +370,14 @@ start_cleanup_timer() ->
     erlang:send_after(?CLEANUP_PERIOD, self(), ?CLEANUP_MSG).
 
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
+handle_call(stats_readiness, _From, #state{phase=Phase, reason=Reason}=State) ->
+    {'reply', #{phase=>Phase, reason=>Reason}, State};
 handle_call(_Req, _From, State) ->
     {'reply', 'ok', State}.
 
 -spec handle_cast(any(), state()) -> kz_types:handle_cast_ret_state(state()).
+handle_cast(_Req, #state{phase=Phase}=State) when Phase =/= ready ->
+    {'noreply', State};
 handle_cast({'create_call', #call_stat{id=_Id}=Stat}, State) ->
     lager:debug("creating new call stat ~s", [_Id]),
     case ets:insert_new(call_table_id(), Stat) of
@@ -380,6 +462,18 @@ dashboard_call_changed([], [#call_stat{account_id=A,queue_id=Q}]) ->
 dashboard_call_changed([], []) -> 'ok'.
 
 -spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
+handle_info({'ETS-TRANSFER', Tid, _From, _Data}, #state{}=State) ->
+    {'noreply', startup_transfer(Tid, State)};
+handle_info({stats_migration_step, Token}, #state{phase=migrating, startup_token=Token}=State) ->
+    {'noreply', startup_step(State)};
+handle_info({stats_startup_timeout, Token}, #state{phase=Phase, startup_token=Token}=State)
+  when Phase =:= waiting_tables; Phase =:= migrating ->
+    {'noreply', startup_failed(startup_timeout, State)};
+handle_info({stats_migration_step, _}, State) -> {'noreply', State};
+handle_info({stats_startup_timeout, _}, State) -> {'noreply', State};
+handle_info(Msg, #state{phase=Phase}=State)
+  when Phase =/= ready, (Msg =:= ?ARCHIVE_MSG orelse Msg =:= ?CLEANUP_MSG) ->
+    {'noreply', State};
 handle_info({'ETS-TRANSFER', _TblId, _From, _Data}, State) ->
     lager:debug("ETS control for ~p transferred to me for writing", [_TblId]),
     {'noreply', State};
@@ -394,17 +488,36 @@ handle_info(_Msg, State) ->
     {'noreply', State}.
 
 -spec handle_event(kz_json:object(), state()) -> gen_listener:handle_event_return().
+handle_event(_JObj, #state{phase=Phase}) when Phase =/= ready -> 'ignore';
 handle_event(_JObj, _State) ->
     {'reply', []}.
 
 -spec terminate(any(), state()) -> 'ok'.
+terminate(_Reason, #state{phase=Phase, startup_ref=Ref}) when Phase =/= ready ->
+    %% Mixed records must not enter the new archiver on failed startup. The
+    %% live ETS managers remain the heirs on a worker-only restart.
+    _ = erlang:cancel_timer(Ref),
+    'ok';
 terminate(_Reason, _) ->
     _ = force_archive_data(),
     lager:debug("acdc stats terminating: ~p", [_Reason]).
 
--spec code_change(any(), state(), any()) -> {'ok', state()}.
-code_change(_OldVsn, State, _Extra) ->
-    {'ok', State}.
+-spec code_change(any(), state(), any()) -> {'ok', state()} | {'error', atom()}.
+code_change(_OldVsn, #state{}=State, _Extra) ->
+    {'ok', State};
+code_change(_OldVsn, _LegacyState, _Extra) ->
+    %% This client callback cannot convert a legacy worker. Native gen_listener
+    %% does not delegate sys:change_code here: a controlled retained-table
+    %% worker restart is still required, not an assumed OTP hot upgrade.
+    {'error', restart_with_retained_tables_required}.
+
+-spec format_status(any(), list()) -> list().
+format_status(_Opt, [_Dictionary, #state{phase=Phase, reason=Reason}]) ->
+    %% A migration continuation contains an internal call-table key. Keep
+    %% generic OTP status/crash formatting free of keys and record digests.
+    [{'data', [{"Phase", Phase}, {"Reason", Reason}]}];
+format_status(_Opt, _) ->
+    [{'data', [{"Phase", unavailable}]}].
 
 publish_query_errors(RespQ, MsgId, Errors) ->
     API = [{<<"Error-Reason">>, Errors}

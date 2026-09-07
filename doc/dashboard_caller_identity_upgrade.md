@@ -33,7 +33,7 @@ Source locations:
   source. Generated `/apis` artifacts must be rebuilt and published with the
   implementation, not assumed to match this candidate already.
 
-## Upgrade hazard: not implemented yet
+## Upgrade hazard and source implementation
 
 `#call_stat{}` changes from an 18-element to a 19-element tuple. Existing ETS
 records do not change when new beams are loaded. New exact record match specs
@@ -41,9 +41,11 @@ can silently omit old rows, and index-19 updates or record conversion can fail.
 
 `acdc_stats_sup` starts separate call/status ETS managers. The call-table manager
 remains the heir when the unnamed stats worker restarts. Consequently a worker
-restart retains old tuples. The current ETS-transfer handler only logs and
-`code_change/3` does not migrate. `upgrade_legacy/1` is a pure tested converter
-with no production caller; its presence is not migration readiness.
+restart retains old tuples. The previously installed ETS-transfer handler only
+logs. The new staged startup calls `acdc_stats_migration` before listener
+activation; that helper uses `upgrade_legacy/1` for conversion. Neither path is
+deployed yet. Native `gen_listener:code_change/3` does not delegate to the stats
+client callback, so `sys:change_code` is not a substitute for this restart path.
 
 A full application/VM restart instead loses retained ETS. Shutdown archival
 excludes waiting/handled records and does not prove all other archival succeeded.
@@ -52,20 +54,23 @@ durable. Never erase the table to make the new reader appear healthy.
 
 ## Next implementation and deployment requirements
 
-1. Add staged stats startup with deferred native listener activation and no
+1. Source implemented and isolated lifecycle tested: staged stats startup with deferred native listener activation and no
    archive/cleanup timers until both expected tables are acquired and verified.
    `gen_listener:start_listener/2` provides the existing deferred activation path.
-2. Resolve exact table IDs and require actual call-table ownership. Preflight
+2. Source implemented and helper tested: resolve exact table IDs and require actual call-table ownership. Preflight
    every row; refuse unknown layouts without deleting anything.
-3. Convert legacy rows in bounded owner-process batches, appending only
+3. Source implemented and helper tested: convert legacy rows in bounded owner-process batches, appending only
    `undefined`. Preserve the original 18 fields, keys and row count. Mixed
    legacy/current tables must be safely resumable after interruption.
-4. Verify no legacy or unknown layouts remain before enabling listeners,
+4. Source implemented and isolated lifecycle tested: verify no legacy or unknown layouts remain before enabling listeners,
    responders, timers or successful dashboard reads. A failure must preserve
    retained data and expose unavailable readiness, not a successful empty view.
 5. Rebuild the complete header-consumer cohort. Stats query/responders,
    dashboard collector/projection, archive and cleanup code must agree. The
    installer already forces full compilation, but that is not runtime migration.
+   Kazoo-apps installer readiness must also await verified stats readiness and
+   separately verify broker consumption; an active systemd unit alone is not
+   proof. This startup/readiness integration remains an installer release gate.
 6. Implement explicit old responder/archive-worker drain and read admission for
    the controlled stats-child restart while ETS managers remain alive. Pausing
    broker consumers alone does not drain independently spawned workers or old
@@ -82,6 +87,34 @@ responder/archive acknowledgements; pre-fix omitted-row/index-update failures
 and post-migration successful queries/updates.
 
 ## Existing evidence and its limits
+
+Migration helper11 tests passed `68e9e6/c09393`, retained at
+`/tmp/kazoo-stats-migration.YErKbj`. They use real protected ETS and actual heir
+transfer, not a mocked converter. They cover existing current identity, all
+original fields, unarchived waiting/handled records, invalid layouts before any
+mutation, owner/tid/table/options/deadline refusal, interrupted mixed-table retry,
+content/count drift and pre-fix select/index-update failures. The hash/count
+verification is not an admission lock; bounds are cooperative between ETS/hash
+BIFs, not a hard per-record heap or latency guarantee.
+
+The staged source obtains both exact owned table IDs, advances owner-local
+migration in mailbox steps, enables the unchanged native listener configuration
+only on verification success and then starts archive/cleanup timers. Startup
+failure retains the tables without starting listeners or attempting archival on
+mixed records. `stats_readiness` returns phase/reason, not broker health. OTP
+status formatting omits the migration continuation's internal key/digest.
+Root full compilation passed76 production modules with `-Werror`, no TEST
+options/agent test exports and unchanged source inputs (`67b393/bf1080`); no
+BEAM was loaded or installed. After correcting named-table transfer handling,
+the lifecycle runner rebuilt12 production modules and passed10 groups
+(`5e37b0/2a5f12`, `/tmp/kazoo-stats-startup.P2O8a8`). It uses actual named ETS
+donations, actual migration and a real `gen_listener` process; broker channel
+requisition is controlled false. Both transfer orders, failure retention,
+mutation/timer rejection, timeout tokens, private status redaction and deferred
+native responder setup pass. Named transfer messages are resolved only at
+acquisition; opaque IDs are retained and checked throughout migration. This is
+not real broker consumption or a live old/new replacement test. Old worker
+drain, direct-reader admission and deployment are still pending.
 
 Root passed upstream 10 tests, collector 50, native codec/snapshot 36, public
 route 30 plus 2 helper tests, 51 production-handler DTO/schema checks, and

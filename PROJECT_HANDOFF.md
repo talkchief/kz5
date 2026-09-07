@@ -6,6 +6,41 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Retained stats startup migration — September7, source tested, NOT deployed:**
+`acdc_stats_migration.erl` now performs owner-only preflight, bounded conversion
+and hash/count verification; `acdc_stats` defers its native listener and timers
+until both tables are owned and migration succeeds. Startup failure retains
+tables and rejects mutation/event/timer work; nonready termination does not run
+the archiver over mixed records. Internal readiness is phase/reason, not broker
+health. OTP formatting omits continuation keys/digests.
+
+Root helper11 tests pass `68e9e6/c09393`, evidence
+`/tmp/kazoo-stats-migration.YErKbj`. Lifecycle10 groups pass `5e37b0/2a5f12`,
+`/tmp/kazoo-stats-startup.P2O8a8`; the runner recompiles12 production modules
+including real `gen_listener` and migration, without TEST. It uses actual
+named ETS donations and proves deferred native responder/channel setup after
+verified conversion, with external broker/config/monitor dependencies controlled.
+It does not establish real broker consumption or installed old/new replacement.
+The first lifecycle run failed10 groups (`2fc1db/3ebc8f`,
+`/tmp/kazoo-stats-startup.ZeMcAI`): named ETS transfer messages carry the name,
+not the opaque tid, and one fixture channel callback was missing. Root fixed
+the source to resolve only the two expected names at transfer, then pin opaque
+tids throughout migration; the fixture now consumes actual named messages.
+Stale opaque tids and ownership changes still fail closed. A named signal alone
+does not establish the age of that signal; actual ownership and conversion are
+verified independently.
+
+Earlier full-source compile76 modules passed `67b393/bf1080`; the subsequently
+corrected stats module was rebuilt in the passing lifecycle runner. Upstream10
+regressions passed `4412fa/0ce91f` before the later startup-only hardening.
+All jobs are terminal; no live BEAM, service or account mutation occurred.
+**Next gate:** implement/test old responder and archive-worker drain plus direct
+reader admission, then rehearse the controlled stats-child replacement while
+keeping ETS managers alive. Native `gen_listener:code_change` does not delegate
+client state conversion; the direct client refusal test is not a hot-upgrade
+safety proof. See `doc/dashboard_caller_identity_upgrade.md`. Do not use a full
+app restart or discard unarchived tables to bypass this gate.
+
 **DASH-10 caller identity candidate and pending-view disposal — September7:**
 source-only, NOT deployed. New `acdc_dashboard_caller.erl` constructs an explicit
 privacy-filtered marker from the initialized call and original matching payload;
@@ -38,7 +73,8 @@ the watchdog after disposal, asserting no remount/cache/subscription. The27
 passing groups cover this in a controlled source browser; not deployed proof.
 
 **DASH-10 deployment gate:** `#call_stat{}` changes from18 to19 tuple elements.
-`upgrade_legacy/1` is only a tested pure conversion, NOT an executed migration.
+At that caller checkpoint, `upgrade_legacy/1` was only a tested pure conversion;
+the newer staged source implementation is documented above, still NOT deployed.
 Rebuild all record readers/writers and implement/test ownership-safe retained
 ETS migration before deployment; a stats-worker restart retains old tuples via
 the ETS manager. Do not hot-load only a subset or delete unarchived records.
