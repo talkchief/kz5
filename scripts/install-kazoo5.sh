@@ -1605,6 +1605,8 @@ ensure_kazoo_sources() {
     # and announcement hunks. Feature patches remain review/test provenance.
     # ACDC is already part of kz5; its historical patches are not applied.
     apply_kazoo_integration_patch crossbar
+    apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
+        "$SCRIPT_DIR/patches/crossbar-soft-delete-revision.patch"
     apply_kazoo_integration_patch blackhole
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"

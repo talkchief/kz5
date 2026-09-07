@@ -1,0 +1,18 @@
+diff --git a/src/crossbar_doc.erl b/src/crossbar_doc.erl
+--- a/src/crossbar_doc.erl
++++ b/src/crossbar_doc.erl
+@@ -641,9 +641,11 @@
+ delete(Context, ?SOFT_DELETE) ->
+     Doc = cb_context:doc(Context),
+     lager:info("soft-deleting doc ~s", [kz_doc:id(Doc)]),
+-    case kz_datamgr:lookup_doc_rev(cb_context:db_name(Context), kz_doc:id(Doc)) of
+-        {'ok', Rev}   -> soft_delete(Context, Rev);
+-        {'error', _E} -> soft_delete(Context, kz_doc:revision(Doc))
++    %% Keep the revision belonging to the validated body. Refreshing it here
++    %% could overwrite a concurrent edit after the HTTP precondition check.
++    case kz_doc:revision(Doc) of
++        Rev when is_binary(Rev), byte_size(Rev) > 0 -> soft_delete(Context, Rev);
++        _ -> handle_datamgr_errors('conflict', kz_doc:id(Doc), Context)
+     end;
+ delete(Context, ?HARD_DELETE) ->
+     Doc = cb_context:doc(Context),

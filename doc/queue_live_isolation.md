@@ -105,7 +105,7 @@ A 403 is a policy decision, not invalidation proof. No deletion occurs before al
 tokens meet that gate. Then exact ownership/content readback and the recorded
 strong revision are required in the offline model; `DELETE` carries `If-Match`,
 and absence is read back (empty exact-key view for scope policies). **This is not
-an atomic native CAS guarantee.** Root source review found that
+an atomic native CAS guarantee.** Root source review found that the pinned
 `crossbar_doc.erl:641–660` refreshes the current DB revision on default soft-delete
 after Cowboy checked `If-Match` against the previously loaded document. A
 concurrent change can therefore be deleted despite the harness's earlier
@@ -115,6 +115,13 @@ atomic owned-cleanup path is implemented and proven; neither offline fixture
 success nor an HTTP precondition alone opens that gate. Ambiguous outcomes are
 still retained without automatic retries or destructive rollback.
 
+P0-19 now has an installer-owned source candidate preserving the validated
+revision. Nine controlled production-module regression groups pass; the pinned
+baseline reproduces the concurrent overwrite. This is **not deployed** and does
+not establish actual HTTP/CouchDB cleanup safety. Source ownership, reproduction,
+evidence and remaining gates are in
+[the soft-delete guidance](crossbar_soft_delete_revision.md).
+
 Ordinary `cb_user_auth:put/1` calls `crossbar_auth:create_auth_token/2`
 (`cb_user_auth.erl:308`), so no request TTL is forwarded. The native three-argument
 helper accepts the `expiration` option (`crossbar_auth.erl:297–315`; its type
@@ -123,6 +130,38 @@ minting path. The harness neither invents a `user_auth` expiration field nor
 changes system/account TTL. `DELETE /token_auth` only deletes a legacy token DB
 document; it is not used as a claimed JWT revocation mechanism. Native user-only
 identity-secret rotation exists but is outside this acceptance harness.
+
+### User-only rotation audit — not an implemented cleanup shortcut
+
+Source review identified `PUT /accounts/A/users/U/auth` with
+`data.action=reset_signature_secret` in `cb_auth` and the owner-specific
+`kz_auth_identity:reset_secret/1` branch. Missing the user context instead selects
+an account-level secret. Do not substitute `/auth` or `/accounts/A/auth`, rotate
+existing users, or infer authorization to do so from this note.
+
+Even exact user rotation is insufficient on its own:
+
+- `kz_auth:include_identity_sign/1` can omit `identity_sig` when identity signing
+  fails; the identity verifier has a permissive unmatched-token branch. User
+  rotation cannot revoke every otherwise valid JWT. Any future proof must
+  validate the exact Kazoo issuer/account/owner/signature/finite-expiry claims
+  in memory and exclude device-bound tokens; never print tokens or claims.
+- Kazoo identity lookup uses `open_cache_doc`; remote caches and in-flight
+  authorization can lag behind a successful write. Generic already-authorized
+  Blackhole sessions differ from the queue-live adapter's fresh authorization
+  on subscription/delivery. No cluster-wide instant revocation is established.
+- This auth action mutates during validation, before later HTTP preconditions;
+  an `If-Match` header is not a proven CAS guard for secret rotation.
+- A future revocation test needs actual old-token401 plus a successful unrelated
+  control request, and fresh/existing queue-live rejection after bounded worker
+  drain on every serving node. Authentication/storage outage is not revocation
+  evidence. Keep mutable policies until all issued tokens meet the proven gate.
+- Datastore debug paths can log full changed documents; do not dump raw logs or
+  claim this operation is credential-free logging.
+
+No secret rotation, key access, token issuance or live fixture was performed for
+this audit. The existing expiry-plus401 requirement and unconditional admission
+closure remain unchanged.
 
 ## Deferred execution proposal — do not run
 

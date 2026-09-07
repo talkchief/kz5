@@ -6,6 +6,19 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Live-only scope / cleanup prerequisite — September 7:** history, ClickHouse
+integration, separate agent dashboard and workforce reporting remain postponed.
+The live summary/detail browser and reconnect proofs below remain current.
+P0-19 now has an installer-owned revision-preserving soft-delete candidate and
+nine passing controlled regression groups; the pinned baseline reproduces the
+overwrite. This backend change is not deployed. Actual HTTP/CouchDB cleanup and
+token invalidation still gate restricted-user acceptance; its harness remains
+unconditionally closed and no fixture identities have been created. See
+`doc/crossbar_soft_delete_revision.md` and `doc/queue_live_isolation.md` for exact
+reproduction, limitations and the source-only user-secret rotation audit. Do
+not use rotation as an unverified cleanup shortcut or delete mutable policies
+while their issued tokens may still authenticate.
+
 **Current deployed UI — September 7:** OxxzgK production build/artifact checks
 `e175b8` and guarded deployment `e8e212` passed. Installer-owned P0-18 background
 load patch preserves the active app/shortcuts;12 targeted tests pass and the
