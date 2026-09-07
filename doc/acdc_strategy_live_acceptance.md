@@ -111,6 +111,16 @@ statuses/memberships matched afterward, all nine services were active, zero call
 and no ledger remained. Summary during calls and broader reliability gates remain
 open. See `monster_browser_call_acceptance.md`.
 
+**Summary browser mode:** `--dashboard-browser-summary-live` retains the same
+owned call lifecycle but observes the overview page, not selected detail. Actual
+f965e9fb passed9 checks, visible selected counters0/0→1/0→0/1→0/0, all page card
+DTO agreement, exact page subscriptions and full acknowledged cleanup. Receipt:
+`/tmp/kazoo-monster-live-deployed.4jYi2Y/receipt.json`; separate one-offer/bridge
+and12-sample call proof: `/var/log/kazoo-strategy-acceptance-Y68nYp/`. No detail
+or supplemental GETs, no browser/HTTP/scope errors. Test phones restored and
+MASTER states/memberships preserved. Overview has no call identity and does not
+prove account-wide totals, restricted-user isolation or load/soak.
+
 **Latest actual run79231: PASS.** Root2519 first compiled74 ACDC and30 Blackhole
 production modules in
 `/usr/local/src/kazoo5-installer/live-dashboard-backend.0KplKA`. Root29023 deployed

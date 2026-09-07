@@ -205,6 +205,7 @@ function endpoint(value, protocols, pathname) {
 }
 async function main(natural) {
     const env = natural ? natural.env : process.env;
+    const summaryMode = natural?.overview === true;
     process.umask(0o077);
     check(process.getuid() === 0 && Number(process.versions.node.split('.')[0]) >= 20, 'root_and_node20_required');
     check((natural || process.argv.length === 2) && !env.KAZOO_TEST_WEB_STAGE && !env.KAZOO_TEST_ACDC_STAGE,
@@ -266,9 +267,12 @@ async function main(natural) {
             event_refetch_verified: false, broker_barrier_verified: false}, production_assets: {}, after: null};
     let browser, context, phase = 'bootstrap', stopping = false, fatal = null, serial = 0, callObserver, observerErrorClass, summary;
     let firstDetailAck = null, firstDetailOrder = null, detailStarted = 0, detailInFlight = 0, maxDetailInFlight = 0;
+    let firstOverviewAck = null, firstOverviewOrder = null, overviewStarted = 0, overviewInFlight = 0, maxOverviewInFlight = 0;
     let overviewGeneration = null;
     let disposalStartOrder = null, disposalSendOrder = null, disposalAckOrder = null;
-    const detailLedger = [], pending = new Set(), requests = new Map(), scopedRequests = new Set();
+    const detailLedger = [], overviewLedger = [], pending = new Set(), requests = new Map(), scopedRequests = new Set();
+    const summaryBindings = new Map();
+    let summaryFinalSubscriptionsEmpty = false;
     const requestPhases = new WeakMap(), httpOrders = new WeakMap();
     const overviewPath = '/v2/accounts/' + account + '/queues/live';
     const homeOverviewPath = '/v2/accounts/' + loginAccount + '/queues/live';
@@ -391,9 +395,16 @@ async function main(natural) {
                             if (disposal && disposalSendOrder === null) {
                                 disposalSendOrder = order; result.native.disposal_unsubscribe_sent = true;
                             }
+                            if (summaryMode && role === 'target' && j.action === 'unsubscribe') {
+                                const binding = summaryBindings.get(j.data.binding);
+                                check(phase === 'cleanup' && binding && binding.sent === null
+                                    && disposalStartOrder !== null && order > disposalStartOrder, 'unexpected_summary_unsubscribe');
+                                binding.sent = order;
+                            }
                             const sent = {action: j.action, binding: j.data.binding, account: j.data.account_id,
                                 requestId: j.request_id, role, phase, order,
-                                disposal, afterDetailGet: firstDetailOrder !== null && order > firstDetailOrder};
+                                disposal, afterDetailGet: firstDetailOrder !== null && order > firstDetailOrder,
+                                afterOverviewGet: firstOverviewOrder !== null && order > firstOverviewOrder};
                             recordHomeCommand(admission, sent);
                             seenRequestIds.add(j.request_id);
                             wire.set(j.request_id, sent);
@@ -427,14 +438,31 @@ async function main(natural) {
                                 if (sent.role === 'target' && sent.action === 'subscribe' && j.status === 'success'
                                     && Array.isArray(j.data?.subscriptions) && j.data.subscriptions.includes(sent.binding)) {
                                     result.counts.native_subscribe_acks++;
+                                    if (summaryMode) {
+                                        check(Array.isArray(j.data.subscribed) && j.data.subscribed.length === 1
+                                            && j.data.subscribed[0] === sent.binding && !summaryBindings.has(sent.binding)
+                                            && summaryBindings.size < 100, 'exact_summary_subscribe_ack_required');
+                                        summaryBindings.set(sent.binding, {sent: null, ack: null});
+                                    }
                                     if (sent.phase === 'detail' && sent.afterDetailGet && selected && firstDetailAck === null) {
                                         firstDetailAck = {order, time: Date.now()}; result.native.detail_ack = true;
+                                    }
+                                    if (summaryMode && sent.phase === 'overview' && sent.afterOverviewGet && selected && firstOverviewAck === null) {
+                                        firstOverviewAck = {order, time: Date.now()};
                                     }
                                 }
                                 if (sent.role === 'target' && sent.action === 'unsubscribe') {
                                     const accepted = j.status === 'success' && Array.isArray(j.data?.unsubscribed)
                                         && j.data.unsubscribed.includes(sent.binding);
                                     if (accepted) result.counts.native_unsubscribe_acks++;
+                                    if (summaryMode) {
+                                        const binding = summaryBindings.get(sent.binding);
+                                        check(accepted && j.data.unsubscribed.length === 1 && binding
+                                            && binding.sent === sent.order && Array.isArray(j.data.subscriptions)
+                                            && !j.data.subscriptions.includes(sent.binding), 'exact_summary_unsubscribe_ack_required');
+                                        binding.ack = order;
+                                        summaryFinalSubscriptionsEmpty = j.data.subscriptions.length === 0;
+                                    }
                                     if (sent.disposal && sent.order === disposalSendOrder) {
                                         if (!accepted) fail('selected_disposal_unsubscribe_rejected');
                                         else { disposalAckOrder = order; result.native.disposal_unsubscribe_ack = true; }
@@ -444,7 +472,7 @@ async function main(natural) {
                             if (j.action === 'event' && j.name === 'changed'
                                 && j.subscribed_key === 'queue_live.changed.' + queue
                                 && j.data?.version === 1 && j.data.account_id === account && j.data.queue_id === queue) result.counts.native_events++;
-                            if (callObserver && phase === 'detail' && j.action === 'event'
+                            if (callObserver && (summaryMode ? ['overview', 'summary_call'].includes(phase) : phase === 'detail') && j.action === 'event'
                                 && j.subscribed_key === 'queue_live.changed.' + queue) {
                                 callObserver.recordEvent(j, timeline('socket_event', 'selected_queue_subscription'));
                             }
@@ -455,10 +483,10 @@ async function main(natural) {
             });
             const page = await context.newPage(); page.setDefaultTimeout(15000);
             if (natural) {
-                const {createBrowserCallObserver, readRenderedCall, BrowserCallError} = require('./test-fixtures/monster-live-call-observer.cjs');
+                const {createBrowserCallObserver, createBrowserSummaryObserver, readRenderedCall, BrowserCallError} = require('./test-fixtures/monster-live-call-observer.cjs');
                 observerErrorClass = BrowserCallError;
-                callObserver = createBrowserCallObserver({accountId: account, queueId: queue,
-                    readPage: () => page.evaluate(readRenderedCall, {accountId: account, queueId: queue}),
+                callObserver = (summaryMode ? createBrowserSummaryObserver : createBrowserCallObserver)({accountId: account, queueId: queue,
+                    readPage: () => page.evaluate(readRenderedCall, {accountId: account, queueId: queue, overview: summaryMode}),
                     getOrder: () => serial, checkClean});
             }
             page.on('console', m => { if (!stopping && m.type() === 'error') result.counts.console_errors++; });
@@ -466,6 +494,7 @@ async function main(natural) {
             page.on('request', request => {
                 const u = new URL(request.url());
                 if (request.method() === 'GET' && same(u, api) && u.pathname === detailPath && firstDetailOrder === null) {
+                    if (summaryMode) fail('unexpected_detail_get_in_summary');
                     // Playwright click can wait through overview ACK/refreshes.
                     // The first actual selected-detail GET, not starting click(),
                     // establishes the detail request/subscription boundary.
@@ -481,6 +510,12 @@ async function main(natural) {
                 if (livePath(u)) queryDiagnostic(u);
                 if (u.pathname === overviewPath) {
                     result.counts.overview_gets++;
+                    if (summaryMode) {
+                        if (firstOverviewOrder === null) { firstOverviewOrder = order; overviewStarted = Date.now(); }
+                        if (overviewLedger.length >= 128) { fail('summary_request_limit'); return; }
+                        overviewInFlight++; maxOverviewInFlight = Math.max(maxOverviewInFlight, overviewInFlight);
+                        const item = {order, time: Date.now(), status: null, overview: true}; overviewLedger.push(item); requests.set(request, item);
+                    }
                     // A response to an already-started overview GET may finish
                     // after navigation; a new overview GET must not be launched.
                     if (firstDetailOrder !== null && order > firstDetailOrder) {
@@ -491,12 +526,12 @@ async function main(natural) {
                     if (firstDetailOrder === null) firstDetailOrder = order;
                     result.counts.detail_gets++; detailInFlight++; maxDetailInFlight = Math.max(maxDetailInFlight, detailInFlight);
                     const item = {order, time: Date.now(), status: null}; detailLedger.push(item); requests.set(request, item);
-                } else if ((phase === 'detail' && !livePath(u)) || (phase === 'detail_transition'
+                } else if ((phase === 'summary_call' && u.pathname !== overviewPath) || (phase === 'detail' && !livePath(u)) || (phase === 'detail_transition'
                     && ['queue_roster', 'agent_names', 'agent_global_status', 'user_names'].includes(category(u)))) result.counts.supplemental_gets++;
             });
-            page.on('requestfinished', r => { if (requests.has(r)) detailInFlight--; });
+            page.on('requestfinished', r => { if (requests.has(r)) { if (requests.get(r).overview) overviewInFlight--; else detailInFlight--; } });
             page.on('requestfailed', r => {
-                if (requests.has(r)) detailInFlight--;
+                if (requests.has(r)) { if (requests.get(r).overview) overviewInFlight--; else detailInFlight--; }
                 if (!stopping) { httpFailure(r, 0); if (scopedRequests.has(r)) result.counts.failed_requests++; }
             });
             page.on('response', response => {
@@ -504,11 +539,11 @@ async function main(natural) {
                 if (item) item.status = response.status();
                 const responseOrder = same(u, api) && u.pathname.startsWith('/v2/')
                     ? timeline('http_response', category(u), response.status(), httpOrders.get(response.request()) || null) : null;
-                if (callObserver && item && response.status() === 200) track((async () => {
-                    const bytes = await response.body(); check(bytes.length <= 2 * 1024 * 1024, 'natural_detail_body_limit');
+                if (callObserver && item && Boolean(item.overview) === summaryMode && response.status() === 200) track((async () => {
+                    const bytes = await response.body(); check(bytes.length <= 2 * 1024 * 1024, summaryMode ? 'natural_overview_body_limit' : 'natural_detail_body_limit');
                     callObserver.recordResponse({body: JSON.parse(bytes.toString('utf8')), requestOrder: item.order,
                         responseOrder, requestAt: item.time, noStore: response.headers()['cache-control'] === 'no-store'});
-                })(), 'natural_detail_validation_failed');
+                })(), summaryMode ? 'natural_overview_validation_failed' : 'natural_detail_validation_failed');
                 if (!stopping && response.status() >= 400) {
                     httpFailure(response.request(), response.status());
                     if (scopedRequests.has(response.request())) result.counts.failed_http++;
@@ -606,6 +641,36 @@ async function main(natural) {
             checkpoint('waiting_selected_queue_on_page');
             await page.locator('.acdc-open-live-queue[data-queue-id="' + queue + '"]').first().waitFor({state: 'visible'});
             result.checks.push('current_authorized_overview_page_contains_queue');
+            if (summaryMode) {
+                checkpoint('waiting_native_selected_overview_ack_refetch');
+                const until = Math.min(overviewStarted + 14000, Date.now() + 5000);
+                while (Date.now() < until && !(firstOverviewAck && overviewLedger.some(r => r.order > firstOverviewAck.order && r.status === 200)) && !fatal) {
+                    await page.waitForTimeout(50);
+                }
+                check(firstOverviewAck && overviewLedger.some(r => r.order > firstOverviewAck.order && r.status === 200
+                    && r.time < overviewStarted + 14000), 'native_overview_ack_refetch_before_periodic_required');
+                await page.waitForFunction(({account, ackAt}) => {
+                    const app = window.require('monster').apps.acdc, c = app.appFlags.acdc.liveDashboardController;
+                    const s = app.appFlags.acdc.liveDashboardSnapshot;
+                    return c && !c.queueId && c.accountId === account && !c.inFlight && s && !s.queueId
+                        && s.accountId === account && s.receivedAt >= ackAt
+                        && app.liveSnapshotValid(s.results.live, account, undefined, s.page);
+                }, {account, ackAt: firstOverviewAck.time}, {timeout: 3000});
+                result.native.supported = true;
+                result.natural_summary = {selected_subscribe_ack: true, ack_refetch: true};
+                await Promise.all([...pending]); checkClean();
+                check(maxOverviewInFlight === 1 && result.counts.detail_gets === 0, 'summary_request_fanout');
+                result.natural_summary.baseline = await callObserver.ready();
+                callObserver.assertSummaryBindings([...summaryBindings.keys()]);
+                phase = 'summary_call';
+                checkpoint('observing_owned_call_in_visible_overview');
+                await natural.runCall(Object.freeze({waitForPhase: callObserver.waitForPhase}));
+                result.natural_summary.observation = callObserver.finish();
+                callObserver.assertSummaryBindings([...summaryBindings.keys()]);
+                check(maxOverviewInFlight === 1 && result.counts.detail_gets === 0 && result.counts.supplemental_gets === 0, 'summary_request_fanout');
+                check(result.counts.auth === 1, 'exactly_one_normal_auth_required'); checkClean();
+                result.checks.push('natural_summary_waiting_handled_zero_card_counts_and_page_dto_match');
+            } else {
             phase = 'detail_transition';
             checkpoint('clicking_selected_queue');
             await page.locator('.acdc-open-live-queue[data-queue-id="' + queue + '"]').first().click();
@@ -677,21 +742,32 @@ async function main(natural) {
                 checkClean();
                 result.checks.push('natural_waiting_handled_gone_native_hints_gets_and_rendered_rows');
             }
+            }
             // Normal navigation retires the local controller, then closing the
             // ephemeral context removes the session. No persistent logout write.
             phase = 'cleanup';
-            checkpoint('navigating_away_from_live_detail');
+            checkpoint(summaryMode ? 'navigating_away_from_live_overview' : 'navigating_away_from_live_detail');
             disposalStartOrder = timeline('navigation_disposal', 'selected_queue_subscription');
             await page.locator('.acdc-tab[data-tab="queues"]').click();
             await page.waitForFunction(() => !window.require('monster').apps.acdc.appFlags.acdc.liveDashboardController);
             result.checks.push('navigation_disposes_live_controller');
-            if (detail.websocket) {
+            if (result.native.supported) {
                 checkpoint('waiting_selected_disposal_unsubscribe_ack');
                 const until = Date.now() + 5000;
                 while (Date.now() < until && disposalAckOrder === null && !fatal) await page.waitForTimeout(50);
                 check(disposalSendOrder !== null && disposalAckOrder !== null && disposalAckOrder > disposalSendOrder,
                     'correlated_selected_disposal_unsubscribe_ack_required');
                 result.checks.push('normal_navigation_selected_unsubscribe_sent_and_acknowledged');
+                if (summaryMode) {
+                    const allDisposed = () => summaryBindings.size > 0
+                        && summaryFinalSubscriptionsEmpty
+                        && [...summaryBindings.values()].every(b => b.sent !== null && b.ack !== null && b.ack > b.sent);
+                    const allUntil = Date.now() + 5000;
+                    while (Date.now() < allUntil && !allDisposed() && !fatal) await page.waitForTimeout(50);
+                    check(allDisposed(), 'all_summary_unsubscribe_acks_required');
+                    result.natural_summary.disposal = {bindings: summaryBindings.size,
+                        exact_page_bindings_verified: true, all_unsubscribe_acks: true, final_subscriptions_empty: true};
+                }
             }
             if (scope.switching) {
                 // Restore only after normal detail disposal and its real ACK.
@@ -709,7 +785,7 @@ async function main(natural) {
                 && (preloadedAcdc || result.production_assets['apps/acdc/app.js'])
                 && (!scope.switching || result.production_assets[ACCOUNT_BROWSER_ASSET]), 'actual_deployed_asset_receipts_missing');
             result.checks.push('actual_served_production_bytes_match_expected_deployed_files');
-            result.status = requiredSocket ? 'PASS' : (detail.websocket ? 'PASS' : 'PASS_SNAPSHOT_ONLY');
+            result.status = requiredSocket ? 'PASS' : (result.native.supported ? 'PASS' : 'PASS_SNAPSHOT_ONLY');
         } finally { clearTimeout(deadline); }
     } catch (e) {
         result.failure = fatal || (e instanceof Failure || (observerErrorClass && e instanceof observerErrorClass)
@@ -726,7 +802,10 @@ async function main(natural) {
         if (fatal) { result.status = 'FAIL'; result.failure = fatal; }
         // Fixed codes and numeric/boolean/hash observations only. No exception,
         // response text, credentials, frames, request IDs or user/call names.
-        if (callObserver && result.status === 'FAIL') result.natural_call = {...result.natural_call, observation: callObserver.evidence()};
+        if (callObserver && result.status === 'FAIL') {
+            const key = summaryMode ? 'natural_summary' : 'natural_call';
+            result[key] = {...result[key], observation: callObserver.evidence()};
+        }
         fs.writeFileSync(path.join(evidenceDir, 'receipt.json'), JSON.stringify(result, null, 2) + '\n', {flag: 'wx', mode: 0o600});
         summary = {status: result.status, evidence: path.join(evidenceDir, 'receipt.json'),
             checks: result.checks.length, failure: result.failure || null};
@@ -737,7 +816,7 @@ async function main(natural) {
     }
     return summary;
 }
-async function runWithNaturalCall(options) {
+async function runNaturalBrowser(options, overview) {
     try {
         check(options && !Array.isArray(options) && Object.keys(options).sort().join(',')
             === 'accountId,loginAccountId,loginQueueId,queueId,runCall'
@@ -746,16 +825,18 @@ async function runWithNaturalCall(options) {
         const env = {...process.env, KAZOO_TEST_ACCOUNT_ID: options.accountId, KAZOO_TEST_QUEUE_ID: options.queueId,
             KAZOO_TEST_LOGIN_ACCOUNT_ID: options.loginAccountId, KAZOO_TEST_LOGIN_QUEUE_ID: options.loginQueueId,
             KAZOO_TEST_REQUIRE_WEBSOCKET: 'true'};
-        return await main({env, runCall: options.runCall});
+        return await main({env, runCall: options.runCall, overview});
     } catch (e) {
         return {status: 'FAIL', evidence: null, checks: 0,
             failure: e instanceof Failure ? e.message : 'embedded_browser_preflight_failed'};
     }
 }
+async function runWithNaturalCall(options) { return runNaturalBrowser(options, false); }
+async function runWithNaturalSummaryCall(options) { return runNaturalBrowser(options, true); }
 module.exports = {accountScopeOptions, accountScopeInBrowser, targetAccountResponse,
     verifyTargetAccountResponse, switchTargetAccount, restoreHomeAccount, browserErrorDiagnostic, ACCOUNT_BROWSER_ASSET,
     socketAdmission, socketScopeRole, recordHomeCommand, observeHomeReply, beginHomeDisposal, closeHomeAdmission,
-    homeOverviewInBrowser, queuesDisposedInBrowser, runWithNaturalCall};
+    homeOverviewInBrowser, queuesDisposedInBrowser, runWithNaturalCall, runWithNaturalSummaryCall};
 if (require.main === module) main().catch(e => {
     process.stderr.write(JSON.stringify({status: 'FAIL', failure: e instanceof Failure ? e.message : 'preflight_failed'}) + '\n');
     process.exitCode = 1;

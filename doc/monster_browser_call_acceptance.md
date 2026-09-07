@@ -1,9 +1,9 @@
 # Actual browser call-transition acceptance
 
-Status, September 7, 2026: **actual deployed browser plus one isolated call
-passed** in guarded job a0d26078. The browser verified waiting → handled → gone,
+Status, September 7, 2026: **actual deployed browser detail and summary both
+passed isolated-call tests** (a0d26078 detail; f965e9fb summary). The browser verified waiting → handled → gone,
 each with a fresh native hint, later authorized GET and matching visible rows
-and counts. This is detail acceptance, not a production/load or summary-call claim.
+and counts. These are single-call development checks, not production/load claims.
 
 Earlier admission53882e refused before payload at approximately754MiB available.
 The successful run temporarily stopped only `kazoo-live-test-agents.service`
@@ -70,6 +70,53 @@ before browser PASS. The outer strategy finally block then restores borrowed
 agent states and removes only its owned resources. Failures retain the protected
 strategy ledger when cleanup cannot be verified; never broaden cleanup scope.
 
+## Summary mode
+
+`--dashboard-browser-summary-live` uses the same prerequisites and owning call
+lifecycle, through `runWithNaturalSummaryCall` with the same five validated
+arguments. It remains on the actual overview page: no detail GETs or injected
+refreshes. The selected card must show0/0 →1/0 →0/1 →0/0 for waiting/handled,
+with a fresh exact queue hint and later authorized overview GET at each phase.
+Every visible card must match the validated overview DTO; the displayed page
+queue count and queue identities must remain consistent. Unavailable data cannot
+be interpreted as observed zero.
+
+Successful native subscription ACKs must exactly cover the validated page's
+queue IDs before and after the call. Cleanup requires each correlated unsubscribe
+ACK and an empty final native subscription set before home restoration.
+The overview DTO intentionally contains no call IDs or detailed agent rows:
+the separate owned-call proof establishes the physical bridge, not an identity
+join inside the summary snapshot. No account-wide or historical totals are claimed.
+
+Actual summary f965e9fb passed9 browser checks; receipt
+`/tmp/kazoo-monster-live-deployed.4jYi2Y/receipt.json`, call/cleanup evidence
+`/var/log/kazoo-strategy-acceptance-Y68nYp/`. There were7 overview GETs,0 detail
+or supplemental GETs,3 natural hints, and2 page subscription/unsubscription ACKs.
+Both visible queue cards agreed with the DTO. One offer/bridge and12 stable
+channel samples passed. Console/page/HTTP/request/scope failures were all zero.
+The30 simulated phones were restored and before/after-summary snapshots compared
+the exact roster/31 reported statuses/memberships without changes.
+
+Shared-source offline revalidation: observer0343ce18 groups (original12 plus6
+summary), CLI b59a7b, company scope c7937d16 groups, original SIP/ownership5a6a8e
+and shared DTO/native observer b1bc1212 groups all passed. Independent source
+review found an omitted-page-subscription evidence gap; the exact membership
+and final-empty checks above closed it before the live run.
+
+After the summary changes, the unchanged detail entry point was re-run against
+the same final helper/harness source and passed11 browser checks again:
+`/tmp/kazoo-monster-live-deployed.IBFBXo/receipt.json` and
+`/var/log/kazoo-strategy-acceptance-ULzxV9/`. This run had5 detail GETs,3 natural
+hints,3 subscribe/unsubscribe ACKs, no browser/HTTP/scope errors, and one
+offer/bridge with12 stable channel samples. Source hashes:
+helper `513baa69a28fa2024f9666ec811a9f58b7235bac32833ec2058d01b94fb368bd`,
+harness `1194df32be84c562c068b61272ee3ef70c9481accd43f46fcfee08d42b627d32`.
+Final snapshot `phone-snapshot-after-summary-detail-recheck.json` matches the
+pre-first-call roster and31 reported statuses/memberships. All nine services
+active,30 phone children/sockets restored, zero calls and no recovery ledger.
+Platform journal checks since04:18 UTC found no crash-report/OOM/service-failure
+markers; this is a narrow test-window check, not a full log or soak audit.
+
 ## Evidence and remaining gates
 
 - Actual run a0d26078: `/var/log/kazoo-strategy-acceptance-elItb6/`
@@ -112,6 +159,5 @@ produce both the private browser receipt and the owning strategy call/cleanup
 evidence. The existing natural HTTP/native call PASS79231 and deployed navigation
 PASS74850/69219 remain separate earlier evidence.
 
-This slice targets detail call rendering. Summary rendering during real calls,
-restricted-principal isolation, cross-node faults and load/soak are separate
+Restricted-principal isolation, cross-node faults and load/soak are separate
 remaining gates. Historical dashboards, WFM and ClickHouse work remain postponed.

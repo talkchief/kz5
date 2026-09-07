@@ -39,9 +39,9 @@ function fixture(options={}){
     `,context,{filename:file,timeout:1000});
     return {events,run:args=>mod.exports.testMain(args),api:mod.exports,process:context.process};
 }
-function browserStageFixture(outcome){
+function browserStageFixture(outcome,summary=false){
     const trace=[],writes=[],mod={exports:{}},observer=Object.freeze({waitForPhase(){}});
-    const browser={async runWithNaturalCall(options){
+    const browser={async [summary?'runWithNaturalSummaryCall':'runWithNaturalCall'](options){
         assert.deepEqual(Object.keys(options).sort(),['accountId','queueId','loginAccountId','loginQueueId','runCall'].sort());
         assert.equal(options.accountId,'a'.repeat(32));assert.equal(options.queueId,'e'.repeat(32));
         assert.equal(options.loginAccountId,'302ae5a70c403124f764cbc54229cfcd');
@@ -56,15 +56,15 @@ function browserStageFixture(outcome){
         request=async(method,p,data)=>{assert.equal(method,'PATCH');assert.equal(data.agent_ring_timeout,12);trace.push('patch');};
         readyAgents=async()=>trace.push('ready');
         runCall=async(label,policy,expected,received)=>{
-            assert.equal(label,'dashboard-browser-natural-call');assert.equal(policy(),6000);assert.equal(received,observer);
+            assert.equal(label,summary?'dashboard-browser-summary-natural-call':'dashboard-browser-natural-call');assert.equal(policy(),6000);assert.equal(received,observer);
             expected({events:[{type:'invite'}]});assert.throws(()=>expected({events:[]}));trace.push('call');return {passed:true};
         };
         write=(name,bytes)=>writes.push({name,body:JSON.parse(bytes)});
         module.exports.run=dashboardBrowserStage;
     `,{require:localRequire,module:mod,__dirname,console:{log(){}},Buffer,process:{env:browserEnv,versions:{node:'22.0.0'}},
         setTimeout:callback=>{trace.push('settle');return setTimeout(callback,0);},clearTimeout,setInterval,clearInterval,
-        trace,writes,observer},{filename:file,timeout:1000});
-    return {run:()=>mod.exports.run(),trace,writes};
+        trace,writes,observer,summary},{filename:file,timeout:1000});
+    return {run:()=>mod.exports.run(summary),trace,writes};
 }
 async function main(){
     let f=fixture();await f.run(['--check-live']);
@@ -80,7 +80,7 @@ async function main(){
     }
     // Dashboard mode must reach the same shared lock boundary as ordinary live
     // acceptance, not silently become preparation or bypass locking.
-    for(const mode of ['--dashboard-live','--dashboard-browser-live','--live']){
+    for(const mode of ['--dashboard-live','--dashboard-browser-live','--dashboard-browser-summary-live','--live']){
         f=fixture();await assert.rejects(f.run([mode]),/unexpected mutation or process/);
         assert.deepEqual(f.events,['prepare']);
     }
@@ -89,16 +89,19 @@ async function main(){
         KAZOO_TEST_EXPECT_TEMPLATES_SHA256:'bad',KAZOO_TEST_EXPECT_ACCOUNT_BROWSER_SHA256:undefined,
         KAZOO_TEST_WEB_STAGE:'/tmp/fake',KAZOO_TEST_ACDC_STAGE:'/tmp/fake',NODE_TLS_REJECT_UNAUTHORIZED:'0'})){
         const env={...browserEnv,[key]:value};assert.throws(()=>harness.browserInputs(env,22));
-        f=fixture({browserEnv:env});await assert.rejects(f.run(['--dashboard-browser-live']));
-        assert.deepEqual(f.events,[],'Invalid browser inputs must fail before preparation or fixture writes');
+        for(const mode of ['--dashboard-browser-live','--dashboard-browser-summary-live']){
+            f=fixture({browserEnv:env});await assert.rejects(f.run([mode]));
+            assert.deepEqual(f.events,[],'Invalid browser inputs must fail before preparation or fixture writes');
+        }
     }
     assert.throws(()=>harness.browserInputs(browserEnv,18));
-    for(const outcome of ['PASS','FAIL','throw']){
-        const stage=browserStageFixture(outcome);
+    for(const summary of [false,true])for(const outcome of ['PASS','FAIL','throw']){
+        const stage=browserStageFixture(outcome,summary);
         if(outcome==='PASS')await stage.run();else await assert.rejects(stage.run());
         assert.deepEqual(stage.trace,['configure','patch','settle','ready','browser',...(outcome==='throw'?[]:['call'])]);
-        assert.equal(stage.writes.length,1);assert.equal(stage.writes[0].name,'dashboard-browser-evidence.json');
+        assert.equal(stage.writes.length,1);assert.equal(stage.writes[0].name,summary?'dashboard-browser-summary-evidence.json':'dashboard-browser-evidence.json');
         assert.equal(stage.writes[0].body.passed,outcome==='PASS');
+        if(summary)assert(stage.writes[0].body.unproven.includes('overview has no call identity'));
     }
     let release;f=fixture({cleanupBarrier:new Promise(resolve=>{release=resolve;})});
     const s1=f.api.testShutdown(143),s2=f.api.testShutdown(130);assert.equal(s1,s2);

@@ -38,14 +38,27 @@ function event() {
     return {action: 'event', name: 'changed', subscribed_key: 'queue_live.changed.' + Q,
         subscription_key: key, routing_key: key, data: {version: 1, account_id: A, queue_id: Q}};
 }
+function overviewDto(state = 'gone') {
+    const body = dto(state), other = copy(dto().data.queues[0]); other.id = H;
+    body.data.queues.push(other); body.data.calls = null; body.data.agents = null;
+    body.data.capabilities.live_call_details = false; body.data.capabilities.agent_runtime = false;
+    body.data.pagination.page_size = 50; return body;
+}
 function page(body) {
     const d = body.data;
+    if (d.calls === null) {
+        const cards = d.queues.map(q => ({id: q.id, waiting: q.metrics_available ? String(q.metrics.current_waiting) : '—',
+            handled: q.metrics_available ? String(q.metrics.current_handled) : '—'}));
+        const selected = cards.find(c => c.id === Q);
+        return {valid: true, generation: 7, receivedAt: EPOCH + 100, dto: JSON.stringify(d),
+            waiting: selected.waiting, handled: selected.handled, cards, queueCount: String(cards.length)};
+    }
     return {valid: true, generation: 7, receivedAt: EPOCH + 100,
         dto: JSON.stringify(d), waiting: String(d.queues[0].metrics.current_waiting),
         handled: String(d.queues[0].metrics.current_handled), empty: !d.calls.rows.length,
         rows: d.calls.rows.map(r => ({callId: r.call_id, state: r.status}))};
 }
-function fixture() {
+function fixture(overview = false) {
     let time = 0, timerId = 0, order = 0, currentPage, dirty = false, reads = 0, hangRead = false;
     const timers = new Map(), mod = {exports: {}};
     vm.runInNewContext(source, {module: mod, require(name) {
@@ -55,12 +68,12 @@ function fixture() {
     const options = {accountId: A, queueId: Q, readPage: async () => {
         reads++; return hangRead ? new Promise(() => {}) : currentPage;
     }, getOrder: () => order, checkClean: () => { assert(!dirty, 'controlled_guard_failure'); }};
-    const observer = mod.exports.createBrowserCallObserver(options);
+    const observer = (overview ? mod.exports.createBrowserSummaryObserver : mod.exports.createBrowserCallObserver)(options);
     const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
     return {observer, exported: mod.exports, options, timers, reads: () => reads,
         mutatePage(fn) { fn(currentPage); }, dirty() { dirty = true; }, hang() { hangRead = true; },
         hint(change = () => {}) { const j = event(); change(j); observer.recordEvent(j, ++order); },
-        sample(body = dto(), change = () => {}, render = true) {
+        sample(body = overview ? overviewDto() : dto(), change = () => {}, render = true) {
             const input = {body, requestOrder: ++order, responseOrder: ++order, requestAt: EPOCH, noStore: true};
             change(input); observer.recordResponse(input); if (render) currentPage = page(body); return input;
         },
@@ -80,12 +93,12 @@ let groups = 0;
 async function test(name, work) { await work(); groups++; console.log('PASS ' + name); }
 (async () => {
     await test('embedded interface rejects malformed input before any browser or credential work', async () => {
-        const {runWithNaturalCall} = require('./test-monster-live-deployed.cjs');
+        const {runWithNaturalCall, runWithNaturalSummaryCall} = require('./test-monster-live-deployed.cjs');
         const good = {accountId: A, queueId: Q, loginAccountId: L, loginQueueId: H, runCall: () => assert.fail()};
         const env = JSON.stringify(process.env), argv = JSON.stringify(process.argv);
-        for (const input of [null, {}, {...good, extra: true}, {...good, queueId: 'unsafe'}, {...good, runCall: 'module'},
+        for (const run of [runWithNaturalCall, runWithNaturalSummaryCall]) for (const input of [null, {}, {...good, extra: true}, {...good, queueId: 'unsafe'}, {...good, runCall: 'module'},
             {...good, loginAccountId: A}, {...good, loginQueueId: undefined}]) {
-            assert.deepEqual(await runWithNaturalCall(input), {status: 'FAIL', evidence: null, checks: 0, failure: 'invalid_natural_call_options'});
+            assert.deepEqual(await run(input), {status: 'FAIL', evidence: null, checks: 0, failure: 'invalid_natural_call_options'});
         }
         assert.equal(JSON.stringify(process.env), env); assert.equal(JSON.stringify(process.argv), argv);
     });
@@ -163,6 +176,91 @@ async function test(name, work) { await work(); groups++; console.log('PASS ' + 
         const pending = p.observer.waitForPhase(CALL, 'waiting', 10000);
         await assert.rejects(p.observer.waitForPhase(CALL, 'waiting', 10000), /invalid_browser_phase/); await p.timeout(pending);
     });
+    await test('summary schema is overview-only and rejects foreign, duplicate or missing selected queues', () => {
+        for (const change of [x => x.body.data.account_id = L, x => x.body.data.calls = dto().data.calls,
+            x => x.body.data.capabilities.live_call_details = true, x => x.body.data.queues[1].id = Q,
+            x => x.body.data.queues[0].id = A, x => x.body.data.window.from++, x => x.body.data.pagination.page_size = 1,
+            x => x.body.data.source.observation_finished_at = x.body.data.generated_at + 1]) {
+            const f = fixture(true); assert.throws(() => f.sample(overviewDto(), change));
+        }
+    });
+    await test('summary selected counters and every visible page card follow the real-call phase interface', async () => {
+        const f = fixture(true); await f.ready();
+        const bindings = [Q, H].map(id => 'queue_live.changed.' + id);
+        assert.doesNotThrow(() => f.observer.assertSummaryBindings(bindings));
+        for (const wrong of [[], bindings.slice(0, 1), [...bindings, 'queue_live.changed.' + L], [bindings[0], bindings[0]]]) {
+            assert.throws(() => f.observer.assertSummaryBindings(wrong), /summary_wire_page_bindings_mismatch/);
+        }
+        for (const phase of ['waiting', 'handled', 'gone']) {
+            f.hint(); f.sample(overviewDto(phase)); const proof = await f.observer.waitForPhase(CALL, phase, 10000);
+            assert.equal(proof.visible_page_queues, 2); assert.equal(proof.snapshot_call_identity_verified, false);
+            assert.equal(proof.active, undefined); assert(proof.hint_order > proof.boundary_order);
+            assert(proof.request_order > proof.hint_order);
+        }
+        const proof = f.observer.finish(); assert.equal(proof.scope, 'visible_overview_page');
+        assert.doesNotThrow(() => f.observer.assertSummaryBindings(bindings.slice().reverse()));
+        assert.equal(proof.snapshot_call_identity_verified, false); assert.equal(proof.event_causal_correlation_verified, false);
+        assert(!JSON.stringify(proof).includes(CALL)); assert(!JSON.stringify(proof).includes(PRIVATE));
+    });
+    await test('summary cannot infer observed zero from an unavailable page', async () => {
+        const f = fixture(true), body = overviewDto();
+        Object.assign(body.data.source, {status: 'unavailable', reason: 'source_unavailable',
+            all_known_sources_responded: false, consistent: false, observation_started_at: null, observation_finished_at: null});
+        body.data.queues.forEach(q => { q.metrics_available = false; q.metrics = null; });
+        f.sample(body);
+        const failure = assert.rejects(f.observer.ready(), /browser_empty_summary_timeout/);
+        await f.advance(10001); await failure;
+        assert.equal(f.observer.evidence().ready, false);
+    });
+    await test('summary rejects wrong selected counters, another card mismatch, total drift and stale controller', async () => {
+        for (const change of [p => p.waiting = '0', p => p.handled = '1', p => p.cards[1].waiting = '9',
+            p => p.queueCount = '999', p => p.cards.pop(), p => p.generation++, p => p.valid = false,
+            p => p.receivedAt = EPOCH - 1, p => p.dto += ' ']) {
+            const f = fixture(true); await f.ready(); f.hint(); f.sample(overviewDto('waiting')); f.mutatePage(change);
+            await f.timeout(f.observer.waitForPhase(CALL, 'waiting', 10000));
+        }
+    });
+    await test('summary requires stable page identities and a post-boundary hint before the later GET', async () => {
+        for (const variant of ['no_hint', 'late_hint', 'page_drift']) {
+            const f = fixture(true); await f.ready();
+            if (variant === 'page_drift') f.hint();
+            const body = overviewDto('waiting'); if (variant === 'page_drift') body.data.queues[1].id = L;
+            f.sample(body); if (variant === 'late_hint') f.hint();
+            await f.timeout(f.observer.waitForPhase(CALL, 'waiting', 10000));
+        }
+    });
+    await test('actual summary capture requires visible current overview cards and configured page count', () => {
+        const {readRenderedCall} = fixture(true).exported, body = overviewDto('waiting'), expected = page(body);
+        const node = extra => ({isConnected: true, nodeType: 1, parentElement: null, getClientRects: () => [{}], ...extra});
+        function card(id, waiting, handled) {
+            const first = node({getAttribute: () => id}), second = node({getAttribute: () => id});
+            const w = node({textContent: waiting}), h = node({textContent: handled});
+            return {w, h, first, second, article: node({querySelectorAll: () => [first, second],
+                querySelector: selector => selector === '.acdc-live-waiting strong' ? w : h})};
+        }
+        const selected = card(Q, '1', '0'), other = card(H, '0', '0'), total = node({textContent: '2'}), ancestor = node({});
+        const root = node({parentElement: ancestor, getAttribute: () => 'false',
+            querySelectorAll: () => [other.article, selected.article],
+            querySelector: selector => selector === '.acdc-live-toolbar p strong' ? total : null});
+        const c = {accountId: A, generation: 7, view: [root]}, s = {accountId: A, receivedAt: expected.receivedAt,
+            page: {size: 50}, results: {live: body.data}};
+        const flags = {currentTab: 'dashboard', liveDashboardController: c, liveDashboardSnapshot: s};
+        const app = {accountId: A, appFlags: {acdc: flags}, liveTransportState: () => 'acknowledged',
+            liveSnapshotValid: (raw, account, queue) => raw === body.data && account === A && queue === undefined};
+        let active = 'acdc';
+        const context = {window: {require: () => ({apps: {acdc: app, auth: {currentAccount: {id: A}}, getActiveApp: () => active}}),
+            getComputedStyle: n => ({display: 'block', visibility: 'visible', opacity: '1', ...n.style})},
+            document: {querySelector: () => root}, input: {accountId: A, queueId: Q, overview: true}};
+        const run = () => vm.runInNewContext('(' + readRenderedCall.toString() + ')(input)', context, {timeout: 1000});
+        assert.deepEqual(copy(run()), expected);
+        for (const item of [root, ancestor, selected.article, other.article, total, selected.w, other.h, selected.first]) {
+            item.style = {display: 'none'}; assert.equal(run().valid, false); delete item.style;
+        }
+        c.queueId = Q; assert.equal(run().valid, false); delete c.queueId;
+        active = 'myaccount'; assert.equal(run().valid, false); active = 'acdc';
+        c.view = [ancestor]; assert.equal(run().valid, false); c.view = [root];
+        selected.second.getAttribute = () => L; assert.equal(run().valid, false);
+    });
     await test('read-only DOM capture checks current controller, transport and mounted row classes', () => {
         const {readRenderedCall} = fixture().exported, body = dto('waiting'), display = page(body);
         const node = extra => ({isConnected: true, nodeType: 1, parentElement: null, getClientRects: () => [{}], ...extra});
@@ -209,6 +307,12 @@ async function test(name, work) { await work(); groups++; console.log('PASS ' + 
         assert(main.includes("'test-fixtures/queue-live-observer.cjs', 'api-docs-queue-live.cjs'"));
         assert(main.includes("KAZOO_TEST_REQUIRE_WEBSOCKET: 'true'"));
         assert(main.includes('natural ? 150000 : 105000'));
+        assert(main.includes('async function runWithNaturalSummaryCall(options)'));
+        assert(main.includes("if (summaryMode) fail('unexpected_detail_get_in_summary')"));
+        assert(main.includes("'all_summary_unsubscribe_acks_required'"));
+        assert(main.includes('&& summaryFinalSubscriptionsEmpty'));
+        assert(main.includes('callObserver.assertSummaryBindings([...summaryBindings.keys()])'));
+        assert(main.indexOf('result.natural_summary.observation = callObserver.finish()') < main.indexOf("phase = 'detail_transition'"));
         assert(!/process\.(?:env|argv)\s*=|process\.env\.[A-Za-z_]+\s*=/.test(main));
         for (let i = 0; i < files.length; i++) assert(fs.readFileSync(files[i]).equals(bytes[i]));
     });

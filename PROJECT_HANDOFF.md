@@ -6,6 +6,28 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Summary live PASS (September7):** opt-in
+`test-acdc-strategies-live.cjs --dashboard-browser-summary-live` passed f965e9fb.
+Receipt `/tmp/kazoo-monster-live-deployed.4jYi2Y/receipt.json` (9checks) and
+`/var/log/kazoo-strategy-acceptance-Y68nYp/` prove actual selected queue counters
+0/0→1/0→0/1→0/0,3 natural hints/later GETs, all visible card/DTO agreement,
+exact subscriptions for both page queues and complete native cleanup. Seven
+overview GETs, zero detail/supplemental GETs and zero browser/HTTP/scope errors.
+One offer/bridge and12 stable samples passed; borrowed fixtures cleaned up,
+MASTER roster/31 statuses/memberships unchanged and30 phones restored. Shared
+test-source revalidation:18 observer,16 company-scope,12 shared DTO groups and
+CLI/SIP ownership fixtures passed. No UI/backend deployment in this slice.
+See `doc/monster_browser_call_acceptance.md`; restricted principals and
+cross-node/load/soak remain open, history/WFM postponed.
+
+The final shared test source also passed a fresh detail-mode real call:
+`/tmp/kazoo-monster-live-deployed.IBFBXo/receipt.json` (11checks),
+`/var/log/kazoo-strategy-acceptance-ULzxV9/` (one offer/bridge,12 samples).
+Five detail GETs,3 natural hints and zero browser/HTTP/scope errors. Final MASTER
+snapshot equals the pre-first-call roster/31 states/memberships, all nine services
+active,30 phones restored, zero calls and no strategy ledger. No crash-report,
+OOM or service-failure journal markers since04:18 UTC; no wider stability claim.
+
 **P0-16 source checkpoint:** binding exception logger fix is captured by the
 installer-owned `kazoo-bindings-exception-diagnostics.patch`, not a nested core
 commit. Current599852 passed8 groups; pinned baseline35d013 failed8 with actual
@@ -154,7 +176,7 @@ all eight services were active. `/apis` is published (8385); full offline catalo
 deterministic rebuild and tamper checks82241 passed. Installer module migration
 `b52988c` passed37 isolated cases and actual idempotent readback58155; it handles
 the native maintenance-command exit-2 convention without accepting failed reads.
-Next: summary call-transition rendering and restricted-user/cross-node/load
+Next: restricted-user/cross-node/load
 checks. Root owns serialized jobs and service windows. No master push or
 enterprise-readiness claim; all ACDC source remains directly in kz5.
 
