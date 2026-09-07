@@ -6,6 +6,25 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Latest continuation (September7):** live-only scope remains unchanged;
+history/WFM/ClickHouse are postponed. Actual isolated call43165 exposed P0-15:
+the caller connected to one agent, but live snapshots stayed waiting because
+ordinary ACDC bridge proof misses native agent-leg-only bridge events. A strict
+reciprocal-channel proof fix is in progress; do not claim natural transition
+acceptance. Evidence `/var/log/kazoo-strategy-acceptance-BMBtU4`; scoped cleanup
+succeeded and zero calls remained. Preceding status POST HTTP500 regression
+P0-14 is fixed in canonical `cb_agents`, six focused tests passed93704 versus
+two baseline failures90610. Production build
+`/usr/local/src/kazoo5-installer/live-dashboard-backend.a0U2gU` compiled74/30
+modules; only `cb_agents.beam` deployed59362 with backup
+`/tmp/kazoo-live-rollout.OYdOqh/cb_agents.before-status-fix.beam`.
+Fix committed locally as `a7c82b1`; all14 combined live-authorization groups19162
+passed afterward. Status restoration74067 and preflight10698 passed. Snapshot
+77653 exactly matches the original master roster and31 reported agent states;
+all eight services are active and zero calls remain. Observer diagnostic fixes
+passed all12 offline groups12490; these do not waive the live failure.
+See task register P0-14–16 and `doc/acdc_strategy_live_acceptance.md`.
+
 **Authoritative live-only checkpoint — September 7, 2026:** supersedes the
 older chronological checkpoints below. Historical queue/agent dashboards,
 workforce reporting and ClickHouse integration are postponed. Root deployed a

@@ -65,6 +65,9 @@ proof before promotion; the handoff does not waive those safety gates.
 
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
+| P0-14 | FIX DEPLOYED — focused/runtime regression verified | Dashboard agent-read authorization accidentally raised `function_clause` on ordinary status POST, producing live HTTP500 and blocking isolated-agent restoration. Canonical `cb_agents` now abstains for ordinary actions; global authorization remains required. Baseline90610 reproduced two failures; candidate93704 passed all6 focused groups. Production build4341 compiled74ACDC/30Blackhole modules; only `cb_agents.beam` deployed59362. Real status restoration74067 and fresh preflight10698 passed. Existing restart callback contract is unchanged, not independently proven as an HTTP veto. |
+| P0-15 | ACTIVE — live call-state correctness | Natural dashboard call43165 actually connected (one CHANNEL_BRIDGE and12stable single-winner samples), but51valid HTTP snapshots continued to show waiting, never handled. Native intercept's agent-side-only bridge event is not consumed by the ordinary caller-side queue proof path. Add strict asynchronous reciprocal-channel evidence with selected-agent/attempt fencing; never infer handled from acceptance alone or reroute an uncertain bridged caller. Live retest required. Test cleanup restored all borrowed agents and deleted only owned resources; no active calls or recovery ledger remain from this run. |
+| P0-16 | OPEN — shared binding diagnostics | `kazoo_bindings` exception logger assumes stack-frame arguments are a list, although integer arity is valid. Logging `function_clause`/`undef` can itself fail and escape dispatch; argument/frame logging also needs redaction. Narrow logger hardening and regressions remain separate from P0-14's deployed authorizer fix. |
 | P0-01 | ACTIVE — API + UI | Queue-specific Login: backend committed `4fc2a2b` with 12 isolated regression groups passing and exact fresh pinned installer-patch replay; explicit-selection UI committed `d263342` with focused/full contract passes. Source-bound OpenAPI overlay/reference committed `22b5f94`, with 9 focused groups / 45 schema cases passing. No silent roster changes or other-agent logout; membership is not readiness. Regenerate/publish `/apis`, deploy and test selected-agent ringing. |
 | P0-02 | OPEN — acceptance | Re-test extension 2000 after the operator selects the intended queue agent. Observed roster Agent 12 logged out; globally ready Agent 19 unassigned; runtime knows no eligible agents. Do not reset all agents to conceal the mismatch. |
 | P0-13 | SOURCE FIX TESTED — deployment open | Live dashboard review found the outbound FSM emits `outbound` in sync replies, but `kapi_acdc_agent` excluded it from the reply status enum. The legitimate state is now accepted. Root38933 passed3 baseline groups reproducing the actual serializer/publisher failure and11 candidate groups, with broker publication substituted; evidence `/tmp/kazoo-agent-sync-status.xBuTWi`. The listener invokes that publisher synchronously, creating a potential restart path before the fix. Real listener/restart, live-call acceptance and deployment remain separate; no confirmed live crash is claimed. |
@@ -315,6 +318,30 @@ a new deployed dashboard. Historical/WFM work remains postponed.
 | DASH-07 | POSTPONED — UI + reporting | Agent historical dashboard using `Agent Historical Dashboard.png`: agent/queue/date filters, last activity, outcomes, talk/break/idle durations, details and export. Define attribution for transfers/multiple queues. |
 | DASH-08 | OPEN — API + Next.js acceptance | Explicit company/account, queue and agent filtering contracts for snapshots and native Blackhole subscriptions. Company means Kazoo ACCOUNT_ID, not a free-text company name; enforce tenant and queue/agent permissions on the server, including wildcards and reseller/sub-account access. Document selected-queue and selected-agent examples, supported filters, unauthorized/unknown IDs and switching scope without leaking old events. Existing generic call bindings are not queue dashboard bindings. Test isolation, reconnect/resnapshot and filter changes with a real Next.js integration before marking ready. |
 | DASH-09 | POSTPONED — API + docs | Add live agent dashboard contracts alongside company queue overview, selected-queue live detail and queue/agent history. Publish versioned HTTP request/response/error schemas at /apis and linked WebSocket bindings/event schemas, with copyable Next.js examples. Clearly label planned versus implemented versus deployment-tested contracts; do not advertise invented dashboard routes as callable. Test actual responses/events against schemas and exercise examples against the matching deployment. |
+
+Current live acceptance continuation: the deployed browser navigation gate is
+passed. Opt-in one-call `--dashboard-live` used the isolated acceptance tenant,
+not the master queue. Preflight10698 and initial waiting observation passed;
+actual call43165 bridged to one agent but failed handled observation (P0-15).
+All owned resources/contacts were cleaned and original agent state restored.
+Evidence: `/var/log/kazoo-strategy-acceptance-BMBtU4`. The observer's shortened
+last-request budget initially reported `http_timeout` at the phase deadline;
+it now distinguishes phase expiry from a full five-second HTTP timeout, with
+all12 offline observer groups12490 passing. This changes diagnostics, not the
+failed live result. CLI cleanup/forward-signal/lock groups passed0c58ba.
+Actual waiting/handled/terminal and browser call-transition acceptance remain
+open; polling healthy snapshots alone does not pass the native-event gate.
+
+DASH-08 / SEC-02 follow-up: source review found scope restrictions are resolved
+from mutable user/policy documents, not frozen into JWT permissions. Missing
+user/policy reads can fall back to native defaults (`crossbar_util`), while
+ordinary token deletion is not proven signed-JWT revocation. Do not delete test
+users or their scope policies while their tokens remain authenticated. The
+isolation harness must use genuinely restricted non-admin users, exact owned
+resources, positive controls and policy-specific denials; retain both user and
+policy until actual authentication invalidation is verified. This is a source
+risk and cleanup constraint, not yet an established deployed exploit. Native
+revocation/cache behavior and any needed fail-closed code fix remain open.
 | BH-01 | ACTIVE — deployment acceptance | Token/reason/unsupported-frame redaction is packaged as a pinned installer patch; session `86439` passed eight public-entry tests, six production compiles and exact source replay. No live deployment yet. Malformed JSON and generic application-payload logging, authentication lifetime and full protocol security remain separate gaps; see `doc/blackhole_resilience.md`. |
 | BH-02 | ACTIVE — security | Context result classification bug reproduced (five failures/one control), corrected in source (six groups pass, 18786); combined replay and ten public-handler tests including mixed-denial dispatch prevention pass (69993). See doc/blackhole_binding_results_acceptance.md. Enforce and test socket authentication lifetime, token/account changes, expiry/revocation and missing/failed auth modules; existing cached authenticated context is not sufficient. Preserve tenant isolation and add queue/resource permissions for dashboard bindings. |
 | BH-03 | ACTIVE — deployment/security acceptance | Finite inbound frame/reassembled-message limits, malformed/non-object rejection and close-reason redaction implemented in installer patch. Session 62506 passes 13 real private-Cowboy wire groups, eight production compiles, exact schema/source replay and cleanup checks. Initial 38610 exit99 rejected because runner changed; clean rerun required and passed. Connection limits/trusted proxy identity, live deployment, load and unrelated-session stress remain open; no total-memory or whole-log-safety guarantee. |

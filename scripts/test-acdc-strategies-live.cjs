@@ -9,7 +9,7 @@ const fsEvents=require('./test-fixtures/strategy-fs-events.cjs');
 const API='http://127.0.0.1:8000/v2',IP='127.0.0.52',OWNER='kazoo5-isolated-ring-strategy-acceptance';
 const FILE='/etc/kazoo/ring-strategy-acceptance.json',BASE='/etc/kazoo/acceptance-secrets.env';
 const FSCLI='/usr/local/freeswitch/bin/fs_cli',ID=/^[a-f0-9]{32}$/,CALL=/^[A-Za-z0-9_.:@-]{1,128}$/;
-let state,saved,token,runDir,current,phones=[],registered=new Set(),events=[],children=new Set(),cleaning=false,eventReader,bridgeEvents=[];
+let state,saved,token,runDir,current,phones=[],registered=new Set(),events=[],children=new Set(),cleanupPromise,shutdownPromise,shutdownResolve,shutdownCode,cleanupActive=false,eventReader,bridgeEvents=[];
 const hex=()=>crypto.randomBytes(16).toString('hex'),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const log=m=>console.log('[strategy-acceptance] '+m);
 function privateRead(file){const st=fs.lstatSync(file);assert(st.isFile()&&!st.isSymbolicLink()&&st.uid===0&&(st.mode&511)===384,'Unsafe protected file');return fs.readFileSync(file,'utf8');}
@@ -36,8 +36,15 @@ function save(){const d=fs.lstatSync('/etc/kazoo');assert(d.isDirectory()&&!d.is
 function write(name,content){assert(path.basename(name)===name,'Unsafe evidence name');const p=path.join(runDir,name);fs.writeFileSync(p,content,{mode:384,flag:'wx'});return p;}
 function command(file,args,timeout=10000){try{return cp.execFileSync(file,args,{encoding:'utf8',timeout,maxBuffer:8*1024*1024,stdio:['ignore','pipe','pipe']});}
     catch(_){throw Error('Local command failed: '+path.basename(file));}}
-async function request(method,p,data){let r,j;try{r=await fetch(API+'/'+p,{method,headers:{'Content-Type':'application/json',...(token?{'X-Auth-Token':token}:{})},
-    body:data===undefined?undefined:JSON.stringify({data}),signal:AbortSignal.timeout(15000)});j=await r.json();}catch(_){throw Error('Local API unavailable');}
+function forward(){assert(!shutdownCode||cleanupActive,'Acceptance interrupted; forward work stopped');}
+async function inCleanup(work){const previous=cleanupActive;cleanupActive=true;try{return await work();}finally{cleanupActive=previous;}}
+async function request(method,p,data){forward();let r,j;try{r=await fetch(API+'/'+p,{method,headers:{Accept:'application/json','Content-Type':'application/json','Connection':'close',...(token?{'X-Auth-Token':token}:{})},
+    body:data===undefined?undefined:JSON.stringify({data}),signal:AbortSignal.timeout(15000)});j=await r.json();}catch(error){
+        const kind=[error.name,error.cause?.code].filter(v=>typeof v==='string'&&/^[A-Za-z0-9_]+$/.test(v)).join('/');
+        const http=Number.isInteger(r?.status)?String(r.status):'none';
+        const content=r?.headers?.get('content-type')||'';
+        const format=content.includes('json')?'json':content.includes('text')?'text':content?'other':'absent';
+        throw Error('Local API unavailable: '+method+' ('+(kind||'unknown')+', HTTP'+http+', '+format+')');}
     if(![200,201,202].includes(r.status)){const e=Error(`API ${method} failed HTTP${r.status}`);e.http_status=r.status;throw e;}assert(j.status==='success','API response did not succeed');return j;}
 async function authenticate(){const vals={};for(const l of privateRead('/etc/kazoo/installer-secrets.env').split('\n')){if(!l||l.startsWith('#'))continue;const at=l.indexOf('=');assert(at>0,'Invalid credential data');vals[l.slice(0,at)]=l.slice(at+1);}
     const result=await request('PUT','user_auth',{credentials:crypto.createHash('md5').update(vals.KAZOO_MASTER_ADMIN_USER+':'+vals.KAZOO_MASTER_ADMIN_PASSWORD).digest('hex'),method:'md5',realm:vals.KAZOO_MASTER_ACCOUNT_REALM});
@@ -55,6 +62,7 @@ async function verifyBorrowed(){const a=(await request('GET',`accounts/${state.A
     }}
 async function status(e){const d=(await request('GET',route('agents',e.user)+'/status')).data;return typeof d==='string'?d:d?.status;}
 async function until(fn,seconds=15,checkObservers=true){const end=Date.now()+seconds*1000;while(Date.now()<end){
+    forward();
     if(checkObservers){for(const p of phones)if(p.failure)throw p.failure;
         for(const child of children)assert(!child.fixtureError,'Synthetic caller process failed');
         if(eventReader)assert(!eventReader.failure&&eventReader.child.exitCode===null,'Scoped bridge-event observation failed: '+(eventReader.failure||'reader exited'));}
@@ -84,7 +92,7 @@ async function configure(strategy){const q=(await request('GET',route('queues',s
 function contacts(e){const r=cp.spawnSync('kamcmd',['ul.lookup','location',e.username+'@'+state.ACCEPTANCE_REALM],{encoding:'utf8',timeout:5000});
     if(r.status!==0){assert((r.stdout+r.stderr).includes('404'),'Registrar unavailable');return [];}
     return [...r.stdout.matchAll(/^\s*Address:\s*(sip:\S+)/gm)].map(m=>m[1].split(';')[0]);}
-function register(e,expires){const expected=`sip:${e.username}@${IP}:${e.port}`;assert(contacts(e).every(c=>c===expected),'Fixture identity has a foreign contact');
+function register(e,expires){forward();const expected=`sip:${e.username}@${IP}:${e.port}`;assert(contacts(e).every(c=>c===expected),'Fixture identity has a foreign contact');
     const csv=write(`registration-${e.index}-${hex()}.csv`,`SEQUENTIAL\n${e.username};[authentication username=${e.username} password=${e.password}];${state.ACCEPTANCE_REALM};${e.port};${expires}\n`);
     if(expires)registered.add(e.index);try{command('sipp',['-ci','127.0.0.1',state.ACCEPTANCE_SIP_PROXY_HOST+':5060','-sf',path.join(__dirname,'sip-tests/register.xml'),'-inf',csv,
         '-i',IP,'-p',String(e.port),'-m','1','-l','1','-r','1','-nostdin','-timeout','15s','-timeout_error'],20000);}finally{fs.unlinkSync(csv);}
@@ -119,12 +127,13 @@ async function startEventReader(){const child=cp.spawn('stdbuf',['-oL',FSCLI,'-b
     child.stdin.write('/filter variable_ecallmgr_Account-ID '+state.ACCEPTANCE_ACCOUNT_ID+'\n');
     await until(()=>reader.filtered,10);
     child.stdin.write('/event json CHANNEL_BRIDGE CHANNEL_UNBRIDGE\n');await until(()=>reader.subscribed,10);}
-function startCaller(){const e=es()[0],csv=write('caller-'+hex()+'.csv',`SEQUENTIAL\n${e.username};[authentication username=${e.username} password=${e.password}];${state.ACCEPTANCE_REALM};2700;60000;0;${path.join(runDir,'tone-440.ulaw')}\n`);
+function startCaller(){forward();const e=es()[0],csv=write('caller-'+hex()+'.csv',`SEQUENTIAL\n${e.username};[authentication username=${e.username} password=${e.password}];${state.ACCEPTANCE_REALM};2700;60000;0;${path.join(runDir,'tone-440.ulaw')}\n`);
     const child=cp.spawn('sipp',['-ci','127.0.0.1',state.ACCEPTANCE_SIP_PROXY_HOST+':5060','-sf',path.join(__dirname,'sip-tests/monitor-customer.xml'),'-inf',csv,
         '-i',IP,'-p',String(e.port),'-mi',IP,'-mp',String(e.rtp),'-min_rtp_port',String(e.rtp),'-max_rtp_port',String(e.rtp+1),
         '-m','1','-l','1','-r','1','-nostdin','-aa','-timeout','90s','-timeout_error'],{stdio:'ignore'});
     children.add(child);child.once('error',()=>{child.fixtureError=true;});child.once('exit',()=>children.delete(child));return child;}
-async function closeCall(){if(!current)return;
+function closeCall(){return inCleanup(closeOwnedCall);}
+async function closeOwnedCall(){if(!current)return;
     const list=fixtureChannels();const caller=list.find(c=>c.id===current.caller_id);
     if(caller){assert(ownedNow(caller,es()[0]),'Unowned caller cleanup refused');command(FSCLI,['-x',`uuid_kill ${caller.id} NORMAL_CLEARING`]);}
     await sleep(500);
@@ -133,11 +142,12 @@ async function closeCall(){if(!current)return;
     for(const child of children)if(child.exitCode===null)child.kill('SIGINT');await sleep(300);
     for(const child of children)if(child.exitCode===null)child.kill('SIGKILL');
     delete saved.current;save();current=null;}
-async function runCall(label,policy,expected){await noTenantCalls();await verifyBorrowed();events=[];bridgeEvents=[];
+async function runCall(label,policy,expected,observer){await noTenantCalls();await verifyBorrowed();events=[];bridgeEvents=[];
     for(const p of phones){p.policy=d=>policy(p.endpoint.index,d);p.failure=null;}
     const caller=startCaller();assert(Number.isInteger(caller.pid),'Cannot start synthetic caller');current={label,caller_id:`1-${caller.pid}@${IP}`};saved.current=current;save();
     const proof={label,bridges:[],events:[],passed:false};
     try {
+        if(observer)await observer.waitForPhase(current.caller_id,'waiting',10000);
         const target=await until(()=>{const c=channel(current.caller_id);if(!c?.bridge||!c.answered)return false;
             assert(ownedNow(c,es()[0]),'Caller scope changed');const a=channel(c.bridge),e=agents().find(e=>ownedNow(a,e));return a?.answered&&e?{a,e}:false;},45);
         proof.winner=target.e.index;proof.agent_call_id=target.a.id;
@@ -150,11 +160,39 @@ async function runCall(label,policy,expected){await noTenantCalls();await verify
         const mediaWinners=new Set(bridgeEvents.filter(e=>e.type==='CHANNEL_BRIDGE').map(e=>e.partner));
         assert.equal(mediaWinners.size,1,'Missing or multiple winning bridge events');assert(mediaWinners.has(target.a.id),'Event and live bridge winner disagree');
         proof.bridge_events=bridgeEvents.slice();proof.events=events.slice();expected(proof);
+        if(observer)await observer.waitForPhase(current.caller_id,'handled',10000);
         proof.passed=true;return proof;
     } catch(error){proof.failure=error.message;log(label+' did not pass: '+error.message);throw error;
-    } finally {proof.events=events.slice();proof.bridge_events=bridgeEvents.slice();write(label+'-evidence.json',JSON.stringify(proof,null,2)+'\n');await closeCall();}}
+    } finally {
+        const callerId=current?.caller_id;
+        proof.events=events.slice();proof.bridge_events=bridgeEvents.slice();
+        try{await closeCall();if(observer&&proof.passed)await observer.waitForPhase(callerId,'gone',10000);}
+        catch(error){proof.passed=false;proof.failure='Scoped call cleanup or terminal dashboard observation failed';throw error;}
+        finally{write(label+'-evidence.json',JSON.stringify(proof,null,2)+'\n');}
+    }}
 const offers=p=>p.events.filter(e=>e.type==='invite');
 function assertLosers(p){for(const e of offers(p).filter(e=>e.agent!==p.winner))assert(p.events.some(x=>x.call_id===e.call_id&&['cancel','bye'].includes(x.type)),'Losing INVITE lacked CANCEL/BYE');}
+async function dashboardStage(){
+    const {QueueLiveObserver}=require('./test-fixtures/queue-live-observer.cjs');
+    const observer=new QueueLiveObserver({accountId:state.ACCEPTANCE_ACCOUNT_ID,queueId:saved.queue_id,token,
+        apiUrl:API,wsUrl:'ws://127.0.0.1:5555/websocket',
+        wsModule:'/usr/local/src/kazoo5-installer/monster-ui/node_modules/ws'});
+    let passed=false;
+    try{
+        await configure('round_robin');
+        await request('PATCH',route('queues',saved.queue_id),{agent_ring_timeout:12});
+        await sleep(1200);await readyAgents();
+        await observer.open();await observer.snapshot();
+        await runCall('dashboard-natural-call',()=>6000,p=>assert.equal(offers(p).length,1),observer);
+        passed=true;
+    }finally{
+        try{await observer.close();}catch(error){passed=false;throw error;}
+        finally{write('dashboard-evidence.json',JSON.stringify({passed,observation:observer.evidence(),
+            scope:'isolated internal call; natural scoped hints and production HTTP snapshots',
+            unproven:['event causal correlation','browser call-transition rendering','cross-node failures','load and soak']},null,2)+'\n');}
+    }
+    log('PASS natural waiting/handled/terminal dashboard call and scoped subscription cleanup; '+runDir);
+}
 async function stages(){const proofs=[];
     await configure('ring_all');
     for(let n=0;n<3;n++){await readyAgents();proofs.push(await runCall('ring-all-'+(n+1),i=>i===1?1500:null,p=>{assert.deepEqual(offers(p).map(e=>e.agent).sort(),[1,2,3]);
@@ -176,7 +214,8 @@ async function stages(){const proofs=[];
     write('summary.json',JSON.stringify({passed:true,account_id:state.ACCEPTANCE_ACCOUNT_ID,queue_id:saved.queue_id,proofs:proofs.map(p=>({label:p.label,winner:p.winner})),
         unproven:['cross-FreeSWITCH-node races','native callback ring-all','large-scale load','audio quality or whisper privacy']},null,2)+'\n');
     log('PASS ring-all concurrent offers/race and loser cleanup, in-order progression/skip, two RR cycles, most-idle single offer; '+runDir);}
-async function cleanup(){if(cleaning)return false;cleaning=true;let ok=true;
+function cleanup(){if(!cleanupPromise)cleanupPromise=inCleanup(performCleanup);return cleanupPromise;}
+async function performCleanup(){let ok=true;
     try{if(current)await closeCall();}catch(e){ok=false;log('Scoped channel cleanup incomplete: '+e.message);}
     if(eventReader){eventReader.child.stdin.end();if(eventReader.child.exitCode===null)eventReader.child.kill('SIGTERM');eventReader=null;}
     for(const p of phones)p.close();phones=[];for(const child of children)if(child.exitCode===null)child.kill('SIGINT');await sleep(300);
@@ -201,21 +240,59 @@ function prepare(){state=parseState(privateRead(BASE));const local=JSON.parse(co
     assert(local.includes(state.ACCEPTANCE_SIP_PROXY_HOST),'SIP proxy must be local');assert(fs.existsSync(FSCLI),'FS diagnostic client missing');
     const sipp=cp.spawnSync('sipp',['-v'],{encoding:'utf8',timeout:5000});assert(!sipp.error&&(sipp.stdout+sipp.stderr).includes('SIPp v3.7.7-TLS-PCAP-SHA256'),'Pinned SIPp version required');
     log('Prepared only: isolated borrowed1001–1004 and marked queue2700; no API writes, registrations or calls');return local;}
-async function main(args){assert(args.length===1&&['--prepare-only','--live','--cleanup'].includes(args[0]),'Use --prepare-only, --live or --cleanup');
+async function main(args){assert(args.length===1&&['--prepare-only','--check-live','--live','--dashboard-live','--cleanup'].includes(args[0]),'Use --prepare-only, --check-live, --live, --dashboard-live or --cleanup');
     assert(process.getuid()===0,'Root required');const peers=prepare();if(args[0]==='--prepare-only')return;
+    if(args[0]==='--check-live'){
+        await authenticate();await verifyBorrowed();await noTenantCalls();
+        for(const e of es())assert(contacts(e).length===0,'Borrowed identity already registered; refusing takeover');
+        for(const e of agents()){
+            assert(['login','ready','logout','logged_out'].includes(await status(e)),'Borrowed agent is busy/paused/unknown');
+            const membership=(await request('GET',route('agents',e.user)+'/queue_status')).data;
+            assert(Array.isArray(membership)&&membership.every(x=>ID.test(x)),'Unknown queue membership');
+        }
+        assert(!fs.existsSync(FILE),'Existing unfinished fixture requires explicit recovery');
+        log('PASS read-only live preflight: isolated identities, no tenant calls/contacts, restorable agent states; no fixture writes');return;
+    }
     const lockPath='/etc/kazoo/monitor-acceptance.lock';if(fs.existsSync(lockPath)){const s=fs.lstatSync(lockPath);assert(s.isFile()&&!s.isSymbolicLink()&&s.uid===0,'Unsafe shared acceptance lock');}
-    const lock=cp.spawn('flock',['-n',lockPath,process.execPath,'-e','process.stdin.resume();'],{stdio:['pipe','ignore','ignore']});await sleep(100);assert(lock.exitCode===null,'Another acceptance run is active');
+    const lock=await acquireLock(lockPath);
     try{process.umask(63);runDir=fs.mkdtempSync('/var/log/kazoo-strategy-acceptance-');fs.chmodSync(runDir,448);await authenticate();await verifyBorrowed();
         if(fs.existsSync(FILE))saved=validateSaved(JSON.parse(privateRead(FILE)),state);
-        else {assert(args[0]==='--live','No saved fixture');saved={schema_version:1,owner:OWNER,deployment_id:hex(),account_id:state.ACCEPTANCE_ACCOUNT_ID,realm:state.ACCEPTANCE_REALM,device_ids:es().map(e=>e.device)};save();}
+        else {assert(['--live','--dashboard-live'].includes(args[0]),'No saved fixture');saved={schema_version:1,owner:OWNER,deployment_id:hex(),account_id:state.ACCEPTANCE_ACCOUNT_ID,realm:state.ACCEPTANCE_REALM,device_ids:es().map(e=>e.device)};save();}
         current=saved.current||null;
         if(args[0]==='--cleanup'){es().forEach(e=>{if(contacts(e).includes(`sip:${e.username}@${IP}:${e.port}`))registered.add(e.index);});assert(await cleanup(),'Cleanup incomplete');return;}
         assert(!current&&!saved.agents,'An unfinished run requires --cleanup first');await noTenantCalls();es().forEach(e=>assert(contacts(e).length===0,'Borrowed identity already registered; refusing takeover'));
         await snapshotAgents();
-        process.once('SIGTERM',()=>{cleanup().finally(()=>process.exit(143));});process.once('SIGINT',()=>{cleanup().finally(()=>process.exit(130));});
+        process.on('SIGTERM',()=>shutdown(143));process.on('SIGINT',()=>shutdown(130));
         try{await ensureFixture();write('tone-440.ulaw',audio.tone([440]));for(const e of es())register(e,600);
-            phones=agents().map(e=>new Phone(e,IP,peers.concat(['127.0.0.1',IP]),evt=>events.push(evt)));for(const p of phones)await p.start();await startEventReader();await stages();
-        }finally{assert(await cleanup(),'Scoped cleanup incomplete; protected recovery state retained');}
-    }finally{lock.stdin.end();if(lock.exitCode===null)lock.kill('SIGTERM');}}
+            phones=agents().map(e=>new Phone(e,IP,peers.concat(['127.0.0.1',IP]),evt=>events.push(evt)));for(const p of phones)await p.start();await startEventReader();
+            if(args[0]==='--dashboard-live')await dashboardStage();else await stages();
+        }catch(error){log('Run failed before cleanup: '+error.message);throw error;}
+        finally{assert(await cleanup(),'Scoped cleanup incomplete; protected recovery state retained');}
+    }finally{lock.stdin.end();if(lock.exitCode===null)lock.kill('SIGTERM');finishShutdown();}}
+function shutdown(code){
+    // Do not race restoration against a still-running request. The active
+    // workflow records the response, stops at its next forward boundary, then
+    // reaches the existing finally cleanup before finishing shutdown.
+    if(!shutdownPromise){shutdownCode=code;shutdownPromise=new Promise(resolve=>{shutdownResolve=resolve;});}
+    return shutdownPromise;
+}
+function finishShutdown(){if(shutdownCode){process.exitCode=shutdownCode;shutdownResolve?.();}}
+async function acquireLock(lockPath){
+    const lock=cp.spawn('flock',['-n',lockPath,process.execPath,'-e',
+        "process.stdout.write('LOCKED\\n');process.stdin.resume();"],{stdio:['pipe','pipe','ignore']});
+    try{
+        await new Promise((resolve,reject)=>{
+            let bytes='';const timer=setTimeout(()=>finish(false),5000);
+            function finish(ok){clearTimeout(timer);lock.stdout.removeListener('data',data);
+                lock.removeListener('error',failed);lock.removeListener('exit',failed);
+                if(ok)resolve();else reject(Error('Shared acceptance lock not acquired'));}
+            function failed(){finish(false);}
+            function data(chunk){bytes+=chunk.toString('utf8');
+                if(bytes==='LOCKED\n')finish(true);else if(bytes.length>=7||!('LOCKED\n'.startsWith(bytes)))finish(false);}
+            lock.stdout.on('data',data);lock.once('error',failed);lock.once('exit',failed);
+        });
+        assert(lock.exitCode===null,'Shared acceptance lock exited after acknowledgement');return lock;
+    }catch(error){lock.stdin.end();if(lock.exitCode===null)lock.kill('SIGTERM');throw error;}
+}
 module.exports={parseState,endpoints,validateSaved,owned,ownedChannel,channelRows,OWNER,IP};
-if(require.main===module)main(process.argv.slice(2)).catch(e=>{console.error('[strategy-acceptance] FAIL: '+e.message);process.exitCode=1;});
+if(require.main===module)main(process.argv.slice(2)).catch(e=>{console.error('[strategy-acceptance] FAIL: '+e.message);process.exitCode=process.exitCode||1;});

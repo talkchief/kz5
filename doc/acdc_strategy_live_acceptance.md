@@ -40,6 +40,66 @@ cannot be verified it retains `/etc/kazoo/ring-strategy-acceptance.json` (0600)
 for a later explicit `--cleanup`, rather than broadening deletion scope.
 Private evidence is retained under `/var/log/kazoo-strategy-acceptance-*`.
 
+## Live-dashboard-only acceptance mode
+
+`--check-live` authenticates and reads the existing isolated fixture, verifies
+the borrowed identities, absence of calls/contacts and restorable agent states,
+and refuses an unfinished fixture. It performs no queue, user, agent or device
+mutation. Authentication still creates an ephemeral token.
+
+`--dashboard-live` uses the same marked queue2700, ownership checks, shared
+acceptance lock and scoped cleanup as the strategy suite, but places only one
+internal round-robin call. The synthetic agent answers after six seconds, with
+a twelve-second ring timeout. A read-only observer subscribes to the selected
+queue's native Blackhole binding before the call. It checks production-schema
+HTTP snapshots for that exact caller while waiting, after the actual single
+FreeSWITCH bridge is verified, and after scoped hangup removes the live row.
+Each phase requires a fresh native invalidation and a subsequent snapshot;
+events contain no causal call nonce, so this does not prove which mutation
+caused a hint. The observer does not inject broker events or change state.
+
+This mode is not the full strategy suite, browser call-transition testing,
+PSTN/media-quality acceptance, cross-node failure testing or load/soak evidence.
+The source addition has guarded offline validation; the actual live run below
+failed handled-state observation. Do not treat the mode's presence as a PASS. Ownership-marked test resources are
+deleted only after cleanup is verified; failures retain the protected recovery
+ledger rather than broadening cleanup.
+
+The shared lock now requires the child to emit its exact post-acquisition ACK,
+not merely remain alive for100ms. Cleanup calls share one promise, including
+repeated termination signals, so a second cleanup request cannot cause exit
+before the first restoration finishes. The actual CLI control-flow fixture
+`scripts/test-acdc-dashboard-live-mode.cjs` substitutes external boundaries and
+tests these cases, denied preflight states and explicit mode selection.
+Root0c58ba passed the revised forward-safe fixture and original strategy-harness
+regression. Pending forward HTTP responses finish bookkeeping before signal
+cleanup begins; no new forward work starts afterward. Root10698 passed live
+read-only preflight. These are not live-call PASS receipts.
+
+## Live-dashboard result (2026-09-07)
+
+Initial setup exposed a status POST authorization regression (HTTP500).
+Two baseline failures90610 and six candidate passes93704 establish the narrow
+`cb_agents` abstention fix, compiled in production build4341 and deployed59362.
+Cleanup74067 then restored all three borrowed agents and removed only the owned
+queue/callflow. One earlier128MiB offline test was OOM-killed inside its guard;
+it is not counted as a baseline reproduction. The256MiB rerun is authoritative.
+
+Natural-call run43165 observed waiting with a native invalidation, then proved
+one answered agent bridge with12stable FreeSWITCH samples and one bridge event.
+However,51valid HTTP snapshots never advanced to handled. The ordinary queue
+proof requires a caller-leg bridge event, while native intercept emits it on
+the initiating agent leg. This is P0-15, not a passing dashboard test.
+Evidence: `/var/log/kazoo-strategy-acceptance-BMBtU4`. Scoped cleanup succeeded;
+original agents were restored, owned contacts/queue/callflow removed, and zero
+calls remained. No callback, full-strategy, load or browser-transition proof.
+
+The final shortened HTTP request budget reported `http_timeout` when its phase
+deadline expired; the observer now labels this `phase_observation_timeout`
+while preserving real five-second HTTP timeout errors. All12 observer groups
+12490 passed, including both cases. The diagnostic correction does not turn
+the failed live transition into a PASS.
+
 ## Latest live result (2026-09-05)
 
 The three ordinary ring-all calls passed: concurrent offers, exactly one stable
