@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "owner": "kazoo5-cardinal-authoring-run",
+  "catalog_sha256": "5703e649a1f5a2bcd0c00e9e19bf4424e024c85648452dba0d190bcf73088134",
+  "approvals_sha256": "d5cd6e9713c30745ac06220c76a5996277b4766f6e1bfcc0620887c058e1e71e",
+  "selected_locales": [
+    "es-es"
+  ],
+  "request_limit": 1,
+  "concurrency": 1,
+  "explicit_retry": true,
+  "retry_budget": 1,
+  "requests_before": 63,
+  "requested": 1,
+  "status": "FAILED",
+  "started_at": "2026-09-07T12:28:42.835Z",
+  "events": [
+    {
+      "locale": "es-es",
+      "id": "acdc-cardinal-v1-number-4",
+      "attempt": 2,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    }
+  ],
+  "runtime_ready": false,
+  "deployed": false,
+  "finished_at": "2026-09-07T12:28:46.540Z",
+  "failure_code": "INCOMPLETE_RESPONSE_REQUIRES_EXPLICIT_RETRY"
+}

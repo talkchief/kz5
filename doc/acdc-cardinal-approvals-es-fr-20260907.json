@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "catalog_sha256": "5703e649a1f5a2bcd0c00e9e19bf4424e024c85648452dba0d190bcf73088134",
+  "approvals": [
+    {
+      "locale": "en-us",
+      "locale_catalog_sha256": "6c2e0333be3bd1dbbf9e8919e30b03353a27c1d745fecb76fa23816b171b4ba8",
+      "context_sha256": "816364d807a6fb8050b6aa2c5d54125daf5cab3853952ffa78d5582dc5f6dfe2",
+      "transcript": {
+        "status": "APPROVED",
+        "evidence_sha256": "8a7db639c4a753b96cbfbd9c1fd3336fc3df4577eabacc4d7ec3ded3a49cb419"
+      },
+      "delivery": {
+        "status": "APPROVED",
+        "evidence_sha256": "8a7db639c4a753b96cbfbd9c1fd3336fc3df4577eabacc4d7ec3ded3a49cb419",
+        "policy": "natural-prerecorded-chunks"
+      },
+      "intro": {
+        "status": "APPROVED",
+        "evidence_sha256": "8a7db639c4a753b96cbfbd9c1fd3336fc3df4577eabacc4d7ec3ded3a49cb419",
+        "semantic_frame": "current-queue-position-number-label",
+        "canonical_id": "acdc-queue-your-current-position-is",
+        "transcript": "Your current position is.",
+        "transcript_sha256": "14dc2fb6f6e5de230d62fed0f66e70626b64b2f23a7a31a052528d4f0ece880d",
+        "wav_sha256": "1fe37e0db985dab9765745fca6cc2e78d17026a992a6088dc92fa37ac7be2dd6"
+      },
+      "listening": {
+        "status": "PENDING",
+        "evidence_sha256": null,
+        "asset_set_sha256": null
+      }
+    },
+    {
+      "locale": "he-il",
+      "locale_catalog_sha256": "b254435a21152a804eb1ffa114adf9e26c6e46afe83289ddec5fdccac27ee661",
+      "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
+      "transcript": {
+        "status": "PENDING",
+        "evidence_sha256": null
+      },
+      "delivery": {
+        "status": "PENDING",
+        "evidence_sha256": null,
+        "policy": "natural-prerecorded-chunks"
+      },
+      "intro": {
+        "status": "PENDING",
+        "evidence_sha256": null,
+        "semantic_frame": "current-queue-position-number-label",
+        "canonical_id": null,
+        "transcript": null,
+        "transcript_sha256": null,
+        "wav_sha256": null
+      },
+      "listening": {
+        "status": "PENDING",
+        "evidence_sha256": null,
+        "asset_set_sha256": null
+      }
+    },
+    {
+      "locale": "fr-fr",
+      "locale_catalog_sha256": "cc42ea5d1b0cde01955baa4fe6a1d0a7b2cebfd5600ac1c7db5c42022376618a",
+      "context_sha256": "2fe1233a54f0ffbb21b2319913bece61833d45f979ccac1d7dbe8ebe689a40d8",
+      "transcript": {
+        "status": "APPROVED",
+        "evidence_sha256": "52cd90da9c994cc5363a5b1edcd2ae14f9c5e37c16edc97bc0a2d57f349b5ae6"
+      },
+      "delivery": {
+        "status": "APPROVED",
+        "evidence_sha256": "52cd90da9c994cc5363a5b1edcd2ae14f9c5e37c16edc97bc0a2d57f349b5ae6",
+        "policy": "natural-prerecorded-chunks"
+      },
+      "intro": {
+        "status": "APPROVED",
+        "evidence_sha256": "52cd90da9c994cc5363a5b1edcd2ae14f9c5e37c16edc97bc0a2d57f349b5ae6",
+        "semantic_frame": "current-queue-position-number-label",
+        "canonical_id": "acdc-queue-your-current-position-is",
+        "transcript": "Votre position actuelle est.",
+        "transcript_sha256": "e5613b3e9cb8b84efc9081c6876fe28815eec069d9b27866d96c25503b09cca0",
+        "wav_sha256": "7ed7292b5feac6a03881c958532d2f9150d39ea4ca7ecf9d1d11385f10be6b2c"
+      },
+      "listening": {
+        "status": "PENDING",
+        "evidence_sha256": null,
+        "asset_set_sha256": null
+      }
+    },
+    {
+      "locale": "es-es",
+      "locale_catalog_sha256": "b0eceef36cec5d489da437e98cc274f23fa6d9a6eb8b7b71f671e8f6b2a2d7d4",
+      "context_sha256": "c23189c1e99b0f5d7c22df55dc2a9cc544779cc3d20ecf276785395c7b324653",
+      "transcript": {
+        "status": "APPROVED",
+        "evidence_sha256": "6504be6d02c6cc2d1c15364aa17c98789ac2d0a63f53aed7a05272906ac4a4e4"
+      },
+      "delivery": {
+        "status": "APPROVED",
+        "evidence_sha256": "6504be6d02c6cc2d1c15364aa17c98789ac2d0a63f53aed7a05272906ac4a4e4",
+        "policy": "natural-prerecorded-chunks"
+      },
+      "intro": {
+        "status": "APPROVED",
+        "evidence_sha256": "6504be6d02c6cc2d1c15364aa17c98789ac2d0a63f53aed7a05272906ac4a4e4",
+        "semantic_frame": "current-queue-position-number-label",
+        "canonical_id": "acdc-queue-your-current-position-is",
+        "transcript": "Su posición actual es.",
+        "transcript_sha256": "a3c7ef71bec8c1c0db48b96ebbf59f4733cce242df4c30384b216b8fcf831bd9",
+        "wav_sha256": "4753cdfe28956fa8ea620508984041b30ab7fb781845c9f80b565e2662f216d4"
+      },
+      "listening": {
+        "status": "PENDING",
+        "evidence_sha256": null,
+        "asset_set_sha256": null
+      }
+    },
+    {
+      "locale": "ar-sa",
+      "locale_catalog_sha256": "ab8f4b5d5e7d92ec1006b03042158fba5ccc8d6349876257dce8025d59fb6151",
+      "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
+      "transcript": {
+        "status": "PENDING",
+        "evidence_sha256": null
+      },
+      "delivery": {
+        "status": "PENDING",
+        "evidence_sha256": null,
+        "policy": "pausal-chunks"
+      },
+      "intro": {
+        "status": "PENDING",
+        "evidence_sha256": null,
+        "semantic_frame": "current-queue-position-number-label",
+        "canonical_id": null,
+        "transcript": null,
+        "transcript_sha256": null,
+        "wav_sha256": null
+      },
+      "listening": {
+        "status": "PENDING",
+        "evidence_sha256": null,
+        "asset_set_sha256": null
+      }
+    }
+  ],
+  "approvals_sha256": "d5cd6e9713c30745ac06220c76a5996277b4766f6e1bfcc0620887c058e1e71e"
+}

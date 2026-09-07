@@ -1,296 +1,329 @@
 #!/usr/bin/env python3
-"""Sanitized internal push bridge import; see README before any activation."""
+"""Sanitized internal push bridge candidate; NOT activation-ready (see README)."""
 
 import json
 import logging
 import os
+import re
 import signal
 import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import amqpstorm
-import requests
-from google.oauth2 import service_account
-from google.auth.transport.requests import Request as GoogleAuthRequest
+from push_payload import InvalidPush, apns_payload, normalize
+from validate_config import NUMBERS, PREFIX, validate
 
 
-def required(name):
-    value = os.environ.get(name)
-    if not value:
-        raise ValueError("missing required environment variable: " + name)
-    return value
-
-
-SA_FILE = required("PUSH_BRIDGE_SA_FILE")
-AMQP_HOST = required("PUSH_BRIDGE_AMQP_HOST")
-AMQP_PORT = int(os.environ.get("PUSH_BRIDGE_AMQP_PORT", "5672"))
-AMQP_USER = required("PUSH_BRIDGE_AMQP_USER")
-AMQP_PASS = required("PUSH_BRIDGE_AMQP_PASS")
-AMQP_VHOST = required("PUSH_BRIDGE_AMQP_VHOST")
-WORKERS = int(os.environ.get("PUSH_BRIDGE_WORKERS", "32"))
-STALL_TIMEOUT = int(os.environ.get("PUSH_BRIDGE_STALL_TIMEOUT", "70"))
-APNS_WORKERS = int(os.environ.get("PUSH_BRIDGE_APNS_WORKERS", "8"))
-
-# No deployment-specific exchange, queue, binding or provider endpoint defaults.
-FCM_SCOPE = required("PUSH_BRIDGE_FCM_SCOPE")
-EXCHANGE = required("PUSH_BRIDGE_EXCHANGE")
-QUEUE = required("PUSH_BRIDGE_QUEUE")
-BINDING_KEY = required("PUSH_BRIDGE_BINDING_KEY")
-FCM_URL_TEMPLATE = required("PUSH_BRIDGE_FCM_URL_TEMPLATE")
-
-APNS_TOKEN_TYPES = ("apple", "apns", "ios")
-APNS_DEV_TOKEN_TYPES = ("apple_dev", "apple_sandbox")
 RECONNECT_DELAY = 5
 HEARTBEAT = 30
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
 log = logging.getLogger("push_bridge")
 
-credentials = service_account.Credentials.from_service_account_file(SA_FILE, scopes=[FCM_SCOPE])
-PROJECT_ID = credentials.project_id
-FCM_URL = FCM_URL_TEMPLATE.format(project_id=PROJECT_ID)
 
-http = requests.Session()
-_token_lock = threading.Lock()
-_stop = threading.Event()
-_last_progress = time.time()
-_conn = None
+class BridgeRuntime:
+    """Explicit startup owns dependencies, credential I/O and mutable state.
 
+    Importing this module does none of these things. Construct only inside a
+    sanitized startup boundary; this remains the unaccepted delivery engine.
+    """
 
-def mark_progress():
-    global _last_progress
-    _last_progress = time.time()
+    def __init__(self, environment):
+        # Validate and initialize from one snapshot, not a live mutable environ.
+        environment = dict(environment)
+        if validate(environment):
+            raise ValueError("invalid_bridge_configuration")
+        # Third-party imports and credential loading happen only after the
+        # complete environment has passed offline validation.
+        import amqpstorm
+        import requests
+        from google.oauth2 import service_account
+        from google.auth.transport.requests import Request as GoogleAuthRequest
 
+        self.amqpstorm = amqpstorm
+        self.requests = requests
+        self.google_request = GoogleAuthRequest
+        self._settings = {key[len(PREFIX):]: value for key, value in environment.items()
+                          if isinstance(key, str) and key.startswith(PREFIX)}
+        for name, (default, _low, _high) in NUMBERS.items():
+            self._settings[name] = int(self._settings.get(name, default))
+        self.credentials = service_account.Credentials.from_service_account_file(
+            self._settings["SA_FILE"], scopes=[self._settings["FCM_SCOPE"]])
+        project = self.credentials.project_id
+        if not isinstance(project, str) or not re.fullmatch(r"[a-z][a-z0-9-]{4,28}[a-z0-9]", project):
+            raise ValueError("invalid_fcm_project")
+        self.fcm_url = self._settings["FCM_URL_TEMPLATE"].format(project_id=project)
+        self._token_lock = threading.Lock()
+        self._stop = threading.Event()
+        self._last_progress = time.monotonic()
+        self._conn = None
+        self._apns_senders = {}
+        self._apns_lock = threading.Lock()
+        self._apns_failed = set()
+        self._lifecycle_lock = threading.Lock()
+        self._active_sends = 0
+        self._closing = False
+        self._http_closed = False
+        # Last startup operation: later failures in main always close it.
+        self.http = requests.Session()
 
-def start_self_watchdog():
-    """Preserved broker-loop watchdog; it does not prove delivery progress."""
-    def loop():
-        while not _stop.wait(5):
-            stalled = time.time() - _last_progress
-            if stalled > STALL_TIMEOUT:
-                log.error("broker_loop_stalled seconds=%.1f", stalled)
-                os._exit(1)
-    threading.Thread(target=loop, name="push-watchdog", daemon=True).start()
+    def mark_progress(self):
+        self._last_progress = time.monotonic()
 
+    def start_self_watchdog(self):
+        """Preserved broker-loop watchdog; it does not prove delivery progress."""
+        def loop():
+            while not self._stop.wait(5):
+                stalled = time.monotonic() - self._last_progress
+                if stalled > self._settings["STALL_TIMEOUT"]:
+                    log.error("broker_loop_stalled seconds=%.1f", stalled)
+                    os._exit(1)
+        threading.Thread(target=loop, name="push-watchdog", daemon=True).start()
 
-def get_access_token():
-    with _token_lock:
-        if not credentials.valid:
-            credentials.refresh(GoogleAuthRequest())
-        return credentials.token
+    def get_access_token(self):
+        with self._token_lock:
+            if not self.credentials.valid:
+                self.credentials.refresh(self.google_request())
+            return self.credentials.token
 
-
-def send_fcm(token_id, data):
-    message = {
-        "message": {
-            "token": token_id,
-            "android": {"priority": "HIGH", "ttl": "60s"},
-            "data": {k: str(v) for k, v in data.items() if v is not None},
-        },
-    }
-    last_status, last_text = 0, ""
-    for attempt in (1, 2):
+    def send_fcm(self, token_id, data):
+        with self._lifecycle_lock:
+            if self._closing:
+                return False, 0, "bridge_closing"
+            self._active_sends += 1
         try:
-            resp = http.post(
-                FCM_URL,
-                headers={"Authorization": "Bearer {}".format(get_access_token())},
-                json=message,
-                timeout=5,
-            )
-            # Provider response text is deliberately not retained or logged.
-            last_status, last_text = resp.status_code, "provider_response"
-            if resp.status_code == 200:
-                return True, last_status, last_text
-            if resp.status_code < 500:
-                return False, last_status, last_text
-        except requests.RequestException:
-            last_status, last_text = -1, "provider_transport_error"
-        if attempt == 1 and not _stop.is_set():
-            time.sleep(0.5)
-    return False, last_status, last_text
+            return self._send_fcm(token_id, data)
+        finally:
+            with self._lifecycle_lock:
+                self._active_sends -= 1
+                close_http = self._closing and self._active_sends == 0 and not self._http_closed
+                if close_http:
+                    self._http_closed = True
+            if close_http:
+                self._close_http()
 
-
-_apns_senders = {}
-_apns_lock = threading.Lock()
-_apns_failed = set()
-
-
-def get_apns_sender(sandbox):
-    env = "dev" if sandbox else "prod"
-    if env in _apns_senders:
-        return _apns_senders[env]
-    if env in _apns_failed:
-        return None
-    with _apns_lock:
-        if env not in _apns_senders and env not in _apns_failed:
+    def _send_fcm(self, token_id, data):
+        message = {
+            "message": {
+                "token": token_id,
+                "android": {"priority": "HIGH", "ttl": "60s"},
+                "data": {key: str(value) for key, value in data.items() if value is not None},
+            },
+        }
+        last_status, last_text = 0, ""
+        for attempt in (1, 2):
             try:
-                import apns_sender as mod
-                if sandbox:
-                    _apns_senders[env] = mod.ApnsSender(key_file=mod.KEY_FILE_DEV, key_id=mod.KEY_ID_DEV)
-                else:
-                    _apns_senders[env] = mod.ApnsSender()
-            except Exception:
-                _apns_failed.add(env)
-                log.error("apns_initialization_failed environment=%s", env)
-    return _apns_senders.get(env)
-
-
-def build_apns_payload(data):
-    import uuid
-    call_id = data.get("call_id")
-    if call_id:
-        bucket = "%s:%d" % (call_id, int(time.time()) // 60)
-        call_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, bucket))
-    else:
-        call_uuid = str(uuid.uuid4())
-    payload = {k: v for k, v in data.items() if v is not None}
-    payload["call_uuid"] = call_uuid
-    return payload
-
-
-def deliver_apns(req, token_id, sandbox):
-    sender = get_apns_sender(sandbox)
-    if sender is None:
-        return
-    payload = build_apns_payload(build_data(req))
-    ok, status, _text = sender.send(token_id, payload, sandbox=sandbox)
-    if ok:
-        log.info("apns_delivery_accepted")
-    elif status in (400, 403, 410):
-        log.warning("apns_delivery_rejected status=%s", status)
-    else:
-        log.error("apns_delivery_failed status=%s", status)
-
-
-def build_data(req):
-    payload = req.get("Payload") or {}
-    if isinstance(payload, str):
-        try:
-            payload = json.loads(payload)
-        except ValueError:
-            payload = {"raw": payload}
-    return {
-        "type": "sip_incoming_call",
-        "call_id": payload.get("call-id") or req.get("Call-ID"),
-        "caller_id_number": payload.get("caller-id-number"),
-        "caller_id_name": payload.get("caller-id-name"),
-        "registration_token": payload.get("registration-token"),
-        "proxy": payload.get("proxy"),
-    }
-
-
-def deliver(raw_body):
-    try:
-        req = json.loads(raw_body)
-    except (ValueError, TypeError):
-        log.warning("invalid_push_json")
-        return
-    token_id = req.get("Token-ID")
-    token_type = req.get("Token-Type", "")
-    if not token_id:
-        log.warning("missing_push_token")
-        return
-    normalized = str(token_type).lower()
-    if normalized in APNS_TOKEN_TYPES or normalized in APNS_DEV_TOKEN_TYPES:
-        deliver_apns(req, token_id, sandbox=normalized in APNS_DEV_TOKEN_TYPES)
-        return
-    if token_type and normalized not in ("firebase", "android", "fcm"):
-        log.info("unsupported_push_token_type")
-        return
-    data = build_data(req)
-    ok, status, _text = send_fcm(token_id, data)
-    if ok:
-        log.info("fcm_delivery_accepted")
-    elif status in (400, 404):
-        log.warning("fcm_delivery_rejected status=%s", status)
-    else:
-        log.error("fcm_delivery_failed status=%s", status)
-
-
-def run():
-    global _conn
-    pool = ThreadPoolExecutor(max_workers=WORKERS)
-    apns_pool = ThreadPoolExecutor(max_workers=APNS_WORKERS)
-    mark_progress()
-    start_self_watchdog()
-
-    def on_message(message):
-        def work():
-            try:
-                deliver(message.body)
-            finally:
-                # Imported behavior, NOT accepted reliability semantics:
-                # provider failures are acknowledged, not redelivered.
+                response = self.http.post(
+                    self.fcm_url,
+                    headers={"Authorization": "Bearer {}".format(self.get_access_token())},
+                    json=message, timeout=5,
+                )
                 try:
-                    message.ack()
+                    last_status, last_text = response.status_code, "provider_response"
+                    if response.status_code == 200:
+                        return True, last_status, last_text
+                    if response.status_code < 500:
+                        return False, last_status, last_text
+                finally:
+                    response.close()
+            except self.requests.RequestException:
+                last_status, last_text = -1, "provider_transport_error"
+            if attempt == 1 and not self._stop.is_set():
+                self._stop.wait(0.5)
+        return False, last_status, last_text
+
+    def get_apns_sender(self, sandbox):
+        environment = "dev" if sandbox else "prod"
+        if environment in self._apns_senders:
+            return self._apns_senders[environment]
+        if environment in self._apns_failed:
+            return None
+        with self._apns_lock:
+            if environment not in self._apns_senders and environment not in self._apns_failed:
+                try:
+                    from apns_sender import ApnsSender
+                    key_file = self._settings.get("APNS_KEY_FILE")
+                    key_id = self._settings.get("APNS_KEY_ID")
+                    if sandbox:
+                        key_file = self._settings.get("APNS_KEY_FILE_DEV", key_file)
+                        key_id = self._settings.get("APNS_KEY_ID_DEV", key_id)
+                    self._apns_senders[environment] = ApnsSender(
+                        key_file=key_file, key_id=key_id,
+                        team_id=self._settings.get("APNS_TEAM_ID"),
+                        topic=self._settings.get("APNS_TOPIC"),
+                        host_prod=self._settings.get("APNS_HOST_PROD"),
+                        host_dev=self._settings.get("APNS_HOST_DEV"),
+                    )
+                except Exception:
+                    self._apns_failed.add(environment)
+                    log.error("apns_initialization_failed environment=%s", environment)
+        return self._apns_senders.get(environment)
+
+    def deliver_apns(self, push):
+        sender = self.get_apns_sender(push.sandbox)
+        if sender is None:
+            return False, 0, "apns_initialization_failed"
+        result = sender.send(push.token_id, apns_payload(push), sandbox=push.sandbox)
+        ok, status, _text = result
+        if ok:
+            log.info("apns_delivery_accepted")
+        elif status in (400, 403, 410):
+            log.warning("apns_delivery_rejected status=%s", status)
+        else:
+            log.error("apns_delivery_failed status=%s", status)
+        return result
+
+    def deliver(self, raw_body):
+        try:
+            push = normalize(raw_body)
+        except InvalidPush:
+            log.warning("invalid_push_payload")
+            return False, 0, "invalid_push_payload"
+        if push.provider == "apns":
+            return self.deliver_apns(push)
+        result = self.send_fcm(push.token_id, push.data)
+        ok, status, _text = result
+        if ok:
+            log.info("fcm_delivery_accepted")
+        elif status in (400, 404):
+            log.warning("fcm_delivery_rejected status=%s", status)
+        else:
+            log.error("fcm_delivery_failed status=%s", status)
+        return result
+
+    def run(self):
+        settings = self._settings
+        pool = ThreadPoolExecutor(max_workers=settings["WORKERS"])
+        apns_pool = ThreadPoolExecutor(max_workers=settings["APNS_WORKERS"])
+        self.mark_progress()
+        self.start_self_watchdog()
+
+        def on_message(message):
+            def work():
+                try:
+                    self.deliver(message.body)
+                finally:
+                    # Imported behavior, NOT accepted reliability semantics:
+                    # provider failures are acknowledged, not redelivered.
+                    try:
+                        message.ack()
+                    except Exception:
+                        pass
+
+            target = pool
+            try:
+                if normalize(message.body).provider == "apns":
+                    target = apns_pool
+            except InvalidPush:
+                pass
+            target.submit(work)
+
+        while not self._stop.is_set():
+            connection = None
+            try:
+                connection = self.amqpstorm.Connection(
+                    settings["AMQP_HOST"], settings["AMQP_USER"], settings["AMQP_PASS"],
+                    port=settings["AMQP_PORT"], virtual_host=settings["AMQP_VHOST"],
+                    heartbeat=HEARTBEAT, timeout=10)
+                self._conn = connection
+                channel = connection.channel()
+                try:
+                    channel.exchange.declare(exchange=settings["EXCHANGE"], passive=True)
+                except self.amqpstorm.AMQPChannelError:
+                    channel = connection.channel()
+                    channel.exchange.declare(exchange=settings["EXCHANGE"], exchange_type="topic")
+                channel.queue.declare(queue=settings["QUEUE"], durable=True)
+                channel.queue.bind(queue=settings["QUEUE"], exchange=settings["EXCHANGE"],
+                                   routing_key=settings["BINDING_KEY"])
+                channel.basic.qos(prefetch_count=settings["WORKERS"] * 2)
+                channel.basic.consume(on_message, queue=settings["QUEUE"], no_ack=False)
+                log.info("consumer_started workers=%d apns_workers=%d",
+                         settings["WORKERS"], settings["APNS_WORKERS"])
+                while not self._stop.is_set() and channel.is_open:
+                    channel.process_data_events(to_tuple=False)
+                    self.mark_progress()
+                    self._stop.wait(0.5)
+            except Exception:
+                if not self._stop.is_set():
+                    log.error("amqp_loop_failed reconnect_seconds=%d", RECONNECT_DELAY)
+                    self.mark_progress()
+                    self._stop.wait(RECONNECT_DELAY)
+            finally:
+                try:
+                    if connection and connection.is_open:
+                        connection.close()
                 except Exception:
                     pass
+        pool.shutdown(wait=False)
+        apns_pool.shutdown(wait=False)
 
-        target = pool
+    def handle_term(self, *_):
+        log.info("shutdown_requested")
+        self._stop.set()
         try:
-            req = json.loads(message.body)
-            if str(req.get("Token-Type", "")).lower() in (APNS_TOKEN_TYPES + APNS_DEV_TOKEN_TYPES):
-                target = apns_pool
+            if self._conn and self._conn.is_open:
+                self._conn.close()
         except Exception:
             pass
-        target.submit(work)
+        threading.Timer(3, lambda: os._exit(0)).start()
 
-    while not _stop.is_set():
-        connection = None
+    def close(self):
+        # shutdown(wait=False) leaves workers in flight. Do not close their
+        # session underneath them or allow queued work to start a new send.
+        # This fence does not wait for workers or fix the imported ACK policy.
+        self._stop.set()
+        with self._lifecycle_lock:
+            self._closing = True
+            close_http = self._active_sends == 0 and not self._http_closed
+            if close_http:
+                self._http_closed = True
+        if close_http:
+            self._close_http()
+
+    def _close_http(self):
         try:
-            connection = amqpstorm.Connection(AMQP_HOST, AMQP_USER, AMQP_PASS, port=AMQP_PORT,
-                virtual_host=AMQP_VHOST, heartbeat=HEARTBEAT, timeout=10)
-            _conn = connection
-            channel = connection.channel()
-            try:
-                channel.exchange.declare(exchange=EXCHANGE, passive=True)
-            except amqpstorm.AMQPChannelError:
-                channel = connection.channel()
-                channel.exchange.declare(exchange=EXCHANGE, exchange_type="topic")
-            channel.queue.declare(queue=QUEUE, durable=True)
-            channel.queue.bind(queue=QUEUE, exchange=EXCHANGE, routing_key=BINDING_KEY)
-            channel.basic.qos(prefetch_count=WORKERS * 2)
-            channel.basic.consume(on_message, queue=QUEUE, no_ack=False)
-            log.info("consumer_started workers=%d apns_workers=%d", WORKERS, APNS_WORKERS)
-            while not _stop.is_set() and channel.is_open:
-                channel.process_data_events(to_tuple=False)
-                mark_progress()
-                time.sleep(0.5)
+            self.http.close()
         except Exception:
-            if not _stop.is_set():
-                log.error("amqp_loop_failed reconnect_seconds=%d", RECONNECT_DELAY)
-                mark_progress()
-                _stop.wait(RECONNECT_DELAY)
-        finally:
-            try:
-                if connection and connection.is_open:
-                    connection.close()
-            except Exception:
-                pass
-    pool.shutdown(wait=False)
-    apns_pool.shutdown(wait=False)
+            log.error("bridge_http_close_failed")
 
 
-def _handle_term(*_):
-    log.info("shutdown_requested")
-    _stop.set()
+def main(argv=None, environment=None):
+    if argv is None:
+        argv = sys.argv[1:]
+    if environment is None:
+        environment = os.environ
+    runtime = None
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stdout)
     try:
-        if _conn and _conn.is_open:
-            _conn.close()
+        if argv:
+            if len(argv) != 2 or argv[0] != "--test":
+                print("usage: bridge.py [--test DEVICE_TOKEN]", file=sys.stderr)
+                return 2
+            # Explicit REAL-send compatibility mode. Test payload is the native
+            # Payload object, not arbitrary provider data; normalize before I/O.
+            test_payload = environment.get("PUSH_BRIDGE_TEST_PAYLOAD_JSON")
+            raw = json.dumps({"Token-ID": argv[1], "Payload": test_payload})
+            normalize(raw)
+            service_environment = dict(environment)
+            service_environment.pop("PUSH_BRIDGE_TEST_PAYLOAD_JSON", None)
+            runtime = BridgeRuntime(service_environment)
+            ok, status, _text = runtime.deliver(raw)
+            print("test_result", ok, status)
+            return 0 if ok else 1
+        runtime = BridgeRuntime(environment)
+        signal.signal(signal.SIGTERM, runtime.handle_term)
+        signal.signal(signal.SIGINT, runtime.handle_term)
+        runtime.run()
+        return 0
     except Exception:
-        pass
-    threading.Timer(3, lambda: os._exit(0)).start()
+        log.error("bridge_startup_or_runtime_failed")
+        return 2
+    finally:
+        if runtime is not None:
+            try:
+                runtime.close()
+            except Exception:
+                log.error("bridge_close_failed")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 3 and sys.argv[1] == "--test":
-        # Existing explicit provider-test mode retained, without embedded
-        # caller identities or endpoints. Never run this during offline QA.
-        okd, st, _tx = send_fcm(sys.argv[2], json.loads(required("PUSH_BRIDGE_TEST_PAYLOAD_JSON")))
-        print("test_result", okd, st)
-        sys.exit(0 if okd else 1)
-    signal.signal(signal.SIGTERM, _handle_term)
-    signal.signal(signal.SIGINT, _handle_term)
-    run()
+    sys.exit(main())

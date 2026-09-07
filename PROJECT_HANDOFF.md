@@ -6,6 +6,34 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Partial Spanish cardinal authoring, not deployed:** `b6a104/b29f10` made32
+initial requests:14 technical-QA passes,18 incomplete OTHER responses rejected.
+One bounded retry of number4 also failed (`95ec3f/06a97a`); its two-attempt
+limit is exhausted. No blanket retry or weakening of the verifier. Offline
+manifest/WAV/SoX check `386c7e/f76721` verifies EN31 unchanged and ES14 valid,
+18 failed,21 pending,33 attempts, no indeterminate requests. New28 WAVs and
+ledgers are preserved in `scripts/assets/acdc-gemini-cardinals-20260907/`.
+See `doc/acdc_cardinal_es_authoring_20260907.md`. Existing210 voices unchanged;
+Gemini remains authoring-only. This does not block unrelated callback fixes.
+
+**Bridge source checkpoint:** root network-isolated `edf013/d8b505` passes
+8 configuration and19 explicit-startup/payload/lifecycle tests, no provider,
+broker or service access. Candidate source under `services/push-bridge/` is
+NOT activation-ready: delivery ACK/retry, bounded work/provider responses,
+transport/credentials, dependency/service/installer and mobile ringing gates
+remain. See its README; do not count these27 tests as delivery acceptance.
+
+**Fresh installed-Gemini callback retry diagnostic PASS:** `f99df0/90042a`
+exits0; evidence `/var/log/kazoo-acceptance/20260907T121515Z`. Busy agent,
+second caller key6 at4.985s then registration1, full5.491s success phrase before
+BYE, deliberately unanswered first return attempt, durable retry_wait and
+second-attempt reciprocal native bridge all pass. Agent readiness returned;
+five monitored call-service PID/restart snapshots unchanged, new errors/cores0.
+Fixture retained: NOT full cleanup or production acceptance. No provider or
+restart. See `doc/acdc_gemini_callback_retry_acceptance_20260907.md` for timing
+and limitations. Single-key6 remains a distinct implementation/acceptance gap;
+the completed test must not be presented as the requested6-only UX.
+
 **Fresh complete Gemini EN offer runner PASS:** `c88ff7/d9b680` exits0,
 `/var/log/kazoo-acceptance/20260907T120840Z`. Three complete5.171s offers at
 3.069/18.089/33.069s; no early offer, zero capture drops, normal46.011s teardown.

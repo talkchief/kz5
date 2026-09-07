@@ -1,31 +1,18 @@
 #!/usr/bin/env python3
 """Sanitized internal APNs HTTP/2 sender import; not activation-ready."""
 
-import binascii
 import json
 import logging
-import os
 import socket
 import ssl
 import threading
 import time
 
-import ecdsa
-import h2.connection
-import h2.events
+from push_payload import InvalidPush, MAX_APNS_BYTES, apns_payload, normalize, normalize_apns_token
+from validate_config import APNS_HOSTS, APPLE_ID, TOPIC, _path
 
 log = logging.getLogger("push_bridge.apns")
 
-# Read optional values here so missing APNs configuration is reported by the
-# imported lazy sender initialization, not by an embedded production default.
-KEY_FILE = os.environ.get("PUSH_BRIDGE_APNS_KEY_FILE")
-KEY_ID = os.environ.get("PUSH_BRIDGE_APNS_KEY_ID")
-TEAM_ID = os.environ.get("PUSH_BRIDGE_APNS_TEAM_ID")
-TOPIC = os.environ.get("PUSH_BRIDGE_APNS_TOPIC")
-KEY_FILE_DEV = os.environ.get("PUSH_BRIDGE_APNS_KEY_FILE_DEV", KEY_FILE)
-KEY_ID_DEV = os.environ.get("PUSH_BRIDGE_APNS_KEY_ID_DEV", KEY_ID)
-HOST_PROD = os.environ.get("PUSH_BRIDGE_APNS_HOST_PROD")
-HOST_DEV = os.environ.get("PUSH_BRIDGE_APNS_HOST_DEV")
 PORT = 443
 TOKEN_TTL = 2700
 CONNECT_TIMEOUT = 8
@@ -39,7 +26,9 @@ def _b64(raw):
 
 class _ProviderToken(object):
     def __init__(self, key_file, key_id, team_id):
-        self._key = ecdsa.SigningKey.from_pem(open(key_file).read())
+        import ecdsa
+        with open(key_file) as handle:
+            self._key = ecdsa.SigningKey.from_pem(handle.read())
         self._key_id = key_id
         self._team_id = team_id
         self._lock = threading.Lock()
@@ -62,27 +51,36 @@ class _ProviderToken(object):
 
 
 class ApnsSender(object):
-    def __init__(self, key_file=None, key_id=None, team_id=None, topic=None):
-        key_file = key_file or KEY_FILE
-        self._key_id = key_id or KEY_ID
-        self._team_id = team_id or TEAM_ID
-        base_topic = topic or TOPIC
-        if not key_file or not self._key_id or not self._team_id or not base_topic:
-            raise ValueError("missing APNs key file, key ID, team ID or base topic configuration")
-        self._topic = base_topic + ".voip"
+    def __init__(self, key_file=None, key_id=None, team_id=None, topic=None,
+                 host_prod=None, host_dev=None):
+        # No module-global environment or provider initialization. Validate
+        # explicit inputs before loading third-party code or opening a key.
+        if (not isinstance(key_file, str) or not _path(key_file)
+                or not isinstance(key_id, str) or not APPLE_ID.fullmatch(key_id)
+                or not isinstance(team_id, str) or not APPLE_ID.fullmatch(team_id)
+                or not isinstance(topic, str) or len(topic) > 249
+                or not TOPIC.fullmatch(topic) or topic.endswith(".voip")
+                or host_prod != APNS_HOSTS["APNS_HOST_PROD"]
+                or host_dev != APNS_HOSTS["APNS_HOST_DEV"]):
+            raise ValueError("invalid_apns_configuration")
+        import h2.connection
+        import h2.events
+        self._h2_connection = h2.connection
+        self._h2_events = h2.events
+        self._key_id = key_id
+        self._team_id = team_id
+        self._topic = topic + ".voip"
+        self._host_prod = host_prod
+        self._host_dev = host_dev
         self._provider_token = _ProviderToken(key_file, self._key_id, self._team_id)
         log.info("apns_sender_initialized")
 
     @staticmethod
     def normalize_token(token):
-        if not token:
-            return None
-        bare = token.split(":")[-1].strip()
         try:
-            binascii.unhexlify(bare)
-        except (binascii.Error, TypeError, ValueError):
+            return normalize_apns_token(token)
+        except InvalidPush:
             return None
-        return bare
 
     def _open(self, host):
         ctx = ssl.create_default_context()
@@ -98,14 +96,22 @@ class ApnsSender(object):
         token = self.normalize_token(device_token)
         if not token:
             return False, 0, "invalid_device_token"
-        host = HOST_DEV if sandbox else HOST_PROD
+        host = self._host_dev if sandbox else self._host_prod
         if not host:
             return False, 0, "missing_apns_host"
-        body = json.dumps(payload, separators=(",", ":")).encode()
+        try:
+            if not isinstance(payload, dict):
+                raise InvalidPush()
+            body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False,
+                              allow_nan=False).encode("utf-8")
+            if len(body) > MAX_APNS_BYTES:
+                raise InvalidPush()
+        except (ValueError, TypeError, UnicodeError, RecursionError, OverflowError):
+            return False, 0, "invalid_push_payload"
         sock = None
         try:
             sock = self._open(host)
-            conn = h2.connection.H2Connection()
+            conn = self._h2_connection.H2Connection()
             conn.initiate_connection()
             sock.sendall(conn.data_to_send())
             headers = [
@@ -125,12 +131,12 @@ class ApnsSender(object):
                 if not chunk:
                     break
                 for event in conn.receive_data(chunk):
-                    if isinstance(event, h2.events.ResponseReceived):
+                    if isinstance(event, self._h2_events.ResponseReceived):
                         status = int(dict(event.headers)[b":status"])
-                    elif isinstance(event, h2.events.DataReceived):
+                    elif isinstance(event, self._h2_events.DataReceived):
                         response += event.data
                         conn.acknowledge_received_data(event.flow_controlled_length, event.stream_id)
-                    elif isinstance(event, (h2.events.StreamEnded, h2.events.ConnectionTerminated)):
+                    elif isinstance(event, (self._h2_events.StreamEnded, self._h2_events.ConnectionTerminated)):
                         deadline = 0
                         break
                 out = conn.data_to_send()
@@ -148,13 +154,40 @@ class ApnsSender(object):
                     pass
 
 
-if __name__ == "__main__":
+def main(argv=None, environment=None):
+    import os
     import sys
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    if len(sys.argv) < 2:
+    if argv is None:
+        argv = sys.argv[1:]
+    if environment is None:
+        environment = os.environ
+    if len(argv) not in (1, 2) or (len(argv) == 2 and argv[1] != "--sandbox"):
         print("usage: apns_sender.py DEVICE_TOKEN [--sandbox]; requires PUSH_BRIDGE_TEST_PAYLOAD_JSON")
-        sys.exit(2)
-    sender = ApnsSender()
-    ok, st, _tx = sender.send(sys.argv[1], json.loads(os.environ["PUSH_BRIDGE_TEST_PAYLOAD_JSON"]), sandbox="--sandbox" in sys.argv)
-    print("test_result", ok, st)
-    sys.exit(0 if ok else 1)
+        return 2
+    try:
+        sandbox = len(argv) == 2
+        raw = json.dumps({"Token-ID": argv[0], "Token-Type": "apple_dev" if sandbox else "apple",
+                          "Payload": environment.get("PUSH_BRIDGE_TEST_PAYLOAD_JSON")})
+        push = normalize(raw)
+        key_file = environment.get("PUSH_BRIDGE_APNS_KEY_FILE")
+        key_id = environment.get("PUSH_BRIDGE_APNS_KEY_ID")
+        if sandbox:
+            key_file = environment.get("PUSH_BRIDGE_APNS_KEY_FILE_DEV", key_file)
+            key_id = environment.get("PUSH_BRIDGE_APNS_KEY_ID_DEV", key_id)
+        sender = ApnsSender(key_file=key_file, key_id=key_id,
+                            team_id=environment.get("PUSH_BRIDGE_APNS_TEAM_ID"),
+                            topic=environment.get("PUSH_BRIDGE_APNS_TOPIC"),
+                            host_prod=environment.get("PUSH_BRIDGE_APNS_HOST_PROD"),
+                            host_dev=environment.get("PUSH_BRIDGE_APNS_HOST_DEV"))
+        ok, status, _text = sender.send(push.token_id, apns_payload(push), sandbox=sandbox)
+        print("test_result", ok, status)
+        return 0 if ok else 1
+    except Exception:
+        log.error("apns_test_startup_or_send_failed")
+        return 2
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())
