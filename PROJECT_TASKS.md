@@ -1,6 +1,14 @@
 # Kazoo 5 project task register
 
-Current voice inventory: **412/584 technical QA**,697 historical requests and
+Latest combined voice checkpoint: **481/584 technical artifacts**, EN31/31,
+HE131/131, FR161/161, ES53/53, AR105/208. Hebrew recovery saved36 new clips;
+actual complete HE131 source plan passes `4842e8/8770e2`. Arabic103, listening,
+runtime admission/maps and full deployment remain open. Mixed five-locale adapter
+offline checks pass `b086d2/31b376`; existing EN documents are preserved.
+See `doc/acdc_cardinal_he_model_recovery.md`. Counts below are older checkpoints
+or explicitly the unchanged original2.5 ledger, not current combined coverage.
+
+Original 2.5 voice ledger (not combined artifact coverage): **412/584 technical QA**,697 historical requests and
 113 retries; EN31/HE92/FR160/ES25/AR104. Five bounded HE concise-v2 requests
 recovered three recordings (six WAVs); two still incomplete. No pending provider
 job or initial identities remain. Failed172; listening/complete cardinal runtime open.
@@ -11,7 +19,7 @@ finish-message presence, never raw provider text.19 groups/377 checks pass
 
 Exact Spanish whole-word reuse is integrated in the separate staging importer:
 19 groups / 5,962 checks and installer adapter regression pass. Actual resolution
-is 412 generated + 2 reused, 170 unresolved; no complete-language deployment is
+at that earlier checkpoint was 412 generated + 2 reused, 170 unresolved; no complete-language deployment is
 claimed. See `doc/acdc_cardinal_reuse_import_integration.md`.
 Separate model-trial results are in `doc/acdc_cardinal_31_model_trial.md`.
 Additional trial calls never reset the original ledger or its failed histories.

@@ -14,7 +14,9 @@ node scripts/install-acdc-cardinal-pack.cjs --verify-only --all-locales
 ```
 
 These are prepared interfaces, not commands executed by this task. They accept
-no operator-supplied pack, map, intro or locale paths. Without `--all-locales`,
+no operator-supplied original cardinal pack, map, intro or locale paths. The
+explicit mixed-model extension below accepts pinned trial/alias inputs only.
+Without `--all-locales`,
 the original EN31 mode, source path, header bytes and final `VERIFY_ONLY` receipt
 remain unchanged. `install-kazoo5.sh` still invokes that original EN command and
 checks count/verified31; this tranche does not alter its caller or activate the
@@ -53,7 +55,8 @@ injection for offline adapter tests. Production builds the five entries only
 from the fixed paths above. Before constructing the database client, it requires
 all five complete source plans, exact role sets, reviewed map bytes, intro pins,
 locale/catalog/context hashes, the fixed approval pin and one shared original
-ledger hash. The ledger must declare artifact completeness after the underlying
+ledger hash. In the original generated-only all-locale mode, the ledger must
+declare artifact completeness after the underlying
 full validator has checked every original attempt and recording. It cannot mix
 locale snapshots from different ledgers, omit an unavailable locale or accept
 technical/listening/runtime readiness substitutions.
@@ -89,6 +92,74 @@ bytes do not establish native listening or actual distributed playback. The
 required range remains0..999999999 in every locale, one female prerecorded voice
 per locale, with no runtime TTS, native SAY, digit substitute or language fallback.
 
+## Explicit mixed-model candidate extension
+
+The adapter additionally accepts this all-locale-only option group, with no
+current trial-index hash compiled into code:
+
+```text
+--model-trial-index /absolute/trial-index.json
+--model-trial-index-sha256 <independently-reviewed-index-byte-sha256>
+```
+
+The pair is mandatory together. If Spanish needs the reviewed ES4/ES9 sources,
+also provide the existing importer's separate complete alias option group:
+
+```text
+--supplemental-pack /absolute/supplemental-pack
+--alias-file /absolute/reviewed-aliases.json
+--alias-sha256 <independently-reviewed-alias-byte-sha256>
+```
+
+The adapter rejects incomplete groups, unknown/duplicate options, malformed
+hashes, noncanonical paths and resolution options without `--all-locales`.
+Alias options require the trial-index opt-in in this adapter; they are never
+an automatic language fallback. The importer validates the exact versioned
+index schema, descendant-only ledger paths, every pinned trial receipt, source
+history, true model/voice, WAV hashes and resampling. See
+`doc/acdc_cardinal_model_trial_staging.md` for that unchanged contract.
+
+Compatibility is deliberate: EN31 stays on its original generated-only
+importer path, with no trial or alias options. This preserves the existing
+content-addressed EN document identities and provenance and avoids prohibited
+metadata backfill. HE/FR/ES/AR receive the same explicit trial-index pair; only
+ES receives alias options. Original source, intro and reviewed map paths remain
+fixed. `releasePlans(open, readHeader, resolution)` exposes this option routing
+for offline tests, without adding arbitrary original-source or map overrides.
+
+Mixed preflight still requires all five complete selected inventories and all
+five exact reviewed map files before database construction or any create. EN
+must supply all 31 generated identities with its original generated asset-set
+hash. Each other locale must supply its exact complete resolved identity set,
+matching transcript/catalog/context/recipe and true per-role model/voice, exact
+resolved asset-set digest, source-kind counts, zero unresolved roles and false
+listening/runtime claims. All five share one original manifest hash and the
+same historical completion fact. The four indexed plans must share one exact
+index hash and complete trial audit. NonSpanish aliases are refused.
+
+The historical ledger may remain `artifact_complete:false`; no failed attempt
+is promoted to a successful 2.5 generation. Here `source_complete:true` means
+the complete selected 584-role staging resolution, not original generation
+completion. Aggregate output explicitly adds `resolution_complete:true`,
+`resolution_mode:indexed-model-trials-v1`, the original historical completion
+fact, current index pin, generated/trial/reused counts and the additional trial
+request count. That last count is taken once from the shared audit, not summed
+four times. It remains separate from original request history.
+
+The same before-write barriers, immutable/create-only per-locale imports and
+final write-disabled five-locale readback apply. In mixed mode every original
+source-summary field, including complete per-role provenance, must match the
+final verification receipt, including EN's unchanged generated proof. Any
+observed index/source/map drift stops subsequent work. Adding unrelated trial
+results requires a fresh pinned invocation; the importer keeps the whole index
+hash out of immutable selected per-role lineage, so an unchanged selected asset
+set does not require metadata backfill or a new content-addressed document.
+
+This extension does not create missing maps, approve native listening, change
+main-shell dispatch or activate mixed-model runtime playback. In particular,
+the existing runtime verifier's fixed-model admission is a separate unresolved
+contract; successful mixed staging is not permission to broaden it globally.
+
 ## Verification status and next integration
 
 The existing13 EN adapter cases remain. Prepared all-locale cases cover fixed
@@ -106,3 +177,16 @@ Actual complete recordings, reviewed nonEN fragments, complete
 runtime map/intro integration and coordinated main-shell/dispatcher admission
 remain release work; the existing default EN path is intentionally retained
 until those artifacts are available. All changes remain in `kz5`.
+
+The subsequent mixed-model extension adds focused adapter doubles for explicit
+index/alias parsing, ES-only alias routing, unchanged EN provenance on repeated
+complete imports, full 584-role mixed ordering, unresolved/missing/incorrect
+fifth-locale proof, index/audit/count/model/context drift, and exact final
+provenance receipts. These are not real database idempotence or listening
+evidence; the separate importer suite owns byte-level document tests. The
+extension has not run tests in its delegated source task. Root's serialized
+validation command is `node scripts/test-install-acdc-cardinal-pack.cjs`, with
+`node scripts/test-acdc-cardinal-import.cjs` as the relevant lower-layer
+regression suite. Actual all-five planning additionally requires complete
+recordings and reviewed maps; a currently complete ES locale alone is not
+sufficient.

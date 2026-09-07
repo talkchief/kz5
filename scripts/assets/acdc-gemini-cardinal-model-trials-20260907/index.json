@@ -52,6 +52,54 @@
     {
       "directory": "fr89-once",
       "sha256": "6e3a4976cafc2c708f3efaa7734af8e853d6828c5735c0d58f5906e13d965844"
+    },
+    {
+      "directory": "he-recovery-1",
+      "sha256": "2548d0deae5cd181c321fa4b27acec418179322dccf888e9119f6f468378b12d"
+    },
+    {
+      "directory": "he-recovery-2",
+      "sha256": "f7a3d3801615d6d8b7e01f2fc9caffdc020ed4b5b8e8d6e64c9d6b636b0f3b1b"
+    },
+    {
+      "directory": "he-recovery-3",
+      "sha256": "86ccfc9241116cc9c1f3aaedb8a15a18ac2f1c5d3b6ce45fa2e04a82ae4139d2"
+    },
+    {
+      "directory": "he-recovery-4",
+      "sha256": "c4a8d42a188bc104a4cf5b01ffa5b9a038e1cc2bd6f098c947dce4220586bb7f"
+    },
+    {
+      "directory": "he-recovery-5",
+      "sha256": "839d432bac037d7c40943f05a8cc9a0792d0a1173e7ec71cd426466869b5ce53"
+    },
+    {
+      "directory": "he-recovery-6",
+      "sha256": "816c8ecc5201fda8eb933e70e47c49da028b981a6df45f1a19387d31bb159f5a"
+    },
+    {
+      "directory": "he-recovery-7",
+      "sha256": "86ccf3e5433e072824e0948cc3ca09b46fdc33c3fe50e5b7fba48efd0a8fed1c"
+    },
+    {
+      "directory": "he-recovery-8",
+      "sha256": "14fe57a14e501751eb08bf90743b231b3b4a8365583ffc3068e8907969807d3a"
+    },
+    {
+      "directory": "he-recovery-9",
+      "sha256": "11826539d1a639a62b36c98e6e00287b8f1480ef87fd1303b864e37fc0942b35"
+    },
+    {
+      "directory": "he-recovery-10",
+      "sha256": "3d8c114af8079ad17bad00ad35a3d9c731cabf8f41498865ee63a5ba090242a4"
+    },
+    {
+      "directory": "he-recovery-11",
+      "sha256": "5249a8abacdbeb08f83b209cf8b8507051d4f18a3a8967f9ef4a981ac60a09b2"
+    },
+    {
+      "directory": "he-recovery-12",
+      "sha256": "3144bbe922c3ee1023e9d20d005375adb9d17ff8f61809b2f44c16a20c0aa1f3"
     }
   ],
   "runtime_ready": false,

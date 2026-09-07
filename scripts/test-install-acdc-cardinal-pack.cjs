@@ -42,6 +42,127 @@ function releaseFixture() {
   return {entries, states, events, clientCalls, client};
 }
 
+function mixedFixture() {
+  const f = releaseFixture(), audit = {source_manifest_sha256: '1'.repeat(64), approvals_sha256: APPROVAL,
+    runtime_ready: false, native_listening_approved: false, additional_trial_requests: 5};
+  for (const locale of LOCALES) {
+    const summary = f.states.get(locale).summary;
+    summary.historical_artifact_complete = false;
+    if (locale === 'en-us') {
+      summary.prompts = pack.plan(locale).map(p => ({id: p.id, entry_sha256: '4'.repeat(64), attempt: 1,
+        master_sha256: '5'.repeat(64), telephony_sha256: '6'.repeat(64)}));
+      summary.selected_asset_set_sha256 = pack.digest(summary.prompts.map(p =>
+        ({id: p.id, master: p.master_sha256, telephony: p.telephony_sha256})).sort((a, b) => a.id.localeCompare(b.id, 'en')));
+      continue;
+    }
+    summary.prompts = pack.plan(locale).map((p, index) => {
+      const reused = locale === 'es-es' && ['acdc-cardinal-v1-number-4', 'acdc-cardinal-v1-number-9'].includes(p.id);
+      const kind = reused ? 'reused_supplemental_master' : index === 0 ? 'separate_model_trial' : 'generated_cardinal';
+      return {id: p.id, resolution: {source_kind: kind, provider: 'google-gemini', voice: 'Sulafat',
+        model: kind === 'separate_model_trial' ? 'gemini-3.1-flash-tts-preview' : pack.MODEL,
+        master_sha256: '5'.repeat(64), telephony_sha256: '6'.repeat(64),
+        transcript_sha256: p.transcript_sha256, context_sha256: p.context_sha256,
+        catalog_record_sha256: p.catalog_record_sha256, resampling_recipe_sha256: pack.digest(pack.RESAMPLING),
+        runtime_ready: false, listening_verified: false, provider_provenance_authenticated: false,
+        ...(reused ? {alias_manifest_sha256: 'a'.repeat(64), source_locale: locale,
+          source_id: p.id.endsWith('-4') ? 'acdc-number-4' : 'acdc-number-9'} : {})}};
+    }).sort((a, b) => a.id.localeCompare(b.id, 'en'));
+    Object.assign(summary, {asset_set_kind: 'cardinal-resolved-assets-v1', staged_candidates_only: true,
+      model_trial_index_sha256: '7'.repeat(64), native_listening_approved: false, selected_unresolved: 0,
+      resolved_listening_approval_declared: false, model_trial_audit: clone(audit), additional_trial_requests: 5,
+      selected_generated: COUNTS[locale] - 1 - (locale === 'es-es' ? 2 : 0), selected_model_trials: 1,
+      selected_reused: locale === 'es-es' ? 2 : 0,
+      ...(locale === 'es-es' ? {alias_manifest_sha256: 'a'.repeat(64)} : {})});
+    summary.selected_asset_set_sha256 = summary.resolved_asset_set_sha256 = pack.digest({schema_version: 1,
+      kind: 'cardinal-resolved-assets-v1', locale, intro: INTROS[locale], prompts: summary.prompts});
+  }
+  return f;
+}
+
+async function mixedCases() {
+  const resolution = {modelTrialIndex: '/tmp/cardinal-trials/index.json', modelTrialIndexSha256: '7'.repeat(64),
+    supplementalDirectory: '/tmp/cardinal-supplemental', aliasFile: '/tmp/cardinal-aliases.json', aliasSha256: 'a'.repeat(64)};
+  const args = ['--plan', '--all-locales', '--model-trial-index', resolution.modelTrialIndex,
+    '--model-trial-index-sha256', resolution.modelTrialIndexSha256,
+    '--supplemental-pack', resolution.supplementalDirectory, '--alias-file', resolution.aliasFile, '--alias-sha256', resolution.aliasSha256];
+  assert.deepEqual(options(args), {mode: '--plan', allLocales: true, resolution});
+  for (const invalid of [args.filter(a => a !== '--all-locales'), args.slice(0, -2), args.slice(0, 5),
+    [...args, '--alias-file', resolution.aliasFile], [...args, '--model-trial-index', resolution.modelTrialIndex],
+    ['--plan', '--all-locales', '--alias-file', resolution.aliasFile, '--alias-sha256', resolution.aliasSha256,
+      '--supplemental-pack', resolution.supplementalDirectory],
+    args.map(a => a === resolution.modelTrialIndex ? '/tmp/../outside/index.json' : a),
+    args.map(a => a === resolution.modelTrialIndexSha256 ? 'not-a-hash' : a)]) assert.throws(() => options(invalid));
+  const opened = [], maps = [];
+  const entries = releasePlans(source => { opened.push(source); return {}; }, file => { maps.push(file); return 'map'; }, resolution);
+  entries.forEach(e => e.header());
+  assert.equal(opened[0].locale, 'en-us');
+  assert.equal(opened[0].modelTrialIndex, undefined); assert.equal(opened[0].aliasFile, undefined);
+  assert(opened.slice(1).every(s => s.modelTrialIndex === resolution.modelTrialIndex
+    && s.modelTrialIndexSha256 === resolution.modelTrialIndexSha256));
+  assert(opened.filter(s => s.locale !== 'es-es').every(s => s.aliasFile === undefined && s.supplementalDirectory === undefined));
+  assert.equal(opened.find(s => s.locale === 'es-es').aliasFile, resolution.aliasFile);
+  assert(maps.every(file => file.startsWith(path.join(__dirname, '../applications/acdc/src') + '/')));
+  assert.throws(() => releasePlans(() => assert.fail('invalid options must fail before opening sources'), () => '',
+    {modelTrialIndex: resolution.modelTrialIndex}));
+
+  let f = mixedFixture();
+  const plan = await installAll('--plan', f.entries, null);
+  assert.equal(plan.count, 584); assert.equal(plan.source_complete, true); assert.equal(plan.resolution_complete, true);
+  assert.equal(plan.historical_artifact_complete, false); assert.equal(plan.additional_trial_requests, 5);
+  assert.equal(plan.selected_generated, 578); assert.equal(plan.selected_model_trials, 4); assert.equal(plan.selected_reused, 2);
+  assert.equal(plan.database_verified, false); assert.deepEqual(f.events, []); assert.deepEqual(f.clientCalls, []);
+  assert.equal(plan.locales[0].asset_set_kind, undefined); assert.equal(plan.locales[0].model_trial_index_sha256, undefined);
+  for (const flag of ['runtime_ready', 'native_listening_approved', 'listening_verified', 'five_language_release_ready']) assert.equal(plan[flag], false);
+  // A preserved/generated-only EN plan remains untouched on repeated complete
+  // mixed installs: the adapter passes no trial/alias options and no source
+  // metadata backfill operation is introduced. Byte-level idempotence lives in
+  // the real importer suite; these doubles prove adapter ordering/forwarding.
+  const enSource = clone(f.states.get('en-us').summary);
+  for (let n = 0; n < 2; n++) {
+    f.events.length = 0;
+    const receipt = await installAll('--import', f.entries, f.client);
+    assert.equal(receipt.verified, 584); assert.equal(receipt.locales[0].created, 0);
+    assert.deepEqual(receipt.locales[0].prompts, enSource.prompts);
+    assert.deepEqual(f.events, [...LOCALES.map(l => [l, true]), ...LOCALES.map(l => [l, false])]);
+    assert.deepEqual(f.clientCalls, []);
+  }
+  for (const kind of ['partial-last', 'missing-index', 'different-index', 'different-audit', 'false-history',
+    'source-count', 'role', 'model', 'voice', 'context', 'asset-set', 'listening', 'readiness', 'cross-locale-alias', 'en-proof', 'en-resolved']) {
+    f = mixedFixture(); const last = f.states.get('ar-sa').summary;
+    if (kind === 'partial-last') last.selected_unresolved = 1;
+    if (kind === 'missing-index') delete last.model_trial_index_sha256;
+    if (kind === 'different-index') last.model_trial_index_sha256 = '8'.repeat(64);
+    if (kind === 'different-audit') last.model_trial_audit.extra = true;
+    if (kind === 'false-history') last.historical_artifact_complete = true;
+    if (kind === 'source-count') last.selected_model_trials++;
+    if (kind === 'role') last.prompts.pop();
+    if (kind === 'model') last.prompts[0].resolution.model = 'other';
+    if (kind === 'voice') last.prompts[0].resolution.voice = 'Kore';
+    if (kind === 'context') last.prompts[0].resolution.context_sha256 = '0'.repeat(64);
+    if (kind === 'asset-set') last.resolved_asset_set_sha256 = '0'.repeat(64);
+    if (kind === 'listening') last.native_listening_approved = true;
+    if (kind === 'readiness') last.staged_candidates_only = false;
+    if (kind === 'cross-locale-alias') last.alias_manifest_sha256 = 'a'.repeat(64);
+    if (kind === 'en-proof') f.states.get('en-us').summary.prompts[0].master_sha256 = '0'.repeat(64);
+    if (kind === 'en-resolved') f.states.get('en-us').summary.model_trial_index_sha256 = '7'.repeat(64);
+    await assert.rejects(installAll('--import', f.entries, f.client), undefined, kind);
+    assert.deepEqual(f.events, [], kind); assert.deepEqual(f.clientCalls, [], kind);
+  }
+  for (const patch of [{model_trial_index_sha256: '0'.repeat(64)}, {selected_model_trials: 99},
+    {selected_unresolved: 1}, {prompts: []}, {historical_artifact_complete: true}, {native_listening_approved: true}]) {
+    f = mixedFixture(); f.states.get('ar-sa').receiptPatch = patch;
+    await assert.rejects(installAll('--verify-only', f.entries, f.client), /invalid five-locale cardinal receipt/);
+  }
+  f = mixedFixture(); f.states.get('en-us').receiptPatch = {prompts: []};
+  await assert.rejects(installAll('--verify-only', f.entries, f.client), /invalid five-locale cardinal receipt/);
+  f = mixedFixture(); f.states.get('en-us').afterInstall = () => {
+    f.states.get('ar-sa').summary.model_trial_index_sha256 = '8'.repeat(64);
+  };
+  await assert.rejects(installAll('--import', f.entries, f.client), /source changed/);
+  assert.deepEqual(f.events, [['en-us', true]]);
+  process.stdout.write('PASS mixed-model all-five completeness, shared index, ES-only aliases, unchanged EN and exact final provenance; adapter doubles only\n');
+}
+
 async function allLocaleCases() {
   for (const mode of ['--plan', '--import', '--verify-only']) {
     assert.deepEqual(options([mode]), {mode, allLocales: false});
@@ -186,5 +307,6 @@ async function main() {
   await assert.rejects(install('--all', plan, {}, () => 'header'), /invalid mode/);
   process.stdout.write('PASS 13 cardinal installer adapter cases; no provider, database, source or service writes\n');
   await allLocaleCases();
+  await mixedCases();
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

@@ -13,6 +13,65 @@ const LOCALES = Object.freeze(['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa']);
 const MODES = Object.freeze(['--plan', '--import', '--verify-only']);
 const sameFile = (a, b) => ['dev', 'ino', 'size', 'mode', 'nlink', 'mtimeMs', 'ctimeMs'].every(k => a[k] === b[k]);
 const sha = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const absolute = value => typeof value === 'string' && path.isAbsolute(value) && path.resolve(value) === value;
+
+function resolutionOptions(value) {
+  const fields = ['modelTrialIndex', 'modelTrialIndexSha256'];
+  const aliases = ['supplementalDirectory', 'aliasFile', 'aliasSha256'];
+  if (!value || Object.getPrototypeOf(value) !== Object.prototype) throw new Error('invalid cardinal resolution options');
+  const keys = Object.keys(value);
+  if (keys.length === 0) return {};
+  const hasAliases = aliases.some(k => Object.hasOwn(value, k));
+  const expected = [...fields, ...(hasAliases ? aliases : [])];
+  if (keys.sort().join(',') !== expected.sort().join(',') || !absolute(value.modelTrialIndex)
+      || !sha(value.modelTrialIndexSha256) || hasAliases && (!absolute(value.supplementalDirectory)
+        || !absolute(value.aliasFile) || !sha(value.aliasSha256))) throw new Error('explicit pinned cardinal resolution options required');
+  return {...value};
+}
+
+// The mixed adapter keeps EN's deployed generated-only document shape. Every
+// other locale must supply a complete resolved inventory, never a historical
+// completion declaration manufactured from trial candidates or reused words.
+function completeMixed(summary, locale) {
+  if (!Array.isArray(summary.prompts) || typeof summary.historical_artifact_complete !== 'boolean') return false;
+  const prompts = [...summary.prompts].sort((a, b) => a.id.localeCompare(b.id, 'en'));
+  if (locale === 'en-us') {
+    return summary.model_trial_index_sha256 === undefined && summary.asset_set_kind === undefined
+      && prompts.every(p => sha(p.master_sha256) && sha(p.telephony_sha256) && sha(p.entry_sha256)
+        && Number.isInteger(p.attempt) && p.attempt >= 1 && p.attempt <= pack.HARD_MAX_ATTEMPTS)
+      && summary.selected_asset_set_sha256 === pack.digest(prompts.map(p =>
+        ({id: p.id, master: p.master_sha256, telephony: p.telephony_sha256})));
+  }
+  if (!sha(summary.model_trial_index_sha256) || summary.asset_set_kind !== 'cardinal-resolved-assets-v1'
+      || summary.staged_candidates_only !== true || summary.native_listening_approved !== false
+      || summary.resolved_listening_approval_declared !== false || summary.selected_unresolved !== 0
+      || summary.resolved_asset_set_sha256 !== summary.selected_asset_set_sha256
+      || !summary.model_trial_audit || summary.model_trial_audit.source_manifest_sha256 !== summary.cardinal_manifest_sha256
+      || summary.model_trial_audit.approvals_sha256 !== APPROVAL || summary.model_trial_audit.runtime_ready !== false
+      || summary.model_trial_audit.native_listening_approved !== false
+      || !Number.isInteger(summary.additional_trial_requests) || summary.additional_trial_requests < 1
+      || summary.additional_trial_requests !== summary.model_trial_audit.additional_trial_requests
+      || locale !== 'es-es' && summary.alias_manifest_sha256 !== undefined) return false;
+  const counts = {generated_cardinal: 0, separate_model_trial: 0, reused_supplemental_master: 0};
+  const wanted = new Map(pack.plan(locale).map(p => [p.id, p]));
+  for (const p of prompts) {
+    const r = p.resolution, role = wanted.get(p.id);
+    if (!role || !r || !Object.hasOwn(counts, r.source_kind) || r.provider !== 'google-gemini' || r.voice !== 'Sulafat'
+        || r.model !== (r.source_kind === 'separate_model_trial' ? 'gemini-3.1-flash-tts-preview' : pack.MODEL)
+        || r.transcript_sha256 !== role.transcript_sha256 || r.context_sha256 !== role.context_sha256
+        || r.catalog_record_sha256 !== role.catalog_record_sha256 || !sha(r.master_sha256) || !sha(r.telephony_sha256)
+        || r.resampling_recipe_sha256 !== pack.digest(pack.RESAMPLING) || r.runtime_ready !== false
+        || r.listening_verified !== false || r.provider_provenance_authenticated !== false) return false;
+    if (r.source_kind === 'reused_supplemental_master' && (locale !== 'es-es' || !sha(summary.alias_manifest_sha256)
+        || r.alias_manifest_sha256 !== summary.alias_manifest_sha256 || r.source_locale !== 'es-es'
+        || !['acdc-number-4', 'acdc-number-9'].includes(r.source_id))) return false;
+    counts[r.source_kind]++;
+  }
+  return summary.selected_generated === counts.generated_cardinal && summary.selected_model_trials === counts.separate_model_trial
+    && summary.selected_reused === counts.reused_supplemental_master
+    && summary.resolved_asset_set_sha256 === pack.digest({schema_version: 1, kind: 'cardinal-resolved-assets-v1',
+      locale, intro: INTROS[locale], prompts});
+}
 
 function checkedHeader(filename, maximum = 65536) {
   const parent = path.dirname(filename), before = fs.lstatSync(filename);
@@ -53,6 +112,8 @@ async function install(mode, plan, client, header) {
 
 // Source-only prerequisite: all five plans must represent the same completed
 // original ledger and approved release, with exact independently stored maps.
+// Explicit mixed mode requires complete selected assets, not a falsely completed
+// original generation ledger. Original EN documents remain generated-only.
 // No database call or credential lookup occurs here.
 function preflightAll(entries) {
   if (!Array.isArray(entries) || entries.length !== LOCALES.length
@@ -62,15 +123,18 @@ function preflightAll(entries) {
         || typeof e.plan?.summary !== 'function' || typeof e.plan?.install !== 'function')) {
     throw new Error('exactly five explicit cardinal locales are required');
   }
+  const summaries = new Map(entries.map(e => [e.locale, e.plan.summary()]));
+  const mixed = [...summaries.values()].some(s => s && Object.hasOwn(s, 'model_trial_index_sha256'));
   const snapshots = LOCALES.map(locale => {
-    const entry = entries.find(e => e.locale === locale), summary = entry.plan.summary();
+    const entry = entries.find(e => e.locale === locale), summary = summaries.get(locale);
     const intro = INTROS[locale], count = COUNTS[locale];
     const expectedIds = pack.plan(locale).map(p => p.id).sort();
     if (!summary || typeof summary !== 'object' || summary.locale !== locale || summary.count !== count || summary.catalog_sha256 !== pack.CATALOG_HASH
         || summary.locale_catalog_sha256 !== pack.LOCALE_HASHES[locale]
         || summary.context_sha256 !== pack.digest(pack.contexts[locale]) || summary.approval_sha256 !== APPROVAL
         || !sha(summary.cardinal_manifest_sha256) || !sha(summary.selected_asset_set_sha256) || !sha(summary.map_sha256)
-        || summary.historical_artifact_complete !== true || summary.authoring_approval_declared !== true
+        || (mixed ? !completeMixed(summary, locale) : summary.historical_artifact_complete !== true)
+        || summary.authoring_approval_declared !== true
         || summary.resampling_provenance_verified !== true || summary.preserves_original_request_history !== true
         || summary.preserves_210_inventory !== true || summary.creates_only_versioned_ids !== true
         || summary.runtime_ready !== false || summary.full_position_language_ready !== false
@@ -89,6 +153,14 @@ function preflightAll(entries) {
   if (snapshots.some(s => s.summary.cardinal_manifest_sha256 !== snapshots[0].summary.cardinal_manifest_sha256)) {
     throw new Error('five-locale cardinal ledger mismatch');
   }
+  if (mixed) {
+    const indexed = snapshots.filter(s => s.locale !== 'en-us'), first = indexed[0].summary;
+    if (snapshots.some(s => s.summary.historical_artifact_complete !== first.historical_artifact_complete)
+        || indexed.some(s => s.summary.model_trial_index_sha256 !== first.model_trial_index_sha256
+          || pack.digest(s.summary.model_trial_audit) !== pack.digest(first.model_trial_audit))) {
+      throw new Error('five-locale cardinal resolution index mismatch');
+    }
+  }
   return snapshots;
 }
 
@@ -100,7 +172,7 @@ function stableAll(snapshots) {
   }
 }
 
-function verifiedReceipt(receipt, source) {
+function verifiedReceipt(receipt, source, mixed = false) {
   return receipt && receipt.mode === 'VERIFY_ONLY' && receipt.locale === source.locale
     && receipt.count === source.count && receipt.verified === source.count && receipt.created === 0
     && receipt.intro_installed_verified === true && receipt.map_sha256 === source.map_sha256
@@ -110,19 +182,30 @@ function verifiedReceipt(receipt, source) {
     && receipt.selected_asset_set_sha256 === source.selected_asset_set_sha256
     && receipt.intro && pack.digest(receipt.intro) === pack.digest(source.intro)
     && receipt.runtime_ready === false && receipt.full_position_language_ready === false
-    && receipt.five_language_release_ready === false && receipt.listening_verified === false;
+    && receipt.five_language_release_ready === false && receipt.listening_verified === false
+    && (!mixed || Object.keys(source).every(k =>
+      Object.hasOwn(receipt, k) && pack.digest(receipt[k]) === pack.digest(source[k])));
 }
 
 async function installAll(mode, entries, client) {
   if (!MODES.includes(mode)) throw new Error('invalid mode');
   const snapshots = preflightAll(entries);
   stableAll(snapshots);
+  const indexed = snapshots.find(s => s.summary.model_trial_index_sha256 !== undefined);
   const common = {schema_version: 1, owner: 'kazoo5-acdc-cardinal-installer', scope: 'all-locales',
     count: 584, catalog_sha256: pack.CATALOG_HASH, approval_sha256: APPROVAL,
     cardinal_manifest_sha256: snapshots[0].summary.cardinal_manifest_sha256,
     source_complete: true, preserves_210_inventory: true,
     runtime_ready: false, full_position_language_ready: false, five_language_release_ready: false,
     listening_verified: false, queue_configuration_changed: false};
+  if (indexed) Object.assign(common, {resolution_mode: 'indexed-model-trials-v1', resolution_complete: true,
+    historical_artifact_complete: indexed.summary.historical_artifact_complete,
+    model_trial_index_sha256: indexed.summary.model_trial_index_sha256,
+    additional_trial_requests: indexed.summary.additional_trial_requests,
+    selected_generated: 31 + snapshots.filter(s => s.locale !== 'en-us').reduce((n, s) => n + s.summary.selected_generated, 0),
+    selected_model_trials: snapshots.filter(s => s.locale !== 'en-us').reduce((n, s) => n + s.summary.selected_model_trials, 0),
+    selected_reused: snapshots.filter(s => s.locale !== 'en-us').reduce((n, s) => n + s.summary.selected_reused, 0),
+    staged_candidates_only: true, native_listening_approved: false});
   if (mode === '--plan') return {...common, mode: 'PLAN_ONLY_NO_DATABASE_ACCESS',
     database_verified: false, locales: snapshots.map(s => s.summary)};
   if (typeof client !== 'function') throw new Error('invalid cardinal database client');
@@ -147,7 +230,7 @@ async function installAll(mode, entries, client) {
   for (const s of snapshots) {
     stableAll(snapshots);
     const receipt = await s.plan.install(pinnedClient, false);
-    if (!verifiedReceipt(receipt, s.summary)) throw new Error('invalid five-locale cardinal receipt');
+    if (!verifiedReceipt(receipt, s.summary, Boolean(indexed))) throw new Error('invalid five-locale cardinal receipt');
     receipts.push(receipt);
   }
   stableAll(snapshots);
@@ -166,8 +249,11 @@ function source(locale) {
     approvalSha256: APPROVAL};
 }
 
-function releasePlans(open = openPlan, readHeader = checkedHeader) {
-  return LOCALES.map(locale => ({locale, plan: open(source(locale)),
+function releasePlans(open = openPlan, readHeader = checkedHeader, selectedResolution = {}) {
+  const resolution = resolutionOptions(selectedResolution);
+  const {supplementalDirectory, aliasFile, aliasSha256, ...trials} = resolution;
+  return LOCALES.map(locale => ({locale, plan: open({...source(locale),
+    ...(locale === 'en-us' ? {} : locale === 'es-es' ? resolution : trials)}),
     header: () => readHeader(locale === 'en-us'
       ? path.join(__dirname, '../applications/acdc/src/acdc_cardinal_map.hrl')
       : path.join(__dirname, '../applications/acdc/src/cardinal_maps', `acdc_cardinal_${locale}.hrl`),
@@ -175,18 +261,32 @@ function releasePlans(open = openPlan, readHeader = checkedHeader) {
 }
 
 function options(args) {
-  if (!Array.isArray(args) || !MODES.includes(args[0])
-      || !(args.length === 1 || args.length === 2 && args[1] === '--all-locales')) {
+  if (!Array.isArray(args) || !args.every(a => typeof a === 'string') || !MODES.includes(args[0])) {
     throw new Error('one explicit mode and optional --all-locales are required');
   }
-  return {mode: args[0], allLocales: args.length === 2};
+  const resolution = {}, seen = new Set(); let allLocales = false;
+  const flags = {'--model-trial-index': 'modelTrialIndex', '--model-trial-index-sha256': 'modelTrialIndexSha256',
+    '--supplemental-pack': 'supplementalDirectory', '--alias-file': 'aliasFile', '--alias-sha256': 'aliasSha256'};
+  for (let i = 1; i < args.length; i++) {
+    const flag = args[i];
+    if (seen.has(flag)) throw new Error('duplicate cardinal adapter option');
+    seen.add(flag);
+    if (flag === '--all-locales') allLocales = true;
+    else {
+      if (!Object.hasOwn(flags, flag) || !args[i + 1] || args[i + 1].startsWith('--')) throw new Error('invalid cardinal adapter option');
+      resolution[flags[flag]] = args[++i];
+    }
+  }
+  const selected = resolutionOptions(resolution);
+  if (Object.keys(selected).length && !allLocales) throw new Error('mixed cardinal resolution requires all-locales');
+  return {mode: args[0], allLocales, ...(Object.keys(selected).length ? {resolution: selected} : {})};
 }
 
 async function main(args) {
-  const {mode, allLocales} = options(args);
+  const {mode, allLocales, resolution = {}} = options(args);
   let receipt;
   if (allLocales) {
-    const entries = releasePlans();
+    const entries = releasePlans(openPlan, checkedHeader, resolution);
     // Reject missing/incomplete release material before even constructing the
     // database client. The adapter never stages a partial locale selection.
     preflightAll(entries);

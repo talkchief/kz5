@@ -6,13 +6,20 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
-**Current voice inventory:**412/584 technical QA (EN31/HE92/FR160/ES25/AR104),
+**Latest combined coverage:**481/584 technical artifacts. EN31, HE131, FR161
+and ES53 complete; AR105/208. All36 remaining Hebrew recordings are saved,
+actual HE131 plan passes `4842e8/8770e2`, mixed five-locale adapter tests pass
+`b086d2/31b376`. See `doc/acdc_cardinal_he_model_recovery.md` for exact pins,
+receipts and limits. Arabic103 recovery, listening, runtime model admission/maps
+and main-shell deployment remain open. Older counts below are historical.
+
+**Original 2.5 voice ledger (not combined coverage):**412/584 technical QA (EN31/HE92/FR160/ES25/AR104),
 697 requests,113 retries,172 failed and no pending/indeterminate identity. Five
 bounded concise-v2 Hebrew requests recovered three recordings; six WAVs saved.
 See `doc/acdc_cardinal_concise_synthesis.md`; older counts below are historical.
 No new cardinal runtime activation or listening approval is implied.
 Exact-word Spanish reuse now passes 5,962 importer checks and installer adapter
-regression; actual resolved inventory is 412 generated + 2 reused, 170 missing.
+regression; that earlier resolved inventory was 412 generated + 2 reused, 170 missing.
 See `doc/acdc_cardinal_reuse_import_integration.md`; staging is not deployment.
 The separate 3.1 model experiment and exact private receipts are documented in
 `doc/acdc_cardinal_31_model_trial.md`; trial calls do not alter the legacy counts.
