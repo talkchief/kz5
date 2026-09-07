@@ -38,6 +38,7 @@ class Element {
 function fixture(options = {}) {
   let app, clock = now, nextTimer = 0;
   const timers = new Map(), requests = [], views = [], errors = [], navigation = [], bindings = [], observers = [], container = new Element(), content = new Element();
+  const schedule = (fn, ms) => { timers.set(++nextTimer, {fn, ms, at: clock + ms}); return nextTimer; };
   const domDocument = {documentElement: {}, activeElement: null};
   const jquery = value => value; jquery.trim = value => String(value).trim();
   jquery.contains = (root, node) => node && node.attached;
@@ -55,7 +56,7 @@ function fixture(options = {}) {
   vm.runInNewContext(source, {
     define(factory) { app = factory(name => name === 'jquery' ? jquery : name === 'lodash' ? lodash : monster); },
     Date: Clock, Math,
-    setTimeout(fn, ms) { timers.set(++nextTimer, {fn, ms, at: clock + ms}); return nextTimer; },
+    setTimeout: schedule,
     clearTimeout(id) { timers.delete(id); },
     ...(options.dom ? {document: domDocument, MutationObserver: class {
       constructor(fn) { this.fn = fn; observers.push(this); }
@@ -81,6 +82,7 @@ function fixture(options = {}) {
   const seam = app.requestLiveDashboard;
   app.requestLiveDashboard = (queueId, callback, page) => requests.push({queueId, callback, page});
   return {app, seam, monster, requests, views, errors, navigation, content, container, timers, bindings, domDocument,
+    scheduler: {setTimeout: schedule, clearTimeout: id => timers.delete(id)},
     advance(ms) { clock += ms; },
     tick(ms) {
       const end = clock + ms; let limit = 1000;
@@ -539,5 +541,70 @@ test('connect false immediately cancels its desired handle; late timeout/ACK can
   assert.equal(f.bindings.length, 1); assert.equal(f.requests.length, 1);
   f.monster.socket.connect = () => true; f.tick(1); assert.equal(f.bindings.length, 2); f.ack(1); f.tick(100);
   assert.equal(f.bindings[0].cancelled, 1); assert.equal(f.requests.length, 2);
+});
+test('only cleanup_pending gets three bounded one-second retries, then the existing fifteen-second floor', () => {
+  const f = fixture(); f.app.renderLiveDashboard(Q); f.reply(0, liveData(true));
+  for (let i = 0; i < 3; i++) {
+    f.bindings[i].params.lifecycle.onError({code: 'cleanup_pending'});
+    assert.equal(f.bindings[i].cancelled, 1); f.tick(999); assert.equal(f.bindings.length, i + 1);
+    f.tick(1); assert.equal(f.bindings.length, i + 2);
+  }
+  f.bindings[3].params.lifecycle.onError({code: 'cleanup_pending'});
+  f.tick(14999); assert.equal(f.bindings.length, 4); f.tick(1); assert.equal(f.bindings.length, 5);
+  f.ack(4); assert.equal(f.app.appFlags.acdc.liveDashboardController.bindings[Q].cleanupRetries, 0);
+  f.app.renderSection('agents'); assert.equal(f.timers.size, 0);
+});
+test('server/auth/transport errors never borrow cleanup retry speed, and navigation cancels pending local retry', () => {
+  for (const code of ['rejected', 'timeout', 'send_failed', 'configuration_unavailable', 'cleanup_pending_wrong']) {
+    const f = fixture(); f.app.renderLiveDashboard(Q); f.reply(0, liveData(true));
+    f.bindings[0].params.lifecycle.onError({code}); f.tick(14999); assert.equal(f.bindings.length, 1);
+    f.tick(1); assert.equal(f.bindings.length, 2);
+  }
+  const f = fixture(); f.app.renderLiveDashboard(Q); f.reply(0, liveData(true));
+  f.bindings[0].params.lifecycle.onError({code: 'cleanup_pending'}); f.app.renderSection('agents');
+  f.tick(20000); assert.equal(f.bindings.length, 1); assert.equal(f.timers.size, 0);
+});
+test('actual framework cleanup ACK permits one-second detail rebind and ACK snapshot after overview navigation', () => {
+  const file = process.env.KAZOO_MONSTER_LIFECYCLE_SOURCE;
+  assert(file && path.isAbsolute(file), 'Set KAZOO_MONSTER_LIFECYCLE_SOURCE to the current patched framework monster.socket.js');
+  const bytes = fs.readFileSync(file), f = fixture(), sockets = [], publications = []; let api, requestId = 0;
+  class Socket {
+    static CONNECTING = 0; static OPEN = 1; static CLOSING = 2; static CLOSED = 3;
+    constructor() { this.readyState = 0; this.events = new Map(); this.sent = []; sockets.push(this); }
+    addEventListener(name, fn) { this.events.set(name, [...(this.events.get(name) || []), fn]); }
+    emit(name, data) { (this.events.get(name) || []).slice().forEach(fn => fn(data)); }
+    open() { this.readyState = 1; this.emit('open', {}); }
+    close() { this.readyState = 3; this.emit('close', {wasClean: true}); }
+    send(value) { assert.equal(this.readyState, 1); this.sent.push(JSON.parse(value)); }
+    reply(request) { this.emit('message', {data: JSON.stringify({action: 'reply', request_id: request.request_id, status: 'success',
+      data: {subscriptions: request.action === 'subscribe' ? [request.data.binding] : [],
+        unsubscribed: request.action === 'unsubscribe' ? [request.data.binding] : []}})}); }
+  }
+  Object.assign(f.monster, {config: {api: {socket: 'wss://fixture.invalid/websocket'}}, isDev: () => true,
+    util: {guid: () => 'fixture-' + ++requestId, getAuthToken: () => 'synthetic-never-real'},
+    pub: name => publications.push(name), waterfall: (steps, done) => steps[0](done)});
+  vm.runInNewContext(bytes.toString('utf8'), {
+    define(factory) { api = factory(name => name === 'lodash' ? lodash : f.monster); },
+    WebSocket: Socket, URL, window: {location: {protocol: 'https:'}},
+    console: {log() {}, warn() {}}, ...f.scheduler
+  }, {filename: file, timeout: 1000});
+  f.monster.socket = api;
+  const overview = liveData(); overview.queues = overview.live.queues = [overview.queues[0]];
+  f.app.renderDashboard(); f.reply(0, overview); const socket = sockets[0]; socket.open();
+  assert.equal(socket.sent.length, 1); assert.equal(socket.sent[0].action, 'subscribe'); socket.reply(socket.sent[0]);
+  f.tick(100); f.reply(1, overview);
+  f.app.renderLiveDashboard(Q); assert.equal(socket.sent[1].action, 'unsubscribe');
+  f.reply(2, liveData(true)); // New bind arrives while real lifecycle entry is removing.
+  assert.equal(socket.sent.length, 2, 'Cleanup-pending attempt must not send or borrow old ACK');
+  assert.equal(f.app.appFlags.acdc.liveDashboardController.bindings[Q].cleanupRetries, 1);
+  socket.reply(socket.sent[1]); f.tick(999); assert.equal(socket.sent.length, 2);
+  f.tick(1); assert.equal(socket.sent.length, 3); assert.equal(socket.sent[2].action, 'subscribe');
+  assert.equal(socket.sent[2].data.binding, 'queue_live.changed.' + Q); assert.equal(socket.sent[2].data.account_id, A);
+  socket.reply(socket.sent[2]); f.tick(100); assert.equal(f.requests.length, 4);
+  f.reply(3, liveData(true)); assert.equal(f.app.liveTransportState(f.app.appFlags.acdc.liveDashboardController), 'acknowledged');
+  f.app.renderSection('agents'); assert.equal(socket.sent[3].action, 'unsubscribe'); socket.reply(socket.sent[3]);
+  assert.equal(f.timers.size, 0); assert(!publications.includes('auth.retryLogin'));
+  assert(bytes.equals(fs.readFileSync(file)), 'Actual lifecycle source changed during fixture');
+  console.log('INFO actual Monster lifecycle source SHA256 ' + require('crypto').createHash('sha256').update(bytes).digest('hex'));
 });
 console.log(JSON.stringify({result: 'PASS', groups, network: false, browser: false, live_writes: false}));

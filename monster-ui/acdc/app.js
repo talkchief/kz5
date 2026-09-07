@@ -921,7 +921,11 @@ define(function(require) {
 				if (!active()) { return; }
 				if (info && info.code === 'disconnected') { self.disconnectLiveSubscriptions(controller); return; }
 				if (attempt.settled) { return; }
-				attempt.settled = true; binding.state = 'error'; binding.retryAfter = Date.now() + 15000;
+				// Local previous-listener teardown can outlive normal navigation.
+				// Never shorten server rejection, transport or authentication backoff.
+				var cleanupRetry = info && info.code === 'cleanup_pending' && (binding.cleanupRetries || 0) < 3;
+				if (cleanupRetry) { binding.cleanupRetries = (binding.cleanupRetries || 0) + 1; }
+				attempt.settled = true; binding.state = 'error'; binding.retryAfter = Date.now() + (cleanupRetry ? 1000 : 15000);
 				controller.admissionAfter = Date.now() + 1000;
 				if (controller.admitting === attempt) { controller.admitting = null; }
 				binding.cancel && binding.cancel(); binding.cancel = null;
@@ -937,7 +941,7 @@ define(function(require) {
 					}, lifecycle: { timeoutMs: 3000,
 						onAck: function(info) {
 							if (!active() || attempt.settled || !info || info.accountId !== controller.accountId || info.binding !== key) { return; }
-							attempt.settled = true; binding.state = 'acknowledged';
+							attempt.settled = true; binding.state = 'acknowledged'; binding.cleanupRetries = 0;
 							if (controller.admitting === attempt) { controller.admitting = null; }
 							self.paintLiveTransport(controller); self.queueLiveRefresh(controller); self.pumpLiveSubscriptions(controller);
 						},
