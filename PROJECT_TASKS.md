@@ -1,14 +1,15 @@
 # Kazoo 5 project task register
 
-Latest execution checkpoint: September7 server resized to8GB; named core services
-and synthetic test phones active after reboot. EN cardinal compositor5 tests/
-14648 cases and importer10 groups/605 checks pass. Actual immutable EN31 media
-import verified, no queue configuration change; runtime integration still open.
-APNs transport23 and prior bridge41 offline tests pass, not real mobile acceptance.
-Extension1000 routes correctly to MicroSIP user, but its caller ID is absent and
-callback transport lacks account-local extension routing. This is an active
-callback fix, not a reason to weaken PSTN restrictions. Bridge main-SH integration
-is in progress. See latest PROJECT_HANDOFF.md checkpoint for evidence handles.
+Latest execution checkpoint September7: bridge installed through main SH with
+hash-pinned dependencies, protected copied FCM/APNs keys, enabled non-root
+service and actual local isolated AMQP consumer readiness; independent verify
+passes. Production10.1.0.28 remains unchanged. No real mobile sends/acceptance.
+Extension1000 internal caller ID is configured; account-local routing source
+passes29 internal/external policy tests, full canonical87 and13 production-module
+build; deployment/live acceptance remain open. All five pure cardinal grammars
+pass73240 parity cases; EN31 immutable assets are imported, ES25 generated plus
+two reuse identities. Remaining language assets/runtime still incomplete.
+See latest PROJECT_HANDOFF.md and doc/push_bridge_development_acceptance.md.
 
 New or returning contributors: read [the engineering handoff](PROJECT_HANDOFF.md)
 first for achieved work, deployment status, source locations and next steps.
@@ -701,7 +702,7 @@ verified; do not toggle global deletion settings to run a dashboard test.
 
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
-| INST-13 | CRITICAL — sanitized source and ACK safety tested; stack installer open | User reaffirmed bridge is part of the main deployment stack, installable standalone or co-located, not a manual add-on. Sanitized production import is tracked under services/push-bridge (no nested Git, secrets or production mutation). Root219760/1a2178 passes8config+19runtime/payload+14settlement fixtures: only owner-thread confirmed acceptance ACKs, failed/uncertain messages retained, stale-generation fences. No actual broker/provider/mobile test or activation. Current status78 manual recovery is NOT production retry/availability. Complete durable bounded retry/DLQ, provider/AMQP transport and deadlines, pinned dependencies, protected external config, explicit bridge SH option, least-privilege named systemd unit enable/start/readiness, remote RabbitMQ and repeat/reboot/mobile ringing tests. Do not restart/change or send notifications to production10.1.0.28. See services/push-bridge/README.md. |
+| INST-13 | CRITICAL — development main-SH installation and broker readiness PASS; release gates open | Main SH now supports push-bridge/aliases/ALL. Rootd789ab/55d3b0 installed Python3.11 and18 hash-pinned packages, protected external FCM/APNs files, non-root enabled/running kazoo-push-bridge.service with actual consumer readiness; independent verifyd6a984/c0c60f passes. Actual keys load with pinned SDKs in network-isolated service-user checkb5fb19. Development uses its own local acceptance topology, not production AMQP. Production service PID1226 unchanged. Prior8config+19runtime+14settlement+23APNs and new15service/dispatch fixtures pass. Current status78 manual recovery is NOT production availability. Finish durable bounded retry/DLQ/expiry, FCM/AMQP transport and deadlines, remote broker, repeat/reboot/recovery and designated-device ringing. No real push has been sent. See doc/push_bridge_development_acceptance.md and services/push-bridge/README.md. |
 | INST-01 | OPEN — installer | One modular install entry point: CouchDB, RabbitMQ, HAProxy, Kazoo apps, eCallMgr, Kazoo FreeSWITCH, Kazoo Kamailio, Monster UI and ALL; automatic pinned dependencies, configuration validation and enabled/running named services. |
 | INST-02 | VERIFIED — current-host scope | Named services and `kazoo-applications` compatibility alias exist; Pivot port reservation, test-phone startup preservation and requested SUP alias repaired. Reboot/custom-root/clean-server regression tests still required. |
 | INST-03 | ACTIVE — installer | Kamailio verifier repair committed `aff66d3`: 11 regression groups and live `--verify-only kamailio` pass; recovered startup JWT failure remains an explicit warning, later/unrelated errors fail, service identity unchanged. Finish combined all-module verification after remaining deployment; verify source/export availability and configuration/transport readiness. |

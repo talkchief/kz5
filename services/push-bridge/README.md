@@ -1,4 +1,74 @@
-# Mobile push bridge: sanitized source import
+# Mobile push bridge: modular installer candidate
+
+## Main installer integration (development installation verified)
+
+September7 root acceptance: the main SH installed Python3.11 and all18
+hash-locked packages, passed dependency/version checks, enabled and started
+`kazoo-push-bridge.service`, and verified actual consumer registration
+(`d789ab/55d3b0`). Separate `--verify-only push-bridge` passed
+(`d6a984/c0c60f`). It runs as the dedicated service user with zero automatic
+restarts at initial readback. The development configuration uses a separate
+local acceptance exchange/queue, not the production broker or production queue.
+The configured FCM and both APNs signing keys load with the installed SDKs as
+that service user in a network-isolated check (`b5fb19`); this does not validate
+provider permissions or delivery. Production bridge state/PID stayed unchanged.
+Credentials and populated configuration remain outside Git. See
+`doc/push_bridge_development_acceptance.md` for scope and remaining gates.
+
+Use `sudo bash scripts/install-kazoo5.sh push-bridge`, or `--verify-only
+push-bridge` to verify. Aliases: `bridge`, `mobile-bridge`, `kazoo-push-bridge`.
+`ALL` now includes the bridge. Missing protected mobile configuration rejects
+bridge/ALL **before host mutation**, instead of silently omitting the component.
+Other selected modules do not require mobile credentials. `--dry-run
+push-bridge` prints the plan without reading credentials or sending traffic.
+
+Prepare `/etc/kazoo-push-bridge/config.json` from `config.json.example`, with
+reviewed broker host/user/password, queue and binding. Put service-account JSON
+and optional Apple key files directly in the same directory. Start with root
+ownership, directory0700 and files0600. Explicit installation changes that
+directory to root:kazoo-push-bridge0750 and only the validated files to0640.
+Symlinks, writable ancestors, duplicate/unknown keys, oversized files and
+alternate OAuth token endpoints are rejected. Configuration is JSON data,
+**never shell code**; values including numeric settings are strings.
+Do not commit populated configuration. APNs fields use the runtime names below.
+
+The separate mobile broker settings support standalone and co-located nodes:
+selecting only bridge never installs/reconfigures RabbitMQ or Kamailio.
+Do not point a development consumer at the production mobile queue. AMQP TLS
+remains a release gap: use an appropriately isolated private network; port5671
+does not by itself enable TLS in this candidate.
+
+Installation provisions Python3.11 and a private venv with hash-verified wheels
+only; checks exact versions against `requirements.lock`; and stages root-owned
+content-addressed releases under `/usr/local/lib/kazoo-push-bridge/releases/`.
+The current lock targets Rocky9 x86_64; other architectures fail explicitly.
+Previous releases remain available; failed new service start attempts rollback
+to the previous link/unit. Dependencies/configuration are validated before
+publishing a new current link. No fabricated release-ready marker is used.
+
+`kazoo-push-bridge.service` runs as a dedicated non-login user and is enabled
+and started by the main SH. `Type=notify` waits for actual AMQP consumer
+registration, not just process creation. Startup90seconds, shutdown15seconds,
+memory384MiB, no swap/core dumps, three starts per five minutes. Status2/78
+prevent automatic restart for configuration/delivery uncertainty. The unit
+uses read-only filesystem, hidden home directories, no privileges/capabilities
+and private temporary files. Disconnect clears the consumer status; a running
+consumer does **not** prove a phone received/rang. Verification checks exact
+release/unit bytes, no drop-ins, effective user/type/status, enabled/running
+state and dependency/configuration checks. Reboot, actual SDK/broker recovery
+and real mobile delivery acceptance remain open. Root performed the development
+installation described above; the original editing agent did not deploy it.
+
+Root-owned new offline commands, not executed by the editing agent:
+
+```sh
+python3 -B -I scripts/test-push-bridge-service.py
+bash scripts/test-install-kazoo5-push-bridge.sh
+```
+
+Also rerun config/runtime/settlement/APNs suites. The lock uses primary PyPI
+version metadata; see `doc/push_bridge_dependency_lock.md`. Dependency
+provenance alone is not package installation or runtime compatibility evidence.
 
 Latest root checkpoint September7: `219760/1a2178` passes8 configuration,
 19 startup/payload/lifecycle and14 owner-thread settlement tests, in a network-
@@ -14,7 +84,7 @@ namespace with128MiB memory and512MiB reserve. No sender was imported/executed,
 no credential file was read and no broker/provider was contacted by those tests.
 This is source/configuration progress only; all activation blockers below remain.
 
-This directory is a **partially offline-tested, non-activation-ready source import** from internal, user-provided production files. It is not a deployment or evidence of reliable provider delivery. Installer activation is paused pending the gates below. No production unit, credential file, token, project/team/key identifier, bundle identifier, broker address or provider endpoint has been copied into the repository.
+This directory contains a **partially offline-tested source/installer candidate** from internal, user-provided production files. Controlled development installation now has an explicit path above; this is not evidence of reliable production delivery. No production unit, credential file, token, project/team/key identifier, bundle identifier, broker address or private provider endpoint has been copied into the repository.
 
 The original licensing and redistribution permissions have not been established. Treat this as internal user-provided source; do not assume an open-source license.
 
@@ -98,23 +168,15 @@ rejection, lexical paths/hosts, APNs completeness, unknown/test settings, CLI
 redaction and failure boundaries. The agent adding these files did not execute
 the tests; record the root's actual result separately before claiming a pass.
 
-### Remaining installer integration boundary
+### Installer and release boundary
 
-Do not add this preflight's exit 0 as service readiness or put the imported
-consumer in `ALL`. First close the delivery, input, transport and lifecycle
-gates below and freeze a dependency manifest. The candidate now wires validation
-before provider initialization through sanitized main-entrypoint boundaries;
-root must verify those offline tests and runtime behavior. Then add the
-explicit mobile bridge option to `scripts/install-kazoo5.sh`'s component
-normalization/selection and execution/verification dispatch. Use its existing
-dry-run, protected configuration, `write_file`, systemd installation and
-post-start verification conventions, but keep bridge credentials separate from
-ordinary persisted deployment settings. A protected environment file must be
-parsed as data, not shell code. A dedicated unprivileged service, bounded
-restart/shutdown, least-privilege filesystem/network access, effective-unit
-readback, broker-consumer readiness and controlled provider acceptance tests
-are still required. The optional service must work with a remote broker and
-must not implicitly install or change a production Kamailio/broker.
+The main SH now includes the bridge in explicit selection and `ALL`, with
+protected JSON configuration, pinned dependencies, a least-privilege service,
+and broker-consumer readiness. The development installation is verified above.
+Configuration validation alone is never service readiness, and consumer
+readiness is never mobile delivery or production acceptance. Remote-broker,
+reboot, failure/retry and actual device tests remain required. Provider secrets
+remain separate from ordinary persisted Kazoo settings and from the repository.
 
 ## Configuration contract
 
@@ -163,7 +225,8 @@ hex characters), optionally with one bounded legacy prefix plus `:`. Hex case
 is normalized. The candidate does not hard-code the common 32-byte device-token
 length. These resource limits and prefix contract still need mobile acceptance
 before release. Forwarded data is capped at 3072 UTF-8 JSON bytes;
-APNs payloads are capped at 4096 bytes. Provider response bounds remain open.
+APNs payloads are capped at 4096 bytes. The APNs transport candidate below adds
+response bounds; FCM response bounds remain open.
 
 Root-owned source regression command (not run by the editing agent):
 
@@ -200,8 +263,9 @@ The same broker owner thread that consumes messages inspects completed futures
 and ACKs only the sender's exact `(True, 200, "provider_response")` result. Other
 results, malformed messages, worker exceptions/cancellation, and ACK exceptions
 remain unacknowledged. ACK exceptions are uncertain, so the controller cannot
-blindly retry an ACK on a second drain. This does not turn the currently flawed
-APNs partial-response success check into trustworthy provider acceptance.
+blindly retry an ACK on a second drain. The separate APNs transport candidate
+below addresses partial-response acceptance; it needs its own verification and
+does not inherit the earlier settlement fixtures' passing result.
 
 Each broker generation owns its controller and a separately bound callback.
 Invalidation prevents late completion/callback activity from settling a prior
@@ -235,7 +299,62 @@ invalidated generations, and actual bridge owner-loop integration using fake
 executors/connections. The two earlier config/runtime test commands must also
 be rerun. Tests against the pinned real AMQP client and broker remain mandatory.
 
-## Dependencies observed, not newly pinned or verified
+## APNs transport safety candidate (offline tested, not deployed)
+
+Root `943db9` passes23 offline transport tests. Related configuration8,
+runtime19 and settlement14 tests pass `76b36d`. Those results precede the
+installer/service candidate above; no real broker/provider or installer
+acceptance is implied.
+
+`apns_sender.py` now returns `(True, 200, "provider_response")` only after both
+valid final response headers and the requested HTTP/2 stream's `StreamEnded`
+event. Header-only EOF, reset, timeout or GOAWAY is not acceptance. Events for
+an unrelated stream cannot settle this one. A completed stream followed by
+GOAWAY remains accepted; GOAWAY received before completion is conservatively
+uncertain even if another event in the same batch reports an end. Complete
+non-200 responses retain their numeric status and fixed category, never the
+provider body. This proves neither delivery to a phone nor exactly-once delivery.
+
+The source candidate counts response body bytes instead of accumulating them:
+16 KiB cumulative DATA limit, 16 KiB decoded final-response header limit and
+64 KiB total received HTTP/2 bytes (including control frames). The wire limit is
+checked before HTTP/2 parsing, and reads are at most 16 KiB, with at most one
+additional byte used to detect overflow. HPACK decompression/parser internals
+still depend on the separately required pinned `h2`/`hpack` validation; these
+application limits are not a proven whole-parser memory bound.
+
+A single eight-second monotonic budget covers token-lock acquisition, TCP/TLS,
+writes and response reads. Each blocking socket operation receives only its
+remaining budget; partial progress does not reset it. JWT `iat` still correctly
+uses wall-clock time, while cached-token age uses monotonic time. Signing or
+other library work that returns after budget expiry cannot report acceptance.
+TLS construction/handshake/ALPN failures close whichever raw or wrapped socket
+the sender currently owns, including failures before `_open()` returns.
+
+**Remaining deadline limitation:** Python's platform DNS lookup inside
+`socket.create_connection()` is not interrupted by socket timeouts, and that
+helper can try multiple resolved addresses before returning. The budget is
+checked immediately afterward, but cannot cancel a stuck resolver or CPU/library
+operation. This is a shared I/O budget, not a hard whole-worker wall-time bound.
+Resolver/cancellation and full worker-shutdown acceptance remain mandatory.
+FCM redirect handling, bounded response reads/token refresh, durable retry,
+broker TLS, dependency pins and installer/service readiness are unchanged.
+
+Root-owned isolated fixture command (not run by the editing agent):
+
+```sh
+python3 -B -I scripts/test-push-bridge-apns-transport.py
+```
+
+Fixtures mock sockets, clocks, HTTP/2 events and signing. They cover complete
+acceptance/rejection, native headers/sandbox routing, partial responses, GOAWAY
+ordering, resets, stream identity, malformed status, cumulative body/wire/header
+limits, shared deadlines, token-lock/cache behavior and TLS socket ownership.
+They do not load real provider dependencies or credentials, create connections,
+or send pushes. Rerun the config, runtime and settlement suites as well, and
+verify the protocol behavior with pinned real HTTP/2 libraries before release.
+
+## Historical production dependencies (not the current lock)
 
 The supplied production environment was reported to use these versions. They are provenance information, not an endorsed or installed lockfile; root owns dependency pins and compatibility/security testing.
 
@@ -247,14 +366,14 @@ The supplied production environment was reported to use these versions. They are
 | `ecdsa` | ecdsa | 0.19.2 |
 | `h2.connection`, `h2.events` | h2 | 3.2.0 |
 
-Other imports are Python standard-library modules (`base64`, `binascii`, `concurrent.futures`, `hashlib`, `json`, `logging`, `os`, `signal`, `socket`, `ssl`, `sys`, `threading`, `time`, `uuid`). Transitive dependencies and Python/OpenSSL versions still need a reproducible manifest. No requirements lockfile or systemd unit is supplied in this slice.
+Other imports are Python standard-library modules (`base64`, `binascii`, `concurrent.futures`, `hashlib`, `json`, `logging`, `os`, `signal`, `socket`, `ssl`, `sys`, `threading`, `time`, `uuid`). The current tracked `requirements.lock` and `kazoo-push-bridge.service` supersede this historical inventory; their installation evidence is above.
 
-## Activation blockers and minimum next fixes
+## Production-release blockers and minimum next fixes
 
 1. **Delivery loss and duplicates:** owner-thread positive-result-only ACK is now a source candidate, not full delivery acceptance. Define terminal rejection versus transient failure, bounded expiry-aware durable retry/dead-letter behavior and stable delivery identity; prove broker durability, ACK/channel ownership, reconnect and duplicate behavior with the pinned real library before activation. The current fail-closed/manual-recovery policy is not production availability. An HTTP 200 only means provider acceptance, not delivery to the phone.
 2. **Bounded work and shutdown:** per-generation admission is now capped and unsettled generations cannot reconnect automatically, but worker completion still lacks a total deadline. Google token refresh has no explicitly supplied timeout. Shared `requests.Session` thread behavior is unproven. The watchdog measures broker-loop progress, not worker completion. Signal shutdown stops without draining and force-exits after three seconds; a fatal settlement return can still wait for hung executor threads at interpreter shutdown. Add total operation deadlines, bounded cancellation/drain and shutdown tests. Do not solve loss with an unbounded requeue loop.
-3. **Input and response limits:** strict input normalization and outgoing payload caps are implemented above, awaiting root and mobile compatibility acceptance. Malformed messages now fail closed unacknowledged and require a reviewed poison-message policy. APNs accumulates response data without a cap; requests eagerly buffers FCM responses. Add provider response caps and protocol error cases.
-4. **Transport/configuration security:** AMQP TLS is not configured and FCM requests follow redirects. Candidate startup now bounds numeric settings and constrains initial provider endpoints, but credential permissions are not checked. Define trusted broker/network authority, TLS/redirect policy, protected credential loading and a least-privilege service account/unit before enabling an installer option. Do not reuse inline production credentials or the supplied production unit.
-5. **APNs lifecycle:** a failed lazy initialization is cached permanently until process restart. JWT and APNs request deadlines still use wall-clock time. The call UUID is now stable, but duplicate/retry behavior still needs acceptance. APNs connection close is currently treated as stream termination even if the response was incomplete; there is no end-to-end delivery evidence. Test initialization recovery, correct key curve/JWT shape, sandbox selection, partial responses/GOAWAY, deadline bounds and duplicate semantics. `_open()` also needs socket cleanup if TLS wrapping fails.
+3. **Input and response limits:** strict input normalization and outgoing payload caps have offline coverage, but mobile compatibility acceptance remains open. Malformed messages fail closed unacknowledged and require a reviewed poison-message policy. APNs caps and protocol fixtures pass23 offline tests and are in the development release; FCM still eagerly buffers responses. Verify pinned parser/decompression limits and add FCM response caps before production acceptance.
+4. **Transport/configuration security:** AMQP TLS is not configured and FCM requests follow redirects. Numeric settings and initial provider endpoints are constrained. Protected credential permissions and the least-privilege service are now installed and verified. Finish TLS/redirect policy and remote-broker acceptance. Never reuse the production AMQP authority in a development consumer or copy the inline production unit into Git.
+5. **APNs lifecycle:** a failed lazy initialization is cached permanently until process restart. Monotonic token-cache/request budgets, actual response stream completion, and TLS-failure socket cleanup have offline coverage and are deployed in the isolated development consumer. Platform resolver/CPU cancellation remains outside the socket budget. Actual configured production/sandbox keys load offline with pinned SDKs, but provider authorization is unverified. Test initialization recovery, real HTTP/2 partial responses/GOAWAY, total worker bounds and duplicate semantics. No end-to-end delivery evidence exists.
 
-Before any controlled provider test: root should freeze dependency pins, add offline configuration/redaction/payload/HTTP2/broker lifecycle regressions, resolve the above blocking reliability and security policies, and define a reviewed protected service unit. A later real-device test needs separate explicit authorization and test credentials. This directory alone does not justify activation.
+Dependency pins, the protected service and listed offline regressions are now present. Before broader activation, resolve the remaining reliability/security gaps and complete broker recovery and designated-device acceptance. Provider credentials alone do not identify an authorized test device. The development installation above is not production approval.

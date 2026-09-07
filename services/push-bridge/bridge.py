@@ -245,6 +245,8 @@ class BridgeRuntime:
                     generation["settlements"] = settlements
                     channel.basic.qos(prefetch_count=limit)
                     channel.basic.consume(on_message, queue=settings["QUEUE"], no_ack=False)
+                    from service_notify import notify_consumer_ready
+                    notify_consumer_ready()
                     log.info("consumer_started workers=%d apns_workers=%d",
                              settings["WORKERS"], settings["APNS_WORKERS"])
                     while not self._stop.is_set() and channel.is_open:
@@ -276,6 +278,8 @@ class BridgeRuntime:
                         self.mark_progress()
                         self._stop.wait(RECONNECT_DELAY)
                 finally:
+                    from service_notify import notify_status
+                    notify_status(False)
                     if settlements is not None:
                         settlements.invalidate()
                     try:

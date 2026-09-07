@@ -1,0 +1,44 @@
+[Unit]
+Description=Kazoo native mobile push bridge (FCM/APNs)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=kazoo-push-bridge
+Group=kazoo-push-bridge
+WorkingDirectory=/usr/local/lib/kazoo-push-bridge/current
+ExecStartPre=/usr/local/lib/kazoo-push-bridge/current/venv/bin/python -B -I /usr/local/lib/kazoo-push-bridge/current/service_launcher.py --check
+ExecStart=/usr/local/lib/kazoo-push-bridge/current/venv/bin/python -B -I /usr/local/lib/kazoo-push-bridge/current/service_launcher.py
+Restart=on-failure
+RestartPreventExitStatus=2 78
+RestartSec=10
+TimeoutStartSec=90
+TimeoutStopSec=15
+KillMode=control-group
+SendSIGKILL=yes
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+TasksMax=192
+MemoryMax=384M
+MemorySwapMax=0
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target

@@ -6,6 +6,52 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**14:24UTC bridge development installation:** provider credentials retrieved
+read-only from production10.1.0.28 into protected private storage. Its service
+remains enabled/active PID1226; no production changes or notifications. Main SH
+`push-bridge` install passed `d789ab/55d3b0`: Python3.11,18 hash-pinned packages,
+non-root enabled/running service, actual AMQP consumer readiness. Independent
+`--verify-only` passed `d6a984/c0c60f`. Local config uses a separate loopback
+acceptance exchange/queue, not the copied production broker URL. Both APNs keys
+and FCM credentials load with actual installed SDKs as service user in an
+isolated network (`b5fb19`); provider access/device ringing remain untested.
+See `doc/push_bridge_development_acceptance.md` for paths and remaining gates.
+Never print or commit private provider files or production-unit contents.
+Repeat install and selected bridge restart passed `77bcab/1adade`. Passive
+broker check `b24480/025319` verifies one consumer/zero ready messages, bridge
+PID53666 and automatic restarts0; all eight core/data/web services active.
+Current79 bridge tests plus dispatch and13 media-adapter cases pass
+`f1da0f/d65ad4`. No handles listed in this latest checkpoint remain running.
+
+**Callback/media checkpoint:** full canonical run03917f/session92746 completed
+exit0,87 tests (`d91ac3`). Focused production13-module build completed exit0
+`592f91/e0e1cc`, `/tmp/kazoo-callback-media-build.qg16Ob`; not deployed yet.
+The strengthened media zero-read regression was rerun: all7 pass
+`b5fb19/52a682`, source digest aeeb9f4d35ae86afe69100ca5cfa6144fd07e2c89748c41fc8950f5b948a4116.
+Older pending-handle statements below are superseded. Internal caller ID1000
+is configured; account-local callback transport still needs live deployment.
+
+**14:07UTC focused work checkpoint:** all three parallel workers stopped at
+their product usage limit; root continued locally. No agent build/deployment ran.
+Pending source now includes main-SH bridge installation, EN cardinal playback
+and account-local extension callbacks; review before any deployment. Internal
+callback tests pass29 (`4be707/4261f8`), five-language grammar passes73240 parity
+cases (`926abd/1ea276`), announcement suite12 (`11f182/7e0065`), media resolver7
+(`bde511/53304e`), installer adapter13 and bridge service15 plus dispatch checks
+(`3f15e0`). New malformed-response guard and fixture fixes are included.
+The media zero-read assertion was strengthened after that media run: rerun it.
+Broader canonical callback run03917f/session92746 was live when this checkpoint
+was written; poll that handle, do not assume completion. No new runtime BEAMs
+have been promoted in this checkpoint.
+
+Spanish pending-only authoring (`baa541/716050`) added11 successful recordings,
+rejected10 incomplete results, and retained all history/22 new WAVs. Spanish25
+generated,28 failed,0 initially pending; ES4/9 reuse remains separate. EN unchanged.
+Device internal caller ID is now1000 (normal Crossbar PATCH/readback `da514d`),
+external identity unchanged; account-local transport still needs live acceptance.
+See `doc/acdc_internal_extension_callbacks.md`. Mobile provider credentials/test
+device paths were requested asynchronously; no production queue was contacted.
+
 **New important bug UI-02:** Callflows → Users gets404 from the account
 `/entitlements` endpoint and displays a generic error. Full sanitized report,
 request ID and acceptance requirements are in PROJECT_TASKS.md. Do not copy the

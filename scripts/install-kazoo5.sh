@@ -221,6 +221,7 @@ Installable components:
   freeswitch    Kazoo FreeSWITCH, including mod_kazoo and its wrapper
   kamailio      Kazoo Kamailio, including the kazoo module and wrapper
   monster-ui    Build Monster UI and serve it through nginx
+  push-bridge   Native FCM/APNs bridge (requires protected mobile configuration)
   all           Install and verify every component above
 
 Aliases accepted: apps, kazoo_apps, monster_ui, and the common typo kamaialio.
@@ -262,6 +263,11 @@ Examples:
     ./${SCRIPT_NAME} kazoo-apps ecallmgr
   sudo ./${SCRIPT_NAME} ALL
   sudo ./${SCRIPT_NAME} --verify-only all
+
+Mobile bridge (also selected by ALL) requires /etc/kazoo-push-bridge/config.json
+and provider key files before installation; see services/push-bridge/README.md.
+It uses its own reviewed AMQP host/config and never implies local RabbitMQ or
+Kamailio installation. Bridge readiness verifies a broker consumer, not a phone.
 EOF
 }
 
@@ -817,6 +823,7 @@ normalize_component() {
         freeswitch|kazoo-freeswitch) printf 'freeswitch\n' ;;
         kamailio|kamaialio|kazoo-kamailio) printf 'kamailio\n' ;;
         monster|monster-ui) printf 'monster-ui\n' ;;
+        bridge|mobile-bridge|push-bridge|kazoo-push-bridge) printf 'push-bridge\n' ;;
         all) printf 'all\n' ;;
         *) return 1 ;;
     esac
@@ -849,6 +856,9 @@ select_component() {
         monster-ui)
             SELECTED[monster-ui]=1
             ;;
+        push-bridge)
+            SELECTED[push-bridge]=1
+            ;;
         all)
             select_component couchdb
             select_component rabbitmq
@@ -858,6 +868,7 @@ select_component() {
             select_component freeswitch
             select_component kamailio
             select_component monster-ui
+            select_component push-bridge
             ;;
         *) die "Internal error: unknown component ${component}" ;;
     esac
@@ -909,7 +920,7 @@ parse_arguments() {
                 shift
                 ;;
             --list)
-                printf '%s\n' couchdb rabbitmq haproxy kazoo-apps ecallmgr freeswitch kamailio monster-ui all
+                printf '%s\n' couchdb rabbitmq haproxy kazoo-apps ecallmgr freeswitch kamailio monster-ui push-bridge all
                 exit 0
                 ;;
             -h|--help) usage; exit 0 ;;
@@ -2658,6 +2669,7 @@ install_acdc_language_packs() (
     if [[ $DRY_RUN == true ]]; then
         log "Would create-only import and verify 210 checked-in Gemini EN/AR/HE/ES/FR fixed/callback-digit assets into configured CouchDB ${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}; preserve official and customer recordings"
         log 'Voice media import requires no provider key, generation call, eSpeak, or local FreeSWITCH; it does not publish runtime or full-position readiness'
+        log 'Would separately import and byte-verify 31 checked-in English cardinal assets and the existing approved intro against the compiled source map; other cardinal languages remain a release gate'
         return 0
     fi
     [[ -s $SCRIPT_DIR/import-acdc-gemini-voices.cjs && -s $SCRIPT_DIR/validate-acdc-gemini-receipt.cjs ]] || \
@@ -2687,7 +2699,14 @@ install_acdc_language_packs() (
     # This receipt is not the language-capabilities runtime manifest. Leave
     # legacy receipts and existing prompt/queue/account documents untouched.
     write_file 0644 /usr/local/share/kazoo5-installer/acdc-gemini-media.json <"$receipt"
+    [[ -s $SCRIPT_DIR/install-acdc-cardinal-pack.cjs ]] || die 'Required checked-in cardinal installer adapter is missing'
+    node "$SCRIPT_DIR/install-acdc-cardinal-pack.cjs" --import >"$receipt"
+    jq -e '.mode == "VERIFY_ONLY" and .count == 31 and .verified == 31 and .created == 0
+        and .intro_installed_verified == true and .runtime_ready == false
+        and .five_language_release_ready == false' "$receipt" >/dev/null || die 'Incomplete immutable cardinal final readback'
+    write_file 0644 /usr/local/share/kazoo5-installer/acdc-cardinal-media.json <"$receipt"
     log 'PASS 210 immutable Gemini voice assets verified; existing audio preserved; runtime and full-position readiness are separate gates'
+    log 'PASS 31 immutable English cardinal assets and approved intro verified; no provider call; other position languages remain a release gate'
 )
 
 validate_acdc_language_receipt() {
@@ -5170,6 +5189,120 @@ verify_monster_ui() {
     log 'PASS Monster UI, stable app bundle, API reachability, and nginx checks'
 }
 
+push_bridge_preflight() {
+    [[ ${SELECTED[push-bridge]:-} ]] || return 0
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would validate protected mobile config, credential permissions and broker/provider inputs before host changes'
+        return 0
+    fi
+    [[ $(uname -m) == x86_64 ]] || die 'Push bridge dependency lock currently supports Rocky 9 x86_64 only'
+    command -v python3 >/dev/null || die 'Python 3 is required for the offline bridge configuration preflight'
+    [[ -f $SCRIPT_DIR/../services/push-bridge/requirements.lock ]] || die 'Push bridge dependency lock is missing'
+    python3 -B -I "$SCRIPT_DIR/../services/push-bridge/service_launcher.py" --check || \
+        die 'Mobile bridge configuration is missing or invalid; prepare /etc/kazoo-push-bridge/config.json and protected provider files (no services changed)'
+}
+
+push_bridge_fingerprint() {
+    local source_dir="$SCRIPT_DIR/../services/push-bridge" file
+    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py \
+        service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
+        [[ -f $source_dir/$file && ! -L $source_dir/$file ]] || die 'Bridge release source is missing or linked'
+        sha256sum "$source_dir/$file" | awk -v name="$file" '{ print $1 "  " name }'
+    done | sha256sum | awk '{ print $1 }'
+}
+
+install_push_bridge() {
+    local source_dir="$SCRIPT_DIR/../services/push-bridge"
+    local base=/usr/local/lib/kazoo-push-bridge release fingerprint file previous='' temporary
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would install Python 3.11, isolated hash-locked bridge dependencies and root-owned release'
+        log 'Would install and enable/start kazoo-push-bridge.service as kazoo-push-bridge; wait for AMQP consumer readiness'
+        return 0
+    fi
+    dnf_install python3.11 python3.11-pip
+    if ! getent passwd kazoo-push-bridge >/dev/null; then
+        run useradd --system --user-group --no-create-home --home-dir /nonexistent \
+            --shell /sbin/nologin kazoo-push-bridge
+    fi
+    [[ $(id -u kazoo-push-bridge) != 0 && $(id -gn kazoo-push-bridge) == kazoo-push-bridge ]] || \
+        die 'Push bridge requires a dedicated non-root user and primary group'
+    python3 -B -I "$source_dir/service_launcher.py" --prepare-permissions
+    [[ ! -L $base && ! -L $base/releases ]] || die 'Bridge installation directories must not be symlinks'
+    run install -d -o root -g root -m 0755 "$base" "$base/releases"
+    fingerprint=$(push_bridge_fingerprint)
+    release="$base/releases/$fingerprint"
+    [[ ! -e $base/current || -L $base/current ]] || die 'Bridge current path must be an installer-owned release link'
+    if [[ -L $base/current ]]; then
+        previous=$(readlink "$base/current")
+        [[ $previous =~ ^/usr/local/lib/kazoo-push-bridge/releases/[0-9a-f]{64}$ ]] || \
+            die 'Refusing to replace an unrelated bridge current link'
+    fi
+    if [[ $previous != "$release" ]]; then
+        [[ ! -L $release ]] || die 'Bridge release directory must not be a symlink'
+        run install -d -o root -g root -m 0755 "$release"
+        for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py \
+            service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
+            run install -o root -g root -m 0644 "$source_dir/$file" "$release/$file"
+        done
+        run python3.11 -I -m venv "$release/venv"
+        run "$release/venv/bin/python" -I -m pip --isolated install --disable-pip-version-check \
+            --index-url https://pypi.org/simple --only-binary=:all: --require-hashes \
+            --retries 2 --timeout 30 -r "$release/requirements.lock"
+    fi
+    run "$release/venv/bin/python" -I -m pip --isolated check
+    run "$release/venv/bin/python" -B -I "$release/service_launcher.py" --check-dependencies
+    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py \
+        service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
+        cmp -s "$source_dir/$file" "$release/$file" || die 'Bridge release bytes do not match source'
+    done
+    run runuser -u kazoo-push-bridge -- "$release/venv/bin/python" -B -I "$release/service_launcher.py" --check
+    # Publish only after dependencies and service-user credential access pass.
+    temporary="$base/current.new.$$"
+    run ln -s "$release" "$temporary"
+    run mv -T "$temporary" "$base/current"
+    write_file 0644 /etc/systemd/system/kazoo-push-bridge.service <"$source_dir/kazoo-push-bridge.service"
+    run systemctl daemon-reload
+    run systemctl enable kazoo-push-bridge.service
+    if ! systemctl restart kazoo-push-bridge.service; then
+        if [[ -n $previous && $previous != "$release" ]]; then
+            ln -s "$previous" "$temporary"
+            mv -T "$temporary" "$base/current"
+            install -o root -g root -m 0644 "$previous/kazoo-push-bridge.service" \
+                /etc/systemd/system/kazoo-push-bridge.service
+            systemctl daemon-reload
+            systemctl restart kazoo-push-bridge.service || warn 'Previous bridge release could not be restarted; operator recovery required'
+        fi
+        die 'Bridge did not reach broker-consumer readiness; inspect protected configuration and service state'
+    fi
+    verify_push_bridge
+}
+
+verify_push_bridge() {
+    if [[ $DRY_RUN == true ]]; then log 'Would verify push bridge release, unit, enabled state and registered consumer'; return 0; fi
+    local base=/usr/local/lib/kazoo-push-bridge release file actual
+    release="$base/releases/$(push_bridge_fingerprint)"
+    [[ -L $base/current && $(readlink "$base/current") == "$release" ]] || die 'Active bridge release differs from requested source'
+    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py \
+        service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
+        cmp -s "$SCRIPT_DIR/../services/push-bridge/$file" "$release/$file" || die 'Bridge release verification failed'
+    done
+    cmp -s "$release/kazoo-push-bridge.service" /etc/systemd/system/kazoo-push-bridge.service || \
+        die 'Bridge unit differs from tracked unit'
+    [[ $(systemctl show -p DropInPaths --value kazoo-push-bridge.service) == '' ]] || die 'Unreviewed bridge unit drop-ins found'
+    actual=$(systemctl show -p User --value kazoo-push-bridge.service)
+    [[ $actual == kazoo-push-bridge ]] || die 'Bridge effective service user is incorrect'
+    [[ $(systemctl show -p Type --value kazoo-push-bridge.service) == notify ]] || die 'Bridge readiness type is incorrect'
+    [[ $(systemctl show -p SubState --value kazoo-push-bridge.service) == running ]] || die 'Bridge consumer is not running'
+    [[ $(systemctl show -p StatusText --value kazoo-push-bridge.service) == 'AMQP consumer registered; mobile delivery not verified' ]] || \
+        die 'Bridge consumer readiness notification is missing'
+    systemctl is-enabled --quiet kazoo-push-bridge.service && systemctl is-active --quiet kazoo-push-bridge.service || \
+        die 'Bridge service must be enabled and active'
+    runuser -u kazoo-push-bridge -- "$release/venv/bin/python" -B -I "$release/service_launcher.py" --check
+    "$release/venv/bin/python" -I -m pip --isolated check
+    "$release/venv/bin/python" -B -I "$release/service_launcher.py" --check-dependencies
+    log 'PASS bridge source, protected configuration and broker-consumer service readiness; real mobile delivery still requires acceptance'
+}
+
 verify_requested() {
     verify_local_epmd_socket
     if [[ ${SELECTED[couchdb]:-} ]]; then verify_couchdb; fi
@@ -5180,6 +5313,7 @@ verify_requested() {
     if [[ ${SELECTED[freeswitch]:-} ]]; then verify_freeswitch; fi
     if [[ ${SELECTED[kamailio]:-} ]]; then verify_kamailio; fi
     if [[ ${SELECTED[monster-ui]:-} ]]; then verify_monster_ui; fi
+    if [[ ${SELECTED[push-bridge]:-} ]]; then verify_push_bridge; fi
 }
 
 install_requested() {
@@ -5193,11 +5327,13 @@ install_requested() {
     if [[ ${SELECTED[ecallmgr]:-} ]]; then install_ecallmgr; fi
     if [[ ${SELECTED[kamailio]:-} ]]; then install_kamailio; fi
     if [[ ${SELECTED[monster-ui]:-} ]]; then install_monster_ui; fi
+    if [[ ${SELECTED[push-bridge]:-} ]]; then install_push_bridge; fi
     verify_requested
 }
 
 main() {
     parse_arguments "$@"
+    push_bridge_preflight
     preflight
     log "Resolved components: ${!SELECTED[*]}"
     if [[ $VERIFY_ONLY == true ]]; then
