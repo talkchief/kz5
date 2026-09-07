@@ -1,5 +1,11 @@
 # Kazoo 5 project task register
 
+INST-13 credential-source clarification: FCM/APNs configuration from production
+10.1.0.28 is already copied to protected local files, not Git. Repeat main-SH
+`--verify-only push-bridge` passes `8c6713/session38308/7f467d`; active/running,
+zero automatic restarts. No new production connection or provider notification.
+Real designated-device delivery and the remaining reliability gates stay OPEN.
+
 Latest voice follow-up: FR138/161 recordings pass technical QA;23 failed after
 two bounded attempts, no FR jobs remain unattempted or indeterminate. All200 new
 WAV files since fdb88cd and six authoring receipts are preserved in the repo.

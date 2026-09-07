@@ -6,6 +6,15 @@ acceptance. No notification was published or sent during these checks.
 
 ## Installation and evidence
 
+Operator clarification rechecked September7: the configured FCM service-account
+and APNs keys were already retrieved read-only from production10.1.0.28 using
+the protected SSH credentials. No additional production retrieval or mutation
+was needed. Independent main-SH verification `8c6713/session38308/7f467d`
+passed protected configuration, locked dependency versions, deployed source
+and broker-consumer readiness. Passive readback `676802` confirmed active/running
+and zero automatic restarts. This did not contact either push provider, validate
+provider permissions, or send a mobile notification.
+
 FCM session-pool deployment `01728e/session59026/abcc83` passed through the
 main SH. Current release is
 `/usr/local/lib/kazoo-push-bridge/releases/c36d971f6f8a1630af942cc1e8b7ee51c3adced67d6d124c500caea329a04db2`.
@@ -19,7 +28,7 @@ whole-operation time bounds, durable recovery and real delivery remain open.
 The independent `--verify-only push-bridge` phase in `5a5172/b0c93a` also
 passed before the next voice-authoring process started in that guard.
 
-Latest focused FCM source deployment: `515d94/1f29eb` passed through the main
+Earlier focused FCM source deployment: `515d94/1f29eb` passed through the main
 SH, using all18 hash-locked dependencies and the existing protected config.
 It adds redirect rejection before Requests redirect/body processing and closes
 streamed responses without reading them. Six real pinned-Requests/fake-adapter

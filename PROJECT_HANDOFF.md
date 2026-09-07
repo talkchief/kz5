@@ -6,6 +6,13 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Mobile credential-source clarification:** FCM/APNs keys from10.1.0.28 were
+already retrieved read-only and configured under `/etc/kazoo-push-bridge`;
+never copy populated configuration or credentials into Git. Fresh independent
+main-SH verification `8c6713/session38308/7f467d` passed; service active/running
+with zero automatic restarts. No new production access or provider push was
+needed. Development consumer remains isolated; real mobile delivery is OPEN.
+
 **Latest French artifact checkpoint:** all161 initial roles attempted and each
 of46 first-attempt failures retried once. FR138 QA/23 failed, no pending or
 indeterminate FR requests. Added100 accepted recordings/200 WAVs since fdb88cd,
