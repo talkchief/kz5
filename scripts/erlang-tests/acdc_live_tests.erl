@@ -7,6 +7,7 @@
 -define(Q, <<"11111111111111111111111111111111">>).
 -define(Q2, <<"22222222222222222222222222222222">>).
 -define(Q3, <<"33333333333333333333333333333333">>).
+-define(U, <<"44444444444444444444444444444444">>).
 -define(N1, 'first@offline.invalid').
 -define(N2, 'second@offline.invalid').
 -define(N3, 'third@offline.invalid').
@@ -20,6 +21,9 @@ incarnation(2)->binary:copy(<<"2">>,64).
 doc(Q)->j([{<<"_id">>,Q},{<<"pvt_type">>,<<"queue">>},{<<"pvt_account_id">>,?A},
     {<<"name">>,<<"Support">>},{<<"strategy">>,<<"round_robin">>},
     {<<"pvt_secret">>,<<"NEVER-RETURN-PRIVATE">>}]).
+agent_doc()->j([{<<"_id">>,?U},{<<"pvt_type">>,<<"user">>},{<<"pvt_account_id">>,?A},
+    {<<"first_name">>,<<"Live">>},{<<"last_name">>,<<"Agent">>},{<<"queues">>,[?Q]},
+    {<<"pvt_secret">>,<<"NEVER-RETURN-PRIVATE-AGENT">>}]).
 context(Queue,Query)->
     Params=case Queue of undefined->[<<"live">>]; _->[Queue,<<"live">>] end,
     cb_context:setters(cb_context:new(),[
@@ -28,7 +32,8 @@ context(Queue,Query)->
         {fun cb_context:set_auth_token_type/2,'x-auth-token'},{fun cb_context:set_auth_token/2,<<"fixture-token">>},
         {fun cb_context:set_api_version/2,<<"v2">>},{fun cb_context:set_req_verb/2,<<"GET">>},
         {fun cb_context:set_req_nouns/2,[{<<"queues">>,Params},{<<"accounts">>,[?A]}]},
-        {fun cb_context:set_raw_path/2,<<"/v2/accounts/",?A/binary,"/queues/live">>},
+        {fun cb_context:set_raw_path/2,iolist_to_binary([<<"/v2/accounts/">>,?A,<<"/queues/">>,
+            case Queue of undefined->[];_->[Queue,<<"/">>] end,<<"live">>])},
         {fun cb_context:set_query_string/2,Query},{fun cb_context:set_db_name/2,kzs_util:format_account_db(?A)},
         {fun cb_context:set_resp_etag/2,<<"old-cache-tag">>}]).
 get(Queue,Query)->
@@ -53,6 +58,7 @@ bump(K)->ets:update_counter(acdc_live_fixture,K,1).
 reset()->
     [put_state(K,V) || {K,V}<-[{docs,[doc(?Q)]},{doc_result,default},{denied,none},
         {auth_result,normal},{scope,true},{catalog_calls,0},{open_calls,0},{broker_calls,0},
+        {roster_calls,0},{agent_docs,[agent_doc()]},{resource_permits,[]},{agent_mode,normal},
         {node_calls,0},{permits,[]},{nodes,[?N1,?N2]},{nodes_after,same},{broker_mode,consensus}]],ok.
 setup()->
     T=ets:new(acdc_live_fixture,[named_table,public]),reset(),
@@ -61,7 +67,12 @@ setup()->
     meck:expect(kz_auth_scope,all,fun(<<"fixture-token">>,[<<"fixture:queues">>])->state(scope) end),
     meck:expect(kz_datamgr,get_results,fun(Db,<<"queues/crossbar_listing">>,Opts)->
         ?assertEqual(kzs_util:format_account_db(?A),Db),bump(catalog_calls),
-        put_state(catalog_options,Opts),{ok,[j([{<<"doc">>,D}]) || D<-state(docs)]} end),
+        put_state(catalog_options,Opts),{ok,[j([{<<"doc">>,D}]) || D<-state(docs)]};
+        (Db,<<"queues/agents_listing">>,Opts)->
+        ?assertEqual(kzs_util:format_account_db(?A),Db),bump(roster_calls),
+        ?assertEqual([?Q],props:get_value(startkey,Opts)),?assertEqual(201,props:get_value(limit,Opts)),
+        ?assert(lists:member(include_docs,Opts)),?assertEqual(false,props:get_value(reduce,Opts)),
+        {ok,[j([{<<"id">>,kz_doc:id(D)},{<<"key">>,[?Q,kz_doc:id(D)]},{<<"doc">>,D}]) || D<-state(agent_docs)]} end),
     meck:expect(kz_datamgr,open_doc,fun(Db,Q)->
         ?assertEqual(kzs_util:format_account_db(?A),Db),bump(open_calls),put_state(open_id,Q),
         case state(doc_result) of default->{ok,doc(Q)}; Result->Result end end),
@@ -71,8 +82,9 @@ setup()->
     meck:expect(kz_amqp_worker,call_collect,fun broker/4),T.
 teardown(T)->meck:unload([kz_datamgr,kz_nodes,kz_amqp_worker,crossbar_bindings,kz_auth_scope]),ets:delete(T).
 auth(<<"v2_resource.authorize">>,C)->
-    [{<<"queues">>,Params}|_]=cb_context:req_nouns(C),
-    put_state(permits,[Params|state(permits)]),
+    [{Resource,Params}|_]=cb_context:req_nouns(C),
+    put_state(resource_permits,[{Resource,Params}|state(resource_permits)]),
+    case Resource of <<"queues">>->put_state(permits,[Params|state(permits)]);_->ok end,
     case lists:member(<<"live">>,Params) of
         true->ok;
         false->?assertEqual([],kz_json:to_proplist(cb_context:query_string(C))),
@@ -80,11 +92,13 @@ auth(<<"v2_resource.authorize">>,C)->
                ?assertEqual(?A,cb_context:account_id(C))
     end,
     case state(auth_result) of
-        normal->case state(denied)=:=Params of true->[false]; false->[true] end;
+        normal->case state(denied)=:=Params orelse state(denied)=:={Resource,Params} of true->[false]; false->[true] end;
         Other->Other
     end;
 auth(<<"v2_resource.authorize.queues">>,[_|_])->[];
+auth(<<"v2_resource.authorize.agents">>,[_|_])->[];
 auth(<<"v2_resource.allowed_scopes.queues">>,<<"cb_user_auth">>)->[[<<"fixture:queues">>]];
+auth(<<"v2_resource.allowed_scopes.agents">>,<<"cb_user_auth">>)->[[<<"fixture:queues">>]];
 auth(Event,_)->error({unexpected_auth_event,Event}).
 broker(Req,Publish,Until,3000)->
     bump(broker_calls),?assert(is_function(Publish,1)),?assert(is_function(Until,1)),
@@ -111,6 +125,9 @@ broker(Req,Publish,Until,3000)->
 public_route_test_()->{setup,fun setup/0,fun teardown/1,fun(_)->[
     {"real overview and detail routes, no-store and no replica summation",fun public_success/0},
     {"detail call rows, bounded truncation and unknown versus empty",fun detail_calls/0},
+    {"runtime agent observations share the authorized snapshot request",fun detail_agents/0},
+    {"embedded roster and agent permissions fail closed before broker",fun agent_authorization/0},
+    {"malformed or foreign roster documents cannot enter runtime scope",fun agent_roster_scope/0},
     {"bounded catalog pagination and lookahead permissions",fun pagination/0},
     {"auth, tenant DB, underlying stats and queue permissions",fun authorization/0},
     {"unsupported queries fail before catalog or broker",fun bad_queries/0},
@@ -145,6 +162,41 @@ public_success()->
     ?assertEqual(null,val(<<"handled_at">>,First)),
     ?assertEqual(5,length(kz_json:to_proplist(First))),
     ?assert(abs(val(<<"entered_at">>,First)-(now_s()-?EPOCH-100))<5).
+detail_agents()->
+    reset(),D=cb_context:resp_data(get(?Q,j([]))),A=val(<<"agents">>,D),
+    ?assertEqual(1,state(roster_calls)),?assertEqual(1,state(broker_calls)),
+    ?assertEqual(true,kz_json:get_value([<<"capabilities">>,<<"agent_runtime">>],D)),
+    ?assertEqual(true,val(<<"runtime_complete">>,A)),
+    [R]=val(<<"rows">>,A),?assertEqual(?U,val(<<"agent_id">>,R)),
+    ?assertEqual(<<"Live Agent">>,val(<<"name">>,R)),
+    ?assertEqual(true,val(<<"queue_member">>,R)),?assertEqual(<<"ready">>,val(<<"state">>,R)),
+    ?assertEqual(undefined,val(<<"instance">>,R)),
+    ?assertEqual(false,val(<<"endpoint_reachability_verified">>,A)),
+    [begin reset(),put_state(agent_mode,Mode),AD=val(<<"agents">>,cb_context:resp_data(get(?Q,j([])))),
+        ?assertEqual(false,val(<<"runtime_complete">>,AD)),[AR]=val(<<"rows">>,AD),
+        ?assertEqual(false,val(<<"observed">>,AR)),?assertEqual(null,val(<<"queue_member">>,AR)),
+        ?assertEqual(Reason,val(<<"reason">>,AR)) end ||
+        {Mode,Reason}<-[{conflict,<<"inconsistent_sources">>},{timeout,<<"source_unavailable">>},
+            {absent,<<"not_observed">>}]],
+    reset(),put_state(broker_mode,timeout),Unknown=val(<<"agents">>,cb_context:resp_data(get(?Q,j([])))),
+    ?assertEqual(null,val(<<"observation_started">>,Unknown)),
+    reset(),put_state(agent_docs,[]),Empty=val(<<"agents">>,cb_context:resp_data(get(?Q,j([])))),
+    ?assertEqual([],val(<<"rows">>,Empty)),?assertEqual(true,val(<<"runtime_complete">>,Empty)),
+    reset(),Overview=cb_context:resp_data(get(undefined,j([]))),
+    ?assertEqual(null,val(<<"agents">>,Overview)),?assertEqual(0,state(roster_calls)).
+agent_authorization()->
+    [begin reset(),put_state(denied,Deny),error_code(403,get(?Q,j([]))),
+        ?assertEqual(0,state(broker_calls)) end || Deny<-[
+        {<<"queues">>,[?Q,<<"roster">>]},
+        {<<"agents">>,[?U]},{<<"agents">>,[?U,<<"status">>]}]].
+agent_roster_scope()->
+    [begin reset(),put_state(agent_docs,[D]),error_code(503,get(?Q,j([]))),
+        ?assertEqual(0,state(broker_calls)) end || D<-[
+        kz_json:set_value(<<"pvt_account_id">>,?Q3,agent_doc()),
+        kz_json:set_value(<<"pvt_type">>,<<"queue">>,agent_doc()),
+        kz_json:set_value(<<"pvt_deleted">>,true,agent_doc()),
+        kz_json:set_value(<<"queues">>,[?Q2],agent_doc())]],
+    reset(),put_state(agent_docs,[agent_doc(),agent_doc()]),error_code(503,get(?Q,j([]))).
 detail_calls()->
     [begin reset(),put_state(broker_mode,Mode),R=get(?Q,j([])),
         ?assertEqual(success,cb_context:resp_status(R)),D=cb_context:resp_data(R),
@@ -252,7 +304,7 @@ reply(Req,Node,Inc,N,AsOf,Wait,Complete)->
             {<<"completion_reason">>,case Complete of true-> <<"exhausted">>; false-> <<"scan_limit">> end},
             {<<"observation_started">>,props:get_value(<<"To">>,Req)},{<<"observation_finished">>,AsOf}])},
         {<<"queues">>,Queues}]),
-    S=case props:get_value(<<"Include-Calls">>,Req) of
+    SCalls=case props:get_value(<<"Include-Calls">>,Req) of
         true ->
             [Selected]=props:get_value(<<"Queue-IDs">>,Req),
             Rows=[j([{<<"call_id">>,<<"active-",(integer_to_binary(100000+I))/binary>>},
@@ -264,11 +316,30 @@ reply(Req,Node,Inc,N,AsOf,Wait,Complete)->
                 {<<"atomic_snapshot">>,false}]),S0);
         _ -> S0
     end,
+    S=case props:get_value(<<"Agent-IDs">>,Req) of
+        undefined -> SCalls;
+        AgentIds ->
+            [SelectedQueue]=props:get_value(<<"Queue-IDs">>,Req),
+            Mode=state(agent_mode),
+            AgentRows=[agent_observation(Id,Node,Mode) || Id<-AgentIds],
+            Observation=acdc_dashboard_agent_codec:encode(#{account_id=>?A,queue_id=>SelectedQueue,
+                observation_started=>AsOf,observation_finished=>AsOf,rows=>AgentRows}),
+            kz_json:set_value(<<"agents">>,Observation,SCalls)
+    end,
     Props=[{<<"Status">>,<<"ok">>},{<<"Snapshot">>,S},{<<"Source-ID">>,source_id(Node)},
         {<<"Source-Incarnation">>,incarnation(Inc)},{<<"Event-Category">>,<<"acdc_dashboard">>},
         {<<"Event-Name">>,<<"snapshot_resp">>},{<<"App-Name">>,<<"test">>},{<<"App-Version">>,<<"1">>}|Req],
     {ok,Encoded}=kapi_acdc_dashboard:snapshot_resp(Props),R=kz_json:decode(iolist_to_binary(Encoded)),
     ?assert(kapi_acdc_dashboard:snapshot_resp_v(R)),R.
+agent_observation(Id,Node,Mode)->
+    Base=#{agent_id=>Id,observed=>false,member=>null,state=>null,reason=>not_observed,instance=>null},
+    case {Mode,Node} of
+        {absent,_}->Base;
+        {timeout,?N2}->Base#{reason=>timeout};
+        {conflict,?N2}->Base#{observed=>true,member=>false,state=><<"paused">>,reason=>observed,instance=>incarnation(2)};
+        {_,?N1}->Base#{observed=>true,member=>true,state=><<"ready">>,reason=>observed,instance=>incarnation(1)};
+        _->Base
+    end.
 pure_request()->Now=now_s()-5,[{<<"Account-ID">>,?A},{<<"Queue-IDs">>,[?Q]},
     {<<"From">>,Now-3600},{<<"To">>,Now},{<<"Msg-ID">>,<<"pure-correlation">>}].
 assess(Responses,Req,Expected)->cb_acdc_live:assess({ok,Responses},Req,lists:sort(Expected),lists:sort(Expected)).

@@ -21,7 +21,8 @@ auth_exit() {
 }
 trap auth_exit EXIT
 auth_sources=(applications/acdc/src/acdc_live_auth.erl applications/acdc/src/cb_acdc_live.erl
-    applications/acdc/src/cb_queues.erl applications/crossbar/src/modules/cb_token_auth.erl
+    applications/acdc/src/cb_queues.erl applications/acdc/src/cb_agents.erl
+    applications/crossbar/src/modules/cb_token_auth.erl
     applications/crossbar/src/crossbar_bindings.erl applications/crossbar/src/cb_context.erl
     applications/crossbar/src/api_util.erl applications/crossbar/src/crossbar_util.erl
     core/kazoo_bindings/src/kazoo_bindings.erl core/kazoo_bindings/src/kazoo_bindings_rt.erl
@@ -50,6 +51,6 @@ erl -noshell -pa "$auth_output" -eval '
         Expected=code:which(M),
         Options=proplists:get_value(options,M:module_info(compile),[]),
         false=lists:any(fun({d,'\''TEST'\''})->true;({d,'\''TEST'\'',_})->true;(export_all)->true;(_)->false end,Options)
-    end,[acdc_live_auth,cb_acdc_live,cb_token_auth,crossbar_bindings,kazoo_bindings,cb_context]),
+    end,[acdc_live_auth,cb_acdc_live,cb_agents,cb_token_auth,crossbar_bindings,kazoo_bindings,cb_context]),
     case eunit:test(acdc_live_auth_tests,[verbose]) of ok->halt(0);_->halt(1) end.' \
     | tee "$auth_output/eunit.log"

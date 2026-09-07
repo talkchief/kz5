@@ -32,7 +32,7 @@ function snapshot() {
             metrics: {current_waiting: 0, current_handled: 0, max_current_wait_seconds: null, records_entered: 0,
                 waiting_in_cohort: 0, handled_in_cohort: 0, processed_in_cohort: 0, abandoned_in_cohort: 0,
                 average_answered_wait_seconds: null, average_processed_talk_seconds: null}}],
-        calls: null, pagination: {page_size: 50, next_start_queue_id: null, has_more: false},
+        calls: null, agents: null, pagination: {page_size: 50, next_start_queue_id: null, has_more: false},
         source: {coverage: 'observed_replicas', all_known_sources_responded: true, consistent: true,
             atomic_snapshot: false, status: 'available', reason: 'consensus',
             observation_started_at: 1700003599, observation_finished_at: 1700003600},
@@ -44,6 +44,15 @@ function calls() {
 }
 function callRow() {
     return {call_id: 'synthetic-call', queue_id: queue, status: 'waiting', entered_at: 1700000000, handled_at: null};
+}
+function agents() {
+    return {limit: 200, roster_complete: true, truncated: false, runtime_complete: true,
+        endpoint_reachability_verified: false, observation_started: 1700003599,
+        observation_finished: 1700003600, rows: []};
+}
+function agentRow() {
+    return {agent_id: '2'.repeat(32), name: 'Synthetic Agent', observed: true,
+        queue_member: true, state: 'ready', reason: 'observed'};
 }
 async function main() {
     group('two GET routes use account token security, bounded overview cursor and query-free detail', () => {
@@ -116,9 +125,9 @@ async function main() {
         rejects(sourceTest, {...source, atomic_snapshot: true}); rejects(sourceTest, {...source, coverage: 'cluster_complete'});
         rejects(sourceTest, {...source, reason: 'invented'});
         const capTest = validate('QueueLiveCapabilities'), caps = snapshot().capabilities; accepts(capTest, caps);
-        accepts(capTest, {...caps, live_call_details: true});
+        accepts(capTest, {...caps, live_call_details: true}); accepts(capTest, {...caps, agent_runtime: true});
         for (const key of Object.keys(caps)) {
-            if (key !== 'live_call_details') rejects(capTest, {...caps, [key]: true});
+            if (!['live_call_details', 'agent_runtime'].includes(key)) rejects(capTest, {...caps, [key]: true});
             rejects(capTest, {...caps, [key]: null});
             const missing = {...caps}; delete missing[key]; rejects(capTest, missing);
         }
@@ -137,13 +146,18 @@ async function main() {
     });
     group('selected detail has exactly one queue, page_size one and no cursor', () => {
         const test = validate('QueueLiveDetailEnvelope'), data = snapshot();
-        data.pagination.page_size = 1; data.calls = calls(); data.capabilities.live_call_details = true;
+        data.pagination.page_size = 1; data.calls = calls(); data.agents = agents();
+        data.capabilities.live_call_details = true; data.capabilities.agent_runtime = true;
         accepts(test, {data});
         rejects(test, {data: {...data, calls: null}});
+        rejects(test, {data: {...data, agents: null}});
+        rejects(test, {data: {...data, capabilities: {...data.capabilities, agent_runtime: false}}});
         rejects(test, {data: {...data, capabilities: {...data.capabilities, live_call_details: false}}});
         rejects(validate('QueueLiveEnvelope'), {data});
         const overview = snapshot();
         rejects(validate('QueueLiveEnvelope'), {data: {...overview, calls: calls()}});
+        rejects(validate('QueueLiveEnvelope'), {data: {...overview, agents: agents()}});
+        rejects(validate('QueueLiveEnvelope'), {data: {...overview, capabilities: {...overview.capabilities, agent_runtime: true}}});
         rejects(validate('QueueLiveEnvelope'), {data: {...overview, capabilities: {...overview.capabilities, live_call_details: true}}});
         rejects(test, {data: {...data, queues: []}}); rejects(test, {data: {...data, queues: [data.queues[0], data.queues[0]]}});
         rejects(test, {data: {...data, pagination: {...data.pagination, page_size: 50}}});
@@ -183,8 +197,47 @@ async function main() {
         for (const key of Object.keys(complete)) { const missing = {...complete}; delete missing[key]; rejects(test, missing); }
         assert(schemas.QueueLiveCalls.description.includes('Runtime invariants'));
         assert(schemas.QueueLiveCalls.description.includes('NOT actual queue position'));
-        const data = snapshot(); data.pagination.page_size = 1; data.calls = unavailable; data.capabilities.live_call_details = true;
+        const data = snapshot(); data.pagination.page_size = 1; data.calls = unavailable; data.agents = agents();
+        data.capabilities.live_call_details = true; data.capabilities.agent_runtime = true;
         accepts(validate('QueueLiveDetailEnvelope'), {data});
+    });
+    group('selected roster rows expose only authorized identity/name and eight observed states or explicit unknowns', () => {
+        const test = validate('QueueLiveAgent'), row = agentRow(); accepts(test, row);
+        for (const state of ['wait', 'sync', 'ready', 'ringing', 'answered', 'wrapup', 'paused', 'outbound']) {
+            accepts(test, {...row, state}); accepts(test, {...row, state, queue_member: false});
+        }
+        for (const reason of ['not_observed', 'inconsistent_sources', 'source_unavailable']) {
+            accepts(test, {...row, observed: false, queue_member: null, state: null, reason});
+            rejects(test, {...row, reason});
+        }
+        for (const state of ['logged_out', 'invented', '', null]) rejects(test, {...row, state});
+        for (const key of Object.keys(row)) { const missing = {...row}; delete missing[key]; rejects(test, missing); }
+        for (const key of ['pid', 'instance', 'device_id', 'queues', 'caller_id_name', 'eligible']) rejects(test, {...row, [key]: 'private'});
+        for (const name of ['', 'x'.repeat(257), 'bad\nname', null]) rejects(test, {...row, name});
+        rejects(test, {...row, agent_id: 'foreign'}); rejects(test, {...row, observed: null});
+        rejects(test, {...row, observed: false}); rejects(test, {...row, queue_member: null});
+    });
+    group('roster truncation, runtime completeness and unknown source timestamps remain separate', () => {
+        const test = validate('QueueLiveAgents'), base = agents(), row = agentRow(); accepts(test, base);
+        accepts(test, {...base, rows: [row]});
+        const unknown = {...row, observed: false, queue_member: null, state: null, reason: 'source_unavailable'};
+        const unavailable = {...base, runtime_complete: false, observation_started: null, observation_finished: null};
+        accepts(test, unavailable); accepts(test, {...unavailable, rows: [unknown]});
+        rejects(test, {...unavailable, runtime_complete: true}); rejects(test, {...unavailable, rows: [row]});
+        rejects(test, {...unavailable, rows: [{...unknown, reason: 'not_observed'}]});
+        const mixed = {...base, runtime_complete: false, rows: [unknown]}; accepts(test, mixed);
+        rejects(test, {...mixed, runtime_complete: true});
+        rejects(test, {...base, observation_started: null}); rejects(test, {...base, observation_finished: null});
+        const rows = Array.from({length: 200}, (_, i) => ({...row, agent_id: i.toString(16).padStart(32, '0')}));
+        const capped = {...base, roster_complete: false, truncated: true, runtime_complete: false, rows};
+        accepts(test, capped); rejects(test, {...capped, runtime_complete: true});
+        rejects(test, {...capped, rows: rows.slice(0, 199)}); rejects(test, {...capped, roster_complete: true});
+        rejects(test, {...base, roster_complete: false}); rejects(test, {...base, limit: 201});
+        rejects(test, {...base, endpoint_reachability_verified: true}); rejects(test, {...base, rows: [...rows, row]});
+        for (const key of Object.keys(base)) { const missing = {...base}; delete missing[key]; rejects(test, missing); }
+        for (const key of ['ready_count', 'eligible_agents', 'source_ids', 'revision']) rejects(test, {...base, [key]: 0});
+        assert(schemas.QueueLiveAgents.description.includes('including lookahead'));
+        assert(schemas.QueueLiveAgent.description.includes('ready-to-ring eligibility'));
     });
     group('handler cache policy and explicit HTTP errors do not change pre-handler authentication claims', () => {
         for (const url of [OVERVIEW, DETAIL]) {
@@ -201,8 +254,10 @@ async function main() {
         assert.deepEqual(target.components.schemas.Preserved, {type: 'string'});
         for (const input of result.inputs) assert.equal(input.sha256, hash(fs.readFileSync(path.join(root, input.file))));
         assert(result.inputs.some(input => input.file === 'scripts/api-docs-queue-live.cjs'));
-        assert.equal(result.inputs.length, 9);
+        assert.equal(result.inputs.length, 12);
         assert(result.inputs.some(input => input.file === 'applications/acdc/src/acdc_live_auth.erl'));
+        assert(result.inputs.some(input => input.file === 'applications/acdc/src/cb_acdc_live_agents.erl'));
+        assert(result.inputs.some(input => input.file === 'applications/acdc/priv/couchdb/views/queues.json'));
         assert.equal(target.paths[DETAIL].get['x-runtime-source-sha256'], hash(fs.readFileSync(path.join(root, 'applications/acdc/src/cb_acdc_live.erl'))));
         assert.throws(() => applyQueueLive({spec: target, root}), /already exists/);
     });
@@ -214,7 +269,12 @@ async function main() {
             ['cb_acdc_live.erl', 'acdc_live_auth:authorize(C)'],
             ['acdc_live_auth.erl', 'andalso scopes(C,Resource).'],
             ['acdc_live_auth.erl', 'kz_auth_scope:all(cb_context:auth_token(C),Required)'],
-            ['cb_acdc_live.erl', '{<<"agent_runtime">>,false},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}'],
+            ['cb_acdc_live.erl', '{<<"agent_runtime">>,IncludeCalls},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}'],
+            ['cb_acdc_live_agents.erl', 'acdc_live_auth:permit(C,<<"agents">>,[I,<<"status">>])'],
+            ['cb_acdc_live_agents.erl', 'selected(val(<<"queues">>,D),Q)'],
+            ['cb_acdc_live_agents.erl', 'Start-?EPOCH,Finish-?EPOCH,true'],
+            ['cb_acdc_live_agents.erl', 'runtime(null,_) -> {#{},null,null,false}'],
+            ['cb_acdc_live_agents.erl', 'Parts=[V || K<-[<<"first_name">>,<<"last_name">>]'],
             ['cb_acdc_live.erl', '{<<"rows">>,[public_call(R) || R<-val(<<"rows">>,C)]}'],
             ['cb_acdc_live.erl', '{<<"call_id">>,val(<<"call_id">>,R)},{<<"queue_id">>,val(<<"queue_id">>,R)}'],
             ['cb_acdc_live.erl', 'unix(N) when is_integer(N) -> N-?EPOCH'],

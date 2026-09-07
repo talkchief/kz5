@@ -66,7 +66,61 @@ malformed_raw_request_terms_test() ->
     Props=kz_json:to_proplist(request()),
     Raw=[{<<"Queue-IDs">>,[?Q|bad_tail]}|proplists:delete(<<"Queue-IDs">>,Props)],
     ?assertNot(kapi_acdc_dashboard:snapshot_req_v(Raw)),
-    [?assertNot(kapi_acdc_dashboard:snapshot_req_v(V)) || V<-[undefined,42,[bad]]].
+    [?assertNot(kapi_acdc_dashboard:snapshot_req_v(V)) || V<-[undefined,42,[bad],[],kz_json:new()]].
+
+agent_scope_contract_test() ->
+    Id=binary:copy(<<"a">>,32),
+    [begin R=kz_json:set_value(<<"Agent-IDs">>,Ids,detail_request()),
+        ?assert(kapi_acdc_dashboard:snapshot_req_v(R)),
+        {ok,Wire}=kapi_acdc_dashboard:snapshot_req(R),
+        ?assertEqual(Ids,kz_json:get_value(<<"Agent-IDs">>,kz_json:decode(iolist_to_binary(Wire))))
+     end || Ids<-[[],[Id]]],
+    [begin R=kz_json:set_value(<<"Agent-IDs">>,Ids,detail_request(),#{keep_null=>true}),
+        ?assertNot(kapi_acdc_dashboard:snapshot_req_v(R))
+     end || Ids<-[null,[<<"bad">>],[Id,Id],[Id,?Q],lists:duplicate(201,Id),false]],
+    ?assertNot(kapi_acdc_dashboard:snapshot_req_v(kz_json:set_values([
+        {<<"Agent-IDs">>,[]},{<<"Include-Calls">>,false},{<<"Queue-IDs">>,[?Q,?Q2]}],request()))).
+
+agent_observation_transport_test() -> with_source(fun(_)->
+    Id=binary:copy(<<"a">>,32),
+    %% A deliberately absent local registry is unknown, never logged out.
+    Req=kz_json:set_value(<<"Agent-IDs">>,[Id],detail_request()),
+    R=response(Req,self()),J=kz_json:get_value([<<"Snapshot">>,<<"agents">>],R),
+    ?assertEqual([Id],kz_json:get_value(<<"Agent-IDs">>,R)),
+    [Row]=kz_json:get_value(<<"rows">>,J),
+    ?assertEqual(false,kz_json:get_value(<<"observed">>,Row)),
+    ?assertEqual(null,kz_json:get_value(<<"member">>,Row)),
+    ?assertEqual(null,kz_json:get_value(<<"state">>,Row)),
+    [begin Bad=kz_json:set_value([<<"Snapshot">>,<<"agents">>,K],V,R,#{keep_null=>true}),
+        ?assertNot(kapi_acdc_dashboard:snapshot_resp_v(Bad))
+     end || {K,V}<-[{<<"account_id">>,?Q2},{<<"queue_id">>,?Q2},{<<"limit">>,201},
+        {<<"endpoint_reachability_verified">>,true},{<<"atomic_snapshot">>,true},
+        {<<"observation_started">>,1},{<<"rows">>,[Row,Row]},{<<"private">>,<<"secret">>}]],
+    ?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:delete_key(<<"Agent-IDs">>,R))),
+    ?assertNot(kapi_acdc_dashboard:snapshot_resp_v(kz_json:delete_key([<<"Snapshot">>,<<"agents">>],R)))
+end).
+
+agent_codec_merge_test() ->
+    Id=binary:copy(<<"a">>,32),Now=now_s(),
+    Unknown=#{agent_id=>Id,observed=>false,member=>null,state=>null,reason=>not_observed,instance=>null},
+    Ready=#{agent_id=>Id,observed=>true,member=>true,state=><<"ready">>,reason=>observed,
+        instance=>binary:copy(<<"b">>,64)},
+    Snap=fun(Row)->acdc_dashboard_agent_codec:encode(#{account_id=>?A,queue_id=>?Q,
+        observation_started=>Now,observation_finished=>Now,rows=>[Row]}) end,
+    U=Snap(Unknown),Yes=Snap(Ready),No=Snap(Ready#{member=>false}),
+    lists:foreach(fun(J)->?assert(acdc_dashboard_agent_codec:valid(J,?A,?Q,[Id],Now)) end,[U,Yes,No]),
+    [Combined]=acdc_dashboard_agent_codec:combine([Id],[U,Yes]),
+    ?assertEqual(true,kz_json:get_value(<<"queue_member">>,Combined)),
+    ?assertEqual(undefined,kz_json:get_value(<<"instance">>,Combined)),
+    [Conflict]=acdc_dashboard_agent_codec:combine([Id],[Yes,No]),
+    ?assertEqual(<<"inconsistent_sources">>,kz_json:get_value(<<"reason">>,Conflict)),
+    [Missing]=acdc_dashboard_agent_codec:combine([Id],[U,U]),
+    ?assertEqual(<<"not_observed">>,kz_json:get_value(<<"reason">>,Missing)),
+    [Timeout]=acdc_dashboard_agent_codec:combine([Id],[Yes,Snap(Unknown#{reason=>timeout})]),
+    ?assertEqual(<<"source_unavailable">>,kz_json:get_value(<<"reason">>,Timeout)),
+    [begin Bad=kz_json:set_value([<<"rows">>],[kz_json:set_value(K,V,hd(kz_json:get_value(<<"rows">>,Yes)))],Yes),
+        ?assertNot(acdc_dashboard_agent_codec:valid(Bad,?A,?Q,[Id],Now))
+     end || {K,V}<-[{<<"state">>,<<"logged_out">>},{<<"member">>,1},{<<"instance">>,<<"raw-pid">>}]].
 
 with_source(F) ->
     Parent=self(), T=ets:new(acdc_stats_call,[named_table,protected,{keypos,#call_stat.id}]),
@@ -302,7 +356,12 @@ topic_binding_and_publication_test() ->
         ?assertEqual(1,meck:num_calls(kz_amqp_util,callmgr_publish,'_'))
     after meck:unload(kz_amqp_util) end.
 
-native_federation_binding_and_reply_routing_test() ->
+native_federation_binding_and_reply_routing_test_() ->
+    %% Native gen_listener/kz_amqp_util passthrough mock compilation can exceed
+    %% EUnit's default5s under the guard's50%CPU limit. Protocol receive and
+    %% production deadlines are unchanged; only this fixture setup allowance.
+    {timeout,15,fun native_federation_binding_and_reply_routing/0}.
+native_federation_binding_and_reply_routing() ->
     Parent=self(),
     meck:new(gen_listener,[non_strict,no_link]),
     meck:new(amqp,[non_strict,no_link]),
@@ -354,3 +413,75 @@ native_federation_binding_and_reply_routing_test() ->
                       <<"consumer://<0.1.0>/",Reply/binary,"x">>,<<"consumer://<0.1.0>/nested/reply">>]]
         after 1000->error(federation_not_forwarded) end
     after meck:unload(gen_listener),meck:unload(amqp),meck:unload(kz_amqp_util) end.
+
+agent_collection_and_encoding_failure_response_test() -> with_source(fun(T)->
+    ets:insert(T,waiting()),
+    Req=kz_json:set_value(<<"Agent-IDs">>,[],detail_request()),
+    meck:new(acdc_dashboard_agents,[non_strict,no_link]),
+    try
+        %% Both the provider exception and the real encoder's missing-field
+        %% exception must become a bounded error response, not a responder exit.
+        lists:foreach(fun(Result)->
+            meck:expect(acdc_dashboard_agents,collect,fun(?A,?Q,[])->
+                case Result of fail->error(private_agent_failure); _->Result end
+            end),
+            R=response(Req,self()),assert_agent_error(R,Req,<<"collection_failed">>),
+            ?assertEqual(nomatch,binary:match(iolist_to_binary(kz_json:encode(R)),<<"private_agent_failure">>)),
+            ?assertEqual(false,ets:info(T,safe_fixed))
+        end,[fail,{ok,#{}}])
+    after meck:unload(acdc_dashboard_agents) end
+end).
+
+agent_collection_stats_incarnation_change_test() -> with_source(fun(T)->
+    Parent=self(),ets:insert(T,waiting()),
+    Req=kz_json:set_value(<<"Agent-IDs">>,[],detail_request()),
+    Other=spawn(fun()->receive stop->ok end end),
+    meck:new(acdc_dashboard_agents,[non_strict,no_link]),
+    try
+        meck:expect(acdc_dashboard_agents,collect,fun(?A,?Q,[])->
+            %% Source was valid for the call-table pass, but the stats child
+            %% incarnation changed during the subsequent agent observation.
+            meck:expect(acdc_stats_sup,stats_srv,fun()->{ok,Other} end),
+            {ok,empty_agent_observation()}
+        end),
+        R=response(Req,Parent),assert_agent_error(R,Req,<<"source_changed">>),
+        ?assertEqual(Parent,ets:info(T,owner)),?assertEqual(false,ets:info(T,safe_fixed))
+    after
+        meck:unload(acdc_dashboard_agents),
+        Mon=monitor(process,Other),Other!stop,
+        receive {'DOWN',Mon,process,Other,_}->ok after 1000->exit(Other,kill) end
+    end
+end).
+
+agent_collection_logical_table_replacement_test() -> with_source(fun(T)->
+    ets:insert(T,waiting()),OldTid=ets:whereis(T),
+    Req=kz_json:set_value(<<"Agent-IDs">>,[],detail_request()),
+    meck:new(acdc_dashboard_agents,[non_strict,no_link]),
+    try
+        meck:expect(acdc_dashboard_agents,collect,fun(?A,?Q,[])->
+            %% Keeping the old tid alive with the same owner defeats a check
+            %% of owner alone. The logical source must still resolve that tid.
+            acdc_stats_call_before_agents=ets:rename(T,acdc_stats_call_before_agents),
+            acdc_stats_call=ets:new(acdc_stats_call,[named_table,protected,{keypos,#call_stat.id}]),
+            {ok,empty_agent_observation()}
+        end),
+        R=response(Req,self()),assert_agent_error(R,Req,<<"source_changed">>),
+        ?assertEqual(self(),ets:info(OldTid,owner)),
+        ?assertNotEqual(OldTid,ets:whereis(acdc_stats_call)),
+        ?assertEqual(false,ets:info(OldTid,safe_fixed))
+    after
+        meck:unload(acdc_dashboard_agents),
+        case ets:whereis(acdc_stats_call_before_agents) of
+            undefined->ok; Renamed->ets:delete(Renamed)
+        end
+    end
+end).
+
+empty_agent_observation() ->
+    #{account_id=>?A,queue_id=>?Q,observation_started=>now_s(),observation_finished=>now_s(),rows=>[]}.
+assert_agent_error(R,Req,Code) ->
+    ?assertEqual(<<"error">>,kz_json:get_value(<<"Status">>,R)),
+    ?assertEqual(Code,kz_json:get_value(<<"Error-Code">>,R)),
+    ?assertEqual(undefined,kz_json:get_value(<<"Snapshot">>,R)),
+    [?assertEqual(kz_json:get_value(K,Req),kz_json:get_value(K,R)) ||
+        K<-[<<"Account-ID">>,<<"Queue-IDs">>,<<"Agent-IDs">>,<<"Include-Calls">>,<<"Msg-ID">>,<<"From">>,<<"To">>]].

@@ -19,6 +19,8 @@ dashboard_exit() {
 }
 trap dashboard_exit EXIT
 dashboard_sources=(applications/acdc/src/kapi_acdc_dashboard.erl
+    applications/acdc/src/acdc_dashboard_agents.erl
+    applications/acdc/src/acdc_dashboard_agent_codec.erl
     applications/acdc/src/acdc_dashboard_snapshot.erl
     applications/acdc/src/acdc_dashboard_collector.erl
     applications/acdc/src/acdc_dashboard_projection.erl
@@ -32,7 +34,7 @@ dashboard_inputs=("${dashboard_sources[@]}"
     core/kazoo_amqp/src/kz_amqp_channel.erl core/kazoo_apps/src/kz_amqp_worker.erl)
 # The resource guard uses a minimal PATH. Enumeration failure must abort,
 # never disappear in a process substitution and silently omit header pins.
-/usr/bin/find applications/acdc/src core/kazoo_stdlib/include core/kazoo_amqp/include \
+/usr/bin/find applications/acdc/src applications/acdc/include core/kazoo_stdlib/include core/kazoo_amqp/include \
     -type f -name '*.hrl' > "$dashboard_amqp_dir/headers.list"
 LC_ALL=C /usr/bin/sort -o "$dashboard_amqp_dir/headers.list" "$dashboard_amqp_dir/headers.list"
 while IFS= read -r dashboard_header; do dashboard_inputs+=("$dashboard_header"); done < "$dashboard_amqp_dir/headers.list"

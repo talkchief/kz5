@@ -9,7 +9,7 @@
 %%% Provider calls are synchronous. Callers must impose their own worker/time
 %%% budget; do not invoke this inside a latency-sensitive mutation mailbox.
 -module(acdc_live_auth).
--export([authorize/1, permit/2, fresh_token/3]).
+-export([authorize/1, permit/2, permit/3, fresh_token/3]).
 -include_lib("crossbar/src/crossbar.hrl").
 
 %% Preserve the existing public route's global-or-resource authorization and
@@ -24,9 +24,15 @@ authorize(C) ->
 
 -spec permit(cb_context:context(), [binary()]) -> ok.
 permit(C,Params) ->
+    permit(C,<<"queues">>,Params).
+
+-spec permit(cb_context:context(), binary(), [binary()]) -> ok.
+permit(C,Resource,Params) ->
     Account=cb_context:account_id(C),
-    Sub=cb_context:setters(C,[{fun cb_context:set_req_nouns/2,[{<<"queues">>,Params},{<<"accounts">>,[Account]}]},
-        {fun cb_context:set_raw_path/2,queue_path(cb_context:api_version(C),Account,Params)},
+    Path=iolist_to_binary([<<"/">>,cb_context:api_version(C),<<"/accounts/">>,Account,
+        <<"/">>,Resource,[[<<"/">>,P]||P<-Params]]),
+    Sub=cb_context:setters(C,[{fun cb_context:set_req_nouns/2,[{Resource,Params},{<<"accounts">>,[Account]}]},
+        {fun cb_context:set_raw_path/2,Path},
         {fun cb_context:set_req_verb/2,?HTTP_GET},{fun cb_context:set_query_string/2,kz_json:new()},
         {fun cb_context:set_resp_status/2,success},{fun cb_context:set_doc/2,kz_json:new()},
         {fun cb_context:set_req_data/2,kz_json:new()}]),

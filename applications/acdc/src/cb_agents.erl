@@ -32,7 +32,7 @@
 -module(cb_agents).
 
 -export([init/0
-        ,authorize/3
+        ,authorize/1, authorize/2, authorize/3
         ,allowed_methods/0, allowed_methods/1, allowed_methods/2
         ,resource_exists/0, resource_exists/1, resource_exists/2
         ,content_types_provided/1, content_types_provided/2, content_types_provided/3
@@ -79,6 +79,15 @@ init() ->
 %% allowed to access the resource, or false if not.
 %% @end
 %%------------------------------------------------------------------------------
+%% A normal read has no resource-specific grant or veto. Explicit abstention
+%% preserves global authorization without manufacturing undef/function_clause
+%% results that stricter embedded-resource callers must reject.
+-spec authorize(cb_context:context()) -> boolean().
+authorize(Context) -> read_authorization(Context).
+
+-spec authorize(cb_context:context(), path_token()) -> boolean().
+authorize(Context, _Id) -> read_authorization(Context).
+
 -spec authorize(cb_context:context(), path_token(), path_token()) -> boolean().
 authorize(Context, _, ?RESTART_PATH_TOKEN) ->
     case cb_context:is_superduper_admin(Context) of
@@ -86,6 +95,14 @@ authorize(Context, _, ?RESTART_PATH_TOKEN) ->
         'false' ->
             Context1 = cb_context:add_system_error('forbidden', Context),
             {'halt', Context1}
+    end;
+authorize(Context, _, ?STATUS_PATH_TOKEN) -> read_authorization(Context).
+
+-spec read_authorization(cb_context:context()) -> false.
+read_authorization(Context) ->
+    case cb_context:req_verb(Context) of
+        ?HTTP_GET -> false;
+        _ -> erlang:error(function_clause)
     end.
 
 %%------------------------------------------------------------------------------

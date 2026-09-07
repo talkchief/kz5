@@ -13,7 +13,7 @@
 -spec snapshot_req(kz_term:api_terms()) -> {ok, iolist()} | {error, string()}.
 snapshot_req(API) ->
     case snapshot_req_v(API) of
-        true -> kz_api:build_message(to_props(API), ?REQ, [<<"Include-Calls">>]);
+        true -> kz_api:build_message(to_props(API), ?REQ, [<<"Include-Calls">>,<<"Agent-IDs">>]);
         false -> {error, "Invalid dashboard snapshot request"}
     end.
 -spec snapshot_req_v(kz_term:api_terms()) -> boolean().
@@ -23,7 +23,7 @@ snapshot_req_v(API) ->
 -spec snapshot_resp(kz_term:api_terms()) -> {ok, iolist()} | {error, string()}.
 snapshot_resp(API) ->
     case snapshot_resp_v(API) of
-        true -> kz_api:build_message(to_props(API), ?RESP, [<<"Snapshot">>, <<"Error-Code">>, <<"Include-Calls">>]);
+        true -> kz_api:build_message(to_props(API), ?RESP, [<<"Snapshot">>, <<"Error-Code">>, <<"Include-Calls">>,<<"Agent-IDs">>]);
         false -> {error, "Invalid dashboard snapshot response"}
     end.
 -spec snapshot_resp_v(kz_term:api_terms()) -> boolean().
@@ -35,10 +35,11 @@ snapshot_resp_v(API) ->
 validate(API, Required, Name) ->
     try
         Props=to_props(API),
-        kz_api:validate(Props, Required, values(Name), []) andalso
+        Props=/=[] andalso kz_api:validate(Props, Required, values(Name), []) andalso
             hex(value(<<"Account-ID">>, Props), 32) andalso
             queue_ids(value(<<"Queue-IDs">>, Props), 100, #{}) andalso
             calls_scope(value(<<"Include-Calls">>, Props), value(<<"Queue-IDs">>, Props)) andalso
+            agents_scope(value(<<"Agent-IDs">>,Props),value(<<"Queue-IDs">>,Props)) andalso
             text(value(<<"Msg-ID">>, Props), 128) andalso
             window(value(<<"From">>, Props), value(<<"To">>, Props))
     catch _:_ -> false end.
@@ -55,6 +56,9 @@ calls_scope(undefined, _) -> true;
 calls_scope(false, _) -> true;
 calls_scope(true, [_]) -> true;
 calls_scope(_, _) -> false.
+agents_scope(undefined,_) -> true;
+agents_scope(Ids,[_]) -> acdc_dashboard_agent_codec:ids(Ids);
+agents_scope(_,_) -> false.
 response_body(API) ->
     case value(<<"Status">>, API) of
         <<"ok">> -> valid_snapshot(value(<<"Snapshot">>,API),API) andalso value(<<"Error-Code">>,API)=:=undefined;
@@ -66,7 +70,7 @@ valid_snapshot(S,API) ->
     try
         exact_object(S,[<<"version">>,<<"account_id">>,<<"as_of">>,<<"timestamp_unit">>,<<"identity_semantics">>,
             <<"distinct_visit_metrics_available">>,<<"agent_eligibility_available">>,<<"workforce_metrics_available">>,
-            <<"window">>,<<"source">>,<<"queues">>]++calls_keys(API)) andalso
+            <<"window">>,<<"source">>,<<"queues">>]++calls_keys(API)++agents_keys(API)) andalso
         value(<<"version">>,S)=:=1 andalso value(<<"account_id">>,S)=:=value(<<"Account-ID">>,API) andalso
         value(<<"timestamp_unit">>,S)=:= <<"kazoo_gregorian_seconds">> andalso
         value(<<"identity_semantics">>,S)=:= <<"call_queue_pair">> andalso
@@ -76,10 +80,19 @@ valid_snapshot(S,API) ->
         valid_window_object(value(<<"window">>,S),API) andalso
         valid_source(value(<<"source">>,S),value(<<"as_of">>,S),value(<<"To">>,API)) andalso
         valid_queues(value(<<"queues">>,S),value(<<"Queue-IDs">>,API),
-                     value(<<"exhausted">>,value(<<"source">>,S))) andalso valid_calls(S,API)
+                     value(<<"exhausted">>,value(<<"source">>,S))) andalso valid_calls(S,API) andalso valid_agents(S,API)
     catch _:_ -> false end.
 calls_keys(API) ->
     case value(<<"Include-Calls">>,API) of true -> [<<"active_calls">>]; _ -> [] end.
+agents_keys(API) ->
+    case value(<<"Agent-IDs">>,API) of undefined -> []; _ -> [<<"agents">>] end.
+valid_agents(S,API) ->
+    case value(<<"Agent-IDs">>,API) of
+        undefined -> true;
+        Ids -> [Q]=value(<<"Queue-IDs">>,API),
+            acdc_dashboard_agent_codec:valid(value(<<"agents">>,S),value(<<"Account-ID">>,API),
+                Q,Ids,value(<<"To">>,API))
+    end.
 
 valid_calls(S,API) ->
     case value(<<"Include-Calls">>,API) of

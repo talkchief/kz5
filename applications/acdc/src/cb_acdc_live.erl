@@ -29,17 +29,20 @@ get(Context, QueueId) ->
         Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
         Ids = [kz_doc:id(D) || D <- Page],
         IncludeCalls = QueueId =/= undefined,
-        {Metrics, Source, ActiveCalls} = snapshot(cb_context:account_id(Context), Ids, Now, IncludeCalls),
+        AgentScope = cb_acdc_live_agents:prepare(Context,QueueId),
+        AgentIds = case AgentScope of undefined -> undefined; _ -> maps:get(ids,AgentScope) end,
+        {Metrics, Source, ActiveCalls, RuntimeAgents} = snapshot(cb_context:account_id(Context), Ids, Now, IncludeCalls,AgentIds),
         ResponseTime = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
         Data = obj([{<<"version">>,1}, {<<"account_id">>,cb_context:account_id(Context)},
             {<<"generated_at">>,ResponseTime-?EPOCH},
             {<<"window">>,obj([{<<"from">>,Now-?EPOCH-3600},{<<"to">>,Now-?EPOCH},{<<"seconds">>,3600}])},
             {<<"queues">>,[public_queue(D, Metrics) || D <- Page]},
             {<<"calls">>,public_calls(IncludeCalls, ActiveCalls)},
+            {<<"agents">>,cb_acdc_live_agents:public(AgentScope,RuntimeAgents)},
             {<<"pagination">>,obj([{<<"page_size">>,Size},{<<"next_start_queue_id">>,Next},{<<"has_more">>,Next=/=null}])},
             {<<"source">>,Source},
             {<<"capabilities">>,obj([{<<"live_call_details">>,IncludeCalls},
-                {<<"agent_runtime">>,false},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}])}]),
+                {<<"agent_runtime">>,IncludeCalls},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}])}]),
         crossbar_util:response(Data, Safe)
     catch
         throw:{live_error, Code, Message} -> crossbar_util:response(error, Message, Code, Safe);
@@ -94,24 +97,48 @@ public_queue(D, Metrics) ->
 safe_text(B,_) when is_binary(B),byte_size(B)>0,byte_size(B)=<256 -> B;
 safe_text(_,Default) -> Default.
 
-snapshot(_,[],_,_) -> {#{},source(<<"empty_scope">>,true,true,[]),null};
-snapshot(Account,Ids,Now,IncludeCalls) ->
+snapshot(_,[],_,_,_) -> {#{},source(<<"empty_scope">>,true,true,[]),null,null};
+snapshot(Account,Ids,Now,IncludeCalls,AgentIds) ->
     Expected = sources(),
     Req = [{<<"Account-ID">>,Account},{<<"Queue-IDs">>,Ids},{<<"From">>,Now-3600},
         {<<"To">>,Now},{<<"Include-Calls">>,IncludeCalls},{<<"Msg-ID">>,kz_binary:rand_hex(16)} |
-        kz_api:default_headers(<<"acdc">>,<<"1.0">>)],
+        kz_api:default_headers(<<"acdc">>,<<"1.0">>)] ++
+        case AgentIds of undefined -> []; _ -> [{<<"Agent-IDs">>,AgentIds}] end,
     case Expected of
-        [] -> {#{},source(<<"source_unavailable">>,false,false,[]),null};
+        [] -> {#{},source(<<"source_unavailable">>,false,false,[]),null,null};
         _ ->
             Until = fun(Rs) -> length(Rs)>=64 orelse
                 lists:usort([val(<<"Source-ID">>,R) || R<-Rs,correlated(R,Req)])=:=Expected end,
             Result = kz_amqp_worker:call_collect(Req,fun kapi_acdc_dashboard:publish_snapshot_req/1,Until,3000),
             After=sources(),
-            case IncludeCalls of
+            {M,S,C}=case IncludeCalls of
                 true -> assess_full(Result,Req,Expected,After);
-                false -> {M,S}=assess(Result,Req,Expected,After),{M,S,null}
-            end
+                false -> {OverviewM,OverviewS}=assess(Result,Req,Expected,After),{OverviewM,OverviewS,null}
+            end,
+            {M,S,C,agent_observations(Result,Req,Expected,After)}
     end.
+
+agent_observations({ok,Rs},Req,Expected,Expected) when is_list(Rs),length(Rs)<64 ->
+    Ids=props:get_value(<<"Agent-IDs">>,Req),
+    case Ids=/=undefined andalso Expected=/=[] andalso
+        lists:all(fun(R)->correlated(R,Req) andalso val(<<"Status">>,R)=:= <<"ok">> end,Rs) andalso
+        lists:usort([val(<<"Source-ID">>,R)||R<-Rs])=:=Expected of
+        false -> null;
+        true ->
+            %% Repeated replies from one incarnation must agree; observations
+            %% from different nodes may legitimately contain local absence.
+            PerSource=lists:usort([{val(<<"Source-ID">>,R),val(<<"Source-Incarnation">>,R),
+                kz_json:get_value([<<"Snapshot">>,<<"agents">>],R)} || R<-Rs]),
+            case length(PerSource)=:=length(Expected) of
+                false -> null;
+                true ->
+                    Observations=[O||{_,_,O}<-PerSource],
+                    #{rows=>acdc_dashboard_agent_codec:combine(Ids,Observations),
+                      observation_started=>lists:min([val(<<"observation_started">>,O)||O<-Observations]),
+                      observation_finished=>lists:max([val(<<"observation_finished">>,O)||O<-Observations])}
+            end
+    end;
+agent_observations(_,_,_,_) -> null.
 
 %% Discovery itself is the existing Kazoo inventory, not a topology guarantee.
 sources() ->
@@ -152,6 +179,7 @@ assess_rows(Rs,Req,Expected,TimedOut) ->
 correlated(R,Req) ->
     try kapi_acdc_dashboard:snapshot_resp_v(R) andalso
         (val(<<"Include-Calls">>,R)=:=true)=:=(props:get_value(<<"Include-Calls">>,Req)=:=true) andalso
+        val(<<"Agent-IDs">>,R)=:=props:get_value(<<"Agent-IDs">>,Req) andalso
         lists:all(fun(K)->val(K,R)=:=props:get_value(K,Req) end,
             [<<"Account-ID">>,<<"Queue-IDs">>,<<"From">>,<<"To">>,<<"Msg-ID">>])
     catch _:_ -> false end.

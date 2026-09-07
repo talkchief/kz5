@@ -35,7 +35,41 @@ function queueLiveContract() {
     const callsFields = {limit: {type: 'integer', enum: [200]},
         order: {type: 'string', enum: ['queue_id_entered_call_id']}};
     const callRows = {type: 'array', maxItems: 200, uniqueItems: true, items: ref('QueueLiveCall')};
+    const agentRows = {type: 'array', maxItems: 200, uniqueItems: true, items: ref('QueueLiveAgent')};
+    const agentIdentity = {agent_id: id, name: {...text, pattern: '^[^\\x00-\\x1f\\x7f]+$'}};
     const schemas = {
+        QueueLiveAgent: {oneOf: [
+            strict({...agentIdentity, observed: {type: 'boolean', enum: [true]}, queue_member: {type: 'boolean'},
+                state: {type: 'string', enum: ['wait', 'sync', 'ready', 'ringing', 'answered', 'wrapup', 'paused', 'outbound']},
+                reason: {type: 'string', enum: ['observed']}}),
+            strict({...agentIdentity, observed: fixedFalse, queue_member: {type: 'boolean', nullable: true, enum: [null]},
+                state: {type: 'string', nullable: true, enum: [null]},
+                reason: {type: 'string', enum: ['not_observed', 'inconsistent_sources', 'source_unavailable']}})
+        ], description: 'One authorized user from the selected queue persisted roster. name comes only from the authorized user document, never a broker payload. observed/state/queue_member are bounded runtime observations, not endpoint reachability, ready-to-ring eligibility, staffing capacity or an agent command. Unobserved is unknown, never implicitly logged out. No PID, runtime instance digest, device identity or private user fields are exposed.'},
+        QueueLiveAgents: {...strict({limit: {type: 'integer', enum: [200]}, roster_complete: {type: 'boolean'},
+            truncated: {type: 'boolean'}, runtime_complete: {type: 'boolean'}, endpoint_reachability_verified: fixedFalse,
+            observation_started: {...time, nullable: true}, observation_finished: {...time, nullable: true}, rows: agentRows}),
+            allOf: [
+                {oneOf: [
+                    {properties: {truncated: {enum: [false]}, roster_complete: {enum: [true]}}},
+                    {properties: {truncated: {enum: [true]}, roster_complete: {enum: [false]},
+                        runtime_complete: {enum: [false]}, rows: {...agentRows, minItems: 200}}}
+                ]},
+                {oneOf: [
+                    {properties: {runtime_complete: {enum: [false]}}},
+                    {properties: {runtime_complete: {enum: [true]}, truncated: {enum: [false]},
+                        observation_started: time, observation_finished: time,
+                        rows: {...agentRows, items: {allOf: [ref('QueueLiveAgent'),
+                            {properties: {observed: {enum: [true]}}}]}}}}
+                ]},
+                {oneOf: [
+                    {properties: {observation_started: time, observation_finished: time}},
+                    {properties: {observation_started: {type: 'integer', nullable: true, enum: [null]},
+                        observation_finished: {type: 'integer', nullable: true, enum: [null]}, runtime_complete: {enum: [false]},
+                        rows: {...agentRows, items: {allOf: [ref('QueueLiveAgent'),
+                            {properties: {observed: {enum: [false]}, reason: {enum: ['source_unavailable']}}}]}}}}
+                ]}
+            ], description: 'Selected queue only; overview returns agents=null. The sole roster query fetches at most 201 selected-queue user documents, authorizes every fetched agent and its status resource (including lookahead), then returns at most 200 unique ID-sorted rows. No global user listing. roster_complete is !truncated. runtime_complete requires an available runtime observation, every displayed row observed, and no roster truncation; an available empty roster can be complete, unavailable runtime cannot. Missing runtime rows are not_observed; unavailable runtime yields source_unavailable rows and null timestamps. Observation timestamps are Unix seconds; runtime enforces finish>=start and exact authorized row identities. These cross-value/runtime checks are not fully expressible in OpenAPI. Even complete runtime observations do not verify endpoints or prove agents can accept a call.'},
         QueueLiveCall: {oneOf: [
             strict({...callFields, status: {type: 'string', enum: ['waiting']},
                 handled_at: {type: 'integer', nullable: true, enum: [null]}}),
@@ -75,17 +109,19 @@ function queueLiveContract() {
                     consistent: {enum: [false]}}}
             ],
             description: 'Consensus/coverage metadata for observed replicas, not an atomic cluster snapshot. available means consensus or an empty configured scope; unavailable means source_unavailable; every other listed reason is partial. consistent is true only for available. Source IDs, node names and internal scan counts are intentionally absent. A response timestamp is not source observation time. Partial/unavailable observations must not be presented as complete occupancy.'},
-        QueueLiveCapabilities: {...strict({live_call_details: {type: 'boolean'}, agent_runtime: fixedFalse,
+        QueueLiveCapabilities: {...strict({live_call_details: {type: 'boolean'}, agent_runtime: {type: 'boolean'},
             websocket_updates: fixedFalse, historical_reporting: fixedFalse}),
-            description: 'live_call_details is true for selected detail and false for overview; it indicates the route supports call rows, not that current rows are available. agent_runtime, websocket_updates and historical_reporting remain false.'}
+            description: 'live_call_details and agent_runtime are true for selected detail and false for overview; they indicate supported DTOs, not current data availability or ready eligibility. websocket_updates and historical_reporting remain false.'}
     };
     schemas.QueueLiveSnapshot = strict({version: {type: 'integer', enum: [1]}, account_id: id,
         generated_at: {...time, description: time.description + ' Response generation time, not proof of source freshness.'},
         window: ref('QueueLiveWindow'), queues: {type: 'array', maxItems: 100, items: ref('QueueLiveQueue')},
         calls: {oneOf: [nullObject, ref('QueueLiveCalls')]},
+        agents: {oneOf: [nullObject, ref('QueueLiveAgents')]},
         pagination: ref('QueueLivePagination'), source: ref('QueueLiveSource'), capabilities: ref('QueueLiveCapabilities')});
     const callScope = selected => ({type: 'object', properties: {calls: selected ? ref('QueueLiveCalls') : nullObject,
-        capabilities: {type: 'object', properties: {live_call_details: {enum: [selected]}}}}});
+        agents: selected ? ref('QueueLiveAgents') : nullObject,
+        capabilities: {type: 'object', properties: {live_call_details: {enum: [selected]}, agent_runtime: {enum: [selected]}}}}});
     schemas.QueueLiveSnapshot.oneOf = [callScope(false), callScope(true)];
     schemas.QueueLiveEnvelope = {type: 'object', properties: {status: {type: 'string', enum: ['success']},
         data: {allOf: [ref('QueueLiveSnapshot'), callScope(false)]}, request_id: {type: 'string'}}, required: ['data']};
@@ -94,13 +130,13 @@ function queueLiveContract() {
         {type: 'object', properties: {queues: {type: 'array', items: ref('QueueLiveQueue'), minItems: 1, maxItems: 1},
             pagination: {type: 'object', properties: {page_size: {enum: [1]}, has_more: {enum: [false]},
                 next_start_queue_id: {type: 'string', nullable: true, enum: [null]}}}}}]}}, required: ['data'],
-        description: 'A successful selected-queue response contains exactly one queue, a calls object, live_call_details=true and never another page. Inspect calls.available and calls.complete; the capability alone is not availability.'};
+        description: 'A successful selected-queue response contains exactly one queue, calls and agents objects, live_call_details=true, agent_runtime=true and never another queue page. Inspect calls.available/calls.complete and agents roster/runtime completeness separately; capabilities alone are not availability or eligibility.'};
     const paths = {};
     for (const [url, selected] of [[OVERVIEW, false], [DETAIL, true]]) {
         paths[url] = {get: {
             operationId: selected ? 'getAccountQueueLiveSnapshot' : 'getAccountQueuesLiveSnapshot', tags: ['ACDC queues'],
             summary: selected ? 'Read an observed live snapshot for one queue' : 'Read a page of observed live queue snapshots',
-            description: 'Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null and live_call_details=false. Detail has a bounded calls object and live_call_details=true, independently of calls.available. No caller name/number, agent IDs, actual queue positions, ready counts, SLA, historical reports or WebSocket updates are supplied. ' +
+            description: 'Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. No caller name/number, actual queue positions, ready counts, SLA, historical reports or WebSocket updates are supplied. ' +
                 (selected ? 'This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.'
                     : 'page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.'),
             parameters: [{name: 'ACCOUNT_ID', in: 'path', required: true, schema: id}, ...(selected
@@ -112,9 +148,9 @@ function queueLiveContract() {
                 200: response('Version 1 observation envelope; inspect source status and metrics_available before displaying metrics', ref(selected ? 'QueueLiveDetailEnvelope' : 'QueueLiveEnvelope')),
                 400: response('Invalid page size, start_queue_id cursor, duplicate or unexpected query parameter', ref('CrossbarError')),
                 401: response('Missing or invalid authentication; pre-handler authentication behavior is unchanged', ref('CrossbarError'), false),
-                403: response('Account, queues/stats scope, selected queue or lookahead authorization denied', ref('CrossbarError')),
+                403: response('Account, queues/stats scope, selected queue, roster, agent/status resource or lookahead authorization denied', ref('CrossbarError')),
                 404: response('Selected queue identifier invalid, absent, deleted, wrong type or wrong account', ref('CrossbarError')),
-                503: response('Queue inventory or snapshot dependency unavailable; no fabricated empty inventory', ref('CrossbarError'))
+                503: response('Queue/agent inventory or snapshot dependency unavailable or malformed; no fabricated empty inventory', ref('CrossbarError'))
             },
             'x-reject-unknown-query-parameters': true,
             'x-contract-review': 'source-reviewed', 'x-implementation-status': 'implemented-in-source; not-live-deployed',
@@ -127,6 +163,9 @@ function applyQueueLive({spec, root}) {
     const handler = 'applications/acdc/src/cb_acdc_live.erl';
     const sourceFiles = ['applications/acdc/src/cb_queues.erl', handler,
         'applications/acdc/src/acdc_live_auth.erl',
+        'applications/acdc/src/cb_acdc_live_agents.erl',
+        'applications/acdc/src/acdc_dashboard_agents.erl',
+        'applications/acdc/priv/couchdb/views/queues.json',
         'applications/acdc/src/acdc_dashboard_collector.erl', 'applications/acdc/src/acdc_dashboard_projection.erl',
         'applications/acdc/src/acdc_dashboard_snapshot.erl', 'applications/acdc/src/kapi_acdc_dashboard.erl',
         'applications/acdc/src/acdc_stats.erl'];
@@ -145,7 +184,10 @@ function applyQueueLive({spec, root}) {
         '<<"source_unavailable">>-> <<"unavailable">>; _-> <<"partial">>',
         'IncludeCalls = QueueId =/= undefined', '<<"calls">>,public_calls(IncludeCalls, ActiveCalls)',
         '<<"live_call_details">>,IncludeCalls',
-        '{<<"agent_runtime">>,false},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}',
+        '{<<"agent_runtime">>,IncludeCalls},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}',
+        'AgentScope = cb_acdc_live_agents:prepare(Context,QueueId)',
+        '{<<"agents">>,cb_acdc_live_agents:public(AgentScope,RuntimeAgents)}',
+        'case AgentIds of undefined -> []; _ -> [{<<"Agent-IDs">>,AgentIds}] end',
         'public_calls(false,_) -> null', 'public_calls(true,null)',
         '{<<"limit">>,200},{<<"observed_count">>,null}',
         '{<<"rows">>,[public_call(R) || R<-val(<<"rows">>,C)]}', 'public_call(R) ->',
@@ -160,6 +202,28 @@ function applyQueueLive({spec, root}) {
         assert(source.includes(expected), 'Queue-live source contract changed: ' + expected);
     }
     for (const [file, needles] of [
+        ['applications/acdc/src/cb_acdc_live_agents.erl', [
+            '-define(LIMIT,200).', 'prepare(_,undefined) -> undefined',
+            'acdc_live_auth:permit(C,<<"queues">>,[Q,<<"roster">>])',
+            'acdc_live_auth:permit(C,<<"agents">>,[I])',
+            'acdc_live_auth:permit(C,<<"agents">>,[I,<<"status">>])',
+            '{startkey,[Q]},{endkey,[Q,kz_json:new()]},{reduce,false},include_docs,{limit,?LIMIT+1}',
+            'kz_doc:type(D)=:= <<"user">> andalso kz_doc:account_id(D)=:=A',
+            'not kz_doc:is_deleted(D) andalso not kz_doc:is_soft_deleted(D)',
+            'selected(val(<<"queues">>,D),Q)', 'not maps:is_key(I,Seen)',
+            'public(undefined,_) -> null', 'runtime(null,_) -> {#{},null,null,false}',
+            'Start-?EPOCH,Finish-?EPOCH,true',
+            'Complete=Available andalso not Truncated andalso lists:all',
+            '{<<"endpoint_reachability_verified">>,false}',
+            'lists:member(S,[<<"wait">>,<<"sync">>,<<"ready">>,<<"ringing">>',
+            '<<"answered">>,<<"wrapup">>,<<"paused">>,<<"outbound">>]',
+            'Parts=[V || K<-[<<"first_name">>,<<"last_name">>]',
+            '[{<<"agent_id">>,kz_doc:id(D)},{<<"name">>,name(D)}']],
+        ['applications/acdc/src/acdc_dashboard_agents.erl', [
+            '-define(MAX_AGENTS,200).', 'endpoint_reachability_verified=>false',
+            'Start=wall(),Deadline=erlang:monotonic_time(millisecond)+?BUDGET_MS']],
+        ['applications/acdc/priv/couchdb/views/queues.json', ['"agents_listing"',
+            "doc.pvt_type !== 'user'", 'emit([doc.queues[i], doc._id], null)']],
         ['applications/acdc/src/acdc_live_auth.erl', [
             'crossbar_bindings:pmap(api_util:create_event_name(C,<<"authorize">>),C)',
             '<<"authorize.",Resource/binary>>', 'lists:any(fun(true)->true;', 'andalso scopes(C,Resource).',

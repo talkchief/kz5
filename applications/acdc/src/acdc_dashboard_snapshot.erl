@@ -20,16 +20,15 @@ handle_req(Request,Props) ->
 
 respond(Request,Server) ->
     Correlation=[{K,kz_json:get_value(K,Request)} || K<-[<<"Account-ID">>,<<"Queue-IDs">>,<<"From">>,<<"To">>,<<"Msg-ID">>]]
-        ++case kz_json:get_value(<<"Include-Calls">>,Request) of
-              undefined -> []; Include -> [{<<"Include-Calls">>,Include}]
-          end,
+        ++[{K,kz_json:get_value(K,Request)} || K<-[<<"Include-Calls">>,<<"Agent-IDs">>],
+            kz_json:get_value(K,Request)=/=undefined],
     %% Full PID serialization includes the Erlang node creation/incarnation;
     %% pid_to_list alone would collide across VM restarts. Raw names/PIDs never
     %% enter Snapshot. Broker headers/opaque IDs are not public DTO fields.
     Identity=[{<<"Source-ID">>,kz_term:to_hex_binary(crypto:hash(sha256,atom_to_binary(node(),utf8)))},
               {<<"Source-Incarnation">>,digest({acdc_dashboard,node(),Server})}],
     Body=case collect(Request,Server) of
-             {ok,Projection} -> [{<<"Status">>,<<"ok">>},{<<"Snapshot">>,snapshot(Projection,Request)}];
+             {ok,Snapshot} -> [{<<"Status">>,<<"ok">>},{<<"Snapshot">>,Snapshot}];
              {error,Code} -> [{<<"Status">>,<<"error">>},{<<"Error-Code">>,Code}]
          end,
     kapi_acdc_dashboard:publish_snapshot_resp(kz_json:get_value(<<"Server-ID">>,Request),
@@ -46,14 +45,27 @@ collect(Request,Server) ->
                     kz_json:get_value(<<"To">>,Request),#{max_scan=>10000,budget_ms=>1000}),
                 case current_source(Tid,Server) of
                     false -> {error,<<"source_changed">>};
-                    true -> collection_result(Result)
+                    true ->
+                        case collection_result(Result) of
+                            {ok,Projection} ->
+                                %% Agent observations are bounded but can take
+                                %% another second. Contain their failures and
+                                %% do not publish a retired stats incarnation.
+                                Snapshot=snapshot(Projection,Request),
+                                case current_source(Tid,Server) of
+                                    true -> {ok,Snapshot};
+                                    false -> {error,<<"source_changed">>}
+                                end;
+                            Error -> Error
+                        end
                 end
         end
     catch _:_ -> {error,<<"collection_failed">>} end.
 
 current_source(undefined,_) -> false;
 current_source(Tid,Server) ->
-    acdc_stats_sup:stats_srv()=:={ok,Server} andalso is_process_alive(Server) andalso ets:info(Tid,owner)=:=Server.
+    acdc_stats_sup:stats_srv()=:={ok,Server} andalso is_process_alive(Server) andalso
+        ets:whereis(acdc_stats:call_table_id())=:=Tid andalso ets:info(Tid,owner)=:=Server.
 collection_result({ok,P}) -> {ok,P};
 collection_result({error,source_unavailable}) -> {error,<<"source_unavailable">>};
 collection_result({error,_}) -> {error,<<"invalid_source">>}.
@@ -69,7 +81,15 @@ snapshot(P,Request) ->
          {<<"source">>,kz_json:from_list(fields(S,[availability,coverage,atomic_snapshot,exhausted,
              completion_reason,projection_complete,cluster_complete,archive_coverage,
              observation_started,observation_finished]))},
-         {<<"queues">>,[queue(Q) || Q<-maps:get(queues,P)]}]++calls(P,Request)).
+         {<<"queues">>,[queue(Q) || Q<-maps:get(queues,P)]}]++calls(P,Request)++agents(Request)).
+agents(Request) ->
+    case kz_json:get_value(<<"Agent-IDs">>,Request) of
+        undefined -> [];
+        Ids ->
+            [Q]=kz_json:get_value(<<"Queue-IDs">>,Request),
+            {ok,Observation}=acdc_dashboard_agents:collect(kz_json:get_value(<<"Account-ID">>,Request),Q,Ids),
+            [{<<"agents">>,acdc_dashboard_agent_codec:encode(Observation)}]
+    end.
 calls(P,Request) ->
     case kz_json:get_value(<<"Include-Calls">>,Request) of
         true ->

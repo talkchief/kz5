@@ -73,13 +73,21 @@ capped; `truncated=true` then implies `complete=false`. Unavailable calls have
 `available=false`, null count and empty rows; this is not complete zero.
 The source's non-atomic, observed-replica limits still apply to complete lists.
 
-`agent_runtime`, `websocket_updates`, and `historical_reporting` currently
-report false. The first two remain required for live delivery; historical
-reporting is postponed. This is not yet a completed queue-detail dashboard.
+Detail now reports `agent_runtime=true` and returns an `agents` object;
+overview reports false and `agents=null`. The selected saved roster and
+authorized names are read once, capped at200 plus an authorized lookahead.
+Runtime observations use the same bounded broker request as queue metrics/calls.
+Each row distinguishes observed FSM state, runtime queue membership and unknown
+status. Device reachability is explicitly unverified. Missing/conflicting
+sources are not interpreted as logout or readiness. See
+`acdc_dashboard_runtime_agents.md` for the collector's limits.
 
-Next: bounded runtime queue-agent data; tenant/queue-authorized
-native Blackhole invalidation events; snapshot recovery after reconnect or
-missed events; matching Monster UI integration; OpenAPI generation; coherent
+`websocket_updates` and `historical_reporting` still report false; native
+delivery requires its coherent rollout and acceptance, while historical
+reporting is postponed. This is not yet a completed deployed dashboard.
+
+Next: matching Monster UI agent integration and native Blackhole invalidation
+rollout; snapshot recovery after reconnect or missed events; OpenAPI generation; coherent
 build/deployment and actual browser/call-state tests. The existing live UI source
 still uses legacy observations, as documented in `acdc_live_dashboard_ui.md`.
 
@@ -88,6 +96,17 @@ not establish a real authenticated HTTP/broker/WebSocket round trip. Preserve
 that distinction in deployment and developer documentation.
 
 ## Verified source checkpoint
+
+September7 runtime-agent integration: root15218 rebuilt16 production modules,
+passed26 public-route/roster groups,24 actual-handler DTO/OpenAPI checks and
+2 separate helper tests (`/tmp/kazoo-live-snapshot.PUEw1v`). Focused OpenAPI
+passed15 groups/297 schema cases. Root36984 separately passed14 authorization
+groups with actual `cb_agents` binding registration (`/tmp/kazoo-live-auth.0W0PcZ`).
+Root82855 passed34 transport tests including final source identity checks after
+agent collection (`/tmp/kazoo-dashboard-amqp.hIW7Q4`). These are controlled-provider
+source checks, not live HTTP/broker acceptance. Initial helper syntax and invalid
+UTF-8 fixture errors were corrected before the passing rerun; no runtime source
+was deployed during these tests.
 
 Root's serialized, network-isolated validations used a 128 MiB memory cap and
 768 MiB reserve. Development ecallmgr was briefly paused only after checking

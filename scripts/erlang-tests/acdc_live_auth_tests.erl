@@ -4,7 +4,7 @@
 %%% not cryptographic JWT validation or cache-independent revocation.
 -module(acdc_live_auth_tests).
 -include_lib("eunit/include/eunit.hrl").
--export([global_auth/1, scope/1, other_auth/1]).
+-export([global_auth/1, scope/1, other_auth/1, internal_error_auth/2]).
 -define(A, <<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>).
 -define(B, <<"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb">>).
 -define(Q, <<"11111111111111111111111111111111">>).
@@ -20,7 +20,9 @@ reset() ->
         {doc_result,{ok,doc()}},{deny,none},{scope,true},{seen,[]},{allow_account,?A},{other,false}]],ok.
 setup() ->
     ets:new(?T,[named_table,public]), reset(),
-    meck:new([crossbar_auth,kzd_accounts,kz_datamgr,kz_auth_scope],[non_strict,no_link]),
+    meck:new([crossbar_auth,kzd_accounts,kz_datamgr,kz_auth_scope,kapi_acdc_agent,kapi_acdc_stats],[non_strict,no_link]),
+    meck:expect(kapi_acdc_agent,declare_exchanges,fun()->ok end),
+    meck:expect(kapi_acdc_stats,declare_exchanges,fun()->ok end),
     meck:expect(crossbar_auth,validate_auth_token,fun(Token,Options) ->
         bump(token_calls),set(last_token,Token),
         ?assertEqual([{<<"proxy_ips">>,[]}],Options),
@@ -40,6 +42,9 @@ setup() ->
     init_bindings(),Pid.
 init_bindings() ->
     ok=cb_token_auth:init(),
+    %% Actual native agent registration, including its read/restart authorizer.
+    %% Only broker exchange declarations above are controlled.
+    ok=cb_agents:init(),
     %% Actual queue registration used by cb_queues:init, without its unrelated
     %% broker exchange declarations. This is a real binding, not a loaded-name mock.
     ok=crossbar_bindings:bind(<<"*.allowed_methods.queues">>,cb_queues,allowed_methods),
@@ -48,7 +53,9 @@ fixture_bindings() ->
     ok=crossbar_bindings:bind(<<"*.authorize">>,?MODULE,global_auth),
     ok=crossbar_bindings:bind(<<"*.allowed_scopes.queues">>,?MODULE,scope).
 cleanup(Pid) ->
-    gen_server:stop(Pid),meck:unload([crossbar_auth,kzd_accounts,kz_datamgr,kz_auth_scope]),ets:delete(?T).
+    gen_server:stop(Pid),
+    meck:unload([crossbar_auth,kzd_accounts,kz_datamgr,kz_auth_scope,kapi_acdc_agent,kapi_acdc_stats]),
+    ets:delete(?T).
 unbind_module(Module) ->
     crossbar_bindings:flush_mod(Module),true=gen_server:call(whereis(kazoo_bindings),is_ready).
 restore_fixture_bindings() ->
@@ -61,16 +68,20 @@ restore_native_bindings() ->
     ok=crossbar_bindings:bind(<<"*.allowed_methods.queues">>,cb_queues,allowed_methods),reset().
 
 global_auth(C) ->
-    [{<<"queues">>,Params},{<<"accounts">>,[?A]}]=cb_context:req_nouns(C),
+    [{Resource,Params},{<<"accounts">>,[?A]}]=cb_context:req_nouns(C),
+    ?assert(lists:member(Resource,[<<"queues">>,<<"agents">>])),
     ?assertEqual(<<"GET">>,cb_context:req_verb(C)),
     ?assertEqual(<<"v2">>,cb_context:api_version(C)),
     ?assertEqual([],kz_json:to_proplist(cb_context:query_string(C))),
     ?assertEqual(?A,cb_context:account_id(C)),
     ?assertEqual(kzs_util:format_account_db(?A),cb_context:db_name(C)),
+    ?assertEqual(iolist_to_binary([<<"/v2/accounts/">>,?A,<<"/">>,Resource,
+        [[<<"/">>,P] || P<-Params]]),cb_context:raw_path(C)),
     set(seen,get_state(seen)++[Params]),
     cb_context:auth_account_id(C)=:=get_state(allow_account) andalso Params=/=get_state(deny).
 scope(<<"cb_user_auth">>) -> [<<"fixture:queues">>].
 other_auth(_) -> get_state(other).
+internal_error_auth(_,_) -> error(private_resource_authorizer_failure).
 fresh() -> acdc_live_auth:fresh_token(<<"offline-token">>,?A,?Q).
 
 authorization_test_() -> {setup,fun setup/0,fun cleanup/1,fun(_)->[
@@ -158,5 +169,51 @@ authorization_test_() -> {setup,fun setup/0,fun cleanup/1,fun(_)->[
             {fun cb_context:set_req_verb/2,<<"POST">>},{fun cb_context:set_doc/2,doc()}]),
         ?assertEqual(ok,acdc_live_auth:permit(Dirty,[?Q])),
         set(deny,[?Q]),?assertThrow({live_error,403,<<"queue_live_resource_forbidden">>},acdc_live_auth:permit(Dirty,[?Q]))
+    end},
+    {"real agent read binding abstains while global allow still authorizes",fun() ->
+        reset(),{ok,C}=fresh(),
+        lists:foreach(fun(Params)->
+            AgentC=agent_context(C,Params,<<"GET">>),
+            ?assertEqual([false],crossbar_bindings:pmap(<<"v2_resource.authorize.agents">>,[AgentC|Params])),
+            ?assertEqual(ok,acdc_live_auth:permit(C,<<"agents">>,Params))
+        end,[[],[?Q],[?Q,<<"status">>]])
+    end},
+    {"agent read abstention never grants without positive global authority",fun() ->
+        reset(),{ok,C}=fresh(),set(allow_account,?B),
+        lists:foreach(fun(Params)->
+            ?assertThrow({live_error,403,<<"queue_live_resource_forbidden">>},
+                acdc_live_auth:permit(C,<<"agents">>,Params))
+        end,[[],[?Q],[?Q,<<"status">>]])
+    end},
+    {"native agent restart restrictions and non-GET failures remain",fun() ->
+        reset(),{ok,C}=fresh(),
+        Restart=agent_context(C,[?Q,<<"restart">>],<<"POST">>),
+        Denied=cb_context:set_is_superduper_admin(Restart,false),
+        ?assertMatch([{halt,_}],crossbar_bindings:pmap(<<"v2_resource.authorize.agents">>,
+            [Denied,?Q,<<"restart">>])),
+        Allowed=cb_context:set_is_superduper_admin(Restart,true),
+        ?assertEqual([true],crossbar_bindings:pmap(<<"v2_resource.authorize.agents">>,
+            [Allowed,?Q,<<"restart">>])),
+        ?assertThrow({live_error,403,<<"queue_live_resource_forbidden">>},
+            acdc_live_auth:permit(cb_context:set_is_superduper_admin(C,false),<<"agents">>,[?Q,<<"restart">>])),
+        lists:foreach(fun(Params)->
+            AgentC=agent_context(C,Params,<<"POST">>),
+            ?assertMatch([{'EXIT',_}],crossbar_bindings:pmap(<<"v2_resource.authorize.agents">>,[AgentC|Params]))
+        end,[[],[?Q],[?Q,<<"status">>]])
+    end},
+    {"internal agent authorizer exceptions are not swallowed as abstention",fun() ->
+        reset(),{ok,C}=fresh(),
+        try
+            ok=crossbar_bindings:bind(<<"*.authorize.agents">>,?MODULE,internal_error_auth),
+            ?assertThrow({live_error,403,<<"queue_live_resource_forbidden">>},
+                acdc_live_auth:permit(C,<<"agents">>,[?Q]))
+        after restore_fixture_bindings() end,
+        ?assertEqual(ok,acdc_live_auth:permit(C,<<"agents">>,[?Q]))
     end}
 ] end}.
+
+agent_context(C,Params,Verb) ->
+    cb_context:setters(C,[{fun cb_context:set_req_verb/2,Verb},
+        {fun cb_context:set_req_nouns/2,[{<<"agents">>,Params},{<<"accounts">>,[?A]}]},
+        {fun cb_context:set_raw_path/2,iolist_to_binary([<<"/v2/accounts/">>,?A,<<"/agents">>,
+            [[<<"/">>,P] || P<-Params]])}]).

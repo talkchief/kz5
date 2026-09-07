@@ -23,12 +23,14 @@ live_exit() {
 trap live_exit EXIT
 mkdir "$live_test_dir/production" "$live_test_dir/test" "$live_test_dir/fixture"
 live_sources=(applications/acdc/src/cb_acdc_live.erl applications/acdc/src/acdc_live_auth.erl applications/acdc/src/cb_queues.erl
+    applications/acdc/src/cb_acdc_live_agents.erl applications/acdc/src/acdc_dashboard_agent_codec.erl
+    applications/acdc/src/cb_agents.erl
     applications/acdc/src/kapi_acdc_dashboard.erl applications/crossbar/src/cb_context.erl
     applications/crossbar/src/api_util.erl applications/crossbar/src/crossbar_util.erl
     core/kazoo_documents/src/kz_doc.erl core/kazoo_data/src/kzs_util.erl
     core/kazoo_stdlib/src/kz_json.erl core/kazoo_stdlib/src/kz_term.erl
     core/kazoo_stdlib/src/props.erl core/kazoo_amqp/src/api/kz_api.erl)
-live_inputs=("${live_sources[@]}" scripts/erlang-tests/acdc_live_tests.erl scripts/test-acdc-live-snapshot.sh
+live_inputs=("${live_sources[@]}" scripts/erlang-tests/acdc_live_tests.erl scripts/erlang-tests/acdc_live_agents_tests.erl scripts/test-acdc-live-snapshot.sh
     scripts/test-acdc-live-response-contract.cjs scripts/api-docs-queue-live.cjs
     scripts/api-docs-tooling/package-lock.json /usr/bin/node)
 /usr/bin/find applications/acdc/src applications/acdc/include applications/crossbar/src \
@@ -54,7 +56,7 @@ erlc -DTEST -Werror +debug_info \
     -I applications/crossbar/src -I applications/crossbar/include \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' \
     -o "$live_test_dir/test" applications/acdc/src/cb_acdc_live.erl
-erlc -Werror +debug_info -o "$live_test_dir/fixture" scripts/erlang-tests/acdc_live_tests.erl
+erlc -Werror +debug_info -o "$live_test_dir/fixture" scripts/erlang-tests/acdc_live_tests.erl scripts/erlang-tests/acdc_live_agents_tests.erl
 # Exercise the real public-route cases with the production beam only.
 erl -noshell -pa "$live_test_dir/production" -pa "$live_test_dir/fixture" \
     -eval '
@@ -65,7 +67,7 @@ erl -noshell -pa "$live_test_dir/production" -pa "$live_test_dir/fixture" \
         false = lists:any(fun({d, '\''TEST'\''}) -> true; ({d, '\''TEST'\'', _}) -> true; (_) -> false end, Options),
         false = erlang:function_exported(cb_acdc_live, options, 2),
         io:format("Production public-route beam: ~s; compile options: ~p~n", [Expected, Options]),
-        case eunit:test({generator, fun acdc_live_tests:public_route_test_/0}, [verbose]) of
+        case eunit:test([{generator, fun acdc_live_tests:public_route_test_/0}, acdc_live_agents_tests], [verbose]) of
             ok -> halt(0); _ -> halt(1)
         end.' \
     | tee "$live_test_dir/eunit-public-production.log"
