@@ -35,31 +35,56 @@ class Element {
   append(value) { this.items.push(value); return this; }
   each(fn) { this.items.forEach(item => fn.call(item)); return this; }
 }
-function fixture() {
+function fixture(options = {}) {
   let app, clock = now, nextTimer = 0;
-  const timers = new Map(), requests = [], views = [], errors = [], navigation = [], container = new Element(), content = new Element();
+  const timers = new Map(), requests = [], views = [], errors = [], navigation = [], bindings = [], observers = [], container = new Element(), content = new Element();
   const jquery = value => value; jquery.trim = value => String(value).trim();
-  const monster = {apps: {}, ui: {}};
+  jquery.contains = (root, node) => node && node.attached;
+  const monster = {apps: {}, ui: {}, socket: {connects: 0,
+    connect() { this.connects++; return true; },
+    bind(params) {
+      const binding = {params, cancelled: 0}; bindings.push(binding);
+      if (options.syncAck) params.lifecycle.onAck({accountId: params.accountId, binding: params.binding, connectionGeneration: 1});
+      return () => { binding.cancelled++; };
+    }
+  }};
   class Clock extends Date { static now() { return clock; } }
   vm.runInNewContext(source, {
     define(factory) { app = factory(name => name === 'jquery' ? jquery : name === 'lodash' ? lodash : monster); },
     Date: Clock, Math,
-    setTimeout(fn, ms) { timers.set(++nextTimer, {fn, ms}); return nextTimer; },
-    clearTimeout(id) { timers.delete(id); }
+    setTimeout(fn, ms) { timers.set(++nextTimer, {fn, ms, at: clock + ms}); return nextTimer; },
+    clearTimeout(id) { timers.delete(id); },
+    ...(options.dom ? {document: {documentElement: {}}, MutationObserver: class {
+      constructor(fn) { this.fn = fn; observers.push(this); }
+      observe() { this.active = true; }
+      disconnect() { this.active = false; }
+    }} : {})
   }, {filename: path.join(root, 'app.js')});
   app.i18n.active = () => strings;
   app.accountId = A;
   app.appFlags.acdc.container = container;
   app.getContentContainer = () => content;
-  app.getTemplate = spec => { const element = new Element(); element.spec = spec; views.push(element); return element; };
+  app.getTemplate = spec => { const element = new Element(); element[0] = element; element.attached = true; element.spec = spec; views.push(element); return element; };
   app.renderLoading = message => { content.empty(); navigation.push({loading: message}); };
   app.renderError = (message, retry) => { content.empty(); errors.push({message, retry}); };
   app.renderQueueForm = id => { ++app.appFlags.acdc.requestGeneration; navigation.push({editor: id}); };
   app.renderAgents = () => navigation.push({agents: true});
   const seam = app.requestLiveDashboard;
   app.requestLiveDashboard = (queueId, callback, page) => requests.push({queueId, callback, page});
-  return {app, seam, monster, requests, views, errors, navigation, content, container, timers,
+  return {app, seam, monster, requests, views, errors, navigation, content, container, timers, bindings,
     advance(ms) { clock += ms; },
+    tick(ms) {
+      const end = clock + ms; let limit = 1000;
+      for (;;) {
+        const next = [...timers].filter(([, t]) => t.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
+        if (!next) break; assert(--limit > 0, 'Unbounded timer loop');
+        clock = next[1].at; timers.delete(next[0]); next[1].fn();
+      }
+      clock = end;
+    },
+    ack(index, generation = 1) { const p = bindings[index].params; p.lifecycle.onAck({accountId: p.accountId, binding: p.binding, connectionGeneration: generation}); },
+    event(index, event) { const p = bindings[index].params; p.callback(event || {version: 1, account_id: p.accountId, queue_id: p.binding.split('.').pop()}); },
+    detach() { content.items[0].attached = false; observers.filter(o => o.active).forEach(o => o.fn()); },
     reply(index, results = data(Boolean(requests[index].queueId)), failures = {}) { requests[index].callback(failures, results); },
     current() { return content.items[0]; },
     fireTimer() { const entry = [...timers][0]; assert(entry); timers.delete(entry[0]); entry[1].fn(); }
@@ -259,5 +284,90 @@ test('legacy queue stats and global-status formatter remain unchanged for other 
   assert.deepEqual(plain(app.buildQueueStats([{id: Q, name: 'Support'}], [{queue_id: Q, status: 'handled'}, {queue_id: Q, status: 'abandoned'}])),
     [{id: Q, name: 'Support', waiting: 0, handling: 1, abandoned: 1, processed: 0}]);
   assert.equal(app.statusClass('ready'), 'online');
+});
+function liveData(detail = false) { const value = data(detail); value.live.capabilities.websocket_updates = true; return value; }
+test('unsupported capability is manual-only; enabled capability binds exact authorized page IDs and separate account', () => {
+  const f = fixture(); f.app.renderDashboard(); f.reply(0); f.tick(15000);
+  assert.equal(f.bindings.length, 0); assert.equal(f.requests.length, 1); assert.equal(f.monster.socket.connects, 0);
+  assert.equal(f.current().find('.acdc-live-transport').text(), strings.acdc.dashboard.transports.unavailable);
+  f.app.renderDashboard(); f.reply(1, liveData());
+  assert.deepEqual(f.bindings.map(b => [b.params.accountId, b.params.binding, b.params.source]),
+    [[A, 'queue_live.changed.' + Q, 'acdc'], [A, 'queue_live.changed.' + R, 'acdc']]);
+  assert.equal(f.monster.socket.connects, 1); assert(f.bindings.every(b => b.params.lifecycle.timeoutMs === 3000));
+});
+test('ACK burst and invalidations coalesce; one snapshot in flight remembers one dirty follow-up', () => {
+  const f = fixture(); f.app.renderDashboard(); f.reply(0, liveData()); f.ack(0); f.ack(1);
+  for (let i = 0; i < 30; i++) f.event(i % 2);
+  f.tick(99); assert.equal(f.requests.length, 1); f.tick(1); assert.equal(f.requests.length, 2);
+  for (let i = 0; i < 30; i++) { f.event(0); f.app.renderDashboard(); }
+  f.tick(500); assert.equal(f.requests.length, 2, 'No overlapping snapshot batches');
+  f.reply(1, liveData()); f.tick(100); assert.equal(f.requests.length, 3);
+  f.reply(2, liveData()); f.tick(1000); assert.equal(f.requests.length, 3);
+  assert.equal(f.bindings.length, 2); assert(f.bindings.every(b => b.cancelled === 0));
+});
+test('synchronous shared ACK is safe and unchanged scope does not bind/ACK loop', () => {
+  const f = fixture({syncAck: true}); f.app.renderLiveDashboard(Q); f.reply(0, liveData(true));
+  assert.equal(f.bindings.length, 1); f.tick(100); assert.equal(f.requests.length, 2);
+  f.reply(1, liveData(true)); f.tick(1000); assert.equal(f.requests.length, 2); assert.equal(f.bindings.length, 1);
+});
+test('event version/account/queue must match and pre-ACK events cannot request snapshots', () => {
+  const f = fixture(); f.app.renderLiveDashboard(Q); f.reply(0, liveData(true)); f.event(0); f.tick(100); assert.equal(f.requests.length, 1);
+  f.ack(0); f.tick(100); f.reply(1, liveData(true));
+  for (const event of [null, {}, {version: 2, account_id: A, queue_id: Q}, {version: 1, account_id: B, queue_id: Q},
+    {version: 1, account_id: A, queue_id: R}]) f.bindings[0].params.callback(event);
+  f.tick(1000); assert.equal(f.requests.length, 2); f.event(0); f.tick(100); assert.equal(f.requests.length, 3);
+});
+test('disconnect keeps counts stale, reconnect ACK resnapshots and periodic repair survives missing events', () => {
+  const f = fixture(); f.app.renderLiveDashboard(Q); f.reply(0, liveData(true)); f.ack(0); f.tick(100); f.reply(1, liveData(true));
+  f.bindings[0].params.lifecycle.onDisconnect({code: 'disconnected'});
+  assert(f.current().find('.acdc-live-freshness').hasClass('is-stale'));
+  assert.equal(f.current().spec.data.selectedCard.waiting, 1);
+  assert.equal(f.current().find('.acdc-live-transport').text(), strings.acdc.dashboard.transports.disconnected);
+  f.ack(0, 2); f.tick(100); assert.equal(f.requests.length, 3); f.reply(2, liveData(true));
+  assert.equal(f.bindings.length, 1); f.tick(15000); assert.equal(f.requests.length, 4, 'Reconcile without any event');
+});
+test('subscription error retries only through bounded reconciliation while supported', () => {
+  const f = fixture(); f.app.renderLiveDashboard(Q); f.reply(0, liveData(true));
+  f.bindings[0].params.lifecycle.onError({code: 'rejected'}); f.tick(14999); assert.equal(f.requests.length, 1);
+  assert(f.current().find('.acdc-live-freshness').hasClass('is-stale'));
+  f.tick(101); assert.equal(f.requests.length, 2); f.reply(1, liveData(true));
+  assert.equal(f.bindings.length, 2); assert.equal(f.bindings[0].cancelled, 1);
+  f.bindings[1].params.lifecycle.onError({code: 'timeout'}); f.tick(1000); assert.equal(f.requests.length, 2);
+});
+test('capability true to false retires bindings and periodic repair without replacing counts with zero', () => {
+  const f = fixture(); f.app.renderDashboard(); f.reply(0, liveData()); f.app.renderDashboard(); f.reply(1);
+  assert(f.bindings.every(b => b.cancelled === 1)); f.tick(16000); assert.equal(f.requests.length, 2);
+  f.ack(0); f.event(0); f.tick(100); assert.equal(f.requests.length, 2);
+  assert.equal(f.current().find('.acdc-live-transport').text(), strings.acdc.dashboard.transports.unavailable);
+  assert.equal(f.current().spec.data.queueRows.find(q => q.id === Q).waiting, 1);
+});
+test('page shrink and navigation cancel exact listeners; stale callbacks cannot revive old scope', () => {
+  const f = fixture(); f.app.renderDashboard(); f.reply(0, liveData());
+  const smaller = liveData(); smaller.queues.pop(); f.app.renderDashboard(); f.reply(1, smaller);
+  assert.equal(f.bindings[0].cancelled, 0); assert.equal(f.bindings[1].cancelled, 1);
+  f.app.renderLiveDashboard(Q); assert.equal(f.bindings[0].cancelled, 1); f.reply(2, liveData(true));
+  f.event(0); f.ack(1); f.tick(100); assert.equal(f.requests.length, 3);
+  const page = {cursor: R, size: 50, history: [null]}; f.app.renderLiveDashboard(null, undefined, page);
+  assert.equal(f.bindings[2].cancelled, 1); assert.deepEqual(plain(f.requests[3].page), page);
+});
+test('account/tab/DOM disposal cancels listeners, timers and late in-flight responses', () => {
+  for (const boundary of ['account', 'tab', 'detach', 'editor']) {
+    const f = fixture({dom: true}); f.app.renderLiveDashboard(Q); f.reply(0, liveData(true)); f.ack(0); f.tick(100);
+    if (boundary === 'account') { f.app.accountId = B; f.event(0); }
+    if (boundary === 'tab') f.app.renderSection('agents');
+    if (boundary === 'detach') f.detach();
+    if (boundary === 'editor') f.current().find('.acdc-live-edit, .acdc-live-add').trigger('click', new Element());
+    assert.equal(f.bindings[0].cancelled, 1, boundary); assert.equal(f.timers.size, 0, boundary);
+    const views = f.views.length; f.reply(1, liveData(true)); f.ack(0); f.event(0); f.tick(20000);
+    assert.equal(f.views.length, views, boundary); assert.equal(f.requests.length, 2, boundary);
+  }
+});
+test('401/403/404 cancels supported live scope immediately and does not retry automatically', () => {
+  for (const status of [401, 403, 404]) {
+    const f = fixture(); f.app.renderLiveDashboard(Q); f.reply(0, liveData(true)); f.app.renderLiveDashboard(Q);
+    f.reply(1, {}, {live: true, denied: true, status}); assert.equal(f.bindings[0].cancelled, 1);
+    assert.equal(f.app.appFlags.acdc.liveDashboardSnapshot, undefined); assert.equal(f.timers.size, 0);
+    f.tick(20000); assert.equal(f.requests.length, 2);
+  }
 });
 console.log(JSON.stringify({result: 'PASS', groups, network: false, browser: false, live_writes: false}));

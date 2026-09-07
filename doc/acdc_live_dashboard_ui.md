@@ -1,9 +1,9 @@
 # Live queue summary/detail — source checkpoint
 
-September 6, 2026. The bounded live DTO adapter and source/template browser
-fixture pass offline. This is not a deployment or complete live-dashboard
-acceptance. Historical screens and workforce reporting are postponed for future
-ClickHouse work, per the user's scope change.
+September 7, 2026. The bounded live DTO adapter and capability-gated native
+invalidation controller passed offline and Chromium fixture checks. This is
+not a deployment or complete live-dashboard acceptance. Historical screens and
+workforce reporting remain postponed for future ClickHouse work.
 
 ## Files and behavior
 
@@ -50,14 +50,52 @@ error. Recognized 401/403/404 failures clear that cache. Cache and late-response
 guards include account, queue, page and navigation generation. API labels are
 escaped. A timer marks data stale after 30 seconds; it does not fetch updates.
 
+## Native invalidation controller — execution pending
+
+`renderLiveDashboard` owns one account/queue/page controller. Only a validated DTO
+with `capabilities.websocket_updates: true` permits `monster.socket.bind` using
+the tested [subscription lifecycle API](monster_socket_lifecycle.md). The account
+is a separate `accountId` option; the exact binding is
+`queue_live.changed.QUEUE_ID`. Overview registers only the current authorized
+page's queue IDs (50 by default, at most 100); detail registers one. An event must
+match `{version: 1, account_id, queue_id}`. It invalidates the snapshot, never
+increments counters or supplies displayable call/agent data.
+
+The first authorized snapshot discovers the capability and scope. Subscription
+ACKs, including reconnect ACKs, and invalidations request the same authorized
+snapshot through 100ms coalescing. At most one snapshot batch is in flight; a
+dirty flag retains one follow-up request. Unchanged subscriptions survive
+same-scope refreshes, avoiding ACK/rebind loops. While support remains true,
+15-second reconciliation also repairs missing events and transient subscription
+failures. A failed binding has a 15-second retry floor, even if other queues keep
+emitting events or the user refreshes. Detail reconciliation still includes its
+three supplemental reads; those remain outside runtime eligibility proof.
+
+ACK is only a correlated Blackhole reply, not a broker-binding barrier, replay
+or gap-free-delivery guarantee. The screen separately reports pending,
+acknowledged, disconnected, rejected/unavailable and unsupported transport
+states. Disconnect/error makes retained values stale, not zero. Capability
+true-to-false removes subscriptions and reconciliation; unsupported responses
+retain manual Refresh. Recognized snapshot HTTP 401/403/404 cancels the controller
+and clears its cache immediately. Partial source counts remain unknown regardless
+of transport state.
+
+Queue/page/tab navigation and app rendering cancel exact returned listener
+handles; account/generation checks and DOM-detachment observation retire stale
+controllers. Disposed callbacks cannot mount data, schedule repair or launch
+late detail supplemental reads. No shared socket disconnect, automatic login,
+agent-state mutation, editor write or callback write is added. HTTP requests
+already sent are ignored after disposal, not claimed remotely cancelled.
+
 ## Important limits — do not advertise completion
 
 The UI now consumes the live snapshot endpoint's collector projection. Its
 source contract describes compared known replicas and explicitly non-atomic
 observations, not complete telephony occupancy. Server generation time is not
-source freshness. Capability flags still declare runtime-agent snapshots,
-WebSocket updates and historical reporting unavailable. Support for detail call
-rows does not imply those rows are available in every response.
+source freshness. Runtime-agent snapshots and historical reporting remain
+unavailable. The backend WebSocket capability stays false until its authenticated
+delivery integration is accepted; this UI does not turn it on. Support for detail
+call rows does not imply those rows are available in every response.
 
 Saved roster is not runtime queue membership or eligibility. Global status or
 SIP registration is not proof an agent can receive this queue's call. The UI
@@ -67,16 +105,17 @@ fall back to IDs/unknown status. These supplementary reads do not establish
 cluster-wide agent coverage. No SLA, performance ranking, daily totals or
 historical handle-time metric is fabricated.
 
-Scoped native Blackhole invalidation/update delivery is not connected by this
-slice. Completion still requires its authenticated integration, matching API
-and message contracts, a production UI build and actual call-state validation.
+The client lifecycle integration does not by itself prove scoped native
+Blackhole delivery. Completion still requires its authenticated server/publisher
+integration, matching API and message contracts, a production UI build and
+actual call-state validation.
 The synthetic browser fixture does not certify token/resource authorization,
 broker delivery, runtime-agent eligibility or production deployment. Polling-only
 delivery is not a substitute for the requested native Blackhole integration.
 
 ## Test evidence
 
-Current DTO checkpoint: root session **37074 passed all 22** updated offline
+Pre-controller DTO checkpoint: root session **37074 passed all 22** updated offline
 dashboard groups and all **20** existing queue-login groups.
 
 Root session **5608 passed all 12 Chromium groups**, with stable source pins;
@@ -91,10 +130,18 @@ The browser runner requires a compatible Node 20+ runtime. The successful run
 used the existing cached executable
 `/tmp/kazoo-ui-browser.eXdEqS/node_modules/node/bin/node` and Playwright at
 `/tmp/kazoo-ui-browser.eXdEqS/node_modules/playwright`; no global Node upgrade was
-needed. Root owns the serialized 384 MiB browser window and temporary development
-service pauses under a restoration trap, following a zero-call check. Do not
-infer completion of the other suites or service restoration from the browser
-result alone while that enclosing window remains active.
+needed. Root owns serialized resource windows and any temporary development
+service pauses under a restoration trap, following a zero-call check.
+
+Controller checkpoint: root64066 passed all32 offline groups (22 existing plus
+10 fake-clock/socket groups). Root55555 passed all18 Chromium groups (12 existing
+plus six synthetic lifecycle/clock groups), with stable source/vendor hashes;
+evidence `/tmp/kazoo-monster-live-dashboard.u5WbOa`. The same window passed all20
+unchanged queue-login groups. These cover scope/capability gates, burst/held-request coalescing,
+synchronous ACK, disconnect/reconnect, retry/reconciliation bounds, capability
+removal, denial and navigation/detachment. Existing queue-login coverage remains
+a separate compatibility gate. None
+of these new socket fixtures proves a live broker or authenticated WebSocket.
 
 Historical pre-DTO checkpoint **11055** passed 22 dashboard and 20 queue-login
 groups with seven stable input pins, retained in

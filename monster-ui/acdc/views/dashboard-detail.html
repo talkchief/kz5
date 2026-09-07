@@ -10,6 +10,7 @@
 		<div class="acdc-live-source" role="status">
 			<div class="acdc-live-source-heading"><span class="acdc-live-freshness {{#if stale}}is-stale{{/if}}">{{freshness}}</span><span>{{i18n.acdc.dashboard.retrieved}} {{retrievedAt}}</span></div>
 			<p class="acdc-live-source-state">{{sourceStatus}} · {{sourceReason}}</p><p>{{i18n.acdc.dashboard.coverage}}</p><p class="acdc-live-stale-note" {{#unless stale}}hidden{{/unless}}>{{i18n.acdc.dashboard.staleHelp}}</p>
+			<p class="acdc-live-transport">{{transport}}</p>
 			{{#if refreshFailed}}<p class="acdc-live-refresh-error">{{i18n.acdc.dashboard.refreshFailed}}</p>{{/if}}
 		</div>
 		{{#if hasWarnings}}<div class="acdc-warning" role="status"><ul>{{#each warnings}}<li>{{this}}</li>{{/each}}</ul></div>{{/if}}

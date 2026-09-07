@@ -181,6 +181,7 @@ define(function(require) {
 					}
 				}));
 
+			self.stopLiveDashboard();
 			self.appFlags.acdc.container = template;
 			self.bindLayout(template);
 			parent.empty().append(template);
@@ -200,7 +201,7 @@ define(function(require) {
 				template = self.appFlags.acdc.container,
 				generation = ++self.appFlags.acdc.requestGeneration;
 
-			self.clearLiveDashboardTimer();
+			self.stopLiveDashboard();
 			self.closeAgentQueueLogin();
 			self.appFlags.acdc.currentTab = tab;
 			template.find('.acdc-tab').removeClass('active');
@@ -826,10 +827,117 @@ define(function(require) {
 			}
 		},
 
+		stopLiveDashboard: function() {
+			var controller = this.appFlags.acdc.liveDashboardController;
+			this.clearLiveDashboardTimer();
+			if (!controller) { return; }
+			controller.stopped = true;
+			clearTimeout(controller.coalesceTimer);
+			clearTimeout(controller.reconcileTimer);
+			if (controller.observer) { controller.observer.disconnect(); }
+			_.each(controller.bindings, function(binding) { binding.cancel && binding.cancel(); });
+			controller.bindings = {};
+			delete this.appFlags.acdc.liveDashboardController;
+		},
+
+		liveControllerActive: function(controller) {
+			var current = !controller.stopped && this.appFlags.acdc.liveDashboardController === controller
+				&& this.isCurrentView(controller.generation, 'dashboard', controller.accountId)
+				&& (!controller.view || typeof document === 'undefined' || $.contains(document.documentElement, controller.view[0]));
+			if (!current && this.appFlags.acdc.liveDashboardController === controller) { this.stopLiveDashboard(); }
+			return current;
+		},
+
+		liveTransportState: function(controller) {
+			if (!controller || !controller.supported) { return 'unavailable'; }
+			var states = _.map(controller.bindings, 'state');
+			if (!states.length) { return 'empty'; }
+			return _.find(['error', 'disconnected', 'connecting'], function(state) { return states.indexOf(state) >= 0; }) || 'acknowledged';
+		},
+
+		paintLiveTransport: function(controller) {
+			if (!this.liveControllerActive(controller) || !controller.view) { return; }
+			var labels = this.i18n.active().acdc.dashboard, state = this.liveTransportState(controller);
+			controller.view.find('.acdc-live-transport').text(labels.transports[state]);
+			if (state === 'error' || state === 'disconnected') {
+				controller.view.find('.acdc-live-freshness').addClass('is-stale').text(labels.stale);
+				controller.view.find('.acdc-live-stale-note').prop('hidden', false);
+			}
+		},
+
+		queueLiveRefresh: function(controller) {
+			var self = this;
+			if (!self.liveControllerActive(controller)) { return; }
+			controller.dirty = true;
+			if (controller.inFlight || controller.coalesceTimer) { return; }
+			controller.coalesceTimer = setTimeout(function() {
+				controller.coalesceTimer = null;
+				if (self.liveControllerActive(controller)) { self.refreshLiveDashboard(controller); }
+			}, 100);
+		},
+
+		syncLiveSubscriptions: function(controller, raw) {
+			var self = this, wanted = raw.capabilities.websocket_updates ? _.map(raw.queues, 'id') : [], added = false;
+			controller.supported = raw.capabilities.websocket_updates;
+			_.each(controller.bindings, function(binding, id) {
+				if (wanted.indexOf(id) < 0 || (binding.state === 'error' && Date.now() >= binding.retryAfter)) {
+					delete controller.bindings[id]; binding.cancel && binding.cancel();
+				}
+			});
+			_.each(wanted, function(id) {
+				if (controller.bindings[id]) { return; }
+				var binding = { state: 'connecting', cancel: null }, key = 'queue_live.changed.' + id;
+				controller.bindings[id] = binding;
+				function active() { return self.liveControllerActive(controller) && controller.bindings[id] === binding; }
+				function failed(state) {
+					if (active()) {
+						binding.state = state;
+						if (state === 'error') { binding.retryAfter = Date.now() + 15000; }
+						self.paintLiveTransport(controller);
+					}
+				}
+				if (!monster.socket || !_.isFunction(monster.socket.bind) || !_.isFunction(monster.socket.connect)) { failed('error'); return; }
+				try {
+					// Register first: an already acknowledged shared binding can ACK synchronously.
+					binding.cancel = monster.socket.bind({ accountId: controller.accountId, binding: key, source: 'acdc',
+						callback: function(event) {
+							if (active() && binding.state === 'acknowledged' && _.isPlainObject(event) && event.version === 1
+								&& event.account_id === controller.accountId && event.queue_id === id) { self.queueLiveRefresh(controller); }
+						}, lifecycle: { timeoutMs: 3000,
+							onAck: function(info) {
+								if (!active() || !info || info.accountId !== controller.accountId || info.binding !== key) { return; }
+								binding.state = 'acknowledged'; self.paintLiveTransport(controller); self.queueLiveRefresh(controller);
+							},
+							onError: function() { failed('error'); },
+							onDisconnect: function() { failed('disconnected'); }
+						} });
+					if (!_.isFunction(binding.cancel)) { binding.cancel = null; failed('error'); }
+					else { added = true; if (!active()) { binding.cancel(); } }
+				} catch (error) { failed('error'); }
+			});
+			if (added && self.liveControllerActive(controller)) {
+				try { if (monster.socket.connect() === false) { throw new Error('unavailable'); } }
+				catch (error) { _.each(controller.bindings, function(binding) { binding.state = 'error'; binding.retryAfter = Date.now() + 15000; }); }
+			}
+			// ACK is neither a broker-binding barrier nor replay. Periodic repair stays
+			// enabled after transient subscription errors while the capability is true.
+			if (!controller.supported) { clearTimeout(controller.reconcileTimer); controller.reconcileTimer = null; }
+			else if (!controller.reconcileTimer) {
+				controller.reconcileTimer = setTimeout(function reconcile() {
+					controller.reconcileTimer = null;
+					if (!self.liveControllerActive(controller) || !controller.supported) { return; }
+					self.queueLiveRefresh(controller);
+					controller.reconcileTimer = setTimeout(reconcile, 15000);
+				}, 15000);
+			}
+			self.paintLiveTransport(controller);
+		},
+
 		// One bounded observation page, never a recursive all-pages inventory read.
 		// Supplementary roster/global status are not runtime queue eligibility.
 		requestLiveDashboard: function(queueId, callback, page) {
 			var self = this, accountId = self.accountId, generation = self.appFlags.acdc.requestGeneration,
+				controller = self.appFlags.acdc.liveDashboardController,
 				paging = page || { cursor: null, size: 50, history: [] }, results = {}, errors = {},
 				data = { accountId: accountId, pageSize: paging.size },
 				resource = queueId ? 'acdc.live.detail' : (paging.cursor ? 'acdc.live.page' : 'acdc.live.overview');
@@ -842,7 +950,7 @@ define(function(require) {
 					callback({ live: true, denied: _.some(codes, function(code) { return ['401', '403', '404'].indexOf(String(code)) >= 0; }) }, {});
 				},
 				success: function(envelope) {
-					if (!self.isCurrentView(generation, 'dashboard', accountId)) { return; }
+					if (!self.isCurrentView(generation, 'dashboard', accountId) || (controller && !self.liveControllerActive(controller))) { return; }
 					if (!envelope || (envelope.status && envelope.status !== 'success')
 						|| !self.liveSnapshotValid(envelope.data, accountId, queueId, paging)) {
 						callback({ live: true }, {}); return;
@@ -853,6 +961,7 @@ define(function(require) {
 					_.each([{ key: 'roster', resource: 'acdc.queues.roster', complete: true },
 						{ key: 'agents', resource: 'acdc.agents.list', complete: true },
 						{ key: 'statuses', resource: 'acdc.agents.statuses' }], function(item) {
+						if (!self.isCurrentView(generation, 'dashboard', accountId) || (controller && !self.liveControllerActive(controller))) { return; }
 						var request = item.complete ? self.requestCompleteList : self.request;
 						request.call(self, item.resource, { accountId: accountId, queueId: encodeURIComponent(queueId) }, function(error, value) {
 							if (error) { errors[item.key] = true; } else { results[item.key] = value; }
@@ -888,7 +997,7 @@ define(function(require) {
 					|| ((source.status === 'unavailable') !== (source.reason === 'source_unavailable'))
 					|| (source.status === 'unavailable' && source.all_known_sources_responded)
 					|| caps.live_call_details !== Boolean(queueId) || caps.agent_runtime !== false
-					|| caps.websocket_updates !== false || caps.historical_reporting !== false) { return false; }
+					|| !_.isBoolean(caps.websocket_updates) || caps.historical_reporting !== false) { return false; }
 				if (source.observation_started_at === null || source.observation_finished_at === null) {
 					if (source.observation_started_at !== null || source.observation_finished_at !== null || (available && !empty)) { return false; }
 				} else if (!integer(source.observation_started_at) || !integer(source.observation_finished_at)
@@ -965,7 +1074,7 @@ define(function(require) {
 						waiting: observed.metrics_available ? observed.metrics.current_waiting : '—',
 						handling: observed.metrics_available ? observed.metrics.current_handled : '—' };
 				}), age = Math.max(Date.now() - meta.receivedAt, asOf === null ? 0 : Date.now() - asOf * 1000),
-				stale = Boolean(meta.refreshFailed || age >= 30000),
+				stale = Boolean(meta.refreshFailed || meta.transportStale || age >= 30000),
 				warnings = [];
 
 			if (source.status !== 'available') { warnings.push(labels.statsUnavailable); }
@@ -981,6 +1090,7 @@ define(function(require) {
 				sourceStatus: labels.sourceStatuses[source.status], sourceReason: labels.sourceReasons[source.reason],
 				updating: Boolean(meta.updating), stale: stale, refreshFailed: Boolean(meta.refreshFailed),
 				freshness: meta.updating ? labels.refreshing : (stale ? labels.stale : labels.snapshot),
+				transport: labels.transports[meta.transport || 'unavailable'],
 				retrievedAt: new Date(meta.receivedAt).toLocaleTimeString(),
 				responseTime: asOf === null ? '—' : new Date(asOf * 1000).toLocaleTimeString(),
 				staleAfter: Math.max(1, 30000 - age),
@@ -1005,31 +1115,53 @@ define(function(require) {
 		},
 
 		renderLiveDashboard: function(queueId, pGeneration, page) {
-			var self = this, generation = self.newGeneration(pGeneration), accountId = self.accountId,
-				paging = page || { cursor: null, size: 50, history: [] },
-				cache = self.appFlags.acdc.liveDashboardSnapshot,
+			var self = this, paging = page || { cursor: null, size: 50, history: [] },
+				controller = self.appFlags.acdc.liveDashboardController;
+			if (controller && self.liveControllerActive(controller) && controller.queueId === queueId
+				&& _.isEqual(controller.page, paging) && (!pGeneration || pGeneration === controller.generation)) {
+				self.refreshLiveDashboard(controller); return;
+			}
+			self.stopLiveDashboard();
+			controller = { generation: self.newGeneration(pGeneration), accountId: self.accountId, queueId: queueId,
+				page: _.cloneDeep(paging), bindings: {}, supported: false, inFlight: false, dirty: false, stopped: false };
+			self.appFlags.acdc.liveDashboardController = controller;
+			self.refreshLiveDashboard(controller);
+		},
+
+		refreshLiveDashboard: function(controller) {
+			var self = this, generation = controller.generation, accountId = controller.accountId,
+				queueId = controller.queueId, paging = controller.page, cache = self.appFlags.acdc.liveDashboardSnapshot,
 				previous = cache && cache.accountId === accountId && cache.queueId === queueId && _.isEqual(cache.page, paging) ? cache : null;
+			if (!self.liveControllerActive(controller)) { return; }
+			if (controller.inFlight) { controller.dirty = true; return; }
+			clearTimeout(controller.coalesceTimer); controller.coalesceTimer = null;
+			controller.inFlight = true; controller.dirty = false;
 
 			self.clearLiveDashboardTimer();
 			if (previous) { self.mountLiveDashboard(previous, generation, { updating: true }); }
 			else { self.renderLoading(self.i18n.active().acdc.states.loadingDashboard); }
 			self.requestLiveDashboard(queueId, function(errors, results) {
-				if (!self.isCurrentView(generation, 'dashboard', accountId)) { return; }
+				if (!self.liveControllerActive(controller)) { return; }
+				controller.inFlight = false;
 				if (errors.live || !self.liveSnapshotValid(results.live, accountId, queueId, paging)) {
-					if (errors.denied) { delete self.appFlags.acdc.liveDashboardSnapshot; }
+					if (errors.denied) { delete self.appFlags.acdc.liveDashboardSnapshot; self.stopLiveDashboard(); }
 					if (previous && !errors.denied) { self.mountLiveDashboard(previous, generation, { refreshFailed: true }); }
 					else { self.renderError(self.i18n.active().acdc.dashboard.inventoryUnavailable, function() { self.renderLiveDashboard(queueId, undefined, paging); }); }
-					return;
+				} else {
+					var snapshot = { accountId: accountId, queueId: queueId, page: paging, receivedAt: Date.now(), results: results, errors: errors };
+					self.appFlags.acdc.liveDashboardSnapshot = snapshot;
+					self.mountLiveDashboard(snapshot, generation, {});
+					self.syncLiveSubscriptions(controller, results.live);
 				}
-				var snapshot = { accountId: accountId, queueId: queueId, page: paging, receivedAt: Date.now(), results: results, errors: errors };
-				self.appFlags.acdc.liveDashboardSnapshot = snapshot;
-				self.mountLiveDashboard(snapshot, generation, {});
+				if (controller.dirty) { self.queueLiveRefresh(controller); }
 			}, paging);
 		},
 
 		mountLiveDashboard: function(snapshot, generation, state) {
 			var self = this, labels = self.i18n.active().acdc.dashboard,
-				model = self.formatLiveDashboard(snapshot.results, snapshot.errors, _.assign({}, snapshot, state)),
+				controller = self.appFlags.acdc.liveDashboardController, transport = self.liveTransportState(controller),
+				renderState = _.assign({}, state, { transport: transport, transportStale: transport === 'error' || transport === 'disconnected' }),
+				model = self.formatLiveDashboard(snapshot.results, snapshot.errors, _.assign({}, snapshot, renderState)),
 				view = $(self.getTemplate({ name: snapshot.queueId ? 'dashboard-detail' : 'dashboard', data: model }));
 
 			self.clearLiveDashboardTimer();
@@ -1050,7 +1182,7 @@ define(function(require) {
 				if (_.some(snapshot.results.queues, { id: id })) { self.renderLiveDashboard(id); }
 			});
 			view.find('.acdc-live-edit, .acdc-live-add').on('click', function() {
-				self.clearLiveDashboardTimer();
+				self.stopLiveDashboard();
 				self.appFlags.acdc.currentTab = 'queues';
 				self.appFlags.acdc.container.find('.acdc-tab').removeClass('active');
 				self.appFlags.acdc.container.find('.acdc-tab[data-tab="queues"]').addClass('active');
@@ -1066,6 +1198,14 @@ define(function(require) {
 				view.find('.acdc-live-no-match').prop('hidden', visible > 0 || !model.hasQueues);
 			});
 			self.getContentContainer().empty().append(view);
+			if (controller) {
+				controller.view = view;
+				if (controller.observer) { controller.observer.disconnect(); }
+				if (typeof MutationObserver !== 'undefined') {
+					controller.observer = new MutationObserver(function() { self.liveControllerActive(controller); });
+					controller.observer.observe(document.documentElement, { childList: true, subtree: true });
+				}
+			}
 			if (!model.stale) {
 				self.appFlags.acdc.liveDashboardTimer = setTimeout(function() {
 					if (!self.isCurrentView(generation, 'dashboard', snapshot.accountId)) { return; }

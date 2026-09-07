@@ -46,7 +46,15 @@
 			"snapshot": "Snapshot received",
 			"refreshing": "Refreshing…",
 			"stale": "Snapshot is stale",
-			"staleHelp": "This response is over 30 seconds old or its refresh failed. Values are not updating automatically; a recent response does not prove fresh source observations.",
+			"staleHelp": "This snapshot is over 30 seconds old, its refresh failed or its update connection was lost. A recent response does not prove fresh source observations; check the source and update status.",
+			"transports": {
+				"unavailable": "Native updates are unavailable for this response. Use Refresh for another authorized snapshot.",
+				"empty": "No queues to subscribe to on this page. The authorized page is reconciled every 15 seconds.",
+				"connecting": "Native subscription acknowledgement pending. Snapshots are also reconciled every 15 seconds.",
+				"acknowledged": "Native subscription acknowledged. Events request a fresh snapshot; acknowledgement is not a broker binding barrier or replay. Reconciliation runs every 15 seconds.",
+				"disconnected": "Native updates disconnected. Retained values are stale; authorized snapshot reconciliation continues every 15 seconds.",
+				"error": "Native subscription unavailable or rejected. Retained values are stale; authorized snapshot reconciliation continues every 15 seconds."
+			},
 			"refreshFailed": "Refresh failed. The previous snapshot is shown; no values have been replaced with zero.",
 			"retrieved": "Retrieved at",
 			"responseTime": "Observation window ended:",

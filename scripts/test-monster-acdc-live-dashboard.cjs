@@ -35,6 +35,20 @@ async function main() {
             const app = window.app, $ = window.jQuery;
             const compiled = Object.fromEntries(Object.entries(templates).map(([n, t]) => [n, window.Handlebars.compile(t)]));
             window.A = 'a'.repeat(32); window.Q = '1'.repeat(32);
+            const RealDate = window.Date;
+            window.clockNow = RealDate.now(); window.clockTimers = new Map(); window.clockNext = 0;
+            window.Date = class extends RealDate { static now() { return clockNow; } };
+            window.setTimeout = (fn, ms) => { clockTimers.set(++clockNext, {fn, at: clockNow + ms}); return clockNext; };
+            window.clearTimeout = id => clockTimers.delete(id);
+            window.tick = ms => {
+                const end = clockNow + ms; let bound = 1000;
+                for (;;) {
+                    const next = [...clockTimers].filter(([, t]) => t.at <= end).sort((a, b) => a[1].at - b[1].at)[0];
+                    if (!next) break; if (--bound <= 0) throw Error('Unbounded fixture timer loop');
+                    clockNow = next[1].at; clockTimers.delete(next[0]); next[1].fn();
+                }
+                clockNow = end;
+            };
             window.paging = () => ({cursor: null, size: 50, history: []});
             app.i18n = {active: () => translations};
             app.getTemplate = ({name, data}) => compiled[name]({...data, i18n: translations});
@@ -67,11 +81,20 @@ async function main() {
                 return d;
             };
             window.reset = () => {
-                app.clearLiveDashboardTimer();
+                app.stopLiveDashboard(); clockTimers.clear(); clockNow = RealDate.now();
                 app.accountId = A; app.appFlags.acdc.currentTab = 'dashboard'; app.appFlags.acdc.requestGeneration = 0;
                 app.appFlags.acdc.container = $('#shell'); delete app.appFlags.acdc.liveDashboardSnapshot;
                 window.ledger = []; window.held = []; window.defer = false; window.mainError = null;
                 window.supplementErrors = false; window.reply = dto(false);
+                window.socketBindings = []; window.socketConnects = 0; window.syncAck = false;
+                monster.socket = {
+                    connect() { socketConnects++; return true; },
+                    bind(params) {
+                        const entry = {params, cancelled: 0}; socketBindings.push(entry);
+                        if (syncAck) params.lifecycle.onAck({accountId: params.accountId, binding: params.binding, connectionGeneration: 1});
+                        return () => { entry.cancelled++; };
+                    }
+                };
                 app.getContentContainer().empty();
                 monster.request = options => {
                     ledger.push({resource: options.resource, data: JSON.parse(JSON.stringify(options.data)), verb: app.requests[options.resource].verb});
@@ -90,6 +113,14 @@ async function main() {
             window.resolve = (index, data, error) => {
                 const options = held[index]; if (!options) throw Error('Missing deferred request');
                 if (error) options.error(error); else options.success({status: 'success', data});
+            };
+            window.ack = (index, generation = 1) => {
+                const p = socketBindings[index].params;
+                p.lifecycle.onAck({accountId: p.accountId, binding: p.binding, connectionGeneration: generation});
+            };
+            window.invalidate = (index, event) => {
+                const p = socketBindings[index].params;
+                p.callback(event || {version: 1, account_id: p.accountId, queue_id: p.binding.split('.').pop()});
             };
             reset();
         }, {templates, translations});
@@ -259,6 +290,106 @@ async function main() {
             assert.equal(await page.locator('.acdc-live-queue-name img').count(), 0);
             assert.equal(await page.evaluate(() => Boolean(window.injected)), false);
             assert.equal((await page.evaluate(() => ledger)).every(r => r.verb === 'GET'), true);
+        });
+        await group('capability gates native bindings; shared synchronous ACK triggers one coalesced same-page refresh', async () => {
+            await page.evaluate(() => { reset(); app.renderDashboard(); tick(16000); });
+            assert.equal(await page.evaluate(() => socketBindings.length), 0);
+            assert.equal(await page.evaluate(() => ledger.length), 1);
+            assert.match(await page.locator('.acdc-live-transport').textContent(), /Native updates are unavailable/);
+            await page.evaluate(() => { syncAck = true; reply = dto(); reply.capabilities.websocket_updates = true; });
+            await page.click('.acdc-refresh');
+            assert.deepEqual(await page.evaluate(() => socketBindings.map(b => ({accountId: b.params.accountId, binding: b.params.binding}))),
+                [{accountId: 'a'.repeat(32), binding: 'queue_live.changed.' + '1'.repeat(32)}]);
+            await page.evaluate(() => tick(100));
+            assert.equal(await page.evaluate(() => ledger.length), 3);
+            await page.evaluate(() => tick(1000));
+            assert.equal(await page.evaluate(() => ledger.length), 3); assert.equal(await page.evaluate(() => socketBindings.length), 1);
+            assert.match(await page.locator('.acdc-live-transport').textContent(), /not a broker binding barrier or replay/);
+        });
+        await group('native event burst and held HTTP batch preserve one-flight plus one dirty refresh', async () => {
+            await page.evaluate(() => {
+                reset(); reply = dto(true); reply.capabilities.websocket_updates = true; app.renderLiveDashboard(Q);
+                defer = true; ack(0); tick(100);
+                for (let i = 0; i < 40; i++) { invalidate(0); app.renderLiveDashboard(Q); }
+                tick(1000);
+            });
+            assert.equal(await page.evaluate(() => held.length), 1);
+            assert.equal(await page.evaluate(() => ledger.filter(r => r.resource === 'acdc.live.detail').length), 2);
+            await page.evaluate(() => { resolve(0, reply); tick(100); });
+            assert.equal(await page.evaluate(() => held.length), 2);
+            await page.evaluate(() => { resolve(1, reply); tick(1000); });
+            assert.equal(await page.evaluate(() => held.length), 2);
+            assert.equal(await page.evaluate(() => socketBindings.length), 1);
+            assert.equal(await page.evaluate(() => ledger.every(r => r.verb === 'GET')), true);
+        });
+        await group('native malformed/foreign hints are ignored; disconnect/reconnect and lost-event reconciliation retain counts', async () => {
+            await page.evaluate(() => {
+                reset(); reply.capabilities.websocket_updates = true; app.renderDashboard(); ack(0); tick(100);
+                for (const e of [{version: 2, account_id: A, queue_id: Q}, {version: 1, account_id: 'b'.repeat(32), queue_id: Q},
+                    {version: 1, account_id: A, queue_id: '2'.repeat(32)}]) invalidate(0, e);
+                tick(1000); socketBindings[0].params.lifecycle.onDisconnect({code: 'disconnected'});
+            });
+            assert.equal(await page.evaluate(() => ledger.length), 2);
+            assert.equal(await page.locator('.acdc-live-freshness.is-stale').count(), 1);
+            assert.deepEqual(await page.locator('.acdc-live-card-metrics strong').allTextContents(), ['1', '1']);
+            assert.match(await page.locator('.acdc-live-transport').textContent(), /disconnected/);
+            await page.evaluate(() => { ack(0, 2); tick(100); });
+            assert.equal(await page.evaluate(() => ledger.length), 3);
+            await page.evaluate(() => { reply = dto(); reply.capabilities.websocket_updates = true; tick(15000); });
+            assert.equal(await page.evaluate(() => ledger.length), 4);
+            assert.equal(await page.evaluate(() => socketBindings.length), 1);
+        });
+        await group('native subscription failures back off across manual snapshots and retain periodic repair', async () => {
+            await page.evaluate(() => {
+                reset(); reply.capabilities.websocket_updates = true; app.renderDashboard();
+                socketBindings[0].params.lifecycle.onError({code: 'rejected'});
+            });
+            assert.match(await page.locator('.acdc-live-transport').textContent(), /unavailable or rejected/);
+            await page.click('.acdc-refresh');
+            assert.equal(await page.evaluate(() => socketBindings.length), 1);
+            await page.evaluate(() => tick(15100));
+            assert.equal(await page.evaluate(() => socketBindings.length), 2);
+            assert.equal(await page.evaluate(() => socketBindings[0].cancelled), 1);
+        });
+        await group('native capability removal and access denial immediately cancel exact listeners', async () => {
+            await page.evaluate(() => { reset(); reply.capabilities.websocket_updates = true; app.renderDashboard(); reply = dto(); });
+            await page.click('.acdc-refresh');
+            assert.equal(await page.evaluate(() => socketBindings[0].cancelled), 1);
+            await page.evaluate(() => { ack(0); invalidate(0); tick(16000); });
+            assert.equal(await page.evaluate(() => ledger.length), 2);
+            assert.match(await page.locator('.acdc-live-transport').textContent(), /Native updates are unavailable/);
+            for (const status of [401, 403, 404]) {
+                await page.evaluate(status => {
+                    reset(); reply.capabilities.websocket_updates = true; app.renderDashboard(); mainError = {status};
+                }, status);
+                await page.click('.acdc-refresh');
+                assert.equal(await page.evaluate(() => socketBindings[0].cancelled), 1);
+                assert.equal(await page.evaluate(() => clockTimers.size), 0);
+                assert.equal(await page.locator('.error').count(), 1);
+            }
+        });
+        await group('native detail/page/account/tab/detached-view disposal blocks late events and replies', async () => {
+            await page.evaluate(() => {
+                reset(); reply.capabilities.websocket_updates = true; app.renderDashboard(); reply = dto(true); reply.capabilities.websocket_updates = true;
+            });
+            await page.locator('.acdc-open-live-queue').first().click();
+            assert.equal(await page.evaluate(() => socketBindings[0].cancelled), 1);
+            assert.equal(await page.evaluate(() => socketBindings.length), 2);
+            for (const boundary of ['page', 'account', 'tab', 'detached']) {
+                await page.evaluate(boundary => {
+                    reset(); reply = dto(true); reply.capabilities.websocket_updates = true; app.renderLiveDashboard(Q);
+                    defer = true; ack(0); tick(100);
+                    if (boundary === 'page') app.renderLiveDashboard(null, undefined, {cursor: '2'.repeat(32), size: 50, history: [null]});
+                    if (boundary === 'account') app.accountId = 'b'.repeat(32);
+                    if (boundary === 'tab') app.appFlags.acdc.currentTab = 'queues';
+                    app.getContentContainer().html('<p class="replacement">Replacement</p>');
+                }, boundary);
+                // Real MutationObserver delivery occurs after the DOM replacement.
+                assert.equal(await page.evaluate(() => socketBindings[0].cancelled), 1);
+                await page.evaluate(() => { resolve(0, reply); ack(0); invalidate(0); tick(20000); });
+                assert.equal(await page.locator('.replacement').count(), 1);
+                assert.equal(await page.evaluate(() => ledger.filter(r => r.resource === 'acdc.queues.roster').length), 1);
+            }
         });
         assert.deepEqual(network, []); assert.deepEqual(errors, []);
     } finally { clearTimeout(deadline); await browser.close(); }
