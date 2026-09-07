@@ -1,4 +1,78 @@
-# Restricted queue-live acceptance — live DEFERRED / HARD CLOSED
+# Restricted queue-live acceptance — explicitly armed development test
+
+## Current admission decision — September7
+
+**Full17-case matrix PASS:** root resume `573eb1`/`0d57c2` completed every case
+listed below with4 real nonadmin tokens. The existing SdiLT6 ledger records all
+17 checks and `matrix_passed: true`. This is HTTP/native socket authorization
+proof, not restricted-browser, load, cross-node, delivery or revocation proof.
+
+The shared-lock invocation was corrected:
+`flock -n 3 COMMAND` interprets `3` as a filename, not a descriptor. It created
+an empty `/opt/kz5/3` during the first run; that file is retained as
+`/var/log/kazoo-queue-live-isolation-SdiLT6/incorrect-lock-file`. The helper now
+acquires inherited fd3 in descriptor mode and retains it in its waiting child.
+The41-group/180-rejection-check suite (`407a4a`/`eb685f`) includes real competing
+flock/release/reacquisition on a private inode and under-lock ledger freshness.
+The successful resumed live run used this corrected lock.
+
+`--mode resume` is explicit and one-shot, restricted to an otherwise completely
+created/unchanged fixture whose only unverified user is `no_roster`. It rechecks
+all public hashes/ownership, user revisions, empty owned queue roster and all3
+known token identities before requesting the last login. Queue GET intentionally
+has no strong revision because it enriches the document with roster data;
+scope GET is a view. An initial resume (`bef681`) stopped before login on the
+mistaken queue-revision expectation; the fixture and test now model this native
+contract. Original write revisions remain unchanged for conditional cleanup.
+
+For a prior uncaptured login, resume additionally requires
+`--retain-ambiguous-login` and durably sets BOTH `cleanup_hold` and
+`resume_attempt.ambiguous` before token issuance. Cleanup refuses either marker
+without any HTTP or deletion. A fresh verified token does not prove an unknown
+older token revoked. SdiLT6 remains retained under this hold; no extra resources
+were created by resume. Do not remove the hold to force cleanup. Future definite
+captured native429 responses can be resumed explicitly without this unknown-
+issuance hold, but never with an automatic retry loop or relaxed rate limits.
+
+Live execution `5a8685`/`7099e9` stopped during the fourth fixture login, after
+creating the owned dormant queue,4 policies and4 nonadmin users. The first3
+tokens passed native identity/expiry verification. The log records PUT/user_auth
+HTTP429 at07:42:19 (request `4c8055cb0759f99f06053218ec5bbdde`); the original
+harness did not journal the failing response status/correlation, so its last
+login remains pending. There was no retry or cleanup. Protected ledger:
+`/var/log/kazoo-queue-live-isolation-SdiLT6/ledger.json`. Never print its tokens or
+passwords. Known-token expiry guard ends2026-09-07T08:43:19Z; unresolved login
+ambiguity separately blocks automatic cleanup.
+
+Separate read-only probes using the3 verified tokens pass5 HTTP cases
+(`5da95c`/`e071a8`) and5 native WebSocket cases (`a9bf71`/`716240`): allowed exact
+queue, denied same-company other queue, denied foreign-company queue, denied
+missing stats, denied missing selected-queue read. HTTP replies used exact
+stage-specific denial assertions; WebSockets required exact native ACK/error
+shapes. These probes do not mark the full17-case matrix passed, establish the
+missing-roster case, or prove cleanup. Existing customer agent state was not
+changed and no calls were originated.
+
+Root opened explicit `--allow-fixture-writes` admission after reviewing deployed
+P0-19/P0-20 revision safety, deployed P0-21 role guard/registration, and actual
+scope-policy HTTP stale/weak/current revision checks. This is not a claim that
+the matrix or cleanup has passed. The corrected fixture passes33 groups and149
+rejection checks (`5dadd0`/`f05ea0`), source SHA
+`f7ef55d517e76356ad3b78e92cff035e1022c502f6c4a8f581f62e794eb407db`.
+Both modes still require explicit arming before protected inputs or network
+access; cleanup requires every token's finite expiry plus60 seconds and actual
+401 before deleting any owner or policy. No global token TTL changes.
+
+Owned queue PUT now omits public `id` and adopts the server UUID only after
+strict ID/ownership/dormant-queue checks, recording it before readback. Unknown
+creation is retained and never retried. HTTP403 data is validated against exact
+native shapes by matrix case: token denial `{cause: "access denied by token
+restrictions", message: "forbidden"}`, hierarchy denial `{message: "forbidden"}`,
+or resource denial `{}` with message `queue_live_resource_forbidden`. Additional
+payloads, incorrect messages/codes and infrastructure failures still fail.
+
+The hard-closed text below records historical decisions and is superseded by
+this section. Do not run this fixture on an older backend lacking those fixes.
 
 Latest checkpoint, September7: the offline fixture now passes28 groups and79
 explicit rejection checks (`caacb6`/`9ff5b9`), source SHA

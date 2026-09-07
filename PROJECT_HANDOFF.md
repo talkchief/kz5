@@ -6,6 +6,70 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Current live isolation result — September7:** all17 real HTTP/native Blackhole
+permission cases pass (`573eb1`/`0d57c2`) with4 actual nonadmin principals. This
+includes exact allowed queue, same-account other queue, foreign account/binding,
+denied cursor, missing stats/queue/roster and positive controls after negatives.
+The no-roster principal is denied the detailed HTTP data but allowed the
+identity-free invalidation hint, as designed. The existing protected SdiLT6
+ledger now has `matrix_passed: true`, all17 check names and4 verified logins.
+No additional fixture resources were created by the resumed run.
+
+The corrected harness passes41 offline groups/180 rejection checks
+(`407a4a`/`eb685f`), including real fd-lock contention, under-lock stale-ledger
+refusal, exact rate-limit diagnostics and one-shot final-login resume. Source
+SHA `bb1dfa2a2e37007f698939d898adeee0bd54c408a78d9de116fb41982063eb46`.
+An earlier resume (`bef681`) correctly stopped before login because its test
+expected a strong queue GET revision; native roster-enriched GET explicitly
+drops the ETag. Resume now checks all fixture public hashes/ownership, only user
+GET revisions, and retains original write revisions for future conditional
+deletion. The final run used the corrected shared descriptor lock.
+
+**Retained fixture, not cleanup PASS:** the original fourth login response was
+uncaptured. Explicit resume recorded both `cleanup_hold: uncaptured_prior_login`
+and `resume_attempt.ambiguous: true` before requesting its new token. Every
+cleanup call refuses that hold even after known tokens expire. Do not clear it
+or claim unknown old JWTs revoked. Nine synthetic resources remain isolated in
+SdiLT6 for reviewed cleanup; their secrets stay outside Git. No calls/services,
+original users, agent memberships or routing were changed by these checks.
+Remaining live-dashboard gates: restricted-user browser behavior, bounded load,
+cross-node behavior and relevant log review. Callback/voice/history work stays
+paused. This is not full production acceptance or master-push completion.
+
+**Earlier restricted-principal checkpoint — September7:** prerequisite deployment
+and documentation are committed locally as `c115335`; no master push yet. Root
+opened explicit fixture admission after deployed cleanup/role-guard review.
+Corrected fixture `5dadd0`/`f05ea0` passes33 offline groups/149 rejection checks.
+Live run `5a8685`/`7099e9` created9 isolated resources and verified3 genuine
+nonadmin logins, then stopped during the fourth login (`api_success_required`).
+Native console request `4c8055cb0759f99f06053218ec5bbdde`,07:42:19, records
+PUT/user_auth429. The fixture did not yet persist that response's status or
+request ID; its last login remains pending, so do not silently relabel/retry it.
+Retained protected ledger: `/var/log/kazoo-queue-live-isolation-SdiLT6/ledger.json`.
+It contains passwords/tokens: never print or commit it. No original user, agent,
+queue membership or routing was changed. The owned denied queue is
+`b516dd656fb84bcbbd51661195a61433` in the isolated acceptance tenant.
+
+Using only the3 verified tokens, separate read-only checks passed5 HTTP cases
+(`5da95c`/`e071a8`) and5 native Blackhole cases (`a9bf71`/`716240`): positive exact
+queue, other queue denial, foreign-company denial, missing-statistics denial,
+missing-queue-read denial. The full17-check matrix, fourth user's roster case,
+expiry cleanup and cross-node/load remain open. These supplemental checks did
+not modify the ledger or pretend its matrix had completed. Earliest cleanup for
+the known tokens, including the61-second guard, is2026-09-07T08:43:19Z; ambiguous
+last login still separately blocks cleanup. Retain both users and policies.
+Next: record definite rate-limit failures in the harness, then reviewed recovery
+of this fixture and completion of remaining live-only checks; never relax auth
+limits or bulk-delete test resources to force acceptance.
+
+Harness-lock correction also required before the next live run: the original
+`flock -n 3 COMMAND` locked a file named `3`, not the inherited descriptor3.
+The empty accidental file was moved to the retained fixture directory as
+`incorrect-lock-file`; no customer data was removed. Root serialized all jobs
+and source-only agents did not run concurrent acceptance, but those earlier
+checks do not prove shared-lock exclusion. The source fix must pass a real
+competing-flock test on a private inode, then use the existing shared lock.
+
 **Current scope and acceptance checkpoint — September 7:** work is limited to
 the live queue summary and selected-queue detail dashboard. Callback fixes and
 voices are paused alongside history, ClickHouse, WFM and the separate agent
