@@ -6,7 +6,21 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
-**Next live gate (September7):** combined actual-browser/call candidate is
+**Latest live PASS (September7):** guarded job a0d26078 passed the combined
+actual-browser/call mode on the deployed nUolDS build. Evidence:
+`/var/log/kazoo-strategy-acceptance-elItb6/` and
+`/tmp/kazoo-monster-live-deployed.CkHl41/receipt.json`. Eleven browser checks
+passed, including actual visible waiting→handled→gone after three natural native
+hints and later GETs, normal company switching and subscription cleanup. The
+call proof has one offer/bridge and12 stable reciprocal-channel samples. Only
+the unrelated30 simulated phones were temporarily stopped, then restored by an
+EXIT trap; all eight call-path/platform services stayed running with the original
+320MiB cap/512MiB reserve. MASTER before/after fixture-pause snapshots compared
+exactly (roster and31 statuses/memberships). All nine services active, zero calls,
+no ledger afterward. Summary during calls, restricted principals, cross-node and
+load/soak remain open; no production-readiness or master-push claim.
+
+**Earlier source/admission checkpoint:** combined actual-browser/call candidate is
 `test-acdc-strategies-live.cjs --dashboard-browser-live`, documented in
 `doc/monster_browser_call_acceptance.md`. Source/offline checks passed: CLI/failure
 f3ea3d, original SIP3ebc21, shared observer12 groups45380, new browser phase12
@@ -132,7 +146,7 @@ all eight services were active. `/apis` is published (8385); full offline catalo
 deterministic rebuild and tamper checks82241 passed. Installer module migration
 `b52988c` passed37 isolated cases and actual idempotent readback58155; it handles
 the native maintenance-command exit-2 convention without accepting failed reads.
-Next: browser call-transition rendering and restricted-user/cross-node/load
+Next: summary call-transition rendering and restricted-user/cross-node/load
 checks. Root owns serialized jobs and service windows. No master push or
 enterprise-readiness claim; all ACDC source remains directly in kz5.
 

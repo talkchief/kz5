@@ -100,8 +100,16 @@ thrown-error propagation plus input rejection and existing shared cleanup/signal
 boundaries. Original SIP/ownership fixture3ebc21 and shared observer12 groups45380
 passed. Browser phase fixture93501 passed12 groups and company-scope fixtured3c369
 passed16. Actual attempt53882e was refused by resource admission before payload
-execution; no call or fixture was created. Combined browser/call execution is
-still pending, not a new live PASS. See `monster_browser_call_acceptance.md`.
+execution; no call or fixture was created. Subsequent guarded a0d26078 passed
+the combined browser/detail/call test:11 browser checks,3 natural hints,6 detail
+GETs, one offer/bridge and12 stable channel samples. Evidence is in
+`/var/log/kazoo-strategy-acceptance-elItb6/` and
+`/tmp/kazoo-monster-live-deployed.CkHl41/receipt.json`. Only the unrelated30
+simulated test phones were paused/restored; all platform services stayed active.
+The original guard limits were unchanged. Exact MASTER roster/31 reported
+statuses/memberships matched afterward, all nine services were active, zero calls
+and no ledger remained. Summary during calls and broader reliability gates remain
+open. See `monster_browser_call_acceptance.md`.
 
 **Latest actual run79231: PASS.** Root2519 first compiled74 ACDC and30 Blackhole
 production modules in

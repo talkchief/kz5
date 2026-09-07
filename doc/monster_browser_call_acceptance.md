@@ -1,11 +1,18 @@
 # Actual browser call-transition acceptance
 
-Status, September 7, 2026: source and offline regression checks pass. Actual
-browser-plus-call execution is **not yet validated**. Resource admission53882e
-refused the payload before any fixture write: approximately754MiB was available,
-below the320MiB test cap plus512MiB reserve. All8 services remained active, zero
-calls remained, and no strategy recovery ledger was created. This is neither a
-call failure nor a live acceptance PASS.
+Status, September 7, 2026: **actual deployed browser plus one isolated call
+passed** in guarded job a0d26078. The browser verified waiting → handled → gone,
+each with a fresh native hint, later authorized GET and matching visible rows
+and counts. This is detail acceptance, not a production/load or summary-call claim.
+
+Earlier admission53882e refused before payload at approximately754MiB available.
+The successful run temporarily stopped only `kazoo-live-test-agents.service`
+(30 receive-only simulated phones), after a zero-call check and state snapshot.
+All eight platform services stayed running; the320MiB cap and512MiB reserve
+were unchanged. An EXIT trap restored the phone service. Before/after snapshots
+matched the exact roster and31 reported statuses/memberships; no status restore
+was performed. Final state: all nine services active, zero FreeSWITCH calls,
+no strategy recovery ledger. This fixture pause is not a production capacity test.
 
 ## Entry point and ownership
 
@@ -65,6 +72,19 @@ strategy ledger when cleanup cannot be verified; never broaden cleanup scope.
 
 ## Evidence and remaining gates
 
+- Actual run a0d26078: `/var/log/kazoo-strategy-acceptance-elItb6/`
+  contains `dashboard-browser-evidence.json` and the natural-call proof. One
+  offered agent, one bridge event and12 stable reciprocal-channel samples passed.
+- Browser receipt: `/tmp/kazoo-monster-live-deployed.CkHl41/receipt.json`:
+  11 checks,3 natural hints,6 detail GETs,3 subscribe and3 unsubscribe ACKs;
+  zero console/page/HTTP/request/scope errors and no supplemental detail calls.
+  Normal company switching and home restoration completed before PASS.
+- The owning harness restored the three borrowed agents and removed only its
+  marked queue/flow and contacts. MASTER snapshots
+  `phone-snapshot-before-fixture-pause.json` and
+  `phone-snapshot-after-fixture-pause.json` under the private rollout directory
+  compared exactly. Test phones restarted with all30 sockets/children observed.
+
 - CLI/failure-path fixturef3ea3d: pass, including invalid inputs before writes,
   browser failure/throw propagation and existing shared cleanup/signal guards.
 - Original SIP/ownership fixture3ebc21: pass.
@@ -82,12 +102,15 @@ Offline commands: `test-acdc-dashboard-live-mode.cjs`,
 `test-monster-live-call-observer.cjs`, `test-monster-live-deployed-scope.cjs`, all
 under `scripts/` and the resource guard with an isolated network namespace.
 
-The prepared development launcher is
+The direct development launcher is
 `/tmp/kazoo-live-rollout.OYdOqh/test-browser-natural-call.sh`; inspect its current
-hash pins and resource admission before use. Successful future execution must
+hash pins and resource admission before use. The successful run used the private
+`test-browser-with-fixture-pause.sh` wrapper in that directory to pause/restore
+only the unrelated simulated-phone service. Snapshot and compare state around
+any such pause; never run the full fixture logout/cleanup operation. Execution must
 produce both the private browser receipt and the owning strategy call/cleanup
 evidence. The existing natural HTTP/native call PASS79231 and deployed navigation
-PASS74850/69219 are separate evidence, not substitutes for this combined test.
+PASS74850/69219 remain separate earlier evidence.
 
 This slice targets detail call rendering. Summary rendering during real calls,
 restricted-principal isolation, cross-node faults and load/soak are separate
