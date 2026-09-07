@@ -1,0 +1,193 @@
+%% Read-only DEV function probe; no worker, queue change, call or provider.
+try
+    ExpectedNode = <<"@@NODE@@">>, ExpectedNode = atom_to_binary(node(), utf8),
+    InputHash = <<"@@INPUT_SHA256@@">>,
+    Hex = fun(Bytes) -> list_to_binary(lists:flatten([io_lib:format("~2.16.0b", [B]) || <<B>> <= Bytes])) end,
+    %% Same descriptor/identity pattern as the cardinal mapping sidecar. Check
+    %% size BEFORE allocating, read at most Size+1, then repin descriptor/path.
+    %% Atime is excluded because this read itself may update it.
+    StatIdentity = fun(Info) -> [element(N, Info) || N <- [2,3,6,7,8,9,10,11,12,13,14]] end,
+    BoundedRead = fun(File, Limit, Kind, ExpectedHash) ->
+        {ok, ParentInfo} = file:read_link_info(filename:dirname(File), [{time, posix}]),
+        {file_info, _, directory, _, _, _, _, ParentMode, _, _, _, _, 0, ParentGid} = ParentInfo,
+        0 = ParentMode band 8#022,
+        case Kind of sidecar -> 8#750 = ParentMode band 8#7777; beam -> ok end,
+        ValidStat = fun(Info) ->
+            {file_info, Size0, regular, _, _, _, _, FileMode, 1, _, _, _, 0, FileGid} = Info,
+            0 = FileMode band 8#022,
+            case Kind of sidecar -> 8#640 = FileMode band 8#7777, ParentGid = FileGid; beam -> ok end,
+            true = is_integer(Size0) andalso Size0 > 0 andalso Size0 =< Limit,
+            Size0
+        end,
+        {ok, BeforeInfo} = file:read_link_info(File, [{time, posix}]),
+        Size = ValidStat(BeforeInfo),
+        {ok, Fd} = file:open(File, [read, binary, raw]),
+        try
+            {ok, OpenInfo} = file:read_file_info(Fd, [{time, posix}]),
+            Size = ValidStat(OpenInfo), true = StatIdentity(BeforeInfo) =:= StatIdentity(OpenInfo),
+            {ok, Bytes} = file:pread(Fd, 0, Size + 1), Size = byte_size(Bytes),
+            {ok, AfterInfo} = file:read_file_info(Fd, [{time, posix}]),
+            {ok, FinalInfo} = file:read_link_info(File, [{time, posix}]),
+            {ok, ParentAfter} = file:read_link_info(filename:dirname(File), [{time, posix}]),
+            true = StatIdentity(OpenInfo) =:= StatIdentity(AfterInfo),
+            true = StatIdentity(OpenInfo) =:= StatIdentity(FinalInfo),
+            true = StatIdentity(ParentInfo) =:= StatIdentity(ParentAfter),
+            ExpectedHash = Hex(crypto:hash(sha256, Bytes)), Bytes
+        after ok = file:close(Fd) end
+    end,
+    Raw = BoundedRead("@@SIDECAR@@", 8388608, sidecar, InputHash),
+    Input = kz_json:decode(Raw), Get = fun(K, J) -> kz_json:get_value(K, J) end,
+    1 = Get(<<"schema_version">>, Input), ExpectedNode = Get(<<"node">>, Input),
+    Account = Get(<<"account">>, Input), true = is_binary(Account) andalso byte_size(Account) =:= 32,
+    match = re:run(Account, <<"^[a-f0-9]{32}$">>, [{capture, none}]),
+    %% Explicit operator account only. Even kapps_config:get can SAVE a
+    %% missing category, so neither config lookup nor discovery belongs here.
+    <<AA:2/binary, AB:2/binary, AC/binary>> = Account,
+    AccountDb = <<"account%2F", AA/binary, "%2F", AB/binary, "%2F", AC/binary>>,
+    Active = fun(D) ->
+        true = lists:member(Get(<<"_deleted">>, D), [undefined, false]),
+        true = lists:member(Get(<<"pvt_deleted">>, D), [undefined, false]),
+        [] = kz_json:get_value(<<"_conflicts">>, D, [])
+    end,
+    CheckAccount = fun() ->
+        {ok, AccountDoc} = kz_datamgr:open_doc(AccountDb, Account, [{conflicts, true}]),
+        Account = Get(<<"_id">>, AccountDoc), <<"account">> = Get(<<"pvt_type">>, AccountDoc),
+        Active(AccountDoc),
+        true = lists:member(Get(<<"enabled">>, AccountDoc), [undefined, true]),
+        true = lists:member(Get(<<"pvt_enabled">>, AccountDoc), [undefined, true]),
+        AccountDoc
+    end,
+    AccountBefore = CheckAccount(),
+    Maps = [media_map, kz_media_map],
+    Owners = [{M, whereis(M), ets:info(M, owner)} || M <- Maps],
+    true = lists:all(fun({_, P, O}) -> is_pid(P) andalso is_pid(O) end, Owners),
+    Deadline = erlang:monotonic_time(millisecond) + 150000,
+    Guard = fun() ->
+        true = erlang:monotonic_time(millisecond) < Deadline,
+        true = lists:all(fun({M, P, O}) -> whereis(M) =:= P andalso ets:info(M, owner) =:= O end, Owners)
+    end,
+    BeamModules = [<<"acdc_announcements">>, <<"acdc_callback_caller">>, <<"acdc_cardinal_media">>,
+        <<"acdc_cardinal_prompts">>, <<"acdc_gemini_prompts">>, <<"acdc_language">>, <<"acdc_wait_time_media">>,
+        <<"cb_acdc_queue_editor">>, <<"cf_acdc_member">>, <<"kz_media_map">>, <<"media_map">>],
+    Beams = Get(<<"beams">>, Input),
+    BeamModules = lists:sort([Get(<<"module">>, B) || B <- Beams]),
+    CheckBeams = fun() -> lists:foreach(fun(B) ->
+        Guard(), M = binary_to_existing_atom(Get(<<"module">>, B), utf8),
+        Path = binary_to_list(Get(<<"path">>, B)), Path = code:which(M),
+        Bytes = BoundedRead(Path, 8388608, beam, Get(<<"sha256">>, B)),
+        {ok, [{M, Digest}]} = beam_lib:md5(Bytes), Digest = M:module_info(md5),
+        false = lists:any(fun({d, 'TEST'}) -> true; ({d, 'TEST', _}) -> true; (_) -> false end,
+            proplists:get_value(options, M:module_info(compile), [])),
+        Guard()
+    end, Beams) end,
+    CheckBeams(),
+    Docs = Get(<<"documents">>, Input), 796 = length(Docs),
+    Ids = [Get(<<"_id">>, E) || E <- Docs], 796 = length(lists:usort(Ids)), Db = <<"system_media">>,
+    CheckDoc = fun(E, D) ->
+        Active(D),
+        true = lists:all(fun(K) -> Get(K, E) =:= Get(K, D) end,
+            [<<"_id">>, <<"_rev">>, <<"prompt_id">>, <<"language">>, <<"source_type">>, <<"content_length">>]),
+        <<"media">> = Get(<<"pvt_type">>, D), Db = Get(<<"pvt_account_db">>, D),
+        Db = kz_json:get_value(<<"pvt_account_id">>, D, Db),
+        <<"audio/wav">> = Get(<<"content_type">>, D), true = Get(<<"streamable">>, D),
+        Voice = Get(<<"source_voice">>, D), ExpectedVoice = Get(<<"source_voice">>, E),
+        true = lists:all(fun(K) -> Get(K, Voice) =:= Get(K, ExpectedVoice) end,
+            [<<"provider">>, <<"model">>, <<"voice">>, <<"canonical_prompt_id">>, <<"sha256">>, <<"transcript_sha256">>]),
+        case Get(<<"source_cardinal_resolution">>, E) of
+            null -> undefined = Get(<<"source_cardinal_resolution">>, D);
+            R -> true = kz_json:are_equal(R, Get(<<"source_cardinal_resolution">>, D))
+        end,
+        Attachments = Get(<<"_attachments">>, D), Name = Get(<<"attachment">>, E),
+        [Name] = kz_json:get_keys(Attachments), Att = Get(Name, Attachments),
+        <<"audio/wav">> = Get(<<"content_type">>, Att),
+        true = Get(<<"digest">>, Att) =:= Get(<<"digest">>, E),
+        true = Get(<<"length">>, Att) =:= Get(<<"content_length">>, E)
+    end,
+    CheckMedia = fun() ->
+        Guard(), {ok, Rows} = kz_datamgr:open_docs(Db, Ids, [{conflicts, true}]), Guard(),
+        true = lists:sort(Ids) =:= lists:sort([Get(<<"id">>, R) || R <- Rows]),
+        ById = maps:from_list([{Get(<<"id">>, R), Get(<<"doc">>, R)} || R <- Rows]),
+        lists:foreach(fun(E) ->
+            Guard(), CheckDoc(E, maps:get(Get(<<"_id">>, E), ById)),
+            Prompt = Get(<<"prompt_id">>, E), Language = Get(<<"language">>, E),
+            Key = <<Db/binary, "/", Prompt/binary>>,
+            lists:foreach(fun(M) ->
+                %% Direct ETS only: prompt_path can lazily repair a miss.
+                [{media_map, Key, Db, Prompt, Languages}] = ets:lookup(M, Key),
+                true = Get(Language, Languages) =:= Get(<<"expected_path">>, E)
+            end, Maps)
+        end, Docs), Guard()
+    end,
+    CheckMedia(),
+    PathFor = fun(L, Canonical) ->
+        [E] = [E || E <- Docs, Get(<<"language">>, E) =:= L,
+            Get(<<"canonical_prompt_id">>, Get(<<"source_voice">>, E)) =:= Canonical],
+        <<"/system_media/", (Get(<<"_id">>, E))/binary>>
+    end,
+    Locales = Get(<<"locales">>, Input),
+    [<<"ar-sa">>, <<"en-us">>, <<"es-es">>, <<"fr-fr">>, <<"he-il">>] = lists:sort([Get(<<"locale">>, L) || L <- Locales]),
+    Numbers = [1,2,4,9,11,12,21,71,80,81,89,101,102,1000,2000,12000,21000,1001001,999999999],
+    Numbers = Get(<<"number_cases">>, Input),
+    WaitCases = [0,59,60,300,301,600,601,900,901,1800,1801,2700,2701,3600,3601,999999],
+    WaitCases = Get(<<"wait_cases">>, Input),
+    WaitKeys = [<<"increase_in_call_volume">>, <<"the_estimated_wait_time_is">>, <<"less_than_1_minute">>,
+        <<"about_5_minutes">>, <<"about_10_minutes">>, <<"about_15_minutes">>, <<"about_30_minutes">>,
+        <<"about_45_minutes">>, <<"about_1_hour">>, <<"at_least_1_hour">>],
+    Buckets = [<<"less_than_1_minute">>, <<"less_than_1_minute">>, <<"about_5_minutes">>, <<"about_5_minutes">>,
+        <<"about_10_minutes">>, <<"about_10_minutes">>, <<"about_15_minutes">>, <<"about_15_minutes">>,
+        <<"about_30_minutes">>, <<"about_30_minutes">>, <<"about_45_minutes">>, <<"about_45_minutes">>,
+        <<"about_1_hour">>, <<"about_1_hour">>, <<"at_least_1_hour">>, <<"at_least_1_hour">>],
+    lists:foreach(fun(Locale) ->
+        Guard(), L = Get(<<"locale">>, Locale),
+        Count = maps:get(L, #{<<"en-us">> => 31, <<"he-il">> => 131, <<"fr-fr">> => 161, <<"es-es">> => 53, <<"ar-sa">> => 208}),
+        Count = Get(<<"count">>, Locale),
+        Cardinal = [E || E <- Docs, Get(<<"language">>, E) =:= L,
+            binary:match(Get(<<"canonical_prompt_id">>, Get(<<"source_voice">>, E)), <<"acdc-cardinal-v1-">>) =:= {0,17}],
+        Count = length(Cardinal),
+        Paths = maps:from_list([{Get(<<"canonical_prompt_id">>, Get(<<"source_voice">>, E)),
+            <<"/system_media/", (Get(<<"_id">>, E))/binary>>} || E <- Cardinal]),
+        {ok, Position} = acdc_cardinal_media:prepare(L, Account, []),
+        Paths = maps:get(assets, Position), L = maps:get(language, Position),
+        Intro = case L of <<"he-il">> -> <<"acdc-cardinal-intro-v1-current-position-number">>;
+            <<"ar-sa">> -> <<"acdc-cardinal-intro-v1-current-position-number">>;
+            _ -> <<"acdc-queue-your-current-position-is">> end,
+        Before = [{play, PathFor(L, Intro)}], Before = maps:get(before_number, Position), [] = maps:get(after_number, Position),
+        lists:foreach(fun(N) ->
+            {ok, Roles} = acdc_cardinal_prompts:roles(N, L),
+            ExpectedPlaylist = Before ++ [{play, maps:get(R, Paths)} || R <- Roles],
+            ExpectedPlaylist = acdc_cardinal_media:playlist(N, L, Position)
+        end, Numbers),
+        lists:foreach(fun(Alternate) ->
+            Guard(), {ok, Callback} = acdc_gemini_prompts:callback(<<"6">>, Alternate, [], L, Account),
+            true = maps:get(builtin_gemini, Callback), false = maps:get(non_gemini_numeric_dependency, Callback),
+            Menu = case Alternate of true -> <<"acdc-callback-menu-alternate">>; false -> <<"acdc-callback-menu-current">> end,
+            ExpectedMedia = maps:from_list([{K, PathFor(L, C)} || {K, C} <-
+                [{offer, <<"acdc-callback-offer-6">>}, {menu, Menu}, {number_readback, <<"acdc-callback-number-readback">>},
+                 {confirmation, <<"acdc-callback-confirmation">>}, {success, <<"acdc-callback-success">>},
+                 {returned_confirmation, <<"acdc-callback-returned-confirmation">>}]]),
+            ExpectedMedia = maps:get(media, Callback),
+            ExpectedAux = maps:from_list([{K, PathFor(L, C)} || {K, C} <- [{unavailable, <<"acdc-callback-unavailable">>},
+                {invalid_entry, <<"acdc-callback-invalid-entry">>}, {enter_number, <<"acdc-callback-enter-number">>}]]),
+            ExpectedAux = maps:get(auxiliary, Callback),
+            Digits = maps:from_list([{D, {play, PathFor(L, <<"acdc-number-", D>>)}} || D <- "0123456789"]),
+            Digits = maps:get(readback, Callback),
+            Readback = [maps:get(D, Digits) || D <- "00123456789"],
+            {ok, Readback} = acdc_gemini_prompts:callback_readback(<<"00123456789">>, Callback)
+        end, [false, true]),
+        Guard(), {ok, Wait} = acdc_wait_time_media:prepare(L, Account, []),
+        Commands = maps:from_list([{K, {play, PathFor(L, <<"acdc-queue-", K/binary>>)}} || K <- WaitKeys]),
+        Commands = maps:get(assets, Wait), L = maps:get(language, Wait),
+        lists:foreach(fun({Seconds, Bucket}) ->
+            Basic = [maps:get(<<"the_estimated_wait_time_is">>, Commands), maps:get(Bucket, Commands)],
+            {Basic, Seconds} = acdc_wait_time_media:playlist(Seconds, undefined, L, Wait),
+            {Basic, Seconds} = acdc_wait_time_media:playlist(Seconds, Seconds, L, Wait),
+            Increased = [maps:get(<<"increase_in_call_volume">>, Commands) | Basic],
+            {Increased, Seconds} = acdc_wait_time_media:playlist(Seconds, Seconds - 1, L, Wait)
+        end, lists:zip(WaitCases, Buckets)),
+        {[], 123} = acdc_wait_time_media:playlist(undefined, 123, L, Wait), Guard()
+    end, Locales),
+    CheckMedia(), CheckBeams(), AccountAfter = CheckAccount(),
+    true = kz_json:are_equal(AccountBefore, AccountAfter), Guard(),
+    {ok, {prerecorded_runtime_verified, InputHash, 796, 1592, 5, 95, 10, 80,
+        no_database_writes, no_calls, no_native_review}}
+catch _:_ -> {error, prerecorded_runtime_verification_failed_safely} end.

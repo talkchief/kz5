@@ -14,7 +14,10 @@ export ERL_CRASH_DUMP=/dev/null
 erlc -DTEST -Werror -I applications/acdc/src -I applications/acdc/include \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$test_dir" \
     applications/acdc/src/acdc_language.erl applications/acdc/src/acdc_announcements.erl \
+    applications/acdc/src/acdc_cardinal_media.erl applications/acdc/src/acdc_cardinal_prompts.erl \
+    applications/acdc/src/acdc_gemini_prompts.erl \
+    applications/acdc/src/acdc_wait_time_media.erl \
     applications/acdc/src/cf_acdc_member.erl applications/acdc/src/acdc_callback_caller.erl
-erlc -Werror -o "$test_dir" scripts/erlang-tests/acdc_language_tests.erl
+erlc -Werror -I applications/acdc/src -o "$test_dir" scripts/erlang-tests/acdc_language_tests.erl
 erl -pa "$test_dir" -noshell \
     -eval 'case eunit:test(acdc_language_tests, [verbose]) of ok -> halt(0); _ -> halt(1) end.'

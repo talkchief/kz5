@@ -17,6 +17,7 @@ for (const [locale, entry] of Object.entries(full.languages)) Object.assign(entr
 });
 validator.assertLanguageCapabilities(full);
 const fullBytes = JSON.stringify(full, null, 2) + '\n';
+const cardinalBytes = JSON.stringify(require('./test-fixtures/acdc-cardinal-capabilities.cjs').cardinalCapabilities('runtime'));
 
 function fixture(options = {}) {
     const configRoot = options.configRoot || '/private/custom-kazoo';
@@ -111,7 +112,7 @@ test('Absent artifact creates only an explicit negative legacy state with root06
     assert.equal(item.mutations.filter(value => value[0] === 'publish').length, 1);
 });
 test('Current fully ready and legacy artifacts are preserved byte-for-byte with zero mutations', () => {
-    for (const content of [fullBytes, legacy]) {
+    for (const content of [fullBytes, legacy, cardinalBytes]) {
         const item = fixture({content});
         assert.equal(item.run().result, 'preserved');
         assert.equal(item.content(), content); assert.deepEqual(item.mutations, []); assert.equal(item.fds.size, 0);
@@ -167,7 +168,7 @@ test('Apps-only custom configuration root creates one protected child and all-fa
     assert.equal(item.nodes.get(item.target).uid, 0); assert.equal(item.nodes.get(item.target).mode, 0o644);
 });
 test('Apps rerun preserves complete or negative existing manifests byte-for-byte without chmod', () => {
-    for (const content of [fullBytes, legacy]) {
+    for (const content of [fullBytes, legacy, cardinalBytes]) {
         const item = fixture({apps: true, content});
         assert.equal(item.run().result, 'preserved'); assert.equal(item.content(), content);
         assert.deepEqual(item.mutations, []);

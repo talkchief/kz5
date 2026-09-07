@@ -1,0 +1,129 @@
+%% Exact source/receipt pinned584 cardinals plus2 new HE/AR introductions.
+%% Existing fixed210 mappings, legacy prompts and account recordings are outside
+%% this scope. A partial failed activation is never represented as completion.
+try
+    true = <<"@@NODE@@">> =:= atom_to_binary(node(), utf8),
+    Mode = '@@MODE@@',
+    %% Keep the executable AST small. The complete inventory is a bounded,
+    %% owner-protected data sidecar, pinned before decoding any JSON.
+    ExpectedFile = "@@EXPECTED_PATH@@",
+    ExpectedGid = @@EXPECTED_GID@@,
+    {ok, ParentInfo} = file:read_link_info(filename:dirname(ExpectedFile), [{time, posix}]),
+    {file_info, _, directory, _, _, _, _, ParentMode, _, _, _, _, 0, ExpectedGid} = ParentInfo,
+    8#750 = ParentMode band 8#7777,
+    ValidStat = fun(Info) ->
+        {file_info, Size, regular, _, _, _, _, FileMode, 1, _, _, _, 0, ExpectedGid} = Info,
+        8#640 = FileMode band 8#7777,
+        true = is_integer(Size) andalso Size > 0 andalso Size =< 8388608,
+        Size
+    end,
+    StatIdentity = fun(Info) -> [element(N, Info) || N <- [2,3,6,7,8,9,10,11,12,13,14]] end,
+    {ok, BeforeInfo} = file:read_link_info(ExpectedFile, [{time, posix}]),
+    Size = ValidStat(BeforeInfo),
+    {ok, ExpectedFd} = file:open(ExpectedFile, [read, binary, raw]),
+    ExpectedBytes = try
+        {ok, OpenInfo} = file:read_file_info(ExpectedFd, [{time, posix}]),
+        Size = ValidStat(OpenInfo),
+        true = StatIdentity(BeforeInfo) =:= StatIdentity(OpenInfo),
+        %% Reading one extra byte rejects growth; at most8MiB+1 is allocated.
+        {ok, Bytes} = file:pread(ExpectedFd, 0, Size + 1),
+        Size = byte_size(Bytes),
+        {ok, AfterInfo} = file:read_file_info(ExpectedFd, [{time, posix}]),
+        {ok, FinalInfo} = file:read_link_info(ExpectedFile, [{time, posix}]),
+        {ok, ParentAfter} = file:read_link_info(filename:dirname(ExpectedFile), [{time, posix}]),
+        true = StatIdentity(OpenInfo) =:= StatIdentity(AfterInfo),
+        true = StatIdentity(OpenInfo) =:= StatIdentity(FinalInfo),
+        true = StatIdentity(ParentInfo) =:= StatIdentity(ParentAfter),
+        true = crypto:hash(sha256, Bytes) =:= base64:decode(<<"@@EXPECTED_SHA256_BASE64@@">>),
+        Bytes
+    after ok = file:close(ExpectedFd)
+    end,
+    Expected = kz_json:decode(ExpectedBytes),
+    586 = length(Expected),
+    Modules = [media_map, kz_media_map],
+    Owners = [{M, whereis(M), ets:info(M, owner)} || M <- Modules],
+    true = lists:all(fun({_, Pid, Owner}) -> is_pid(Pid) andalso is_pid(Owner) end, Owners),
+    Deadline = erlang:monotonic_time(millisecond) + 150000,
+    Guard = fun() ->
+        true = erlang:monotonic_time(millisecond) < Deadline,
+        true = lists:all(fun({M, Pid, Owner}) -> whereis(M) =:= Pid andalso ets:info(M, owner) =:= Owner end, Owners)
+    end,
+    Db = <<"system_media">>,
+    Get = fun(K, J) -> kz_json:get_value(K, J) end,
+    Check = fun(E, D) ->
+        true = lists:all(fun(K) -> Get(K, D) =:= Get(K, E) end,
+            [<<"_id">>, <<"_rev">>, <<"prompt_id">>, <<"language">>, <<"source_type">>, <<"content_length">>]),
+        true = lists:member(Get(<<"_deleted">>, D), [undefined, false]),
+        true = lists:member(Get(<<"pvt_deleted">>, D), [undefined, false]),
+        [] = kz_json:get_value(<<"_conflicts">>, D, []),
+        <<"media">> = Get(<<"pvt_type">>, D),
+        Db = Get(<<"pvt_account_db">>, D),
+        Db = kz_json:get_value(<<"pvt_account_id">>, D, Db),
+        <<"audio/wav">> = Get(<<"content_type">>, D),
+        true = Get(<<"streamable">>, D),
+        Voice = Get(<<"source_voice">>, D),
+        true = lists:all(fun(K) -> Get(K, Voice) =:= Get(K, Get(<<"source_voice">>, E)) end,
+            [<<"provider">>, <<"model">>, <<"voice">>, <<"canonical_prompt_id">>, <<"sha256">>, <<"transcript_sha256">>]),
+        case Get(<<"source_cardinal_resolution">>, E) of
+            null -> undefined = Get(<<"source_cardinal_resolution">>, D);
+            Resolution ->
+                %% JSON object key order is irrelevant, but no lineage field
+                %% may disappear, change or be added to the verified object.
+                true = kz_json:are_equal(Resolution, Get(<<"source_cardinal_resolution">>, D))
+        end,
+        Attachments = Get(<<"_attachments">>, D), Name = Get(<<"attachment">>, E),
+        [Name] = kz_json:get_keys(Attachments), Att = Get(Name, Attachments),
+        <<"audio/wav">> = Get(<<"content_type">>, Att),
+        true = Get(<<"digest">>, Att) =:= Get(<<"digest">>, E),
+        true = Get(<<"length">>, Att) =:= Get(<<"content_length">>, E),
+        ok
+    end,
+    Read = fun(E) ->
+        Guard(),
+        {ok, D} = kz_datamgr:open_doc(Db, Get(<<"_id">>, E), [{conflicts, true}]),
+        Guard(), ok = Check(E, D), D
+    end,
+    Existing = fun(M, E) ->
+        Guard(), Prompt = Get(<<"prompt_id">>, E), Language = Get(<<"language">>, E),
+        Key = <<Db/binary, "/", Prompt/binary>>,
+        case ets:lookup(M, Key) of
+            [] -> missing;
+            [{media_map, Key, Db, Prompt, Languages}] ->
+                case Get(Language, Languages) of
+                    undefined -> missing;
+                    P -> true = P =:= Get(<<"expected_path">>, E), present
+                end
+        end
+    end,
+    %% ALL documents and existing paths pass before the first map mutation.
+    Docs = [{E, Read(E)} || E <- Expected],
+    Before = [Existing(M, E) || {E, _} <- Docs, M <- Modules],
+    case Mode of
+        activate ->
+            lists:foreach(fun({E, _}) ->
+                Fresh = Read(E),
+                lists:foreach(fun(M) ->
+                    Guard(),
+                    %% Refuse conflicting paths that appeared after preflight;
+                    %% this is not permission to overwrite another mapping.
+                    case Existing(M, E) of
+                        present -> ok;
+                        missing ->
+                            ok = gen_listener:call(M, {add_mapping, Db, Fresh}, 5000)
+                    end,
+                    Guard()
+                end, Modules)
+            end, Docs);
+        check -> ok
+    end,
+    lists:foreach(fun({E, _}) ->
+        lists:foreach(fun(M) ->
+            %% Do not call prompt_path: its lazy resolver can repair a cache
+            %% miss during a race, which would violate read-only check mode.
+            present = Existing(M, E)
+        end, Modules),
+        _ = Read(E)
+    end, Docs),
+    Guard(),
+    {ok, {cardinal_mapping_verified, Mode, 586, 1172, length([X || X <- Before, X =:= missing]), no_database_writes}}
+catch _:_ -> {error, cardinal_mapping_verification_failed_safely} end.

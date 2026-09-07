@@ -6,6 +6,62 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+Focused checkpoint, 2026-09-07 21:41 UTC: native atomic interception is now
+deployed: module-only `012ab4/805728`, installed SHA256
+`4ac9d4af50deca7a4163bb158befaecbbdcd59f23e137fe49aaf9d213810cfec`,
+backup `/var/lib/kazoo-mod-kazoo-upgrade.dU80a1`, native eCallMgr-to-FreeSWITCH
+check `d58bb9/e31aba`. Full FreeSWITCH build marker is intentionally unchanged.
+The eCallMgr aggregate reconciliation passes81 source-transition cases.
+Matching apps/UI deployment, native five-language capability proof and actual
+calls still remain. A five-language position1/offer live-test draft is frozen
+outside the repository under `/opt/kz5-voice-acceptance-work`; review/test before
+integrating, and do not claim wait-time or full callback coverage from it.
+
+Earlier attempt: the normal apps+ecallmgr installer
+`a87725/session80615` ended with exit1 (`4c095b`) before compilation/restart:
+eCallMgr's checked-in atomic delta is not included in its installer aggregate.
+Reconciliation and the missing native `kz_intercept` prerequisite were subsequently
+fixed as recorded above. Offline six Erlang cases and
+100 three-answer race iterations pass `ad7f8b/35c78b`; live acceptance remains open.
+All796 media documents and1592 runtime mappings are installed
+and independently verified. The matching backend/UI and native capability proof
+are not yet accepted. Pre-restart call/status ETS snapshots are private under
+`/var/lib/kazoo/predeploy-check.BRAAd0/snapshot` (22 call rows including9 unarchived,
+685 archived status rows); never commit these. Canonical launcher path fixes and
+the finalization hook's16 synthetic cases passed before this build.
+
+Saved five-language cardinal assets are
+pushed in `d09d697` on master. Complete voice runtime deployment is still pending;
+no more Gemini authoring is required. Bridge source is deployed through main SH,
+install `feccd8/4664d3`, independent verify `b0c4d8/02b4a6`, release
+`b20944143ade6ae0ad3ffb4c4c69094305348d7220f890669ca57606fb3810f8`.
+Consumer readiness passed, not actual Android/iOS delivery. No production changes
+or opt-in topology/retry activation. See PROJECT_TASKS.md's top section for
+current remaining work; older milestones below are historical.
+
+**Current artifacts:**584/584 complete, including AR208. Final59-receipt replay
+`d5f2f4/467d44` leaves no missing roles/proposed requests. Index pin is
+`b6c4e2a2ef515be72d378a239086b4421992a095447003c1c397c925d98c1e51`.
+All four nonEN maps are actual emitted source. MainSH/all-five playback/cache
+integration is in progress; do not infer deployment or listening approval.
+Actual synthetic broker retry proof passes `feecd1/ac00b2`; see its detailed
+receipt/document. Current task register supersedes historical snapshots below.
+
+**Earlier artifacts:**529/584; EN/HE/FR/ES complete, AR153/208 (55 missing).
+Three actual HE/FR/ES source maps are saved and independently reviewed, not
+activated. Forty-receipt replay and all nine running services pass
+`de95f2/fb1089`. See `doc/acdc_cardinal_ar_model_recovery.md`; older inventory
+counts below are historical checkpoints, never runtime acceptance claims.
+
+**Focused source fixes:** mixed-model cardinal admission passes importer8,233
+checks, current-module compile/17 EUnit and adapter tests (`38195b/4482a3`).
+No nonEN map is activated. Opt-in bridge counted retry passes all187 Python
+tests; main-SH retry-module staging/verification paths pass `c73261`.
+Actual broker fault/counter proofs, header-directed/APNs retries and real phones
+remain open. See `doc/acdc_cardinal_model_runtime_admission.md` and
+`doc/push_bridge_counted_retry.md`. Latest Arabic authoring checkpoint is in
+`doc/acdc_cardinal_ar_model_recovery.md`.
+
 **Latest combined coverage:**481/584 technical artifacts. EN31, HE131, FR161
 and ES53 complete; AR105/208. All36 remaining Hebrew recordings are saved,
 actual HE131 plan passes `4842e8/8770e2`, mixed five-locale adapter tests pass

@@ -18,7 +18,12 @@ inputs=(applications/acdc/src/acdc_cardinal_media.erl
         scripts/erlang-tests/acdc_cardinal_media_tests.erl
         scripts/test-acdc-cardinal-media.sh
         scripts/acdc-cardinal-catalog.cjs
-        scripts/import-acdc-gemini-cardinals.cjs)
+        scripts/import-acdc-gemini-cardinals.cjs
+        applications/acdc/src/cardinal_maps/acdc_cardinal_he-il.hrl
+        applications/acdc/src/cardinal_maps/acdc_cardinal_fr-fr.hrl
+        applications/acdc/src/cardinal_maps/acdc_cardinal_es-es.hrl
+        applications/acdc/src/cardinal_maps/acdc_cardinal_ar-sa.hrl
+        applications/acdc/src/acdc_wait_time_media.erl)
 before=$(sha256sum -- "${inputs[@]}" | sha256sum | cut -d ' ' -f 1)
 # Pure authoring-source expectations only; no WAV, provider, approval or database
 # operation. Synthetic EUnit metadata must never be mistaken for a release map.
@@ -36,10 +41,10 @@ process.stdout.write('[' + rows.join(',\n') + '].\n');
 NODE
 erlc -Werror -I applications/acdc/src -I applications/acdc/include \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$cardinal_build/production" \
-    "${inputs[@]:0:4}"
+    "${inputs[@]:0:4}" applications/acdc/src/acdc_wait_time_media.erl
 erlc -DTEST +debug_info -Werror -I applications/acdc/src -I applications/acdc/include \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$cardinal_build/test" \
-    "${inputs[@]:0:4}"
+    "${inputs[@]:0:4}" applications/acdc/src/acdc_wait_time_media.erl
 erlc -Werror -I applications/acdc/src -o "$cardinal_build/test" "${inputs[6]}"
 erl -noshell -pa "$cardinal_build/test" \
     -eval 'case eunit:test(acdc_cardinal_media_tests, [verbose]) of ok -> halt(0); _ -> halt(1) end.'

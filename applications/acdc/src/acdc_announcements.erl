@@ -24,6 +24,7 @@
         ,callback_offer_prompts/2
         ,resolve_callback_audio/2
         ,resolve_position_audio/2
+        ,resolve_wait_time_audio/2
         ,schedule_init/2
         ,schedule_due/2
         ,schedule_wait_ms/2
@@ -79,7 +80,8 @@ init(Manager, Call, Props) ->
     'ok' = kz_events:bind_call_id(CallId),
     try
         CallbackConfig = resolve_callback_audio(Config, AnnouncementCall),
-        ResolvedConfig = resolve_position_audio(CallbackConfig, AnnouncementCall),
+        PositionConfig = resolve_position_audio(CallbackConfig, AnnouncementCall),
+        ResolvedConfig = resolve_wait_time_audio(PositionConfig, AnnouncementCall),
         %% Media verification must not restart the first-offer clocks or leave
         %% manager death unmonitored while datastore reads are in progress.
         loop(State#{config := ResolvedConfig,
@@ -368,38 +370,19 @@ maybe_announce_position(#{manager := Manager
 -spec position_prompts(kz_term:api_pos_integer(), binary(), map()) ->
           kapps_call_command:audio_macro_prompts().
 position_prompts(Position, Language0, Config) ->
-    case acdc_gemini_prompts:canonical(Language0) of
-        <<"en-us">> = Language ->
-            acdc_cardinal_media:playlist(Position, Language, maps:get(position_audio, Config, undefined));
-        _ -> legacy_position_prompts(Position, Language0, Config)
-    end.
-
--spec legacy_position_prompts(any(), binary(), map()) -> list().
-legacy_position_prompts(Position, Language, Config) when is_integer(Position), Position > 0 ->
-    Prefix = announcements_media_file(<<"you_are_at_position">>, Config),
-    Suffix = announcements_media_file(<<"in_the_queue">>, Config),
-    Number = acdc_language:number_prompts(Position, Language),
-    case {acdc_language:bundled(Language), Prefix, Suffix, Number} of
-        {_, _, _, []} -> [];
-        {'true', <<"queue-you_are_at_position">>, <<"queue-in_the_queue">>, _} ->
-            %% A separate installed prompt avoids replacing existing system
-            %% audio or changing explicitly customized/localized playlists.
-            [{'prompt', <<"acdc-queue-your-current-position-is">>, acdc_language:canonical(Language), <<"A">>}
-             | Number];
-        _ ->
-            [{'prompt', localized_default(Prefix, Language, Config), Language, <<"A">>}]
-                ++ Number ++ [{'prompt', localized_default(Suffix, Language, Config), Language, <<"A">>}]
-    end;
-legacy_position_prompts(_, _, _) -> [].
+    Language = acdc_gemini_prompts:canonical(Language0),
+    acdc_cardinal_media:playlist(Position, Language, maps:get(position_audio, Config, undefined)).
 
 %% An incomplete position pack must not disable or reset the independent
-%% callback clock. EN defaults require the verified immutable cardinal pack;
-%% other locales keep their existing behavior until their packs are complete.
+%% callback clock. Every supported locale requires its complete immutable pack;
+%% no missing or unsupported locale can fall back to SAY or numeric aliases.
 -spec resolve_position_audio(map(), kapps_call:call()) -> map().
 resolve_position_audio(#{position_announcements_enabled := false} = Config, _) -> Config;
 resolve_position_audio(Config, Call) ->
     case acdc_gemini_prompts:canonical(kapps_call:language(Call)) of
-        <<"en-us">> = Language ->
+        Language when Language =:= <<"en-us">>; Language =:= <<"he-il">>;
+                      Language =:= <<"fr-fr">>; Language =:= <<"es-es">>;
+                      Language =:= <<"ar-sa">> ->
             Result = try acdc_cardinal_media:prepare(Language, kapps_call:account_id(Call),
                             maps:get(announcements_media_selection, Config, []))
                      catch _:_ -> {error, cardinal_media_unavailable}
@@ -410,7 +393,7 @@ resolve_position_audio(Config, Call) ->
                     lager:warning("queue position audio unavailable: immutable cardinal preflight failed"),
                     Config#{position_announcements_enabled := false, position_audio => undefined}
             end;
-        _ -> Config
+        _ -> Config#{position_announcements_enabled := false, position_audio => undefined}
     end.
 
 %%------------------------------------------------------------------------------
@@ -440,22 +423,22 @@ maybe_announce_wait_time(PromptAcc, #{call := Call
 -spec wait_time_prompts(kz_term:api_non_neg_integer(), kz_term:api_non_neg_integer(),
                         binary(), map()) ->
           {kapps_call_command:audio_macro_prompts(), kz_term:api_non_neg_integer()}.
-wait_time_prompts(AverageWaitTime, LastAverageWaitTime, Language, Config)
-  when is_integer(AverageWaitTime), AverageWaitTime >= 0 ->
-    IncreasePrompt =
-        case is_integer(LastAverageWaitTime) andalso AverageWaitTime > LastAverageWaitTime of
-            'true' ->
-                [{'prompt', localized_default(announcements_media_file(<<"increase_in_call_volume">>, Config), Language, Config), Language, <<"A">>}];
-            'false' ->
-                []
-        end,
-    {IncreasePrompt ++
-         [{'prompt', localized_default(announcements_media_file(<<"the_estimated_wait_time_is">>, Config), Language, Config), Language, <<"A">>}
-         ,time_prompt(AverageWaitTime, Language)
-         ],
-     AverageWaitTime};
-wait_time_prompts(_, LastAverageWaitTime, _, _) ->
-    {[], LastAverageWaitTime}.
+wait_time_prompts(AverageWaitTime, LastAverageWaitTime, Language, Config) ->
+    acdc_wait_time_media:playlist(AverageWaitTime, LastAverageWaitTime,
+        acdc_gemini_prompts:canonical(Language), maps:get(wait_time_audio, Config, undefined)).
+
+%% Resolve once during worker initialization, preserving the original start
+%% timestamp and every unrelated announcement setting when this pack fails.
+-spec resolve_wait_time_audio(map(), kapps_call:call()) -> map().
+resolve_wait_time_audio(#{wait_time_announcements_enabled := false} = Config, _) -> Config;
+resolve_wait_time_audio(Config, Call) ->
+    Result = try acdc_wait_time_media:prepare(acdc_gemini_prompts:canonical(kapps_call:language(Call)),
+        kapps_call:account_id(Call), maps:get(announcements_media_selection, Config, []))
+    catch _:_ -> {error, wait_time_media_unavailable} end,
+    case Result of
+        {ok, Audio} -> Config#{wait_time_audio => Audio};
+        _ -> Config#{wait_time_announcements_enabled := false, wait_time_audio => undefined}
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Add the independently scheduled callback offer to the same playlist.
@@ -527,50 +510,3 @@ get_average_wait_time(Call) ->
         {'ok', Resp} ->
             kz_json:get_integer_value(<<"Average-Wait-Time">>, Resp, 0)
     end.
-
-%%------------------------------------------------------------------------------
-%% @doc Structure for time prompt entries.
-%% @end
-%%------------------------------------------------------------------------------
--spec time_prompt(non_neg_integer(), binary()) -> {'prompt', kz_term:ne_binary(), binary(), kz_term:ne_binary()}.
-time_prompt(Time, Language) ->
-    {'prompt', acdc_language:default_prompt(time_prompt2(Time), Language), Language, <<"A">>}.
-
-%% Only remap stock IDs. User-selected UUIDs, URLs and other prompt names keep
-%% their existing account-scoped resolution behavior.
--spec localized_default(binary(), binary(), map()) -> binary().
-localized_default(Prompt, Language, _Config) ->
-    case lists:member(Prompt, [Value || {_, Value} <- ?DEFAULT_ANNOUNCEMENTS_MEDIA]) of
-        'true' -> acdc_language:default_prompt(Prompt, Language);
-        'false' -> Prompt
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc Returns the appropriate prompt name for the given average wait time.
-%% @end
-%%------------------------------------------------------------------------------
--spec time_prompt2(non_neg_integer()) -> kz_term:ne_binary().
-time_prompt2(Time) when Time < ?SECONDS_IN_MINUTE ->
-    <<"queue-less_than_1_minute">>;
-time_prompt2(Time) when Time =< 5 * ?SECONDS_IN_MINUTE ->
-    <<"queue-about_5_minutes">>;
-time_prompt2(Time) when Time =< 10 * ?SECONDS_IN_MINUTE ->
-    <<"queue-about_10_minutes">>;
-time_prompt2(Time) when Time =< 15 * ?SECONDS_IN_MINUTE ->
-    <<"queue-about_15_minutes">>;
-time_prompt2(Time) when Time =< 30 * ?SECONDS_IN_MINUTE ->
-    <<"queue-about_30_minutes">>;
-time_prompt2(Time) when Time =< 45 * ?SECONDS_IN_MINUTE ->
-    <<"queue-about_45_minutes">>;
-time_prompt2(Time) when Time =< 60 * ?SECONDS_IN_MINUTE ->
-    <<"queue-about_1_hour">>;
-time_prompt2(_) ->
-    <<"queue-at_least_1_hour">>.
-
-%%------------------------------------------------------------------------------
-%% @doc Return the media file of a given name from the config.
-%% @end
-%%------------------------------------------------------------------------------
--spec announcements_media_file(kz_term:ne_binary(), map()) -> kz_term:api_ne_binary().
-announcements_media_file(Name, #{announcements_media := Media}) ->
-    props:get_binary_value(Name, Media).

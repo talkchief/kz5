@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Mapping
 from functools import partial
 
 from push_payload import InvalidPush, apns_payload, normalize
@@ -18,6 +19,7 @@ from delivery_settlement import OwnerSettlements, SettlementFailure
 from amqp_topology import TopologyFailure, configure as configure_topology
 from freshness import FreshnessFailure
 from freshness_runtime import capture_body, remaining as freshness_remaining
+from delivery_retry import MODE as RETRY_MODE
 
 
 RECONNECT_DELAY = 5
@@ -282,7 +284,8 @@ class BridgeRuntime:
             },
         }
         last_status, last_text = 0, ""
-        for attempt in (1, 2):
+        attempts = 1 if self._settings.get("RETRY") == RETRY_MODE else 2
+        for attempt in range(1, attempts + 1):
             try:
                 self._check_freshness(freshness)
                 token = self.get_access_token()
@@ -299,6 +302,19 @@ class BridgeRuntime:
                     hooks={"response": [reject_fcm_redirect]},
                 )
                 try:
+                    if attempts == 1 and response.status_code in (500, 503):
+                        # FCM requires Retry-After to be honored. This narrow
+                        # policy has no persisted header-directed schedule: any
+                        # spelling/value or unavailable mapping fails stopped.
+                        # Inspect keys only; never retain/log provider values.
+                        try:
+                            headers = response.headers
+                            blocked = not isinstance(headers, Mapping) or any(
+                                type(name) is not str or name.lower() == "retry-after" for name in headers)
+                        except Exception:
+                            blocked = True
+                        if blocked:
+                            return False, response.status_code, "provider_retry_after_required"
                     last_status, last_text = response.status_code, "provider_response"
                     if response.status_code == 200:
                         return True, last_status, last_text
@@ -314,7 +330,7 @@ class BridgeRuntime:
                 return False, -1, error.code
             except self.requests.RequestException:
                 last_status, last_text = -1, "provider_transport_error"
-            if attempt == 1 and not self._stop.is_set():
+            if attempt < attempts and not self._stop.is_set():
                 self._stop.wait(0.5)
         return False, last_status, last_text
 
@@ -421,6 +437,7 @@ class BridgeRuntime:
                         except InvalidPush:
                             pass
                         worker = self.deliver
+                        lease = None
                         if settings.get("FRESHNESS", "legacy") != "legacy":
                             try:
                                 lease = capture_body(body, settings["FRESHNESS"])
@@ -428,7 +445,8 @@ class BridgeRuntime:
                             except FreshnessFailure as error:
                                 outcome = (False, 0, error.code)
                                 worker = lambda _body, outcome=outcome: outcome
-                        generation["settlements"].submit(target, worker, message, body, provider=provider)
+                        generation["settlements"].submit(target, worker, message, body, provider=provider,
+                            **({"freshness": lease} if settings.get("RETRY") == RETRY_MODE else {}))
                     except Exception:
                         # Libraries may catch callback exceptions internally;
                         # retain a fixed owner-loop failure instead of relying
@@ -450,7 +468,8 @@ class BridgeRuntime:
                     limit = settings["WORKERS"] * 2
                     # This branch is reached only after live quorum preflight
                     # returned successfully for this connection generation.
-                    settlements = OwnerSettlements(limit, quarantine=settings.get("TOPOLOGY") == "quorum-v1")
+                    settlements = OwnerSettlements(limit, quarantine=settings.get("TOPOLOGY") == "quorum-v1",
+                        **({"retry": True} if settings.get("RETRY") == RETRY_MODE else {}))
                     generation["settlements"] = settlements
                     channel.basic.qos(prefetch_count=limit)
                     channel.basic.consume(on_message, queue=settings["QUEUE"], no_ack=False)

@@ -425,6 +425,8 @@ define(function(require) {
 				flags = ['ready', 'position', 'wait_time', 'callback', 'native_speaker_review'],
 				legacy = _.get(manifest, 'backend_mode') === 'legacy';
 
+			if (_.get(manifest, 'schema_version') === 2) { return self.validCardinalCapabilities(manifest); }
+
 			return _.isPlainObject(manifest) && manifest.schema_version === 1
 				&& (manifest.backend_mode === undefined || legacy)
 				&& (!legacy || _.isEqual(_.keys(manifest).sort(), ['schema_version', 'backend_mode', 'generated_at', 'languages'].sort()))
@@ -450,6 +452,65 @@ define(function(require) {
 						&& _.isEqual(entry.required_prompt_ids.slice().sort(), required)
 						&& /^[a-f0-9]{64}$/.test(entry.source_catalog_sha256 || '')
 						&& /^[a-f0-9]{64}$/.test(entry.installed_media_sha256 || '');
+				});
+		},
+
+		validCardinalCapabilities: function(manifest) {
+			var self = this,
+				counts = { 'en-us': 31, 'he-il': 131, 'fr-fr': 161, 'es-es': 53, 'ar-sa': 208 },
+				flags = ['ready', 'selection_ready', 'position', 'wait_time', 'callback', 'native_speaker_review',
+					'position_installed_verified', 'callback_installed_verified',
+					'position_runtime_verified', 'callback_runtime_verified', 'wait_time_runtime_verified'],
+				keys = flags.concat(['numbers', 'number_range', 'numeric_prompt_count', 'callback_prompt_count',
+					'source_catalog_sha256', 'cardinal_map_sha256', 'fixed_map_sha256', 'installed_media_sha256',
+					'runtime_evidence_sha256', 'native_review_sha256']),
+				hash = function(value) { return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value); },
+				exact = function(value, wanted) { return _.isPlainObject(value) && _.isEqual(_.keys(value).sort(), wanted.slice().sort()); };
+
+			return exact(manifest, ['schema_version', 'backend_mode', 'generated_at', 'languages'])
+				&& manifest.schema_version === 2 && manifest.backend_mode === 'prerecorded-cardinal-v1'
+				&& typeof manifest.generated_at === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(manifest.generated_at)
+				&& isFinite(Date.parse(manifest.generated_at)) && exact(manifest.languages, self.announcementLocales)
+				&& _.every(self.announcementLocales, function(locale) {
+					var entry = manifest.languages[locale];
+
+					return exact(entry, keys) && _.every(flags, function(key) { return typeof entry[key] === 'boolean'; })
+						&& entry.numbers === 'prerecorded-cardinal' && _.isEqual(entry.number_range, [0, 999999999])
+						&& entry.numeric_prompt_count === counts[locale] && entry.callback_prompt_count === 42
+						&& _.every(['source_catalog_sha256', 'cardinal_map_sha256', 'fixed_map_sha256'], function(key) { return hash(entry[key]); })
+						&& _.every(['installed_media_sha256', 'runtime_evidence_sha256', 'native_review_sha256'], function(key) {
+							return entry[key] === null || hash(entry[key]);
+						})
+						&& (!(entry.position_installed_verified || entry.callback_installed_verified) || hash(entry.installed_media_sha256))
+						&& (!(entry.position_runtime_verified || entry.callback_runtime_verified || entry.wait_time_runtime_verified)
+							|| hash(entry.runtime_evidence_sha256))
+						&& entry.native_speaker_review === hash(entry.native_review_sha256)
+						&& entry.position === (entry.position_installed_verified && entry.position_runtime_verified)
+						&& entry.callback === (entry.callback_installed_verified && entry.callback_runtime_verified)
+						&& entry.wait_time === (entry.callback_installed_verified && entry.wait_time_runtime_verified)
+						&& entry.selection_ready === (entry.position && entry.callback && entry.wait_time)
+						&& entry.ready === (entry.selection_ready && entry.native_speaker_review);
+				});
+		},
+
+		verifiedCardinalCallbackMedia: function(media, locale, mapHash) {
+			var required = this.requiredBuiltinCallbackPromptIds(),
+				selected = _.filter(media, function(item) { return _.isPlainObject(item) && item.language === locale; }),
+				purposes = [];
+
+			// Match the immutable fixed210 projection, not canonical aliases or
+			// a caller's arbitrary set of42 attached media documents.
+			return mapHash === 'a316e74ff278ae53750781e57fe49fca0e61f50c626ef84278afc470fb02f974'
+				&& selected.length === 42 && _.every(selected, function(item) {
+					if (item.has_attachments !== true || item.import_metadata_verified !== true
+						|| item.source_type !== 'kazoo5_acdc_gemini_voice_installer' || item.source_map_sha256 !== mapHash
+						|| typeof item.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.sha256)
+						|| required.indexOf(item.canonical_prompt_id) < 0
+						|| purposes.indexOf(item.canonical_prompt_id) >= 0
+						|| item.prompt_id !== item.canonical_prompt_id + '-gemini-sulafat-' + item.sha256.slice(0, 16)
+						|| item.id !== locale + '/' + item.prompt_id) { return false; }
+					purposes.push(item.canonical_prompt_id);
+					return true;
 				});
 		},
 
@@ -512,6 +573,7 @@ define(function(require) {
 				ids = _.map(media, 'id'),
 				valid = self.validLanguageCapabilities(manifest),
 				legacy = valid && manifest.backend_mode === 'legacy',
+				cardinal = valid && manifest.backend_mode === 'prerecorded-cardinal-v1',
 				fixedRequired = self.requiredLanguagePromptIds(),
 				geminiPurposes = self.verifiedGeminiEnglishPurposes(media),
 				legacyRequired = _.map(_.filter(fixedRequired, function(id) {
@@ -526,15 +588,18 @@ define(function(require) {
 					ready = !loadError && valid && (legacy ? locale === 'en-us' && _.every(legacyRequired, function(id) {
 						return legacyIds.indexOf('en-us/' + id) >= 0;
 					}) && _.every(self.requiredBuiltinCallbackPromptIds(), function(id) { return geminiPurposes.indexOf(id) >= 0; })
+						: cardinal ? entry.selection_ready && self.verifiedCardinalCallbackMedia(media, locale, entry.fixed_map_sha256)
 						: entry.ready && _.every(entry.required_prompt_ids, function(id) {
 						return ids.indexOf(locale + '/' + id) >= 0;
 					})),
-					reviewPending = ready && locale !== 'en-us' && entry.native_speaker_review === false;
+					reviewPending = cardinal ? entry.position_installed_verified && !entry.native_speaker_review
+						: ready && locale !== 'en-us' && entry.native_speaker_review === false;
 
 				return { value: locale,
 					disabled: !ready,
 					ready: Boolean(ready),
-					label: labels.languages[locale] + ' — ' + (ready ? labels.languageReady : labels.languageNotInstalled)
+					label: labels.languages[locale] + ' — ' + (ready ? (cardinal && !entry.ready
+						? labels.languageTestReady : labels.languageReady) : labels.languageNotInstalled)
 						+ (reviewPending ? ' — ' + labels.nativeReviewPending : '') };
 			});
 		},

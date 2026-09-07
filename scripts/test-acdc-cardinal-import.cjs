@@ -328,6 +328,9 @@ async function run() {
   await group('create-only31, exact native attachments, idempotence and read-only verification', async () => {
     const db = database(base), receipt = await opened.install(db.client, true);
     equal(receipt.created, 31); equal(receipt.verified, 31); equal(receipt.intro_installed_verified, true);
+    equal(receipt.intro_installed, {locale: db.plan.intro.locale, canonical_id: db.plan.intro.canonical_id,
+      prompt_id: db.plan.intro.prompt_id, document_id: db.plan.intro.id, attachment: db.plan.intro.attachment,
+      sha256: db.plan.intro.sha256, revision: db.docs.get(db.plan.intro.id)._rev});
     equal(receipt.installed, db.plan.cardinal.map(a => ({locale: a.locale, canonical_id: a.canonical_id,
       prompt_id: a.prompt_id, document_id: a.id, attachment: a.attachment, sha256: a.sha256,
       revision: '1-' + 'a'.repeat(32)})));
@@ -396,6 +399,9 @@ async function run() {
       }
       const receipt = await snapshot.install(db.client, true);
       equal(receipt.created, count); equal(receipt.verified, count); equal(receipt.intro_created, newIntro ? 1 : 0);
+      equal(receipt.intro_installed, {locale: db.plan.intro.locale, canonical_id: db.plan.intro.canonical_id,
+        prompt_id: db.plan.intro.prompt_id, document_id: db.plan.intro.id, attachment: db.plan.intro.attachment,
+        sha256: db.plan.intro.sha256, revision: db.docs.get(db.plan.intro.id)._rev});
       equal(db.calls.filter(c => c.method === 'PUT').length, count + (newIntro ? 1 : 0));
       equal(receipt.database_requests <= receipt.database_request_limit, true);
       if (locale === 'ar-sa') equal(receipt.database_requests > 128, true);
@@ -585,6 +591,22 @@ async function run() {
     equal(s.selected_reused, 2); equal(s.selected_model_trials, 1); equal(s.additional_trial_requests, 1);
     equal(s.selected_unresolved, 0); equal(s.historical_generated_asset_set_sha256, null);
     equal(s.staged_candidates_only, true); equal(s.model_trial_index_sha256, mixed.modelTrialIndexSha256);
+    const header = mixedPlan.renderMap(), rows = header.split('\n').filter(line => line.startsWith('    {')).map(line =>
+      JSON.parse(line.trim().replace(/^\{/, '[').replace(/\},?$/, ']').replace(/<<|>>/g, '')));
+    equal(s.map_row_schema, importer.RESOLVED_ROW_SCHEMA);
+    equal(header.includes(`-define(CARDINAL_ES_ROW_SCHEMA, <<"${importer.RESOLVED_ROW_SCHEMA}">>).`), true);
+    equal(rows.length, 53); equal(rows.every(row => row.length === 9), true);
+    for (const row of rows) {
+      const p = s.prompts.find(p => p.id === row[1]).resolution;
+      equal(row.slice(7), [p.model, p.source_kind]); equal(row[3], p.telephony_sha256); equal(row[6], p.transcript_sha256);
+    }
+    equal(hash(JSON.stringify({schema_version: 1, row_schema: importer.RESOLVED_ROW_SCHEMA, rows})), s.map_sha256);
+    equal(hash(JSON.stringify(rows)) === s.map_sha256, false);
+    const changedRows = clone(rows); changedRows[0][7] = 'foreign-model';
+    equal(hash(JSON.stringify({schema_version: 1, row_schema: importer.RESOLVED_ROW_SCHEMA, rows: changedRows})) === s.map_sha256, false);
+    const enWithIndex = importer.openPlan({...source(mixed), locale: 'en-us', introFile: base.introFile});
+    equal(enWithIndex.renderMap(), opened.renderMap()); equal(enWithIndex.summary().map_row_schema, undefined);
+    equal(reusedPlan.renderMap().includes('ROW_SCHEMA'), false);
     for (const k of ['runtime_ready', 'native_listening_approved', 'listening_verified', 'resolved_listening_approval_declared',
       'historical_artifact_complete', 'five_language_release_ready']) equal(s[k], false);
     const proof = s.prompts.find(p => p.id === 'acdc-cardinal-v1-number-13').resolution;

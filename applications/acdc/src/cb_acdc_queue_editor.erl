@@ -11,6 +11,12 @@
 -endif.
 -include_lib("crossbar/src/crossbar.hrl").
 -include_lib("kernel/include/file.hrl").
+-include("acdc_cardinal_map.hrl").
+-include("acdc_gemini_map.hrl").
+-include("cardinal_maps/acdc_cardinal_he-il.hrl").
+-include("cardinal_maps/acdc_cardinal_fr-fr.hrl").
+-include("cardinal_maps/acdc_cardinal_es-es.hrl").
+-include("cardinal_maps/acdc_cardinal_ar-sa.hrl").
 -define(LIMIT, 500).
 -define(CAT, <<"acdc.queues">>).
 -define(FLAG, <<"talkchief-acdc-managed">>).
@@ -226,8 +232,73 @@ verified_manifest_media(Manifest) ->
     true = valid_manifest(Manifest),
     case kz_json:get_value(<<"backend_mode">>, Manifest) of
         <<"legacy">> -> verified_legacy_media(Manifest);
+        <<"prerecorded-cardinal-v1">> -> verified_cardinal_media(Manifest);
         undefined -> verified_full_media(Manifest)
     end.
+
+%% Only locales claiming a verified runtime feature need fresh editor checks.
+%% One bounded bulk datapath request (maximum796 owned IDs), never one lookup
+%% per clip. Installed-only/source-only artifacts cause no database operation.
+%% This rechecks metadata, not audio bytes or live-node/listening evidence.
+verified_cardinal_media(Manifest) ->
+    Languages = kz_json:get_json_value(<<"languages">>, Manifest),
+    Active = [L || L <- locales(), cardinal_runtime_claim(kz_json:get_json_value(L, Languages))],
+    Ids = lists:usort([cardinal_asset_id(A) || L <- Active,
+        A <- cardinal_rows(L) ++ [cardinal_intro(L)] ++ cardinal_fixed(L)]),
+    {Docs, _} = case Ids of [] -> {[], []}; _ -> verified_media(Ids) end,
+    Checked = lists:foldl(fun(L, Acc) ->
+        Entry = kz_json:get_json_value(L, Acc),
+        Position = lists:all(fun(A) -> cardinal_asset_verified(A, Docs) end,
+            cardinal_rows(L) ++ [cardinal_intro(L)]),
+        Callback = acdc_gemini_prompts:callback_media_complete(L,
+            acdc_gemini_prompts:verified_callback_media(L, Docs)),
+        Runtime = [{<<"position_runtime_verified">>, Position andalso kz_json:is_true(<<"position_runtime_verified">>, Entry)},
+                   {<<"callback_runtime_verified">>, Callback andalso kz_json:is_true(<<"callback_runtime_verified">>, Entry)},
+                   {<<"wait_time_runtime_verified">>, Callback andalso kz_json:is_true(<<"wait_time_runtime_verified">>, Entry)}],
+        kz_json:set_value(L, cardinal_availability(kz_json:set_values(Runtime, Entry)), Acc)
+    end, Languages, Active),
+    Media = lists:append([acdc_gemini_prompts:verified_callback_media(L, Docs) || L <- Active]),
+    {kz_json:set_value(<<"languages">>, Checked, Manifest), Media}.
+
+cardinal_runtime_claim(E) ->
+    lists:any(fun(K) -> kz_json:is_true(K, E) end,
+        [<<"position_runtime_verified">>, <<"callback_runtime_verified">>, <<"wait_time_runtime_verified">>]).
+
+cardinal_availability(E) ->
+    Position = kz_json:is_true(<<"position_installed_verified">>, E) andalso kz_json:is_true(<<"position_runtime_verified">>, E),
+    Callback = kz_json:is_true(<<"callback_installed_verified">>, E) andalso kz_json:is_true(<<"callback_runtime_verified">>, E),
+    Wait = kz_json:is_true(<<"callback_installed_verified">>, E) andalso kz_json:is_true(<<"wait_time_runtime_verified">>, E),
+    kz_json:set_values([{<<"position">>, Position}, {<<"callback">>, Callback}, {<<"wait_time">>, Wait},
+        {<<"selection_ready">>, Position andalso Callback andalso Wait},
+        {<<"ready">>, Position andalso Callback andalso Wait andalso kz_json:is_true(<<"native_speaker_review">>, E)}], E).
+
+cardinal_asset_id(A) -> <<(element(1, A))/binary, "/", (element(3, A))/binary>>.
+cardinal_asset_verified(A, Docs) ->
+    case [D || D <- Docs, kz_doc:id(D) =:= cardinal_asset_id(A)] of
+        [Doc] when tuple_size(A) =:= 9 -> acdc_gemini_prompts:verified_cardinal_asset(A, {ok, Doc});
+        [Doc] when tuple_size(A) =:= 7 -> acdc_gemini_prompts:verified_asset(A, {ok, Doc});
+        _ -> false
+    end.
+cardinal_rows(<<"en-us">>) -> ?CARDINAL_ASSETS;
+cardinal_rows(<<"he-il">>) -> ?CARDINAL_HE_ASSETS;
+cardinal_rows(<<"fr-fr">>) -> ?CARDINAL_FR_ASSETS;
+cardinal_rows(<<"es-es">>) -> ?CARDINAL_ES_ASSETS;
+cardinal_rows(<<"ar-sa">>) -> ?CARDINAL_AR_ASSETS.
+cardinal_fixed(L) -> [A || A <- ?GEMINI_ASSETS, element(1, A) =:= L].
+cardinal_intro(<<"he-il">>) -> ?CARDINAL_HE_INTRO_ASSET;
+cardinal_intro(<<"ar-sa">>) -> ?CARDINAL_AR_INTRO_ASSET;
+cardinal_intro(L) ->
+    [A] = [A || A <- cardinal_fixed(L), element(2, A) =:= <<"acdc-queue-your-current-position-is">>], A.
+cardinal_map_hash(<<"en-us">>) -> ?CARDINAL_MAP_SHA256;
+cardinal_map_hash(<<"he-il">>) -> ?CARDINAL_HE_MAP_SHA256;
+cardinal_map_hash(<<"fr-fr">>) -> ?CARDINAL_FR_MAP_SHA256;
+cardinal_map_hash(<<"es-es">>) -> ?CARDINAL_ES_MAP_SHA256;
+cardinal_map_hash(<<"ar-sa">>) -> ?CARDINAL_AR_MAP_SHA256.
+cardinal_count(<<"en-us">>) -> 31;
+cardinal_count(<<"he-il">>) -> 131;
+cardinal_count(<<"fr-fr">>) -> 161;
+cardinal_count(<<"es-es">>) -> 53;
+cardinal_count(<<"ar-sa">>) -> 208.
 
 %% The deployed English baseline resolves fixed defaults to immutable Gemini
 %% media, not obsolete canonical callback aliases. Keep its official legacy
@@ -313,6 +384,12 @@ protected_parent(Path) ->
     case filename:dirname(Path) of Path -> ok; Parent -> protected_parent(Parent) end.
 
 valid_manifest(M) ->
+    case kz_json:get_value(<<"schema_version">>, M) of
+        2 -> valid_cardinal_manifest(M);
+        _ -> valid_legacy_or_full_manifest(M)
+    end.
+
+valid_legacy_or_full_manifest(M) ->
     kz_json:get_value(<<"schema_version">>, M) =:= 1
         andalso timestamp(kz_json:get_value(<<"generated_at">>, M))
         andalso lists:sort(kz_json:get_keys(kz_json:get_json_value(<<"languages">>, M, kz_json:new()))) =:= lists:sort(locales())
@@ -321,6 +398,43 @@ valid_manifest(M) ->
             <<"legacy">> -> valid_legacy_manifest(M);
             _ -> false
         end.
+
+exact_keys(Object, Keys) ->
+    kz_json:is_json_object(Object) andalso lists:sort(kz_json:get_keys(Object)) =:= lists:sort(Keys).
+
+cardinal_flags() ->
+    [<<"ready">>, <<"selection_ready">>, <<"position">>, <<"wait_time">>, <<"callback">>, <<"native_speaker_review">>,
+     <<"position_installed_verified">>, <<"callback_installed_verified">>,
+     <<"position_runtime_verified">>, <<"callback_runtime_verified">>, <<"wait_time_runtime_verified">>].
+
+valid_cardinal_manifest(M) ->
+    exact_keys(M, [<<"schema_version">>, <<"backend_mode">>, <<"generated_at">>, <<"languages">>])
+        andalso kz_json:get_value(<<"backend_mode">>, M) =:= <<"prerecorded-cardinal-v1">>
+        andalso timestamp(kz_json:get_value(<<"generated_at">>, M))
+        andalso exact_keys(kz_json:get_json_value(<<"languages">>, M), locales())
+        andalso lists:all(fun(L) -> valid_cardinal_language(L,
+            kz_json:get_json_value([<<"languages">>, L], M)) end, locales()).
+
+valid_cardinal_language(L, E) ->
+    exact_keys(E, cardinal_flags() ++ [<<"numbers">>, <<"number_range">>, <<"numeric_prompt_count">>,
+        <<"callback_prompt_count">>, <<"source_catalog_sha256">>, <<"cardinal_map_sha256">>, <<"fixed_map_sha256">>,
+        <<"installed_media_sha256">>, <<"runtime_evidence_sha256">>, <<"native_review_sha256">>])
+    andalso lists:all(fun(K) -> is_boolean(kz_json:get_value(K, E)) end, cardinal_flags())
+    andalso kz_json:get_value(<<"numbers">>, E) =:= <<"prerecorded-cardinal">>
+    andalso kz_json:get_value(<<"number_range">>, E) =:= [0, 999999999]
+    andalso kz_json:get_value(<<"numeric_prompt_count">>, E) =:= cardinal_count(L)
+    andalso kz_json:get_value(<<"callback_prompt_count">>, E) =:= 42
+    andalso kz_json:get_value(<<"source_catalog_sha256">>, E) =:= ?CARDINAL_CATALOG_SHA256
+    andalso kz_json:get_value(<<"cardinal_map_sha256">>, E) =:= cardinal_map_hash(L)
+    andalso kz_json:get_value(<<"fixed_map_sha256">>, E) =:= ?GEMINI_MAP_SHA256
+    andalso lists:all(fun(K) -> V = kz_json:get_value(K, E), V =:= null orelse hex(V, 64) end,
+        [<<"installed_media_sha256">>, <<"runtime_evidence_sha256">>, <<"native_review_sha256">>])
+    andalso (not (kz_json:is_true(<<"position_installed_verified">>, E) orelse kz_json:is_true(<<"callback_installed_verified">>, E))
+        orelse hex(kz_json:get_value(<<"installed_media_sha256">>, E), 64))
+    andalso (not cardinal_runtime_claim(E) orelse hex(kz_json:get_value(<<"runtime_evidence_sha256">>, E), 64))
+    andalso kz_json:is_true(<<"native_speaker_review">>, E) =:= hex(kz_json:get_value(<<"native_review_sha256">>, E), 64)
+    andalso lists:all(fun(K) -> kz_json:get_value(K, E) =:= kz_json:get_value(K, cardinal_availability(E)) end,
+        [<<"ready">>, <<"selection_ready">>, <<"position">>, <<"wait_time">>, <<"callback">>]).
 
 valid_legacy_manifest(M) ->
     Flags = [<<"ready">>, <<"position">>, <<"wait_time">>, <<"callback">>, <<"native_speaker_review">>],
@@ -516,7 +630,11 @@ language_selection_ready(Language, Catalog) ->
                         lists:all(fun(Id) -> lists:member(Id, Ids) end, legacy_official_ids())
                         andalso acdc_gemini_prompts:callback_media_complete(<<"en-us">>,
                             kz_json:get_list_value(<<"system_media">>, Catalog, []));
-                undefined -> kz_json:is_true([<<"languages">>, Language, <<"ready">>], Manifest)
+                undefined -> kz_json:is_true([<<"languages">>, Language, <<"ready">>], Manifest);
+                <<"prerecorded-cardinal-v1">> ->
+                    kz_json:is_true([<<"languages">>, Language, <<"selection_ready">>], Manifest)
+                        andalso acdc_gemini_prompts:callback_media_complete(Language,
+                            kz_json:get_list_value(<<"system_media">>, Catalog, []))
             end
     end.
 

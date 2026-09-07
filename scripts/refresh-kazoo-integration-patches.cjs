@@ -3,19 +3,20 @@
 // Ignored upstream source is reproduced by explicit patch layers.
 // ACDC is tracked directly in kz5 and is intentionally excluded; its patches
 // remain historical test fixtures and must not overwrite the bundled source.
-// README: language and atomic layers are STAGED, NOT default installer hooks.
-// --write preserves their baseline versions; it never promotes staged changes
-// into the installed aggregate. Language is preserved, atomic files are explicit.
+// eCallMgr atomic answer is now part of its default aggregate. The immutable
+// previous aggregate and reviewed atomic delta remain transition provenance;
+// regeneration must reproduce their exact combined bytes, not absorb edits.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const cp=require('node:child_process'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..'),patchDir=path.join(__dirname,'patches');
 const mode=process.argv[2];
-assert(process.argv.length===3&&['--check','--write'].includes(mode),
-    'Usage: node scripts/refresh-kazoo-integration-patches.cjs --check|--write');
+const selected=process.argv.length===5&&process.argv[3]==='--component'&&process.argv[4]==='ecallmgr'?'ecallmgr':null;
+assert((process.argv.length===3||selected)&&['--check','--write'].includes(mode),
+    'Usage: node scripts/refresh-kazoo-integration-patches.cjs --check|--write [--component ecallmgr]');
 const components=[
     {name:'crossbar',base:'crossbar-kazoo5-integration.patch',layers:[]},
-    {name:'ecallmgr',base:'ecallmgr-kazoo5-integration.patch',layers:[
-        {name:'ecallmgr-atomic-answer-runtime.patch',files:['src/ecallmgr_originate.erl']}]},
+    {name:'ecallmgr',base:'ecallmgr-kazoo5-integration.patch',layers:[],
+        previous:'ecallmgr-kazoo5-before-atomic.patch',atomic:'ecallmgr-atomic-answer-runtime.patch'},
     {name:'cdr',base:'cdr-report-timestamp-fallback.patch',layers:[]}
 ];
 function git(cwd,args,{diff=false,missing=false}={}) {
@@ -53,6 +54,7 @@ const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'kazoo-patch-checkpoint-'))
 const outputs=new Map(),inputs=new Map(),snapshots=[];
 try {
     for(const component of components) {
+        if(selected&&component.name!==selected)continue;
         const cwd=path.join(root,'applications',component.name);
         assert.equal(fs.realpathSync(cwd),cwd,'Symlinked component');
         assert.equal(git(cwd,['rev-parse','--show-toplevel']).trim(),cwd,'Expected independent checkout');
@@ -80,6 +82,20 @@ try {
             const file=path.join(temporary,name);fs.writeFileSync(file,text);apply(replay,file);applied.push(file);
         }
         layerFile(component.base,candidate);
+        if(component.previous) {
+            // Validate the generated aggregate independently, then prove the
+            // immutable old+delta recipe yields exactly the same live source.
+            // Neither historical input is regenerated or overwritten.
+            apply(replay,applied.pop(),true);
+            for(const name of [component.previous,component.atomic]) {
+                const text=fs.readFileSync(path.join(patchDir,name),'utf8');inputs.set(name,text);
+                if(name===component.atomic)assert.deepEqual([...sections(text).keys()],['src/ecallmgr_originate.erl'],
+                    'Atomic eCallMgr transition inventory changed');
+                else assert.deepEqual([...sections(text).keys()].sort(),[...changed.keys()].sort(),
+                    'Previous eCallMgr inventory changed');
+                layerFile(name,text);
+            }
+        }
         for(const layer of component.layers) {
             let text;
             if(layer.preserve) {
@@ -122,7 +138,7 @@ try {
             const staged=target+'.'+process.pid+'.tmp';fs.writeFileSync(staged,text,{mode:0o644,flag:'wx'});fs.renameSync(staged,target);
         }
     }
-    console.log('PASS staged language/atomic layers remain separate from default installer baseline');
+    console.log('PASS reproducible integration aggregates; eCallMgr atomic answer included with immutable transition provenance');
 } finally {
     assert(temporary.startsWith(path.join(os.tmpdir(),'kazoo-patch-checkpoint-')),'Unsafe temporary cleanup');
     fs.rmSync(temporary,{recursive:true,force:false});

@@ -100,6 +100,41 @@ class FreshnessRuntimeTests(unittest.TestCase):
         self.assertEqual([s["timeout"] for s in sent], [0.9, 0.3])
         for response in responses: response.close.assert_called_once()
 
+    def test_broker_retry_mode_keeps_original_deadline_and_one_post_after_auth(self):
+        runtime, http, admitted = self.runtime(), Mock(), lease()
+        runtime._settings["RETRY"] = "quorum-counted-v1"
+        now = clock_value()
+        def token():
+            now.update(clock_value(1000100, 200)); return "fixture-token"
+        runtime.get_access_token.side_effect = token
+        http.post.return_value = Mock(status_code=503, headers={})
+        with patch.object(freshness_runtime, "clocks", side_effect=lambda: dict(now)):
+            self.assertEqual(runtime._send_fcm_with_session(http, "fixture", {}, admitted),
+                             (False, 503, "provider_response"))
+        http.post.assert_called_once(); runtime._stop.wait.assert_not_called()
+        self.assertEqual(http.post.call_args.kwargs["json"]["message"]["android"]["ttl"], "0.900s")
+        self.assertEqual(http.post.call_args.kwargs["timeout"], 0.9)
+        now.update(clock_value(1001000, 1100)); http.post.reset_mock()
+        runtime.get_access_token.reset_mock(side_effect=True)
+        with patch.object(freshness_runtime, "clocks", side_effect=lambda: dict(now)):
+            self.assertEqual(runtime._send_fcm_with_session(http, "fixture", {}, admitted),
+                             (False, 0, "push_freshness_expired"))
+        http.post.assert_not_called(); runtime.get_access_token.assert_not_called()
+
+    def test_retry_header_absence_must_be_known_and_values_are_never_inspected(self):
+        class PrivateValue:
+            def __str__(self):
+                raise AssertionError("do not inspect provider header value")
+        for headers in (None, [], {"Retry-After": PrivateValue()}, {"retry-after": "0"}, {1: "unknown"}):
+            runtime, http = self.runtime(), Mock()
+            runtime._settings["RETRY"] = "quorum-counted-v1"
+            http.post.return_value = Mock(status_code=503, headers=headers)
+            with patch.object(freshness_runtime, "clocks", return_value=clock_value()):
+                self.assertEqual(runtime._send_fcm_with_session(http, "fixture", {}, lease()),
+                                 (False, 503, "provider_retry_after_required"))
+            http.post.assert_called_once(); http.post.return_value.close.assert_called_once()
+            runtime._stop.wait.assert_not_called()
+
     def test_retry_after_deadline_is_not_dispatched(self):
         runtime, http, admitted = self.runtime(), Mock(), lease()
         now = clock_value()

@@ -19,6 +19,7 @@ from requests.adapters import BaseAdapter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "services/push-bridge"))
 import bridge
+from freshness import capture
 
 
 class UnreadableBody:
@@ -40,10 +41,11 @@ class UnreadableBody:
 
 
 class Adapter(BaseAdapter):
-    def __init__(self, statuses):
+    def __init__(self, statuses, extra_headers=None):
         self.statuses = list(statuses)
         self.calls = []
         self.bodies = []
+        self.extra_headers = {} if extra_headers is None else extra_headers
 
     def send(self, request, **kwargs):
         self.calls.append((request, kwargs))
@@ -58,6 +60,7 @@ class Adapter(BaseAdapter):
         # A hostile/oversized/chunked body must not be fetched for any status.
         response.headers["Location"] = "https://unapproved.invalid/private-token"
         response.headers["Content-Length"] = "999999999"
+        response.headers.update(self.extra_headers)
         self.bodies.append(response.raw)
         return response
 
@@ -71,7 +74,7 @@ class FcmTransportTests(unittest.TestCase):
         self.guard.start()
         self.addCleanup(self.guard.stop)
 
-    def run_send(self, statuses):
+    def run_send(self, statuses, retry=False, extra_headers=None):
         runtime = bridge.BridgeRuntime.__new__(bridge.BridgeRuntime)
         runtime.requests = requests
         runtime.http = requests.Session()
@@ -87,9 +90,16 @@ class FcmTransportTests(unittest.TestCase):
         runtime._http_sessions = [runtime.http]
         runtime._idle_http = [runtime.http]
         runtime._settings = {"WORKERS": 2}
-        adapter = Adapter(statuses)
+        if retry:
+            runtime._settings.update(RETRY="quorum-counted-v1", TOPOLOGY="quorum-v1", FRESHNESS="unix-ms-v1")
+        adapter = Adapter(statuses, extra_headers)
         runtime.http.mount("https://", adapter)
-        result = runtime.send_fcm("fixture-device", {"call_id": "fixture-call", "absent": None})
+        now = {"now_ms": 1000000, "monotonic_ms": 100}
+        lease = capture({"Push-Freshness": {"version": 1, "created_at_ms": 1000000, "deadline_ms": 1060000}},
+                        "unix-ms-v1", **now)
+        with patch("freshness_runtime.clocks", return_value=now):
+            result = runtime.send_fcm("fixture-device", {"call_id": "fixture-call", "absent": None},
+                                      **({"freshness": lease} if retry else {}))
         self.assertEqual(runtime._active_sends, 0)
         for request, kwargs in adapter.calls:
             self.assertEqual(request.url, runtime.fcm_url)
@@ -103,6 +113,30 @@ class FcmTransportTests(unittest.TestCase):
             self.assertEqual(body.closed, 1)
             self.assertEqual(body.released, 1)
         return result, adapter, runtime
+
+    def test_opted_in_broker_counted_mode_makes_only_one_post_and_never_waits(self):
+        for status in (500, 503, 429, 401, 403):
+            result, adapter, runtime = self.run_send([status, 200], retry=True)
+            self.assertEqual(result, (False, status, "provider_response"))
+            self.assertEqual(len(adapter.calls), 1); self.assertEqual(adapter.statuses, [200])
+            runtime.get_access_token.assert_called_once(); runtime._stop.wait.assert_not_called()
+        result, adapter, runtime = self.run_send([requests.RequestException("fixture-private-value"), 200], retry=True)
+        self.assertEqual(result, (False, -1, "provider_transport_error")); self.assertEqual(len(adapter.calls), 1)
+        runtime._stop.wait.assert_not_called()
+
+    def test_legacy_still_allows_two_posts_for_completed_503(self):
+        result, adapter, runtime = self.run_send([503, 200])
+        self.assertEqual(result, (True, 200, "provider_response")); self.assertEqual(len(adapter.calls), 2)
+        runtime._stop.wait.assert_called_once_with(0.5)
+
+    def test_retry_after_presence_always_blocks_new_retry_without_reading_value(self):
+        for status in (500, 503):
+            for value in ("0", "2", "", "not-a-delay", "Wed, 21 Oct 2015 07:28:00 GMT"):
+                result, adapter, runtime = self.run_send([status, 200], retry=True,
+                                                        extra_headers={"rEtRy-AfTeR": value})
+                self.assertEqual(result, (False, status, "provider_retry_after_required"))
+                self.assertEqual(len(adapter.calls), 1); runtime._stop.wait.assert_not_called()
+                self.assertEqual(adapter.statuses, [200])
 
     def test_success_closes_without_eager_body_download(self):
         result, adapter, _ = self.run_send([200])

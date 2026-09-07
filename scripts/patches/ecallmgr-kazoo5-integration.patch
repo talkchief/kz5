@@ -268,7 +268,7 @@ index db15c93..06e1501 100644
  
  -spec maybe_start_dtmf_action(dialplan_context()) -> 'undefined' | kz_types:xml_el().
 diff --git a/src/ecallmgr_originate.erl b/src/ecallmgr_originate.erl
-index 259991e..8d1bb04 100644
+index 259991e..ab14250 100644
 --- a/src/ecallmgr_originate.erl
 +++ b/src/ecallmgr_originate.erl
 @@ -15,6 +15,10 @@
@@ -276,7 +276,7 @@ index 259991e..8d1bb04 100644
  -export([start_link/1]).
  
 +-ifdef(TEST).
-+-export([originate_api_command/4, build_originate/3]).
++-export([originate_api_command/4, build_originate/3, intercept_unbridged_only/2]).
 +-endif.
 +
  -export([init/1
@@ -334,7 +334,33 @@ index 259991e..8d1bb04 100644
      {'noreply', State};
  
  handle_info({'kapi', {{_Ex, _RK, {_Basic, _Deliver}}
-@@ -408,6 +425,13 @@ get_bridge_action(JObj) ->
+@@ -388,10 +405,22 @@ get_extension_action(JObj) ->
+ intercept_unbridged_only('undefined', JObj) ->
+     get_bridge_action(JObj);
+ intercept_unbridged_only(ExistingCallId, JObj) ->
+-    case kz_json:is_true(<<"Intercept-Unbridged-Only">>, JObj, 'true') of
+-        'true' ->
++    CCVs = kz_json:get_json_value(<<"Custom-Channel-Vars">>, JObj, kz_json:new()),
++    IsAgent = is_binary(kz_json:get_ne_binary_value(<<"Agent-ID">>, CCVs)),
++    case {IsAgent, kz_json:is_true(<<"Intercept-Unbridged-Only">>, JObj, 'true')} of
++        {'true', _} ->
++            %% The module checks account/member ownership again on live channels.
++            %% Never fall back to the non-atomic core intercept for an ACDC leg.
++            case kz_json:get_value(<<"Member-Call-ID">>, CCVs) =:= ExistingCallId
++                andalso is_binary(kz_json:get_ne_binary_value(<<"Account-ID">>, CCVs))
++                andalso byte_size(ExistingCallId) =< 192
++                andalso re:run(ExistingCallId, <<"\\A[A-Za-z0-9_.:@-]+\\z">>, [{'capture', 'none'}]) =:= 'match' of
++                'true' -> <<" 'kz_intercept:", ExistingCallId/binary, "' inline ">>;
++                'false' -> erlang:error('invalid_acdc_intercept_target')
++            end;
++        {'false', 'true'} ->
+             <<" 'set:intercept_unbridged_only=true,intercept:", ExistingCallId/binary, "' inline ">>;
+-        'false' ->
++        {'false', 'false'} ->
+             <<" 'set:intercept_unbridged_only=false,intercept:", ExistingCallId/binary, "' inline ">>
+     end.
+ 
+@@ -408,6 +437,13 @@ get_bridge_action(JObj) ->
  
  -spec get_eavesdrop_action(kz_json:object()) -> kz_term:ne_binary().
  get_eavesdrop_action(JObj) ->
@@ -348,7 +374,7 @@ index 259991e..8d1bb04 100644
      {CallId, Group} = case kz_json:get_value(<<"Eavesdrop-Group-ID">>, JObj) of
                            'undefined' -> {kz_json:get_binary_value(<<"Eavesdrop-Call-ID">>, JObj), <<>>};
                            ID -> {<<"all">>, <<"eavesdrop_require_group=", ID/binary, ",">>}
-@@ -430,16 +454,17 @@ build_originate(Action, JObj) ->
+@@ -430,16 +466,17 @@ build_originate(Action, JObj) ->
      end.
  
  -spec build_originate(kz_term:ne_binary(), kz_json:objects(), kz_json:object()) ->
@@ -370,7 +396,7 @@ index 259991e..8d1bb04 100644
  
  -spec get_channel_vars(kz_json:object()) -> iolist().
  get_channel_vars(JObj) ->
-@@ -474,19 +499,39 @@ add_loopback('false') ->
+@@ -474,19 +511,39 @@ add_loopback('false') ->
      ,{<<"Loopback-Bowout">>, 'false'}
      ].
  
@@ -416,7 +442,7 @@ index 259991e..8d1bb04 100644
  -spec get_unset_vars(kz_json:object()) -> iolist().
  get_unset_vars(JObj) ->
      %% Refactor (Karl wishes he had unit tests here for you to use)
-@@ -582,7 +627,7 @@ publish_originate_ready(UUID, Request, Q, ServerId) ->
+@@ -582,7 +639,7 @@ publish_originate_ready(UUID, Request, Q, ServerId) ->
      Props = [{<<"Msg-ID">>, kz_api:msg_id(Request, UUID)}
              ,{<<"Originate-UUID">>, UUID}
              ,{<<"Originate-Queue">>, Q}

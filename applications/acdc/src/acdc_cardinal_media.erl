@@ -3,14 +3,30 @@
 -module(acdc_cardinal_media).
 -export([prepare/3, playlist/3]).
 -ifdef(TEST).
--export([prepare_with/6, frame/3, frame_with/5, expected_roles/1, intro/1]).
+-export([prepare_with/6, frame/3, frame_with/5, expected_roles/1, intro/1,
+         compiled_assets/0, intro_assets/0]).
 -endif.
 -include("acdc_cardinal_map.hrl").
 -include("acdc_gemini_map.hrl").
+-include("cardinal_maps/acdc_cardinal_he-il.hrl").
+-include("cardinal_maps/acdc_cardinal_fr-fr.hrl").
+-include("cardinal_maps/acdc_cardinal_es-es.hrl").
+-include("cardinal_maps/acdc_cardinal_ar-sa.hrl").
+
+%% All five reviewed source maps are mandatory compile inputs. Never substitute
+%% a partial inventory or generated placeholder when a release map is absent.
+-spec compiled_assets() -> [tuple()].
+compiled_assets() ->
+    ?CARDINAL_ASSETS ++ ?CARDINAL_HE_ASSETS ++ ?CARDINAL_FR_ASSETS
+        ++ ?CARDINAL_ES_ASSETS ++ ?CARDINAL_AR_ASSETS.
+
+%% HE/AR framing belongs only to cardinal playback, not the fixed210 contract.
+-spec intro_assets() -> [tuple()].
+intro_assets() -> ?GEMINI_ASSETS ++ [?CARDINAL_HE_INTRO_ASSET, ?CARDINAL_AR_INTRO_ASSET].
 
 -spec prepare(any(), binary(), any()) -> {ok, map()} | {error, atom()}.
 prepare(Language, Account, Media) ->
-    prepare_with(Language, Account, Media, ?CARDINAL_ASSETS,
+    prepare_with(Language, Account, Media, compiled_assets(),
                  fun(Id) -> kz_datamgr:open_cache_doc(<<"system_media">>, Id) end,
                  fun frame/3).
 
@@ -23,11 +39,16 @@ prepare_with(Language, Account, Media, Assets, Read, Frame)
     try
         Expected = expected_roles(Language),
         Selected = [A || A <- Assets, element(1, A) =:= Language],
+        %% A resolved locale cannot silently downgrade one role to the legacy
+        %% verifier by dropping its compiled model/source admission fields.
+        true = Selected =/= [],
+        [Schema] = lists:usort([tuple_size(A) || A <- Selected]),
+        true = (Schema =:= 7 orelse Schema =:= 9),
         true = lists:sort([element(2, A) || A <- Selected]) =:= Expected,
         {ok, Before, After} = Frame(Language, Account, Media),
         true = valid_frame(Before, After, Language),
         true = lists:all(fun(A) ->
-            acdc_gemini_prompts:verified_asset(A, Read(document_id(A)))
+            verified_cardinal_row(A, Read(document_id(A)))
         end, Selected),
         Paths = maps:from_list([{element(2, A), path(Language, element(3, A))}
                                || A <- Selected]),
@@ -36,6 +57,13 @@ prepare_with(Language, Account, Media, Assets, Read, Frame)
     catch _:_ -> {error, cardinal_media_unavailable}
     end;
 prepare_with(_, _, _, _, _, _) -> {error, unsupported_language}.
+
+-spec verified_cardinal_row(tuple(), any()) -> boolean().
+verified_cardinal_row(A, Result) when tuple_size(A) =:= 9 ->
+    acdc_gemini_prompts:verified_cardinal_asset(A, Result);
+verified_cardinal_row(A, Result) when tuple_size(A) =:= 7 ->
+    acdc_gemini_prompts:verified_asset(A, Result);
+verified_cardinal_row(_, _) -> false.
 
 -spec expected_roles(binary()) -> [binary()].
 expected_roles(Language) ->
@@ -86,10 +114,7 @@ pairs(Roles) -> Roles ++ [<<"joined-", Role/binary>> || Role <- Roles].
 
 -spec frame(binary(), binary(), any()) -> tuple().
 frame(Language, Account, Media) ->
-    %% The current compiled cardinal map remains EN-only. New intro tuples must
-    %% be deliberately added to this inventory when complete maps are admitted;
-    %% they never replace or extend the fixed210 map by implication.
-    frame_with(Language, Account, Media, ?GEMINI_ASSETS,
+    frame_with(Language, Account, Media, intro_assets(),
         fun(Id) -> kz_datamgr:open_cache_doc(<<"system_media">>, Id) end).
 
 -spec frame_with(binary(), binary(), any(), list(), function()) -> tuple().

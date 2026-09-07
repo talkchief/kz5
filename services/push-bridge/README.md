@@ -1,5 +1,15 @@
 # Mobile push bridge: modular installer candidate
 
+Explicit strict-quorum FCM500/503 retries without Retry-After are a source candidate only.
+See [counted retry policy and open broker acceptance gates](../../doc/push_bridge_counted_retry.md).
+The retry setting is not activated; legacy behavior and topology remain unchanged.
+The code is installed on development as release `b20944143ade6ae0ad3ffb4c4c69094305348d7220f890669ca57606fb3810f8`:
+main-SH install `feccd8/4664d3` and independent verify `b0c4d8/02b4a6` pass.
+Isolated real-broker retry acceptance passes `feecd1/ac00b2`; no provider sends
+were made. Actual Android/iOS delivery remains open. The installer now also
+rolls back a distinct previous release when post-start verification fails;
+seven isolated rollback scenarios pass `943abf/2ca19d`.
+
 Versioned producer expiry is now available as an explicit quorum-only opt-in.
 See [freshness configuration, tests and release boundaries](../../doc/push_bridge_freshness.md).
 It does not silently change legacy routing or prove real phone delivery.

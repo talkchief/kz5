@@ -1624,8 +1624,7 @@ ensure_kazoo_sources() {
     apply_kazoo_integration_patch blackhole
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"
-    apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
-        "$SCRIPT_DIR/patches/ecallmgr-kazoo5-integration.patch"
+    apply_kazoo_integration_patch ecallmgr
     apply_required_source_patch "$KAZOO_ROOT/applications/cdr" \
         "$SCRIPT_DIR/patches/cdr-report-timestamp-fallback.patch"
 }
@@ -1677,6 +1676,19 @@ apply_kazoo_integration_patch() (
             transition_delta_files=(priv/couchdb/schemas/system_config.blackhole.json)
             transition_created_files=(priv/couchdb/schemas/channel_monitoring.json src/cb_channel_monitor.erl
                 src/kazoo_monster_catalog.erl src/modules/cb_members.erl)
+            ;;
+        ecallmgr)
+            transition_new=ecallmgr-kazoo5-integration.patch
+            transition_old=ecallmgr-kazoo5-before-atomic.patch
+            transition_delta=ecallmgr-atomic-answer-runtime.patch
+            transition_files=(src/call_cmd/ecallmgr_call_command.erl src/call_cmd/ecallmgr_fs_bridge.erl
+                src/ecallmgr_fs_channels.erl src/ecallmgr_fs_resource.erl src/ecallmgr_fs_xml.erl
+                src/ecallmgr_originate.erl src/ecallmgr_util.erl src/event_stream/ecallmgr_fs_event_stream.erl
+                src/mod_kazoo.erl src/node/ecallmgr_fs_nodes.erl src/node/ecallmgr_fs_pinger.erl
+                src/ecallmgr_call_monitor.erl)
+            transition_old_files=("${transition_files[@]}")
+            transition_delta_files=(src/ecallmgr_originate.erl)
+            transition_created_files=(src/ecallmgr_call_monitor.erl)
             ;;
         mod_kazoo)
             transition_new=mod-kazoo-kz5-integration.patch
@@ -2065,11 +2077,19 @@ verify_kazoo_production_beams() {
 }
 
 prepare_kazoo_runtime_artifact_permissions() {
-    local runtime_root
+    local runtime_root atomic_script
     [[ $DRY_RUN != true ]] || return 0
     runtime_root=$(readlink -f -- "$KAZOO_ROOT")
     [[ -n $runtime_root && $runtime_root != / && -d $runtime_root/applications && -d $runtime_root/core ]] || \
         die 'Cannot validate the Kazoo code tree for runtime artifact permissions'
+    # This exact public read-only script is evaluated as the Kazoo service user.
+    # A fresh root checkout/build under umask077 must not leave it unreadable.
+    atomic_script="$SCRIPT_DIR/verify-ecallmgr-atomic-media.erl"
+    [[ -f $atomic_script && ! -L $atomic_script &&
+       $(realpath -e -- "$atomic_script") == "$atomic_script" &&
+       $(stat -c '%u:%h' -- "$atomic_script") == 0:1 ]] ||
+        die 'Cannot prepare an unsafe atomic media verification script'
+    chmod 0644 -- "$atomic_script" || die 'Cannot prepare atomic media verification script permissions'
     # Root builds may inherit umask 077. These are code and public schema/view
     # definitions, not deployment configuration, logs, keys, or credential files.
     find "$runtime_root/core" "$runtime_root/applications" "$runtime_root/deps" -type f \
@@ -2544,6 +2564,136 @@ install_acdc_editor_capabilities() {
         die 'Could not safely initialize the apps-owned editor capability fallback'
 }
 
+finalize_acdc_prerecorded_capabilities() (
+    set -euo pipefail
+    local mode=${1:---install} account=''
+    [[ $mode == --install || $mode == --check ]] || die 'Invalid prerecorded capability operation'
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would prove prerecorded runtime functions before publishing installer-owned selection capability; native/full readiness stays false'
+        return 0
+    fi
+    if [[ $mode == --install ]]; then
+        [[ $VERIFY_ONLY != true ]] || die 'Verification cannot publish prerecorded capability'
+        verify_kazoo_current_build
+        account=$(configured_master_account_id) || die 'Prerecorded proof requires the configured existing account'
+        [[ $account =~ ^[0-9a-f]{32}$ ]] || die 'Invalid prerecorded proof account'
+    fi
+    node - "$mode" "$SCRIPT_DIR" "$KAZOO_ROOT" "$KAZOO_CONFIG_DIR" "$KAZOO_HOSTNAME" \
+        "$account" "${KAZOO_BUILD_SNAPSHOT_THIS_RUN:-}" "$(acdc_cardinal_index_pin)" <<'JS'
+// ACDC_PRERECORDED_FINALIZATION_BEGIN
+'use strict';
+try {
+    const fs = require('node:fs'), path = require('node:path'), cp = require('node:child_process');
+    const assert = require('node:assert/strict');
+    const [mode, scripts, root, configRoot, host, account, build, indexSha] = process.argv.slice(2);
+    const probe = require(path.join(scripts, 'probe-acdc-prerecorded-runtime.cjs'));
+    const publisher = require(path.join(scripts, 'publish-acdc-prerecorded-capabilities.cjs'));
+    const {assertLanguageCapabilities} = require(path.join(scripts, 'validate-acdc-language-capabilities.cjs'));
+    const run = args => {
+        const r = cp.spawnSync('/usr/local/bin/sup', ['-e', ...args],
+            {encoding: 'utf8', timeout: 30000, maxBuffer: 65536, stdio: ['ignore', 'pipe', 'pipe']});
+        assert(!r.error && r.status === 0, 'Capability config RPC failed'); return r.stdout.trim();
+    };
+    // fetch_current has the same node/zone/default precedence but never saves a
+    // missing category (get/get_ne_binary may do so, even in verify-only).
+    const configArgs = ['kapps_config', 'fetch_current', '<<"acdc.queues">>', '<<"editor_language_capabilities_path">>'];
+    const readConfig = () => { const value = run(configArgs); return /^\{error,\s*not_found\}$/.test(value) ? 'undefined' : value; };
+    const configured = readConfig(), fallback = path.join(configRoot, 'acdc', 'language-capabilities.json');
+    const matched = configured.match(/^<<"(\/[^"\\\r\n]+)">>$/);
+    assert(configured === 'undefined' || matched, 'Unsupported explicit capability path');
+    const target = matched ? matched[1] : fallback;
+    assert(probe.absolute(target), 'Noncanonical capability path');
+    assert(target !== fallback || /^\/[A-Za-z0-9_./-]+$/.test(target), 'Unsafe default capability path');
+    const pin = (file, limit = 131072) => {
+        probe.protectedParents(path.dirname(file));
+        const st = fs.lstatSync(file);
+        assert(st.isFile() && !st.isSymbolicLink() && st.uid === 0 && st.nlink === 1
+            && !(st.mode & 0o022) && st.size > 0 && st.size <= limit, 'Unprotected installer input');
+        const h = cp.spawnSync('/usr/bin/sha256sum', [file], {encoding: 'utf8', timeout: 10000, maxBuffer: 4096});
+        assert(!h.error && h.status === 0 && probe.validSha(h.stdout.slice(0, 64)), 'Cannot pin installer input');
+        const sha256 = h.stdout.slice(0, 64); return {sha256, bytes: probe.readPinned(file, sha256, limit)};
+    };
+    const markerPath = digest => target + '.installer-' + digest + '.json';
+    const existing = target === fallback && fs.existsSync(target) ? pin(target) : null;
+    const old = existing ? assertLanguageCapabilities(JSON.parse(existing.bytes)) : null;
+    const native = old && Object.values(old.languages).some(l => l.native_speaker_review);
+    const initial = old && old.schema_version === 1 && old.backend_mode === 'legacy';
+    let owned = false;
+    if (existing && fs.existsSync(markerPath(existing.sha256))) {
+        const marker = JSON.parse(pin(markerPath(existing.sha256)).bytes);
+        probe.exactKeys(marker, ['owner', 'capability_sha256', 'receipt', 'receipt_sha256']);
+        assert(marker.owner === 'kazoo5-acdc-prerecorded-finalization' && marker.capability_sha256 === existing.sha256
+            && probe.absolute(marker.receipt) && probe.validSha(marker.receipt_sha256), 'Invalid installer ownership marker');
+        owned = marker;
+    }
+    // Explicit operator paths and reviewed/non-installer artifacts are never
+    // automatically replaced, even when the generic publisher could accept them.
+    if (target !== fallback || native || old && !initial && !owned) {
+        console.log('SKIP automatic voice capability publication/check: preserved custom or reviewed artifact; no five-language selection claim');
+    } else if (mode === '--check') {
+        assert(owned, 'No installer-owned runtime capability proof');
+        const evidence = pin(owned.receipt, 65536);
+        assert(evidence.sha256 === owned.receipt_sha256, 'Runtime evidence changed');
+        const receipt = JSON.parse(evidence.bytes);
+        // Routine verification checks old evidence against current files and
+        // media receipts; the five-minute publication age rule is not a TTL.
+        publisher.validateReceipt(receipt, Date.parse(receipt.finished_at));
+        probe.validateBeams({schema_version: 1, modules: receipt.beams});
+        assert(receipt.node === 'kazoo_apps@' + host, 'Runtime proof belongs to another node');
+        assert(pin('/usr/local/share/kazoo5-installer/acdc-cardinal-media.json', 8 * 1024 * 1024).sha256 === receipt.cardinal_receipt_sha256
+            && pin('/usr/local/share/kazoo5-installer/acdc-gemini-media.json').sha256 === receipt.fixed_receipt_sha256,
+        'Installed media evidence changed');
+        const expected = publisher.capability(receipt, evidence.sha256, Date.parse(old.generated_at));
+        assert.deepEqual(old, expected, 'Capability differs from measured runtime evidence');
+        assert(configured !== 'undefined', 'Installer capability is shadowed by legacy path precedence');
+        console.log('PASS matching installer capability and retained runtime evidence; native/full readiness remains false');
+    } else {
+        assert(probe.validAccount(account) && probe.validSha(build) && probe.validSha(indexSha));
+        probe.protectedParents(path.dirname(target));
+        const directory = fs.mkdtempSync(path.join(path.dirname(target), '.prerecorded-proof-'));
+        fs.chmodSync(directory, 0o700);
+        const modules = probe.MODULES.map(module => {
+            const area = module === 'kz_media_map' ? 'core/kazoo_media' : module === 'media_map' ? 'applications/media_mgr' : 'applications/acdc';
+            const file = path.join(root, area, 'ebin', module + '.beam');
+            return {module, path: file, sha256: pin(file, 8 * 1024 * 1024).sha256};
+        });
+        const manifest = path.join(directory, 'production-beams.json');
+        const manifestSha = probe.createEvidence(manifest, Buffer.from(JSON.stringify({schema_version: 1, modules}) + '\n'));
+        probe.createEvidence(path.join(directory, 'build-lineage.json'), Buffer.from(JSON.stringify({
+            schema_version: 1, build_snapshot_sha256: build, beam_manifest_sha256: manifestSha, account}) + '\n'));
+        const cardinalReceipt = '/usr/local/share/kazoo5-installer/acdc-cardinal-media.json';
+        const fixedReceipt = '/usr/local/share/kazoo5-installer/acdc-gemini-media.json';
+        const fixedMap = path.join(root, 'applications/acdc/src/acdc_gemini_map.hrl');
+        const receipt = path.join(directory, 'runtime-receipt.json');
+        const options = probe.parseArgs(['--node', 'kazoo_apps@' + host, '--account', account,
+            '--cardinal-receipt', cardinalReceipt, '--cardinal-receipt-sha256', pin(cardinalReceipt, 8 * 1024 * 1024).sha256,
+            '--fixed-receipt', fixedReceipt, '--fixed-receipt-sha256', pin(fixedReceipt).sha256,
+            '--beam-manifest', manifest, '--beam-manifest-sha256', manifestSha,
+            '--fixed-map', fixedMap, '--fixed-map-sha256', pin(fixedMap, 262144).sha256,
+            '--fixed-pack', path.join(scripts, 'assets/acdc-gemini-fixed-20260905'),
+            '--completion-pack', path.join(scripts, 'assets/acdc-gemini-completion-20260905'),
+            '--supplemental-pack', path.join(scripts, 'assets/acdc-gemini-supplemental-20260906'),
+            '--model-trial-index', path.join(scripts, 'assets/acdc-gemini-cardinal-model-trials-20260907/index.json'),
+            '--model-trial-index-sha256', indexSha, '--alias-file', path.join(scripts, 'acdc-cardinal-reuse-es-20260907.json'),
+            '--alias-sha256', 'f1338ba60bbb360a91491fcf3be0d161ca25ff267a2f7ec32c2faacc49ca1b6d', '--output', receipt]);
+        const result = probe.execute(options);
+        assert(readConfig() === configured, 'Capability configuration changed during proof');
+        const published = publisher.publish({account, receipt, 'receipt-sha256': result.sha256,
+            output: target, 'previous-sha256': existing ? existing.sha256 : 'absent'});
+        probe.createEvidence(markerPath(published.sha256), Buffer.from(JSON.stringify({
+            owner: 'kazoo5-acdc-prerecorded-finalization', capability_sha256: published.sha256,
+            receipt, receipt_sha256: result.sha256}) + '\n'));
+        if (configured === 'undefined') {
+            run(['kapps_config', 'set_default', '<<"acdc.queues">>', '<<"editor_language_capabilities_path">>', '<<"' + target + '">>']);
+            assert(readConfig() === '<<"' + target + '">>', 'Capability path publication unconfirmed');
+        }
+        console.log('PASS five-language selection capability from measured runtime proof; native/full readiness remains false');
+    }
+} catch (_) { console.error('Prerecorded capability finalization failed safely; publication/readiness is unconfirmed.'); process.exitCode = 1; }
+// ACDC_PRERECORDED_FINALIZATION_END
+JS
+)
+
 install_kazoo_apps() {
     # Validate/import immutable defaults before touching the application build
     # or restarting mapped code. Fresh bootstrap needs only configured CouchDB,
@@ -2562,6 +2712,7 @@ install_kazoo_apps() {
     fi
     install_kazoo_prompts
     activate_acdc_voice_mappings
+    finalize_acdc_prerecorded_capabilities --install
     verify_kazoo_apps
 }
 
@@ -2662,6 +2813,42 @@ ensure_system_media_database() (
         jq -e '.db_name == "system_media"' >/dev/null || die 'Configured system_media identity could not be verified'
 )
 
+acdc_cardinal_index_pin() {
+    printf '%s\n' 'b6c4e2a2ef515be72d378a239086b4421992a095447003c1c397c925d98c1e51'
+}
+
+run_acdc_cardinal_pack() {
+    local mode=$1
+    [[ $mode == --plan || $mode == --import || $mode == --verify-only ]] || die 'Invalid cardinal media operation'
+    [[ -s $SCRIPT_DIR/install-acdc-cardinal-pack.cjs ]] || die 'Required checked-in cardinal installer adapter is missing'
+    # Release pin is updated only after the complete saved recording inventory
+    # is verified. Never derive trust from a locally altered index at install.
+    node "$SCRIPT_DIR/install-acdc-cardinal-pack.cjs" "$mode" --all-locales \
+        --model-trial-index "$SCRIPT_DIR/assets/acdc-gemini-cardinal-model-trials-20260907/index.json" \
+        --model-trial-index-sha256 "$(acdc_cardinal_index_pin)" \
+        --supplemental-pack "$SCRIPT_DIR/assets/acdc-gemini-supplemental-20260906" \
+        --alias-file "$SCRIPT_DIR/acdc-cardinal-reuse-es-20260907.json" \
+        --alias-sha256 f1338ba60bbb360a91491fcf3be0d161ca25ff267a2f7ec32c2faacc49ca1b6d
+}
+
+validate_acdc_cardinal_receipt() {
+    local mode=$1
+    jq -e --arg mode "$mode" '
+        .owner == "kazoo5-acdc-cardinal-installer" and .scope == "all-locales"
+        and .mode == $mode and .count == 584 and .source_complete == true
+        and .resolution_mode == "indexed-model-trials-v1" and .resolution_complete == true
+        and .runtime_ready == false and .five_language_release_ready == false
+        and .listening_verified == false and .queue_configuration_changed == false
+        and (.locales | length == 5)
+        and ([.locales[].locale] | sort == ["ar-sa","en-us","es-es","fr-fr","he-il"])
+        and all(.locales[]; .count == ({"en-us":31,"he-il":131,"fr-fr":161,"es-es":53,"ar-sa":208}[.locale]))
+        and (if $mode == "PLAN_ONLY_NO_DATABASE_ACCESS" then .database_verified == false
+            else .database_verified == true and .verified == 584
+                and all(.locales[]; .mode == "VERIFY_ONLY" and .verified == .count
+                    and .created == 0 and .intro_installed_verified == true) end)
+    ' >/dev/null
+}
+
 install_acdc_language_packs() (
     local fixed_dir="$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905"
     local completion_dir="$SCRIPT_DIR/assets/acdc-gemini-completion-20260905" receipt
@@ -2669,7 +2856,7 @@ install_acdc_language_packs() (
     if [[ $DRY_RUN == true ]]; then
         log "Would create-only import and verify 210 checked-in Gemini EN/AR/HE/ES/FR fixed/callback-digit assets into configured CouchDB ${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}; preserve official and customer recordings"
         log 'Voice media import requires no provider key, generation call, eSpeak, or local FreeSWITCH; it does not publish runtime or full-position readiness'
-        log 'Would separately import and byte-verify 31 checked-in English cardinal assets and the existing approved intro against the compiled source map; other cardinal languages remain a release gate'
+        log 'Would preflight all 584 prerecorded EN/HE/FR/ES/AR cardinal assets and exact compiled maps before any media database effects; separately import and byte-verify them and their approved intros'
         return 0
     fi
     [[ -s $SCRIPT_DIR/import-acdc-gemini-voices.cjs && -s $SCRIPT_DIR/validate-acdc-gemini-receipt.cjs ]] || \
@@ -2683,6 +2870,8 @@ install_acdc_language_packs() (
     jq -e '.mode == "PLAN_ONLY_NO_DATABASE_ACCESS" and .count == 210
         and .creates_only_versioned_ids == true and .preserves_legacy_and_custom_media == true
         and .runtime_ready == false' "$receipt" >/dev/null || die 'Incomplete immutable voice source plan'
+    run_acdc_cardinal_pack --plan >"$receipt" || die 'Incomplete immutable five-language cardinal source plan'
+    validate_acdc_cardinal_receipt PLAN_ONLY_NO_DATABASE_ACCESS <"$receipt" || die 'Invalid five-language cardinal source plan'
     ensure_system_media_database
     # Credentials are inherited only by this child, never placed in argv, URLs,
     # receipts, or public capability artifacts. CouchDB may be a separate host.
@@ -2699,14 +2888,13 @@ install_acdc_language_packs() (
     # This receipt is not the language-capabilities runtime manifest. Leave
     # legacy receipts and existing prompt/queue/account documents untouched.
     write_file 0644 /usr/local/share/kazoo5-installer/acdc-gemini-media.json <"$receipt"
-    [[ -s $SCRIPT_DIR/install-acdc-cardinal-pack.cjs ]] || die 'Required checked-in cardinal installer adapter is missing'
-    node "$SCRIPT_DIR/install-acdc-cardinal-pack.cjs" --import >"$receipt"
-    jq -e '.mode == "VERIFY_ONLY" and .count == 31 and .verified == 31 and .created == 0
-        and .intro_installed_verified == true and .runtime_ready == false
-        and .five_language_release_ready == false' "$receipt" >/dev/null || die 'Incomplete immutable cardinal final readback'
+    run_acdc_cardinal_pack --import >"$receipt"
+    validate_acdc_cardinal_receipt IMPORT_AND_VERIFY <"$receipt" || die 'Incomplete immutable cardinal import readback'
+    run_acdc_cardinal_pack --verify-only >"$receipt"
+    validate_acdc_cardinal_receipt VERIFY_ONLY <"$receipt" || die 'Incomplete immutable cardinal final readback'
     write_file 0644 /usr/local/share/kazoo5-installer/acdc-cardinal-media.json <"$receipt"
     log 'PASS 210 immutable Gemini voice assets verified; existing audio preserved; runtime and full-position readiness are separate gates'
-    log 'PASS 31 immutable English cardinal assets and approved intro verified; no provider call; other position languages remain a release gate'
+    log 'PASS 584 immutable five-language cardinal assets and approved intros verified; no provider call; runtime/listening acceptance is separate'
 )
 
 validate_acdc_language_receipt() {
@@ -2731,9 +2919,25 @@ run_acdc_voice_mapping_check() {
         die 'Immutable Gemini prompt mappings could not be verified on the running apps node'
 }
 
+run_acdc_cardinal_mapping_check() {
+    local mode=$1 receipt=$2
+    [[ $mode == --activate || $mode == --check ]] || die 'Invalid cardinal mapping operation'
+    [[ -n ${KAZOO_HOSTNAME:-} ]] || die 'Kazoo hostname is required for cardinal mapping verification'
+    [[ -s $SCRIPT_DIR/refresh-acdc-cardinal-mappings.cjs && -s $SCRIPT_DIR/refresh-acdc-cardinal-mappings.erl.template ]] || \
+        die 'Required prerecorded cardinal mapping tools are missing'
+    node "$SCRIPT_DIR/refresh-acdc-cardinal-mappings.cjs" "$mode" \
+        --node "kazoo_apps@${KAZOO_HOSTNAME}" --receipt "$receipt" \
+        --model-trial-index "$SCRIPT_DIR/assets/acdc-gemini-cardinal-model-trials-20260907/index.json" \
+        --model-trial-index-sha256 "$(acdc_cardinal_index_pin)" \
+        --supplemental-pack "$SCRIPT_DIR/assets/acdc-gemini-supplemental-20260906" \
+        --alias-file "$SCRIPT_DIR/acdc-cardinal-reuse-es-20260907.json" \
+        --alias-sha256 f1338ba60bbb360a91491fcf3be0d161ca25ff267a2f7ec32c2faacc49ca1b6d || \
+        die 'Prerecorded cardinal mappings could not be verified on the running apps node'
+}
+
 activate_acdc_voice_mappings() {
     if [[ $DRY_RUN == true ]]; then
-        log 'Would activate/verify only the 210 immutable Gemini prompts in both running media caches; no database or custom recording changes'
+        log 'Would activate/verify the 210 fixed prompts and separate 584 cardinals plus two intros in both running media caches; no database or custom recording changes'
         return 0
     fi
     # Imports happen before services start. Existing nodes/reruns also need
@@ -2741,7 +2945,8 @@ activate_acdc_voice_mappings() {
     # configuration events. This is safe while initial map loading completes.
     verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
     run_acdc_voice_mapping_check --activate /usr/local/share/kazoo5-installer/acdc-gemini-media.json
-    log 'PASS 210 owned Gemini prompts resolve in both active media maps; no language capability was published'
+    run_acdc_cardinal_mapping_check --activate /usr/local/share/kazoo5-installer/acdc-cardinal-media.json
+    log 'PASS 796 owned prerecorded media documents resolve in both active maps; no language capability was published'
 }
 
 verify_acdc_language_packs() (
@@ -2759,6 +2964,10 @@ verify_acdc_language_packs() (
     # Verification must never repair caches or turn on incomplete languages.
     # Fresh byte verification supplies exact current revisions for this check.
     run_acdc_voice_mapping_check --check "$receipt"
+    run_acdc_cardinal_pack --verify-only >"$receipt" || die 'Immutable five-language cardinal media could not be verified'
+    validate_acdc_cardinal_receipt VERIFY_ONLY <"$receipt" || die 'Immutable cardinal verification receipt is inconsistent'
+    run_acdc_cardinal_mapping_check --check "$receipt"
+    log 'PASS 584 cardinal assets plus two new intros, exact installed revisions and both running prompt maps'
     log 'PASS 210 Gemini assets, installed audio bytes and both running prompt maps; no full-position readiness claim'
 )
 
@@ -3026,6 +3235,19 @@ verify_erlang_applications() {
     local node_prefix=$1
     local expected_apps=$2
     local fqdn erl_call_bin output app deadline all_running
+    # CLI preflight initializes both derived values. Sourced maintenance calls
+    # must do the same: an empty erl_call name-mode would otherwise be retried
+    # until the full readiness deadline, hiding an invocation/configuration bug.
+    if [[ -z ${KAZOO_HOSTNAME:-} ]]; then
+        die 'Kazoo hostname is not initialized; run installer preflight or explicitly set KAZOO_HOSTNAME before sourced verification'
+        return 1
+    fi
+    case ${KAZOO_NODE_NAME_TYPE:-} in
+        -name|-sname) ;;
+        *)
+            die 'Kazoo Erlang naming mode is not initialized: KAZOO_NODE_NAME_TYPE must be exactly -name or -sname before verification'
+            return 1 ;;
+    esac
     fqdn=$KAZOO_HOSTNAME
     verify_cookie_copy "$KAZOO_RUNTIME_COOKIE_FILE" kazoo
     erl_call_bin=$(find_erl_call) || die 'erl_call was not installed with Erlang'
@@ -3140,6 +3362,7 @@ verify_kazoo_apps() {
     verify_acdc_interfaces
     verify_kazoo_prompts
     verify_acdc_language_packs
+    finalize_acdc_prerecorded_capabilities --check
 }
 
 verify_sup_beam_export() {
@@ -3298,6 +3521,52 @@ verify_ecallmgr_event_stream_framing() {
     log 'PASS eCallMgr and configured FreeSWITCH nodes use four-byte event-stream framing'
 }
 
+verify_ecallmgr_atomic_media() {
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would verify native kz_intercept on every configured FreeSWITCH node through eCallMgr; no call or native admission change'
+        return 0
+    fi
+    local script="$SCRIPT_DIR/verify-ecallmgr-atomic-media.erl" raw node output parent owner mode
+    local -a nodes=()
+    local -A seen=()
+    # A runtime file:script read must use the exact protected checked-in file.
+    [[ $script =~ ^/[a-zA-Z0-9_./-]+$ && -f $script && ! -L $script && $(realpath -e -- "$script") == "$script" &&
+       $(stat -c '%u:%a:%h' -- "$script") == 0:644:1 ]] ||
+        die 'Atomic media verification script is missing, linked or unprotected'
+    parent=$(dirname -- "$script")
+    while :; do
+        [[ -d $parent && ! -L $parent ]] || die 'Atomic media verifier ancestor is unsafe'
+        read -r owner mode < <(stat -c '%u %a' -- "$parent")
+        [[ $owner == 0 && $mode =~ ^[0-7]+$ && $((8#$mode & 022)) == 0 &&
+           $((8#$mode & 001)) != 0 ]] || die 'Atomic media verifier ancestor is not protected and traversable'
+        [[ $parent != / ]] || break
+        parent=$(dirname -- "$parent")
+    done
+    raw=$(freeswitch_nodes_to_manage) || die 'Cannot resolve configured FreeSWITCH nodes'
+    [[ ${#raw} -le 32768 ]] || die 'Configured FreeSWITCH inventory is unbounded'
+    while IFS= read -r node; do
+        [[ -n $node ]] || continue
+        [[ $node == *@* ]] || node="freeswitch@${node}"
+        [[ ${#node} -le 255 && $node =~ ^[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+$ &&
+           ! ${seen[$node]:-} ]] || die 'Invalid or duplicate FreeSWITCH node in atomic media scope'
+        seen[$node]=1
+        nodes+=("$node")
+    done <<<"$raw"
+    [[ ${#nodes[@]} -le 128 ]] || die 'Too many FreeSWITCH nodes in atomic media scope'
+    if ((${#nodes[@]} == 0)); then
+        warn 'No configured FreeSWITCH nodes; atomic media compatibility remains unverified'
+        return 0
+    fi
+    for node in "${nodes[@]}"; do
+        output=$(timeout --signal=KILL 20 sup -t 15 -n ecallmgr -e file script \
+            "\"$script\"" "[{'MediaNode','$node'}]" </dev/null 2>/dev/null) ||
+            die 'Remote atomic media verification failed; upgrade native mod_kazoo before eCallMgr'
+        [[ $output == '{ok,ecallmgr_atomic_media_verified}' ]] ||
+            die 'Configured FreeSWITCH lacks verified native kz_intercept; upgrade media before eCallMgr'
+        log "PASS native kz_intercept/mod_kazoo inventory through eCallMgr: ${node} (no call performed)"
+    done
+}
+
 verify_ecallmgr() {
     if [[ $DRY_RUN == true ]]; then log 'Would verify eCallMgr'; return 0; fi
     verify_kazoo_pivot_port_reservation kazoo-ecallmgr.service
@@ -3308,6 +3577,7 @@ verify_ecallmgr() {
     verify_ecallmgr_callback_cleanup
     verify_ecallmgr_event_stream_framing
     verify_configured_freeswitch_nodes
+    verify_ecallmgr_atomic_media
 }
 
 freeswitch_nodes_to_manage() {
@@ -3813,6 +4083,9 @@ verify_freeswitch() {
         die 'FreeSWITCH mod_kazoo does not provide the Kazoo originate cancellation API'
     grep -Eq '^kz_originate_reconcile,' <<<"$api_list" || \
         die 'FreeSWITCH mod_kazoo does not provide the Kazoo originate reconciliation API'
+    /usr/local/freeswitch/bin/fs_cli -x 'show application as json' | \
+        jq -e '[.rows[] | select(.name == "kz_intercept" and .ikey == "mod_kazoo")] | length == 1' >/dev/null || \
+        die 'FreeSWITCH mod_kazoo lacks atomic ACDC pickup; update the media module before eCallMgr'
     /usr/local/freeswitch/bin/fs_cli -x 'module_exists mod_spandsp' | grep -i true >/dev/null || \
         die 'FreeSWITCH did not load mod_spandsp'
     for module in mod_say_en mod_say_es mod_say_fr; do
@@ -5253,7 +5526,7 @@ push_bridge_preflight() {
 
 push_bridge_fingerprint() {
     local source_dir="$SCRIPT_DIR/../services/push-bridge" file
-    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
+    for file in bridge.py apns_sender.py delivery_settlement.py delivery_retry.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
         service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
         [[ -f $source_dir/$file && ! -L $source_dir/$file ]] || die 'Bridge release source is missing or linked'
         sha256sum "$source_dir/$file" | awk -v name="$file" '{ print $1 "  " name }'
@@ -5289,7 +5562,7 @@ install_push_bridge() {
     if [[ $previous != "$release" ]]; then
         [[ ! -L $release ]] || die 'Bridge release directory must not be a symlink'
         run install -d -o root -g root -m 0755 "$release"
-        for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
+        for file in bridge.py apns_sender.py delivery_settlement.py delivery_retry.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
             service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
             run install -o root -g root -m 0644 "$source_dir/$file" "$release/$file"
         done
@@ -5300,7 +5573,7 @@ install_push_bridge() {
     fi
     run "$release/venv/bin/python" -I -m pip --isolated check
     run "$release/venv/bin/python" -B -I "$release/service_launcher.py" --check-dependencies
-    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
+    for file in bridge.py apns_sender.py delivery_settlement.py delivery_retry.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
         service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
         cmp -s "$source_dir/$file" "$release/$file" || die 'Bridge release bytes do not match source'
     done
@@ -5312,7 +5585,21 @@ install_push_bridge() {
     write_file 0644 /etc/systemd/system/kazoo-push-bridge.service <"$source_dir/kazoo-push-bridge.service"
     run systemctl daemon-reload
     run systemctl enable kazoo-push-bridge.service
+    local bridge_activation_failed=false bridge_verification_pid
     if ! systemctl restart kazoo-push-bridge.service; then
+        bridge_activation_failed=true
+    else
+        # Do not test verify_push_bridge directly in an if/! expression: Bash
+        # would suppress errexit inside it and could hide a dependency failure.
+        # A child also contains its explicit die/exit without exiting before
+        # rollback. Launch outside a conditional; wait only tests its status.
+        ( set -e; verify_push_bridge ) &
+        bridge_verification_pid=$!
+        if ! wait "$bridge_verification_pid"; then
+            bridge_activation_failed=true
+        fi
+    fi
+    if [[ $bridge_activation_failed == true ]]; then
         if [[ -n $previous && $previous != "$release" ]]; then
             ln -s "$previous" "$temporary"
             mv -T "$temporary" "$base/current"
@@ -5321,9 +5608,8 @@ install_push_bridge() {
             systemctl daemon-reload
             systemctl restart kazoo-push-bridge.service || warn 'Previous bridge release could not be restarted; operator recovery required'
         fi
-        die 'Bridge did not reach broker-consumer readiness; inspect protected configuration and service state'
+        die 'Bridge restart or post-start verification failed; inspect protected configuration and service state'
     fi
-    verify_push_bridge
 }
 
 verify_push_bridge() {
@@ -5331,7 +5617,7 @@ verify_push_bridge() {
     local base=/usr/local/lib/kazoo-push-bridge release file actual
     release="$base/releases/$(push_bridge_fingerprint)"
     [[ -L $base/current && $(readlink "$base/current") == "$release" ]] || die 'Active bridge release differs from requested source'
-    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
+    for file in bridge.py apns_sender.py delivery_settlement.py delivery_retry.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
         service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
         cmp -s "$SCRIPT_DIR/../services/push-bridge/$file" "$release/$file" || die 'Bridge release verification failed'
     done

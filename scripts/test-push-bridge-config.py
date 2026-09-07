@@ -42,6 +42,20 @@ def environment(apns=False):
 
 
 class ConfigTests(unittest.TestCase):
+    def test_retry_requires_explicit_verified_topology_and_strict_freshness(self):
+        candidate = environment()
+        candidate[config.PREFIX + "RETRY"] = "quorum-counted-v1"
+        errors = config.validate(candidate)
+        self.assertIn("RETRY:requires_quorum", errors); self.assertIn("RETRY:requires_freshness", errors)
+        candidate.update({config.PREFIX + "TOPOLOGY": "quorum-v1", config.PREFIX + "FRESHNESS": "unix-ms-v1",
+                          config.PREFIX + "QUEUE": "fixture-mobile.quorum-v1",
+                          config.PREFIX + "AMQP_MANAGEMENT_URL": "https://broker.example.invalid:15671"})
+        with patch("builtins.open", side_effect=AssertionError("unexpected file access")):
+            self.assertEqual(config.validate(candidate), ())
+        for value in ("legacy", "", "true", "quorum-counted-v2", "fixture-private-value"):
+            candidate[config.PREFIX + "RETRY"] = value
+            self.assertIn("RETRY:invalid_mode", config.validate(candidate))
+
     def test_valid_configs_do_not_read_files_or_import_providers(self):
         with patch("builtins.open", side_effect=AssertionError("unexpected file access")):
             self.assertEqual(config.validate(environment()), ())

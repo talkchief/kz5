@@ -151,7 +151,19 @@ async function offline() {
     assert(spec.paths['/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks']);
     assert(spec.paths['/accounts/{ACCOUNT_ID}/queues/editor'].put.responses['201']);
     assert.equal(spec.components.schemas.QueueEditorSnapshot.required.includes('language_capabilities'), false);
-    assert.deepEqual(spec.components.schemas.QueueEditorLanguageCapabilities.properties.backend_mode.enum, ['legacy']);
+    assert.deepEqual(spec.components.schemas.QueueEditorLanguageCapabilities.oneOf,
+        [{$ref: '#/components/schemas/QueueEditorLanguageCapabilitiesV1'}, {$ref: '#/components/schemas/QueueEditorLanguageCapabilitiesV2'}]);
+    assert.deepEqual(spec.components.schemas.QueueEditorLanguageCapabilitiesV1.properties.backend_mode.enum, ['legacy']);
+    const cardinal = spec.components.schemas.QueueEditorLanguageCapabilitiesV2;
+    assert.deepEqual(cardinal.properties.backend_mode.enum, ['prerecorded-cardinal-v1']);
+    assert.equal(cardinal.additionalProperties, false);
+    for (const [locale, count] of Object.entries({'en-us': 31, 'he-il': 131, 'fr-fr': 161, 'es-es': 53, 'ar-sa': 208})) {
+        const entry = cardinal.properties.languages.properties[locale];
+        assert.equal(entry.additionalProperties, false);
+        assert.deepEqual(entry.properties.numeric_prompt_count.enum, [count]);
+        assert.deepEqual(entry.properties.callback_prompt_count.enum, [42]);
+        assert(entry.required.includes('selection_ready') && entry.required.includes('native_review_sha256'));
+    }
     const members = spec.paths['/accounts/{ACCOUNT_ID}/members/devices'].get;
     assert.equal(members['x-implementation-status'], 'implemented-source-reviewed');
     for (const [route, verbs] of [

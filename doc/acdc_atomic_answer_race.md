@@ -1,7 +1,18 @@
 # Atomic ACDC answer selection
 
-Status: source-level regression tests only. A coordinated FreeSWITCH module
-deployment and the true simultaneous-answer live acceptance remain required.
+Status: source integrated into the installer; coordinated runtime deployment
+and true simultaneous-answer live acceptance remain required. On September7,
+the normal apps installer exposed a missing eCallMgr aggregate transition and
+stopped before compilation/restart. The transition passes81 cases and exact
+source replay (`37fef8/3ba923`). The media module was then freshly compiled and
+promoted with rollback copies (`012ab4/805728`); native `kz_intercept` registration
+and remote eCallMgr inventory pass (`d58bb9/e31aba`). Its installed SHA256 is
+`4ac9d4af50deca7a4163bb158befaecbbdcd59f23e137fe49aaf9d213810cfec`;
+backup is `/var/lib/kazoo-mod-kazoo-upgrade.dU80a1`. The full FreeSWITCH build
+marker remains unchanged. Matching backend deployment still remains.
+Six Erlang compatibility cases
+and100 three-answer native-boundary race iterations pass (`ad7f8b/35c78b`);
+neither is a live simultaneous-call test.
 
 The isolated live strategy test found that three agents answering together could
 all be disconnected before any `CHANNEL_BRIDGE`. FreeSWITCH 1.11.3's ordinary
@@ -53,7 +64,8 @@ their existing bounded proof/reconciliation lifecycle.
 
 ## Validation and deployment
 
-The Erlang atomic changes remain explicit supplemental patches. The existing
+The eCallMgr atomic changes are now part of its default aggregate, with an
+explicit reviewed old-to-current transition. The existing
 native `mod-kazoo-atomic-intercept.patch` is now included in the default installer
 source aggregate; its 21-case offline installer/source regression passes, but
 this is not evidence of a new runtime deployment. See
@@ -64,20 +76,18 @@ The reproducible source order is:
    module tree. It already includes `mod-kazoo-atomic-intercept.patch`; do not
    apply that supplemental patch a second time. Independent replay uses the
    original thirteen patches followed by the unchanged atomic-intercept patch.
-2. Apply `scripts/patches/acdc-kazoo5-integration.patch` to pinned ACDC, then
-   `scripts/patches/acdc-atomic-answer-runtime.patch`. The independently staged
-   `acdc-language-runtime.patch` is optional for atomic answering; to reproduce
-   all current source, apply it between the baseline and atomic patch. Its
-   files do not overlap the atomic layer.
-3. Apply `scripts/patches/ecallmgr-kazoo5-integration.patch` to pinned Ecallmgr,
-   then `scripts/patches/ecallmgr-atomic-answer-runtime.patch`.
+2. Use the tracked `applications/acdc` source in kz5. ACDC is not a nested
+   repository and its historical patches must not overwrite the bundled code.
+3. Apply `scripts/patches/ecallmgr-kazoo5-integration.patch` to pinned eCallMgr.
+   It includes the atomic change; do not apply the supplemental delta twice.
+   For an existing reviewed pre-atomic deployment, the installer uses
+   `ecallmgr-kazoo5-before-atomic.patch` plus the unchanged
+   `ecallmgr-atomic-answer-runtime.patch`, with private replay before mutation.
 
-`scripts/refresh-kazoo-integration-patches.cjs --check` verifies forward replay,
-exact source bytes and reverse replay for these Erlang layers. `--write` keeps
-the language patch unchanged and preserves the pre-staged versions in default
-baseline aggregates; it never silently promotes language/atomic work into the
-installer. Production deployment still requires the ordering and idle-call
-gate below.
+`scripts/refresh-kazoo-integration-patches.cjs --check --component ecallmgr`
+verifies exact pinned forward/current/reverse replay while retaining the
+historical baseline and delta. It does not change nested source or deploy code.
+Production deployment still requires the ordering and idle-call gate below.
 
 - `bash scripts/test-mod-kazoo-intercept.sh` executes the production app with a
   deterministic FreeSWITCH boundary, including 100 three-thread answer races in

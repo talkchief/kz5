@@ -1,5 +1,135 @@
 # Kazoo 5 project task register
 
+## Current focused release checkpoint — 2026-09-07 21:41 UTC
+
+- **Atomic installer blocker repaired and native prerequisite deployed:** all81
+  source-transition cases and exact eCallMgr patch replay pass `37fef8/3ba923`.
+  The same run freshly compiles the updated mod_kazoo. Module-only promotion
+  `012ab4/session71356/805728` passes; actual `kz_intercept` is registered,
+  PID809116, automatic restarts0. Installed SHA256
+  `4ac9d4af50deca7a4163bb158befaecbbdcd59f23e137fe49aaf9d213810cfec`.
+  Previous module and libtool archive are backed up under
+  `/var/lib/kazoo-mod-kazoo-upgrade.dU80a1`; installed/source core and eight
+  headers matched before promotion. Full FreeSWITCH build marker deliberately
+  remains unchanged: this is not full-engine installer/rebuild acceptance.
+- **Remote native gate verified:** `d58bb9/e31aba` passes the corrected20-case
+  Erlang fixture, shell scope/refusal/permission fixtures, modular installer
+  checks and the actual eCallMgr-to-FreeSWITCH atomic inventory request.
+  Initial gate fixture `70c0c3/e19034` exposed file:script's rejection of a local
+  named fun; explicit `fun erlang:is_binary/1` fixes it without weakening checks.
+  No live call was made. Empty configured media scope stays explicitly unverified.
+- **Verification timeouts corrected:** SUP uses seconds, not milliseconds.
+  The cardinal mapper and prerecorded probe now request180seconds, retaining
+  their190000ms local and150second native bounds. Probe9 Node groups pass
+  `b41a85/978e65`; full seven-group mapper plus native586/1172 fixture passes
+  `d58bb9/e31aba`. Initial direct mapper .cjs invocation correctly refused
+  to replace its required two-phase .sh test. Finalization16, initialization10
+  and production-BEAM safety fixtures pass `59eb68/59a139`.
+
+- **Coherent deployment stopped before compilation/restart:** normal
+  `install-kazoo5.sh kazoo-apps ecallmgr`, `a87725/session80615/4c095b`, passed
+  both installed voice packs but refused the eCallMgr aggregate. Current nested
+  source is the old aggregate plus the checked-in atomic-answer delta; installer
+  reconciliation was subsequently fixed without discarding that work. Native inventory
+  `a4f5b9` confirms the running FreeSWITCH lacks `kz_intercept`: deploy that
+  module before the dependent eCallMgr cohort (now done above). Six Erlang reconciliation tests
+  and100 concurrent three-answer native-boundary races pass `ad7f8b/35c78b`;
+  these are not actual live simultaneous-call acceptance.
+- **Pre-restart preservation:** no active FreeSWITCH calls; native ETS had22 call
+  rows (9 unarchived,13 archived) and685 archived status rows (`cfe9ae/84fcf8`).
+  All rows saved using synchronous ETS snapshots with MD5/object-count metadata
+  (`ffd4d7/4daa23`) under protected
+  `/var/lib/kazoo/predeploy-check.BRAAd0/snapshot`. These private snapshots contain
+  call data, must not enter Git, and are not an automatic restore/migration claim.
+- **Finalization fixes tested:**16 synthetic main-SH orchestration cases plus
+  cardinal and bridge shell fixtures pass `0e861a/5dea78`. Bounded runtime-reader
+  and initialization fixtures pass `ccf782/7a8dad`. Review found launcher paths
+  retained `scripts/../`, conflicting with exact loaded-BEAM verification; both
+  launchers now canonicalize their root. Canonical library/config paths, logging
+  and reloader behavior pass `2d89e6/9e6811`. Native proof still awaits deployment.
+
+- **Saved and pushed:** all584 position roles across EN/HE/FR/ES/AR;
+  artifact-only commit `d09d697` is on `origin/master` (`9114e3/6504c4`).
+  No further Gemini generation is needed for this inventory. This does not
+  claim the complete pack is deployed or listening-approved.
+- **Bridge deployed:** main-SH install `feccd8/4664d3` and independent
+  verify-only `b0c4d8/02b4a6` pass. Active release
+  `b20944143ade6ae0ad3ffb4c4c69094305348d7220f890669ca57606fb3810f8`,
+  PID679049, zero restarts at readback; broker consumer registered.
+  The isolated development queue had zero ready/unacknowledged messages before
+  restart. Protected topology/freshness/retry opt-ins remain absent. No real
+  provider sends or production-server changes. Android/iOS acceptance remains open.
+- **Media installed and independently verified:** actual main-SH media routine
+  `96ba63/session31524/e25b08` passes all584 cardinals,210 fixed assets and two
+  new intros. Final read-only cardinal receipt SHA256
+  `a629cbb24bd4ed2ae235adc72002419fb0affd1deb267fe12cfe371116e052bd`;
+  fixed receipt SHA256
+  `294fd51eb3cb4d7de42b0bc4dfdcba1a8ccd548c5a63b888d470d56508a91f9e`.
+  Both are under `/usr/local/share/kazoo5-installer/`; no provider request,
+  account/queue mutation, or runtime readiness publication occurred.
+- **Runtime mappings activated and checked:** `f7bee8/session67837/e30111`
+  verifies all210 fixed/420 mappings plus586 cardinal/intro documents and1172
+  mappings. Activation added1172 missing owned paths; the independent read-only
+  cardinal check finds zero missing. No database/queue write or language
+  readiness publication. First sourced attempt `31175c/9bac13` omitted node-name
+  initialization and stopped before mappings; corrected `-sname` driver passed.
+- **Voice integration still open:** deploy matching apps/UI and publish
+  evidence-backed language capabilities.
+  Both earlier cache-helper tests hit the384MiB validation limit; neither was a
+  live Kazoo service crash. The bounded-sidecar fix now passes its full586-document/
+  1172-map Node and actual Erlang scope `72fdba/8501c9`, under the unchanged cap.
+- **Current regression evidence:** capability/UI/backend/path/initializer and
+  cardinal grammar checks pass `060f9a/2b2583`, including73,240 JS parity cases.
+  New wait-time/cardinal/callback-scheduler/announcement/language suites all pass
+  `0c9112/21885e` (56 EUnit cases). Bridge post-start failure rollback and exact
+  cardinal release-pin shell fixtures pass `943abf/2ca19d`. OpenAPI source rebuild
+  and deterministic/schema/tamper checks pass `eda5ac/0d8037` (358paths,
+  653operations,506schemas,1603references); live publication awaits matched runtime.
+- **Final gates still open:** five-language live/listening acceptance, extension1000
+  callback acceptance after final deployment, real mobile delivery and broader
+  fresh/separate-server installation/reboot/recovery/load checks. Publish matching
+  OpenAPI and commit remaining tested code. Dashboards stay postponed.
+
+The dated/count-based entries below retain earlier evidence; this section is
+the current priority summary and does not turn historical passes into release approval.
+
+Latest focused integration: all584 position roles have saved audio, including
+Arabic208/208. Final authoring `20e177/5e5503` and59-receipt read-only resolver/
+planner replay `d5f2f4/467d44` leave zero missing roles or further proposed
+Gemini requests. Final index SHA256:
+`b6c4e2a2ef515be72d378a239086b4421992a095447003c1c397c925d98c1e51`.
+Original412 +170 new-model recordings +2 reviewed Spanish aliases =584.
+All-five main-SH source
+preflight now precedes any media database effects; shell fixture and ten bridge
+acceptance harness tests pass `debd38/b50cb1`. Final index pin is frozen and the
+real Arabic map emitted. Complete-source preflight, current regression, runtime
+deployment and listening acceptance are not yet closed at this checkpoint.
+
+Actual isolated bridge retry acceptance passes `feecd1/ac00b2` with stable source,
+broker counters0→1→2, companion progress, three-attempt exhaustion quarantine,
+channel-close recovery and original-deadline expiry. Exact temporary vhost/user
+removed. No provider calls or production effects. The prior setup failure is
+retained, cause unproven; safe command diagnostics now preserve future failures.
+Real devices, full broker restart/lost-ACK/DLQ faults remain open. See
+`doc/push_bridge_retry_broker_acceptance.md`.
+
+**Earlier artifact checkpoint:**529/584 (EN31/31, HE131/131, FR161/161,
+ES53/53, AR153/208). Arabic55 still missing; every accepted recording saved.
+Actual complete HE/FR/ES source maps are prepared and independently reviewed,
+but not included/activated yet. Current40-receipt replay and all nine running
+services pass `de95f2/fb1089`. See `doc/acdc_cardinal_ar_model_recovery.md`.
+
+Current focused source fixes: per-recording mixed-model cardinal admission passes
+23 importer groups/8,233 checks and17 current-source EUnit tests plus installer
+adapter regression (`38195b/4482a3`). Fixed210/EN behavior is retained; no new
+runtime maps are activated. See `doc/acdc_cardinal_model_runtime_admission.md`.
+Opt-in bridge counted FCM500/503 retry passes all187 bridge tests; main-SH
+includes the retry module in all release paths and its fixture passes `c73261`.
+Actual broker counter/recovery and header-directed/APNs/uncertain-outcome retry
+remain open; no opt-in activation or real phone delivery. See
+`doc/push_bridge_counted_retry.md`. Arabic recovery latest checkpoint is in
+`doc/acdc_cardinal_ar_model_recovery.md`; older counts below are historical.
+
 Latest combined voice checkpoint: **481/584 technical artifacts**, EN31/31,
 HE131/131, FR161/161, ES53/53, AR105/208. Hebrew recovery saved36 new clips;
 actual complete HE131 source plan passes `4842e8/8770e2`. Arabic103, listening,

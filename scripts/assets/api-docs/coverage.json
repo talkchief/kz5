@@ -1297,8 +1297,8 @@
     "POST /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}",
     "GET /websocket"
   ],
-  "schema_count": 504,
-  "internal_reference_count": 1601,
+  "schema_count": 506,
+  "internal_reference_count": 1603,
   "unresolved_reference_count": 0,
   "schema_adjustments": [
     {
@@ -2289,7 +2289,7 @@
     },
     {
       "file": "applications/acdc/src/cb_acdc_queue_editor.erl",
-      "sha256": "b167d790d9f4a05ebc7f4f2c66ea444a9c684519f896df2d24d4e5bf6f704bd5",
+      "sha256": "3dcf9bae9c6c36ceda21f0c0466861e28e9bc8e90fd92b0f4b9e55867ef3babd",
       "literal_binding_nouns": []
     },
     {
@@ -2400,7 +2400,7 @@
     },
     {
       "file": "applications/acdc/src/cb_acdc_queue_editor.erl",
-      "sha256": "b167d790d9f4a05ebc7f4f2c66ea444a9c684519f896df2d24d4e5bf6f704bd5"
+      "sha256": "3dcf9bae9c6c36ceda21f0c0466861e28e9bc8e90fd92b0f4b9e55867ef3babd"
     },
     {
       "file": "applications/acdc/src/cb_agents.erl",
@@ -2924,7 +2924,7 @@
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",
-      "sha256": "32e0ee1c23c27a61b01ff940acf20f438a2b506fd574fda407fcf075a00a1a75"
+      "sha256": "45084ced2fe30babba5c378bb53bce66646ddd1c1c5267ea816660553b4d76fc"
     },
     {
       "file": "scripts/api-docs-queue-live.cjs",
@@ -2944,7 +2944,7 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "0cb16542acc75274f47cb70ffaaecd02a9644eb3269b20a7cd8333b2cddeda1d"
+      "sha256": "ff9029d6a56a0da1e03afdf34eabe510b2f0f877172ad900daba3f8d3d997efd"
     },
     {
       "file": "scripts/patches/blackhole-kazoo5-integration.patch",

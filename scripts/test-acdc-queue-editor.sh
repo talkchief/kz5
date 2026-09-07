@@ -28,6 +28,12 @@ cd "$editor_root"
 sha256sum applications/acdc/src/cb_queues.erl applications/acdc/src/cb_acdc_queue_editor.erl \
     applications/acdc/src/acdc_gemini_prompts.erl applications/acdc/src/acdc_gemini_map.hrl \
     core/kazoo_documents/src/kz_doc.erl scripts/erlang-tests/acdc_queue_editor_tests.erl \
+    applications/acdc/src/acdc_cardinal_map.hrl \
+    applications/acdc/src/cardinal_maps/acdc_cardinal_he-il.hrl \
+    applications/acdc/src/cardinal_maps/acdc_cardinal_fr-fr.hrl \
+    applications/acdc/src/cardinal_maps/acdc_cardinal_es-es.hrl \
+    applications/acdc/src/cardinal_maps/acdc_cardinal_ar-sa.hrl \
+    scripts/erlang-tests/acdc_cardinal_capabilities_tests.erl \
     scripts/erlang-tests/acdc_editor_manifest_path_tests.erl scripts/test-acdc-queue-editor.sh \
     >"$editor_output/source-pins.sha256"
 trap finish EXIT
@@ -42,11 +48,11 @@ erlc +warn_export_all +warn_unused_import +warn_unused_vars +warn_missing_spec -
     applications/acdc/src/cb_queues.erl applications/acdc/src/cb_acdc_queue_editor.erl applications/acdc/src/acdc_gemini_prompts.erl
 erlc -DTEST +debug_info -Werror -I applications/acdc/src -I applications/acdc/include \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$editor_output" applications/acdc/src/cb_acdc_queue_editor.erl
-erlc +debug_info -Werror -I applications/acdc/src -o "$editor_output" scripts/erlang-tests/acdc_queue_editor_tests.erl scripts/erlang-tests/acdc_editor_manifest_path_tests.erl
+erlc +debug_info -Werror -I applications/acdc/src -o "$editor_output" scripts/erlang-tests/acdc_queue_editor_tests.erl scripts/erlang-tests/acdc_editor_manifest_path_tests.erl scripts/erlang-tests/acdc_cardinal_capabilities_tests.erl
 if [[ $editor_mode == --bulk-only ]]; then
     editor_eunit='case eunit:test({generator, fun acdc_queue_editor_tests:bulk_outcomes_test_/0}, [verbose]) of ok -> halt(0); _ -> halt(1) end.'
 else
-    editor_eunit='case eunit:test([acdc_queue_editor_tests, acdc_editor_manifest_path_tests], [verbose]) of ok -> halt(0); _ -> halt(1) end.'
+    editor_eunit='case eunit:test([acdc_queue_editor_tests, acdc_editor_manifest_path_tests, acdc_cardinal_capabilities_tests], [verbose]) of ok -> halt(0); _ -> halt(1) end.'
 fi
 erl -pa "$editor_output" -noshell -eval "$editor_eunit" 2>&1 | tee "$editor_output/eunit.log"
 editor_completed=1

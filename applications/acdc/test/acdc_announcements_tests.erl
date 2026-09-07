@@ -10,10 +10,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--define(DEFAULT_POSITION_PROMPT, <<"queue-you_are_at_position">>).
--define(DEFAULT_IN_QUEUE_PROMPT, <<"queue-in_the_queue">>).
--define(DEFAULT_WAIT_PROMPT, <<"queue-the_estimated_wait_time_is">>).
--define(DEFAULT_INCREASE_PROMPT, <<"queue-increase_in_call_volume">>).
 
 english_position_is_a_complete_sentence_test() ->
     Audio = #{language => <<"en-us">>,
@@ -101,12 +97,11 @@ proplist_config_test() ->
     ?assertEqual('true', maps:get(wait_time_announcements_enabled, Config)),
     ?assertEqual(15, maps:get(announcements_interval, Config)),
     ?assertEqual(<<"fr-ca">>, maps:get(announcement_language, Config)),
-    ?assertEqual(
-       [{'prompt', <<"custom-position">>, <<"fr-ca">>, <<"A">>}
-       ,{'say', <<"2">>, <<"number">>}
-       ,{'prompt', ?DEFAULT_IN_QUEUE_PROMPT, <<"fr-ca">>, <<"A">>}
-       ],
-       acdc_announcements:position_prompts(2, <<"fr-ca">>, Config)).
+    ?assertEqual([{<<"you_are_at_position">>, <<"custom-position">>}],
+                 maps:get(announcements_media_selection, Config)),
+    %% Unsupported regional variants never select another locale or native SAY.
+    ?assertEqual([], acdc_announcements:position_prompts(2, <<"fr-ca">>, Config)),
+    ?assertEqual([], acdc_announcements:position_prompts(2, <<"fr-fr">>, Config)).
 
 json_config_and_partial_media_defaults_test() ->
     Config = acdc_announcements:get_config(
@@ -117,18 +112,27 @@ json_config_and_partial_media_defaults_test() ->
                                     ,{<<"increase_in_call_volume">>, <<>>}
                                     ])}
                  ])),
-    ?assertEqual(
-       [{'prompt', ?DEFAULT_POSITION_PROMPT, <<"es-us">>, <<"A">>}
-       ,{'say', <<"4">>, <<"number">>}
-       ,{'prompt', <<"custom-in-queue">>, <<"es-us">>, <<"A">>}
-       ],
-       acdc_announcements:position_prompts(4, <<"es-us">>, Config)),
-    ?assertEqual(
-       {[{'prompt', ?DEFAULT_INCREASE_PROMPT, <<"es-us">>, <<"A">>}
-        ,{'prompt', ?DEFAULT_WAIT_PROMPT, <<"es-us">>, <<"A">>}
-        ,{'prompt', <<"queue-about_5_minutes">>, <<"es-us">>, <<"A">>}
-        ], 240},
+    ?assertEqual(<<"custom-in-queue">>, proplists:get_value(<<"in_the_queue">>,
+                 maps:get(announcements_media_selection, Config))),
+    ?assertEqual([], acdc_announcements:position_prompts(4, <<"es-us">>, Config)),
+    ?assertEqual([], acdc_announcements:position_prompts(4, <<"es-es">>, Config)),
+    ?assertEqual({[], 120},
        acdc_announcements:wait_time_prompts(240, 120, <<"es-us">>, Config)).
+
+non_english_custom_framing_preserves_prerecorded_number_test() ->
+    lists:foreach(fun({Language, Number, Role}) ->
+        Prefix = {prompt, <<"custom-position">>, Language, <<"A">>},
+        Suffix = {prompt, <<"custom-in-queue">>, Language, <<"A">>},
+        Path = <<"/system_media/", Language/binary, "/approved-number">>,
+        Audio = #{language => Language, before_number => [Prefix], after_number => [Suffix],
+                  assets => #{Role => Path}},
+        Config = (acdc_announcements:get_config([]))#{position_audio => Audio},
+        ?assertEqual([Prefix, {play, Path}, Suffix],
+            acdc_announcements:position_prompts(Number, Language, Config)),
+        ?assertEqual([], acdc_announcements:position_prompts(Number, Language,
+            Config#{position_audio := Audio#{assets := #{}}}))
+    end, [{<<"fr-fr">>, 2, <<"acdc-cardinal-v1-terminal-2">>},
+          {<<"es-es">>, 4, <<"acdc-cardinal-v1-number-4">>}]).
 
 language_override_test() ->
     Call = kapps_call:set_language(<<"en-us">>, kapps_call:new()),
@@ -154,7 +158,12 @@ unknown_wait_time_is_skipped_test() ->
                  acdc_announcements:wait_time_prompts('undefined', 75, <<"en-us">>, Config)).
 
 wait_time_boundaries_test() ->
-    Config = acdc_announcements:get_config([]),
+    Keys = [<<"increase_in_call_volume">>, <<"the_estimated_wait_time_is">>, <<"less_than_1_minute">>,
+            <<"about_5_minutes">>, <<"about_10_minutes">>, <<"about_15_minutes">>, <<"about_30_minutes">>,
+            <<"about_45_minutes">>, <<"about_1_hour">>, <<"at_least_1_hour">>],
+    Audio = #{language => <<"en-us">>, assets => maps:from_list([{Key,
+        {play, <<"/system_media/en-us/acdc-queue-", Key/binary>>}} || Key <- Keys])},
+    Config = (acdc_announcements:get_config([]))#{wait_time_audio => Audio},
     Cases = [{0, <<"queue-less_than_1_minute">>}
             ,{60, <<"queue-about_5_minutes">>}
             ,{300, <<"queue-about_5_minutes">>}
@@ -166,6 +175,6 @@ wait_time_boundaries_test() ->
       fun({Seconds, Expected}) ->
               {Prompts, Seconds} =
                   acdc_announcements:wait_time_prompts(Seconds, 'undefined', <<"en-us">>, Config),
-              ?assertEqual({'prompt', <<"acdc-", Expected/binary>>, <<"en-us">>, <<"A">>}, lists:last(Prompts))
+              ?assertEqual({play, <<"/system_media/en-us/acdc-", Expected/binary>>}, lists:last(Prompts))
       end,
       Cases).

@@ -43,7 +43,7 @@ TOPOLOGY_LIMITS = {
     "TOPOLOGY_DLQ_MAX_BYTES": ("67108864", 32768, 268435456),
 }
 TOPOLOGY_SETTINGS = ("TOPOLOGY", "AMQP_MANAGEMENT_URL", "AMQP_MANAGEMENT_CA_FILE") + tuple(TOPOLOGY_LIMITS)
-KNOWN = frozenset(REQUIRED + tuple(NUMBERS) + APNS_REQUIRED + APNS_OVERRIDES + AMQP_TLS_SETTINGS + TOPOLOGY_SETTINGS + ("FRESHNESS",))
+KNOWN = frozenset(REQUIRED + tuple(NUMBERS) + APNS_REQUIRED + APNS_OVERRIDES + AMQP_TLS_SETTINGS + TOPOLOGY_SETTINGS + ("FRESHNESS", "RETRY"))
 SAFE_PATH = re.compile(r"/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\Z")
 TOPOLOGY = re.compile(r"[A-Za-z0-9_.:-]{1,255}\Z")
 BINDING = re.compile(r"[A-Za-z0-9_.*#:-]{1,255}\Z")
@@ -195,6 +195,13 @@ def validate(environment):
             errors.add("FRESHNESS:invalid_mode")
         if values.get("TOPOLOGY", "legacy") != "quorum-v1":
             errors.add("FRESHNESS:requires_quorum")
+    if PREFIX + "RETRY" in environment:
+        if values.get("RETRY") != "quorum-counted-v1":
+            errors.add("RETRY:invalid_mode")
+        if values.get("TOPOLOGY") != "quorum-v1":
+            errors.add("RETRY:requires_quorum")
+        if values.get("FRESHNESS") != "unix-ms-v1":
+            errors.add("RETRY:requires_freshness")
 
     apns_enabled = any(values.get(name) for name in APNS_REQUIRED + APNS_OVERRIDES)
     if apns_enabled:

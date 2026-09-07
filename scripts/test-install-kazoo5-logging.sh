@@ -20,6 +20,10 @@ for fixture in apps media; do
     [[ $fixture != media ]] || launcher=dev-start-ecallmgr.sh
     output=$(PATH="$test_dir/bin:$PATH" KAZOO_LOG_ROOT="$test_dir/$fixture" \
         "$SCRIPT_DIR/$launcher" test_node)
+    canonical_root=$(cd "$SCRIPT_DIR/.." && pwd -P)
+    grep -Fxq "arg=$canonical_root/rel/dev.vm.args" <<<"$output" || fail 'VM arguments use a noncanonical project path'
+    grep -Fxq "arg=$canonical_root/rel/sys.config" <<<"$output" || fail 'runtime config uses a noncanonical project path'
+    grep -Fq ":$canonical_root/deps:$canonical_root/core:$canonical_root/applications" <<<"$output" || fail 'loaded library roots are not canonical'
     grep -Fxq "dump=$test_dir/$fixture/erl_crash.dump" <<<"$output" || fail 'crash path is not writable node-local storage'
     grep -Fxq 'seconds=10' <<<"$output" || fail 'crash dump time is unbounded'
     grep -Fxq 'bytes=104857600' <<<"$output" || fail 'crash dump size is unbounded'

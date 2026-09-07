@@ -1,7 +1,7 @@
 %%% Immutable fixed Gemini defaults, never global aliases for customer media.
 -module(acdc_gemini_prompts).
 -export([canonical/1, default/4, default_alias/5, selection/2,
-         verified_asset/2,
+         verified_asset/2, verified_cardinal_asset/2,
          auxiliary/2, builtin/2,
          callback/5, callback_readback/2, telephone/3, capabilities/1,
          callback_media_ids/1, verified_callback_media/2, callback_media_complete/2,
@@ -313,8 +313,65 @@ media_id(A) -> <<(element(1,A))/binary,"/",(element(3,A))/binary>>.
 verified_asset(Asset, Result) ->
     try imported(Asset, Result) catch _:_ -> false end.
 
+%% Versioned cardinal-only rows append the compiled model and source kind to
+%% the historical seven immutable fields. Neither value comes from a document
+%% or a configuration fallback. Fixed210 and legacy EN verification stay /2.
+-spec verified_cardinal_asset(tuple(), any()) -> boolean().
+verified_cardinal_asset(Asset, Result) ->
+    try imported_cardinal(Asset, Result) catch _:_ -> false end.
+
+-spec imported_cardinal(tuple(), any()) -> boolean().
+imported_cardinal({Language, <<"acdc-cardinal-v1-", Role/binary>>=Canonical,
+                  Prompt, Sha, Md5, Length, Transcript, Model, Kind}, {ok,Doc}=Result)
+  when byte_size(Role) > 0 ->
+    Resolution = get(<<"source_cardinal_resolution">>, Doc),
+    lists:member(Language, [<<"es-es">>, <<"fr-fr">>, <<"he-il">>, <<"ar-sa">>])
+      andalso cardinal_model(Model, Kind)
+      andalso unique_cardinal_object(Doc)
+      andalso unique_cardinal_object(Resolution)
+      andalso unique_cardinal_object(get(<<"source_voice">>, Doc))
+      andalso cardinal_source(Kind, Language, Canonical, Resolution)
+      andalso get(<<"schema_version">>, Resolution) =:= 1
+      andalso get(<<"owner">>, Resolution) =:= <<"kazoo5-acdc-cardinal-import">>
+      andalso get(<<"provider">>, Resolution) =:= <<"google-gemini">>
+      andalso get(<<"model">>, Resolution) =:= Model
+      andalso get(<<"voice">>, Resolution) =:= ?VOICE
+      andalso get(<<"source_kind">>, Resolution) =:= Kind
+      andalso get(<<"transcript_sha256">>, Resolution) =:= Transcript
+      andalso get(<<"telephony_sha256">>, Resolution) =:= Sha
+      andalso get(<<"runtime_ready">>, Resolution) =:= false
+      andalso get(<<"listening_verified">>, Resolution) =:= false
+      andalso get(<<"provider_provenance_authenticated">>, Resolution) =:= false
+      andalso imported_model({Language,Canonical,Prompt,Sha,Md5,Length,Transcript}, Result, Model);
+imported_cardinal(_, _) -> false.
+
+-spec unique_cardinal_object(any()) -> boolean().
+unique_cardinal_object({Props}=Object) when is_list(Props) ->
+    Keys = keys(Object),
+    length(Keys) =:= length(Props) andalso Keys =:= lists:usort(Keys);
+unique_cardinal_object(_) -> false.
+
+-spec cardinal_model(any(), any()) -> boolean().
+cardinal_model(<<"gemini-3.1-flash-tts-preview">>, <<"separate_model_trial">>) -> true;
+cardinal_model(?MODEL, <<"generated_cardinal">>) -> true;
+cardinal_model(?MODEL, <<"reused_supplemental_master">>) -> true;
+cardinal_model(_, _) -> false.
+
+-spec cardinal_source(binary(), binary(), binary(), any()) -> boolean().
+cardinal_source(<<"reused_supplemental_master">>, <<"es-es">>, <<"acdc-cardinal-v1-number-4">>, Resolution) ->
+    get(<<"source_locale">>, Resolution) =:= <<"es-es">>
+      andalso get(<<"source_id">>, Resolution) =:= <<"acdc-number-4">>;
+cardinal_source(<<"reused_supplemental_master">>, <<"es-es">>, <<"acdc-cardinal-v1-number-9">>, Resolution) ->
+    get(<<"source_locale">>, Resolution) =:= <<"es-es">>
+      andalso get(<<"source_id">>, Resolution) =:= <<"acdc-number-9">>;
+cardinal_source(<<"reused_supplemental_master">>, _, _, _) -> false;
+cardinal_source(_, _, _, _) -> true.
+
 -spec imported(tuple(), any()) -> boolean().
-imported({Language,Canonical,Prompt,Sha,Md5,Length,Transcript}=A, {ok,Doc}) ->
+imported(Asset, Result) -> imported_model(Asset, Result, ?MODEL).
+
+-spec imported_model(tuple(), any(), binary()) -> boolean().
+imported_model({Language,Canonical,Prompt,Sha,Md5,Length,Transcript}=A, {ok,Doc}, Model) ->
     Voice = get(<<"source_voice">>,Doc), Attachments = get(<<"_attachments">>,Doc),
     AttachmentName = <<Prompt/binary,".wav">>, Attachment = get(AttachmentName,Attachments),
     get(<<"_id">>,Doc) =:= media_id(A) andalso valid_revision(get(<<"_rev">>,Doc))
@@ -327,13 +384,13 @@ imported({Language,Canonical,Prompt,Sha,Md5,Length,Transcript}=A, {ok,Doc}) ->
       andalso get(<<"content_type">>,Doc) =:= <<"audio/wav">>
       andalso get(<<"content_length">>,Doc) =:= Length andalso get(<<"streamable">>,Doc) =:= true
       andalso get(<<"provider">>,Voice) =:= <<"google-gemini">>
-      andalso get(<<"model">>,Voice) =:= ?MODEL andalso get(<<"voice">>,Voice) =:= ?VOICE
+      andalso get(<<"model">>,Voice) =:= Model andalso get(<<"voice">>,Voice) =:= ?VOICE
       andalso get(<<"canonical_prompt_id">>,Voice) =:= Canonical
       andalso get(<<"sha256">>,Voice) =:= Sha andalso get(<<"transcript_sha256">>,Voice) =:= Transcript
       andalso keys(Attachments) =:= [AttachmentName]
       andalso get(<<"content_type">>,Attachment) =:= <<"audio/wav">>
       andalso get(<<"length">>,Attachment) =:= Length andalso get(<<"digest">>,Attachment) =:= Md5;
-imported(_,_) -> false.
+imported_model(_,_,_) -> false.
 
 -spec account_override(binary(), binary()) -> custom | none | unavailable.
 account_override(Account, Prompt) ->

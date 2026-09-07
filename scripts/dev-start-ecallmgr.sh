@@ -2,7 +2,8 @@
 
 cd "$(dirname "$0")" || exit 1
 
-ROOT=$PWD/..
+# Canonical paths keep loaded BEAM identity consistent with deployment proofs.
+ROOT=$(cd .. && pwd -P) || exit 1
 
 ERL_LIBS="${ERL_LIBS:-}:$ROOT/deps:$ROOT/core:$ROOT/applications"
 for rabbitmq_deps in "$ROOT"/deps/rabbitmq_erlang_client-*/deps; do

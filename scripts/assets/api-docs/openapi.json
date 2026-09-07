@@ -50476,6 +50476,19 @@
       "QueueEditorLanguageCapabilities": {
         "type": "object",
         "nullable": true,
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/QueueEditorLanguageCapabilitiesV1"
+          },
+          {
+            "$ref": "#/components/schemas/QueueEditorLanguageCapabilitiesV2"
+          }
+        ],
+        "description": "Legacy schema1 remains compatible. Schema2 distinguishes installed evidence, development selection readiness, deployed runtime verification and native listening review. Null/absent remains unavailable. See each versioned contract; do not treat selection_ready as full production certification."
+      },
+      "QueueEditorLanguageCapabilitiesV1": {
+        "type": "object",
+        "nullable": true,
         "description": "Verified deployment language manifest, schema_version=1, or null if unavailable. Do not infer readiness from language names or source files. Each locale reports ready/position/wait_time/callback/native_speaker_review independently. Native speaker review is not implied by automated media verification.",
         "properties": {
           "schema_version": {
@@ -50750,6 +50763,653 @@
             "description": "Present only for the explicitly declared English baseline. Its full-pack language flags remain false. Explicit en-us selection additionally requires a complete system_media catalog and every required English baseline prompt with an attachment; this is not multilingual or all-Gemini readiness. Missing proof rejects the selection."
           }
         }
+      },
+      "QueueEditorLanguageCapabilitiesV2": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "enum": [
+              2
+            ]
+          },
+          "backend_mode": {
+            "type": "string",
+            "enum": [
+              "prerecorded-cardinal-v1"
+            ]
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "languages": {
+            "type": "object",
+            "properties": {
+              "en-us": {
+                "type": "object",
+                "properties": {
+                  "ready": {
+                    "type": "boolean"
+                  },
+                  "selection_ready": {
+                    "type": "boolean"
+                  },
+                  "position": {
+                    "type": "boolean"
+                  },
+                  "wait_time": {
+                    "type": "boolean"
+                  },
+                  "callback": {
+                    "type": "boolean"
+                  },
+                  "native_speaker_review": {
+                    "type": "boolean"
+                  },
+                  "position_installed_verified": {
+                    "type": "boolean"
+                  },
+                  "callback_installed_verified": {
+                    "type": "boolean"
+                  },
+                  "position_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "callback_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "wait_time_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "numbers": {
+                    "type": "string",
+                    "enum": [
+                      "prerecorded-cardinal"
+                    ]
+                  },
+                  "number_range": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "enum": [
+                      [
+                        0,
+                        999999999
+                      ]
+                    ]
+                  },
+                  "numeric_prompt_count": {
+                    "type": "integer",
+                    "enum": [
+                      31
+                    ]
+                  },
+                  "callback_prompt_count": {
+                    "type": "integer",
+                    "enum": [
+                      42
+                    ]
+                  },
+                  "source_catalog_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "cardinal_map_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "fixed_map_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "installed_media_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  },
+                  "runtime_evidence_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  },
+                  "native_review_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "ready",
+                  "selection_ready",
+                  "position",
+                  "wait_time",
+                  "callback",
+                  "native_speaker_review",
+                  "position_installed_verified",
+                  "callback_installed_verified",
+                  "position_runtime_verified",
+                  "callback_runtime_verified",
+                  "wait_time_runtime_verified",
+                  "numbers",
+                  "number_range",
+                  "numeric_prompt_count",
+                  "callback_prompt_count",
+                  "source_catalog_sha256",
+                  "cardinal_map_sha256",
+                  "fixed_map_sha256",
+                  "installed_media_sha256",
+                  "runtime_evidence_sha256",
+                  "native_review_sha256"
+                ],
+                "additionalProperties": false
+              },
+              "ar-sa": {
+                "type": "object",
+                "properties": {
+                  "ready": {
+                    "type": "boolean"
+                  },
+                  "selection_ready": {
+                    "type": "boolean"
+                  },
+                  "position": {
+                    "type": "boolean"
+                  },
+                  "wait_time": {
+                    "type": "boolean"
+                  },
+                  "callback": {
+                    "type": "boolean"
+                  },
+                  "native_speaker_review": {
+                    "type": "boolean"
+                  },
+                  "position_installed_verified": {
+                    "type": "boolean"
+                  },
+                  "callback_installed_verified": {
+                    "type": "boolean"
+                  },
+                  "position_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "callback_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "wait_time_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "numbers": {
+                    "type": "string",
+                    "enum": [
+                      "prerecorded-cardinal"
+                    ]
+                  },
+                  "number_range": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "enum": [
+                      [
+                        0,
+                        999999999
+                      ]
+                    ]
+                  },
+                  "numeric_prompt_count": {
+                    "type": "integer",
+                    "enum": [
+                      208
+                    ]
+                  },
+                  "callback_prompt_count": {
+                    "type": "integer",
+                    "enum": [
+                      42
+                    ]
+                  },
+                  "source_catalog_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "cardinal_map_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "fixed_map_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "installed_media_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  },
+                  "runtime_evidence_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  },
+                  "native_review_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "ready",
+                  "selection_ready",
+                  "position",
+                  "wait_time",
+                  "callback",
+                  "native_speaker_review",
+                  "position_installed_verified",
+                  "callback_installed_verified",
+                  "position_runtime_verified",
+                  "callback_runtime_verified",
+                  "wait_time_runtime_verified",
+                  "numbers",
+                  "number_range",
+                  "numeric_prompt_count",
+                  "callback_prompt_count",
+                  "source_catalog_sha256",
+                  "cardinal_map_sha256",
+                  "fixed_map_sha256",
+                  "installed_media_sha256",
+                  "runtime_evidence_sha256",
+                  "native_review_sha256"
+                ],
+                "additionalProperties": false
+              },
+              "he-il": {
+                "type": "object",
+                "properties": {
+                  "ready": {
+                    "type": "boolean"
+                  },
+                  "selection_ready": {
+                    "type": "boolean"
+                  },
+                  "position": {
+                    "type": "boolean"
+                  },
+                  "wait_time": {
+                    "type": "boolean"
+                  },
+                  "callback": {
+                    "type": "boolean"
+                  },
+                  "native_speaker_review": {
+                    "type": "boolean"
+                  },
+                  "position_installed_verified": {
+                    "type": "boolean"
+                  },
+                  "callback_installed_verified": {
+                    "type": "boolean"
+                  },
+                  "position_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "callback_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "wait_time_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "numbers": {
+                    "type": "string",
+                    "enum": [
+                      "prerecorded-cardinal"
+                    ]
+                  },
+                  "number_range": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "enum": [
+                      [
+                        0,
+                        999999999
+                      ]
+                    ]
+                  },
+                  "numeric_prompt_count": {
+                    "type": "integer",
+                    "enum": [
+                      131
+                    ]
+                  },
+                  "callback_prompt_count": {
+                    "type": "integer",
+                    "enum": [
+                      42
+                    ]
+                  },
+                  "source_catalog_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "cardinal_map_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "fixed_map_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "installed_media_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  },
+                  "runtime_evidence_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  },
+                  "native_review_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "ready",
+                  "selection_ready",
+                  "position",
+                  "wait_time",
+                  "callback",
+                  "native_speaker_review",
+                  "position_installed_verified",
+                  "callback_installed_verified",
+                  "position_runtime_verified",
+                  "callback_runtime_verified",
+                  "wait_time_runtime_verified",
+                  "numbers",
+                  "number_range",
+                  "numeric_prompt_count",
+                  "callback_prompt_count",
+                  "source_catalog_sha256",
+                  "cardinal_map_sha256",
+                  "fixed_map_sha256",
+                  "installed_media_sha256",
+                  "runtime_evidence_sha256",
+                  "native_review_sha256"
+                ],
+                "additionalProperties": false
+              },
+              "es-es": {
+                "type": "object",
+                "properties": {
+                  "ready": {
+                    "type": "boolean"
+                  },
+                  "selection_ready": {
+                    "type": "boolean"
+                  },
+                  "position": {
+                    "type": "boolean"
+                  },
+                  "wait_time": {
+                    "type": "boolean"
+                  },
+                  "callback": {
+                    "type": "boolean"
+                  },
+                  "native_speaker_review": {
+                    "type": "boolean"
+                  },
+                  "position_installed_verified": {
+                    "type": "boolean"
+                  },
+                  "callback_installed_verified": {
+                    "type": "boolean"
+                  },
+                  "position_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "callback_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "wait_time_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "numbers": {
+                    "type": "string",
+                    "enum": [
+                      "prerecorded-cardinal"
+                    ]
+                  },
+                  "number_range": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "enum": [
+                      [
+                        0,
+                        999999999
+                      ]
+                    ]
+                  },
+                  "numeric_prompt_count": {
+                    "type": "integer",
+                    "enum": [
+                      53
+                    ]
+                  },
+                  "callback_prompt_count": {
+                    "type": "integer",
+                    "enum": [
+                      42
+                    ]
+                  },
+                  "source_catalog_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "cardinal_map_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "fixed_map_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "installed_media_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  },
+                  "runtime_evidence_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  },
+                  "native_review_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "ready",
+                  "selection_ready",
+                  "position",
+                  "wait_time",
+                  "callback",
+                  "native_speaker_review",
+                  "position_installed_verified",
+                  "callback_installed_verified",
+                  "position_runtime_verified",
+                  "callback_runtime_verified",
+                  "wait_time_runtime_verified",
+                  "numbers",
+                  "number_range",
+                  "numeric_prompt_count",
+                  "callback_prompt_count",
+                  "source_catalog_sha256",
+                  "cardinal_map_sha256",
+                  "fixed_map_sha256",
+                  "installed_media_sha256",
+                  "runtime_evidence_sha256",
+                  "native_review_sha256"
+                ],
+                "additionalProperties": false
+              },
+              "fr-fr": {
+                "type": "object",
+                "properties": {
+                  "ready": {
+                    "type": "boolean"
+                  },
+                  "selection_ready": {
+                    "type": "boolean"
+                  },
+                  "position": {
+                    "type": "boolean"
+                  },
+                  "wait_time": {
+                    "type": "boolean"
+                  },
+                  "callback": {
+                    "type": "boolean"
+                  },
+                  "native_speaker_review": {
+                    "type": "boolean"
+                  },
+                  "position_installed_verified": {
+                    "type": "boolean"
+                  },
+                  "callback_installed_verified": {
+                    "type": "boolean"
+                  },
+                  "position_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "callback_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "wait_time_runtime_verified": {
+                    "type": "boolean"
+                  },
+                  "numbers": {
+                    "type": "string",
+                    "enum": [
+                      "prerecorded-cardinal"
+                    ]
+                  },
+                  "number_range": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "enum": [
+                      [
+                        0,
+                        999999999
+                      ]
+                    ]
+                  },
+                  "numeric_prompt_count": {
+                    "type": "integer",
+                    "enum": [
+                      161
+                    ]
+                  },
+                  "callback_prompt_count": {
+                    "type": "integer",
+                    "enum": [
+                      42
+                    ]
+                  },
+                  "source_catalog_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "cardinal_map_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "fixed_map_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "installed_media_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  },
+                  "runtime_evidence_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  },
+                  "native_review_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "ready",
+                  "selection_ready",
+                  "position",
+                  "wait_time",
+                  "callback",
+                  "native_speaker_review",
+                  "position_installed_verified",
+                  "callback_installed_verified",
+                  "position_runtime_verified",
+                  "callback_runtime_verified",
+                  "wait_time_runtime_verified",
+                  "numbers",
+                  "number_range",
+                  "numeric_prompt_count",
+                  "callback_prompt_count",
+                  "source_catalog_sha256",
+                  "cardinal_map_sha256",
+                  "fixed_map_sha256",
+                  "installed_media_sha256",
+                  "runtime_evidence_sha256",
+                  "native_review_sha256"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "en-us",
+              "ar-sa",
+              "he-il",
+              "es-es",
+              "fr-fr"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "schema_version",
+          "backend_mode",
+          "generated_at",
+          "languages"
+        ],
+        "additionalProperties": false,
+        "description": "Explicit prerecorded cardinal contract: exact584 position roles across five locales, plus42 fixed/callback-digit records per locale and the pinned position intro. Counts describe required inventories, not proof of installation. Installed flags require pinned byte-readback evidence. Runtime flags require independent deployed-code, mapping and live-function evidence. position/callback/wait_time are the conjunction of their installed and runtime facts. selection_ready requires all three functions and permits development voice testing without inventing native review; ready additionally requires native_speaker_review and its real listening-evidence hash. Source-only or installed-only records cannot enable selection. Backend checks exact compiled map/catalog pins and fresh metadata for only runtime-claimed locales through the bounded bulk datapath; it can only downgrade runtime flags. No readiness, live deployment or native review is inferred from audio generation."
       },
       "QueueEditorSnapshot": {
         "type": "object",

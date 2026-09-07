@@ -3,3 +3,4 @@
 printf 'dump=%s\nseconds=%s\nbytes=%s\n' \
     "$ERL_CRASH_DUMP" "$ERL_CRASH_DUMP_SECONDS" "$ERL_CRASH_DUMP_BYTES"
 printf 'arg=%s\n' "$@"
+printf 'libs=%s\n' "$ERL_LIBS"

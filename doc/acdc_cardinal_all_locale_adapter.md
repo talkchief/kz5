@@ -1,5 +1,15 @@
 # Offline five-locale installer adapter
 
+Current integration supersedes the original EN-only caller described below:
+`install-kazoo5.sh` now selects all five locales using a fixed source index and
+Spanish reuse pins. All584 source roles and five maps must pass before
+`ensure_system_media_database` or fixed210 imports. Cardinal receipts stay
+separate, include final intro revisions, and receive independent byte readback.
+Runtime cache activation/check is a separate scoped584+2 operation; no provider
+key, account changes or synthesis is used. Shell ordering/negative receipt
+fixtures pass `debd38/b50cb1`; complete source/runtime validation is recorded
+in the latest task register. Older sections retain their historical scope.
+
 Root validation `d5431a/session11085/822a82` passed the retained13 EN cases
 and all new five-locale adapter barriers/order/read-only verification cases in
 an isolated network namespace. These use adapter doubles, not complete release
@@ -18,9 +28,8 @@ no operator-supplied original cardinal pack, map, intro or locale paths. The
 explicit mixed-model extension below accepts pinned trial/alias inputs only.
 Without `--all-locales`,
 the original EN31 mode, source path, header bytes and final `VERIFY_ONLY` receipt
-remain unchanged. `install-kazoo5.sh` still invokes that original EN command and
-checks count/verified31; this tranche does not alter its caller or activate the
-all-locale branch.
+remain supported. The original adapter tranche did not alter the main-shell
+caller; the current integration above replaces that EN-only dispatch.
 
 ## Fixed release inputs
 
@@ -40,8 +49,8 @@ transcript and telephony WAV hashes must match the committed importer pins.
 | es-es | 53 | `applications/acdc/src/cardinal_maps/acdc_cardinal_es-es.hrl` |
 | ar-sa | 208 | `applications/acdc/src/cardinal_maps/acdc_cardinal_ar-sa.hrl` |
 
-The four new fragments are **required future reviewed release artifacts**. This
-task does not create them or fabricate complete maps from incomplete recordings.
+The four new fragments are required reviewed release artifacts. They are emitted
+only from complete verified recordings, never fabricated from incomplete audio.
 Each file must exactly equal its locale importer's `renderMap()` bytes. NonEN
 fragments include the explicit intro asset tuple; EN keeps its original map and
 the independently verified fixed intro. Secure map reads reject symlinks,

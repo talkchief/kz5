@@ -1,6 +1,7 @@
 %%% SPDX-License-Identifier: MPL-2.0
 -module(acdc_language_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("acdc_gemini_map.hrl").
 
 canonical_locales_are_exact_test() ->
     ?assertEqual(<<"en-us">>, acdc_language:canonical(undefined)),
@@ -87,19 +88,33 @@ localized_backend_playlists_test() ->
     Config = acdc_announcements:get_config([]),
     lists:foreach(
       fun(Language) ->
-              Position = acdc_announcements:position_prompts(21, Language, Config),
-              ?assertEqual({prompt, <<"acdc-queue-your-current-position-is">>, Language, <<"A">>}, hd(Position)),
-              ?assertEqual(acdc_language:number_prompts(21, Language), tl(Position)),
-              {Wait, 4000} = acdc_announcements:wait_time_prompts(4000, 60, Language, Config),
-              ?assertEqual([<<"acdc-queue-increase_in_call_volume">>, <<"acdc-queue-the_estimated_wait_time_is">>
-                           ,<<"acdc-queue-at_least_1_hour">>], [Id || {prompt, Id, _, _} <- Wait])
+              ?assertEqual([], acdc_announcements:position_prompts(21, Language, Config)),
+              {ok, Roles} = acdc_cardinal_prompts:roles(21, Language),
+              Intro = {play, <<"/system_media/", Language/binary, "/approved-intro">>},
+              Paths = maps:from_list([{Role, <<"/system_media/", Language/binary, "/", Role/binary>>} || Role <- Roles]),
+              Audio = #{language => Language, before_number => [Intro], after_number => [], assets => Paths},
+              ?assertEqual([Intro | [{play, maps:get(Role, Paths)} || Role <- Roles]],
+                  acdc_announcements:position_prompts(21, Language, Config#{position_audio => Audio})),
+              ?assertEqual({[], 60}, acdc_announcements:wait_time_prompts(4000, 60, Language, Config)),
+              WaitKeys = [<<"increase_in_call_volume">>, <<"the_estimated_wait_time_is">>, <<"less_than_1_minute">>,
+                  <<"about_5_minutes">>, <<"about_10_minutes">>, <<"about_15_minutes">>, <<"about_30_minutes">>,
+                  <<"about_45_minutes">>, <<"about_1_hour">>, <<"at_least_1_hour">>],
+              WaitAudio = #{language => Language, assets => maps:from_list([{K,
+                  {play, <<"/system_media/", Language/binary, "/acdc-queue-", K/binary>>}} || K <- WaitKeys])},
+              {Wait, 4000} = acdc_announcements:wait_time_prompts(4000, 60, Language, Config#{wait_time_audio => WaitAudio}),
+              ?assertEqual([{play, <<"/system_media/", Language/binary, "/acdc-queue-", K/binary>>}
+                  || K <- [<<"increase_in_call_volume">>, <<"the_estimated_wait_time_is">>, <<"at_least_1_hour">>]], Wait)
       end, [<<"en-us">>, <<"ar-sa">>, <<"he-il">>, <<"es-es">>, <<"fr-fr">>]),
     Custom = acdc_announcements:get_config([{<<"media">>, [{<<"you_are_at_position">>, <<"customer-prefix">>}
                                                           ,{<<"in_the_queue">>, <<"customer-suffix">>}]}]),
-    ?assertEqual([{prompt, <<"customer-prefix">>, <<"ar-sa">>, <<"A">>}
-                 ,{prompt, <<"acdc-number-80">>, <<"ar-sa">>, <<"A">>}
-                 ,{prompt, <<"customer-suffix">>, <<"ar-sa">>, <<"A">>}],
-                 acdc_announcements:position_prompts(80, <<"ar-sa">>, Custom)).
+    ?assertEqual([], acdc_announcements:position_prompts(80, <<"ar-sa">>, Custom)),
+    {ok, ArabicRoles} = acdc_cardinal_prompts:roles(80, <<"ar-sa">>),
+    ArabicPaths = maps:from_list([{Role, <<"/system_media/ar-sa/", Role/binary>>} || Role <- ArabicRoles]),
+    Prefix = {prompt, <<"customer-prefix">>, <<"ar-sa">>, <<"A">>},
+    Suffix = {prompt, <<"customer-suffix">>, <<"ar-sa">>, <<"A">>},
+    ArabicAudio = #{language => <<"ar-sa">>, before_number => [Prefix], after_number => [Suffix], assets => ArabicPaths},
+    ?assertEqual([Prefix] ++ [{play, maps:get(Role, ArabicPaths)} || Role <- ArabicRoles] ++ [Suffix],
+        acdc_announcements:position_prompts(80, <<"ar-sa">>, Custom#{position_audio => ArabicAudio})).
 
 callback_language_inherits_queue_and_preserves_custom_media_test() ->
     Call = kapps_call:set_language(<<"en-us">>, kapps_call:new()),
@@ -108,20 +123,40 @@ callback_language_inherits_queue_and_preserves_custom_media_test() ->
     ?assertEqual(<<"en-us">>, kapps_call:language(cf_acdc_member:queue_announcement_call(kz_json:new(), Call))),
     meck:new(kz_datamgr, [passthrough, no_link]),
     try
-        meck:expect(kz_datamgr, open_cache_doc, fun(_, Id) -> {ok, doc(Id, 32)} end),
+        meck:expect(kz_datamgr, open_cache_doc, fun(<<"system_media">>, Id) -> {ok, immutable_doc(Id)} end),
         ?assertMatch({ok, _}, cf_acdc_member:callback_test_media(kz_json:new(), <<"ar-sa">>)),
-        ?assertEqual({ok, <<"acdc-callback-returned-confirmation">>},
+        [Confirmation] = [A || A <- ?GEMINI_ASSETS, element(1,A) =:= <<"he-il">>,
+            element(2,A) =:= <<"acdc-callback-returned-confirmation">>],
+        ?assertEqual({ok, <<"/system_media/he-il/", (element(3,Confirmation))/binary>>},
                      acdc_callback_caller:confirmation_prompt(Queue, kapps_call:set_language(<<"he-il">>, Call))),
+        Arabic = acdc_gemini_prompts:callback_media_ids(<<"ar-sa">>),
+        ?assertEqual(42, length(Arabic)),
+        lists:foreach(fun(Missing) ->
+            meck:expect(kz_datamgr, open_cache_doc, fun(<<"system_media">>, Id) ->
+                case Id of Missing -> {error,not_found}; _ -> {ok,immutable_doc(Id)} end end),
+            ?assertMatch({error, _}, cf_acdc_member:callback_test_media(kz_json:new(), <<"ar-sa">>))
+        end, Arabic),
         meck:expect(kz_datamgr, open_cache_doc, fun(_, _) -> {error, not_found} end),
         ?assertMatch({error, _}, cf_acdc_member:callback_test_media(kz_json:new(), <<"ar-sa">>)),
         ?assertEqual({error, missing_localized_media},
                      acdc_callback_caller:confirmation_prompt(Queue, kapps_call:set_language(<<"he-il">>, Call))),
         Custom = kz_json:set_value([<<"callback">>, <<"media">>, <<"returned_confirmation">>],
                                    <<"account-custom-media">>, Queue),
-        ?assertEqual({ok, <<"account-custom-media">>},
+        ?assertEqual({ok, <<"prompt://system_media/account-custom-media/HE_IL">>},
                      acdc_callback_caller:confirmation_prompt(Custom, kapps_call:set_language(<<"he-il">>, Call)))
     after meck:unload(kz_datamgr)
     end.
+
+immutable_doc(Id) ->
+    [{L,C,P,S,M,N,T}] = [A || A <- ?GEMINI_ASSETS, <<(element(1,A))/binary,"/",(element(3,A))/binary>> =:= Id],
+    kz_json:from_list([{<<"_id">>,Id},{<<"_rev">>,<<"1-abc">>},{<<"pvt_type">>,<<"media">>},
+        {<<"pvt_account_db">>,<<"system_media">>},{<<"source_type">>,<<"kazoo5_acdc_gemini_voice_installer">>},
+        {<<"prompt_id">>,P},{<<"language">>,L},{<<"content_type">>,<<"audio/wav">>},
+        {<<"content_length">>,N},{<<"streamable">>,true},
+        {<<"source_voice">>,kz_json:from_list([{<<"provider">>,<<"google-gemini">>},{<<"model">>,<<"gemini-2.5-pro-preview-tts">>},
+            {<<"voice">>,<<"Sulafat">>},{<<"canonical_prompt_id">>,C},{<<"sha256">>,S},{<<"transcript_sha256">>,T}])},
+        {<<"_attachments">>,kz_json:from_list([{<<P/binary,".wav">>,kz_json:from_list([
+            {<<"content_type">>,<<"audio/wav">>},{<<"length">>,N},{<<"digest">>,M}])}])}]).
 
 doc(Id, Length) ->
     kz_json:from_list([{<<"_id">>, Id}, {<<"_attachments">>, kz_json:from_list(

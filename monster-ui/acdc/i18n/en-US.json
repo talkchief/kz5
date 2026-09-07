@@ -206,6 +206,7 @@
 			"keepCallerId": "Keep existing caller-ID behavior",
 			"capabilitiesUnavailable": "Installed language readiness could not be verified. Language changes are disabled; existing settings are preserved.",
 			"languageReady": "Ready",
+			"languageTestReady": "Available for voice testing",
 			"languageNotInstalled": "Not installed or incomplete",
 			"nativeReviewPending": "Synthetic voice; native-speaker review pending",
 			"languages": {

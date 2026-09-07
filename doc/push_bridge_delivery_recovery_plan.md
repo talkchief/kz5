@@ -1,5 +1,13 @@
 # Mobile bridge delivery recovery — open implementation gate
 
+New narrow source candidate: `push_bridge_counted_retry.md` specifies explicit
+strict-quorum broker-counted retries for completed FCM500/503 without Retry-After only, with one FCM
+POST per delivery and nonblocking owner-thread delay/NACK scheduling. It is not
+activated; actual counter/durability and failure-recovery proofs remain open.
+Producer freshness and strict bridge deadline checks now exist (see
+`push_bridge_freshness.md`); the historical producer audit below explains why
+that additive contract was necessary, not a request to reimplement it.
+
 Update: the explicit quorum topology, limits, live no-policy verification and
 synthetic dead-letter routing portion is now implemented and tested. See
 `push_bridge_quorum_topology.md` for deployment and evidence. This plan's

@@ -1,0 +1,936 @@
+diff --git a/src/call_cmd/ecallmgr_call_command.erl b/src/call_cmd/ecallmgr_call_command.erl
+index 7335286..ef473c4 100644
+--- a/src/call_cmd/ecallmgr_call_command.erl
++++ b/src/call_cmd/ecallmgr_call_command.erl
+@@ -18,6 +18,7 @@
+ -ifdef(TEST).
+ -export([get_conference_flags/1
+         ,tones_app/1
++        ,file_playback_timeout/2
+         ]).
+ -endif.
+ 
+@@ -1009,7 +1010,7 @@ play(UUID, JObj) ->
+ -spec play_app(kz_term:ne_binary(), kz_json:object()) -> fs_app().
+ play_app(UUID, JObj) ->
+     MediaName = kz_json:get_ne_binary_value(<<"Media-Name">>, JObj),
+-    F = ecallmgr_util:media_path(MediaName, 'new', UUID, JObj),
++    F = file_playback_timeout(ecallmgr_util:media_path(MediaName, 'new', UUID, JObj), JObj),
+     %% if Leg is set, use uuid_broadcast; otherwise use playback
+     case ecallmgr_fs_channel:is_bridged(UUID) of
+         'true' -> play_bridged(JObj, F);
+@@ -1020,6 +1021,18 @@ play_app(UUID, JObj) ->
+                     )
+     end.
+ 
++%% FreeSWITCH's per-file timeout is milliseconds, unlike playback_timeout_sec.
++%% It expires with this file handle; later playback inherits no shortened cap.
++-spec file_playback_timeout(binary(), kz_json:object()) -> binary().
++file_playback_timeout(MediaPath, JObj) ->
++    case {kz_json:get_value(<<"Playback-Timeout-Ms">>, JObj), MediaPath} of
++        {'undefined', _} -> MediaPath;
++        {_, <<"{", _/binary>>} -> throw({'msg', <<"Per-file timeout cannot override existing file parameters">>});
++        {Timeout, _} when is_integer(Timeout), Timeout >= 1, Timeout =< 60000 ->
++            <<"{timeout=", (integer_to_binary(Timeout))/binary, "}", MediaPath/binary>>;
++        _ -> throw({'msg', <<"Invalid per-file playback timeout">>})
++    end.
++
+ play_app(MediaPath, 'true', _Loop) ->
+     {<<"endless_playback">>, MediaPath};
+ play_app(MediaPath, 'false', LoopCount) when is_integer(LoopCount), LoopCount > 0 ->
+diff --git a/src/call_cmd/ecallmgr_fs_bridge.erl b/src/call_cmd/ecallmgr_fs_bridge.erl
+index a15f8f8..2ac560a 100644
+--- a/src/call_cmd/ecallmgr_fs_bridge.erl
++++ b/src/call_cmd/ecallmgr_fs_bridge.erl
+@@ -17,6 +17,10 @@
+         ,try_create_bridge_string/2
+         ]).
+ 
++-ifdef(TEST).
++-export([bridge_commands/4]).
++-endif.
++
+ -include("ecallmgr.hrl").
+ 
+ -define(BYPASS_MEDIA_AFTER_BRIDGE, kapps_config:get_boolean(?APP_NAME, <<"use_bypass_media_after_bridge">>, 'false')).
+@@ -345,13 +349,26 @@ create_command(DP, Node, UUID, #channel{profile=ChannelProfile}, JObj, AppUUID)
+     UpdatedJObj = kz_json:set_value(<<"Endpoints">>, UniqueEndpoints, kz_json:merge(JObj, CommonProperties)),
+ 
+     BridgeApp = kz_app_config:get_ne_binary(?APP, [<<"dialplan">>, <<"apps">>, <<"bridge">>], <<"kz_bridge">>),
+-    Scope = list_to_binary(["/^[app_uuid=",AppUUID,"^app_uuid_name=bridge]"]),
+-    LiftedCmd = list_to_binary([BridgeApp, " ", Scope
+-                               ,build_channels_vars(Node, UUID, UniqueEndpoints, UpdatedJObj)
+-                               ,try_create_bridge_string(UniqueEndpoints, UpdatedJObj)
+-                               ]),
+-
+-    [{"application", LiftedCmd} | DP].
++    ChannelVars = build_channels_vars(Node, UUID, UniqueEndpoints, UpdatedJObj),
++    BridgeString = try_create_bridge_string(UniqueEndpoints, UpdatedJObj),
++    bridge_commands(BridgeApp, AppUUID, ChannelVars, BridgeString) ++ DP.
++
++%% Pinned Kazoo FreeSWITCH reads app_uuid/app_uuid_name before parsing normal
++%% %[...] scope variables. It does not support the newer /[...] app-variable
++%% prefix: leaving that prefix on the originate URL makes comma-separated
++%% variables look like channel types. Set both one-shot event variables in a
++%% single preceding application, so the bridge consumes them together.
++-spec bridge_commands(kz_term:ne_binary(), kz_term:api_binary(), iolist(), binary()) -> kz_term:proplist().
++bridge_commands(_, _, _, <<>>) -> erlang:error('empty_bridge_dialstring');
++bridge_commands(BridgeApp, 'undefined', ChannelVars, BridgeString) ->
++    [{"application", iolist_to_binary([BridgeApp, " ", ChannelVars, BridgeString])}];
++bridge_commands(BridgeApp, AppUUID, ChannelVars, BridgeString) when is_binary(AppUUID) ->
++    case re:run(AppUUID, <<"\\A(?:[a-fA-F0-9]{32}|[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12})\\z">>, [{'capture','none'}]) of
++        'match' ->
++            [{"application", <<"kz_multiset ^^!app_uuid=", AppUUID/binary, "!app_uuid_name=bridge">>}
++             | bridge_commands(BridgeApp, 'undefined', ChannelVars, BridgeString)];
++        'nomatch' -> erlang:error('invalid_bridge_application_uuid')
++    end.
+ 
+ -spec maybe_bypass_after_bridge(boolean(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:objects()) -> kz_json:objects().
+ maybe_bypass_after_bridge('false', _, _, Endpoints) ->
+diff --git a/src/ecallmgr_fs_channels.erl b/src/ecallmgr_fs_channels.erl
+index 76622a7..ca74e39 100644
+--- a/src/ecallmgr_fs_channels.erl
++++ b/src/ecallmgr_fs_channels.erl
+@@ -49,8 +49,15 @@
+ -export([handle_query_account_channels/2]).
+ -export([handle_query_channels/2]).
+ -export([handle_channel_status/2]).
++-export([handle_originate_reconcile/2]).
+ -export([api_status/1]).
+ 
++-ifdef(TEST).
++-export([parse_originate_reconcile/2
++        ,aggregate_originate_reconcile/1
++        ]).
++-endif.
++
+ -export([channels/1, channels/2, channels/3, channels/4]).
+ -export([handle_channels/2]).
+ 
+@@ -90,6 +97,9 @@
+                     ,{{?MODULE, 'handle_channel_status'}
+                      ,[{<<"channel">>, <<"channel_status_req">>}]
+                      }
++                    ,{{?MODULE, 'handle_originate_reconcile'}
++                     ,[{<<"channel">>, <<"originate_reconcile_req">>}]
++                     }
+                     ,{{?MODULE, 'handle_query_endpoint_channels'}
+                      ,[{<<"channel">>, <<"query_endpoint_channels_req">>}]
+                      }
+@@ -405,6 +415,102 @@ handle_channel_status(JObj, _Props) ->
+             kapi_call:publish_channel_status_resp(kz_api:server_id(JObj), Resp)
+     end.
+ 
++%% FreeSWITCH, not the ephemeral ecallmgr originate process, is the truth
++%% boundary. Every ecallmgr instance reports only what its currently connected
++%% media nodes can prove from the exact UUID/request/caller tuple.
++-spec handle_originate_reconcile(kz_json:object(), kz_term:proplist()) -> 'ok'.
++handle_originate_reconcile(JObj, _Props) ->
++    'true' = kapi_call:originate_reconcile_req_v(JObj),
++    UUID = kz_json:get_ne_binary_value(<<"Originate-UUID">>, JObj),
++    RequestId = kz_json:get_ne_binary_value(<<"Originate-Request-ID">>, JObj),
++    CallerId = kz_json:get_ne_binary_value(<<"Outbound-Call-ID">>, JObj),
++    Operation = kz_json:get_ne_binary_value(<<"Operation">>, JObj),
++    Result = case safe_reconcile_tokens([UUID, RequestId, CallerId]) of
++                 'true' ->
++                     Command = list_to_binary([Operation, " ", UUID, " ", RequestId, " ", CallerId]),
++                     aggregate_originate_reconcile(
++                       [query_originate_reconcile(Node, Command)
++                        || Node <- ecallmgr_fs_nodes:connected()]);
++                 'false' -> #{'status' => <<"unknown">>, 'detail' => <<"invalid_correlation">>}
++             end,
++    Resp = props:filter_undefined(
++             [{<<"Originate-UUID">>, UUID}
++             ,{<<"Originate-Request-ID">>, RequestId}
++             ,{<<"Outbound-Call-ID">>, CallerId}
++             ,{<<"Operation">>, Operation}
++             ,{<<"Status">>, maps:get('status', Result)}
++             ,{<<"Media-Node">>, maps:get('media_node', Result, 'undefined')}
++             ,{<<"Module-Epoch">>, maps:get('module_epoch', Result, 'undefined')}
++             ,{<<"Outcome">>, maps:get('outcome', Result, 'undefined')}
++             ,{<<"Result-Call-ID">>, maps:get('result_call_id', Result, 'undefined')}
++             ,{<<"Failure-Cause">>, maps:get('failure_cause', Result, 'undefined')}
++             ,{<<"Detail">>, maps:get('detail', Result, 'undefined')}
++             ,{<<"Msg-ID">>, kz_api:msg_id(JObj)}
++              | kz_api:default_headers(?APP_NAME, ?APP_VERSION)]),
++    kapi_call:publish_originate_reconcile_resp(kz_api:server_id(JObj), Resp).
++
++-spec query_originate_reconcile(atom(), kz_term:ne_binary()) -> map().
++query_originate_reconcile(Node, Command) ->
++    Result = try freeswitch:api(Node, 'kz_originate_reconcile', Command)
++             catch _:_ -> {'error', 'query_failed'}
++             end,
++    parse_originate_reconcile(kz_term:to_binary(Node), Result).
++
++-spec parse_originate_reconcile(kz_term:ne_binary(), any()) -> map().
++parse_originate_reconcile(Node, {'ok', Reply}) when is_binary(Reply) ->
++    Tokens = binary:split(Reply, [<<" ">>, <<"\t">>, <<"\r">>, <<"\n">>]
++                         ,['global', 'trim_all']),
++    parse_originate_reconcile_tokens(Node, Tokens);
++parse_originate_reconcile(Node, _) ->
++    #{'status' => <<"unknown">>, 'media_node' => Node, 'detail' => <<"switch_query_failed">>}.
++
++-spec parse_originate_reconcile_tokens(kz_term:ne_binary(), [binary()]) -> map().
++%% mod_kazoo:api/4 removes the transport's +OK prefix before returning
++%% {ok, Reply}. Keep the raw wire forms below for compatibility, but accept
++%% only the same exact success shapes after that transport normalization.
++parse_originate_reconcile_tokens(Node, [<<"PENDING">>, Epoch]) ->
++    parse_originate_reconcile_tokens(Node, [<<"+OK">>, <<"PENDING">>, Epoch]);
++parse_originate_reconcile_tokens(Node, [<<"SETTLED">>, <<"success">>, Epoch, CallId]) ->
++    parse_originate_reconcile_tokens(Node, [<<"+OK">>, <<"SETTLED">>, <<"success">>, Epoch, CallId]);
++parse_originate_reconcile_tokens(Node, [<<"SETTLED">>, <<"failure">>, Epoch, Cause]) ->
++    parse_originate_reconcile_tokens(Node, [<<"+OK">>, <<"SETTLED">>, <<"failure">>, Epoch, Cause]);
++parse_originate_reconcile_tokens(Node, [<<"+OK">>, <<"PENDING">>, Epoch]) ->
++    #{'status' => <<"pending">>, 'media_node' => Node, 'module_epoch' => Epoch};
++parse_originate_reconcile_tokens(Node, [<<"+OK">>, <<"SETTLED">>, <<"success">>, Epoch, CallId]) ->
++    #{'status' => <<"settled">>, 'media_node' => Node, 'module_epoch' => Epoch
++     ,'outcome' => <<"success">>, 'result_call_id' => CallId};
++parse_originate_reconcile_tokens(Node, [<<"+OK">>, <<"SETTLED">>, <<"failure">>, Epoch, Cause]) ->
++    #{'status' => <<"settled">>, 'media_node' => Node, 'module_epoch' => Epoch
++     ,'outcome' => <<"failure">>, 'failure_cause' => Cause};
++parse_originate_reconcile_tokens(Node, [<<"-ERR">>, <<"UNKNOWN">>, Epoch]) ->
++    #{'status' => <<"unknown">>, 'media_node' => Node, 'module_epoch' => Epoch
++     ,'detail' => <<"not_observed_in_module_epoch">>};
++parse_originate_reconcile_tokens(Node, [<<"-ERR">>, <<"CORRELATION_MISMATCH">>, Epoch]) ->
++    #{'status' => <<"unknown">>, 'media_node' => Node, 'module_epoch' => Epoch
++     ,'detail' => <<"correlation_mismatch">>};
++parse_originate_reconcile_tokens(Node, _) ->
++    #{'status' => <<"unknown">>, 'media_node' => Node, 'detail' => <<"invalid_switch_response">>}.
++
++%% At most one connected media node may claim a transaction. A second claim is
++%% conflict evidence, even if the text happens to match.
++-spec aggregate_originate_reconcile([map()]) -> map().
++aggregate_originate_reconcile(Results) ->
++    Authoritative = [Result || Result <- Results,
++                               maps:get('status', Result, <<"unknown">>) =/= <<"unknown">>],
++    case Authoritative of
++        [Result] -> Result;
++        [] -> #{'status' => <<"unknown">>, 'detail' => <<"no_authoritative_transaction">>};
++        _ -> #{'status' => <<"unknown">>, 'detail' => <<"conflicting_media_nodes">>}
++    end.
++
++-spec safe_reconcile_tokens([any()]) -> boolean().
++safe_reconcile_tokens(Tokens) ->
++    lists:all(fun(Token) when is_binary(Token), byte_size(Token) > 0, byte_size(Token) =< 512 ->
++                      lists:all(fun(Character) -> Character > 32 andalso Character =/= 127 end,
++                                binary_to_list(Token));
++                 (_) -> 'false'
++              end, Tokens).
++
+ -type api_status_node_info() :: {kz_term:ne_binary(), kz_term:ne_binary()}.
+ 
+ -spec api_status(kz_term:ne_binary()) ->
+diff --git a/src/ecallmgr_fs_resource.erl b/src/ecallmgr_fs_resource.erl
+index 61563d7..cd4c119 100644
+--- a/src/ecallmgr_fs_resource.erl
++++ b/src/ecallmgr_fs_resource.erl
+@@ -83,6 +83,13 @@ start_link(Node, Options) ->
+ 
+ -spec handle_originate_req(kz_json:object(), kz_term:proplist()) -> kz_types:sup_startchild_ret().
+ handle_originate_req(JObj, Props) ->
++    case ecallmgr_call_monitor:operation(JObj) of
++        <<"stop">> -> ecallmgr_call_monitor:stop(props:get_value('node', Props), JObj);
++        _ -> start_originate(JObj, Props)
++    end.
++
++-spec start_originate(kz_json:object(), kz_term:proplist()) -> kz_types:sup_startchild_ret().
++start_originate(JObj, Props) ->
+     _ = kz_log:put_callid(JObj),
+     Arg = #{node => props:get_value('node', Props)
+            ,queue => props:get_value('self', Props)
+diff --git a/src/ecallmgr_fs_xml.erl b/src/ecallmgr_fs_xml.erl
+index db15c93..06e1501 100644
+--- a/src/ecallmgr_fs_xml.erl
++++ b/src/ecallmgr_fs_xml.erl
+@@ -312,7 +312,11 @@ route_resp_xml(<<"bridge">>, Routes, JObj, DialplanContext) ->
+     FailExtEl = extension_el(<<"failed_bridge">>, <<"false">>, [FailConditionEl]),
+ 
+     Context = context(JObj, DialplanContext),
+-    ContextContent = Actions ++ maybe_unset_custom_sip_headers() ++ Extensions ++ [FailExtEl],
++    %% FreeSWITCH hunts extensions, not actions directly under a context.
++    %% Queue progress and setup before the route attempts, then keep hunting.
++    Setup = condition_el(Actions ++ maybe_unset_custom_sip_headers()),
++    SetupExtEl = extension_el(<<"bridge_setup">>, <<"true">>, [Setup]),
++    ContextContent = [SetupExtEl] ++ Extensions ++ [FailExtEl],
+     ContextEl = context_el(Context, ContextContent),
+     SectionEl = section_el(<<"dialplan">>, <<"Route Bridge Response">>, ContextEl),
+     {'ok', xmerl:export([SectionEl], 'fs_xml')};
+@@ -545,7 +549,10 @@ route_resp_pre_park_action(JObj) ->
+ route_resp_progress(JObj) ->
+     case kz_json:is_true(<<"Ignore-Progress">>, JObj, 'false') of
+         'true' -> 'undefined';
+-        'false' -> action_el(<<"ring_ready">>, 'undefined', 'true')
++        %% ring_ready is not SAF_ROUTING_EXEC in supported FreeSWITCH builds.
++        %% As the first normal action it still sends progress before park or
++        %% bridge without trying to execute it during XML dialplan hunting.
++        'false' -> action_el(<<"ring_ready">>)
+     end.
+ 
+ -spec maybe_start_dtmf_action(dialplan_context()) -> 'undefined' | kz_types:xml_el().
+diff --git a/src/ecallmgr_originate.erl b/src/ecallmgr_originate.erl
+index 259991e..8d1bb04 100644
+--- a/src/ecallmgr_originate.erl
++++ b/src/ecallmgr_originate.erl
+@@ -15,6 +15,10 @@
+ 
+ -export([start_link/1]).
+ 
++-ifdef(TEST).
++-export([originate_api_command/4, build_originate/3]).
++-endif.
++
+ -export([init/1
+         ,handle_call/3
+         ,handle_cast/2
+@@ -84,7 +88,7 @@ init([#{payload := JObj
+     kz_amqp_channel:consumer_channel(Channel),
+     ServerId = kz_api:server_id(JObj),
+     OriginateUUID = kz_json:get_ne_binary_value(<<"Originate-UUID">>, JObj, kz_binary:rand_hex(16)),
+-    case kapi_resource:originate_req_v(JObj) of
++    case kapi_resource:originate_req_v(JObj) andalso ecallmgr_call_monitor:guard(Node, JObj) of
+         'false' ->
+             Error = <<"originate failed to execute as JObj did not validate">>,
+             publish_error(Error, 'undefined', JObj, ServerId),
+@@ -205,11 +209,22 @@ handle_cast('originate_execute', #state{tref=TRef}=State) when is_reference(TRef
+     _ = erlang:cancel_timer(TRef),
+     handle_cast('originate_execute', State#state{tref='undefined'});
+ 
++handle_cast('originate_execute', #state{originate_pid_ref={Pid, Ref}}=State)
++  when is_pid(Pid), is_reference(Ref) ->
++    %% Duplicate execute deliveries must never ring another supervisor leg.
++    {'noreply', State};
++
+ handle_cast('originate_execute', #state{dialstrings=Dialstrings
+                                        ,node=Node
+                                        ,originate_uuid=OriginateUUID
++                                       ,originate_req=JObj
+                                        }=State) ->
+-    {'noreply', State#state{originate_pid_ref = originate_execute(Node, OriginateUUID, Dialstrings)}};
++    case ecallmgr_call_monitor:guard(Node, JObj) of
++        'true' -> {'noreply', State#state{originate_pid_ref = originate_execute(Node, OriginateUUID, Dialstrings, JObj)}};
++        'false' ->
++            publish_error(<<"monitor target is no longer authorized and active">>, OriginateUUID, JObj, State#state.server_id),
++            {'stop', 'normal', State}
++    end;
+ 
+ handle_cast('originate_cancel', #state{node=Node
+                                       ,originate_uuid=OriginateUUID
+@@ -228,12 +243,14 @@ handle_cast(_Msg, State) ->
+ -spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
+ handle_info({'kapi', {{_Ex, _RK, {_Basic, _Deliver}}
+                      ,{'dialplan', 'originate_execute'}
+-                     ,_Payload
++                     ,Payload
+                      }}
+-           ,State
++           ,#state{originate_req=JObj}=State
+            ) ->
+-    lager:info("received originate execute"),
+-    gen_server:cast(self(), 'originate_execute'),
++    case ecallmgr_call_monitor:execute_matches(JObj, Payload) of
++        'true' -> gen_server:cast(self(), 'originate_execute');
++        'false' -> lager:warning("discarding uncorrelated monitor execute")
++    end,
+     {'noreply', State};
+ 
+ handle_info({'kapi', {{_Ex, _RK, {_Basic, _Deliver}}
+@@ -408,6 +425,13 @@ get_bridge_action(JObj) ->
+ 
+ -spec get_eavesdrop_action(kz_json:object()) -> kz_term:ne_binary().
+ get_eavesdrop_action(JObj) ->
++    case ecallmgr_call_monitor:operation(JObj) of
++        <<"start">> -> ecallmgr_call_monitor:action(JObj);
++        _ -> get_legacy_eavesdrop_action(JObj)
++    end.
++
++-spec get_legacy_eavesdrop_action(kz_json:object()) -> kz_term:ne_binary().
++get_legacy_eavesdrop_action(JObj) ->
+     {CallId, Group} = case kz_json:get_value(<<"Eavesdrop-Group-ID">>, JObj) of
+                           'undefined' -> {kz_json:get_binary_value(<<"Eavesdrop-Call-ID">>, JObj), <<>>};
+                           ID -> {<<"all">>, <<"eavesdrop_require_group=", ID/binary, ",">>}
+@@ -430,16 +454,17 @@ build_originate(Action, JObj) ->
+     end.
+ 
+ -spec build_originate(kz_term:ne_binary(), kz_json:objects(), kz_json:object()) ->
+-          kz_term:ne_binary().
++          kz_term:api_binary().
+ build_originate(Action, Endpoints, JObj) ->
+     lager:debug("building originate command arguments"),
+     DialSeparator = ecallmgr_util:get_dial_separator(JObj, Endpoints),
+ 
+     DialStrings = ecallmgr_util:build_bridge_string(Endpoints, DialSeparator),
+ 
+-    ChannelVars = get_channel_vars(JObj),
+-
+-    list_to_binary([ChannelVars, DialStrings, " ", Action]).
++    case iolist_size(DialStrings) of
++        0 -> 'undefined';
++        _ -> list_to_binary([get_channel_vars(JObj), DialStrings, " ", Action])
++    end.
+ 
+ -spec get_channel_vars(kz_json:object()) -> iolist().
+ get_channel_vars(JObj) ->
+@@ -474,19 +499,39 @@ add_loopback('false') ->
+     ,{<<"Loopback-Bowout">>, 'false'}
+     ].
+ 
+--spec originate_execute(atom(), kz_term:ne_binary(), kz_term:ne_binary()) ->
++-spec originate_execute(atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
+           kz_term:pid_ref().
+-originate_execute(Node, UUID, Dialstrings) ->
++originate_execute(Node, UUID, Dialstrings, Request) ->
+     lager:debug("executing originate on ~s / ~s ~s", [Node, UUID, Dialstrings]),
+-    kz_process:spawn_monitor(fun originate_execute_async/4, [self(), Node, UUID, Dialstrings]).
++    kz_process:spawn_monitor(fun originate_execute_async/5, [self(), Node, UUID, Dialstrings, Request]).
+ 
+--spec originate_execute_async(pid(), atom(), kz_term:ne_binary(), kz_term:ne_binary()) ->
++-spec originate_execute_async(pid(), atom(), kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object()) ->
+           {'originate_result', freeswitch:fs_api_return()}.
+-originate_execute_async(Pid, Node, UUID, Dialstrings) ->
+-    Arg = list_to_binary([UUID, " ", Dialstrings]),
++originate_execute_async(Pid, Node, UUID, Dialstrings, Request) ->
++    RequestId = kz_api:msg_id(Request),
++    CallerId = kz_json:get_ne_binary_value(<<"Outbound-Call-ID">>, Request),
++    Arg = originate_api_command(UUID, RequestId, CallerId, Dialstrings),
+     Res = freeswitch:async_api(Node, 'kz_originate', Arg),
+     Pid ! {'originate_result', Res}.
+ 
++%% v2 gives mod_kazoo the immutable correlation tuple before it registers the
++%% pending transaction. Legacy requests remain compatible but cannot later be
++%% proven settled by the recovery protocol.
++-spec originate_api_command(kz_term:ne_binary(), kz_term:api_binary(), kz_term:api_binary(),
++                            kz_term:ne_binary()) -> kz_term:ne_binary().
++originate_api_command(UUID, RequestId, CallerId, Dialstrings) ->
++    case safe_originate_token(UUID) andalso safe_originate_token(RequestId)
++        andalso safe_originate_token(CallerId) of
++        'true' -> list_to_binary(["v2 ", UUID, " ", RequestId, " ", CallerId, " ", Dialstrings]);
++        'false' -> list_to_binary([UUID, " ", Dialstrings])
++    end.
++
++-spec safe_originate_token(any()) -> boolean().
++safe_originate_token(Value) when is_binary(Value), byte_size(Value) > 0, byte_size(Value) =< 512 ->
++    lists:all(fun(Character) -> Character > 32 andalso Character =/= 127 end,
++              binary_to_list(Value));
++safe_originate_token(_) -> 'false'.
++
+ -spec get_unset_vars(kz_json:object()) -> iolist().
+ get_unset_vars(JObj) ->
+     %% Refactor (Karl wishes he had unit tests here for you to use)
+@@ -582,7 +627,7 @@ publish_originate_ready(UUID, Request, Q, ServerId) ->
+     Props = [{<<"Msg-ID">>, kz_api:msg_id(Request, UUID)}
+             ,{<<"Originate-UUID">>, UUID}
+             ,{<<"Originate-Queue">>, Q}
+-            | kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
++            | ecallmgr_call_monitor:ready_headers(Request) ++ kz_api:default_headers(Q, ?APP_NAME, ?APP_VERSION)
+             ],
+     kapi_dialplan:publish_originate_ready(ServerId, Props).
+ 
+diff --git a/src/ecallmgr_util.erl b/src/ecallmgr_util.erl
+index 7ae993d..f2301f4 100644
+--- a/src/ecallmgr_util.erl
++++ b/src/ecallmgr_util.erl
+@@ -1321,7 +1321,9 @@ media_path(<<"http://", _/binary>> = URI, _Type, _UUID, _) -> get_fs_playback(UR
+ media_path(<<"https://", _/binary>> = URI, _Type, _UUID, _) -> get_fs_playback(URI);
+ media_path(<<?HTTP_GET_PREFIX, _/binary>> = Media, _Type, _UUID, _) -> Media;
+ media_path(<<"\$", _/binary>> = Media, _Type, _UUID, _) -> Media;
+-media_path(<<"prompt://", _/binary>> = Media, _Type, _UUID, _) -> Media;
++%% prompt:// is a Kazoo media-manager identifier, not a FreeSWITCH file
++%% interface. Resolve it through lookup_media below, exactly like stored
++%% media, so the installed http_cache playback interface receives a real URL.
+ media_path(MediaName, Type, UUID, JObj) ->
+     case lookup_media(MediaName, Type, UUID, JObj) of
+         {'error', _E} ->
+diff --git a/src/event_stream/ecallmgr_fs_event_stream.erl b/src/event_stream/ecallmgr_fs_event_stream.erl
+index ddba5a9..ddf7f85 100644
+--- a/src/event_stream/ecallmgr_fs_event_stream.erl
++++ b/src/event_stream/ecallmgr_fs_event_stream.erl
+@@ -260,7 +260,7 @@ maybe_bind(Node, Bindings) ->
+           {'error', any()} |
+           {'EXIT', any()}.
+ maybe_bind(Node, Bindings, 2) ->
+-    case catch gen_server:call({'mod_kazoo', Node}, {'event', Bindings}, 2 * ?MILLISECONDS_IN_SECOND) of
++    case catch mod_kazoo:call({'mod_kazoo', Node}, {'event', Bindings}, 2 * ?MILLISECONDS_IN_SECOND) of
+         {'ok', {_IP, _Port}}=OK -> OK;
+         {'EXIT', {'timeout',_}} -> {'error', 'timeout'};
+         {'EXIT', {{'nodedown',_}, _}} -> {'error', 'nodedown'};
+@@ -268,7 +268,7 @@ maybe_bind(Node, Bindings, 2) ->
+         {'error', _Reason}=E -> E
+     end;
+ maybe_bind(Node, Bindings, Attempts) ->
+-    case catch gen_server:call({'mod_kazoo', Node}, {'event', Bindings}, 2 * ?MILLISECONDS_IN_SECOND) of
++    case catch mod_kazoo:call({'mod_kazoo', Node}, {'event', Bindings}, 2 * ?MILLISECONDS_IN_SECOND) of
+         {'ok', {_IP, _Port}}=OK -> OK;
+         {'EXIT', {'timeout',_}} ->
+             lager:debug("timeout on attempt ~b to bind: ~p", [Attempts, Bindings]),
+diff --git a/src/mod_kazoo.erl b/src/mod_kazoo.erl
+index a2ec0ab..f1064c9 100644
+--- a/src/mod_kazoo.erl
++++ b/src/mod_kazoo.erl
+@@ -54,6 +54,8 @@
+ 
+ -export([sync_channel/2]).
+ -export([no_legacy/1]).
++-export([ping/1]).
++-export([call/2, call/3]).
+ 
+ -export([async_api/3]).
+ 
+@@ -63,13 +65,38 @@
+ 
+ -define(TIMEOUT, 5 * ?MILLISECONDS_IN_SECOND).
+ 
++%% OTP 24 introduced process-alias reply tags for calls to remote processes.
++%% FreeSWITCH's mod_kazoo C-node can reply to the historical reference tag,
++%% but the EI API it uses cannot address an Erlang process alias. Keep the
++%% wire protocol compatible while retaining a bounded timeout.
++-spec call({atom(), atom()}, term()) -> term().
++call(Server, Request) ->
++    call(Server, Request, ?TIMEOUT).
++
++-spec call({atom(), atom()}, term(), timeout()) -> term().
++call(Server, Request, Timeout) ->
++    Tag = make_ref(),
++    Server ! {'$gen_call', {self(), Tag}, Request},
++    receive
++        {Tag, Reply} -> Reply
++    after Timeout ->
++            exit({'timeout', {'gen_server', 'call', [Server, Request, Timeout]}})
++    end.
++
++-spec ping(atom()) -> 'pong' | 'pang'.
++ping(Node) ->
++    case version(Node, ?TIMEOUT) of
++        {'ok', _Version} -> 'pong';
++        _ -> 'pang'
++    end.
++
+ -spec version(atom()) -> freeswitch:fs_api_return().
+ version(Node) ->
+     version(Node, ?TIMEOUT).
+ 
+ -spec version(atom(), pos_integer()) -> freeswitch:fs_api_return().
+ version(Node, Timeout) ->
+-    try gen_server:call({'mod_kazoo', Node}, 'version', Timeout) of
++    try call({'mod_kazoo', Node}, 'version', Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         Result -> Result
+     catch
+@@ -103,7 +130,7 @@ getpid(Node) ->
+ 
+ -spec getpid(atom(), pos_integer()) -> freeswitch:fs_api_return().
+ getpid(Node, Timeout) ->
+-    try gen_server:call({'mod_kazoo', Node}, 'getpid', Timeout) of
++    try call({'mod_kazoo', Node}, 'getpid', Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         Result -> Result
+     catch
+@@ -120,7 +147,7 @@ bind(Node, Type) ->
+ 
+ -spec bind(atom(), atom(), pos_integer()) -> freeswitch:fs_api_return().
+ bind(Node, Type, Timeout) ->
+-    try gen_server:call({'mod_kazoo', Node}, {'bind', Type}, Timeout) of
++    try call({'mod_kazoo', Node}, {'bind', Type}, Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         {'ok', <<"-ERR ", Reason/binary>>} -> internal_fs_error(Reason);
+         Result -> Result
+@@ -165,7 +192,7 @@ api(Node, Cmd, Args) ->
+ 
+ -spec api(atom(), kz_term:text(), kz_term:text(), timeout()) -> freeswitch:fs_api_return().
+ api(Node, Cmd, Args, Timeout) when is_atom(Node) ->
+-    try gen_server:call({'mod_kazoo', Node}, {'api', Cmd, Args}, Timeout) of
++    try call({'mod_kazoo', Node}, {'api', Cmd, Args}, Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         {'ok', <<"-ERR", Reason/binary>>} -> api_result('error', Reason);
+         {'ok', <<"+OK", Result/binary>>} -> api_result('ok', Result);
+@@ -207,7 +234,7 @@ json_api(Node, UUID, Cmd, Data, Timeout) when is_atom(Node) ->
+              ,{<<"data">>, Data}
+              ],
+     JObj = kz_json:from_list(Params),
+-    try gen_server:call({'mod_kazoo', Node}, {'json_api', kz_json:encode(JObj)}, Timeout) of
++    try call({'mod_kazoo', Node}, {'json_api', kz_json:encode(JObj)}, Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         {'error', {'parse_error', _Where}} = Err -> Err;
+         {'ok', Result} -> json_api_result('ok', Result);
+@@ -241,7 +268,7 @@ bgapi(Node, Cmd, Args) ->
+     Self = self(),
+     _ = kz_process:spawn(
+           fun() ->
+-                  try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
++                  try call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
+                       {'ok', <<"-ERR ", Reason/binary>>} ->
+                           Self ! {'api', internal_fs_error(Reason)};
+                       {'ok', JobId}=JobOk ->
+@@ -274,7 +301,7 @@ bgapi(Node, Cmd, Args, Fun) when is_function(Fun, 2) ->
+     Self = self(),
+     _ = kz_process:spawn(
+           fun() ->
+-                  try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
++                  try call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
+                       {'ok', <<"-ERR ", Reason/binary>>} ->
+                           Self ! {'api', internal_fs_error(Reason)};
+                       {'ok', JobId}=JobOk ->
+@@ -307,7 +334,7 @@ bgapi(Node, Cmd, Args, Fun, CallBackParams) when is_function(Fun, 3) ->
+     Self = self(),
+     _ = kz_process:spawn(
+           fun() ->
+-                  try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
++                  try call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
+                       {'ok', <<"-ERR ", Reason/binary>>} ->
+                           Self ! {'api', internal_fs_error(Reason)};
+                       {'ok', JobId}=JobOk ->
+@@ -340,7 +367,7 @@ bgapi(Node, UUID, CallBackParams, Cmd, Args, Fun) when is_function(Fun, 6) ->
+     Self = self(),
+     _ = kz_process:spawn(
+           fun() ->
+-                  try gen_server:call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
++                  try call({'mod_kazoo', Node}, {'bgapi', Cmd, Args}, ?TIMEOUT) of
+                       {'ok', <<"-ERR ", Reason/binary>>} ->
+                           Self ! {'api', internal_fs_error(Reason)};
+                       {'ok', JobId}=JobOk ->
+@@ -378,7 +405,7 @@ event(Node, Events) ->
+ event(Node, [_|_]=Events, Timeout) ->
+     PortOpen = get('port_open'),
+     PackeSize = freeswitch:event_stream_framing(Node),
+-    try gen_server:call({'mod_kazoo', Node}, {'event', Events}, Timeout) of
++    try call({'mod_kazoo', Node}, {'event', Events}, Timeout) of
+         'timeout' -> {'error', 'timeout'};
+         {'ok', <<"-ERR ", Reason/binary>>} -> internal_fs_error(Reason);
+         {'ok', {IP, Port}} when PortOpen =:= 'undefined' ->
+@@ -414,7 +441,7 @@ sendevent_custom(Node, SubClassName, Headers) ->
+ 
+ -spec sendmsg(atom(), kz_term:ne_binary(), list()) -> freeswitch:fs_api_return().
+ sendmsg(Node, UUID, Headers) ->
+-    gen_server:call({'mod_kazoo', Node}, {'sendmsg', UUID, Headers}).
++    call({'mod_kazoo', Node}, {'sendmsg', UUID, Headers}).
+ 
+ -spec config(atom()) -> 'ok'.
+ config(Node) ->
+@@ -435,7 +462,7 @@ bgapi4(Node, Cmd, Args, Fun, CallBackParams) ->
+     end.
+ 
+ bgapi4(Node, Cmd, Args, Fun, CallBackParams, Self) ->
+-    try gen_server:call({'mod_kazoo', Node}, {'bgapi4', Cmd, Args}, ?TIMEOUT) of
++    try call({'mod_kazoo', Node}, {'bgapi4', Cmd, Args}, ?TIMEOUT) of
+         {'ok', <<"-ERR ", Reason/binary>>} ->
+             Self ! {'api', internal_fs_error(Reason)};
+         {'ok', <<"+OK ", JobId/binary>>} ->
+@@ -480,7 +507,7 @@ cmd(Node, UUID, Command) ->
+ 
+ -spec cmd(atom(), kz_term:ne_binary(), boolean(), list()) -> freeswitch:fs_api_return().
+ cmd(Node, UUID, Sync, Command) ->
+-    gen_server:call({'mod_kazoo', Node}, {'command', UUID, Sync, Command}).
++    call({'mod_kazoo', Node}, {'command', UUID, Sync, Command}).
+ 
+ -spec cmds(atom(), kz_term:ne_binary(), list()) -> freeswitch:fs_api_return().
+ cmds(Node, UUID, Commands) ->
+@@ -488,7 +515,7 @@ cmds(Node, UUID, Commands) ->
+ 
+ -spec cmds(atom(), kz_term:ne_binary(), boolean(), list()) -> freeswitch:fs_api_return().
+ cmds(Node, UUID, Sync, Commands) ->
+-    gen_server:call({'mod_kazoo', Node}, {'commands', UUID, Sync, Commands}).
++    call({'mod_kazoo', Node}, {'commands', UUID, Sync, Commands}).
+ 
+ -spec cast_cmd(atom(), kz_term:ne_binary(), list()) -> freeswitch:fs_api_return().
+ cast_cmd(Node, UUID, Command) ->
+@@ -516,7 +543,7 @@ sync_channel(Node, UUID) ->
+ 
+ -spec no_legacy(atom()) -> 'ok' | {'error', 'timeout' | 'exception'}.
+ no_legacy(Node) ->
+-    try gen_server:call({'mod_kazoo', Node}, 'no_legacy') of
++    try call({'mod_kazoo', Node}, 'no_legacy') of
+         'timeout' -> {'error', 'timeout'};
+         Result -> Result
+     catch
+diff --git a/src/node/ecallmgr_fs_nodes.erl b/src/node/ecallmgr_fs_nodes.erl
+index 9e8c59f..8d6e801 100644
+--- a/src/node/ecallmgr_fs_nodes.erl
++++ b/src/node/ecallmgr_fs_nodes.erl
+@@ -693,7 +693,7 @@ maybe_ping_node(#node{node=NodeName
+                      ,cookie=Cookie
+                      }=Node) ->
+     erlang:set_cookie(NodeName, Cookie),
+-    case net_adm:ping(NodeName) of
++    case mod_kazoo:ping(NodeName) of
+         'pong' ->
+             _ = ecallmgr_fs_pinger_sup:remove_node(NodeName),
+             maybe_start_node_handlers(Node);
+@@ -876,7 +876,7 @@ try_connect_to_default_fs() ->
+ 
+ -spec try_connect_to_default_fs(atom()) -> 'skip' | 'ok' | {'error', 'no_connection'}.
+ try_connect_to_default_fs(Node) ->
+-    case net_adm:ping(Node) of
++    case mod_kazoo:ping(Node) of
+         'pong' ->
+             lager:info("connected to default freeswitch node ~p", [Node]),
+             add(Node);
+diff --git a/src/node/ecallmgr_fs_pinger.erl b/src/node/ecallmgr_fs_pinger.erl
+index 00aab62..c71d788 100644
+--- a/src/node/ecallmgr_fs_pinger.erl
++++ b/src/node/ecallmgr_fs_pinger.erl
+@@ -106,7 +106,7 @@ handle_info('check_node_status', #state{timeout=Timeout}=State)
+   when Timeout > ?MILLISECONDS_IN_MINUTE * 15 ->
+     handle_info('check_node_status', State#state{timeout=?MILLISECONDS_IN_MINUTE});
+ handle_info('check_node_status', #state{node=Node, timeout=Timeout}=State) ->
+-    case net_adm:ping(Node) of
++    case mod_kazoo:ping(Node) of
+         'pong' ->
+             %% give the node a moment to init
+             timer:sleep(?MILLISECONDS_IN_SECOND),
+diff --git a/src/ecallmgr_call_monitor.erl b/src/ecallmgr_call_monitor.erl
+new file mode 100644
+index 0000000..c9745e0
+--- /dev/null
++++ b/src/ecallmgr_call_monitor.erl
+@@ -0,0 +1,252 @@
++%%% Narrow account/correlation guard for Crossbar supervisor calls.
++%%% This Source Code Form is subject to the Mozilla Public License, v. 2.0.
++-module(ecallmgr_call_monitor).
++-export([guard/2, operation/1, stop/2, action/1, ready_headers/1, execute_matches/2]).
++-ifdef(TEST).
++-export([matches_channel/3, valid_request/2, stop_result/3]).
++-endif.
++-include("ecallmgr.hrl").
++
++%% Crossbar's correlated AMQP wait is 5000 ms. Keep the entire FS stop proof
++%% below that deadline, including the initial authorization and every poll.
++-define(STOP_BUDGET_MS, 3000).
++-define(STOP_API_TIMEOUT_MS, 750).
++-define(STOP_POLL_MS, 50).
++
++-spec operation(kz_json:object()) -> any().
++operation(J) -> kz_json:get_value(<<"Monitor-Operation">>, J).
++
++-spec guard(atom(), kz_json:object()) -> boolean().
++guard(Node, J) ->
++    case operation(J) of
++        'undefined' -> 'true';
++        <<"start">> -> valid_request(Node, J) andalso live_matches(Node, J, 'target');
++        _ -> 'false'
++    end.
++
++-spec valid_request(atom(), kz_json:object()) -> boolean().
++valid_request(Node, J) ->
++    Account = kz_json:get_value(<<"Monitor-Account-ID">>, J),
++    Request = kz_json:get_value(<<"Monitor-Request-ID">>, J),
++    Supervisor = kz_json:get_value(<<"Outbound-Call-ID">>, J),
++    Target = kz_json:get_value(<<"Eavesdrop-Call-ID">>, J),
++    Op = operation(J),
++    Base = kz_json:get_value(<<"Switch-Nodename">>, J) =:= kz_term:to_binary(Node)
++        andalso kz_json:get_value(<<"Application-Name">>, J) =:= <<"eavesdrop">>
++        andalso hex_id(Account) andalso hex_id(Request) andalso safe_id(Target) andalso hex_id(Supervisor)
++        andalso kz_json:get_value(<<"Originate-UUID">>, J) =:= Supervisor
++        andalso kz_api:msg_id(J) =:= Request
++        andalso kz_json:get_value(<<"Existing-Call-ID">>, J) =:= 'undefined'
++        andalso kz_json:get_value(<<"Eavesdrop-Group-ID">>, J) =:= 'undefined',
++    Base andalso case Op of
++        <<"start">> ->
++            CCVs = kz_json:get_value(<<"Custom-Channel-Vars">>, J, kz_json:new()),
++            Device = kz_json:get_value(<<"Monitor-Device-ID">>, J),
++            Mode = kz_json:get_value(<<"Eavesdrop-Mode">>, J),
++            Timeout = kz_json:get_value(<<"Timeout">>, J),
++            Target =/= Supervisor andalso hex_id(Device)
++                andalso lists:member(Mode, [<<"listen">>, <<"whisper">>, <<"full">>])
++                andalso kz_json:get_value(<<"Originate-Immediate">>, J) =:= 'false'
++                andalso is_integer(Timeout) andalso Timeout >= 5 andalso Timeout =< 60
++                andalso kz_json:get_value(<<"Account-ID">>, CCVs) =:= Account
++                andalso kz_json:get_value(<<"Authorizing-ID">>, CCVs) =:= Device
++                andalso kz_json:get_value(<<"Monitor-Request-ID">>, CCVs) =:= Request
++                andalso kz_json:get_value(<<"Monitor-Target-ID">>, CCVs) =:= Target
++                andalso safe_endpoint(kz_json:get_value(<<"Endpoints">>, J), Supervisor);
++        <<"stop">> -> Supervisor =:= Target;
++        _ -> 'false'
++    end.
++
++-spec safe_endpoint(any(), binary()) -> boolean().
++safe_endpoint([Endpoint], Supervisor) ->
++    Keys = [<<"Invite-Format">>, <<"Endpoint-Type">>, <<"To-User">>, <<"To-Username">>, <<"To-Realm">>
++            ,<<"Ignore-Early-Media">>, <<"Bypass-Media">>, <<"Outbound-Call-ID">>],
++    kz_json:get_keys(Endpoint) -- Keys =:= []
++        andalso kz_json:get_value(<<"Invite-Format">>, Endpoint) =:= <<"username">>
++        andalso kz_json:get_value(<<"Endpoint-Type">>, Endpoint) =:= <<"sip">>
++        andalso kz_json:get_value(<<"Outbound-Call-ID">>, Endpoint) =:= Supervisor
++        andalso matches(kz_json:get_value(<<"To-Username">>, Endpoint), <<"^[A-Za-z0-9_.+-]{1,128}$">>)
++        andalso kz_json:get_value(<<"To-User">>, Endpoint) =:= kz_json:get_value(<<"To-Username">>, Endpoint)
++        andalso matches(kz_json:get_value(<<"To-Realm">>, Endpoint), <<"^[A-Za-z0-9.-]{1,253}$">>);
++safe_endpoint(_, _) -> 'false'.
++
++-spec live_matches(atom(), kz_json:object(), atom()) -> boolean().
++live_matches(Node, J, Kind) ->
++    Id = kz_json:get_value(<<"Eavesdrop-Call-ID">>, J),
++    try freeswitch:api(Node, 'uuid_dump', Id) of
++        {'ok', Dump} -> matches_channel(J, Kind, dump_props(Dump));
++        _ -> 'false'
++    catch _:_ -> 'false'
++    end.
++
++%% uuid_dump contains optional empty headers and values with colons. Parse only
++%% the security fields and split on the first separator, not string:tokens/2.
++-spec dump_props(binary()) -> kz_term:proplist().
++dump_props(Dump) ->
++    Keys = [<<"Unique-ID">>, <<"Channel-State">>, ?GET_CCV(<<"Account-ID">>)
++            ,?GET_CCV(<<"Monitor-Request-ID">>), ?GET_CCV(<<"Monitor-Target-ID">>)
++            ,?GET_CCV(<<"Monitor-Mode">>)],
++    [{K, kz_http_util:urldecode(V)} || Line <- binary:split(Dump, <<"\n">>, ['global'])
++                                   ,[K,V] <- [binary:split(Line, <<": ">>)]
++                                   ,lists:member(K, Keys)].
++
++-spec matches_channel(kz_json:object(), atom(), kz_term:proplist()) -> boolean().
++matches_channel(J, Kind, Props) ->
++    matches_identity(J, Kind, Props)
++        andalso active_state(props:get_value(<<"Channel-State">>, Props)).
++
++-spec active_state(any()) -> boolean().
++active_state(State) ->
++    lists:member(State, [<<"CS_NEW">>, <<"CS_INIT">>, <<"CS_ROUTING">>, <<"CS_SOFT_EXECUTE">>
++                        ,<<"CS_EXECUTE">>, <<"CS_EXCHANGE_MEDIA">>, <<"CS_PARK">>
++                        ,<<"CS_CONSUME_MEDIA">>, <<"CS_HIBERNATE">>, <<"CS_RESET">>]).
++
++-spec matches_identity(kz_json:object(), atom(), kz_term:proplist()) -> boolean().
++matches_identity(J, Kind, Props) ->
++    Account = kz_json:get_value(<<"Monitor-Account-ID">>, J),
++    Id = kz_json:get_value(<<"Eavesdrop-Call-ID">>, J),
++    Base = length(Props) =:= length(lists:ukeysort(1, Props))
++        andalso props:get_value(<<"Unique-ID">>, Props) =:= Id
++        andalso props:get_value(?GET_CCV(<<"Account-ID">>), Props) =:= Account,
++    Base andalso case Kind of
++        'target' -> 'true';
++        'supervisor' ->
++            props:get_value(?GET_CCV(<<"Monitor-Request-ID">>), Props) =:= kz_json:get_value(<<"Monitor-Request-ID">>, J)
++                andalso props:get_value(?GET_CCV(<<"Monitor-Target-ID">>), Props) =/= Id
++                andalso safe_id(props:get_value(?GET_CCV(<<"Monitor-Target-ID">>), Props))
++                andalso lists:member(props:get_value(?GET_CCV(<<"Monitor-Mode">>), Props), [<<"listen">>, <<"whisper">>, <<"full">>])
++    end.
++
++-spec stop(atom(), kz_json:object()) -> 'ok'.
++stop(Node, J) ->
++    Id = kz_json:get_value(<<"Outbound-Call-ID">>, J),
++    Result = stop_result(Node, J, ?STOP_BUDGET_MS),
++    Resp = [{<<"Call-ID">>, Id}, {<<"Msg-ID">>, kz_api:msg_id(J)}
++            ,{<<"Monitor-Request-ID">>, kz_json:get_value(<<"Monitor-Request-ID">>, J)}
++            ,{<<"Application-Response">>, Result} | kz_api:default_headers(?APP_NAME, ?APP_VERSION)],
++    kapi_resource:publish_originate_resp(kz_api:server_id(J), Resp).
++
++-spec stop_result(atom(), kz_json:object(), pos_integer()) -> binary().
++stop_result(Node, J, Budget) ->
++    Deadline = erlang:monotonic_time('millisecond') + Budget,
++    case valid_request(Node, J) andalso operation(J) =:= <<"stop">> of
++        'false' -> <<"MONITOR_STOP_DENIED">>;
++        'true' ->
++            Id = kz_json:get_value(<<"Outbound-Call-ID">>, J),
++            case stop_snapshot(Node, Id, Deadline) of
++                {'ok', Props} ->
++                    case matches_channel(J, 'supervisor', Props) of
++                        'true' -> stop_verified_supervisor(Node, J, Id, Props, Deadline);
++                        'false' -> <<"MONITOR_STOP_DENIED">>
++                    end;
++                _ -> <<"MONITOR_STOP_DENIED">>
++            end
++    end.
++
++-spec stop_verified_supervisor(atom(), kz_json:object(), binary(), kz_term:proplist(), integer()) -> binary().
++stop_verified_supervisor(Node, J, Id, Props, Deadline) ->
++    %% mod_kazoo strips '+OK\n' to atom 'ok'; do not prefix-match arbitrary
++    %% text as success. Even an acknowledged kill is not disappearance proof.
++    Kill = stop_api(Node, 'uuid_kill', <<Id/binary, " NORMAL_CLEARING">>, Deadline),
++    case (Kill =:= 'ok' orelse Kill =:= {'ok', <<>>})
++        andalso wait_supervisor_absent(Node, J, Id, Props, Deadline)
++    of
++        'true' -> <<"MONITOR_STOPPED">>;
++        'false' -> <<"MONITOR_STOP_FAILED">>
++    end.
++
++-spec wait_supervisor_absent(atom(), kz_json:object(), binary(), kz_term:proplist(), integer()) -> boolean().
++wait_supervisor_absent(Node, J, Id, Original, Deadline) ->
++    case stop_api(Node, 'uuid_exists', Id, Deadline) of
++        {'ok', 'false'} -> 'true';
++        {'ok', 'true'} ->
++            case stop_snapshot(Node, Id, Deadline) of
++                {'ok', Props} ->
++                    State = props:get_value(<<"Channel-State">>, Props),
++                    %% A still-present UUID must retain the original identity.
++                    %% Never kill again: a reused/mutated UUID fails closed.
++                    Same = matches_identity(J, 'supervisor', Props)
++                        andalso lists:keydelete(<<"Channel-State">>, 1, lists:sort(Props))
++                            =:= lists:keydelete(<<"Channel-State">>, 1, lists:sort(Original)),
++                    Same andalso (active_state(State) orelse lists:member(State, [<<"CS_HANGUP">>, <<"CS_REPORTING">>, <<"CS_DESTROY">>]))
++                        andalso poll_supervisor_absent(Node, J, Id, Original, Deadline);
++                {'error', <<"No such channel!">>} ->
++                    %% The session can vanish between exists and dump. This
++                    %% error alone is not proof; require a new exact exists=false.
++                    poll_supervisor_absent(Node, J, Id, Original, Deadline);
++                _ -> 'false'
++            end;
++        _ -> 'false'
++    end.
++
++-spec poll_supervisor_absent(atom(), kz_json:object(), binary(), kz_term:proplist(), integer()) -> boolean().
++poll_supervisor_absent(Node, J, Id, Original, Deadline) ->
++    case Deadline - erlang:monotonic_time('millisecond') of
++        Remaining when Remaining > 0 ->
++            receive after min(?STOP_POLL_MS, Remaining) -> 'ok' end,
++            wait_supervisor_absent(Node, J, Id, Original, Deadline);
++        _ -> 'false'
++    end.
++
++-spec stop_snapshot(atom(), binary(), integer()) -> {'ok', kz_term:proplist()} | {'error', any()}.
++stop_snapshot(Node, Id, Deadline) ->
++    case stop_api(Node, 'uuid_dump', Id, Deadline) of
++        {'ok', Dump} when is_binary(Dump) ->
++            try {'ok', dump_props(Dump)} catch _:_ -> {'error', 'invalid_dump'} end;
++        {'error', _} = Error -> Error;
++        _ -> {'error', 'invalid_dump'}
++    end.
++
++-spec stop_api(atom(), atom(), binary(), integer()) -> any().
++stop_api(Node, Command, Args, Deadline) ->
++    case Deadline - erlang:monotonic_time('millisecond') of
++        Remaining when Remaining > 0 ->
++            try freeswitch:api(Node, Command, Args, min(?STOP_API_TIMEOUT_MS, Remaining)) of
++                Result ->
++                    case erlang:monotonic_time('millisecond') < Deadline of
++                        'true' -> Result;
++                        'false' -> {'error', 'timeout'}
++                    end
++            catch _:_ -> {'error', 'exception'}
++            end;
++        _ -> {'error', 'timeout'}
++    end.
++
++%% WRITE mixes into audio sent toward the exact selected target leg (agent).
++%% READ would leak supervisor speech toward that leg's bridged customer.
++%% Fixed channel variables replace delayed synthetic DTMF and forbid escalation.
++-spec action(kz_json:object()) -> binary().
++action(J) ->
++    Target = kz_json:get_value(<<"Eavesdrop-Call-ID">>, J),
++    {Read, Write} = case kz_json:get_value(<<"Eavesdrop-Mode">>, J) of
++        <<"listen">> -> {<<"false">>, <<"false">>};
++        <<"whisper">> -> {<<"false">>, <<"true">>};
++        <<"full">> -> {<<"true">>, <<"true">>}
++    end,
++    <<"set:eavesdrop_enable_dtmf=false,set:eavesdrop_bridge_aleg=true,set:eavesdrop_bridge_bleg=true,"
++      "set:eavesdrop_whisper_aleg=", Read/binary, ",set:eavesdrop_whisper_bleg=", Write/binary,
++      ",eavesdrop:", Target/binary, " inline">>.
++
++-spec ready_headers(kz_json:object()) -> kz_term:proplist().
++ready_headers(J) ->
++    case operation(J) of
++        <<"start">> -> [{<<"Monitor-Verified">>, 'true'}, {<<"Monitor-Request-ID">>, kz_json:get_value(<<"Monitor-Request-ID">>, J)}];
++        _ -> []
++    end.
++
++-spec execute_matches(kz_json:object(), kz_json:object()) -> boolean().
++execute_matches(J, Execute) ->
++    case operation(J) of
++        'undefined' -> 'true';
++        <<"start">> -> kz_json:get_value(<<"Originate-UUID">>, Execute) =:= kz_json:get_value(<<"Originate-UUID">>, J)
++            andalso kz_api:msg_id(Execute) =:= kz_json:get_value(<<"Monitor-Request-ID">>, J);
++        _ -> 'false'
++    end.
++
++-spec safe_id(any()) -> boolean().
++safe_id(V) -> matches(V, <<"^[A-Za-z0-9_.:@-]{1,128}$">>).
++-spec hex_id(any()) -> boolean().
++hex_id(V) -> matches(V, <<"^[a-f0-9]{32}$">>).
++-spec matches(any(), binary()) -> boolean().
++matches(V, Regex) when is_binary(V) -> re:run(V, Regex, [{'capture', 'none'}]) =:= 'match';
++matches(_, _) -> 'false'.

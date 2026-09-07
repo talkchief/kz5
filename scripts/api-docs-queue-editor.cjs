@@ -30,6 +30,28 @@ function applyQueueEditor({spec, operation, request, response, envelope, object,
     schemas.QueueEditorLanguageCapabilities = {type: 'object', nullable: true, description: 'Verified deployment language manifest, schema_version=1, or null if unavailable. Do not infer readiness from language names or source files. Each locale reports ready/position/wait_time/callback/native_speaker_review independently. Native speaker review is not implied by automated media verification.',
         properties: {schema_version: {type: 'integer', enum: [1]}, generated_at: str, languages: {type: 'object', properties: Object.fromEntries(['en-us', 'ar-sa', 'he-il', 'es-es', 'fr-fr'].map(locale => [locale, object({ready: {type: 'boolean'}, position: {type: 'boolean'}, wait_time: {type: 'boolean'}, callback: {type: 'boolean'}, native_speaker_review: {type: 'boolean'}, required_prompt_ids: {type: 'array', items: str}, number_range: {type: 'array', items: {type: 'integer'}, minItems: 2, maxItems: 2}, numbers: {type: 'string', enum: ['native_say', 'prerecorded']}, numeric_prompt_count: {type: 'integer'}, source_catalog_sha256: str, installed_media_sha256: str})]))}}};
     schemas.QueueEditorLanguageCapabilities.properties.backend_mode = {type: 'string', enum: ['legacy'], description: 'Present only for the explicitly declared English baseline. Its full-pack language flags remain false. Explicit en-us selection additionally requires a complete system_media catalog and every required English baseline prompt with an attachment; this is not multilingual or all-Gemini readiness. Missing proof rejects the selection.'};
+    schemas.QueueEditorLanguageCapabilitiesV1 = schemas.QueueEditorLanguageCapabilities;
+    const cardinalCounts = {'en-us': 31, 'ar-sa': 208, 'he-il': 131, 'es-es': 53, 'fr-fr': 161};
+    const proofHash = {type: 'string', pattern: '^[a-f0-9]{64}$'};
+    const cardinalFlags = ['ready', 'selection_ready', 'position', 'wait_time', 'callback', 'native_speaker_review',
+        'position_installed_verified', 'callback_installed_verified', 'position_runtime_verified',
+        'callback_runtime_verified', 'wait_time_runtime_verified'];
+    schemas.QueueEditorLanguageCapabilitiesV2 = strict({schema_version: {type: 'integer', enum: [2]},
+        backend_mode: {type: 'string', enum: ['prerecorded-cardinal-v1']},
+        generated_at: {type: 'string', format: 'date-time'},
+        languages: strict(Object.fromEntries(Object.entries(cardinalCounts).map(([locale, count]) => [locale, strict({
+            ...Object.fromEntries(cardinalFlags.map(flag => [flag, {type: 'boolean'}])),
+            numbers: {type: 'string', enum: ['prerecorded-cardinal']},
+            number_range: {type: 'array', items: {type: 'integer'}, minItems: 2, maxItems: 2, enum: [[0, 999999999]]},
+            numeric_prompt_count: {type: 'integer', enum: [count]}, callback_prompt_count: {type: 'integer', enum: [42]},
+            source_catalog_sha256: proofHash, cardinal_map_sha256: proofHash, fixed_map_sha256: proofHash,
+            installed_media_sha256: {...proofHash, nullable: true}, runtime_evidence_sha256: {...proofHash, nullable: true},
+            native_review_sha256: {...proofHash, nullable: true}
+        })]))) });
+    schemas.QueueEditorLanguageCapabilitiesV2.description = 'Explicit prerecorded cardinal contract: exact584 position roles across five locales, plus42 fixed/callback-digit records per locale and the pinned position intro. Counts describe required inventories, not proof of installation. Installed flags require pinned byte-readback evidence. Runtime flags require independent deployed-code, mapping and live-function evidence. position/callback/wait_time are the conjunction of their installed and runtime facts. selection_ready requires all three functions and permits development voice testing without inventing native review; ready additionally requires native_speaker_review and its real listening-evidence hash. Source-only or installed-only records cannot enable selection. Backend checks exact compiled map/catalog pins and fresh metadata for only runtime-claimed locales through the bounded bulk datapath; it can only downgrade runtime flags. No readiness, live deployment or native review is inferred from audio generation.';
+    schemas.QueueEditorLanguageCapabilities = {type: 'object', nullable: true,
+        oneOf: [ref('QueueEditorLanguageCapabilitiesV1'), ref('QueueEditorLanguageCapabilitiesV2')],
+        description: 'Legacy schema1 remains compatible. Schema2 distinguishes installed evidence, development selection readiness, deployed runtime verification and native listening review. Null/absent remains unavailable. See each versioned contract; do not treat selection_ready as full production certification.'};
     schemas.QueueEditorSnapshot = strict({queue: {...schemas.QueuePatch, properties: {...schemas.QueuePatch.properties, agents: list(hex)}}, roster: list(hex), users: list(ref('QueueEditorUser')), media: list(ref('QueueEditorMedia')), system_media: list(ref('QueueEditorSystemMedia')), numbers: list(strict({number: str, state: {type: 'string', enum: ['in_service']}})),
         language_capabilities: ref('QueueEditorLanguageCapabilities'), callflows: strict({summaries: list(ref('QueueEditorRouteSummary')), routes: list(ref('QueueEditorRoute'))}), revisions: ref('QueueEditorRevisions'),
         catalogs: strict(Object.fromEntries(['users', 'media', 'callflows', 'numbers', 'system_media'].map(name => [name, ref('QueueEditorCatalogState')])))});

@@ -11,6 +11,7 @@ transition_fixture_helper="$transition_fixture_output/apply-source-transition.sh
 readonly transition_fixture_shared=$(cd -- "$transition_fixture_dir/.." && pwd -P)
 readonly transition_fixture_blackhole_ref=4e3f02a5ab01c09a44c287f4f93b15d2782f5614
 readonly transition_fixture_crossbar_ref=2ac862830f9b626d2170d08daf1991b0ca33dba7
+readonly transition_fixture_ecallmgr_ref=fb8eba201b41762ce8fae928c61bd5d22379a1bc
 transition_fixture_count=0
 transition_fixture_inputs=(
     "$transition_fixture_dir/test-kazoo-source-transition.sh"
@@ -24,6 +25,9 @@ transition_fixture_inputs=(
     "$transition_fixture_patches/blackhole-binding-cleanup.patch"
     "$transition_fixture_patches/blackhole-pre-queue-live-integration.patch"
     "$transition_fixture_patches/blackhole-queue-live.patch"
+    "$transition_fixture_patches/ecallmgr-kazoo5-integration.patch"
+    "$transition_fixture_patches/ecallmgr-kazoo5-before-atomic.patch"
+    "$transition_fixture_patches/ecallmgr-atomic-answer-runtime.patch"
 )
 finish() {
     local status=$?
@@ -54,7 +58,7 @@ const [installer, output] = process.argv.slice(2);
 const source = fs.readFileSync(installer, 'utf8');
 const definitions = source.match(/^apply_kazoo_integration_patch\(\) \(\n[\s\S]*?^\)\n/gm);
 assert.equal(definitions?.length, 1, 'Expected exactly one integration helper');
-for (const family of ['blackhole', 'crossbar']) {
+for (const family of ['blackhole', 'crossbar', 'ecallmgr']) {
   assert(source.includes('    apply_kazoo_integration_patch ' + family + '\n'), 'Missing integration call site');
 }
 fs.writeFileSync(output, definitions[0], {flag: 'wx', mode: 0o600});
@@ -118,6 +122,14 @@ select_app() {
             missing_hunk_source=src/crossbar_auth.erl
             missing_source=src/modules/cb_members.erl
             ;;
+        ecallmgr)
+            old_patch=ecallmgr-kazoo5-before-atomic.patch
+            step_patch=ecallmgr-atomic-answer-runtime.patch
+            sentinel_source=src/ecallmgr_util.erl
+            partial_source=src/ecallmgr_originate.erl
+            missing_hunk_source=src/ecallmgr_fs_xml.erl
+            missing_source=src/ecallmgr_call_monitor.erl
+            ;;
         *) fail "unsupported fixture app: $app" ;;
     esac
 }
@@ -145,6 +157,13 @@ prepare_baseline "$transition_fixture_crossbar_ref" \
     priv/couchdb/schemas/queue_update.json priv/couchdb/schemas/queues.json \
     src/api_util.erl src/crossbar_auth.erl src/modules/cb_channels.erl \
     src/modules/cb_devices.erl priv/couchdb/schemas/system_config.blackhole.json
+select_app ecallmgr
+# The monitoring module is created by both reviewed aggregates, not upstream.
+prepare_baseline "$transition_fixture_ecallmgr_ref" \
+    src/call_cmd/ecallmgr_call_command.erl src/call_cmd/ecallmgr_fs_bridge.erl \
+    src/ecallmgr_fs_channels.erl src/ecallmgr_fs_resource.erl src/ecallmgr_fs_xml.erl \
+    src/ecallmgr_originate.erl src/ecallmgr_util.erl src/event_stream/ecallmgr_fs_event_stream.erl \
+    src/mod_kazoo.erl src/node/ecallmgr_fs_nodes.erl src/node/ecallmgr_fs_pinger.erl
 
 seed_sentinels() {
     local source_module=${sentinel_source##*/}
@@ -297,7 +316,7 @@ expect_unverified_dry_run() {
     pass "$app/dry-run absent source, explicit unverified warning, no mutation"
 }
 
-for app in blackhole crossbar; do
+for app in blackhole crossbar ecallmgr; do
     select_app "$app"
     for state in clean current legacy; do
         new_case "$state" "$state"
@@ -350,6 +369,10 @@ for app in blackhole crossbar; do
     new_case half-new-transition legacy
     if [[ $app == blackhole ]]; then
         git -C "$source_dir" apply --include=src/blackhole_bindings.erl "$script_dir/patches/$step_patch"
+    elif [[ $app == ecallmgr ]]; then
+        replace_once "$source_dir/src/ecallmgr_originate.erl" \
+            '-export([originate_api_command/4, build_originate/3]).' \
+            '-export([originate_api_command/4, build_originate/3, intercept_unbridged_only/2]).'
     else
         replace_once "$source_dir/priv/couchdb/schemas/system_config.blackhole.json" \
             '        "max_queued_messages": {' \
@@ -362,6 +385,10 @@ for app in blackhole crossbar; do
         replace_once "$source_dir/src/modules/bh_token_auth.erl" \
             'lager:debug("trying to authenticate with token")' \
             'lager:debug("fixture-edited-token-message")'
+    elif [[ $app == ecallmgr ]]; then
+        replace_once "$source_dir/src/ecallmgr_originate.erl" \
+            '-export([originate_api_command/4, build_originate/3]).' \
+            '-export([originate_api_command/4]).'
     else
         replace_once "$source_dir/src/api_util.erl" \
             'is_custom_route_module(<<"members">>) -> '\''true'\'';' \
@@ -406,6 +433,9 @@ for app in blackhole crossbar; do
         replace_once "$script_dir/patches/$new_patch" \
             '+    lager:debug("trying to authenticate with token"),' \
             '+    lager:debug("fixture-inconsistent-current-patch"),'
+    elif [[ $app == ecallmgr ]]; then
+        replace_once "$script_dir/patches/$new_patch" \
+            "erlang:error('invalid_acdc_intercept_target')" "erlang:error('fixture_invalid_intercept_target')"
     else
         replace_once "$script_dir/patches/$new_patch" \
             '+            "default": 65536,' '+            "default": 65535,'
@@ -419,6 +449,9 @@ for app in blackhole crossbar; do
     if [[ $app == blackhole ]]; then
         replace_once "$script_dir/patches/$step_patch" \
             '+-define(DEFAULT_MAX_FRAME_SIZE, 65536).' '+-define(DEFAULT_MAX_FRAME_SIZE, 65535).'
+    elif [[ $app == ecallmgr ]]; then
+        replace_once "$script_dir/patches/$step_patch" \
+            "erlang:error('invalid_acdc_intercept_target')" "erlang:error('fixture_invalid_intercept_target')"
     else
         replace_once "$script_dir/patches/$step_patch" \
             '+            "default": 65536,' '+            "default": 65535,'
@@ -499,6 +532,6 @@ replace_once "$script_dir/patches/blackhole-pre-queue-live-integration.patch" \
     '+    lager:debug("fixture-inconsistent-pre-queue-baseline"),'
 expect_rejection wrong-pre-queue-baseline
 
-[[ $transition_fixture_count == 60 ]] || fail "unexpected case count: $transition_fixture_count"
+[[ $transition_fixture_count == 81 ]] || fail "unexpected case count: $transition_fixture_count"
 printf 'PASS all %s bounded source-transition cases (no builds, services or network)\n' "$transition_fixture_count" \
     | tee -a "$transition_fixture_output/results.log"
