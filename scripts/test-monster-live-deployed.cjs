@@ -7,9 +7,171 @@
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const crypto = require('node:crypto'), dns = require('node:dns').promises;
 const ID = /^[a-f0-9]{32}$/, HASH = /^[a-f0-9]{64}$/;
+const ACCOUNT_BROWSER_ASSET = 'apps/common/submodules/accountBrowser/accountBrowser.js';
+const ACCOUNT_TOGGLE = '#main_topbar_account_toggle_container';
 class Failure extends Error {}
 function check(ok, code) { if (!ok) throw new Failure(code); }
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+function browserErrorDiagnostic(error, uiOrigin) {
+    const name = ['TypeError', 'ReferenceError', 'SyntaxError', 'RangeError', 'Error'].includes(error.name) ? error.name : 'other';
+    const message = typeof error.message === 'string' ? error.message : '';
+    const kind = message.includes('is not a function') ? 'missing_function' :
+        /Cannot read propert/.test(message) ? 'missing_property' : /[Tt]emplate/.test(message) ? 'template' : 'other';
+    const frames = [];
+    for (const match of String(error.stack || '').matchAll(/(https?:\/\/[^\s)]+):(\d+):(\d+)/g)) {
+        let u; try { u = new URL(match[1]); } catch (_) { continue; }
+        const known = {'/js/main.js': 'ui_main', '/js/templates.js': 'ui_templates',
+            ['/' + ACCOUNT_BROWSER_ASSET]: 'account_browser'};
+        if (u.origin === uiOrigin && known[u.pathname] && frames.length < 6) frames.push({asset: known[u.pathname], line: Number(match[2]), column: Number(match[3])});
+    }
+    return {name, kind, frames};
+}
+function accountScopeOptions(env) {
+    const account = env.KAZOO_TEST_ACCOUNT_ID, queue = env.KAZOO_TEST_QUEUE_ID;
+    const loginAccount = env.KAZOO_TEST_LOGIN_ACCOUNT_ID === undefined ? account : env.KAZOO_TEST_LOGIN_ACCOUNT_ID;
+    const switching = account !== loginAccount;
+    const loginQueue = switching ? env.KAZOO_TEST_LOGIN_QUEUE_ID : queue;
+    const loginName = env.KAZOO_TEST_LOGIN_ACCOUNT_NAME === undefined ?
+        (env.KAZOO_TEST_ACCOUNT_NAME || 'KazooMaster') : env.KAZOO_TEST_LOGIN_ACCOUNT_NAME;
+    check(ID.test(account || '') && ID.test(queue || '') && ID.test(loginAccount || ''), 'explicit_account_and_queue_required');
+    check(ID.test(loginQueue || ''), 'explicit_login_queue_required_for_switch');
+    check(typeof loginName === 'string' && loginName.length > 0 && Buffer.byteLength(loginName) <= 256
+        && !/[\x00-\x1f\x7f]/.test(loginName), 'invalid_login_account_name');
+    return {account, queue, loginAccount, loginQueue, loginName, switching};
+}
+function socketAdmission(scope) {
+    return {stage: scope.switching ? 'home' : 'target', subscribe: null, subscribeAck: null,
+        disposalStart: null, unsubscribe: null, unsubscribeAck: null};
+}
+function socketScopeRole(scope, admission, data) {
+    check(data && /^queue_live\.changed\.[a-f0-9]{32}$/.test(data.binding || ''), 'unexpected_socket_scope');
+    if (admission.stage === 'home' || admission.stage === 'home_cleanup') {
+        check(scope.switching && data.account_id === scope.loginAccount
+            && data.binding === 'queue_live.changed.' + scope.loginQueue, 'unexpected_home_socket_scope');
+        return 'home';
+    }
+    check(admission.stage === 'target' && data.account_id === scope.account, 'unexpected_target_socket_scope');
+    return 'target';
+}
+function recordHomeCommand(admission, sent) {
+    if (sent.role !== 'home') return;
+    if (sent.action === 'subscribe') {
+        check(admission.stage === 'home' && admission.subscribe === null, 'unexpected_home_subscribe');
+        admission.subscribe = sent;
+    } else {
+        check(sent.action === 'unsubscribe' && admission.stage === 'home_cleanup'
+            && admission.subscribeAck !== null && admission.unsubscribe === null
+            && sent.order > admission.disposalStart, 'unexpected_home_unsubscribe');
+        admission.unsubscribe = sent;
+    }
+}
+function observeHomeReply(admission, sent, reply, order) {
+    // Native ACKs carry bindings, not an account ID. The exact same-connection
+    // request record provides account/role ownership; a stale record cannot win.
+    if (!sent || sent.role !== 'home' || reply.request_id !== sent.requestId) return false;
+    const subscribing = sent.action === 'subscribe', field = subscribing ? 'subscribed' : 'unsubscribed';
+    check(sent === (subscribing ? admission.subscribe : admission.unsubscribe)
+        && admission.stage === (subscribing ? 'home' : 'home_cleanup')
+        && (subscribing ? admission.subscribeAck : admission.unsubscribeAck) === null
+        && reply.action === 'reply' && reply.status === 'success' && order > sent.order
+        && reply.data && Object.keys(reply.data).sort().join(',') === [field, 'subscriptions'].sort().join(',')
+        && JSON.stringify(reply.data[field]) === JSON.stringify([sent.binding])
+        && JSON.stringify(reply.data.subscriptions) === JSON.stringify(subscribing ? [sent.binding] : []),
+    'exact_home_subscription_reply_required');
+    if (subscribing) admission.subscribeAck = order;
+    else admission.unsubscribeAck = order;
+    return true;
+}
+function beginHomeDisposal(admission, order) {
+    check(admission.stage === 'home' && admission.subscribeAck !== null
+        && order > admission.subscribeAck, 'home_subscribe_ack_before_disposal_required');
+    admission.disposalStart = order; admission.stage = 'home_cleanup';
+}
+function closeHomeAdmission(admission, disposed) {
+    check(disposed === true && admission.stage === 'home_cleanup' && admission.subscribeAck !== null
+        && admission.unsubscribe !== null && admission.unsubscribeAck > admission.unsubscribe.order
+        && admission.unsubscribe.order > admission.disposalStart, 'home_disposal_and_exact_unsubscribe_ack_required');
+    admission.stage = 'target';
+}
+function homeOverviewInBrowser({loginAccount, loginQueue}) {
+    const monster = window.require('monster'), auth = monster.apps.auth, app = monster.apps.acdc;
+    const flags = app?.appFlags.acdc, c = flags?.liveDashboardController, s = flags?.liveDashboardSnapshot;
+    const toggle = document.querySelector('#main_topbar_account_toggle');
+    return Boolean(toggle) && !toggle.classList.contains('masquerading')
+        && auth.originalAccount?.id === loginAccount && auth.currentAccount?.id === loginAccount
+        && app?.isMasqueradable === true && app.accountId === loginAccount && flags.currentTab === 'dashboard'
+        && Boolean(c) && c.accountId === loginAccount && !c.queueId && !c.stopped && !c.inFlight && !c.dirty
+        && !c.coalesceTimer && !c.admitting && !c.admissionTimer && c.supported === true
+        && app.liveTransportState(c) === 'acknowledged' && Boolean(s) && s.accountId === loginAccount && !s.queueId
+        && app.liveSnapshotValid(s.results.live, loginAccount, undefined, s.page)
+        && s.results.live.queues.length === 1 && s.results.live.queues[0].id === loginQueue;
+}
+function queuesDisposedInBrowser() {
+    const flags = window.require('monster').apps.acdc.appFlags.acdc;
+    return flags.currentTab === 'queues' && !flags.liveDashboardController;
+}
+function accountScopeInBrowser({loginAccount, account, requireAcdc = false}) {
+    // Read-only assertion executed in the real page; never replace auth/app state.
+    const monster = window.require('monster'), auth = monster.apps.auth, app = monster.apps.acdc;
+    const toggle = document.querySelector('#main_topbar_account_toggle');
+    return Boolean(toggle) && auth.originalAccount?.id === loginAccount && auth.currentAccount?.id === account
+        && Boolean(toggle?.classList.contains('masquerading')) === (loginAccount !== account)
+        && (!requireAcdc || app?.isMasqueradable === true && app.accountId === account);
+}
+function targetAccountResponse(response, api, account) {
+    const u = new URL(response.url());
+    return u.origin === api.origin && !u.username && !u.password
+        && u.pathname === '/v2/accounts/' + account && response.request().method() === 'GET';
+}
+async function verifyTargetAccountResponse(response, account) {
+    const body = await response.json();
+    check(response.status() === 200 && body?.status === 'success' && body.data?.id === account,
+        'masquerade_account_readback_failed');
+    // Native envelopes may echo the existing token. Never retain that envelope.
+    delete body.auth_token;
+}
+async function switchTargetAccount(page, api, scope, checkpoint) {
+    if (!scope.switching) return false;
+    checkpoint('waiting_native_account_picker_ready');
+    await page.locator('#main_topbar_account_toggle_link[aria-disabled="false"]').waitFor({state: 'visible', timeout: 10000});
+    checkpoint('opening_native_account_switcher');
+    await page.locator('#main_topbar_account_toggle_link').click();
+    await page.locator(ACCOUNT_TOGGLE + ' .account-browser-search').waitFor({state: 'visible', timeout: 10000});
+    await page.locator(ACCOUNT_TOGGLE + ' .account-list-loader').waitFor({state: 'detached', timeout: 10000});
+    const row = page.locator(ACCOUNT_TOGGLE + ' .account-list .account-list-element[data-id="' + scope.account + '"] .account-link');
+    if (await row.count() === 0) {
+        checkpoint('searching_native_account_browser_by_id');
+        const search = page.locator(ACCOUNT_TOGGLE + ' .account-browser-search');
+        // A normal non-Enter keyup attaches the initially detached search link.
+        // fill()+Enter alone does not exercise the native global-search control.
+        await search.pressSequentially(scope.account);
+        await search.press('Enter');
+    }
+    await row.waitFor({state: 'visible', timeout: 10000});
+    check(await row.count() === 1, 'masquerade_target_row_not_unique');
+    checkpoint('selecting_native_target_account');
+    const [response] = await Promise.all([
+        page.waitForResponse(r => targetAccountResponse(r, api, scope.account), {timeout: 10000}),
+        row.click()
+    ]);
+    await verifyTargetAccountResponse(response, scope.account);
+    // The framework's failed account.get callback can still continue routing.
+    // Both successful server readback and actual switched state are mandatory.
+    await page.waitForFunction(accountScopeInBrowser, scope, {timeout: 10000});
+    return true;
+}
+async function restoreHomeAccount(page, scope, checkpoint) {
+    if (!scope.switching) return false;
+    checkpoint('waiting_home_account_picker_ready');
+    await page.locator('#main_topbar_account_toggle_link[aria-disabled="false"]').waitFor({state: 'visible', timeout: 10000});
+    checkpoint('restoring_home_with_native_account_control');
+    await page.locator('#main_topbar_account_toggle_link').click();
+    await page.locator(ACCOUNT_TOGGLE + ' .home-account-link').click();
+    await page.waitForFunction(accountScopeInBrowser,
+        {...scope, account: scope.loginAccount, requireAcdc: true}, {timeout: 10000});
+    await page.waitForFunction(queuesDisposedInBrowser);
+    return true;
+}
 function readFile(file, privateFile = false) {
     check(path.isAbsolute(file) && fs.realpathSync(file) === file, 'unsafe_input_path');
     const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
@@ -50,9 +212,8 @@ async function main() {
     const target = endpoint(process.env.KAZOO_TEST_UI_URL || 'http://kz5.talkchief.io/', ['http:', 'https:'], '/');
     const api = endpoint(process.env.KAZOO_TEST_API_URL || target.origin + '/v2', ['http:', 'https:'], '/v2');
     const socket = endpoint(process.env.KAZOO_TEST_WS_URL || target.origin.replace(/^http/, 'ws') + '/websocket', ['ws:', 'wss:'], '/websocket');
-    const account = process.env.KAZOO_TEST_ACCOUNT_ID, queue = process.env.KAZOO_TEST_QUEUE_ID;
-    check(ID.test(account || '') && ID.test(queue || ''), 'explicit_account_and_queue_required');
-    const accountName = process.env.KAZOO_TEST_ACCOUNT_NAME || 'KazooMaster';
+    const scope = accountScopeOptions(process.env), {account, queue, loginAccount, loginName} = scope;
+    const admission = socketAdmission(scope);
     const requiredSocket = process.env.KAZOO_TEST_REQUIRE_WEBSOCKET === 'true';
     check([undefined, 'true', 'false'].includes(process.env.KAZOO_TEST_REQUIRE_WEBSOCKET), 'invalid_websocket_mode');
     const web = process.env.KAZOO_TEST_WEB_ROOT || '/var/www/html/monster-ui';
@@ -65,13 +226,15 @@ async function main() {
     // Production embeds preloaded applications in main.js and their views in
     // templates.js; the deployer deliberately removes the standalone app.js.
     const assets = ['index.html', 'js/main.js', 'js/templates.js', 'js/config.js', 'build-config.json',
-        'css/style.css', 'apps/acdc/style/app.css', ...(preloadedAcdc ? [] : ['apps/acdc/app.js'])];
+        'css/style.css', 'apps/acdc/style/app.css', ...(preloadedAcdc ? [] : ['apps/acdc/app.js']),
+        ...(scope.switching ? [ACCOUNT_BROWSER_ASSET, 'apps/common/style/app.css'] : [])];
     const pins = () => Object.fromEntries([__filename, ...assets.map(p => path.join(web, p))].map(p => [p, digest(readFile(p))]));
     const before = pins();
     check(before[path.join(web, 'build-config.json')] === digest(buildBytes), 'preload_manifest_changed');
     const expected = [['KAZOO_TEST_EXPECT_MAIN_SHA256', 'js/main.js'],
         ['KAZOO_TEST_EXPECT_TEMPLATES_SHA256', 'js/templates.js'],
-        ...(preloadedAcdc ? [] : [['KAZOO_TEST_EXPECT_ACDC_SHA256', 'apps/acdc/app.js']])];
+        ...(preloadedAcdc ? [] : [['KAZOO_TEST_EXPECT_ACDC_SHA256', 'apps/acdc/app.js']]),
+        ...(scope.switching ? [['KAZOO_TEST_EXPECT_ACCOUNT_BROWSER_SHA256', ACCOUNT_BROWSER_ASSET]] : [])];
     for (const [key, file] of expected) {
         check(HASH.test(process.env[key] || '') && before[path.join(web, file)] === process.env[key], 'expected_deployed_artifact_hash_required');
     }
@@ -86,11 +249,15 @@ async function main() {
     const resolver = hosts.filter(h => !h.includes(':')).map(h => 'MAP ' + h + ' 127.0.0.1').join(', ');
     const evidenceDir = fs.mkdtempSync('/tmp/kazoo-monster-live-deployed.');
     const result = {status: 'FAIL', kind: 'actual_deployed_ui_readonly', preloaded_acdc: preloadedAcdc, before, checks: [],
-        checkpoints: [], http_failures: [], live_queries: [], timeline: [], diagnostics_truncated: false,
+        checkpoints: [], http_failures: [], browser_errors: [], blocked_socket_diagnostics: [], live_queries: [], timeline: [], diagnostics_truncated: false,
         counts: {auth: 0, blocked_http_writes: 0, blocked_socket_frames: 0, external: 0,
             console_errors: 0, page_errors: 0, failed_http: 0, failed_requests: 0,
             omitted_external_font_requests: 0, overview_gets: 0, detail_gets: 0, supplemental_gets: 0,
             late_overview_gets: 0, native_subscribe_acks: 0, native_unsubscribe_acks: 0, native_events: 0},
+        account_switch: {requested: scope.switching, target_verified: false, home_restored: false,
+            home_overview_verified: false, home_subscribe_ack: false, home_controller_disposed: false,
+            home_unsubscribe_ack: false, home_admission_closed: false,
+            restricted_principal_verified: false},
         native: {required: requiredSocket, supported: null, detail_ack: false, ack_refetch: false,
             disposal_unsubscribe_sent: false, disposal_unsubscribe_ack: false,
             event_refetch_verified: false, broker_barrier_verified: false}, production_assets: {}, after: null};
@@ -101,6 +268,7 @@ async function main() {
     const detailLedger = [], pending = new Set(), requests = new Map(), scopedRequests = new Set();
     const requestPhases = new WeakMap(), httpOrders = new WeakMap();
     const overviewPath = '/v2/accounts/' + account + '/queues/live';
+    const homeOverviewPath = '/v2/accounts/' + loginAccount + '/queues/live';
     const detailPath = '/v2/accounts/' + account + '/queues/' + queue + '/live';
     const fail = code => { fatal ||= code; };
     const track = (work, code) => { const p = Promise.resolve(work).catch(() => fail(code)).finally(() => pending.delete(p)); pending.add(p); };
@@ -110,7 +278,12 @@ async function main() {
         if (same(u, api)) {
             if (u.pathname === overviewPath) return 'live_overview';
             if (u.pathname === detailPath) return 'live_detail';
+            if (scope.switching && u.pathname === homeOverviewPath) return 'home_live_overview';
             if (u.pathname === '/v2/user_auth') return 'web_auth';
+            if (scope.switching && u.pathname === '/v2/accounts/' + account) return 'switch_target_account';
+            if (scope.switching && u.pathname === '/v2/accounts/' + loginAccount + '/children') return 'switch_home_children';
+            if (scope.switching && u.pathname === '/v2/accounts/' + account + '/children') return 'switch_target_children';
+            if (scope.switching && u.pathname === '/v2/search/multi') return 'switch_account_search';
             if (u.pathname === '/v2/accounts/' + account + '/queues') return 'queue_catalog';
             if (u.pathname === '/v2/accounts/' + account + '/alerts') return 'framework_alerts';
             if (u.pathname === '/v2/accounts/' + account + '/agents/status') return 'agent_global_status';
@@ -124,7 +297,8 @@ async function main() {
             const relative = u.pathname === '/' ? 'index.html' : u.pathname.slice(1);
             const known = {'index.html': 'ui_index', 'js/main.js': 'ui_main', 'js/templates.js': 'ui_templates',
                 'js/config.js': 'ui_config', 'build-config.json': 'ui_build_config', 'css/style.css': 'ui_css',
-                'apps/acdc/style/app.css': 'acdc_css', 'apps/acdc/app.js': 'acdc_module'};
+                'apps/acdc/style/app.css': 'acdc_css', 'apps/acdc/app.js': 'acdc_module',
+                [ACCOUNT_BROWSER_ASSET]: 'framework_account_browser', 'apps/common/style/app.css': 'framework_common_css'};
             return known[relative] || 'other_ui_asset';
         }
         return 'external';
@@ -191,29 +365,47 @@ async function main() {
                 try {
                     const u = new URL(route.url());
                     if (u.href !== socket.href) { result.counts.external++; route.close(); return; }
-                    const server = route.connectToServer(), wire = new Map();
+                    const server = route.connectToServer(), wire = new Map(), seenRequestIds = new Set();
                     route.onMessage(message => {
+                        let frame;
                         try {
                             check(typeof message === 'string' && Buffer.byteLength(message) <= 65536, 'unsafe_socket_frame');
-                            const j = JSON.parse(message);
+                            const j = JSON.parse(message); frame = j;
                             check(j && Object.keys(j).sort().join(',') === 'action,auth_token,data,request_id'
                                 && j.data && Object.keys(j.data).sort().join(',') === 'account_id,binding'
                                 && typeof j.auth_token === 'string' && j.auth_token.length > 0 && j.auth_token.length <= 16384
-                                && ['subscribe', 'unsubscribe'].includes(j.action) && j.data.account_id === account
+                                && ['subscribe', 'unsubscribe'].includes(j.action)
                                 && /^queue_live\.changed\.[a-f0-9]{32}$/.test(j.data?.binding || '')
                                 && typeof j.request_id === 'string' && /^lifecycle-[A-Za-z0-9-]+$/.test(j.request_id) && j.request_id.length <= 128
-                                && !wire.has(j.request_id) && wire.size < 200, 'unexpected_socket_command');
-                            const selected = j.data.binding === 'queue_live.changed.' + queue;
-                            const order = timeline('socket_' + j.action, selected ? 'selected_queue_subscription' : 'other_page_queue_subscription');
+                                && !seenRequestIds.has(j.request_id) && seenRequestIds.size < 200
+                                && wire.size < 200, 'unexpected_socket_command');
+                            const role = socketScopeRole(scope, admission, j.data);
+                            const selected = role === 'target' && j.data.binding === 'queue_live.changed.' + queue;
+                            const order = timeline('socket_' + j.action, role === 'home' ? 'home_queue_subscription'
+                                : selected ? 'selected_queue_subscription' : 'other_page_queue_subscription');
                             const disposal = selected && j.action === 'unsubscribe' && phase === 'cleanup'
                                 && disposalStartOrder !== null && order > disposalStartOrder;
                             if (disposal && disposalSendOrder === null) {
                                 disposalSendOrder = order; result.native.disposal_unsubscribe_sent = true;
                             }
-                            wire.set(j.request_id, {action: j.action, binding: j.data.binding, phase, order,
-                                disposal, afterDetailGet: firstDetailOrder !== null && order > firstDetailOrder});
+                            const sent = {action: j.action, binding: j.data.binding, account: j.data.account_id,
+                                requestId: j.request_id, role, phase, order,
+                                disposal, afterDetailGet: firstDetailOrder !== null && order > firstDetailOrder};
+                            recordHomeCommand(admission, sent);
+                            seenRequestIds.add(j.request_id);
+                            wire.set(j.request_id, sent);
                             server.send(message); // Actual bytes, token stays only in memory.
-                        } catch (_) { result.counts.blocked_socket_frames++; route.close(); }
+                        } catch (_) {
+                            result.counts.blocked_socket_frames++;
+                            diagnostic(result.blocked_socket_diagnostics, {phase,
+                                action:['subscribe','unsubscribe'].includes(frame?.action)?frame.action:'other',
+                                account:frame?.data?.account_id===account?'target':frame?.data?.account_id===loginAccount?'login':'other',
+                                exact_queue_binding:/^queue_live\.changed\.[a-f0-9]{32}$/.test(frame?.data?.binding||''),
+                                lifecycle_request:/^lifecycle-[A-Za-z0-9-]+$/.test(frame?.request_id||''),
+                                top_shape:!!frame&&Object.keys(frame).sort().join(',')==='action,auth_token,data,request_id',
+                                data_shape:!!frame?.data&&Object.keys(frame.data).sort().join(',')==='account_id,binding'});
+                            route.close();
+                        }
                     });
                     server.onMessage(message => {
                         try {
@@ -221,17 +413,22 @@ async function main() {
                             const j = JSON.parse(message), sent = wire.get(j.request_id);
                             if (j.action === 'reply' && sent) {
                                 wire.delete(j.request_id);
-                                const selected = sent.binding === 'queue_live.changed.' + queue;
-                                const order = timeline('socket_reply', selected ? 'selected_queue_subscription' : 'other_page_queue_subscription',
+                                const selected = sent.role === 'target' && sent.binding === 'queue_live.changed.' + queue;
+                                const order = timeline('socket_reply', sent.role === 'home' ? 'home_queue_subscription'
+                                    : selected ? 'selected_queue_subscription' : 'other_page_queue_subscription',
                                     null, sent.order, j.status === 'success' ? 'success' : j.status === 'error' ? 'error' : 'invalid');
-                                if (sent.action === 'subscribe' && j.status === 'success'
+                                if (observeHomeReply(admission, sent, j, order)) {
+                                    if (sent.action === 'subscribe') result.account_switch.home_subscribe_ack = true;
+                                    else result.account_switch.home_unsubscribe_ack = true;
+                                }
+                                if (sent.role === 'target' && sent.action === 'subscribe' && j.status === 'success'
                                     && Array.isArray(j.data?.subscriptions) && j.data.subscriptions.includes(sent.binding)) {
                                     result.counts.native_subscribe_acks++;
                                     if (sent.phase === 'detail' && sent.afterDetailGet && selected && firstDetailAck === null) {
                                         firstDetailAck = {order, time: Date.now()}; result.native.detail_ack = true;
                                     }
                                 }
-                                if (sent.action === 'unsubscribe') {
+                                if (sent.role === 'target' && sent.action === 'unsubscribe') {
                                     const accepted = j.status === 'success' && Array.isArray(j.data?.unsubscribed)
                                         && j.data.unsubscribed.includes(sent.binding);
                                     if (accepted) result.counts.native_unsubscribe_acks++;
@@ -251,7 +448,7 @@ async function main() {
             });
             const page = await context.newPage(); page.setDefaultTimeout(15000);
             page.on('console', m => { if (!stopping && m.type() === 'error') result.counts.console_errors++; });
-            page.on('pageerror', () => { if (!stopping) result.counts.page_errors++; });
+            page.on('pageerror', error => { if (!stopping) { result.counts.page_errors++; diagnostic(result.browser_errors, browserErrorDiagnostic(error, target.origin)); } });
             page.on('request', request => {
                 const u = new URL(request.url());
                 if (request.method() === 'GET' && same(u, api) && u.pathname === detailPath && firstDetailOrder === null) {
@@ -302,35 +499,78 @@ async function main() {
                     result.production_assets[relative] = digest(bytes);
                 })(), 'served_asset_hash_failed');
             });
-            checkpoint('opening_production_index'); await page.goto(target.href, {waitUntil: 'domcontentloaded', timeout: 30000});
+            const initialUrl = new URL(target.href);
+            if (scope.switching) initialUrl.hash = 'apps/acdc';
+            checkpoint('opening_production_index'); await page.goto(initialUrl.href, {waitUntil: 'domcontentloaded', timeout: 30000});
             checkpoint('filling_normal_login');
             await page.locator('#login').fill(secret.user); await page.locator('#password').fill(secret.password);
             secret.password = ''; secret.user = '';
-            await page.locator('#account_name').fill(accountName);
+            await page.locator('#account_name').fill(loginName);
             const authWait = page.waitForResponse(r => same(new URL(r.url()), api)
                 && new URL(r.url()).pathname === '/v2/user_auth' && r.request().method() === 'PUT');
             checkpoint('submitting_normal_login'); await page.getByRole('button', {name: 'Sign in', exact: true}).click();
             const authResponse = await authWait;
             const auth = await authResponse.json();
-            check(authResponse.ok() && auth.status === 'success' && auth.data?.account_id === account, 'web_login_scope_failed');
+            check(authResponse.ok() && auth.status === 'success' && auth.data?.account_id === loginAccount, 'web_login_scope_failed');
             delete auth.auth_token;
             checkpoint('waiting_authenticated_shell'); await page.locator('#login').waitFor({state: 'hidden', timeout: 25000});
             await page.waitForFunction(() => window.require('monster').apps.auth.appsStore !== undefined);
             await page.waitForLoadState('networkidle', {timeout: 15000});
             result.checks.push('normal_web_login_expected_account');
             await page.evaluate(() => window.require('monster').pub('myaccount.hide'));
+            if (scope.switching) {
+                phase = 'home_overview';
+                checkpoint('waiting_valid_home_overview_and_native_ack');
+                await page.locator('.acdc-live-queue-grid').waitFor({state: 'visible'});
+                await page.waitForFunction(homeOverviewInBrowser, scope, {timeout: 20000});
+                const homeAckUntil = Date.now() + 5000;
+                while (Date.now() < homeAckUntil && admission.subscribeAck === null && !fatal) await page.waitForTimeout(50);
+                check(!fatal, fatal || 'home_native_observation_failed');
+                check(admission.subscribeAck !== null, 'correlated_home_subscribe_ack_required');
+                result.account_switch.home_overview_verified = true;
+                phase = 'home_cleanup';
+                checkpoint('navigating_home_to_queues');
+                beginHomeDisposal(admission, timeline('navigation_disposal', 'home_queue_subscription'));
+                await page.locator('.acdc-tab[data-tab="queues"]').click();
+                await page.waitForFunction(queuesDisposedInBrowser);
+                await page.waitForFunction(accountScopeInBrowser,
+                    {...scope, account: loginAccount, requireAcdc: true}, {timeout: 10000});
+                result.account_switch.home_controller_disposed = true;
+                checkpoint('waiting_exact_home_unsubscribe_ack');
+                const homeUntil = Date.now() + 5000;
+                while (Date.now() < homeUntil && admission.unsubscribeAck === null && !fatal) await page.waitForTimeout(50);
+                closeHomeAdmission(admission, await page.evaluate(queuesDisposedInBrowser));
+                result.account_switch.home_admission_closed = true;
+                checkClean();
+                result.checks.push('pinned_home_overview_ack_and_disposal_ack_before_switch');
+                phase = 'account_switch';
+                result.account_switch.target_verified = await switchTargetAccount(page, api, scope, checkpoint);
+                await page.waitForLoadState('networkidle', {timeout: 10000});
+                checkClean();
+                result.checks.push('normal_account_browser_target_read_and_scope_verified');
+            }
             phase = 'overview';
             checkpoint('routing_to_acdc');
             await page.evaluate(() => window.require('monster').routing.goTo('apps/acdc'));
-            checkpoint('waiting_overview_grid');
-            await page.locator('.acdc-live-queue-grid').waitFor({state: 'visible'});
+            if (scope.switching) await page.waitForFunction(accountScopeInBrowser,
+                {...scope, requireAcdc: true}, {timeout: 10000});
+            // A real company switch preserves the Queues tab used for home
+            // disposal. Select Dashboard before waiting for its absent grid.
+            if (scope.switching) {
+                checkpoint('clicking_switched_dashboard_tab');
+                await page.locator('.acdc-tab[data-tab="dashboard"]').click();
+            }
+            checkpoint('waiting_overview_grid'); await page.locator('.acdc-live-queue-grid').waitFor({state: 'visible'});
             // Normal dashboard tab and queue controls, never app request/mock seams.
-            checkpoint('clicking_dashboard_tab'); await page.locator('.acdc-tab[data-tab="dashboard"]').click();
+            if (!scope.switching) {
+                checkpoint('clicking_dashboard_tab'); await page.locator('.acdc-tab[data-tab="dashboard"]').click();
+            }
             checkpoint('waiting_valid_overview_snapshot');
             await page.waitForFunction(expected => {
                 const app = window.require('monster').apps.acdc, c = app.appFlags.acdc.liveDashboardController;
                 const s = app.appFlags.acdc.liveDashboardSnapshot;
-                return c && !c.inFlight && s && !s.queueId && s.accountId === expected && app.liveSnapshotValid(s.results.live, expected, undefined, s.page);
+                return app.accountId === expected && c && !c.inFlight && s && !s.queueId && s.accountId === expected
+                    && app.liveSnapshotValid(s.results.live, expected, undefined, s.page);
             }, account);
             checkpoint('waiting_overview_ack_and_coalesced_gets_settled');
             await page.waitForFunction(expected => {
@@ -422,10 +662,21 @@ async function main() {
                     'correlated_selected_disposal_unsubscribe_ack_required');
                 result.checks.push('normal_navigation_selected_unsubscribe_sent_and_acknowledged');
             }
+            if (scope.switching) {
+                // Restore only after normal detail disposal and its real ACK.
+                // Failures instead close the ephemeral context; no logout write.
+                await page.waitForLoadState('networkidle', {timeout: 10000});
+                phase = 'account_restore';
+                result.account_switch.home_restored = await restoreHomeAccount(page, scope, checkpoint);
+                await page.waitForLoadState('networkidle', {timeout: 10000});
+                check(result.counts.auth === 1, 'exactly_one_normal_auth_required');
+                result.checks.push('normal_home_account_restored_after_detail_disposal');
+            }
             checkpoint('verifying_served_asset_hashes'); await Promise.all([...pending]); checkClean();
             check(['index.html', 'js/main.js', 'js/templates.js', 'js/config.js', 'css/style.css']
                 .every(file => result.production_assets[file])
-                && (preloadedAcdc || result.production_assets['apps/acdc/app.js']), 'actual_deployed_asset_receipts_missing');
+                && (preloadedAcdc || result.production_assets['apps/acdc/app.js'])
+                && (!scope.switching || result.production_assets[ACCOUNT_BROWSER_ASSET]), 'actual_deployed_asset_receipts_missing');
             result.checks.push('actual_served_production_bytes_match_expected_deployed_files');
             result.status = requiredSocket ? 'PASS' : (detail.websocket ? 'PASS' : 'PASS_SNAPSHOT_ONLY');
         } finally { clearTimeout(deadline); }
@@ -449,6 +700,10 @@ async function main() {
         if (result.status === 'FAIL') process.exitCode = 1;
     }
 }
+module.exports = {accountScopeOptions, accountScopeInBrowser, targetAccountResponse,
+    verifyTargetAccountResponse, switchTargetAccount, restoreHomeAccount, browserErrorDiagnostic, ACCOUNT_BROWSER_ASSET,
+    socketAdmission, socketScopeRole, recordHomeCommand, observeHomeReply, beginHomeDisposal, closeHomeAdmission,
+    homeOverviewInBrowser, queuesDisposedInBrowser};
 if (require.main === module) main().catch(e => {
     process.stderr.write(JSON.stringify({status: 'FAIL', failure: e instanceof Failure ? e.message : 'preflight_failed'}) + '\n');
     process.exitCode = 1;

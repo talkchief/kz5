@@ -6,6 +6,30 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Current UI continuation (September 7):** the user reaffirmed live summary and
+clicked queue detail only; history is postponed for future ClickHouse work.
+Company-switch acceptance exposed P0-17, an early account-picker click racing
+Common initialization. The installer-owned readiness patch passed 14 focused
+actual-Core fixture groups98957, including the old-code exception, and installer
+preservation44606 passed11 groups. Evidence: `/tmp/monster-account-picker-proof.SS17Sv`.
+Fresh source25080 is `/usr/local/src/kazoo5-installer/monster-owned-build.nUolDS/source`;
+configuration is byte-identical to live. Wiring13624 exposed an omitted existing
+lifecycle patch in the test replay; corrected wiring95129 passed12 groups.
+Production build74495 and artifact verification passed; deployment85061 changed
+only main/templates and the Core English locale, removed0 and preserved1,941
+files. Backup is `monster-owned-build.nUolDS/deployment-backup`; owned verification
+10382 passed. New main SHA256 is `a125c954578f3d006b6f2c8bad5236b7ecb33917e9af5226857c0930ed860439`;
+templates SHA256 is `fd6d1c690383e1d1dc30c73435bdfa165728434e897db2d76fc391bf7418f0bd`.
+Actual browser74850 passed7 checks (`/tmp/kazoo-monster-live-deployed.w8N0gc/receipt.json`)
+and switched browser69219 passed10 (`/tmp/kazoo-monster-live-deployed.tE4KRo/receipt.json`).
+The latter proves exact home ACK/disposal before target, normal company selection,
+target summary/detail and return home after acknowledged cleanup. Both had zero
+console/page/HTTP/blocked-scope errors and zero supplemental detail requests.
+All8 services were active with zero calls afterward. P0-17 is development-verified;
+these are not browser natural-call rendering, restricted-principal, cross-node or
+soak results. Historical work remains postponed. See
+`doc/monster_account_picker_readiness.md` and `doc/monster_deployed_account_switch.md`.
+
 **Latest continuation (September7):** live-only scope remains unchanged;
 history/WFM/ClickHouse are postponed. **P0-15 is fixed and the isolated natural
 call transition passed79231**: waiting → handled → gone, each with a fresh

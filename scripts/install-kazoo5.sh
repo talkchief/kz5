@@ -4413,6 +4413,7 @@ monster_ui_build_fingerprint() {
     local -a inputs=(
         framework_myaccount_patch:patches/monster-ui-myaccount-transition.patch
         monster-ui-branding-billing.patch:patches/monster-ui-branding-billing.patch
+        monster-ui-account-picker-readiness.patch:patches/monster-ui-account-picker-readiness.patch
         monster-ui-websocket-config.patch:patches/monster-ui-websocket-config.patch
         monster-ui-websocket-subscription-lifecycle.patch:patches/monster-ui-websocket-subscription-lifecycle.patch
         monster-ui-optional-integrations.patch:patches/monster-ui-optional-integrations.patch
@@ -4509,6 +4510,7 @@ sync_monster_ui_sources() {
         die 'Monster UI source does not match the MyAccount visibility patch'
     fi
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-branding-billing.patch"
+    apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-account-picker-readiness.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-websocket-config.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-websocket-subscription-lifecycle.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-optional-integrations.patch"

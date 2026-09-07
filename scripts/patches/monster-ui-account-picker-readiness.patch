@@ -1,0 +1,142 @@
+diff --git a/src/apps/core/app.js b/src/apps/core/app.js
+--- a/src/apps/core/app.js
++++ b/src/apps/core/app.js
+@@ -239,21 +239,48 @@
+ 		 * @param  {Object} args
+ 		 * @param  {String} [args.defaultApp]
+ 		 */
+-		_loadApps: function(args) {
+-			var self = this,
+-				loggedInAppsToLoad = _
++		_loadApps: function(args) {
++			var self = this,
++				accountBrowserGeneration = (self.appFlags.accountBrowserGeneration || 0) + 1,
++				loggedInAppsToLoad = _
+ 					.chain(monster.config.whitelabel)
+ 					.get('additionalLoggedInApps', [])
+ 					.concat(self.getPlugins())
++					.uniq()
+-					.reject(function(name) {
+-						return _.has(monster.apps, name);
+-					})
+-					.value();
+-
+-			monster.parallel(_.map(loggedInAppsToLoad, function(name) {
+-				return function(callback) {
+-					monster.apps.load(name, callback);
+-				};
++					.reject(function(name) {
++						// Even a cached Common must complete the native load callback.
++						return name !== 'common' && _.has(monster.apps, name);
++					})
++					.value();
++
++			self.appFlags.accountBrowserGeneration = accountBrowserGeneration;
++			self._setAccountBrowserState('loading');
++			monster.parallel(_.map(loggedInAppsToLoad, function(name) {
++				return function(callback) {
++					if (name !== 'common') {
++						return monster.apps.load(name, callback);
++					}
++					var completed = false;
++
++					monster.apps.load(name, function(err, loadedApp) {
++						if (completed) {
++							return;
++						}
++						completed = true;
++						if (self.appFlags.accountBrowserGeneration === accountBrowserGeneration) {
++							var validCommon = !err && loadedApp === monster.apps.common
++								&& _.isFunction(_.get(loadedApp, 'getTemplate'))
++								&& _.isFunction(_.get(loadedApp, 'accountBrowserRender'))
++								&& _.isFunction(_.get(loadedApp, 'callApi'))
++								&& _.isFunction(_.get(loadedApp, 'i18n.active'))
++								&& _.isString(loadedApp.accountId) && loadedApp.accountId.length > 0
++								&& loadedApp.accountId === _.get(monster, 'apps.auth.currentAccount.id');
++
++							self._setAccountBrowserState(validCommon ? 'ready' : 'failed');
++						}
++						callback(err, loadedApp);
++					});
++				};
+ 			}), function afterBaseAppsLoad(err, result) {
+ 				// If admin with no app, go to app store, otherwite, oh well...
+ 				var defaultApp = monster.util.isAdmin()
+@@ -405,17 +432,42 @@
+ 			container.find('[data-toggle="tooltip"]').tooltip();
+ 		},
+ 
+-		hideAccountToggle: function() {
++		_setAccountBrowserState: function(state) {
++			var self = this,
++				ready = state === 'ready',
++				link = $('#main_topbar_account_toggle_link'),
++				labels = self.i18n.active().accountToggle;
++
++			self.appFlags.accountBrowserState = state;
++			link.attr('aria-disabled', ready ? 'false' : 'true')
++				.toggleClass('disabled', !ready);
++			if (ready) {
++				link.removeAttr('tabindex');
++			} else {
++				link.attr('tabindex', '-1');
++				self.hideAccountToggle();
++			}
++			link.find('.account-browser-readiness-status')
++				.text(ready ? '' : state === 'failed' ? labels.failed : labels.loading)
++				.toggle(!ready);
++		},
++
++		hideAccountToggle: function() {
+ 			$('#main_topbar_account_toggle_container .account-toggle-content').empty();
+ 			$('#main_topbar_account_toggle_container .current-account-container').empty();
+ 			$('#main_topbar_account_toggle').removeClass('open');
+ 		},
+ 
+-		showAccountToggle: function() {
+-			var self = this,
+-				mainContainer = $('#main_topbar_account_toggle_container');
+-
+-			monster.pub('common.accountBrowser.render', {
++		showAccountToggle: function() {
++			var self = this,
++				mainContainer = $('#main_topbar_account_toggle_container');
++
++			// Submodule handlers are registered before Common is initialized.
++			// Never publish to their partial context, even on a programmatic click.
++			if (self.appFlags.accountBrowserState !== 'ready') {
++				return false;
++			}
++			monster.pub('common.accountBrowser.render', {
+ 				container: mainContainer.find('.account-toggle-content'),
+ 				customClass: 'ab-dropdown',
+ 				addBackButton: true,
+diff --git a/src/apps/core/views/app.html b/src/apps/core/views/app.html
+--- a/src/apps/core/views/app.html
++++ b/src/apps/core/views/app.html
+@@ -8,8 +8,9 @@
+ 			<a href="javascript:void(0);" class="links" id="main_topbar_current_app"></a>
+ 			<ul class="nav" id="main_topbar_nav">
+ 				<li id="main_topbar_account_toggle">
+-					<a href="javascript:void(0);" class="links" id="main_topbar_account_toggle_link" data-title="{{i18n.accountToggle.toggleTooltip}}" data-placement="bottom" data-toggle="tooltip">
+-						<i class="icon-telicon-account-jump"></i>
++					<a href="javascript:void(0);" class="links disabled" id="main_topbar_account_toggle_link" aria-disabled="true" tabindex="-1" data-title="{{i18n.accountToggle.toggleTooltip}}" data-placement="bottom" data-toggle="tooltip">
++						<i class="icon-telicon-account-jump"></i>
++						<span class="account-browser-readiness-status" role="status" aria-live="polite">{{i18n.accountToggle.loading}}</span>
+ 					</a>
+ 					<div id="main_topbar_account_toggle_container" class="topbar-dropdown-container">
+ 						<div class="account-toggle-header">
+diff --git a/src/apps/core/i18n/en-US.json b/src/apps/core/i18n/en-US.json
+--- a/src/apps/core/i18n/en-US.json
++++ b/src/apps/core/i18n/en-US.json
+@@ -636,7 +636,9 @@
+ 	"__version": "3.22",
+ 	"accountToggle": {
+ 		"currentAccountLabel": "Browsing",
+-		"toggleTooltip": "Account Jump",
++		"toggleTooltip": "Account Jump",
++		"loading": "Loading account picker...",
++		"failed": "Account picker unavailable. Reload this page to retry.",
+ 		"__comment": "UI-2092: adding search-related labels",
+ 		"__version": "3.22",
+ 		"breadcrumbSearchResults": "search results for \"{{variable}}\""

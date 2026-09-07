@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 // Actual installer functions run under no-write shell stubs; patch replay is in memory.
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+const crypto = require('node:crypto');
 const cp = require('node:child_process'), assert = require('node:assert/strict');
 const {configure} = require('./configure-monster-runtime.cjs');
 const framework = process.argv[2] || '/usr/local/src/kazoo5-installer/monster-ui';
@@ -22,6 +23,13 @@ function functionSource(name) {
 }
 let passed = 0;
 function test(name, body) { body(); passed++; console.log('PASS: ' + name); }
+function assertTextEqual(actual, expected, label) {
+    const digest = value => crypto.createHash('sha256').update(value).digest('hex');
+    // Never let assert.equal render a complete framework file on mismatch.
+    assert(actual === expected, label + ': expected_sha256=' + digest(expected)
+        + ' actual_sha256=' + digest(actual) + ' expected_bytes=' + Buffer.byteLength(expected)
+        + ' actual_bytes=' + Buffer.byteLength(actual));
+}
 test('Explicit disabled socket survives auto and disabled-to-auto regeneration', () => {
     const initial = 'define({api:{socket:false},custom:{value:"preserve"}});';
     assert.equal(evaluate(configure(initial, options)).api.socket, false);
@@ -57,7 +65,7 @@ test('New settings are persisted, fingerprinted and passed through the real sour
     }
     const fingerprint = functionSource('monster_ui_build_fingerprint');
     for (const name of ['MONSTER_UI_WEBSOCKET_URL', 'MONSTER_UI_REMOTE_BRANDING', 'MONSTER_UI_BRAINTREE',
-        'configure-monster-runtime.cjs', 'monster-ui-branding-billing.patch', 'monster-ui-websocket-config.patch',
+        'configure-monster-runtime.cjs', 'monster-ui-branding-billing.patch', 'monster-ui-account-picker-readiness.patch', 'monster-ui-websocket-config.patch',
         'monster-ui-websocket-subscription-lifecycle.patch',
         'monster-ui-optional-integrations.patch']) assert(fingerprint.includes(name), 'Missing build identity input: ' + name);
     const configureApi = functionSource('configure_monster_ui_api');
@@ -66,6 +74,7 @@ test('New settings are persisted, fingerprinted and passed through the real sour
     assert(!configureApi.includes('checkout'), 'Configuration hook must not discard operator settings');
     assert(!/checkout[^\n]*src\/js\/config\.js/.test(functionSource('sync_monster_ui_sources')));
     const syncSource = functionSource('sync_monster_ui_sources');
+    assert(syncSource.includes('apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-account-picker-readiness.patch"'));
     assert(syncSource.indexOf('patches/monster-ui-websocket-config.patch') < syncSource.indexOf('patches/monster-ui-websocket-subscription-lifecycle.patch'));
     assert(syncSource.includes('apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-websocket-subscription-lifecycle.patch"'));
 });
@@ -233,11 +242,11 @@ test('Real transport verification rejects HTML200 and upstream5xx while allowing
     }
 });
 
-test('Transition + branding/billing + socket + optional patches replay pinned framework byte-exactly', () => {
+test('Transition + readiness + branding/billing + socket/lifecycle + optional patches replay pinned framework byte-exactly', () => {
     const pin = '7ef735eada6fd0e2b96c06f32c0bb868867f7d18';
     assert.equal(cp.execFileSync('git', ['-C', framework, 'rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(), pin);
-    const files = new Map(), patches = ['monster-ui-myaccount-transition.patch', 'monster-ui-branding-billing.patch',
-        'monster-ui-websocket-config.patch', 'monster-ui-optional-integrations.patch'];
+    const files = new Map(), patches = ['monster-ui-myaccount-transition.patch', 'monster-ui-branding-billing.patch', 'monster-ui-account-picker-readiness.patch',
+        'monster-ui-websocket-config.patch', 'monster-ui-websocket-subscription-lifecycle.patch', 'monster-ui-optional-integrations.patch'];
     for (const patchName of patches) {
         const patchPath = path.join(__dirname, 'patches', patchName);
         const patch = fs.readFileSync(patchPath, 'utf8');
@@ -260,7 +269,7 @@ test('Transition + branding/billing + socket + optional patches replay pinned fr
                 while (index < lines.length && !lines[index].startsWith('@@ ')) {
                     const line = lines[index++], kind = line[0];
                     assert([' ', '+', '-'].includes(kind));
-                    if (kind !== '+') {assert.equal(line.slice(1), baseline[cursor++], patchName + ': ' + file); removed++;}
+                    if (kind !== '+') {assertTextEqual(line.slice(1), baseline[cursor], patchName + ': ' + file + ':' + (cursor + 1)); cursor++; removed++;}
                     if (kind !== '-') {result.push(line.slice(1)); added++;}
                 }
                 assert.equal(removed, oldCount); assert.equal(added, newCount);
@@ -268,8 +277,8 @@ test('Transition + branding/billing + socket + optional patches replay pinned fr
             result.push(...baseline.slice(cursor)); files.set(file, result.join('\n'));
         }
     }
-    assert.equal(files.size, 9, 'Unexpected framework patch scope');
-    for (const [file, bytes] of files) assert.equal(fs.readFileSync(path.join(framework, file), 'utf8'), bytes, 'Byte mismatch: ' + file);
+    assert.equal(files.size, 11, 'Unexpected framework patch scope');
+    for (const [file, bytes] of files) assertTextEqual(fs.readFileSync(path.join(framework, file), 'utf8'), bytes, 'Byte mismatch: ' + file);
     cp.execFileSync('git', ['-C', framework, 'apply', '--check', '--reverse',
         ...patches.map(name => path.join(__dirname, 'patches', name))], {stdio: 'pipe'});
 });

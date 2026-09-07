@@ -50,7 +50,7 @@ try {
             fs.copyFileSync(path.join(__dirname,file),path.join(scripts,file));
         write(path.join(scripts,'assets/monster-ui/package-lock.npm10.json'),fs.readFileSync(path.join(__dirname,'assets/monster-ui/package-lock.npm10.json')));
         write(path.join(scripts,'assets/monster-ui/minifier-profile.json'),fs.readFileSync(path.join(__dirname,'assets/monster-ui/minifier-profile.json')));
-        const patches=['monster-ui-myaccount-transition.patch','monster-ui-branding-billing.patch','monster-ui-websocket-config.patch','monster-ui-websocket-subscription-lifecycle.patch',
+        const patches=['monster-ui-myaccount-transition.patch','monster-ui-branding-billing.patch','monster-ui-account-picker-readiness.patch','monster-ui-websocket-config.patch','monster-ui-websocket-subscription-lifecycle.patch',
             'monster-ui-optional-integrations.patch','monster-ui-callflows-acdc-queue.patch','monster-ui-callflows-css-nesting.patch','monster-ui-npm-native-overrides.patch','monster-ui-isolated-minify.patch','monster-ui-preloaded-apps.patch'];
         for(const file of patches)write(path.join(scripts,'patches',file),fs.readFileSync(path.join(['monster-ui-npm-native-overrides.patch','monster-ui-isolated-minify.patch'].includes(file)?__dirname:path.join(project,'scripts'),'patches',file)));
         const env={SCRIPT_DIR:scripts,MONSTER_UI_REF:'a'.repeat(40),MONSTER_UI_NODE_MAJOR:'18',MONSTER_UI_LOCK_SHA256:'b'.repeat(64),
@@ -68,7 +68,7 @@ try {
         const target=path.join(scripts,'install-kazoo5.sh'),bytes=fs.readFileSync(target,'utf8');
         fs.writeFileSync(target,bytes.replace('sync_monster_ui_sources() {','sync_monster_ui_sources() {\n    # reviewed build change'));
         assert.notEqual(succeeds(shell(code,env)),original);
-        for(const file of ['verify-monster-production-artifact.cjs','patches/monster-ui-preloaded-apps.patch']){
+        for(const file of ['verify-monster-production-artifact.cjs','patches/monster-ui-preloaded-apps.patch','patches/monster-ui-account-picker-readiness.patch']){
             const target=path.join(scripts,file),bytes=fs.readFileSync(target);fs.unlinkSync(target);
             assert.notEqual(shell(code,env).status,0,'Missing fingerprint input must fail: '+file);write(target,bytes);
         }
