@@ -266,9 +266,10 @@ define(function(require) {
 		},
 
 		requestEnvelope: function(resource, data, callback) {
-			var self = this;
+			var self = this,
+				read = _.get(self.requests, [resource, 'verb']) === 'GET';
 
-			monster.request({
+			return (read ? self.requestBoundedRead.bind(self) : monster.request.bind(monster))({
 				resource: resource,
 				data: _.merge({
 					accountId: self.accountId
@@ -280,6 +281,44 @@ define(function(require) {
 					callback(self.formatApiError(error));
 				}
 			});
+		},
+
+		// Monster's request options do not forward a per-call AJAX timeout. Bound
+		// reads here so a lost response cannot retain a loading view/inFlight latch.
+		// Writes deliberately retain their existing uncertainty/retry semantics.
+		requestBoundedRead: function(options) {
+			var self = this, settled = false, xhr, timer;
+			function abort() {
+				if (xhr && typeof xhr.abort === 'function') {
+					try { xhr.abort(); } catch (_) { /* Completion is already closed. */ }
+				}
+			}
+			function finish(error, value) {
+				if (settled) { return; }
+				settled = true; clearTimeout(timer);
+				if (error) { options.error(value); }
+				else { options.success(value); }
+			}
+			timer = setTimeout(function() {
+				if (settled) { return; }
+				// Abort before the consumer can retry. Abort's error callback and
+				// any later success cannot settle this read a second time.
+				settled = true; abort();
+				options.error({ status: 0, message: self.i18n.active().acdc.states.error });
+			}, 10000);
+			try {
+				xhr = monster.request(_.assign({}, options, {
+					success: function(response) { finish(false, response); },
+					error: function(error) { finish(true, error); }
+				}));
+			} catch (error) {
+				if (settled) { throw error; }
+				finish(true, { status: 0, message: self.i18n.active().acdc.states.error });
+			}
+			return function() {
+				if (settled) { return; }
+				settled = true; clearTimeout(timer); abort();
+			};
 		},
 
 		requestCompleteList: function(resource, data, callback) {
@@ -836,6 +875,8 @@ define(function(require) {
 			clearTimeout(controller.coalesceTimer);
 			clearTimeout(controller.reconcileTimer);
 			clearTimeout(controller.admissionTimer);
+			if (typeof controller.cancelRequest === 'function') { controller.cancelRequest(); }
+			controller.cancelRequest = null;
 			if (controller.observer) { controller.observer.disconnect(); }
 			_.each(controller.bindings, function(binding) { binding.cancel && binding.cancel(); });
 			controller.bindings = {};
@@ -995,7 +1036,7 @@ define(function(require) {
 
 			if (queueId) { data.queueId = encodeURIComponent(queueId); }
 			if (paging.cursor) { data.startQueueId = encodeURIComponent(paging.cursor); }
-			monster.request({ resource: resource, data: data,
+			return self.requestBoundedRead({ resource: resource, data: data,
 				error: function(error) {
 					var codes = [_.get(error, 'status'), _.get(error, 'statusCode'), _.get(error, 'error'), _.get(error, 'data.error')];
 					callback({ live: true, denied: _.some(codes, function(code) { return ['401', '403', '404'].indexOf(String(code)) >= 0; }) }, {});
@@ -1206,9 +1247,9 @@ define(function(require) {
 			self.clearLiveDashboardTimer();
 			if (previous) { self.mountLiveDashboard(previous, generation, { updating: true }); }
 			else { self.renderLoading(self.i18n.active().acdc.states.loadingDashboard); }
-			self.requestLiveDashboard(queueId, function(errors, results) {
+			controller.cancelRequest = self.requestLiveDashboard(queueId, function(errors, results) {
 				if (!self.liveControllerActive(controller)) { return; }
-				controller.inFlight = false;
+				controller.cancelRequest = null; controller.inFlight = false;
 				if (errors.live || !self.liveSnapshotValid(results.live, accountId, queueId, paging)) {
 					if (errors.denied) { delete self.appFlags.acdc.liveDashboardSnapshot; self.stopLiveDashboard(); }
 					if (previous && !errors.denied) { self.mountLiveDashboard(previous, generation, { refreshFailed: true }); }
@@ -2264,7 +2305,9 @@ define(function(require) {
 		},
 
 		requestQueueEditor: function(resource, data, callback) {
-			monster.request({ resource: resource, data: _.merge({ accountId: this.accountId }, data),
+			// The aggregate editor requires exactly five body fields. Keep this
+			// framework option outside that body and its stable retry fingerprint.
+			monster.request({ resource: resource, data: _.merge({ accountId: this.accountId }, data, { removeMetadataAPI: true }),
 				success: function(response) { callback(null, response && response.data); },
 				error: function(response) { callback(response || { message: 'Queue editor request failed' }); }
 			});

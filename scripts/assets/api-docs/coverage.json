@@ -2301,7 +2301,7 @@
     },
     {
       "file": "applications/acdc/src/cb_queues.erl",
-      "sha256": "5254d8af1249ae8fa96e27151e248d2152cb28de15a177d2052c7870f3279ea3",
+      "sha256": "2047ae0a99f82235ada0fc50716f31e8546a5cfd124663d1166fd7511cde95bd",
       "literal_binding_nouns": [
         "queues"
       ]
@@ -2396,11 +2396,11 @@
     },
     {
       "file": "applications/acdc/src/cb_queues.erl",
-      "sha256": "5254d8af1249ae8fa96e27151e248d2152cb28de15a177d2052c7870f3279ea3"
+      "sha256": "2047ae0a99f82235ada0fc50716f31e8546a5cfd124663d1166fd7511cde95bd"
     },
     {
       "file": "applications/acdc/src/cb_queues.erl",
-      "sha256": "5254d8af1249ae8fa96e27151e248d2152cb28de15a177d2052c7870f3279ea3"
+      "sha256": "2047ae0a99f82235ada0fc50716f31e8546a5cfd124663d1166fd7511cde95bd"
     },
     {
       "file": "applications/acdc/src/kapi_acdc_agent.erl",

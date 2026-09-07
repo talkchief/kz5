@@ -32,14 +32,14 @@ function fixture(){
  vm.runInNewContext(source,context,{filename:path.join(root,'app.js')});app.accountId=A;app.appFlags.acdc.currentTab='agents';app.appFlags.acdc.requestGeneration=1;
  app.i18n.active=()=>strings;app.getTemplate=options=>options.name==='agent-queue-login'?content:options;
  view.data('agent-inventory',[{id:U,first_name:'Ada',queues:[Q]},{id:V,first_name:'Other',queues:[R]}]);view.data('queue-inventory',[{id:Q,name:'Support'},{id:R,name:'Sales'}]);
- const originalRender=app.renderAgentQueueSessions;app.renderAgentQueueSessions=()=>{};
+ const originalRender=app.renderAgentQueueSessions,originalRequest=app.request;app.renderAgentQueueSessions=()=>{};
  let memberships=[Q],queues=[{id:Q,name:'Support'},{id:R,name:'Sales'}],getReply,postReply,postError,postDeferred;
  const pending={account_id:A,agent_id:U,queue_id:Q,action:'login',runtime_only:true,state:'pending',confirmed:false,runtime_member:false,runtime_observed:true,agent_status:'ready'};
  getReply={...pending};postReply={account_id:A,agent_id:U,queue_id:Q,action:'login',runtime_only:true,state:'pending',confirmed:false};
  app.requestCompleteList=(resource,data,callback)=>{requests.push({resource,data:plain(data),read:true});callback(null,resource==='acdc.agents.queueMemberships'?memberships:queues);};
  app.request=(resource,data,callback)=>{requests.push({resource,data:plain(data)});if(resource==='acdc.agents.queueLoginStatus')callback(null,getReply);
   else if(resource==='acdc.agents.queueLogin'){if(postDeferred){postDeferred=callback;return;}callback(postError,postReply);}else throw Error('Unexpected request: '+resource);};
- return {app,content,view,dialog,timers,requests,pending,originalRender,
+ return {app,content,view,dialog,timers,requests,pending,originalRender,originalRequest,monster,
   advance(ms){clock+=ms;},setGet(value){getReply=value;},setPost(value,error){postReply=value;postError=error;},deferPost(){postDeferred=true;},finishPost(){postDeferred(null,postReply);},
   setMemberships(v){memberships=v;},setQueues(v){queues=v;},open(){app.openAgentQueueLogin(view,U,1,A);},select(id=Q){content.find('.acdc-login-queue').val(id).trigger('change');},
   click(){content.find('.acdc-confirm-queue-login').trigger('click');},check(){content.find('.acdc-check-queue-login').trigger('click');},
@@ -83,4 +83,41 @@ test('complete-list envelope refuses pagination before queue choice',()=>{const 
 test('templates separate global status and escape queue and agent labels',()=>{const table=fs.readFileSync(path.join(root,'views/agents.html'),'utf8');assert(table.includes('acdc-agent-queue-login'));assert(!table.includes('data-status="login"'));assert(table.includes('agents.globalStatus'));
  const dialog=Handlebars.compile(fs.readFileSync(path.join(root,'views/agent-queue-login.html'),'utf8'))({agentName:'<script>x</script>',i18n:strings});assert(dialog.includes('&lt;script&gt;'));assert(dialog.includes('role="status"'));assert(dialog.includes('<option value="">'));
  const rows=Handlebars.compile(fs.readFileSync(path.join(root,'views/agent-queue-sessions.html'),'utf8'))({items:[{name:'<b>Queue</b>',state:'pending',label:'Pending'}]});assert(rows.includes('&lt;b&gt;Queue&lt;/b&gt;'));});
+test('actual Monster GET response envelope reaches unchanged queue proof validator',()=>{
+ const file=process.env.KAZOO_MONSTER_REQUEST_SOURCE||'/usr/local/src/kazoo5-installer/monster-ui/src/js/lib/monster.js';
+ const bytes=fs.readFileSync(file),sent=[],f=fixture();let actual,proof;
+ const jquery={each:lodash.forEach,ajax:settings=>{sent.push(settings);return{abort(){}};}};
+ const dependencies={jquery,lodash,handlebars:Handlebars,cookies:{get(){},set(){},remove(){}},postal:{channel:()=>({}),publish(){}}};
+ vm.runInNewContext(bytes.toString('utf8'),{define(factory){actual=factory(name=>dependencies[name]||{});},window:{location:{protocol:'https:',hostname:'fixture.invalid'}},console},{filename:file,timeout:1000});
+ actual.config={api:{default:'https://fixture.invalid/v2/'}};f.app.getAuthToken=()=> 'synthetic-never-sent';
+ actual._defineRequest('acdc.agents.queueLoginStatus',f.app.requests['acdc.agents.queueLoginStatus'],f.app);
+ f.monster.request=actual.request.bind(actual);f.app.request=f.originalRequest;
+ f.app.checkAgentQueueLogin(U,Q,(error,value)=>{assert(!error);proof=value;});
+ const settings=sent[0],url=new URL(settings.url);
+ assert.equal(settings.type,'GET');assert.equal(url.pathname,'/v2/accounts/'+A+'/agents/'+U+'/queue_status');
+ assert.equal(url.searchParams.get('runtime_only'),'true');assert.equal(url.searchParams.get('queue_id'),Q);assert.equal(url.searchParams.get('action'),'login');
+ settings.success({status:'success',data:{...f.pending,state:'confirmed',confirmed:true,runtime_member:true,agent_status:'ready'}});
+ assert.deepEqual(plain(proof),{state:'confirmed',agentStatus:'ready'});assert.equal(f.app.agentQueueSession(U,Q).state,'confirmed');assert.equal(f.timers.size,0);
+ assert(bytes.equals(fs.readFileSync(file)),'Actual request source drifted');
+ console.log('INFO actual Monster request source SHA256 '+require('node:crypto').createHash('sha256').update(bytes).digest('hex'));
+});
+test('missing runtime read callback becomes unavailable without another login mutation',()=>{
+ const f=fixture();let options,aborted=0,failures=0;
+ f.app.request=f.originalRequest;f.monster.request=o=>{options=o;return{abort(){aborted++;o.error({status:0});}};};
+ f.app.agentQueueSession(U,Q,{state:'pending'});
+ f.app.checkAgentQueueLogin(U,Q,error=>{assert(error);failures++;});
+ const timer=[...f.timers].find(([,value])=>value.delay===10000);assert(timer);f.timers.delete(timer[0]);timer[1].fn();
+ assert.equal(failures,1);assert.equal(aborted,1);assert.equal(f.app.agentQueueSession(U,Q).state,'pending');
+ options.success({data:{...f.pending,state:'confirmed',confirmed:true,runtime_member:true}});assert.equal(failures,1);
+ assert.equal(f.app.agentQueueSession(U,Q).state,'pending');assert.equal(f.requests.length,0);
+});
+test('read watchdog does not change the single login POST path or claim timed-out writes failed',()=>{
+ const f=fixture();let options,result;
+ f.app.request=f.originalRequest;f.monster.request=o=>{options=o;};
+ f.app.sendAgentQueueLogin(U,Q,error=>{result=error||'accepted';});
+ assert.equal(options.resource,'acdc.agents.queueLogin');assert.equal(f.timers.size,0);assert.equal(result,undefined);
+ assert.deepEqual(plain(options.data.data),{action:'login',queue_id:Q,runtime_only:true});
+ options.success({data:{account_id:A,agent_id:U,queue_id:Q,action:'login',runtime_only:true,state:'pending',confirmed:false}});
+ assert.equal(result,'accepted');assert.equal(f.app.agentQueueSession(U,Q).state,'pending');
+});
 console.log(JSON.stringify({result:'PASS',groups,network:false,browser:false,live_writes:false}));

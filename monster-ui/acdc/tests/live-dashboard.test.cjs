@@ -214,8 +214,8 @@ test('malformed, blank and oversized queue names fall back to IDs before sorting
 test('only selected queue active records and authoritative roster IDs reach detail', () => {
   const result = model(fixture());
   assert.equal(result.calls.length, 2); assert.equal(result.members.length, 1);
-  assert.equal(result.members[0].name, 'Ada Agent'); assert.equal(result.members[0].status, 'Ready · observed');
-  assert.equal(result.members[0].membership, 'Member · observed');
+  assert.equal(result.members[0].name, 'Ada Agent'); assert.equal(result.members[0].status, 'Ready');
+  assert.equal(result.members[0].membership, 'Member');
   assert.equal(result.rosterCount, 1); assert.equal(result.selectedCard.waiting, 1); assert.equal(result.selectedCard.handling, 1);
   assert(!JSON.stringify(result.calls).includes('Other queue secret'));
   assert(!JSON.stringify(result.members).includes('Other'));
@@ -274,12 +274,12 @@ test('observation-window timestamps and retrieval age both make snapshots stale'
   assert.equal(model(f, input).stale, true, 'Receiving an old response must not reset freshness');
   assert.equal(model(f, data(true), {}, {refreshFailed: true}).stale, true);
   assert.equal(model(f).sourceTime, undefined);
-  assert(strings.acdc.dashboard.responseTime.includes('Observation window'));
+  assert.equal(strings.acdc.dashboard.responseTime, 'Data collected at:');
 });
 test('elapsed Unix values are frozen to observation window, signed times supported and invalid values unknown', () => {
   const f = fixture(), result = model(f);
   assert.equal(result.calls.find(c => c.status === 'Waiting').wait, '1:15');
-  const handled = result.calls.find(c => c.status === 'In progress'); assert.equal(handled.wait, '1:00'); assert.equal(handled.talk, '0:40');
+  const handled = result.calls.find(c => c.status === 'In Progress'); assert.equal(handled.wait, '1:00'); assert.equal(handled.talk, '0:40');
   for (const value of [null, '1', NaN, timestamp + 1]) assert.equal(f.app.liveDuration(value, timestamp), '—');
   assert.equal(f.app.liveDuration(-2, 0), '0:02');
   f.advance(40000); assert.equal(model(f).calls.find(c => c.status === 'Waiting').wait, '1:15');
@@ -496,7 +496,7 @@ test('all eight observed runtime states permit either membership without claimin
     assert.equal(f.app.liveSnapshotValid(input.live, A, Q, paging()), true);
     assert.equal(model(f, input).members[0].status, 'Unknown'); assert.equal(model(f, input).members[0].membership, 'Unknown');
   }
-  assert(strings.acdc.dashboard.memberContext.includes('does not verify endpoint reachability'));
+  assert(strings.acdc.dashboard.memberContext.includes('does not guarantee that a device can receive calls'));
 });
 test('available and unavailable empty agent rosters have distinct runtime completeness', () => {
   const f = fixture(), input = data(true); input.live.agents = agentData([]);
@@ -606,5 +606,67 @@ test('actual framework cleanup ACK permits one-second detail rebind and ACK snap
   assert.equal(f.timers.size, 0); assert(!publications.includes('auth.retryLogin'));
   assert(bytes.equals(fs.readFileSync(file)), 'Actual lifecycle source changed during fixture');
   console.log('INFO actual Monster lifecycle source SHA256 ' + require('crypto').createHash('sha256').update(bytes).digest('hex'));
+});
+test('initial real read seam times out once, leaves loading and permits a fresh retry', () => {
+  const f = fixture({dom: true}), sent = []; let aborted = 0;
+  f.app.requestLiveDashboard = f.seam;
+  f.monster.request = options => { sent.push(options); return {abort() { aborted++; options.error({status: 0}); }}; };
+  f.app.renderDashboard(); const controller = f.app.appFlags.acdc.liveDashboardController;
+  assert(controller.inFlight); assert(f.navigation.at(-1).loading);
+  f.tick(9999); assert.equal(f.errors.length, 0);
+  f.tick(1); assert.equal(f.errors.length, 1); assert.equal(aborted, 1); assert.equal(controller.inFlight, false);
+  sent[0].success({data: data().live}); sent[0].error({status: 503});
+  assert.equal(f.views.length, 0); assert.equal(f.errors.length, 1); assert.equal(f.bindings.length, 0);
+  f.errors[0].retry(); assert.equal(sent.length, 2); assert(controller.inFlight);
+  sent[1].success({data: data().live}); assert(f.current()); assert.equal(controller.inFlight, false);
+});
+test('timed-out refresh retains a stale snapshot and does not freeze future refreshes', () => {
+  const f = fixture({dom: true}), sent = []; f.app.requestLiveDashboard = f.seam;
+  f.monster.request = options => { sent.push(options); return {abort() {}}; };
+  f.app.renderLiveDashboard(Q); sent[0].success({data: data(true).live});
+  f.app.renderLiveDashboard(Q); f.tick(10000);
+  assert(f.current().spec.data.refreshFailed); assert.equal(f.app.appFlags.acdc.liveDashboardController.inFlight, false);
+  f.app.renderLiveDashboard(Q); assert.equal(sent.length, 3);
+  sent[2].success({data: data(true).live}); assert.equal(f.current().spec.data.refreshFailed, false);
+});
+test('disposing an in-flight live read aborts it and late callbacks cannot revive the controller', () => {
+  for (const boundary of ['tab', 'account']) {
+    const f = fixture({dom: true}), sent = []; let aborted = 0;
+    f.app.requestLiveDashboard = f.seam;
+    f.monster.request = options => { sent.push(options); return {abort() { aborted++; options.error({status: 0}); }}; };
+    f.app.renderDashboard(); const old = f.app.appFlags.acdc.liveDashboardController;
+    if (boundary === 'tab') f.app.renderSection('agents');
+    else { f.app.accountId = B; f.app.renderDashboard(); }
+    assert(old.stopped); assert.equal(aborted, 1);
+    sent[0].success({data: data().live}); sent[0].error({status: 403});
+    assert.equal(f.views.length, 0); assert.equal(f.errors.length, 0); assert.equal(f.bindings.length, 0);
+    f.app.stopLiveDashboard(); f.tick(10000); assert.equal(f.errors.length, 0);
+  }
+});
+test('synchronous read transport failure settles loading; duplicate callbacks settle only once', () => {
+  const f = fixture(); f.app.requestLiveDashboard = f.seam;
+  f.monster.request = () => { throw Error('fixture transport failure'); };
+  f.app.renderDashboard(); assert.equal(f.errors.length, 1); assert.equal(f.timers.size, 0);
+  assert.equal(f.app.appFlags.acdc.liveDashboardController.inFlight, false);
+  const g = fixture(); let completions = 0;
+  g.monster.request = options => { options.success({data: data().live}); options.error({status: 503}); options.success({}); };
+  g.seam.call(g.app, null, () => completions++);
+  assert.equal(completions, 1); assert.equal(g.timers.size, 0);
+});
+test('generic GET batch has a deadline for every member, including optional agent stats', () => {
+  const f = fixture(), sent = []; let result;
+  f.monster.request = options => { sent.push(options); return {abort() {}}; };
+  f.app.requestMany({agents: {resource: 'acdc.agents.list'}, stats: {resource: 'acdc.agents.stats'}}, (errors, values) => { result = {errors, values}; });
+  sent[0].success({data: []}); f.tick(9999); assert.equal(result, undefined);
+  f.tick(1); assert(result.errors.stats); assert.deepEqual(plain(result.values.agents), []);
+  sent[1].success({data: {late: true}}); assert.equal(result.values.stats, undefined);
+});
+test('dashboard labels use plain call-center wording without changing API field names', () => {
+  function values(value) { return typeof value === 'string' ? [value] : Object.values(value).flatMap(values); }
+  assert(values(strings.acdc.dashboard).every(value => !/\bobserved\b/i.test(value)));
+  assert.equal(strings.acdc.dashboard.elapsedHandling, 'In Progress');
+  assert.equal(strings.acdc.dashboard.observedHandling, 'In Progress');
+  assert.equal(strings.acdc.dashboard.observedWaiting, 'Waiting');
+  assert.equal(strings.acdc.dashboard.runtimeStates.ready, 'Ready');
 });
 console.log(JSON.stringify({result: 'PASS', groups, network: false, browser: false, live_writes: false}));

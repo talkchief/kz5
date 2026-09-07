@@ -44,6 +44,7 @@
         ,allowed_methods/0, allowed_methods/1, allowed_methods/2, allowed_methods/3
         ,resource_exists/0, resource_exists/1, resource_exists/2, resource_exists/3
         ,content_types_provided/1, content_types_provided/2
+        ,content_types_provided/3, content_types_provided/4
         ,validate/1, validate/2, validate/3, validate/4
         ,put/1, put/2, put/3
         ,post/2, post/3
@@ -205,7 +206,18 @@ content_types_provided(Context, ?STATS_PATH_TOKEN) ->
     cb_context:add_content_types_provided(Context
                                          ,[{'to_json', ?JSON_CONTENT_TYPES}
                                           ,{'to_csv', ?CSV_CONTENT_TYPES}
-                                          ]).
+                                          ]);
+content_types_provided(Context, _) -> Context.
+
+%% Content negotiation dispatch includes every path token. Non-stats routes
+%% use the existing context handlers; route existence/auth remain independent.
+-spec content_types_provided(cb_context:context(), path_token(), path_token()) ->
+          cb_context:context().
+content_types_provided(Context, _, _) -> Context.
+
+-spec content_types_provided(cb_context:context(), path_token(), path_token(), path_token()) ->
+          cb_context:context().
+content_types_provided(Context, _, _, _) -> Context.
 
 %%------------------------------------------------------------------------------
 %% @doc Check the request (request body, query string params, path tokens, etc)

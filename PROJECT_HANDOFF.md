@@ -6,6 +6,78 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Startup loader candidate — September 7:** installer-owned singleflight patch
+passes16 actual-loader regression groups (`fe213e`/`d8fe85`), including old-source
+reproduction of missing ACDC translations. Fresh full installer patch preparation
+passed `f65634`/`96a194` at monster-owned-build.MwsDYg/source. Production build
+`c56a9e`, session26766, is in progress; do not assume deployed. The wrapper
+temporarily pauses ecallmgr/test phones and restores them on exit. Check the
+actual handle and service states before further jobs. See
+`doc/monster_app_load_singleflight.md`.
+
+**Queue creation acceptance — September 7:** real deployed form PUT returned201
+and a complete editor operation; the harness incorrectly expected200. Exact
+readback/owned-queue cleanup then passed `09a4d6`/`131789` without another create.
+The operation receipt remains, the queue is gone, and all31 reported agent states
+and memberships match the pre-test snapshot (`86fb9a`). Details and protected
+ledger location are in `doc/acdc_ui_stabilization_20260907.md`.
+
+**Queue API log fix deployed — September 7:** P0-23 now has matching real
+before/after HTTP evidence: six successful reads emitted six handler errors
+before the fix and no error lines afterward (`499e52`/`b61caa`,
+`da07ec`/`86d759`). Only cb_queues was hot-loaded; no service restart. Runtime
+hash/export verification passed `0c9f54`/`84b347`, rollback artifact retained at
+`/tmp/kazoo-queue-types-deployment.XS9QCz`. Current production-metadata compile
+passes six tests; matching installed baseline fails three. Source and details:
+`doc/acdc_ui_stabilization_20260907.md`. No cluster-wide reliability claim.
+
+**UI deployed checkpoint — September 7:** dashboard wording now removes observed
+from user-facing values and uses In Progress. Root52 dashboard groups pass
+`078c38`/`a26140`; queue-login23 pass `b01286`. Actual queue-create400 was traced
+to Monster injecting ui_metadata into the strict editor body. The local
+requestQueueEditor wrapper opts out without relaxing backend validation;
+eight actual-serializer groups pass `e412fe`. Build stage hXJTv6 passed production
+artifact verification (`130be8`/`b8aff7`), then owned deployment changed three
+files and preserved live configuration (`6d7352`/`d9a24c`). Both temporarily
+paused services were restored and verified active. Fresh browser `cbf2ed`/`80cbbf`
+verified the plain labels and In Progress, plus confirmed membership without a
+login mutation. UI-02 is closed; broader editor error-recovery and timeout acceptance remain
+open. Startup still emits a TypeError reading acdc; do not call that resolved. See
+`doc/acdc_ui_stabilization_20260907.md` for evidence and remaining acceptance.
+
+**Newest operator issues — September 7:** P0-22 is a login VERIFICATION display
+bug, not a failed login (operator correction). Root actual read-only HTTP proof
+and selected-queue live agree Agent12 is ready and a runtime queue member.
+P0-25 tracks indefinite ACDC loading; read-deadline changes are source tested
+and deployed, with intermittent startup diagnosis still open. P0-26 tracks new
+queue creation400; the deployed serializer opt-out fixes unwanted ui_metadata,
+and real create/readback acceptance subsequently passed. UI-01 tracks separately
+reproduced storage404. DASH-10 requests caller name/number display with preserved
+internal call identity. P0-24 explains the latest callback refusal: caller ID
+was SIP username `kz5_test`, while alternate-number collection is disabled.
+Do not weaken callback validation or call these reports resolved without their
+actual-browser/call acceptance. No working agent state was changed by diagnosis.
+
+Focused deployed-browser read-only probe `54433a`/`1326c7` displayed the initial
+dashboard and actual Agent12 queue-login dialog as "Queue membership confirmed";
+the real UI proof GET returned confirmed/ready. It sent no login mutation.
+One TypeError was observed without enough detail yet to identify its cause, and
+an earlier run timed out at shell readiness. The operator's intermittent/stale
+UI report is therefore still open, not disproven by this successful attempt.
+Source-only GET-deadline changes and content-negotiation handlers await root
+tests/deployment. Bridge source is sanitized under services/push-bridge, but
+its installer option/activation are not ready; imported reliability/security
+gaps are explicitly documented there. Production bridge was not changed.
+
+**New bridge task — September 7:** user requested importing the mobile push
+bridge installed on production Kamailio `10.1.0.28` into kz5 and exposing it as
+an installable service in the modular SH installer. Tracked as `INST-13`.
+Production access is discovery/source retrieval only: no restart, configuration
+change or real notification test. Identify the actual implementation before
+claiming Pusher/FCM support; exclude all production secrets and customer data
+from Git. This explicitly adds bridge packaging work without resuming postponed
+history or voice/callback deployment work.
+
 **Current live isolation result — September7:** all17 real HTTP/native Blackhole
 permission cases pass (`573eb1`/`0d57c2`) with4 actual nonadmin principals. This
 includes exact allowed queue, same-account other queue, foreign account/binding,
