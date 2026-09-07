@@ -68,9 +68,11 @@ durable. Never erase the table to make the new reader appear healthy.
 5. Rebuild the complete header-consumer cohort. Stats query/responders,
    dashboard collector/projection, archive and cleanup code must agree. The
    installer already forces full compilation, but that is not runtime migration.
-   Kazoo-apps installer readiness must also await verified stats readiness and
-   separately verify broker consumption; an active systemd unit alone is not
-   proof. This startup/readiness integration remains an installer release gate.
+   Kazoo-apps installer readiness now calls `acdc_maintenance:stats_ready/0`,
+   requiring verified stats admission and native broker consumption before exact
+   `ready` is accepted. Runtime protocol and actual shell-hook tests pass;
+   live/fresh-host installer acceptance remains a release gate. An active
+   systemd unit alone is not proof.
 6. Implement explicit old responder/archive-worker drain and read admission for
    the controlled stats-child restart while ETS managers remain alive. Pausing
    broker consumers alone does not drain independently spawned workers or old
@@ -87,6 +89,30 @@ responder/archive acknowledgements; pre-fix omitted-row/index-update failures
 and post-migration successful queries/updates.
 
 ## Existing evidence and its limits
+
+### Installer readiness source checkpoint
+
+`acdc_maintenance:stats_ready/0` obtains the current supervisor child, requires
+ready-table admission, checks the native `is_consuming` result with a 1000ms
+call timeout, then rechecks the same tid and current child. It returns only
+`ready`, `{error,not_consuming}` or `{error,source_unavailable}`, never private
+state. `verify_acdc_stats_ready` invokes this through the existing protected
+local `erl_call` path; only exit-zero plus exact `ready` passes. Polling is
+bounded by `KAZOO_START_TIMEOUT`, with an outer 10-second per-RPC cap and
+two-second retries. The overall deadline can be exceeded by a final in-flight
+RPC/retry; this is not a hard real-time deadline. Verification performs no
+repair or migration itself.
+
+Root startup17 groups pass `8ecdb9/dff757`, evidence
+`/tmp/kazoo-stats-startup.xiLcue`, with13 fresh production compiles. Nine
+controlled readiness protocol cases cover success, legacy/malformed/refused
+admission, non-consuming/invalid broker state, second-source change and replaced
+supervisor child. The actual native listener still has a controlled unavailable
+broker and correctly fails overall readiness after local migration succeeds.
+This is not a successful real broker-ACK test. Installer5 source-gate groups
+pass `e8f999/b6a8d2`, including exact response/exit-code rejection, retry,
+cookie/tool failure, dry run and verifier ordering. Read-only installer safety
+regressions pass `f77e99`; shell syntax and diff whitespace also pass.
 
 ### Direct maintenance reads and first-replacement drain
 

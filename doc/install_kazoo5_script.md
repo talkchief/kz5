@@ -135,7 +135,7 @@ without moving the whole compatibility set is not considered an upgrade.
 | `couchdb` | `couchdb.service` | exact RPM version and authenticated `/_up` response |
 | `rabbitmq` | `rabbitmq-server.service` | exact RabbitMQ/Erlang versions, broker ping, listener, Kazoo user, consistent-hash plugin |
 | `haproxy` | `haproxy.service` | config parser plus both CouchDB proxy ports |
-| `kazoo-apps` | `kazoo-apps.service` | Erlang apps, Crossbar JSON API, ACDC DB/app, master account, SUP |
+| `kazoo-apps` | `kazoo-apps.service` | Erlang apps, migrated/consuming ACDC stats, Crossbar JSON API, ACDC DB/app, master account, SUP |
 | `ecallmgr` | `kazoo-ecallmgr.service` | Erlang app and configured FreeSWITCH nodes |
 | `freeswitch` | `kazoo-freeswitch.service` | version, CLI, Sofia SIP profile, process stability, `mod_kazoo`, SpanDSP, ecallmgr link when local |
 | `kamailio` | `kazoo-kamailio.service` | config, SIP OPTIONS, RPC, established AMQP transport, queue when RabbitMQ is local, SQLite, dispatcher, SBC ACL |
@@ -335,13 +335,25 @@ arguments. Commands such as these are then available:
 sup kazoo_maintenance syslog_level debug
 sup kapps_controller running_apps
 sup kapps_config get kapps_controller kapps
+sup acdc_maintenance stats_ready
 sup -n ecallmgr ecallmgr_maintenance list_fs_nodes
 ```
 
-ACDC is part of the default `KAZOO_APPS_LIST`. The installer fetches its pinned
-community repository, applies the OTP 26 compatibility fix, compiles it with
-Kazoo, persists it in `kapps_controller.kapps`, and verifies both the running
-application and the `acdc` CouchDB database.
+ACDC is part of the default `KAZOO_APPS_LIST`. The installer compiles the source
+tracked directly under this kz5 repository's `applications/acdc`, persists it
+in `kapps_controller.kapps`, and verifies the running application and `acdc`
+CouchDB database. It must not fetch, patch or commit a separate ACDC checkout.
+
+The new `stats_ready` source returns exactly `ready` only when the current
+stats worker grants access to both migrated retained tables, its native listener
+reports broker consumption, and a second admission/current-worker check agrees.
+Otherwise it returns a fixed `source_unavailable` or `not_consuming` error. The
+installer retries this read-only RPC within `KAZOO_START_TIMEOUT` and refuses
+success on an old/missing function, failed RPC or any response other than exact
+`ready`. It does not delete retained data or restart a worker as a repair.
+This is a local readiness sample, not ongoing broker health, cluster failover,
+call-capacity or backup acceptance. Source tests pass; live deployment remains
+gated by [the retained-stats upgrade procedure](dashboard_caller_identity_upgrade.md).
 
 The staged callback integration adds durable queue-position metadata, a
 correlated caller pause/register/resume/abandon menu, bounded returned-caller

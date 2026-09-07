@@ -6,6 +6,31 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Installer stats readiness — September7, source tested, NOT deployed:**
+New `sup acdc_maintenance stats_ready` returns exact `ready` only for the same
+current stats child with verified table admission before/after a true native
+broker-consumption check. Fixed unavailable/non-consuming errors expose no
+private state. `verify_kazoo_apps` now requires this read-only RPC after Erlang
+application checks, before API success. Exit-nonzero, legacy/unknown output and
+timeouts cannot pass; no delete/restart/repair is attempted. Installer guidance
+now also removes an obsolete instruction claiming it fetches separate ACDC.
+
+Root startup17 groups pass `8ecdb9/dff757`, evidence
+`/tmp/kazoo-stats-startup.xiLcue` (13 fresh production modules, no TEST).
+Installer5 source-gate groups pass `e8f999/b6a8d2`; read-only verifier regressions
+pass `f77e99`. Positive readiness protocol uses controlled responses; real native
+listener with unavailable mocked broker correctly returns not_consuming. This
+does not establish a real broker ACK or installed/fresh-host acceptance.
+All root jobs are terminal. No live deployment/service/account changes.
+
+Drain helper review found its first source draft incorrectly assumed registered
+ETS manager names. Native `WORKER_NAME_ARGS` sets supervisor child IDs only and
+uses unregistered `kazoo_etsmgr_srv:start_link/1`. The agent is correcting it to
+the actual child mapping and updating fixtures before root executes it. Treat
+the untracked helper/fixture/runner as unaccepted until the next explicit proof.
+The previously published checkpoint `457f551` is independently verified on
+remote master (`c7a375/d4af49`, readback `c2ae9f`).
+
 **Direct maintenance read admission — September7, source tested, NOT deployed:**
 `acdc_stats:find_call/1` now requires before/after admission from the same ready
 stats owner and checks the exact opaque table identity/ownership. Missing,

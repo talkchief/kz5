@@ -25,6 +25,51 @@ def shell(code, env=None):
 
 
 class SourceGateTests(unittest.TestCase):
+    def stats_readiness(self, **overrides):
+        stubs = """verify_cookie_copy(){
+    [[ $* == '/fixture/runtime.cookie kazoo' ]] || exit 99
+    return "$COOKIE_STATUS"
+}
+find_erl_call(){ printf '%s\\n' /fixture/erl_call; return "$FIND_STATUS"; }
+timeout(){ [[ $1 == 10 ]] || exit 99; shift; "$@"; }
+runuser(){
+    [[ $* == '--user kazoo -- /fixture/erl_call -name kazoo_apps@fixture.example -a acdc_maintenance stats_ready []' ]] || exit 99
+    printf '%s\\n' "$RESPONSE"
+    return "$RPC_STATUS"
+}
+sleep(){
+    [[ $1 == 2 ]] || exit 99
+    RESPONSE=$NEXT_RESPONSE
+    RPC_STATUS=$NEXT_STATUS
+    SECONDS=$((SECONDS + 2))
+}
+"""
+        env = {"DRY_RUN": "false", "KAZOO_RUNTIME_COOKIE_FILE": "/fixture/runtime.cookie",
+               "KAZOO_START_TIMEOUT": "5", "KAZOO_NODE_NAME_TYPE": "-name",
+               "KAZOO_HOSTNAME": "fixture.example", "COOKIE_STATUS": "0", "FIND_STATUS": "0",
+               "RESPONSE": "ready", "RPC_STATUS": "0", "NEXT_RESPONSE": "unavailable",
+               "NEXT_STATUS": "0", **overrides}
+        return shell(stubs + hook("verify_acdc_stats_ready") + '\nverify_acdc_stats_ready\n', env)
+
+    def test_stats_readiness_exact_success_and_retry(self):
+        self.assertEqual(self.stats_readiness().returncode, 0)
+        self.assertEqual(self.stats_readiness(RESPONSE="{error,not_consuming}", NEXT_RESPONSE="ready").returncode, 0)
+        self.assertEqual(self.stats_readiness(RESPONSE="ready", RPC_STATUS="1", NEXT_RESPONSE="ready").returncode, 0)
+        for response in ["", "ok", "true", "{ok, ready}", " ready", "ready\\nnoise",
+                         "{error,source_unavailable}", "{error,not_consuming}", "{badrpc,undef}"]:
+            with self.subTest(response=response):
+                self.assertEqual(self.stats_readiness(RESPONSE=response, NEXT_RESPONSE=response).returncode, 42)
+        self.assertEqual(self.stats_readiness(RPC_STATUS="1", NEXT_RESPONSE="ready", NEXT_STATUS="1").returncode, 42)
+        self.assertEqual(self.stats_readiness(FIND_STATUS="1").returncode, 42)
+        self.assertNotEqual(self.stats_readiness(COOKIE_STATUS="1").returncode, 0)
+
+    def test_stats_readiness_dry_run_and_installer_order(self):
+        self.assertEqual(self.stats_readiness(DRY_RUN="true", COOKIE_STATUS="99", FIND_STATUS="99").returncode, 0)
+        code = hook("verify_kazoo_apps")
+        self.assertEqual(code.count("verify_acdc_stats_ready"), 1)
+        self.assertLess(code.index("verify_erlang_applications"), code.index("verify_acdc_stats_ready"))
+        self.assertLess(code.index("verify_acdc_stats_ready"), code.index("api_result=$(curl"))
+
     def test_canonical_safe_paths_accept_and_metacharacters_fail(self):
         code = hook("validate_install_directory") + '\nvalidate_install_directory KAZOO_ROOT "$VALUE"\n'
         for value in ["/opt/kz5", "/var/www/monster-ui", "/srv/.private/Kazoo_5.0-build"]:

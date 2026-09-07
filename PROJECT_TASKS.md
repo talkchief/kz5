@@ -44,6 +44,12 @@ the latest engineering handoff takes precedence for current deployment state.
   evidence `/tmp/kazoo-stats-startup.fTo5ct`. Not deployed. Remaining dynamic
   callback admission and actual old-worker drain/replacement still gate release;
   source-only drain helper work is not yet accepted or included in this proof.
+  Installer readiness is now source-tested too: `acdc_maintenance:stats_ready/0`
+  requires the same admitted stats child and true native broker consumption;
+  `verify_kazoo_apps` polls the protected RPC and accepts only exact `ready`
+  with exit zero. Root startup17 groups `8ecdb9/dff757`, installer5 groups
+  `e8f999/b6a8d2` and read-only safety `f77e99` pass. Not deployed; actual broker
+  ACK, safe retained-table replacement and fresh/split-host acceptance remain.
 - **P0-25 additional source fix, not deployed:** initial pending dashboard
   views now own a disposal observer too. A detached loading view previously
   allowed its watchdog to overwrite the replacement screen. Reproduced in

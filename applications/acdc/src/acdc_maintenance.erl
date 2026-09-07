@@ -23,6 +23,7 @@
         ,register_views/0
 
         ,flush_call_stat/1
+        ,stats_ready/0
         ,queues_summary/0, queues_summary/1, queue_summary/2
         ,queues_detail/0, queues_detail/1, queue_detail/2
         ,queues_restart/1, queue_restart/2
@@ -350,6 +351,30 @@ flush_call_stat(CallId) ->
                                      ,?ABANDON_INTERNAL_ERROR
                                      ),
             io:format("setting call to 'abandoned'~n", [])
+    end.
+
+%% Fixed, non-sensitive readiness result for SUP and installer verification.
+%% Application/systemd liveness alone does not prove retained-table migration
+%% completed or that the native listener acknowledged broker consumption.
+-spec stats_ready() -> 'ready' | {'error', 'source_unavailable' | 'not_consuming'}.
+stats_ready() ->
+    try
+        {'ok', Pid} = acdc_stats_sup:stats_srv(),
+        {'ok', Tid} = gen_listener:call(Pid, stats_call_read_source, 1000),
+        true = is_reference(Tid),
+        %% Same native request as gen_listener:is_consuming/1, with an explicit
+        %% shorter timeout so an unresponsive worker cannot stall verification.
+        case gen_server:call(Pid, is_consuming, 1000) of
+            true -> 'ok';
+            false -> throw(not_consuming);
+            _ -> throw(source_unavailable)
+        end,
+        {'ok', Tid} = gen_listener:call(Pid, stats_call_read_source, 1000),
+        {'ok', Pid} = acdc_stats_sup:stats_srv(),
+        'ready'
+    catch
+        throw:not_consuming -> {'error', 'not_consuming'};
+        _:_ -> {'error', 'source_unavailable'}
     end.
 
 -spec queues_summary() -> 'ok'.

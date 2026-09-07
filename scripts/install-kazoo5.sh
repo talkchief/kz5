@@ -3032,6 +3032,29 @@ verify_erlang_applications() {
     die "Erlang applications did not become ready on ${node_prefix}: ${expected_apps}"
 }
 
+verify_acdc_stats_ready() {
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would require migrated ACDC stats tables and native broker consumption'
+        return 0
+    fi
+    local erl_call_bin output deadline
+    verify_cookie_copy "$KAZOO_RUNTIME_COOKIE_FILE" kazoo
+    erl_call_bin=$(find_erl_call) || die 'erl_call was not installed with Erlang'
+    deadline=$((SECONDS + KAZOO_START_TIMEOUT))
+    while ((SECONDS < deadline)); do
+        if output=$(timeout 10 runuser --user kazoo -- "$erl_call_bin" \
+            "$KAZOO_NODE_NAME_TYPE" "kazoo_apps@${KAZOO_HOSTNAME}" \
+            -a 'acdc_maintenance stats_ready []' 2>/dev/null); then
+            if [[ $output == ready ]]; then
+                log 'PASS ACDC retained stats migrated and native listener consuming'
+                return 0
+            fi
+        fi
+        sleep 2
+    done
+    die 'ACDC stats did not confirm migrated tables and broker consumption; retain tables and inspect startup readiness'
+}
+
 verify_erlang_logging() {
     local node_prefix=$1 erl_call_bin=$2 output
     local expected_root="/var/log/kazoo/$node_prefix"
@@ -3070,6 +3093,7 @@ verify_kazoo_apps() {
     verify_kazoo_production_beams
     verify_erlang_node kazoo-apps.service kazoo_apps
     verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
+    verify_acdc_stats_ready
     deadline=$((SECONDS + KAZOO_START_TIMEOUT))
     while ((SECONDS < deadline)); do
         api_result=$(curl --connect-timeout 5 --max-time 15 --silent --show-error \

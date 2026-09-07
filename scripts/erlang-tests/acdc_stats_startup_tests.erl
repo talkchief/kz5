@@ -24,6 +24,7 @@ startup_test_() -> {timeout,90,{setup,fun setup/0,fun teardown/1,fun(_)->[
     {"second admission refusal with the same owner and tid withholds JSON",wrap(fun()->read_revoked(refused) end)},
     {"second admission timeout with the same owner and tid withholds JSON",wrap(fun()->read_revoked(timeout) end)},
     {"ready source admission refuses replacement table identities",wrap(fun ready_read_source/0)},
+    {"installer readiness requires matching admission, consumption and current worker",wrap(fun maintenance_readiness/0)},
     {"actual gen_listener defers responder/channel setup until real migration",wrap(fun native_listener/0)}
 ] end}}.
 
@@ -246,6 +247,7 @@ read_unavailable()->
     Unavailable={error,source_unavailable},
     meck:expect(acdc_stats_sup,stats_srv,fun()->{error,not_found} end),
     ?assertEqual(Unavailable,acdc_stats:find_call(<<"1">>)),
+    ?assertEqual(Unavailable,acdc_maintenance:stats_ready()),
     ?assertEqual(ok,acdc_maintenance:flush_call_stat(<<"1">>)),
     ?assertEqual(0,count(changed)),
     ?assertEqual(0,count(forbidden_publish)),
@@ -320,12 +322,43 @@ ready_read_source()->
     ets:delete(C),{_,_}=donate(call,[record(2)],self()),
     ?assertEqual({reply,{error,source_unavailable},Ready},
         acdc_stats:handle_call(stats_call_read_source,{self(),make_ref()},Ready)).
+maintenance_readiness()->
+    Tid=make_ref(),Gate={'$client_call',stats_call_read_source},
+    Unavailable={error,source_unavailable},
+    Cases=[{[{Gate,{ok,Tid}},{is_consuming,true},{Gate,{ok,Tid}}],false,ready},
+        {[{Gate,ok}],false,Unavailable},
+        {[{Gate,{error,source_unavailable}}],false,Unavailable},
+        {[{Gate,{ok,not_a_tid}}],false,Unavailable},
+        {[{Gate,{ok,Tid}},{is_consuming,false}],false,{error,not_consuming}},
+        {[{Gate,{ok,Tid}},{is_consuming,<<"true">>}],false,Unavailable},
+        {[{Gate,{ok,Tid}},{is_consuming,true},{Gate,{error,source_unavailable}}],false,Unavailable},
+        {[{Gate,{ok,Tid}},{is_consuming,true},{Gate,{ok,make_ref()}}],false,Unavailable},
+        {[{Gate,{ok,Tid}},{is_consuming,true},{Gate,{ok,Tid}}],true,Unavailable}],
+    [begin
+        Parent=self(),Pid=spawn(fun()->readiness_protocol(Plan,Parent) end),
+        Ref=monitor(process,Pid),put(startup_test_children,[Pid|get(startup_test_children)]),
+        ets:delete(?COUNTS,readiness_sup),
+        meck:expect(acdc_stats_sup,stats_srv,fun()->
+            case bump(readiness_sup) of
+                2 when Replace -> {ok,Parent};
+                _ -> {ok,Pid}
+            end end),
+        ?assertEqual(Expected,acdc_maintenance:stats_ready()),
+        receive {readiness_protocol_complete,Pid}->ok after 1000->error(readiness_protocol_incomplete) end,
+        Pid!finish,receive {'DOWN',Ref,process,Pid,normal}->ok after 1000->error(readiness_owner_exit_timeout) end
+    end||{Plan,Replace,Expected}<-Cases].
+readiness_protocol([],Parent)->
+    Parent!{readiness_protocol_complete,self()},receive finish->ok end;
+readiness_protocol([{Request,Reply}|Rest],Parent)->
+    receive {'$gen_call',From,Request}->gen_server:reply(From,Reply),readiness_protocol(Rest,Parent)
+    after 2000->error(readiness_request_missing) end.
 native_listener()->
     {ok,Pid}=acdc_stats:start_link(),unlink(Pid),Ref=monitor(process,Pid),
     put(startup_test_children,[Pid|get(startup_test_children)]),
     meck:expect(acdc_stats_sup,stats_srv,fun()->{ok,Pid} end),
     try
         ?assertEqual(#{phase=>waiting_tables,reason=>undefined},gen_listener:call(Pid,stats_readiness)),
+        ?assertEqual({error,source_unavailable},acdc_maintenance:stats_ready()),
         ?assertEqual({error,source_unavailable},acdc_stats:find_call(<<"1">>)),
         ?assertEqual([],gen_listener:responders(Pid)),?assertEqual(undefined,gen_listener:queue_name(Pid)),
         ?assertEqual(false,gen_listener:is_consuming(Pid)),no_activation(),
@@ -344,6 +377,7 @@ native_listener()->
         ?assertEqual(1,count({config,<<"cleanup_period_ms">>})),
         %% Requisition is controlled false: local readiness is not AMQP ACK.
         ?assertEqual(false,gen_listener:is_consuming(Pid)),
+        ?assertEqual({error,not_consuming},acdc_maintenance:stats_ready()),
         exit(Pid,kill),receive {'DOWN',Ref,process,Pid,killed}->ok after 1000->error(listener_exit_timeout) end,
         [receive {'ETS-TRANSFER',Name,Pid,startup_fixture}->?assertEqual(Tid,ets:whereis(Name))
          after 1000->error(heir_return_timeout) end ||
