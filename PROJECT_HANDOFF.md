@@ -6,6 +6,25 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Current voice inventory:**406/584 technical QA (EN31/HE86/FR160/ES25/AR104),
+680 requests,96 retries,178 failed and no pending/indeterminate identity. Four
+bounded concise-v2 Hebrew retries recovered two recordings; four WAVs saved.
+See `doc/acdc_cardinal_concise_synthesis.md`; older counts below are historical.
+No new cardinal runtime activation or listening approval is implied.
+
+**Latest warm-up and callback proof:** all210 deployed Gemini clips and420
+running cache mappings verify; extension1000 native request construction passes.
+Live isolated1001 retry `6e1abf/session73991/6fd51b` proves confirmation, missed
+first return, durable retry and second native agent bridge. See
+`doc/development_warmup_20260907.md`; this is not the operator1000 phone test.
+
+Verified-quorum permanent-message quarantine passes145 bridge tests and actual
+broker DLQ/continued acceptance/restored-policy proof (`51559a/3e77be`). Main-SH
+deployment `e1b349/b94ad2` passes: release51d97e626ef2, PID423856, NRestarts0;
+existing legacy dev routing unchanged. See
+`doc/push_bridge_permanent_quarantine.md`. Transient retries/freshness/phones open.
+Independent main-SH verify-only passes `55f252/session16031/cbbb2c`.
+
 **Latest voice checkpoint:**404/584 technical QA (EN31/HE84/FR160/ES25/AR104),
 676 historical requests and92 cumulative retries. All initial identities are
 attempted;180 FAILED, none PENDING or REQUESTING. Added65 Arabic recordings

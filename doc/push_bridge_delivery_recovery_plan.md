@@ -6,6 +6,12 @@ synthetic dead-letter routing portion is now implemented and tested. See
 provider outcome/retry, source freshness and failure-recovery parts remain OPEN;
 do not redo the completed topology work or infer that it closes the whole gate.
 
+Further focused source change: explicit verified-quorum mode now quarantines
+local malformed payloads and a conservative provider-specific set of permanent
+rejections, while leaving legacy and transient/uncertain behavior unchanged.
+See `push_bridge_permanent_quarantine.md` for exact dispositions and evidence.
+This closes only that classification/owner-settlement slice, not the full plan.
+
 The imported bridge configuration comes from production Kamailio `10.1.0.28`.
 The protected copy is outside Git; never embed its credentials, device tokens,
 private keys or production unit environment in this repository. The development
@@ -39,6 +45,30 @@ Current FCM internal retries must be reconciled with the broker attempt ceiling.
 DLQ retention and topology permissions must be specified before deployment.
 
 ## Freshness contract required
+
+Read-only producer audit (September7): the pinned
+`kazoo-configs-kamailio/kamailio/pusher-role.cfg` builds native `push_req` without
+a timestamp, expiry or deadline (lines143–144), then uses three-argument
+`kazoo_publish` (line158). Its SHA-256 is
+`0a27014d9582e4e7af00d027b5e68ff61e2298a694444bd3e31f828f5cfd1350`.
+The local Kamailio source `src/modules/kazoo/kz_amqp.c`, SHA-256
+`798cefdca441ed7f73487d8bbf65683d6bec3c40337b8a59ba673b57cb614782`, sets content
+type but no AMQP timestamp/expiration in `kz_amqp_send_ex`. Therefore the
+Gregorian timestamp from the Erlang publisher does not cover this actual
+Kamailio producer path. Do not infer freshness from arrival time or Msg-ID.
+
+Next implementation boundary: additive, explicitly versioned producer metadata
+in the JSON envelope, independently validated by strict bridge mode. Preserve
+legacy fields and make missing freshness fail closed only in the new explicit
+mode. Producer changes belong in the tracked installer patch/config pipeline,
+not a private edit on production10.1.0.28. No such change has been deployed.
+
+Additional source-review finding to reproduce/fix before using the optional
+four-argument header path: `add_amqp_headers` stores string pointers into a
+temporary buffer that it frees before publish. This is a suspected header
+lifetime defect, not a reproduced crash or evidence about current three-argument
+push traffic. Keep it out of the freshness implementation path; add a bounded
+regression and tracked build patch before admitting that API.
 
 Native `push_req` does not currently provide a validated, unambiguous expiry
 contract. Its optional `Expires` integer must not be guessed to be Unix time.

@@ -6,6 +6,7 @@ starts a provider worker or restarts RabbitMQ. Deletes only resources created by
 this invocation; retains a protected receipt even on failure.
 """
 import datetime
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "services/push-brid
 import amqpstorm
 from amqp_management import ManagementVerificationFailure, verify_topology
 from amqp_topology import configure, plan
+from delivery_settlement import OwnerSettlements
 
 
 def main():
@@ -92,6 +94,44 @@ def main():
             raise RuntimeError("synthetic_dead_letter_mismatch")
         dead.ack()
         receipt["checks"].append("confirmed_synthetic_publish_reject_and_dead_letter_readback")
+        # Actual broker messages, actual owner-thread settlement and a separate
+        # worker thread; worker outcomes are synthetic, never provider requests.
+        settlements = OwnerSettlements(1, quarantine=True)
+        def settle_synthetic(body, outcome, provider):
+            if channel.basic.publish(body, exchange=settings["EXCHANGE"], routing_key="fixture.only",
+                                     properties={"delivery_mode": 2}) is not True:
+                raise RuntimeError("synthetic_publish_not_confirmed")
+            delivered = receive(wanted.work_queue)
+            if delivered.body != body:
+                raise RuntimeError("synthetic_message_mismatch")
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                settlements.submit(executor, lambda _body: outcome, delivered, body, provider=provider)
+                deadline = time.monotonic() + 5
+                while settlements.pending_count:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("synthetic_settlement_timeout")
+                    settlements.drain()
+                    time.sleep(0.01)
+
+        for body, outcome, provider in (
+                ("{", (False, 0, "invalid_push_payload"), None),
+                ("fixture-fcm-rejection", (False, 400, "provider_response"), "fcm"),
+                ("fixture-apns-rejection", (False, 410, "provider_response"), "apns")):
+            settle_synthetic(body, outcome, provider)
+            quarantined = receive(wanted.dead_queue)
+            if quarantined.body != body:
+                raise RuntimeError("synthetic_quarantine_mismatch")
+            quarantined.ack()
+        receipt["checks"].append("owner_quarantines_synthetic_invalid_and_permanent_results_to_real_dlq")
+        settle_synthetic("fixture-accepted", (True, 200, "provider_response"), "fcm")
+        # Synchronous declare confirms earlier ACKs have been processed. No
+        # consumer exists that could hide a wrongly retained ready message.
+        for queue in (wanted.work_queue, wanted.dead_queue):
+            state = channel.queue.declare(queue=queue, passive=True)
+            if state.get("message_count") != 0:
+                raise RuntimeError("synthetic_settlement_left_ready_messages")
+        settlements.invalidate()
+        receipt["checks"].append("owner_accepts_next_synthetic_success_after_quarantine")
         ctl("set_policy", "-p", identity, "fixture-unsafe-overflow", "^fixture\\.mobile\\.quorum-v1$",
             '{"overflow":"drop-head"}', "--apply-to", "quorum_queues")
         try:
@@ -101,8 +141,18 @@ def main():
         else:
             raise RuntimeError("unsafe_policy_was_accepted")
         ctl("clear_policy", "-p", identity, "fixture-unsafe-overflow")
-        if verify_topology(settings, wanted) is not True:
-            raise RuntimeError("restored_policy_not_verified")
+        # Management queue statistics may still show the removed policy. Keep
+        # the verifier strict and wait only in this explicit restoration test.
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                if verify_topology(settings, wanted) is not True:
+                    raise RuntimeError("restored_policy_not_verified")
+                break
+            except ManagementVerificationFailure:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.5)
         receipt["checks"].append("restored_topology_verified")
         receipt["complete"] = True
     except Exception as error:

@@ -376,12 +376,14 @@ class BridgeRuntime:
                     try:
                         body = message.body
                         target = pool
+                        provider = None
                         try:
-                            if normalize(body).provider == "apns":
+                            provider = normalize(body).provider
+                            if provider == "apns":
                                 target = apns_pool
                         except InvalidPush:
                             pass
-                        generation["settlements"].submit(target, self.deliver, message, body)
+                        generation["settlements"].submit(target, self.deliver, message, body, provider=provider)
                     except Exception:
                         # Libraries may catch callback exceptions internally;
                         # retain a fixed owner-loop failure instead of relying
@@ -401,7 +403,9 @@ class BridgeRuntime:
                     channel = configure_topology(connection, settings, self.amqpstorm.AMQPChannelError,
                                                  verify=verifier)
                     limit = settings["WORKERS"] * 2
-                    settlements = OwnerSettlements(limit)
+                    # This branch is reached only after live quorum preflight
+                    # returned successfully for this connection generation.
+                    settlements = OwnerSettlements(limit, quarantine=settings.get("TOPOLOGY") == "quorum-v1")
                     generation["settlements"] = settlements
                     channel.basic.qos(prefetch_count=limit)
                     channel.basic.consume(on_message, queue=settings["QUEUE"], no_ack=False)

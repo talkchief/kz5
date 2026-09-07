@@ -1,5 +1,18 @@
 # One-time cardinal synthesis recovery experiment
 
+Additional bounded HE experiment `982b59/session1670/4a1521`: four serialized
+attempt2 requests recovered joined-masculine9 and10; joined-masculine8 and
+joined-feminine10 remained incomplete. Same approved text/model/Sulafat and
+concise-v2, default attempt cap2, explicit cumulative retry budget96. No further
+request was automatically scheduled. Combined inventory is406/584 technical QA
+(EN31/HE86/FR160/ES25/AR104),680 requests and96 cumulative retries. All original
+attempts remain intact; new successes are four checked-in WAVs. No runtime
+import, listening approval or provider-root-cause claim follows from this trial.
+Verification `602a4b/session71755/d80b23` passes full ledger/WAV/actual-SoX checks,
+repo/private-origin equality, unchanged approvals and every historical attempt
+prefix/success from `d61c91f`. Run receipt:
+`scripts/assets/acdc-gemini-cardinals-20260907/run-b27e2dea-61d3-4007-8946-78157cc3cd66.json`.
+
 Offline validation `6a52f3/session77127/e5dc60` passed15 verifier groups/4926
 assertions,18 generator groups/299 checks and the EN/five-locale installer
 adapter suite. Provider/key access was mocked and the network namespace was

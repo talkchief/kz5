@@ -2,6 +2,12 @@
 
 ## Main installer integration (development installation verified)
 
+Verified `quorum-v1` mode now quarantines malformed payloads and conservative
+provider-specific permanent rejections without stopping the next delivery.
+All145 bridge tests and an actual isolated broker proof pass. Legacy routing and
+transient/uncertain outcomes remain unchanged. See
+[`permanent quarantine`](../../doc/push_bridge_permanent_quarantine.md).
+
 New explicit `quorum-v1` topology and fresh policy/queue verification pass132
 offline tests plus actual isolated broker declaration/dead-letter/policy-refusal
 acceptance. Main SH includes both new modules. Legacy behavior remains default;

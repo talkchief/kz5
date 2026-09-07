@@ -1,5 +1,30 @@
 # Kazoo 5 project task register
 
+Current voice inventory: **406/584 technical QA**,680 historical requests and
+96 retries; EN31/HE86/FR160/ES25/AR104. Four bounded HE concise-v2 retries recovered
+two recordings (four WAVs); two still incomplete. No pending provider job or
+initial identities remain. Failed178; listening/complete cardinal runtime open.
+See `doc/acdc_cardinal_concise_synthesis.md`. Older counts below are historical.
+
+Latest focused stabilization: live isolated internal1001 callback retry passes
+`6e1abf/session73991/6fd51b`, including full Gemini confirmation, unanswered first
+return, durable retry and second reciprocal agent bridge. Extension1000 read-only
+routing passes. Warm-up verifies210 installed Gemini clips and420 running mappings,
+with nine services active. See `doc/development_warmup_20260907.md`.
+
+Bridge permanent-message quarantine in verified quorum mode passes145 offline
+tests and actual isolated broker DLQ/continued-acceptance proof
+`51559a/session54486/3e77be`. Legacy behavior remains unchanged; no production
+pushes. See `doc/push_bridge_permanent_quarantine.md`. Main-SH deployment
+`e1b349/session76962/b94ad2` passes; release51d97e626ef2, active PID423856,
+NRestarts0. Transient recovery/freshness/phones stay OPEN; dev routing unchanged.
+Independent main-SH verify-only also passes `55f252/session16031/cbbb2c`.
+INST-13 freshness audit confirms native Kamailio pushes carry no trusted event
+time; explicit additive producer metadata is required, not an Expires/timestamp
+guess. Also reproduce/fix the optional four-argument AMQP header-buffer lifetime
+finding before using that path. Neither is a reproduced live crash. Details in
+`doc/push_bridge_delivery_recovery_plan.md`.
+
 Latest voice checkpoint: **404/584 recordings pass technical QA** (EN31,
 HE84, FR160, ES25, AR104). All584 planned identities have had an initial
 attempt;180 remain FAILED, with no PENDING or REQUESTING entries. Historical
