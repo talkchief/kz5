@@ -6,6 +6,40 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Latest voice checkpoint:**404/584 technical QA (EN31/HE84/FR160/ES25/AR104),
+676 historical requests and92 cumulative retries. All initial identities are
+attempted;180 FAILED, none PENDING or REQUESTING. Added65 Arabic recordings
+(130 WAVs), retaining every previous success and attempt. No live authoring job
+remains. This does not activate the expanded cardinal pack: failed-only recovery,
+listening, complete packaging and runtime integration remain open. See
+`doc/acdc_cardinal_ar_initial_completion.md`. Older inventory counts below are
+historical. Never call Gemini during installation, account creation or calls.
+
+**Latest bridge/installer follow-up:** new explicit quorum topology and fresh
+management-policy/queue verification are deployed in release
+`734ca0203eff1bc9da4ca4932d2375ce404b187b0c399222f3ae33edb6217880`, PID381466,
+NRestarts0. MainSH `eddec8/session40843/cdcd63`, independent verify
+`e02540/session45092/9a1a1c`; all132 bridge tests/43 Kamailio cases pass
+`37a62e/session13700/fb9511`. Actual isolated broker proof
+`852b0d/session65965/f8265c` passes declaration/confirmed synthetic publish/DLQ
+readback/unsafe-policy refusal/restoration. Its temporary vhost/user were removed.
+See `doc/push_bridge_quorum_topology.md`. Existing dev consumer stays on its
+isolated legacy binding; no production connection or real device notification.
+Provider retries, event expiry, fault recovery and designated phones stay OPEN.
+
+Final offline installer regression `0fad16/session97479/43a0e0` passes syntax,
+pins, aliases, modular/security/ALL/error paths, bridge dispatch and43 Kamailio
+cases. Voice ledger/private-origin equality, historical immutability and all
+saved WAV/hash/actual-SoX checks pass `4e6f91/session99094/fbe779`.
+
+Kamailio effective-URI verification fix is in main SH, with43 offline cases and
+modular tests passing (`d9be50/1578f8`). Actual verification
+`23b62b/session86116/c623a0` proves its effective transport/local-vhost queues
+and SBC checks but fails the retained journal gate:4 earlier malformed SIP
+replies without valid Via (15:16:37/15:20:36UTC). Not JWT/AMQP failures; sender
+unproven. No gate weakened or service restarted. Nine checked services active.
+See `doc/kamailio_effective_amqp_verification.md`.
+
 **Latest voice/installer checkpoint:**339/584 cardinal recordings pass technical
 QA (EN31/HE84/FR160/ES25/AR39);553 requests,92 retries. New optional versioned
 `cardinal-concise-v2` authoring instruction keeps exact text/model/Sulafat and

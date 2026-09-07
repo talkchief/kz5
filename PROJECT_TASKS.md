@@ -1,5 +1,38 @@
 # Kazoo 5 project task register
 
+Latest voice checkpoint: **404/584 recordings pass technical QA** (EN31,
+HE84, FR160, ES25, AR104). All584 planned identities have had an initial
+attempt;180 remain FAILED, with no PENDING or REQUESTING entries. Historical
+requests676, cumulative retries92. This checkpoint adds65 successful Arabic
+recordings/130 WAVs without regenerating any earlier success. Full five-language
+cardinal packaging, listening review and runtime deployment remain OPEN.
+See `doc/acdc_cardinal_ar_initial_completion.md`. Gemini remains authoring-only.
+
+Latest bridge/installer checkpoint: explicit quorum topology and live broker
+verification are implemented, all132 bridge tests pass (`37a62e/fb9511`), and
+isolated actual RabbitMQ declaration/confirmed-publish/DLQ readback/unsafe-policy
+refusal pass (`852b0d/f8265c`). Main-SH deployment `eddec8/cdcd63` and separate
+verification `e02540/9a1a1c` pass; active consumer PID381466, NRestarts0, release
+`734ca0203eff1bc9da4ca4932d2375ce404b187b0c399222f3ae33edb6217880`.
+Current dev binding remains isolated legacy; production unchanged. Temporary
+test vhosts/users were removed, protected receipts retained. Retry/expiry,
+broker failure recovery, remote TLS and real devices remain mandatory OPEN.
+See `doc/push_bridge_quorum_topology.md`.
+
+Final checkpoint regression `0fad16/session97479/43a0e0` passes installer syntax,
+pins, aliases, modular/security/ALL/error paths, bridge dispatch and43 effective
+Kamailio endpoint cases. Voice preservation/hash/SoX verification passes
+`4e6f91/session99094/fbe779`. These fixtures do not replace fresh-server or
+real-device release acceptance.
+
+INST-03/08 focused distributed-Kamailio fix passes43 fixtures and modular tests.
+Verification now follows the effective URI host/port/vhost and never substitutes
+unrelated local broker queues for remote evidence. Actual `--verify-only kamailio`
+passes those endpoint/queue/SBC checks but still FAILS the unmodified journal
+gate on4 earlier malformed SIP replies with missing/invalid Via. Their origin
+is unproven; no logs/gates were removed or Kamailio restart performed. See
+`doc/kamailio_effective_amqp_verification.md`. Nine checked services are active.
+
 Latest September7 checkpoint: prerecorded cardinal inventory is339/584 QA
 (EN31 HE84 FR160 ES25 AR39),553 historical requests and92 cumulative retries.
 New concise-recipe experiment saved4 HE recordings/8 WAVs;2 HE and4 AR attempts
@@ -18,10 +51,10 @@ Missing nonEN recordings/maps, listening, runtime integration and deployment
 remain OPEN. See `doc/acdc_cardinal_all_locale_adapter.md`.
 
 Production10.1.0.28 remains read-only; its FCM/APNs configuration is already
-stored outside Git. Dev bridge active/running, NRestarts0. Remaining durable
-delivery/freshness work now has a concrete plan in
-`doc/push_bridge_delivery_recovery_plan.md`; this is not an implemented quorum
-queue/retry/expiry policy or proof of Android/iOS phone delivery.
+stored outside Git. Dev bridge active/running, NRestarts0. Quorum topology is
+implemented and tested as described above. Remaining provider retry/freshness
+work is tracked in `doc/push_bridge_delivery_recovery_plan.md`; topology tests
+are not proof of Android/iOS phone delivery.
 
 The snapshots below are historical where superseded by this checkpoint.
 

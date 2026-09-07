@@ -1,0 +1,637 @@
+{
+  "schema_version": 1,
+  "owner": "kazoo5-cardinal-authoring-run",
+  "catalog_sha256": "5703e649a1f5a2bcd0c00e9e19bf4424e024c85648452dba0d190bcf73088134",
+  "approvals_sha256": "452b815a65f726e4d221b2585f61162fae0a1c43d6fb1370a0f27bb3a37b8ea5",
+  "selected_locales": [
+    "ar-sa"
+  ],
+  "request_limit": 36,
+  "concurrency": 2,
+  "explicit_retry": false,
+  "retry_budget": 92,
+  "attempt_limit": 2,
+  "explicit_attempt_limit": false,
+  "requests_before": 556,
+  "requested": 36,
+  "status": "FAILED",
+  "started_at": "2026-09-07T17:00:28.265Z",
+  "events": [
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-9",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 1,
+        "inline_audio_parts": 1,
+        "text_parts": 0,
+        "finish_reason": "STOP"
+      },
+      "telephony_sha256": "bf64f5cb9cec8c4d74dcf5a6063dd97e53fbd5d1743a459a5c747a29943dc0ce"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-8",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-9",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-10",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-10",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 1,
+        "inline_audio_parts": 1,
+        "text_parts": 0,
+        "finish_reason": "STOP"
+      },
+      "telephony_sha256": "b37c66fbaf1647ae56013749e26c3530753298ec63ce7de76f0cec4b7e198be9"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-11",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 1,
+        "inline_audio_parts": 1,
+        "text_parts": 0,
+        "finish_reason": "STOP"
+      },
+      "telephony_sha256": "668f7ba92eb801d6ea71f74a607bb9d7cd6a2c2e929283cf46267e765766b090"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-11",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 1,
+        "inline_audio_parts": 1,
+        "text_parts": 0,
+        "finish_reason": "STOP"
+      },
+      "telephony_sha256": "d7e686addd3196e4e314d96f0e97cffe35469cba42bd583d1613945a42e8772d"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-12",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-12",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-13",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-13",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-14",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-15",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-14",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-15",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-16",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-16",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-17",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-17",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-18",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-18",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-small-19",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-small-19",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-decade-20",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-decade-20",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-decade-30",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-decade-40",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-decade-30",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 1,
+        "inline_audio_parts": 1,
+        "text_parts": 0,
+        "finish_reason": "STOP"
+      },
+      "telephony_sha256": "2fd0bdb130325b79b28293fca05c2759a2d24518109d2549af45358154639b36"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-decade-40",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-decade-50",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-decade-60",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-decade-50",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-decade-60",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-decade-70",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-scale-1000-decade-70",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-scale-1000-decade-80",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "response_diagnostics": {
+        "candidate_count": 1,
+        "first_candidate_part_count": 0,
+        "inline_audio_parts": 0,
+        "text_parts": 0,
+        "finish_reason": "OTHER"
+      },
+      "telephony_sha256": null
+    }
+  ],
+  "runtime_ready": false,
+  "deployed": false,
+  "finished_at": "2026-09-07T17:01:37.262Z",
+  "failure_code": "INCOMPLETE_RESPONSE_REQUIRES_EXPLICIT_RETRY"
+}

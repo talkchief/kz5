@@ -4370,28 +4370,81 @@ verify_kamailio_sbc() {
 }
 
 verify_kamailio_amqp_connection() {
-    local address connections deadline escaped_address
+    local endpoint host port vhost protocol address connections deadline
     local -a broker_addresses=()
+    # This URI is what configure_kazoo_kamailio rendered, including an explicit
+    # operator URI. Never place its credentials in argv or diagnostic output.
+    endpoint=$(printf '%s' "$KAZOO_AMQP_URI" | \
+        python3 -B -I "$SCRIPT_DIR/kamailio-amqp-endpoint.py") || \
+        die 'Could not parse the effective Kamailio AMQP endpoint'
+    host=$(jq -r '.host' <<<"$endpoint")
+    port=$(jq -r '.port' <<<"$endpoint")
+    vhost=$(jq -r '.vhost' <<<"$endpoint")
+    protocol=$(jq -r '.protocol' <<<"$endpoint")
     mapfile -t broker_addresses < <(
-        getent ahostsv4 "$KAZOO_AMQP_HOST" | awk '{print $1}' | sort -u
+        getent ahosts "$host" | awk '{print $1}' | sort -u
     )
     ((${#broker_addresses[@]})) || \
-        die "Could not resolve configured AMQP host ${KAZOO_AMQP_HOST}"
+        die 'Could not resolve the effective Kamailio AMQP host'
     deadline=$((SECONDS + KAZOO_START_TIMEOUT))
     while ((SECONDS < deadline)); do
         connections=$(ss -H -tnp state established \
-            "( dport = :${KAZOO_AMQP_PORT} )" 2>/dev/null || true)
+            "( dport = :${port} )" 2>/dev/null || true)
         for address in "${broker_addresses[@]}"; do
-            escaped_address=${address//./\\.}
-            if grep -E "[[:space:]]${escaped_address}:${KAZOO_AMQP_PORT}[[:space:]].*\\(\\\"kamailio\\\"" \
-                <<<"$connections" >/dev/null; then
-                log "PASS Kamailio established AMQP transport to ${KAZOO_AMQP_HOST}:${KAZOO_AMQP_PORT}"
+            # ss omits the state column when a state filter is supplied; peer
+            # is field four. Literal comparison avoids regex/address ambiguity.
+            if awk -v peer="${address}:${port}" -v peer6="[${address}]:${port}" \
+                '($4 == peer || $4 == peer6) && index($0, "(\"kamailio\",") { found=1 }
+                 END { exit !found }' <<<"$connections"; then
+                log 'PASS Kamailio established transport to its effective AMQP endpoint'
+                verify_kamailio_local_amqp_queues "$port" "$vhost" "$protocol" "$address" "${broker_addresses[@]}"
                 return 0
             fi
         done
         sleep 2
     done
-    die "Kamailio has no established AMQP transport to port ${KAZOO_AMQP_PORT}; run verification as root and check ${KAZOO_AMQP_HOST} credentials/connectivity"
+    die 'Kamailio has no established transport to its effective AMQP endpoint; run verification as root and check broker credentials/connectivity'
+}
+
+verify_kamailio_local_amqp_queues() {
+    local port=$1 vhost=$2 protocol=$3 connected_address=$4 address local_addresses listeners queues
+    shift 4
+    systemctl is-active --quiet rabbitmq-server.service 2>/dev/null || {
+        log 'Kamailio queue inspection skipped: no active local RabbitMQ service (transport only)'
+        return 0
+    }
+    local_addresses=$(ip -j address show | jq -er '[.[].addr_info[].local] | .[]') || \
+        die 'Could not determine local addresses for Kamailio broker verification'
+    for address in "$@"; do
+        if [[ $address != 127.* && $address != ::1 ]] && \
+           ! grep -Fxq -- "$address" <<<"$local_addresses"; then
+            log 'Kamailio queue inspection skipped: effective broker is remote or mixed-locality (transport only)'
+            return 0
+        fi
+    done
+    listeners=$(timeout --signal=TERM --kill-after=5 30 \
+        rabbitmq-diagnostics -q listeners --formatter json 2>/dev/null) || \
+        die 'Could not inspect local RabbitMQ listener identity for Kamailio'
+    # The CLI's node must own the exact endpoint before its queue inventory
+    # can prove anything. An unrelated local broker is not remote evidence.
+    if ! jq -e -s --arg address "$connected_address" --argjson port "$port" --arg protocol "$protocol" '
+        length == 1 and (.[0] | type == "object" and .result == "ok" and
+            (.node | type) == "string" and (.node | length) > 0 and
+            (.listeners | type) == "array" and
+            any(.listeners[]; .port == $port and .protocol == $protocol and
+                (.interface == $address or
+                    (.interface == "0.0.0.0" and ($address | contains(":") | not)) or
+                    (.interface == "::" and ($address | contains(":"))))))
+    ' <<<"$listeners" >/dev/null 2>&1; then
+        die 'Local RabbitMQ listener does not match the effective Kamailio AMQP endpoint'
+    fi
+    queues=$(timeout --signal=TERM --kill-after=5 30 \
+        rabbitmqctl -q -p "$vhost" list_queues name 2>/dev/null) || \
+        die 'Could not inspect Kamailio queues on the effective AMQP vhost'
+    grep -F -- "kamailio@${KAZOO_HOSTNAME}-" <<<"$queues" | \
+        awk -v prefix="kamailio@${KAZOO_HOSTNAME}-" 'index($0, prefix) == 1 { found=1 } END { exit !found }' || \
+        die 'Kamailio did not create Kazoo AMQP consumer queues on the effective vhost'
+    log 'PASS Kamailio consumer queues on the exact local AMQP endpoint and vhost'
 }
 
 install_kamailio() {
@@ -4443,11 +4496,6 @@ verify_kamailio() {
     verify_kamailio_amqp_connection
     [[ $(/usr/sbin/kamcmd cfg.get kazoo registrar_check_amqp_availability 2>/dev/null) == 0 ]] || \
         die 'Kamailio registrar has the incompatible AMQP XAVP availability guard enabled'
-    if systemctl is-active --quiet rabbitmq-server.service 2>/dev/null; then
-        rabbitmqctl -q list_queues name 2>/dev/null | \
-            grep -E "^kamailio@${KAZOO_HOSTNAME//./\\.}-" >/dev/null || \
-            die 'Kamailio did not create Kazoo AMQP consumer queues'
-    fi
     if systemctl is-active --quiet kazoo-freeswitch.service 2>/dev/null && \
        systemctl is-active --quiet kazoo-ecallmgr.service 2>/dev/null; then
         deadline=$((SECONDS + KAZOO_START_TIMEOUT))
@@ -5204,7 +5252,7 @@ push_bridge_preflight() {
 
 push_bridge_fingerprint() {
     local source_dir="$SCRIPT_DIR/../services/push-bridge" file
-    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py \
+    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py \
         service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
         [[ -f $source_dir/$file && ! -L $source_dir/$file ]] || die 'Bridge release source is missing or linked'
         sha256sum "$source_dir/$file" | awk -v name="$file" '{ print $1 "  " name }'
@@ -5240,7 +5288,7 @@ install_push_bridge() {
     if [[ $previous != "$release" ]]; then
         [[ ! -L $release ]] || die 'Bridge release directory must not be a symlink'
         run install -d -o root -g root -m 0755 "$release"
-        for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py \
+        for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py \
             service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
             run install -o root -g root -m 0644 "$source_dir/$file" "$release/$file"
         done
@@ -5251,7 +5299,7 @@ install_push_bridge() {
     fi
     run "$release/venv/bin/python" -I -m pip --isolated check
     run "$release/venv/bin/python" -B -I "$release/service_launcher.py" --check-dependencies
-    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py \
+    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py \
         service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
         cmp -s "$source_dir/$file" "$release/$file" || die 'Bridge release bytes do not match source'
     done
@@ -5282,7 +5330,7 @@ verify_push_bridge() {
     local base=/usr/local/lib/kazoo-push-bridge release file actual
     release="$base/releases/$(push_bridge_fingerprint)"
     [[ -L $base/current && $(readlink "$base/current") == "$release" ]] || die 'Active bridge release differs from requested source'
-    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py \
+    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py \
         service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
         cmp -s "$SCRIPT_DIR/../services/push-bridge/$file" "$release/$file" || die 'Bridge release verification failed'
     done

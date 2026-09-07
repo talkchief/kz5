@@ -10,6 +10,7 @@ import ipaddress
 import os
 import re
 import sys
+from urllib.parse import urlsplit
 
 
 PREFIX = "PUSH_BRIDGE_"
@@ -35,7 +36,14 @@ APNS_REQUIRED = (
 )
 APNS_OVERRIDES = ("APNS_KEY_FILE_DEV", "APNS_KEY_ID_DEV")
 AMQP_TLS_SETTINGS = ("AMQP_TLS", "AMQP_CA_FILE")
-KNOWN = frozenset(REQUIRED + tuple(NUMBERS) + APNS_REQUIRED + APNS_OVERRIDES + AMQP_TLS_SETTINGS)
+TOPOLOGY_LIMITS = {
+    "TOPOLOGY_WORK_MAX_MESSAGES": ("1000", 1, 100000),
+    "TOPOLOGY_WORK_MAX_BYTES": ("33554432", 32768, 268435456),
+    "TOPOLOGY_DLQ_MAX_MESSAGES": ("10000", 1, 100000),
+    "TOPOLOGY_DLQ_MAX_BYTES": ("67108864", 32768, 268435456),
+}
+TOPOLOGY_SETTINGS = ("TOPOLOGY", "AMQP_MANAGEMENT_URL", "AMQP_MANAGEMENT_CA_FILE") + tuple(TOPOLOGY_LIMITS)
+KNOWN = frozenset(REQUIRED + tuple(NUMBERS) + APNS_REQUIRED + APNS_OVERRIDES + AMQP_TLS_SETTINGS + TOPOLOGY_SETTINGS)
 SAFE_PATH = re.compile(r"/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\Z")
 TOPOLOGY = re.compile(r"[A-Za-z0-9_.:-]{1,255}\Z")
 BINDING = re.compile(r"[A-Za-z0-9_.*#:-]{1,255}\Z")
@@ -61,6 +69,64 @@ def _path(value):
     return bool(SAFE_PATH.fullmatch(value)) and not any(
         part in (".", "..") for part in value.split("/")
     )
+
+
+def management_url_valid(value):
+    """Credential-free base URL; plaintext is restricted to literal loopback."""
+    try:
+        if (not isinstance(value, str) or not value.startswith(("https://", "http://"))
+                or any(char.isspace() for char in value) or "?" in value or "#" in value):
+            return False
+        parsed = urlsplit(value)
+        if (parsed.scheme not in ("https", "http") or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None
+                or parsed.path or parsed.query or parsed.fragment
+                or not _host(parsed.hostname)
+                or (parsed.port is not None and not 1 <= parsed.port <= 65535)
+                or parsed.netloc.endswith(":")):
+            return False
+        if parsed.scheme == "https":
+            return True
+        return parsed.hostname == "localhost" or ipaddress.ip_address(parsed.hostname).is_loopback
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+def topology_errors(values, present):
+    """Pure shape preflight only, never evidence of effective broker policy."""
+    errors = set()
+    mode = values.get("TOPOLOGY", "legacy")
+    if mode not in ("legacy", "quorum-v1"):
+        errors.add("TOPOLOGY:invalid_mode")
+    if mode != "quorum-v1":
+        if any(name in present for name in TOPOLOGY_SETTINGS if name != "TOPOLOGY"):
+            errors.add("TOPOLOGY:quorum_settings_require_opt_in")
+        return errors
+    queue = values.get("QUEUE", "")
+    exchange = values.get("EXCHANGE", "")
+    if (not isinstance(queue, str) or not TOPOLOGY.fullmatch(queue)
+            or not queue.endswith(".quorum-v1") or queue.startswith("amq.")
+            or len(queue) > 251 or queue == ".quorum-v1"
+            or exchange in (queue, queue + ".dlx", queue + ".dlq")):
+        errors.add("QUEUE:invalid_versioned_topology")
+    url = values.get("AMQP_MANAGEMENT_URL", "")
+    if not management_url_valid(url):
+        errors.add("AMQP_MANAGEMENT_URL:invalid_format")
+    elif (not isinstance(values.get("AMQP_HOST"), str)
+          or urlsplit(url).hostname.lower() != values["AMQP_HOST"].lower()):
+        errors.add("AMQP_MANAGEMENT_URL:broker_host_mismatch")
+    if "AMQP_MANAGEMENT_CA_FILE" in present:
+        ca = values.get("AMQP_MANAGEMENT_CA_FILE", "")
+        if not isinstance(ca, str) or not _path(ca):
+            errors.add("AMQP_MANAGEMENT_CA_FILE:invalid_format")
+        if not isinstance(url, str) or not url.startswith("https://"):
+            errors.add("AMQP_MANAGEMENT_CA_FILE:requires_https")
+    for name, (default, low, high) in TOPOLOGY_LIMITS.items():
+        value = values.get(name, default)
+        if (not isinstance(value, str) or not re.fullmatch(r"[1-9][0-9]{0,8}", value)
+                or not low <= int(value) <= high):
+            errors.add(name + ":invalid_range")
+    return errors
 
 
 def validate(environment):
@@ -122,6 +188,8 @@ def validate(environment):
     check("BINDING_KEY", lambda value: bool(BINDING.fullmatch(value)))
     check("FCM_SCOPE", lambda value: value == FCM_SCOPE)
     check("FCM_URL_TEMPLATE", lambda value: value == FCM_URL)
+    errors.update(topology_errors(values, {key[len(PREFIX):] for key in environment
+                                          if isinstance(key, str) and key.startswith(PREFIX)}))
 
     apns_enabled = any(values.get(name) for name in APNS_REQUIRED + APNS_OVERRIDES)
     if apns_enabled:

@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from push_payload import InvalidPush, apns_payload, normalize
 from validate_config import NUMBERS, PREFIX, validate
 from delivery_settlement import OwnerSettlements, SettlementFailure
+from amqp_topology import TopologyFailure, configure as configure_topology
 
 
 RECONNECT_DELAY = 5
@@ -389,16 +390,16 @@ class BridgeRuntime:
 
                 try:
                     connection = self._connect_amqp()
-                    channel = connection.channel()
                     self._conn = connection
-                    try:
-                        channel.exchange.declare(exchange=settings["EXCHANGE"], passive=True)
-                    except self.amqpstorm.AMQPChannelError:
-                        channel = connection.channel()
-                        channel.exchange.declare(exchange=settings["EXCHANGE"], exchange_type="topic")
-                    channel.queue.declare(queue=settings["QUEUE"], durable=True)
-                    channel.queue.bind(queue=settings["QUEUE"], exchange=settings["EXCHANGE"],
-                                       routing_key=settings["BINDING_KEY"])
+                    verifier = None
+                    if settings.get("TOPOLOGY", "legacy") == "quorum-v1":
+                        try:
+                            from amqp_management import verify_topology
+                            verifier = verify_topology
+                        except Exception:
+                            raise TopologyFailure() from None
+                    channel = configure_topology(connection, settings, self.amqpstorm.AMQPChannelError,
+                                                 verify=verifier)
                     limit = settings["WORKERS"] * 2
                     settlements = OwnerSettlements(limit)
                     generation["settlements"] = settlements
@@ -422,7 +423,7 @@ class BridgeRuntime:
                         self._stop.wait(0.5)
                     if not self._stop.is_set() and settlements.pending_count:
                         raise SettlementFailure()
-                except SettlementFailure:
+                except (SettlementFailure, TopologyFailure):
                     self._stop.set()
                     raise
                 except Exception:
@@ -524,6 +525,9 @@ def main(argv=None, environment=None):
         signal.signal(signal.SIGINT, runtime.handle_term)
         runtime.run()
         return 0
+    except TopologyFailure:
+        log.error("push_bridge_topology_unverified")
+        return 78
     except SettlementFailure:
         log.error("push_delivery_unsettled_manual_recovery_required")
         # A future service unit must prevent automatic restarts for this status

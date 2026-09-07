@@ -1,5 +1,11 @@
 # Mobile bridge delivery recovery — open implementation gate
 
+Update: the explicit quorum topology, limits, live no-policy verification and
+synthetic dead-letter routing portion is now implemented and tested. See
+`push_bridge_quorum_topology.md` for deployment and evidence. This plan's
+provider outcome/retry, source freshness and failure-recovery parts remain OPEN;
+do not redo the completed topology work or infer that it closes the whole gate.
+
 The imported bridge configuration comes from production Kamailio `10.1.0.28`.
 The protected copy is outside Git; never embed its credentials, device tokens,
 private keys or production unit environment in this repository. The development

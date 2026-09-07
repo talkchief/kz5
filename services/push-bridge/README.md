@@ -2,6 +2,14 @@
 
 ## Main installer integration (development installation verified)
 
+New explicit `quorum-v1` topology and fresh policy/queue verification pass132
+offline tests plus actual isolated broker declaration/dead-letter/policy-refusal
+acceptance. Main SH includes both new modules. Legacy behavior remains default;
+no native traffic is migrated automatically. See
+[`doc/push_bridge_quorum_topology.md`](../../doc/push_bridge_quorum_topology.md)
+for protected configuration, bounded limits, same-host management requirements
+and the remaining retry/freshness/fault-injection/device gates.
+
 Latest AMQPS update: strict optional broker TLS and protected CA parsing pass112
 bridge tests and installer dispatch (`0d2bfe/b60ebe`). Main-SH deployment
 `1ff54f/02ae6d` and independent verify `9f2d32/f1ad28` pass. Enabled active
