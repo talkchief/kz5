@@ -3,6 +3,7 @@
 // only newly marked queue/callflow docs may be written or conditionally deleted.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
 const {spawnSync}=require('node:child_process');
+const {timingProfile}=require('./callback-offer-profile.cjs');
 const ACCOUNT='7807ad61761269a1ccec833dde63f621', id=v=>/^[a-f0-9]{32}$/.test(v||'');
 const sha=v=>crypto.createHash('sha256').update(v).digest('hex');
 const canonical=v=>JSON.stringify(v,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)
@@ -15,8 +16,9 @@ const contentFingerprint=document=>fingerprint(Object.fromEntries(Object.entries
 function audioMode(value='legacy') {
     assert(['legacy','gemini'].includes(value),'Unexpected offer audio mode');return value;
 }
-function plan(state,user,marker,mode='legacy') {
+function plan(state,user,marker,mode='legacy',profile='default') {
     audioMode(mode);
+    const timing=timingProfile(mode,profile);
     assert(state.ACCEPTANCE_ACCOUNT_ID===ACCOUNT && /^acceptance-[a-f0-9]{12}\.invalid$/.test(state.ACCEPTANCE_REALM)
         && /^Kazoo5 Acceptance [a-f0-9]{12}$/.test(state.ACCEPTANCE_ACCOUNT_NAME),'Not the isolated acceptance tenant');
     assert(id(state.ACCEPTANCE_AGENT_1_USER_ID) && user.id===state.ACCEPTANCE_AGENT_1_USER_ID && user.enabled!==false,'Callback authority must be the existing enabled fixture user');
@@ -26,7 +28,7 @@ function plan(state,user,marker,mode='legacy') {
             wait_time_announcements_enabled:false,initial_delay:11,interval:15,language:'en-us'},
         callback:{enabled:true,entry_key:'6',allow_alternate_number:false,use_local_resources:true,
             caller_id_source:'inherit',outbound_authority:{type:'user',id:user.id},max_attempts:1,
-            announcement:{enabled:true,initial_delay:3,interval:15}}};
+            announcement:{enabled:true,initial_delay:timing.initial,interval:timing.interval}}};
     return {queue,route:queueId=>{assert(id(queueId));return {name:marker,kazoo_acceptance_fixture:marker,numbers:['2098'],
         flow:{module:'acdc_member',data:{id:queueId},children:{}}};}};
 }
@@ -39,7 +41,8 @@ function assertOwned(document,fixture,collection) {
     } else {
         assert.equal(document.id,fixture.queue_id);assert.deepEqual(document.agents,[]);
         assert.equal(document.callback.enabled,true);assert.equal(document.callback.entry_key,'6');
-        assert.deepEqual(document.callback.announcement,{enabled:true,initial_delay:3,interval:15});
+        const timing=timingProfile(audioMode(fixture.audio_mode),fixture.timing_profile);
+        assert.deepEqual(document.callback.announcement,{enabled:true,initial_delay:timing.initial,interval:timing.interval});
         assert.equal(document.announcements.initial_delay,11);assert.equal(document.announcements.interval,15);
         if(audioMode(fixture.audio_mode)==='gemini') {
             assert.equal(document.moh,'silence_stream://-1');
@@ -237,9 +240,10 @@ async function references(run,mode='legacy') {
     fs.writeFileSync(path.join(run,'offer-reference-receipt.json'),JSON.stringify(receipt,null,2)+'\n',{mode:384});
 }
 async function runtime(action,run,option) {
-    assert(option===undefined||option==='--gemini','Unexpected fixture option');
+    assert(option===undefined||option==='--gemini'||option==='--gemini-30','Unexpected fixture option');
     assert(option===undefined||action==='setup','Audio option applies only to setup; cleanup uses the protected receipt');
-    const mode=option==='--gemini'?'gemini':'legacy';
+    const mode=option==='--gemini'||option==='--gemini-30'?'gemini':'legacy';
+    const profile=option==='--gemini-30'?'interval-30':'default';
     assert(['setup','cleanup','recover','entry'].includes(action)&&path.isAbsolute(run));
     const s=fs.lstatSync(run);assert(s.isDirectory()&&!s.isSymbolicLink()&&s.uid===0&&(s.mode&511)===448);
     assert(fs.realpathSync(run)===run&&run.startsWith('/var/log/kazoo-acceptance/'));
@@ -301,7 +305,8 @@ async function runtime(action,run,option) {
         const user=(await api('GET','users/'+state.ACCEPTANCE_AGENT_1_USER_ID)).data;
         const fixture={account:ACCOUNT,marker:'acdc-offer-'+crypto.randomBytes(12).toString('hex'),extension:'2098',baseline:await baseline([])};
         if(mode==='gemini')fixture.audio_mode=mode;
-        const desired=plan(state,user,fixture.marker,mode);persist(fixture);
+        if(profile!=='default')fixture.timing_profile=profile;
+        const desired=plan(state,user,fixture.marker,mode,profile);persist(fixture);
         for(const collection of ['queues','callflows']) {
             const key=collection==='queues'?'queue_id':'callflow_id',body=collection==='queues'?desired.queue:desired.route(fixture.queue_id);
             const created=(await api('PUT',collection,body)).data;assert(id(created.id));fixture[key]=created.id;persist(fixture);
@@ -346,7 +351,7 @@ async function runtime(action,run,option) {
             // Explicit receipt repair only, never a delete or refreshed CAS.
             // Reconstruct the original fixture body; retain altered documents.
             assert.deepEqual(await baseline([fixture.queue_id,fixture.callflow_id].filter(Boolean)),fixture.baseline,'Unrelated documents changed before recovery');
-            const desired=plan(state,(await api('GET','users/'+state.ACCEPTANCE_AGENT_1_USER_ID)).data,fixture.marker,audioMode(fixture.audio_mode));
+            const desired=plan(state,(await api('GET','users/'+state.ACCEPTANCE_AGENT_1_USER_ID)).data,fixture.marker,audioMode(fixture.audio_mode),fixture.timing_profile);
             for(const collection of ['callflows','queues']) {
                 const documentId=fixture[collection==='queues'?'queue_id':'callflow_id'];
                 if(!documentId||fixture[collection+'_couch'])continue;

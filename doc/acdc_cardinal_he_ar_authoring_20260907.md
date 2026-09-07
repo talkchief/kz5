@@ -1,5 +1,29 @@
 # Hebrew / Arabic prerecorded cardinal authoring
 
+## Follow-up after16:16UTC
+
+HE final35 initial requests finished (`577929/session83184/c6d391`):21 new
+QA recordings,14 failures. All131 initial HE roles are now attempted:80 QA,
+51 failed. Receipt `run-dc065657-7de3-4cf4-abe0-110a373845f4.json`.
+
+AR next batch (`7411c1/session8043/385e54`) stopped after31 requests on
+`GEMINI_HTTP_500`, saving10 successes/21 failures. Receipt
+`run-2b27cb1c-0eae-4cea-9d9c-bedd9fe50e7a.json`. A subsequent bounded batch
+(`582de7/session52298/1e9227`) stopped after4 requests on HTTP500, saving3
+successes/1 failure; receipt `run-1b6f5854-9491-4583-89a5-213a32b3e80e.json`.
+Another bounded resume with concurrency1 (`5d2115/session10778/9e4cd3`) stopped
+after14 initial requests on HTTP500:4 successes/10 failures. Receipt
+`run-6aaa690d-09db-425f-8985-9cc901d4aca4.json`. No failed identity was retried
+in these runs. AR39 QA/42 failed/127 pending.
+All handles are terminal, no REQUESTING entries remain. Provider rejection
+does not erase attempts or imply that a clip passed.
+
+Whole ledger:335 QA,542 attempts,85 historical retries. All38 new recordings
+(76 WAVs) since17946f2 are preserved in Git. Independent offline hash/SoX,
+repo/private equality and unchanged prior-success/history verification passes
+`9c74e0/session36821/e854e2`. Full completion, listening and runtime deployment
+remain false. Gemini is never invoked at install or runtime.
+
 ## Latest checkpoint, 16:16UTC
 
 Three HE batches attempted96 roles:59 QA,37 failed,35 initial roles still

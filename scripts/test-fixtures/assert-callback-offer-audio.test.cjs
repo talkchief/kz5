@@ -20,19 +20,21 @@ function capture(options={}) {
     sip(99.95,'INVITE sip:2098@acceptance.invalid SIP/2.0',2,'INVITE',true,sdp('127.0.0.20',47200),'');
     sip(100,'SIP/2.0 200 OK',2,'INVITE',false,sdp(options.remote||'127.0.0.1',30000));
     if(!options.noAck)sip(100.01,'ACK sip:2098@acceptance.invalid SIP/2.0',2,'ACK',true,'',options.badTag?'wrong':'remote');
-    const audio=Buffer.alloc(46*8000,options.noiseByte===undefined?255:options.noiseByte);
+    const duration=options.duration||46;
+    const audio=Buffer.alloc(duration*8000,options.noiseByte===undefined?255:options.noiseByte);
     const selectedRefs=options.refs||refs;
     for(const at of options.offer||[3,18,33])selectedRefs.offer.copy(audio,at*8000);
     for(const at of options.position||[11,26,41])selectedRefs.position.copy(audio,at*8000);
     if(options.partialEntry)selectedRefs.offer.subarray(0,3200).copy(audio,400);
+    if(options.earlySpeech)selectedRefs.offer.subarray(0,3200).copy(audio,20*8000);
     if(options.transient)selectedRefs.offer.subarray(0,160).copy(audio,1600);
     for(let offset=0;offset<audio.length;offset+=160){if((options.loss&&offset===3*8000+160)||offset===options.lossAt*8000
         ||offset<(options.skipRtpBefore||0)*8000)continue;
         const rtp=Buffer.alloc(172);rtp[0]=128;rtp.writeUInt16BE(offset/160,2);rtp.writeUInt32BE(offset,4);rtp.writeUInt32BE(77,8);audio.copy(rtp,12,offset,offset+160);
         udp(100+offset/8000+(options.rtpStartShift||0),rtp,options.foreign?'127.0.0.2':'127.0.0.1','127.0.0.20',30000,47200);}
     if(options.dtmf){const b=Buffer.alloc(16);b[0]=128;b[1]=101;udp(108,b,'127.0.0.20','127.0.0.1',47200,30000);}
-    sip(146,'BYE sip:2098@acceptance.invalid SIP/2.0',3,'BYE',true);
-    if(!options.noByeAck)sip(146.01,'SIP/2.0 200 OK',3,'BYE',false);
+    sip(100+duration,'BYE sip:2098@acceptance.invalid SIP/2.0',3,'BYE',true);
+    if(!options.noByeAck)sip(100+duration+.01,'SIP/2.0 200 OK',3,'BYE',false);
     return Buffer.concat(records);
 }
 let groups=0;const valid=capture(),result=inspect(valid,refs,expected);
@@ -85,6 +87,23 @@ for(const [options,pattern] of [[{offer:[0,18,33]},/energetic audio|schedule/],[
     assert.throws(()=>inspect(geminiCapture(options),geminiRefs,geminiExpected),pattern);groups++;
 assert.throws(()=>inspect(valid,refs,geminiExpected),/longer-than-five/);
 assert.throws(()=>inspect(valid,refs,{...expected,audio_mode:'other'}),/audio mode/);groups++;
+const thirtyExpected={...geminiExpected,timing_profile:'interval-30'};
+const thirtyCapture=options=>geminiCapture({duration:76,offer:[30,60],...options});
+const thirty=inspect(thirtyCapture(),geminiRefs,thirtyExpected);
+assert.deepEqual(thirty.expected_offer_seconds,[30,60]);
+assert.deepEqual(thirty.offer.map(m=>m.after_queue_entry_seconds),[30,60]);
+assert.equal(thirty.entry_silence.end_after_queue_entry_seconds,29);
+assert.equal(thirty.entry_silence.observed_energetic_windows,0);
+assert.equal(thirty.position_verified,false);assert.equal(thirty.call_duration_seconds,76);groups++;
+for(const [options,pattern] of [[{offer:[0,30,60]},/energetic/],[{offer:[30,45,60]},/exactly2/],
+    [{offer:[30,62]},/schedule/],[{offer:[30]},/exactly2/],[{earlySpeech:true},/energetic/],
+    [{lossAt:20},/Missing RTP/],[{duration:46},/duration/]]) {
+    assert.throws(()=>inspect(thirtyCapture(options),geminiRefs,thirtyExpected),pattern);groups++;
+}
+assert.throws(()=>inspect(thirtyCapture(),geminiRefs,{...expected,timing_profile:'interval-30'}),/requires immutable/);
+for(const invalid of [null,30,'30',[],{},'unknown'])
+    assert.throws(()=>inspect(thirtyCapture(),geminiRefs,{...thirtyExpected,timing_profile:invalid}),/timing profile/);
+groups++;
 const hash=bytes=>require('node:crypto').createHash('sha256').update(bytes).digest('hex');
 const wavHash='a'.repeat(64),prompt='acdc-callback-offer-6-gemini-sulafat-'+wavHash.slice(0,16);
 const receipt={audio_mode:'gemini',scope:'offer_only_silence_hold',position_verified:false,

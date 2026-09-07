@@ -6,6 +6,17 @@ acceptance. No notification was published or sent during these checks.
 
 ## Installation and evidence
 
+Latest AMQPS-support deployment: `1ff54f/session31649/02ae6d` passed main SH;
+independent verify and installed-venv TLS regression passed
+`9f2d32/session48034/f1ad28`. Current release
+`24e085e77183a418ded9df942a6dd16dc5883eacb2e7ca30d85a3cc7e4ab6c76`,
+enabled/active registered consumer PID323748, zero automatic restarts. All112
+bridge tests plus installer dispatch pass `0d2bfe/b60ebe`. Explicit verified
+AMQPS and protected CA preflight are implemented; development broker remains
+local/plaintext/isolated. No production or notification changes. Real remote
+TLS broker acceptance and mobile ringing remain open, alongside recovery and
+total deadlines. See `push_bridge_amqp_tls.md`.
+
 Latest OAuth transport deployment `3f5035/session60404/aa39ab` passes main SH;
 release `5d3745fd54bc8297f586c8ebb9c8e917de410957d9f02b6c04070c75997b5afa` is
 enabled/active with registered consumer PID301642, zero automatic restarts.

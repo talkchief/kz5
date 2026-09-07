@@ -3,6 +3,7 @@
 const fs = require('node:fs'), assert = require('node:assert/strict'), crypto = require('node:crypto');
 const {packets, audioSdp} = require('./assert-callback-confirmation-pcap.cjs');
 const {phraseMatches} = require('./assert-announcement-audio.cjs');
+const {timingProfile} = require('./callback-offer-profile.cjs');
 const sha = data => crypto.createHash('sha256').update(data).digest('hex');
 function assertCaptureLog(text) {
     assert(typeof text === 'string' && text.length <= 65536, 'Invalid capture completion log');
@@ -27,16 +28,18 @@ function completeMatches(audio, reference) {
         match.correlation = dot / Math.sqrt(a*b); return match.correlation >= .985;
     });
 }
-function assertGeminiEntrySilence(audio,times,anchor) {
-    // Offer onset permits +/-1s around its configured3s deadline. Inspect only
-    // [entry,entry+2s), never the legitimate earliest onset at entry+2s.
+function assertGeminiEntrySilence(audio,times,anchor,until=2) {
+    assert(until===2||until===29,'Unexpected entry-silence duration');
+    // Offer onset permits +/-1s around the selected profile's deadline.
+    // Inspect up to2s (default) or29s (30-second profile), excluding its
+    // legitimate earliest onset. The whole pre-offer wait must be covered.
     // PCMU silence/quiet comfort noise is allowed, as are at most two20ms
     // energetic windows (brief transients). This is a quantified early-audio
     // check, not a claim of bit-perfect silence or acoustic speaker review.
     const windowSamples=160, rmsLimit=256, allowedEnergeticWindows=2;
     let count=0,energy=0,inWindow=0,energetic=0,maxRms=0,first,last;
     for(let i=0;i<audio.length;i++) {
-        if(times[i]<anchor||times[i]>=anchor+2)continue;
+        if(times[i]<anchor||times[i]>=anchor+until)continue;
         if(first===undefined)first=times[i];last=times[i];count++;
         energy+=decode(audio[i])**2;inWindow++;
         if(inWindow===windowSamples) {
@@ -53,11 +56,11 @@ function assertGeminiEntrySilence(audio,times,anchor) {
     const observation={samples:count,
         first_after_queue_entry_seconds:first===undefined?null:Number((first-anchor).toFixed(6)),
         last_after_queue_entry_seconds:last===undefined?null:Number((last-anchor).toFixed(6))};
-    assert(count>=15200&&count<=16160&&first<=anchor+.1&&last>=anchor+1.98,
+    assert(count>=(until-.1)*8000&&count<=until*8000+160&&first<=anchor+.1&&last>=anchor+until-.02,
         'Insufficient Gemini entry-silence observation: '+JSON.stringify(observation));
     if(inWindow&&Math.sqrt(energy/inWindow)>rmsLimit)energetic++;
     assert(energetic<=allowedEnergeticWindows,'Unexpected energetic audio before Gemini offer window');
-    return {start_after_queue_entry_seconds:0,end_after_queue_entry_seconds:2,
+    return {start_after_queue_entry_seconds:0,end_after_queue_entry_seconds:until,
         ...observation,allowed_startup_gap_ms:100,
         pre_rtp_gap_seconds:Number(Math.max(0,times[0]-anchor).toFixed(6)),
         startup_gap_is_observed_silence:false,
@@ -78,6 +81,7 @@ function sip(packet) {
 function inspect(buffer, refs, expected) {
     const mode=expected.audio_mode===undefined?'legacy':expected.audio_mode;
     assert(['legacy','gemini'].includes(mode),'Unexpected offer audio mode');
+    const timing=timingProfile(mode,expected.timing_profile);
     if(mode==='gemini')assert(refs.offer.length>5*8000&&refs.offer.length<7*8000,
         'Gemini probe requires the complete longer-than-five-second offer');
     assert(buffer.length <= 32*1024*1024 && /^[a-f0-9]{32}$/.test(expected.queue_id), 'Invalid fixture capture/queue');
@@ -107,7 +111,7 @@ function inspect(buffer, refs, expected) {
         && done.from === bye.from && done.to === bye.to, 'Dialog tags disagree');
     assert(invite.src === expected.ip && ack.src === expected.ip && bye.src === expected.ip && answer.dst === expected.ip,
         'Caller must originate and normally end the exact call');
-    assert(bye.time-answer.time >= 45 && bye.time-answer.time <= 52 && done.time >= bye.time, 'Unexpected call duration/teardown');
+    assert(bye.time-answer.time >= timing.earliest && bye.time-answer.time <= timing.latest && done.time >= bye.time, 'Unexpected call duration/teardown');
     const local = audioSdp(invite, false), remote = audioSdp(answer, false);
     assert(local.ip === expected.ip && local.port === expected.media_port
         && (remote.ip.startsWith('127.') || (expected.local_engine_ips || []).includes(remote.ip)), 'Non-local negotiated media');
@@ -128,7 +132,7 @@ function inspect(buffer, refs, expected) {
     }
     assert(incoming.length > 1500 && new Set(incoming.map(p => p.ssrc)).size === 1, 'Insufficient/ambiguous media stream');
     const base = incoming[0].stamp, length = Math.max(...incoming.map(p => ((p.stamp-base)>>>0)+p.audio.length));
-    assert(length <= 55*8000, 'Invalid media timeline');
+    assert(length <= (timing.latest+3)*8000, 'Invalid media timeline');
     const audio = Buffer.alloc(length,255), covered = new Uint8Array(length), times = new Float64Array(length);
     for (const p of incoming) {
         const offset = (p.stamp-base)>>>0;
@@ -140,12 +144,12 @@ function inspect(buffer, refs, expected) {
     assert(covered.every(Boolean), 'Missing RTP in observed announcement timeline');
     const anchor = expected.queue_entry;
     assert(Number.isFinite(anchor) && Math.abs(anchor-answer.time)<5, 'Missing exact queue-entry anchor');
-    const entrySilence=mode==='gemini'?assertGeminiEntrySilence(audio,times,anchor):undefined;
+    const entrySilence=mode==='gemini'?assertGeminiEntrySilence(audio,times,anchor,timing.silenceUntil):undefined;
     const result = {};
-    const targetsByName=mode==='gemini'?[['offer',[3,18,33]]]:[['offer',[3,18,33]], ['position',[11,26,41]]];
+    const targetsByName=mode==='gemini'?[['offer',timing.offers]]:[['offer',timing.offers], ['position',[11,26,41]]];
     for (const [name, targets] of targetsByName) {
         const reference = refs[name], matches = completeMatches(audio,reference);
-        assert(matches.length === 3, 'Expected exactly3 complete '+name+' phrases, found'+matches.length);
+        assert(matches.length === targets.length, 'Expected exactly'+targets.length+' complete '+name+' phrases, found'+matches.length);
         result[name] = matches.map((m,i) => {
             assert(covered.subarray(m.sample,m.sample+reference.length).every(Boolean), 'Missing RTP inside full '+name+' phrase');
             const delay = times[m.sample]-anchor;
@@ -159,7 +163,7 @@ function inspect(buffer, refs, expected) {
     return {result:'PASS',...result, audio_mode:mode,scope:mode==='gemini'?'offer_only_silence_hold':'legacy_dual_schedule',
         ...(mode==='gemini'?{entry_silence:entrySilence}:{}),
         position_verified:mode==='legacy',offer_duration_seconds:refs.offer.length/8000,
-        expected_offer_seconds:[3,18,33], expected_position_seconds:mode==='gemini'?[]:[11,26,41],
+        timing_profile:timing.name,expected_offer_seconds:timing.offers, expected_position_seconds:mode==='gemini'?[]:[11,26,41],
         delivery_tolerance_seconds:1, no_offer_on_entry:true, exact_negotiated_received_pcmu:true, complete_audio_coverage:true,
         call_duration_seconds:Number((bye.time-answer.time).toFixed(3)), normal_sip_teardown:true};
 }
@@ -186,6 +190,7 @@ if (require.main === module) {
         const expected = JSON.parse(read('offer-call.json')), fixture = JSON.parse(read('offer-fixture.json'));
         assert(expected.queue_id===fixture.queue_id && expected.account===fixture.account);
         expected.audio_mode=fixture.audio_mode===undefined?'legacy':fixture.audio_mode;
+        expected.timing_profile=fixture.timing_profile;
         const evidence=JSON.parse(read('offer-queue-entry.json')); assert(evidence.call_id===expected.call_id && evidence.queue_id===expected.queue_id);
         expected.queue_entry=Date.parse(evidence.entry_at)/1000;
         expected.local_engine_ips=Object.values(require('node:os').networkInterfaces()).flat().filter(x=>x.family==='IPv4').map(x=>x.address);

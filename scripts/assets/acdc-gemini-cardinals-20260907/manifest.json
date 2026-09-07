@@ -8,7 +8,7 @@
   "voice": "Sulafat",
   "initial_request_budget": 584,
   "retry_request_budget": 85,
-  "requests_reserved": 458,
+  "requests_reserved": 542,
   "retries_explicitly_enabled": true,
   "automatic_retries": 0,
   "conversion": {
@@ -19862,8 +19862,54 @@
       "catalog_record_sha256": "fc81d226b5e8af95f7831d47abd7e048e9c530193b55748f27551292911fd90e",
       "transcript_sha256": "d025442a5708585df4540551f9430a5b796e1d365c0905e491e26ffdfe2e46df",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:25.666Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוּשְׁלוֹשׁ מֵאוֹת",
+          "instruction_sha256": "4267732e07f802c7625b067be5630719db063b8f13084b6d621627639b491891",
+          "request_body_sha256": "e4ef8d6bfa028786d1d2946db08e774afd7d21ce568e5af45ce45c08c75abcd7",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "ecc01c4ed925dabc97420703ce2c1e9d9e5241d2efd4647d30efa2e4a45c24a5",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-hundreds-300.attempt-1.master-24000.wav",
+            "sha256": "83aae8b30d12a1f79a7c34720788ae0af0808d40779b3bc31bae024212d3a9b8",
+            "pcm_sha256": "ecc01c4ed925dabc97420703ce2c1e9d9e5241d2efd4647d30efa2e4a45c24a5",
+            "byte_length": 106170,
+            "sample_count": 53063,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 2.210958333333333,
+            "rms": 3284.0103567119786,
+            "peak": 17424,
+            "clipped_samples": 0,
+            "silence_fraction": 0.30375214367826925,
+            "leading_silence_samples": 196,
+            "trailing_silence_samples": 866
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-hundreds-300.attempt-1.telephony-8000.wav",
+            "sha256": "f69e31d9665beca114c3499e5e2bc88617e499ef4445bbd7f4e0a94e36e767cf",
+            "pcm_sha256": "b88e7d939c9c04f87506eed0078315c2fcae0855612f3139da2a42d52b7c1a49",
+            "byte_length": 35420,
+            "sample_count": 17688,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 2.211,
+            "rms": 2919.8658280687428,
+            "peak": 13997,
+            "clipped_samples": 0,
+            "silence_fraction": 0.31264133876074174,
+            "leading_silence_samples": 66,
+            "trailing_silence_samples": 453
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -19878,8 +19924,54 @@
       "catalog_record_sha256": "9e42387cdc1b1ae9d8f7715d94026965c2b7a7a368e155379081da0bbf68e2b6",
       "transcript_sha256": "021174a94fce8f5835d10ea46b6fda480b96301fe6f1fad7e4f7b2f0b2a1b0c8",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:25.752Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nאַרְבַּע מֵאוֹת",
+          "instruction_sha256": "8047dbd34dac5fac444e6848e7bb12bf041c2ccdbab7ccb57e227f16f2d6d59f",
+          "request_body_sha256": "d41b804284c873cdefbfef9a96e4adc0351d67595bd4fc2f2376ce9b41cd34de",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "eed90f6d0b7eef2a65f931d374a2017a590c50504a01f10a985e8042150ad8a6",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-hundreds-400.attempt-1.master-24000.wav",
+            "sha256": "7fd4b4a625761a7abc0e6203c672f985a6208eb263a4978f51d3c6647056aadd",
+            "pcm_sha256": "eed90f6d0b7eef2a65f931d374a2017a590c50504a01f10a985e8042150ad8a6",
+            "byte_length": 67770,
+            "sample_count": 33863,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.4109583333333333,
+            "rms": 3488.3258474046265,
+            "peak": 21936,
+            "clipped_samples": 0,
+            "silence_fraction": 0.392818120072055,
+            "leading_silence_samples": 161,
+            "trailing_silence_samples": 2365
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-hundreds-400.attempt-1.telephony-8000.wav",
+            "sha256": "3a75c3b048d3f6d26d820de744a4aaf6d890a700717b61e54a0e5a5030400528",
+            "pcm_sha256": "eafb202ed02f2e474c7072b794cc9c4cb5828340bac3b3172923a403bebde4b7",
+            "byte_length": 22620,
+            "sample_count": 11288,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.411,
+            "rms": 3478.7494528323173,
+            "peak": 21057,
+            "clipped_samples": 0,
+            "silence_fraction": 0.3997165131112686,
+            "leading_silence_samples": 55,
+            "trailing_silence_samples": 866
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -19894,8 +19986,22 @@
       "catalog_record_sha256": "698f9be5677ad63c4e4edeaa7be4d5bbd0a86baa3a0a97a2c8b9ef3fa79935de",
       "transcript_sha256": "a8e858c5b5391b95e7b15abc6a8659efa2abea2ba1f15160be53dd3c130706e1",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:28.374Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוְאַרְבַּע מֵאוֹת",
+          "instruction_sha256": "cfde88b01caad76134ba383156c33c6b8cebb4cf26c5cb1119044940edb11961",
+          "request_body_sha256": "9ca63715402cac4f8c1c22e8df66d493252beb762b1ea2145e28e1dac5ecda3f",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -19910,8 +20016,22 @@
       "catalog_record_sha256": "6d0b794ee5aae9a9c0a667dc8566bd2ab0309415f0ac783d5e0d670b6783bd25",
       "transcript_sha256": "546bf9f594caa75e569683c868922cd26f34ab743430078fd82d15bc2766393d",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:29.265Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nחֲמֵשׁ מֵאוֹת",
+          "instruction_sha256": "150e6b975044af7925c92eb3c478eff97122ee061be3a38d43e9df2619c0b282",
+          "request_body_sha256": "82640ebd78ae6d0df518b1649f8cd7af02f1e6f864c98cb9ccd6d4b8e2de620b",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -19926,8 +20046,54 @@
       "catalog_record_sha256": "2626c0b405fd6491014f233d9a65dde6e8df55ed8158ef6e3d42482fec192a5e",
       "transcript_sha256": "9fac4fb8609170a42098dcc51850f6dfabf0ef22c36c36afdbf8a0a1c2bd5d41",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:31.142Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוַחֲמֵשׁ מֵאוֹת",
+          "instruction_sha256": "aa2fbb16e2d40864f9de21cabc37b747f8db598659843e6bcd994ac6a65c6764",
+          "request_body_sha256": "988a89a3bd3b5d381c3ee05c8666fbba40be4bb026174d50bb2b06ead65db6e3",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "198d12df4d08987f9582cc88424900408387b0f94d371e5b54d32b60083c45c4",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-hundreds-500.attempt-1.master-24000.wav",
+            "sha256": "a2551bf5d782635d54eaff57f01e0f47d8ac279f858a6f95c80042d82c55d167",
+            "pcm_sha256": "198d12df4d08987f9582cc88424900408387b0f94d371e5b54d32b60083c45c4",
+            "byte_length": 96570,
+            "sample_count": 48263,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 2.0109583333333334,
+            "rms": 3313.753156610733,
+            "peak": 19686,
+            "clipped_samples": 0,
+            "silence_fraction": 0.20773677558378054,
+            "leading_silence_samples": 2,
+            "trailing_silence_samples": 0
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-hundreds-500.attempt-1.telephony-8000.wav",
+            "sha256": "417bd9445750a0d561366d11701b7d120e3ffa1f2f38cbf336051fc4eb7a7e78",
+            "pcm_sha256": "e2f2a33658354a6e521ef22958f36ae86d5e82f93ccfb74d46939388a6b16cb3",
+            "byte_length": 32220,
+            "sample_count": 16088,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 2.011,
+            "rms": 3131.8091493355337,
+            "peak": 18430,
+            "clipped_samples": 0,
+            "silence_fraction": 0.21425907508702138,
+            "leading_silence_samples": 1,
+            "trailing_silence_samples": 0
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -19942,8 +20108,22 @@
       "catalog_record_sha256": "5705770083ba3d5d6eee0a4e4144489b6cb0fe0bf3aa1f68a5d79b3fd3db94f3",
       "transcript_sha256": "132b0bf092b7bc4aba54d72e3024d5b5db6ccf01a8ee87a5eb524fc8d2899873",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:31.622Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nשֵׁשׁ מֵאוֹת",
+          "instruction_sha256": "f4383286048e37e53969b7746d6f2ec7e094ff1bb4a0d73f24ce4299cd9944be",
+          "request_body_sha256": "40bea018ad8d9cc3ef04e8ac4e5c4f3fcf900ec0c63560ade5ce42d2482463bd",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -19958,8 +20138,54 @@
       "catalog_record_sha256": "28766b029ad61924bbcd924ecb4ce241c996cf92070dcfa558261ede47c10141",
       "transcript_sha256": "7ba5501e7dd0b04b251ae419090f086722de6de6bc99415bf2feaa3eaa44eb81",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:33.851Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוְשֵׁשׁ מֵאוֹת",
+          "instruction_sha256": "403fa9cadfd390d10135e852581fb2399ee1df08631b4286e8873220d0aa2022",
+          "request_body_sha256": "2f25a355edd5e163bcb10d020126f22fe163758860177588216c1c0e519f9d74",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "6ccba686638f62d18186d1434784fbb711f0142d820ac9b4bdec18b4d3266df2",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-hundreds-600.attempt-1.master-24000.wav",
+            "sha256": "5d2b2d8ddb66fe8c5c49021878f4cb467364936d79079125e8b55ad2a86e2737",
+            "pcm_sha256": "6ccba686638f62d18186d1434784fbb711f0142d820ac9b4bdec18b4d3266df2",
+            "byte_length": 79290,
+            "sample_count": 39623,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.6509583333333333,
+            "rms": 1979.0600193156104,
+            "peak": 16103,
+            "clipped_samples": 0,
+            "silence_fraction": 0.23973449764025945,
+            "leading_silence_samples": 95,
+            "trailing_silence_samples": 0
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-hundreds-600.attempt-1.telephony-8000.wav",
+            "sha256": "30d3b70769a3d704d7c6337fe5adc9e7f884f8768facca719bd30c368a0bfce4",
+            "pcm_sha256": "1070037951e26f9cf99397ded712e760cf8981a1c6ba75a100e3a819b558d7df",
+            "byte_length": 26460,
+            "sample_count": 13208,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.651,
+            "rms": 1693.835715320901,
+            "peak": 14294,
+            "clipped_samples": 0,
+            "silence_fraction": 0.25105996365838884,
+            "leading_silence_samples": 32,
+            "trailing_silence_samples": 0
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -19974,8 +20200,54 @@
       "catalog_record_sha256": "e1c6477c302da4a22d02f7eb31808b17def2b8f8b4072575de35bb0fe00f4bad",
       "transcript_sha256": "cf6840abe40d4ecac2ab3513ef512e1748cec989122d1b335a4a44f378c136f9",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:34.646Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nשְׁבַע מֵאוֹת",
+          "instruction_sha256": "ae7d3a78c245d41c1853ea24f06dd644ab64b2f912ec724a02fc2fcea7705d11",
+          "request_body_sha256": "a3c7274ef738f479f4b728d44bef6f13ea4a0a58ef395763bb4625752ac20f9a",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "b7ff43b5f60eac05ee22a4e12195c9a3fd60fd6c7a5d9deb100ef78ae95bc6ae",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-hundreds-700.attempt-1.master-24000.wav",
+            "sha256": "637d11d2d704bf04614df12d77da8ecddd7a3dd6428ba0c3ee80e849c78a5bec",
+            "pcm_sha256": "b7ff43b5f60eac05ee22a4e12195c9a3fd60fd6c7a5d9deb100ef78ae95bc6ae",
+            "byte_length": 58170,
+            "sample_count": 29063,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.2109583333333334,
+            "rms": 4390.4659256762225,
+            "peak": 26313,
+            "clipped_samples": 0,
+            "silence_fraction": 0.20338574820218147,
+            "leading_silence_samples": 4,
+            "trailing_silence_samples": 389
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-hundreds-700.attempt-1.telephony-8000.wav",
+            "sha256": "bea4a6539de05a08c90da55f78d1b230cffa2a1ac44cf921d205a2cb012a3a5a",
+            "pcm_sha256": "b85f34eadb44a003faba6c565f894305ca1b6854418ac2a00d43000f670cc388",
+            "byte_length": 19420,
+            "sample_count": 9688,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.211,
+            "rms": 4323.31860338644,
+            "peak": 25815,
+            "clipped_samples": 0,
+            "silence_fraction": 0.21273740710156896,
+            "leading_silence_samples": 2,
+            "trailing_silence_samples": 132
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -19990,8 +20262,22 @@
       "catalog_record_sha256": "5015c67a7d411ff58b16d271dd71ee79de553f4e2a48394f0b3c8a92076ec545",
       "transcript_sha256": "3cafa4bd7695919ffda2b8778eb71a4fc1057349f4f6b3ca5f6c18850f677202",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:36.369Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוּשְׁבַע מֵאוֹת",
+          "instruction_sha256": "3d851e32e714b0be10729615e439f5e1ea7ac9efad507715f25690854e4d36f7",
+          "request_body_sha256": "a4bdcf3e5907d2f1cadd6f056f0cf52e12e0c2a290ae224836e0558b3998b059",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20006,8 +20292,54 @@
       "catalog_record_sha256": "a71f49879cc0fcbcabec6148e1a634e60426fd049876f578c00d0a27dcc10e73",
       "transcript_sha256": "8519e3d46ccee665b6f7cb5a938cc996820b8e622de9bedb0a8c839113eeeaab",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:36.861Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nשְׁמוֹנֶה מֵאוֹת",
+          "instruction_sha256": "672f904384604c979f0c9aea47fe8b281ee3d62c25b1192e4fa3cb77d686644f",
+          "request_body_sha256": "54e86cc2efb6579f4dfae38043f7203c06779a8df1d6d6639b7212171f428289",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "e44dfd4e0c97807a0ea8a7e885dfcecdbf2b1f523f2fd8ce39227949d5f9d5ed",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-hundreds-800.attempt-1.master-24000.wav",
+            "sha256": "7a8c676782a29983a03f1029a7639e4bc32ff58e60c8325f1e6e3a59e7e0690c",
+            "pcm_sha256": "e44dfd4e0c97807a0ea8a7e885dfcecdbf2b1f523f2fd8ce39227949d5f9d5ed",
+            "byte_length": 83130,
+            "sample_count": 41543,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.7309583333333334,
+            "rms": 3838.0371176861845,
+            "peak": 17559,
+            "clipped_samples": 0,
+            "silence_fraction": 0.2501985894133789,
+            "leading_silence_samples": 11,
+            "trailing_silence_samples": 10
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-hundreds-800.attempt-1.telephony-8000.wav",
+            "sha256": "0c9c7e5d2a0c577f3dbe17bbd02278558953c77d64c88defc856e3f62d7552cd",
+            "pcm_sha256": "7ea2b5448310cbd7b47fd8ba7758a7e84bcc7486f31baa3e5119ce09933e6547",
+            "byte_length": 27740,
+            "sample_count": 13848,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.731,
+            "rms": 3684.787652573099,
+            "peak": 17309,
+            "clipped_samples": 0,
+            "silence_fraction": 0.2557047949162334,
+            "leading_silence_samples": 4,
+            "trailing_silence_samples": 3
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20022,8 +20354,54 @@
       "catalog_record_sha256": "7af71d38a628f0bb48ac849c6ab33e404bfc3390d522ec8c29d7d661222ad202",
       "transcript_sha256": "1338a8fc9b581b8df92e1d175f202c5605c86b0e18221b2f0d4e006b01d55c71",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:38.720Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוּשְׁמוֹנֶה מֵאוֹת",
+          "instruction_sha256": "013e1d02178b7ba362e79c59ba3ffa2b6098f26862e2cf641f58cc4d6bd1b1b7",
+          "request_body_sha256": "26d9b377aad7bba346817083709aca416d3c62a34465f76ac22c95ca5b89d54a",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "108ccef46b2a7a4555e653431bbb8bd6a47608555405d16d27795900b278a96d",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-hundreds-800.attempt-1.master-24000.wav",
+            "sha256": "a4821beb155e4572f5cc780f36bbed36459cef887cd1b1c53fe24484a50b6f38",
+            "pcm_sha256": "108ccef46b2a7a4555e653431bbb8bd6a47608555405d16d27795900b278a96d",
+            "byte_length": 88890,
+            "sample_count": 44423,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.8509583333333333,
+            "rms": 3333.484004842319,
+            "peak": 17670,
+            "clipped_samples": 0,
+            "silence_fraction": 0.30418927132341356,
+            "leading_silence_samples": 27,
+            "trailing_silence_samples": 146
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-hundreds-800.attempt-1.telephony-8000.wav",
+            "sha256": "5d89e670f72d1c83cc577c130eecb8602df601e2f85d2a9fe05f62db78d08058",
+            "pcm_sha256": "3db68a02e7d864d7cd3d5730677601c545fee590bf31144503b4c53f7b579cbf",
+            "byte_length": 29660,
+            "sample_count": 14808,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.851,
+            "rms": 3154.8200087294586,
+            "peak": 18312,
+            "clipped_samples": 0,
+            "silence_fraction": 0.31118314424635335,
+            "leading_silence_samples": 9,
+            "trailing_silence_samples": 48
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20038,8 +20416,22 @@
       "catalog_record_sha256": "ea1293f9f05783a17c1fe4d444df67934966766b8ae201602e68ac74155ef605",
       "transcript_sha256": "0f657cc719497447b978edeb9fa2e6a723dd17521141cd2d47d65ec307e13593",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:39.458Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nתְּשַׁע מֵאוֹת",
+          "instruction_sha256": "c8c20357090845e810341baa36a11f7bd28217bebf13b6785aa395ea2383a27c",
+          "request_body_sha256": "9462881ddb03bf42b38453d6afabe3ee9ba30abd957d4063bca46aa209e90b5a",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20054,8 +20446,54 @@
       "catalog_record_sha256": "93516825c82ea8d02cdbb3d9f571733086c28211fbd650bef1bc93f621371e32",
       "transcript_sha256": "209070ec0668dea3a22ee518c1e7f231d3be6f9c9f8beb146f1f0328ae274570",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:41.368Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוּתְשַׁע מֵאוֹת",
+          "instruction_sha256": "4e2eb33828d6e5ba9f6aa228d10b74fb1181790043a90014a99722da3e23c589",
+          "request_body_sha256": "dce9bdb1fe0b435e1068867d39e703e7c8a7b13c820cd093bd3d6067ec3a3271",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "dc8907c783960f238ad246fd78f6c89092e0f1e3b3284701a25d68aa89b9d96a",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-hundreds-900.attempt-1.master-24000.wav",
+            "sha256": "86419d984005f42da2c1c62da16f54d343813356f8cbff905dad797fb127624b",
+            "pcm_sha256": "dc8907c783960f238ad246fd78f6c89092e0f1e3b3284701a25d68aa89b9d96a",
+            "byte_length": 75450,
+            "sample_count": 37703,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.5709583333333332,
+            "rms": 3308.4272448786096,
+            "peak": 16597,
+            "clipped_samples": 0,
+            "silence_fraction": 0.2950163116993343,
+            "leading_silence_samples": 1,
+            "trailing_silence_samples": 958
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-hundreds-900.attempt-1.telephony-8000.wav",
+            "sha256": "0155ccfe7f92fbd46c720d33edfb7996f8cdc36d68150bd00f8e8eb20c40d530",
+            "pcm_sha256": "7ab436507390446aa204b38658c37a1f2e8d134572484b65a36c1a5b98dcf2eb",
+            "byte_length": 25180,
+            "sample_count": 12568,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.571,
+            "rms": 3116.852495840045,
+            "peak": 16386,
+            "clipped_samples": 0,
+            "silence_fraction": 0.2991725015913431,
+            "leading_silence_samples": 1,
+            "trailing_silence_samples": 319
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20071,8 +20509,54 @@
       "catalog_record_sha256": "1a6786c78f96c6b4ef59bbf7394f08db7d70f18f6a1a7d65d30abd215b8c9aeb",
       "transcript_sha256": "280f13f2587dd4f0044a1d5162e9fa1959983de2665de3450affb2e71f75a453",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:41.854Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nאֶלֶף",
+          "instruction_sha256": "8df9fe8b2fce486136d077626cfed24dd5b9becfcebf75fc88d618a5d7c17638",
+          "request_body_sha256": "bf84c548ce37c2f72230bdb5af4043b817a62a6e573af8f9a05bba7160e53d9d",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "7c6baa5e64e1e5f55a1fc501c4bd193d88b1c1ea071638372a400b50af864659",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-thousands-1.attempt-1.master-24000.wav",
+            "sha256": "ea839ede3dcafc91c5f99a1e251e5315bb6770d800ce72c48efc60ce551973b3",
+            "pcm_sha256": "7c6baa5e64e1e5f55a1fc501c4bd193d88b1c1ea071638372a400b50af864659",
+            "byte_length": 52410,
+            "sample_count": 26183,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.0909583333333333,
+            "rms": 1843.7036150546965,
+            "peak": 12906,
+            "clipped_samples": 0,
+            "silence_fraction": 0.3533208570446473,
+            "leading_silence_samples": 4,
+            "trailing_silence_samples": 0
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-thousands-1.attempt-1.telephony-8000.wav",
+            "sha256": "03f6064c8ded50e9190ee9d68894be95e22d39d7439ece590163df71b229ed7c",
+            "pcm_sha256": "58a444629a1dcf6f2a362c1e088f7c6d1732803affc89c1df6189a4bb4dee5a1",
+            "byte_length": 17500,
+            "sample_count": 8728,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.091,
+            "rms": 1793.434345911077,
+            "peak": 13363,
+            "clipped_samples": 0,
+            "silence_fraction": 0.36801099908340973,
+            "leading_silence_samples": 9,
+            "trailing_silence_samples": 0
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20088,8 +20572,22 @@
       "catalog_record_sha256": "e4464f44e0d3d83b205104a3e8f7432b37e1d31f9e63588636c77e4872c43981",
       "transcript_sha256": "ccdf9047255bae5786460a3b7227e5d2092a21bb281f87ef7e88a06341eb9934",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:43.765Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוְאֶלֶף",
+          "instruction_sha256": "d872e58da2c22150936f93199aa1ee74b5baef0510970949c190d7e6ca3cf43c",
+          "request_body_sha256": "8b3c1169347f8a1cb1ab473b61dfd9d0b7e442b7e83fca3c8aaaa9306ab1a3fc",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20105,8 +20603,54 @@
       "catalog_record_sha256": "d7961242f70d16999aba51fe444ede08e21d1c02f6474cdbce7119093fcbe35c",
       "transcript_sha256": "c59eed4e57ec4747b3e9e7c5e5a830c81ac91cfbda0b5840b768dc89ffe81286",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:44.063Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nאַלְפַּיִם",
+          "instruction_sha256": "6d15ed8a0301ef64b5814ada6f3ee91e86086b0d518cba62ddd74e7e7ee5351a",
+          "request_body_sha256": "1b55b15db6daa616e4b97586013a4eb00d019a8ddc1353b1666c5cc7529b2892",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "7d5e8a23f3f39d9af3a293d6b681b7df36bb90a5a4213041a70fda8d265aa936",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-thousands-2.attempt-1.master-24000.wav",
+            "sha256": "5ec0c3d498ee3b365e1571cdab5cbd04a57c7da6c2e7ac8e3047b4bea3e98200",
+            "pcm_sha256": "7d5e8a23f3f39d9af3a293d6b681b7df36bb90a5a4213041a70fda8d265aa936",
+            "byte_length": 58170,
+            "sample_count": 29063,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.2109583333333334,
+            "rms": 3477.7077797056727,
+            "peak": 25066,
+            "clipped_samples": 0,
+            "silence_fraction": 0.34893163128376287,
+            "leading_silence_samples": 156,
+            "trailing_silence_samples": 3
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-thousands-2.attempt-1.telephony-8000.wav",
+            "sha256": "40cba1ec1ac3be84ad70b547d6e17b8b852741187cf80309198b7e02023361ba",
+            "pcm_sha256": "675f930499efb05cedeb5c5f2eef6f2289410e9a3e9530ffad21b71948e8e629",
+            "byte_length": 19420,
+            "sample_count": 9688,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.211,
+            "rms": 3475.6745568752062,
+            "peak": 26186,
+            "clipped_samples": 0,
+            "silence_fraction": 0.35156895127993393,
+            "leading_silence_samples": 52,
+            "trailing_silence_samples": 34
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20122,8 +20666,54 @@
       "catalog_record_sha256": "72f406991257e0a169b37d952bf50eeb8d21d32dc629e9283d7f217d97d94dc2",
       "transcript_sha256": "971781c6082f8781e4fc891f11b4e95cd9394e59871fe89fcfddf122a9fd8b72",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:45.902Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוְאַלְפַּיִם",
+          "instruction_sha256": "07668610e26bef5fd15ff8b15f808800c82b25a71a3ef173b0a9de43cadb7875",
+          "request_body_sha256": "1ac95033668b9e9b6ee585b9db00b898e46390fbdd1603bec7421a7f8d169e6d",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "f57647ec5c6edb64b54b5ab9a7cb9d6a14deb165fddf8b08faec915c731353f7",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-2.attempt-1.master-24000.wav",
+            "sha256": "8295a1674259c1819faf571242ec03da943cfdef3311eb2689bd6ea12e188ae0",
+            "pcm_sha256": "f57647ec5c6edb64b54b5ab9a7cb9d6a14deb165fddf8b08faec915c731353f7",
+            "byte_length": 67770,
+            "sample_count": 33863,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.4109583333333333,
+            "rms": 3213.8441370650735,
+            "peak": 23581,
+            "clipped_samples": 0,
+            "silence_fraction": 0.10430263119038478,
+            "leading_silence_samples": 83,
+            "trailing_silence_samples": 142
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-2.attempt-1.telephony-8000.wav",
+            "sha256": "b32f94f69de45928407eb77fc6996523775a567e2228300d35fe8d94316e0c1b",
+            "pcm_sha256": "af110452896ce75c68403e050f09990958b816996de785c3dde7bbcad7274aee",
+            "byte_length": 22620,
+            "sample_count": 11288,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.411,
+            "rms": 3207.873741795743,
+            "peak": 23436,
+            "clipped_samples": 0,
+            "silence_fraction": 0.10453579021970234,
+            "leading_silence_samples": 28,
+            "trailing_silence_samples": 47
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20139,8 +20729,54 @@
       "catalog_record_sha256": "1729fb2d93f15bef9c823284a0192ea3ed77404db829907ac9124e8338f3b214",
       "transcript_sha256": "e7aba51e732a158013aa923a63721eee5bd9c57e1e798018cb8bd528c0ed43a6",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:46.362Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nשְׁלוֹשֶׁת אֲלָפִים",
+          "instruction_sha256": "0c0d1b0fc1967b439fe7a8abb3e8960e5a1172b86c105d553e84d102227c03c0",
+          "request_body_sha256": "c0ee38cee9f1497400b381a4ca53e6c2d32001196d545eea54531ed2b3a59934",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "543293a04391cb3f432a85e7d174b206f73e154399dfe60a6b95f357526c9d96",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-thousands-3.attempt-1.master-24000.wav",
+            "sha256": "597be7cd4ce9d86ffa0057e4ef850ef7d8c53054ad5b32e238f93645e1c67160",
+            "pcm_sha256": "543293a04391cb3f432a85e7d174b206f73e154399dfe60a6b95f357526c9d96",
+            "byte_length": 75450,
+            "sample_count": 37703,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.5709583333333332,
+            "rms": 3111.0623796791488,
+            "peak": 22421,
+            "clipped_samples": 0,
+            "silence_fraction": 0.1714187199957563,
+            "leading_silence_samples": 0,
+            "trailing_silence_samples": 0
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-thousands-3.attempt-1.telephony-8000.wav",
+            "sha256": "ec0fc4b8e99c13fc7335a6b030c3dbabec0aab2b0291337fa8a93a7ec5d22382",
+            "pcm_sha256": "a4065560975ccde2b679653fdd0f4421b81b9c126f1a2ca0c1a9bbca05f2325a",
+            "byte_length": 25180,
+            "sample_count": 12568,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.571,
+            "rms": 2943.0866541147343,
+            "peak": 22566,
+            "clipped_samples": 0,
+            "silence_fraction": 0.17568427753023552,
+            "leading_silence_samples": 0,
+            "trailing_silence_samples": 0
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20156,8 +20792,22 @@
       "catalog_record_sha256": "c9a13b36b767d0207bf539f9d92749267d7572ab8e68b3c0f350ec1e5fd125d2",
       "transcript_sha256": "5a665e889da49dcd62fb3a47d648a6b28ef15343fc229911ca687d8b3615ebd9",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:48.175Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוּשְׁלוֹשֶׁת אֲלָפִים",
+          "instruction_sha256": "a4f8449b00e30f0d95f3f5d6fe0bd31e26786d69cec43ebc1fadfacf8b5fd933",
+          "request_body_sha256": "9b8248fda8175bda9965df79519227ee5ef0a1afea3074ddaa42e6458b1047b4",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20173,8 +20823,22 @@
       "catalog_record_sha256": "0105db4146269309c88373d823d02bcf9249a31484cbc0f2f023dc2d7d374cbb",
       "transcript_sha256": "76cc365c7dce3600ae570cd6d90567b77daa382ca104635988ad55e2017f4912",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:48.864Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nאַרְבַּעַת אֲלָפִים",
+          "instruction_sha256": "4f18154645c672f75b0edb7a10f4d6809f814a739e9898bf4690476ba1df7f24",
+          "request_body_sha256": "5ae0a1a9e436b37fd01f40030d6479a963f1c642983b258bd668fc31c2bd459e",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20190,8 +20854,22 @@
       "catalog_record_sha256": "c0fd110cebd18949df66b8aade95fbca0d2d4a9476bd042e99b26b45c6108a1a",
       "transcript_sha256": "f3c1a139b8d0bee461438568a3f069d28e9322565ef8f875d33adc34f875cc1a",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:51.430Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוְאַרְבַּעַת אֲלָפִים",
+          "instruction_sha256": "a61863a6ada44ce2c8f84e81b5a048acd25b759a20287ac272b232e91db381b2",
+          "request_body_sha256": "7f57f272807d80cb26d02fa7327f6ae5a2f88a2d1bd2a0f27d5e05b0164c9285",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20207,8 +20885,22 @@
       "catalog_record_sha256": "434ee5d8d708f7ad12063df0ab0c470dcec61b346b2c78dd155d2bc415dedf2f",
       "transcript_sha256": "15656b3a1a0cc858353b42c316e03fccc388a5a58f8bf1704ca79ab7cd2f15bb",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:51.535Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nחֲמֵשֶׁת אֲלָפִים",
+          "instruction_sha256": "25c64c536f643401a59e82157a58b739a95091b973e281b31d693485ae875b16",
+          "request_body_sha256": "ad4c7135412520d6c050c451bcfc0e74fc99d1479bd2630fde7112ea217568c3",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20224,8 +20916,54 @@
       "catalog_record_sha256": "51b1578907319dd60bf499f864fcb6d555522976fcd55715a4d626b03844eee2",
       "transcript_sha256": "02ff441c1c6c395231f0e8aa9703b023d139898ff427b33113db52ec37627ac0",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:54.059Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוַחֲמֵשֶׁת אֲלָפִים",
+          "instruction_sha256": "bb3b964072af646e5e9eebbf3d52d80f5ce8dd9647afe63d90d06529dcf09207",
+          "request_body_sha256": "be03d873b96aa49016af9fcd935555d2a9e8f21fd56ffe91588ef5c807b76cb8",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "ddc9fdc0c8a6baf785c95212584f79a3c12c89df9bf738337055ca4e2e4ae824",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-5.attempt-1.master-24000.wav",
+            "sha256": "112fb01a653705086fec9e574a33da2de14f1ed7d3b9a341409f2c077d573741",
+            "pcm_sha256": "ddc9fdc0c8a6baf785c95212584f79a3c12c89df9bf738337055ca4e2e4ae824",
+            "byte_length": 119610,
+            "sample_count": 59783,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 2.4909583333333334,
+            "rms": 3149.8738166318467,
+            "peak": 18751,
+            "clipped_samples": 0,
+            "silence_fraction": 0.2344144656507703,
+            "leading_silence_samples": 39,
+            "trailing_silence_samples": 65
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-5.attempt-1.telephony-8000.wav",
+            "sha256": "91a6e26d14e1564c633221082e99229b1fc9ee8757cc3d939a6cb17ec04cd744",
+            "pcm_sha256": "36d112c353f7d844a16af99f797d3d522821e628dd0b731d70eae40042ea0d33",
+            "byte_length": 39900,
+            "sample_count": 19928,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 2.491,
+            "rms": 3117.049187153852,
+            "peak": 18805,
+            "clipped_samples": 0,
+            "silence_fraction": 0.241870734644721,
+            "leading_silence_samples": 13,
+            "trailing_silence_samples": 56
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20241,8 +20979,22 @@
       "catalog_record_sha256": "7c95e30cf539a8ac798b92e0ceedd9f7d29fd84e292995ca42c3f761d12ccbce",
       "transcript_sha256": "751c21ad7da197045ad9aa983c37f61420da2d85acf6bf4e3b5e00d5ee322dfa",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:18:54.231Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nשֵׁשֶׁת אֲלָפִים",
+          "instruction_sha256": "f7cd385fcbcdd54ee191736211d54022b2251ea9ad21d162810d8351da4143da",
+          "request_body_sha256": "5b849703975d951216f44990d2cc6254823943599349e6e820f09cecdf37e599",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20258,8 +21010,54 @@
       "catalog_record_sha256": "72fa61b64b360cb2de3de08990ccc3759459e193cfb203415f81e0aa6c8f6d64",
       "transcript_sha256": "4a4bddef886c80a1d61d639478040876ffa001cfa709596b0e32f9fa9f824dd2",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:57.343Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוְשֵׁשֶׁת אֲלָפִים",
+          "instruction_sha256": "e9056d1e2d6fe0b8784ed52ca4ee3439a24a55585bb0945e81a95aba81da1018",
+          "request_body_sha256": "27eda73f7cd382b11778db03ffee78d1c7526d60f5ef7a966f81709291d9117e",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "a9461c37099c1a11a341e732d6da799ab3fc258edc237cd7a999b8a41b494040",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-6.attempt-1.master-24000.wav",
+            "sha256": "b80b5167a867ee8edcd20ac1d7ca54ae04fab10211462bac0f0988cfa32a5b2f",
+            "pcm_sha256": "a9461c37099c1a11a341e732d6da799ab3fc258edc237cd7a999b8a41b494040",
+            "byte_length": 83130,
+            "sample_count": 41543,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.7309583333333334,
+            "rms": 2462.7888781031284,
+            "peak": 15130,
+            "clipped_samples": 0,
+            "silence_fraction": 0.25467587800592156,
+            "leading_silence_samples": 59,
+            "trailing_silence_samples": 0
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-6.attempt-1.telephony-8000.wav",
+            "sha256": "42107f5bd3ed0e2f7ab6af74ebd09768a4528e25e2b0857d9447d74411f4d76c",
+            "pcm_sha256": "f6c05eca3a06192a3d8560b031fb94a37fbdbec415e2eb721bb5ddb52a2893fc",
+            "byte_length": 27740,
+            "sample_count": 13848,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.731,
+            "rms": 2275.0811346557116,
+            "peak": 14834,
+            "clipped_samples": 0,
+            "silence_fraction": 0.26314269208549973,
+            "leading_silence_samples": 42,
+            "trailing_silence_samples": 0
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20275,8 +21073,54 @@
       "catalog_record_sha256": "8b62600a0373acaaf90a27851a2666b906011d333389cd558c9154fe4c004d85",
       "transcript_sha256": "96b433bee04c02a8d86fe315571b4c1a3023fa5822e05cf55a6adb88d10efec6",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:57.832Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nשִׁבְעַת אֲלָפִים",
+          "instruction_sha256": "988ecac8df28bdf424a0863ec6adcc2904d52c65f999dfb1bd888d3510dff591",
+          "request_body_sha256": "f18ca61b2e5b4c3778c751cd36055be62a5fc8cf68a12c361865ed365b2d7e4d",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "72bc25e9f4c3be3f02d33fe2f9776dc997d185bf0a6f053fb19d729565623b97",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-thousands-7.attempt-1.master-24000.wav",
+            "sha256": "a672b5214ac5ae717a7dcede9245f42a28b63af31c8532a307d2f72505af91ad",
+            "pcm_sha256": "72bc25e9f4c3be3f02d33fe2f9776dc997d185bf0a6f053fb19d729565623b97",
+            "byte_length": 90810,
+            "sample_count": 45383,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.8909583333333333,
+            "rms": 2265.4221963504788,
+            "peak": 21071,
+            "clipped_samples": 0,
+            "silence_fraction": 0.33065244695150164,
+            "leading_silence_samples": 0,
+            "trailing_silence_samples": 1646
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-thousands-7.attempt-1.telephony-8000.wav",
+            "sha256": "1b9aa9924d8b85442c017e5ecbba51d1eacd81388a50a807b401dfd96f9fcd2f",
+            "pcm_sha256": "6fa36fe145dfb4eaca9f5786b448253852ba6240473945e100420c4903b1fdf8",
+            "byte_length": 30300,
+            "sample_count": 15128,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.891,
+            "rms": 2097.7025891590974,
+            "peak": 19287,
+            "clipped_samples": 0,
+            "silence_fraction": 0.33950290851401377,
+            "leading_silence_samples": 2,
+            "trailing_silence_samples": 867
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20292,8 +21136,54 @@
       "catalog_record_sha256": "cc9565b87817b977641ce7cc7648fac85a2be57522bd95d924dc486fedbdf890",
       "transcript_sha256": "dba2803e2efbc2b98f05deafb03b1c061cce3a4a019a8b1900f9cba9974ac5e8",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:18:59.864Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוְשִׁבְעַת אֲלָפִים",
+          "instruction_sha256": "bfc949aafdb70d6cc7fda8687078ccd96b66e05e9ea1b381c7285c30bd200de7",
+          "request_body_sha256": "8d44ff6389103c76152ba2070a82778677fea227fb29d9050b5749434e5fa3f3",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "a7a6105ffc846aea41d5a3fb92df04265d6e0fac3294102ef53c2b58721e7dba",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-7.attempt-1.master-24000.wav",
+            "sha256": "8010164071566da5ecf8af91e104e8e97a24e834c926603babd148e6026d2022",
+            "pcm_sha256": "a7a6105ffc846aea41d5a3fb92df04265d6e0fac3294102ef53c2b58721e7dba",
+            "byte_length": 115770,
+            "sample_count": 57863,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 2.4109583333333333,
+            "rms": 4021.3645673081796,
+            "peak": 27038,
+            "clipped_samples": 0,
+            "silence_fraction": 0.23472685481222888,
+            "leading_silence_samples": 167,
+            "trailing_silence_samples": 57
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-7.attempt-1.telephony-8000.wav",
+            "sha256": "d62332b14f25331f6269957b05d43e0c3254c0f4ad89e2422e4f17a1097802d9",
+            "pcm_sha256": "5eb4cda7968ebc207eb0f01b02e896bc63bffa720f3b24c6337ccabed3569854",
+            "byte_length": 38620,
+            "sample_count": 19288,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 2.411,
+            "rms": 3900.9076845028353,
+            "peak": 27919,
+            "clipped_samples": 0,
+            "silence_fraction": 0.24087515553712152,
+            "leading_silence_samples": 56,
+            "trailing_silence_samples": 19
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20309,8 +21199,22 @@
       "catalog_record_sha256": "4e8935dd2cca491413806e80ea020d45752b7bf88c0b6cba6f068d4c8c6933b5",
       "transcript_sha256": "ca23eb7e21a936d7caf69f6224e3216271ca0336a1a1da5c1c5b8c791fecd4a7",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:19:03.076Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nשְׁמוֹנַת אֲלָפִים",
+          "instruction_sha256": "0ba744d41fef7797ad167b86496ac80bc05bf37bc426834f134cad02b47169ba",
+          "request_body_sha256": "5881989e8f36d28e85281894ecddac4a0be0cae69828eda40a60b18f17e2f790",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20326,8 +21230,54 @@
       "catalog_record_sha256": "93cbbdb0c8072ee3c98689e8851307ebdf67280e8a8fb96b669a056e67882ba2",
       "transcript_sha256": "a8cba858c43e826a715fdbb8968f55906d49b646c6baafb423025491fe4ca3e3",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:19:05.629Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוּשְׁמוֹנַת אֲלָפִים",
+          "instruction_sha256": "d820a66e702beb38fe5102357db691041f280dc0fb8bc8349f8ed6a35a2ca0f5",
+          "request_body_sha256": "1ffc3fe49e0c6e58ab2525c3ce871a061ab8eee2cc65f9852a63f479aca01d16",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "3d930ea88e298520d21e4dfb9483b15161a805a163c96a3726c983f25e53f9dd",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-8.attempt-1.master-24000.wav",
+            "sha256": "4c4771216dd4f5a3e51322057907f9ef61bf440d7b5a18066cb9f8bf50cb3c41",
+            "pcm_sha256": "3d930ea88e298520d21e4dfb9483b15161a805a163c96a3726c983f25e53f9dd",
+            "byte_length": 88890,
+            "sample_count": 44423,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.8509583333333333,
+            "rms": 3603.10745338898,
+            "peak": 19567,
+            "clipped_samples": 0,
+            "silence_fraction": 0.20250770997006057,
+            "leading_silence_samples": 11,
+            "trailing_silence_samples": 17
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-8.attempt-1.telephony-8000.wav",
+            "sha256": "722445adccbddbe243edd39c3f9e10b782ffbbf65a9d5c8a7756877717e3271d",
+            "pcm_sha256": "8128bccf2e6a2a3e29d77b9c48cb668aa0b727af954ad037a666ccb71055df12",
+            "byte_length": 29660,
+            "sample_count": 14808,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.851,
+            "rms": 3456.1225767320643,
+            "peak": 17444,
+            "clipped_samples": 0,
+            "silence_fraction": 0.2086709886547812,
+            "leading_silence_samples": 4,
+            "trailing_silence_samples": 16
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20343,8 +21293,54 @@
       "catalog_record_sha256": "5faa9ae87f40a0ab02b219987f8273bb532bb8ee629ed58af5ec37c3beb39fcf",
       "transcript_sha256": "0e8c0cbe5d7112497cc8fb5756dfdeda224e3987bf3dd48a2cbed20ab8b1c39e",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:19:08.368Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nתִּשְׁעַת אֲלָפִים",
+          "instruction_sha256": "11bb475f153aeff104b0c36f37ba2b6fa6b75c0d75f35e8447e93918576a651f",
+          "request_body_sha256": "7ec073ca59b03ab4f1e58cf0013fa4088567d76de88bd9e4ea0d4bbb031c0cd1",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "c9a3fde6cdda2928e49819644f92330b2d8eb2cb020ff7d5b8c5e3f6d734235a",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-thousands-9.attempt-1.master-24000.wav",
+            "sha256": "6b3fda4a6b5fbfdb1c48dc9d7a03385543cc4ad1f0a152dfbb500ec0209a413e",
+            "pcm_sha256": "c9a3fde6cdda2928e49819644f92330b2d8eb2cb020ff7d5b8c5e3f6d734235a",
+            "byte_length": 79290,
+            "sample_count": 39623,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.6509583333333333,
+            "rms": 4351.726271058734,
+            "peak": 26542,
+            "clipped_samples": 0,
+            "silence_fraction": 0.2496782171970825,
+            "leading_silence_samples": 156,
+            "trailing_silence_samples": 386
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-thousands-9.attempt-1.telephony-8000.wav",
+            "sha256": "ecb6d40a412735b0fcbbab24684669791a730bc15ddf8eec35af813ac651dbcc",
+            "pcm_sha256": "e33110c7d0dcde98126fb85c7efcd940b1cbbc8558d0fcc76274a7a2e0edd252",
+            "byte_length": 26460,
+            "sample_count": 13208,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.651,
+            "rms": 3989.4572714202095,
+            "peak": 18590,
+            "clipped_samples": 0,
+            "silence_fraction": 0.26090248334342825,
+            "leading_silence_samples": 53,
+            "trailing_silence_samples": 129
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20360,8 +21356,54 @@
       "catalog_record_sha256": "b85a4b94ab1e23b52f89a180468beaa74567beaefa636b234d414f682e4e0113",
       "transcript_sha256": "c1ee2aad12e22e8d424c25407b3b141b08b85ac60b544b610e9f9c07d4fad905",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:19:10.962Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוְתִשְׁעַת אֲלָפִים",
+          "instruction_sha256": "7d47dcdc39e3031fbafcc23af2e59e3dc4adc07d8b427d38c7e8012055cf7ca5",
+          "request_body_sha256": "9cf7c0c2255cc9f915dbc3a2015941472a847edb2a141c784b999ca3062b7d61",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "c4fa1df944126a24e624003df61d77fef22c4afa1f803d73808fea0c97d676ed",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-9.attempt-1.master-24000.wav",
+            "sha256": "439c7b69903d45213b8f2a247522d464bc77b09647f48f36d402d3dac24dbe1f",
+            "pcm_sha256": "c4fa1df944126a24e624003df61d77fef22c4afa1f803d73808fea0c97d676ed",
+            "byte_length": 92730,
+            "sample_count": 46343,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.9309583333333333,
+            "rms": 2907.420329212537,
+            "peak": 22297,
+            "clipped_samples": 0,
+            "silence_fraction": 0.12519690136590209,
+            "leading_silence_samples": 0,
+            "trailing_silence_samples": 1826
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-thousands-9.attempt-1.telephony-8000.wav",
+            "sha256": "59399d6eb87235584503587e1155b44d11a90ae4b4f098434051a94cbe279eaa",
+            "pcm_sha256": "84f9c21c1628c085655fe9e0e1df509336a54461ec303d8bb6524914114ef620",
+            "byte_length": 30940,
+            "sample_count": 15448,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.931,
+            "rms": 2835.926588624396,
+            "peak": 21050,
+            "clipped_samples": 0,
+            "silence_fraction": 0.1294018643190057,
+            "leading_silence_samples": 2,
+            "trailing_silence_samples": 609
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20377,8 +21419,22 @@
       "catalog_record_sha256": "c10882a716b7bb7d19857fef16cbb3daa928b3b40c1c420b1a3fcf9a6ce571d8",
       "transcript_sha256": "3e339833a34af216552202b418ffd63ae036ff66d2973d37145083b4eeef81ec",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:19:13.569Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nעֲשֶׂרֶת אֲלָפִים",
+          "instruction_sha256": "bcf9e98ca5c0e01c530d62293ec0da07f6a53ed9c7d9007046461c98136fc307",
+          "request_body_sha256": "57f006878aab0563ab42f5bf20029fe53be69009c36497be20fada146d5490db",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20394,8 +21450,22 @@
       "catalog_record_sha256": "c374e1b5ab9a19b8e9a819bdcffcfcc22c6de29d27a3e350f1d89549cd834307",
       "transcript_sha256": "6a0ddd2622c4066e934ee98fd3d3252a37588ce8b73c0c01266bc0ca6af886e5",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:19:13.848Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nוַעֲשֶׂרֶת אֲלָפִים",
+          "instruction_sha256": "c6c51cc5a9ab597de24048285d80e67f9883392733383a1c7bffdcababec92f8",
+          "request_body_sha256": "cd0ae2ab0c6349dc40be6dfad78fc3627358fab1f1a6f04d457e92ed66aef74a",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20411,8 +21481,54 @@
       "catalog_record_sha256": "aaee620e238aebe020b584c9cfd87f87ad8475e14e9520e7be1a71eb5ad9f21a",
       "transcript_sha256": "957f3816c0222d382d8f648263be7991365eceaac5ed2e2b7605d54f1087db72",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:19:16.294Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nמִילְיוֹן",
+          "instruction_sha256": "c07d43695cdb8604dc50b4b63bd8c63ca4f2a5e6d6e8fea55845869c3843d421",
+          "request_body_sha256": "98fcd2cc6773c5079f861ce1c340d586ef2677cd1e2bf883cabc226240dd3991",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "e9ae4d239f34213d884b8d90a14af3fd0ce36fae22bac1ad641b2c9be82695a0",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-million.attempt-1.master-24000.wav",
+            "sha256": "13eeb249fd345c504cd0dd20c1412989383b9c5bbe4e1528826fd31060b48f66",
+            "pcm_sha256": "e9ae4d239f34213d884b8d90a14af3fd0ce36fae22bac1ad641b2c9be82695a0",
+            "byte_length": 58170,
+            "sample_count": 29063,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.2109583333333334,
+            "rms": 4467.565790809013,
+            "peak": 18705,
+            "clipped_samples": 0,
+            "silence_fraction": 0.26463200633107387,
+            "leading_silence_samples": 0,
+            "trailing_silence_samples": 146
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-million.attempt-1.telephony-8000.wav",
+            "sha256": "65461f0c5bc37cafe755f31afd3809aae62ba75c2c37301b0db2c3e15bdd36cc",
+            "pcm_sha256": "53ede55f2de3925d9639f6a3ae82295cca8c76914a97d18f91b1ec7c0c054212",
+            "byte_length": 19420,
+            "sample_count": 9688,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.211,
+            "rms": 4465.182431707695,
+            "peak": 18486,
+            "clipped_samples": 0,
+            "silence_fraction": 0.2647605284888522,
+            "leading_silence_samples": 1,
+            "trailing_silence_samples": 48
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -20428,8 +21544,54 @@
       "catalog_record_sha256": "1e6b5e1f00546690702c781d2df943912daaf95e10f2339c751bc37fd2ba530b",
       "transcript_sha256": "4a98aea1dbf2f4551bb15367fad64734469fddbcd92584744e348e80a86c3f8f",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:19:17.370Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Israeli Hebrew. Use a professional, warm, natural adult female call-center voice. This is one complete prerecorded cardinal-number chunk. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nשְׁנֵי מִילְיוֹן",
+          "instruction_sha256": "650fad71d78339fcecc355b7bf48cfb122a603ed6523608f39aff22b496cf772",
+          "request_body_sha256": "b81da46f4fdac135200db65b64dbc3c3496d6e1ee41ab68027e7c780284b7800",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "7028ae189e747d0c0ec89451641a1163166daf5436b1ec3ed771d07929e94dcf",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-two-million.attempt-1.master-24000.wav",
+            "sha256": "e1a7a92153025d4d387c90aa4f4767a1cde25cda3a49eec53c4898a6a6be1721",
+            "pcm_sha256": "7028ae189e747d0c0ec89451641a1163166daf5436b1ec3ed771d07929e94dcf",
+            "byte_length": 71610,
+            "sample_count": 35783,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.4909583333333334,
+            "rms": 3690.693260578176,
+            "peak": 13942,
+            "clipped_samples": 0,
+            "silence_fraction": 0.09884582064108655,
+            "leading_silence_samples": 0,
+            "trailing_silence_samples": 143
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-two-million.attempt-1.telephony-8000.wav",
+            "sha256": "1488787fbc79a6c203da8331ae8bf190be534f03cff6639efea273eb4d5ca903",
+            "pcm_sha256": "3d2d4e2cbdce240cd396577462990d7b90c0e06425c111a69cc5b4a8bbf6619f",
+            "byte_length": 23900,
+            "sample_count": 11928,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.491,
+            "rms": 3471.170462639493,
+            "peak": 9689,
+            "clipped_samples": 0,
+            "silence_fraction": 0.10035211267605634,
+            "leading_silence_samples": 0,
+            "trailing_silence_samples": 47
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22174,8 +23336,22 @@
       "catalog_record_sha256": "1f2340812fa95e6e94606bf52a60f1b86e0e4c4bfbab86bf1c570b10275777cd",
       "transcript_sha256": "cab25b04d1ff0fbbc4aadbc62b37230d353a2756a068142adaea885fc131612c",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:27.279Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَسِتَّةَ عَشَر",
+          "instruction_sha256": "8e67ab88db276fd3751f7b9981b686ea56a32a1fa83f2f2cfba92e3aaf4ee245",
+          "request_body_sha256": "c266c75bd5c11795929a5a48b24bc4536c2fa32144de2d3d43b3c3d59788d0ee",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22192,8 +23368,22 @@
       "catalog_record_sha256": "747213e56827f844f393dcb9382fb0f75a4d4b8b86b766dc1a01bced21c34876",
       "transcript_sha256": "1f8235235b5d1861c7e34f69c10e0e6c433d08b9f336b340f3ca5086f3d0ac1d",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:27.436Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nسَبْعَةَ عَشَر",
+          "instruction_sha256": "76705391e1d8ab9a1921b89850364735c033f0d235996fcc9251fd5b37370d0c",
+          "request_body_sha256": "092792db97a568cc6c1a7b1345b1fccc5d0d8062d5c7259e132244c1daade3f4",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22210,8 +23400,22 @@
       "catalog_record_sha256": "023662121275be15760688932c861e8293dc69af481093bf936cce2208f6389a",
       "transcript_sha256": "8c185c6b3743232bc68aefeb31f9020d1802e904f65d320bbf869643436e556e",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:30.153Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَسَبْعَةَ عَشَر",
+          "instruction_sha256": "780d41c4262148ac2a00010978e0d8bb29d505587a7fb99ddd8bb2b53d22a2e0",
+          "request_body_sha256": "b8eda5ae65d3459dfbe27c9d7307395eff975d138a1e1627b89480f45fbed3ee",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22228,8 +23432,22 @@
       "catalog_record_sha256": "903b1bc0ac6887a6fca92857ec0cd4e13148654c0e97df4373a2b99b8fdb7933",
       "transcript_sha256": "454069ee2ea1c9953bf8b03bc3f0f4bf396c8e98b55f13ab760382ab19fb1bce",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:30.525Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nثَمَانِيَةَ عَشَر",
+          "instruction_sha256": "6de33feaae9617e1b941a8ea653f094cbed16a58fab9dd48afda76b1d439d807",
+          "request_body_sha256": "c7adfa2d2caa85df83924eacd9b78e1e4ec7808887a43c30ed9e88f974f95878",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22246,8 +23464,22 @@
       "catalog_record_sha256": "c3fc0507863088a2331f1f0d546301d87a5d489301e146d874031e5d30b87574",
       "transcript_sha256": "e278018135e983d3e04571ae4c6de54b4fec36a47af392cb0b51e23fbff7365a",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:32.824Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَثَمَانِيَةَ عَشَر",
+          "instruction_sha256": "bc66219a81f517df83348ec1c56d4dd1227266134d3776e3086bf59caa2b0528",
+          "request_body_sha256": "a2a4272acc879f9b9ca84b094a72e00ad912fae34c8e83115ea8e116d2d7e3b2",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22264,8 +23496,22 @@
       "catalog_record_sha256": "c9cf51a3bf91a84e8be75a7f8dc2a0e41c1da5d1ea1f0b207f292b926f6671e0",
       "transcript_sha256": "40e080e84ea172c92d87a6ad077226fe08876dc109d7152c40813a5940968c88",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:33.959Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nتِسْعَةَ عَشَر",
+          "instruction_sha256": "5c8e7a10cf1b586d87d5dd4464bf7d1b7b47cfa2e39c78b616d9929e82c991ac",
+          "request_body_sha256": "172ef4774da834fefcbbe14a84ebcc7f3872502271bd41fed3e464f93e28013c",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22282,8 +23528,22 @@
       "catalog_record_sha256": "8e154c7ba5b762f0d3676c990c21833ba9def3ab0977d0f422749b4b3c3ea484",
       "transcript_sha256": "b137606d181b417bf68feacd4bc7d560631d24c72a08a0ad6a37faf594e93747",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:36.022Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَتِسْعَةَ عَشَر",
+          "instruction_sha256": "f7c0c0f4124d64341a606da980395ee57e0606ea6751101c0300092aa56833ea",
+          "request_body_sha256": "89b203fae3535783746df3e3a33ed093690e69b42fbca8860e21662bea18c090",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22300,8 +23560,22 @@
       "catalog_record_sha256": "09daf3e9da0e424496f0a0dc971988422850a01ce2d4f91b069bc97fbdfd5356",
       "transcript_sha256": "8aa3c9c9e5bc2f035d7183562e3d42ad2ea5cf93aa0e0fe5ce5fd0c2cac79bff",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:36.842Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nعِشْرُون",
+          "instruction_sha256": "c2e071f079ed6cd9cfe08c0fbf7da19e39ff1c97bf458089e556a4c4f053293e",
+          "request_body_sha256": "5a22c3a312d70b4d4cd6978e721f2f3ca414ba7afe0be7a03117d08652f39fc6",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22318,8 +23592,22 @@
       "catalog_record_sha256": "f7a80f05d70a96c0e8850dd89369532dca23ad8bf99aee7a26393fa810316427",
       "transcript_sha256": "86fe0df7989c570eba45dc41897b759655e51d88603dc350d12e0c41f16339fa",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:38.473Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَعِشْرُون",
+          "instruction_sha256": "487ce6f7f3d816c3e974141ced27fbfc0c83783c7452a3fe8e6cb3e10dca231b",
+          "request_body_sha256": "96b7bbe9619b679094d803290fce14a121cec07d5fb8abea91790f66e88b2d5d",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22336,8 +23624,54 @@
       "catalog_record_sha256": "9d8f070978d1fc602da90292c8e4d711700a7bd76b563725bc81524e1d5b7d56",
       "transcript_sha256": "00876f92854d15517bc3ec094ec5feb70bcd2989594d96d3ff17d1e3ad50eca8",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:22:39.264Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nثَلَاثُون",
+          "instruction_sha256": "8dd77dbc7fb82c7d7488a425faf1598d6b9c00e98422d6466d4c64fa47becd00",
+          "request_body_sha256": "8a8f7054581c74df65e336b1635491597008381e689b961cdfce7f5a635d8cec",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "53cd0f92647f0dd3b4124e731ce61e541b8a5168e5a147cbb14ff3cef414fbb0",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-number-30.attempt-1.master-24000.wav",
+            "sha256": "9e71d75e5856cc5adac1bfeb529ac52162cde134f14edf4f39fb0ce6673a6823",
+            "pcm_sha256": "53cd0f92647f0dd3b4124e731ce61e541b8a5168e5a147cbb14ff3cef414fbb0",
+            "byte_length": 60090,
+            "sample_count": 30023,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.2509583333333334,
+            "rms": 3952.4328041994195,
+            "peak": 17192,
+            "clipped_samples": 0,
+            "silence_fraction": 0.05752256603270826,
+            "leading_silence_samples": 508,
+            "trailing_silence_samples": 0
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-number-30.attempt-1.telephony-8000.wav",
+            "sha256": "a249bd78bedf23aef117163856897fab9a64f4579d95397318466deac8e962f7",
+            "pcm_sha256": "5f22e7ee20dbf6a7ebd6066d1461f0e5a80e15ed1324d6953610279f38021dd1",
+            "byte_length": 20060,
+            "sample_count": 10008,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.251,
+            "rms": 3923.4936639651987,
+            "peak": 17081,
+            "clipped_samples": 0,
+            "silence_fraction": 0.08673061550759392,
+            "leading_silence_samples": 221,
+            "trailing_silence_samples": 0
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22354,8 +23688,22 @@
       "catalog_record_sha256": "ddc488ccb84344305acf6dbba351a5a6a3a14a4c4a003199581c23f6ead6fed8",
       "transcript_sha256": "0c306dfd64168be2285c9d319de52b170156c640c135e3e3fa9b689fff83c085",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:41.772Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَثَلَاثُون",
+          "instruction_sha256": "3fde8a9402844641b9ca960dde2a09e56f84d2fb88b51faeaa35a4c2f95b80e1",
+          "request_body_sha256": "900530d3a1a4d3569cccc22360afee41ee1cd1209796f9485d23b223a11668a5",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22372,8 +23720,22 @@
       "catalog_record_sha256": "aba098a92aa209223bd547a2e5b16b665f9f2b33703e14d8f1d44e68b107f1ad",
       "transcript_sha256": "d2f98f87470fb35751845f7df552812fdededfb79bf357981aeeaadb5750aa8e",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:42.018Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nأَرْبَعُون",
+          "instruction_sha256": "ba3924d977f2d351472ba85fa7b8a8e04b873f39cfbf8f76190c6767526bc5ce",
+          "request_body_sha256": "3bbb3643c8ea1650a8c6f203c8343b2f0d90c33168093259452164cf3eee9b05",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22390,8 +23752,22 @@
       "catalog_record_sha256": "fae0ca28d4099c95151d52f1291696c69b4de162b0c1cdbe56ddd9cc8a5ce57d",
       "transcript_sha256": "93934d635b817fdda882a7a4e187661b056fa835e6b886d7907f877237913d93",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:44.380Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَأَرْبَعُون",
+          "instruction_sha256": "4f49a8c76efb40e11f25ae9539c71f2384fb29bd8d0b1866c2c51b51e01d2cfb",
+          "request_body_sha256": "558f4b71ddbdf4814f58b3f8be8f4c74b15beaf1dbc0524b72ec22a0d8ce3110",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22408,8 +23784,54 @@
       "catalog_record_sha256": "4160d0a92e44c5729f9513238e06153a6fb36b55c079120e9a672cef2e1e172c",
       "transcript_sha256": "9764cc34291682338d40c9085faddb071d335fb8ea36b695c1583f25ed084057",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:22:44.463Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nخَمْسُون",
+          "instruction_sha256": "8ae5903ecd416bfa18fe77c487cc2f507a73f46e5e9cf150509f0e7e647dd693",
+          "request_body_sha256": "898a0ff4ea33d474f1fb5337a1db4874b73d6591dcd72776fc0d8209d7aa50fd",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "46b4da8579a0261ec818b75b55fee99881f890120f6894813c9242d33017f371",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-number-50.attempt-1.master-24000.wav",
+            "sha256": "658dd217d0913360e9310826a2bf8d792bbee4952c0aa214cc2a2e17fcdf06bc",
+            "pcm_sha256": "46b4da8579a0261ec818b75b55fee99881f890120f6894813c9242d33017f371",
+            "byte_length": 60090,
+            "sample_count": 30023,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.2509583333333334,
+            "rms": 3316.9129249193725,
+            "peak": 11944,
+            "clipped_samples": 0,
+            "silence_fraction": 0.1251040868667355,
+            "leading_silence_samples": 0,
+            "trailing_silence_samples": 676
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-number-50.attempt-1.telephony-8000.wav",
+            "sha256": "6872ce2ade345410f99e2c2bab9bfd2460958ebd507d8b8b4604156c1bc24463",
+            "pcm_sha256": "6c5b36e8309554fb49109d0e96c7516a6ab5df52151fe2d6066dc8a1c454c373",
+            "byte_length": 20060,
+            "sample_count": 10008,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.251,
+            "rms": 3244.722035326104,
+            "peak": 11788,
+            "clipped_samples": 0,
+            "silence_fraction": 0.13309352517985612,
+            "leading_silence_samples": 0,
+            "trailing_silence_samples": 225
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22426,8 +23848,54 @@
       "catalog_record_sha256": "805f0bae93d583da2d345352c29fbd500cfbbc403cf9ccd01f26dd4df751a263",
       "transcript_sha256": "6abfc935acee576cc4ea5e0537ec6ffe338e729e8a50851d9d23da5142fba814",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:22:46.859Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَخَمْسُون",
+          "instruction_sha256": "d6e1237f950c173af9deb91b17dd4908d575de09e0a763ba32f9515f34c6c318",
+          "request_body_sha256": "77b6b3e8a4d975f79e31ebd625dcadec49a44292b2c72e610b07715204b27465",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "1ab818b100c54656580cd1b86ad3e911e45cff813ede946800c34dedf55d16e7",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-50.attempt-1.master-24000.wav",
+            "sha256": "b18cd8f8b740fd6ecc17ed0146f782e7371821b7728880a77b8a06f2b176d573",
+            "pcm_sha256": "1ab818b100c54656580cd1b86ad3e911e45cff813ede946800c34dedf55d16e7",
+            "byte_length": 62010,
+            "sample_count": 30983,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.2909583333333334,
+            "rms": 3927.766895283862,
+            "peak": 17801,
+            "clipped_samples": 0,
+            "silence_fraction": 0.24629635606622988,
+            "leading_silence_samples": 1,
+            "trailing_silence_samples": 926
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-50.attempt-1.telephony-8000.wav",
+            "sha256": "a7e2d70f89b485fee525eb0b225ea8407f7efdc0e08be785d37245f071128abe",
+            "pcm_sha256": "ed797dac9d158877df7ba4e44a0e5cb493b5c6e798a4df8db8bd07efe1e7c708",
+            "byte_length": 20700,
+            "sample_count": 10328,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.291,
+            "rms": 3637.870026510446,
+            "peak": 17975,
+            "clipped_samples": 0,
+            "silence_fraction": 0.26723470178156467,
+            "leading_silence_samples": 1,
+            "trailing_silence_samples": 1003
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22444,8 +23912,22 @@
       "catalog_record_sha256": "a52cbb5e9e4942af967d6cd903dc05edbdc879d08d662cb811a485e62d8036d7",
       "transcript_sha256": "1298e5eaf4a89c9a4d7441e45e3c9665e3b415e58f44cbc10edeecce3137d62f",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:46.986Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nسِتُّون",
+          "instruction_sha256": "9baa953cdcf8487b7819e1675186c470fc8c8db5d7675956ed43b534e16c2959",
+          "request_body_sha256": "0ec9152fe74ed61d2d24682096e4a54b78d24f58914fd3bedeb306bb644e3edf",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22462,8 +23944,54 @@
       "catalog_record_sha256": "4a413af80bd80d382b9f81616ee1e200eb31651807875eccf3155520e01965d6",
       "transcript_sha256": "346afe805bb226a2700c5f43af6cf08cf9e0510d709bba51575ea8e513d01d2e",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:22:49.354Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَسِتُّون",
+          "instruction_sha256": "45562137a159af389498efd584b7073133f98af68e89733c4db3459d2f4df25e",
+          "request_body_sha256": "e9013aa469242aece0e629823ec1874113db73f5835dc4c5a5a721acc2436cdd",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "803b6f23bbfe26dcada2711ef14acbe06bf2106feeab93a4846a310abb77ef61",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-60.attempt-1.master-24000.wav",
+            "sha256": "0f4ae23b5920edd2f3bd46c87ee49e211674c808745f2c6fef97d477e155627b",
+            "pcm_sha256": "803b6f23bbfe26dcada2711ef14acbe06bf2106feeab93a4846a310abb77ef61",
+            "byte_length": 65850,
+            "sample_count": 32903,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.3709583333333333,
+            "rms": 3955.170369983285,
+            "peak": 19004,
+            "clipped_samples": 0,
+            "silence_fraction": 0.3155335379752606,
+            "leading_silence_samples": 2,
+            "trailing_silence_samples": 614
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-60.attempt-1.telephony-8000.wav",
+            "sha256": "32a4a1daf7025e5b9991cb0b16ac2bef48d48a07749e1330b55d7ebf7329c649",
+            "pcm_sha256": "eb44760f5a89fcafce880bcfafcfa53d2c03f6d4b27986f38a62dabae805afb5",
+            "byte_length": 21980,
+            "sample_count": 10968,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.371,
+            "rms": 3778.2171009109056,
+            "peak": 18852,
+            "clipped_samples": 0,
+            "silence_fraction": 0.32777169948942375,
+            "leading_silence_samples": 1,
+            "trailing_silence_samples": 496
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22480,8 +24008,54 @@
       "catalog_record_sha256": "739f38c44609c3214cbdba5cd371754af5404554118c507bdbf04fda294bc0f1",
       "transcript_sha256": "8aa606ab47019d1b6cc0c9582c32b0fa295bee593f4b3a7532eb0fe504ae83e1",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:22:49.471Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nسَبْعُون",
+          "instruction_sha256": "9b77aa7a33f7dcbc65ec4281b832614236ec8bc54e1cc619d287cdb946b2f047",
+          "request_body_sha256": "f5c7757112cc0a55c4aa84c1c139ebbe21090cd53bc3c53f641b18e05682cd3b",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "da81af43f86eadcc8983e5bc6effbd9b16b432fad6f7b8e0ddee662a186420a4",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-number-70.attempt-1.master-24000.wav",
+            "sha256": "df42f6965d09a71a8e98374f4afb5416c9db932080f1064032d4368e2d987ca5",
+            "pcm_sha256": "da81af43f86eadcc8983e5bc6effbd9b16b432fad6f7b8e0ddee662a186420a4",
+            "byte_length": 58170,
+            "sample_count": 29063,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.2109583333333334,
+            "rms": 2275.1838362798308,
+            "peak": 12522,
+            "clipped_samples": 0,
+            "silence_fraction": 0.10604548738946427,
+            "leading_silence_samples": 116,
+            "trailing_silence_samples": 146
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-number-70.attempt-1.telephony-8000.wav",
+            "sha256": "1116e2dd797ef2e1102c442651ac60c5c773d38306de89287c646a60fa6c297a",
+            "pcm_sha256": "da630d30b7025f9a3a9a73a6cbce76a8e40f9f94aed0b5a58d7412915a17ccb5",
+            "byte_length": 19420,
+            "sample_count": 9688,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.211,
+            "rms": 2238.1595448547914,
+            "peak": 12477,
+            "clipped_samples": 0,
+            "silence_fraction": 0.12169694467382329,
+            "leading_silence_samples": 43,
+            "trailing_silence_samples": 48
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22498,8 +24072,54 @@
       "catalog_record_sha256": "c78144e4a1a65743a4b2034199f26a93bac74221515493ae8b3192b766156817",
       "transcript_sha256": "a52a3eb4ec5d007ba9eef0b80df2c9e6996135e42c43ce5749b08f63a615deaf",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:22:51.782Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَسَبْعُون",
+          "instruction_sha256": "53ffecaa05819aacf6f4f3071b7dd50b2beddc076a356c2cccb6316233e13877",
+          "request_body_sha256": "902741beb878ac0f687c719687dfc9b80c3e265414e2ff2e99b36beead19c40b",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "e240655cf6ba55231e1bf78bf6d6df148c19ddf1f595ec416238cb8b31686b9b",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-70.attempt-1.master-24000.wav",
+            "sha256": "7f480964e07ef8e8123f3c738ccaad98ea72884acf132c11bf07acdab87ff2dc",
+            "pcm_sha256": "e240655cf6ba55231e1bf78bf6d6df148c19ddf1f595ec416238cb8b31686b9b",
+            "byte_length": 69690,
+            "sample_count": 34823,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.4509583333333333,
+            "rms": 4340.121175000343,
+            "peak": 24867,
+            "clipped_samples": 0,
+            "silence_fraction": 0.33690377049651093,
+            "leading_silence_samples": 168,
+            "trailing_silence_samples": 3590
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-70.attempt-1.telephony-8000.wav",
+            "sha256": "2d2cbbc101b8dec6758b97c044a181e5f54275fc04a8206aea6643d035b011d1",
+            "pcm_sha256": "72d48853a2333ad65feee1556f6cf3d17856f0bd8dbadecb471e54f14d2a1604",
+            "byte_length": 23260,
+            "sample_count": 11608,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.451,
+            "rms": 4269.919038159418,
+            "peak": 24706,
+            "clipped_samples": 0,
+            "silence_fraction": 0.3402825637491385,
+            "leading_silence_samples": 56,
+            "trailing_silence_samples": 1199
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22516,8 +24136,22 @@
       "catalog_record_sha256": "36c1a05a51309e6f0294396e05b0246f9ec596c5c818c1f320c362723783cd0a",
       "transcript_sha256": "1a3975a45941208b273f1f7ef3b7e376c6cbd0d3f9227ed8cd11f92115d81924",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:52.062Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nثَمَانُون",
+          "instruction_sha256": "baf084152d71b7e815570af15c651d39e4585f75d1fd8c2fb52576985e992be6",
+          "request_body_sha256": "c122ddff6e9964d818fc3f15af5d889a61154fe6fcf82092fb9592ba38d0d392",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22534,8 +24168,22 @@
       "catalog_record_sha256": "f511f4c2ac7bdbb9bf4ed8096676a30be3ac51da83f41ddc501bee704ba55168",
       "transcript_sha256": "4c8db4cf126adb9ba0f96869ebcf76e5c6935a4a56dadf546850e9bbdcab5434",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:54.457Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَثَمَانُون",
+          "instruction_sha256": "edf63a1338d83d31f449ab75437ac4116d256caa672ec34f5988787deb9d4477",
+          "request_body_sha256": "f7fc6f3dc5efb4a34f0c8f6fb2e264310fba8a9a9ae9386fec85ce8da6f25c52",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22552,8 +24200,22 @@
       "catalog_record_sha256": "00c6ea48766f04546afc7e5b010bca79c82935118dbf23cf369932535680c542",
       "transcript_sha256": "aaa61c3c3b7f0e1195291396eebc3db494273ee19d3ec8c995d7d0955d54e1b6",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:54.576Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nتِسْعُون",
+          "instruction_sha256": "1042eb21c1f482b8a4a454e23d88514dcd3adcb496c9a681d7e1e24898ba1e9f",
+          "request_body_sha256": "58858a74497ec699746d34a2e9a40c66875cff0da85f1d828528e0734de7d069",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22570,8 +24232,54 @@
       "catalog_record_sha256": "23c34204270bdc0f1e1112836098abc4ce1beab48c0ebd9727b117918e62f643",
       "transcript_sha256": "b458b85bffc322d5fe46b37298a638ad28ef9fe47ca4037b4eb44b357789954e",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:22:56.969Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَتِسْعُون",
+          "instruction_sha256": "7a51d629e186efdf3be9d9c69cb300c64467480899f7665d462956b83e38d2d5",
+          "request_body_sha256": "5100c4fa16153b0f60b047fbfdb94138f5e95bacc918544d5bafc9b046b8ef1a",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "64b469058f41bb0b9d96248e79df653822b40fb8647cdac51b71ea960ccfc0d1",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-90.attempt-1.master-24000.wav",
+            "sha256": "64793e7bc31eaaae5515555c5ad3f082945b9a07adaa54a1c67bbf41c983c298",
+            "pcm_sha256": "64b469058f41bb0b9d96248e79df653822b40fb8647cdac51b71ea960ccfc0d1",
+            "byte_length": 69690,
+            "sample_count": 34823,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.4509583333333333,
+            "rms": 4222.666107489082,
+            "peak": 23536,
+            "clipped_samples": 0,
+            "silence_fraction": 0.29609740688625336,
+            "leading_silence_samples": 51,
+            "trailing_silence_samples": 707
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-90.attempt-1.telephony-8000.wav",
+            "sha256": "d35fab571fe0dc28ad65563fff472d48a397efda415d646bbb3adeb673219dd5",
+            "pcm_sha256": "91a9102637edc4cc134d6b69a31ca58d359d3ab8048fc902808809fd0efa6fe0",
+            "byte_length": 23260,
+            "sample_count": 11608,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.451,
+            "rms": 4073.232092329223,
+            "peak": 22668,
+            "clipped_samples": 0,
+            "silence_fraction": 0.30246381805651273,
+            "leading_silence_samples": 32,
+            "trailing_silence_samples": 1530
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22588,8 +24296,54 @@
       "catalog_record_sha256": "b4c685fc288967c0e1faf3e846004df50979052e87278dffa81c638db4069b6d",
       "transcript_sha256": "cb5b901d0208a2b27a884b2bb346459c30b787ce195295f47719eebe0288422c",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:22:57.084Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nمِئَة",
+          "instruction_sha256": "351195d234d549369be32f890c6264adaa9ede0bcb4baab7be54e02b83ee9ca0",
+          "request_body_sha256": "4167f9f60e91d053ab1b4ab436b2b50e154ab4523b5d2b81cd4a70bbef40e539",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "776bea320b72cfd9394163ae10d2613c360129e5ce5bb36a26b0ee00cb2656f1",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-number-100.attempt-1.master-24000.wav",
+            "sha256": "d877ed35d7ed2b52de7c5e3651fa1f368f023430f3dd4554d8abd385009ee1b4",
+            "pcm_sha256": "776bea320b72cfd9394163ae10d2613c360129e5ce5bb36a26b0ee00cb2656f1",
+            "byte_length": 50490,
+            "sample_count": 25223,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.0509583333333334,
+            "rms": 2568.211240419927,
+            "peak": 13487,
+            "clipped_samples": 0,
+            "silence_fraction": 0.49395393093605044,
+            "leading_silence_samples": 56,
+            "trailing_silence_samples": 267
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-number-100.attempt-1.telephony-8000.wav",
+            "sha256": "deff79a9cfda5ac20a0e9c437b6daebaed9bbb14797fe89f8b4b3ac4285e2dc2",
+            "pcm_sha256": "99f061d980b12f6b21e281566cedf06209cec49ac1675c0493ed844070d14038",
+            "byte_length": 16860,
+            "sample_count": 8408,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.051,
+            "rms": 2567.207092879484,
+            "peak": 13219,
+            "clipped_samples": 0,
+            "silence_fraction": 0.49500475737392957,
+            "leading_silence_samples": 55,
+            "trailing_silence_samples": 484
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22606,8 +24360,54 @@
       "catalog_record_sha256": "bb3fb4efaef5cdf7b8ebd0c212346f9827acc999d4a3ab764208c8a21c43e1d0",
       "transcript_sha256": "28a8333907755cc17d4fa6fc9373f8fca0a3e6c558c4812a021c54a85877e163",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:22:59.162Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَمِئَة",
+          "instruction_sha256": "2453dac7a1775bfa0bc7248a178240de20669146e486156c8421f4be00bb9a17",
+          "request_body_sha256": "b5966746fe4bb18257f6b584aecffdb8538dcc30676b53c5ad2bf11fa09464e6",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "abfe602e6d381b9c53765f3888f0a4b8296c948491545c3ff9f351d48bcc49d1",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-100.attempt-1.master-24000.wav",
+            "sha256": "04cb0c59ebf818f78f515b4b966f6a92e032b46e119696961eaaa0241eb76d84",
+            "pcm_sha256": "abfe602e6d381b9c53765f3888f0a4b8296c948491545c3ff9f351d48bcc49d1",
+            "byte_length": 56250,
+            "sample_count": 28103,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.1709583333333333,
+            "rms": 2734.2311625015654,
+            "peak": 17273,
+            "clipped_samples": 0,
+            "silence_fraction": 0.3887129487955023,
+            "leading_silence_samples": 3574,
+            "trailing_silence_samples": 386
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-100.attempt-1.telephony-8000.wav",
+            "sha256": "46f4951ffb711ded78e10bb423c3108631cd9bb15ded003d1638fd4f67f99fd8",
+            "pcm_sha256": "a1184ed67a7a06a319594798ae2562813aafc8a9c6b74dbb5b5d78c997a735e9",
+            "byte_length": 18780,
+            "sample_count": 9368,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.171,
+            "rms": 2732.9962664327977,
+            "peak": 16979,
+            "clipped_samples": 0,
+            "silence_fraction": 0.38941076003415886,
+            "leading_silence_samples": 1192,
+            "trailing_silence_samples": 150
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22624,8 +24424,22 @@
       "catalog_record_sha256": "30448bdfeb9750f16867a3f3685a182a9ea7b38d238b8afc0a166c4334269204",
       "transcript_sha256": "12bfc402dda0e0991578052dd20f167dced809557cf15ec10fe6a17d4ee14107",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:22:59.633Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nمِئَتَان",
+          "instruction_sha256": "7f2711c6684f85c72d9b348300a27c3d95805a9f9e835643f2688ce254f9d7d7",
+          "request_body_sha256": "fe937cbb9d128120e14e61c2b55ddf90f02f8f286bd8573aa69844ccebddcf6e",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22642,8 +24456,22 @@
       "catalog_record_sha256": "068960bd2414b6668cf4eb0f8d5aae2845b226cd027a51dc838fca550733a03c",
       "transcript_sha256": "ab6f546b10968aec628c2f27a18fc532150062a9f8875bdd72786424f49d9532",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:23:01.229Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَمِئَتَان",
+          "instruction_sha256": "7007ea79aaff6bd5f3357b80011d16ebdfc03e6233b88c2e6a4d069d44cc3dcd",
+          "request_body_sha256": "5000641fa7dd7534ecd63053759357b9c76a78dfcb3595aa05fcf7c892feb939",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22660,8 +24488,54 @@
       "catalog_record_sha256": "70207229703e284567f37709e34f03733f50186df2376d5925b7cdcc5681ecf3",
       "transcript_sha256": "b75322a46872faf809e69a1ed58aa06f87cd7d0b82a6f1a14974da2c67857224",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:23:02.104Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nثَلَاثُمِئَة",
+          "instruction_sha256": "ed2e7e056c6a63c982a75becc54f43e2e57ecf082e4c2309d806299f2832c87b",
+          "request_body_sha256": "550451026b8949776c81c63ae6026e50a50d497c21dabe1f40cb3a52a92a6d54",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "2f92e46957b36d9bec551015bb798132882075e338319f4ef4e3fdcc15437f4d",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-number-300.attempt-1.master-24000.wav",
+            "sha256": "936863436841d8d1e693f3f7a7be15284c7bfe669a62c7113d2990da99ec9510",
+            "pcm_sha256": "2f92e46957b36d9bec551015bb798132882075e338319f4ef4e3fdcc15437f4d",
+            "byte_length": 67770,
+            "sample_count": 33863,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.4109583333333333,
+            "rms": 3588.0769071128266,
+            "peak": 18326,
+            "clipped_samples": 0,
+            "silence_fraction": 0.29831969996751617,
+            "leading_silence_samples": 0,
+            "trailing_silence_samples": 386
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-number-300.attempt-1.telephony-8000.wav",
+            "sha256": "f4983310725165ec735c55ef0c56511a176f2e9fbf310ab13c69197a357ddbf3",
+            "pcm_sha256": "4be861f99a242d99112f4240c9f641b8014fdfbd729cb241b37bb20298615505",
+            "byte_length": 22620,
+            "sample_count": 11288,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.411,
+            "rms": 3581.4237868453342,
+            "peak": 17617,
+            "clipped_samples": 0,
+            "silence_fraction": 0.32981927710843373,
+            "leading_silence_samples": 1,
+            "trailing_silence_samples": 946
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22678,8 +24552,22 @@
       "catalog_record_sha256": "6a847d3c2b9ded202135a24c04c1845ef9595bf08059360a75af0de68bf4bf59",
       "transcript_sha256": "92bb5933cf9c75c241b51636f22a60d58caffdf99c3553386e488c6a49c24926",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:23:03.345Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَثَلَاثُمِئَة",
+          "instruction_sha256": "da86f50f4931219b5e21ece9ca6cfa6288128c432b6b502a0df809b603e8c9c2",
+          "request_body_sha256": "c69332f6f4a73dc0b2ae59faf2b2f660290b53405a2a96a542a831fa118a9cd8",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22696,8 +24584,22 @@
       "catalog_record_sha256": "b9cf3b75f785f2aec951dd93a951401f70d6c81cfcc52877e9729ac9c532c39e",
       "transcript_sha256": "a3619cd0dda9c0d9a3d56dce29e203d6280bdcef8f18d5924c73ff764dfe6e51",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:23:04.478Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nأَرْبَعُمِئَة",
+          "instruction_sha256": "99114169b4ca2af7f58b6c64379513e487ebe4cbdce29f793668b8fbbe857ba8",
+          "request_body_sha256": "0f6bceb88818eddc48dc4df49bf6c3da00258511e25e152db49471962e46bfca",
+          "failure_code": "GEMINI_HTTP_500",
+          "provider_finish_reason": null,
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22714,8 +24616,22 @@
       "catalog_record_sha256": "1888c13dda0fc0e4fe307e856becc19e57aaf677103413bea184547767bcca73",
       "transcript_sha256": "5806555f94fd4bc4e45ba5226bd3a5507a57268d5c9485fd6ea4bc9f6fb17793",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:23:05.633Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَأَرْبَعُمِئَة",
+          "instruction_sha256": "3e8fe873833dae4e527dafb8fa16de88ceea22b497e27c0ea222ca372e960f52",
+          "request_body_sha256": "d9d33fdef21b4b1510c1d673ba0a1c012094a17e3b516feb59562755657486d3",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22732,8 +24648,54 @@
       "catalog_record_sha256": "87b7d8b1bc5e2bad4809c5d33983ea1cfdd2e35cfcfb341964ce0e43a2cd6687",
       "transcript_sha256": "05b998970e0e6d7efc6748a5afcae20ebc5bc4909c736a718fbb8ed7ab555ecb",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:28:34.238Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nخَمْسُمِئَة",
+          "instruction_sha256": "1aa673f9fdaff6c8b7a57d6c26ef5108e3bb9982b4d22c8b92e798542bc476de",
+          "request_body_sha256": "8b3fe5d85130778d1e3cb8b72a01d2fa926907b73f5d86c6f666d5ef1fb01fa3",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "790c03c8d257a9fa8a155e696db8d037117793ae19834284896adfc08c5d75a3",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-number-500.attempt-1.master-24000.wav",
+            "sha256": "97519ff05f3d94b26e648f3500e5df952f5c2a3a906118795096dac4e2730a8b",
+            "pcm_sha256": "790c03c8d257a9fa8a155e696db8d037117793ae19834284896adfc08c5d75a3",
+            "byte_length": 65850,
+            "sample_count": 32903,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.3709583333333333,
+            "rms": 3633.5870734318346,
+            "peak": 23737,
+            "clipped_samples": 0,
+            "silence_fraction": 0.29185788529921286,
+            "leading_silence_samples": 5,
+            "trailing_silence_samples": 2309
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-number-500.attempt-1.telephony-8000.wav",
+            "sha256": "6649906ad5a1fc8ba4867029feaac38e4471d7f5fd7630fd0665c44dca83a6b7",
+            "pcm_sha256": "87d44b71b6a4fd1c779d5e48d8517d42b603fd712cb90fb59d3faaa839a3426b",
+            "byte_length": 21980,
+            "sample_count": 10968,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.371,
+            "rms": 3496.3441242313966,
+            "peak": 23184,
+            "clipped_samples": 0,
+            "silence_fraction": 0.3051604668125456,
+            "leading_silence_samples": 2,
+            "trailing_silence_samples": 929
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22750,8 +24712,54 @@
       "catalog_record_sha256": "32fc4be6eb13674ffd631380f96007c63e7d6ea16033f64c8852a3b06bc4fb6f",
       "transcript_sha256": "d50cb71fccb962012fc965433ff3fb5a29dd07b0eb5a8fb122a03b45a873393e",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:28:34.333Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَخَمْسُمِئَة",
+          "instruction_sha256": "b9377ef0378d3fe6bbcf9fc2255b977610784ac6fb768205f35cf854a5c5865e",
+          "request_body_sha256": "2a64be17068e16defeef7f6958ea6d65e182a8323bea5d88d3a64ef3602cad0a",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "77ee296390c2411a91a33ac62d9810939ec2f172c38fd702b58f466b8824284d",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-500.attempt-1.master-24000.wav",
+            "sha256": "e479c9dd7395293699c08688487c9cfc2daa61badcb581bf1c8905240743c2f9",
+            "pcm_sha256": "77ee296390c2411a91a33ac62d9810939ec2f172c38fd702b58f466b8824284d",
+            "byte_length": 79290,
+            "sample_count": 39623,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.6509583333333333,
+            "rms": 3590.2024737560646,
+            "peak": 19023,
+            "clipped_samples": 0,
+            "silence_fraction": 0.1667213487116069,
+            "leading_silence_samples": 59,
+            "trailing_silence_samples": 0
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-500.attempt-1.telephony-8000.wav",
+            "sha256": "6db9cdfe148766268af94e32b71d248b4ee40a544b6f91ff80838c76080ab04e",
+            "pcm_sha256": "e7ab0b1da8938189145544f38f61b2592214025957c84dac75cabfdfeca07674",
+            "byte_length": 26460,
+            "sample_count": 13208,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.651,
+            "rms": 3330.9823823477673,
+            "peak": 16484,
+            "clipped_samples": 0,
+            "silence_fraction": 0.17686250757116898,
+            "leading_silence_samples": 30,
+            "trailing_silence_samples": 0
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22768,8 +24776,22 @@
       "catalog_record_sha256": "cd4558f0239ec1d19da34377d2d179dfafe21b6649fa9f6acedfd533d564fcfd",
       "transcript_sha256": "ffa9f5175a30839c26e519f58102c41cab0cd8553016bafd0261563bb8783856",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:28:37.029Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nسِتُّمِئَة",
+          "instruction_sha256": "bddd11fb94afdfc964cfbc3bb5fab90fc07021cfba6f4701e6735b407dbc4487",
+          "request_body_sha256": "e24a3861e8a528758829cd69890d5951778f69ddcaaecbd1afbd9ecf1f09435b",
+          "failure_code": "GEMINI_HTTP_500",
+          "provider_finish_reason": null,
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22786,8 +24808,54 @@
       "catalog_record_sha256": "daa044d167b5111be7f3ad882b560f0d9ed246423d307971e6970c5ec45ea33c",
       "transcript_sha256": "435a3967160023e9f33d7f7f611b32703070e54718c32e98dac89baaac9f2583",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:28:37.243Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَسِتُّمِئَة",
+          "instruction_sha256": "4ae3b53ba02609c799539f9148d8bbcc306fee13e63e5cb1a5135b06efe703f4",
+          "request_body_sha256": "a1b5c19737f7ba49cb7c3329486151dbcf354e6ea2ab8ba46db577d5d6608fb6",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "e678260dec828acd535651d7c8010ddd12c4a80af28cb5db4dbd3cc48c5a6fd1",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-600.attempt-1.master-24000.wav",
+            "sha256": "1095c38990a34e0685ba35eb32fdcc11724ff41c2517c18a70733a750ed56111",
+            "pcm_sha256": "e678260dec828acd535651d7c8010ddd12c4a80af28cb5db4dbd3cc48c5a6fd1",
+            "byte_length": 71610,
+            "sample_count": 35783,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.4909583333333334,
+            "rms": 5850.515987375058,
+            "peak": 26334,
+            "clipped_samples": 0,
+            "silence_fraction": 0.39594220719336,
+            "leading_silence_samples": 17,
+            "trailing_silence_samples": 1721
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-600.attempt-1.telephony-8000.wav",
+            "sha256": "12c81c8ff09437c8d0c1d9c09ad22b82bc761de7c3806ac1f3126725282e0c33",
+            "pcm_sha256": "5b9887b6f662ec37738c5f6d0c2121038578146604a021804a2d70bb2dabf16b",
+            "byte_length": 23900,
+            "sample_count": 11928,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.491,
+            "rms": 5549.32806335401,
+            "peak": 24739,
+            "clipped_samples": 0,
+            "silence_fraction": 0.4130617035546613,
+            "leading_silence_samples": 83,
+            "trailing_silence_samples": 1469
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22804,8 +24872,22 @@
       "catalog_record_sha256": "9287de9a8eaf36dda8c59d6a3ec7bcd0bbce55f7f49a9da0a75ab4ecc6dc45ab",
       "transcript_sha256": "0d1b9043e358fec8f090ad283b316fef8ffb552dcef6d42964a06227f847b55d",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:33:51.268Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nسَبْعُمِئَة",
+          "instruction_sha256": "0cc4e70913764845727f4f0a5c00a0c9f0d192de01c3224bd66f0644a0a5c146",
+          "request_body_sha256": "acd0f38f467ac0611a85b3faf0ff0b4c705982b9670dd1bb7114e26911a6ac13",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22822,8 +24904,54 @@
       "catalog_record_sha256": "010d413c8432564457f76faf31e9b3ddb615281004ff224e008b076eeead1cf5",
       "transcript_sha256": "efaf3ac0f50ed946a2fa26c23d318da19303d3bbaa500791d18b31862d13973e",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:33:53.771Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَسَبْعُمِئَة",
+          "instruction_sha256": "b5e0c5f038735f5f757053553a6f77f4803119399ab657eeb00d9b0ec25a9318",
+          "request_body_sha256": "a0e5bcdaf5afaa068df3fd03a2bd94c07da620e154e4e9a7c9faf27bc83e39b4",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "dc33a7000d7f2fc53c6406d97078f466c2c22faf0224a62b1cf739c08d13e4b7",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-700.attempt-1.master-24000.wav",
+            "sha256": "abb44b68f6700a9c014abc7ac608a27d2ce81e84a6dffd5376d7845f1d70cf34",
+            "pcm_sha256": "dc33a7000d7f2fc53c6406d97078f466c2c22faf0224a62b1cf739c08d13e4b7",
+            "byte_length": 58170,
+            "sample_count": 29063,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.2109583333333334,
+            "rms": 2356.920085683938,
+            "peak": 17795,
+            "clipped_samples": 0,
+            "silence_fraction": 0.22475312252692428,
+            "leading_silence_samples": 168,
+            "trailing_silence_samples": 667
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-700.attempt-1.telephony-8000.wav",
+            "sha256": "f35cddc13e83efb5982dd09be008547932cc96c7810008c921bc7a0ceade3884",
+            "pcm_sha256": "465a80c3ed5a9844d63c921fbde62f225773a21cdf958147ff4adc667a905b75",
+            "byte_length": 19420,
+            "sample_count": 9688,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.211,
+            "rms": 2156.680365661172,
+            "peak": 17854,
+            "clipped_samples": 0,
+            "silence_fraction": 0.23781998348472336,
+            "leading_silence_samples": 57,
+            "trailing_silence_samples": 222
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22840,8 +24968,22 @@
       "catalog_record_sha256": "1f11c2a605e351ffd4d6b17336e61b3d664a041be01d8e4b6f4531639b97f061",
       "transcript_sha256": "1489915a3c2e5536932af8f1b3072bb5b6da438e497019844e451e9e1a054eec",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:33:56.156Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nثَمَانِمِئَة",
+          "instruction_sha256": "7302d934a8021f4ddf14ab014ddc71dae76c05f299e6c460443fd03f82fdd4d2",
+          "request_body_sha256": "c117897347da711da8691a363a6b5c4057847c2aa3ced2d046060144cf91321a",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22858,8 +25000,22 @@
       "catalog_record_sha256": "22e088ef46f704ea1ee4e4039e30dca985488370246f959811f05b3d0a273bad",
       "transcript_sha256": "1f72c8f867576d2fa7bb430f6307aee1f3e72ded9cebdd083bc6e2286e5c0691",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:33:58.574Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَثَمَانِمِئَة",
+          "instruction_sha256": "42487a39df2d04cce82622dce4543fbd5a0094ca112cc1aff12981e9e89f87d1",
+          "request_body_sha256": "bd4598ced48e6a7779092dd7419e02a52f55dac6bbcf89dea9457944525c3f30",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22876,8 +25032,22 @@
       "catalog_record_sha256": "5aa0f753722e8d5c6307dfd28da4494ff004cc36bf1b3ba4c39943db92c5be30",
       "transcript_sha256": "ec96eb75d7084e15736c779c4300d3b8a338b54a0ff9ed69fa58cdf739049a37",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:34:02.389Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nتِسْعُمِئَة",
+          "instruction_sha256": "350e08b8827a608bf1353abeb1c7ab9f9649fa626af8fdf9744de40df2d37275",
+          "request_body_sha256": "30d87b55b80da2577260924affc39f9acb048896c768d61c809c713890013989",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22894,8 +25064,54 @@
       "catalog_record_sha256": "81bd14c2d9132b842e9a0058f011bb6f45892f103d65ac0ffcc721a696e49ea0",
       "transcript_sha256": "f638612a15fc6941c5c7f3e7e5891375c2dbc7edbfd26936aff29988b292bde2",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:34:04.603Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَتِسْعُمِئَة",
+          "instruction_sha256": "8c28c4f57cb5325e9843206092c914e7dbba984d8ab0b97be741dff97969b4ce",
+          "request_body_sha256": "5a20c927b75fcfc9617189fc650292a926045acee78ba4664b387547dd8eb226",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "1397279d59fc4ad49289ec533dba1887ac78ecfb65ce010cd9caca83029b2883",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-900.attempt-1.master-24000.wav",
+            "sha256": "6ee2384b41ba63f02e6d19e2e4ee2a4fb015ae1dd7eaf6656638f9f4304934c7",
+            "pcm_sha256": "1397279d59fc4ad49289ec533dba1887ac78ecfb65ce010cd9caca83029b2883",
+            "byte_length": 77370,
+            "sample_count": 38663,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.6109583333333333,
+            "rms": 3355.9720822194067,
+            "peak": 20767,
+            "clipped_samples": 0,
+            "silence_fraction": 0.3457051961823966,
+            "leading_silence_samples": 59,
+            "trailing_silence_samples": 2596
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-joined-number-900.attempt-1.telephony-8000.wav",
+            "sha256": "1ed2069eca77a606be2ccdb7f16698ac0ebc1cbbdec75c39104ddaa9da94b13f",
+            "pcm_sha256": "bf5814213877908edb5ef1186a69e423fc3c62492056f9289041f48ec95c9d50",
+            "byte_length": 25820,
+            "sample_count": 12888,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.611,
+            "rms": 3310.443170030073,
+            "peak": 19316,
+            "clipped_samples": 0,
+            "silence_fraction": 0.35630043451272503,
+            "leading_silence_samples": 52,
+            "trailing_silence_samples": 938
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22913,8 +25129,54 @@
       "catalog_record_sha256": "5e07767454e8a98fc5c0c1c67b5b5ac19925148f6f226400bf5b165dda499d2c",
       "transcript_sha256": "08ce5cc3a00242f03dd2d1a78dd45de0b8663b769dc33a981fdb63be719e98f7",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:34:27.670Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nأَلْف",
+          "instruction_sha256": "37f137fbcab236f2fe594a50270a969308cf1bae7544b3905190aec2a57c6c30",
+          "request_body_sha256": "0969b4707ae9e399011f7bb65fc32bfd7d929cbd00d0417be3d8be2db170ddca",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "ee681ccd983295b047182e5416c062817413438e0c077028e480a1ed24771885",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-scale-1000-small-1.attempt-1.master-24000.wav",
+            "sha256": "3875d0e8d852e1c2e7a39120209f334c7db0d8196da8f08cc36a7e303c134481",
+            "pcm_sha256": "ee681ccd983295b047182e5416c062817413438e0c077028e480a1ed24771885",
+            "byte_length": 52410,
+            "sample_count": 26183,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.0909583333333333,
+            "rms": 1632.0657691019708,
+            "peak": 12906,
+            "clipped_samples": 0,
+            "silence_fraction": 0.3444983386166597,
+            "leading_silence_samples": 66,
+            "trailing_silence_samples": 674
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-scale-1000-small-1.attempt-1.telephony-8000.wav",
+            "sha256": "80e7d82e117676bec4959f84d6ade9bb4cb2b8718b1e0e534c51264fc5d3aa8f",
+            "pcm_sha256": "3b644fff9613c22d2c6cb0e6f1bdf1d4b2053ff1564562497b0c2b025985a38b",
+            "byte_length": 17500,
+            "sample_count": 8728,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.091,
+            "rms": 1621.9776901690261,
+            "peak": 12345,
+            "clipped_samples": 0,
+            "silence_fraction": 0.37179193400549954,
+            "leading_silence_samples": 24,
+            "trailing_silence_samples": 225
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22932,8 +25194,22 @@
       "catalog_record_sha256": "70cf5190aacefd24099a532f7724c63bf9a070be6ab4693a17f4446898d4eff5",
       "transcript_sha256": "fa473df84d72a731f16342d1da048fffd55689a8c72b86e4eb26d77f89c21cd6",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:34:30.170Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَأَلْف",
+          "instruction_sha256": "30f8eb652366f6f6505049c9c6093520f051632994a520fb8c1eee912172a1c5",
+          "request_body_sha256": "1261e28039497553d9ba47b62c9c9241dfe9e3ca3bcc22a0bb278f2398982179",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22951,8 +25227,54 @@
       "catalog_record_sha256": "6fa587acc456876131de8e47f6967d201cb642eededf2810ab106844299fea69",
       "transcript_sha256": "5210f9ad4204d30c9db8cc1d130c9805931574d0d82d489e6b9ea8a4d2c0f3af",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "QA_PASSED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T16:34:32.578Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nأَلْفَان",
+          "instruction_sha256": "76e8160c006d972914ff17aaf9f37205f0637e59eb985c7c76702464fa9cc8d2",
+          "request_body_sha256": "04e5fb8a4310230e703afd0d9fc1e431ba9f6e3814a583b88b55986cb8ce384f",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "2d46ba517c7cf7b9a12d26ec0602e8fa37e29c6fc1997e04d248c6af97d32412",
+          "master": {
+            "file": "ar-sa/acdc-cardinal-v1-scale-1000-small-2.attempt-1.master-24000.wav",
+            "sha256": "61e541250bb4f43c9ba8d05257a8d8233c180488fae35666326e6901d911100e",
+            "pcm_sha256": "2d46ba517c7cf7b9a12d26ec0602e8fa37e29c6fc1997e04d248c6af97d32412",
+            "byte_length": 58170,
+            "sample_count": 29063,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.2109583333333334,
+            "rms": 3676.7019936226566,
+            "peak": 26660,
+            "clipped_samples": 0,
+            "silence_fraction": 0.21102432646320063,
+            "leading_silence_samples": 92,
+            "trailing_silence_samples": 448
+          },
+          "telephony": {
+            "file": "ar-sa/acdc-cardinal-v1-scale-1000-small-2.attempt-1.telephony-8000.wav",
+            "sha256": "92393d7631015a2308d2a4bb17fa50e026f5c49c0ae407774ce0af50d4b67f7b",
+            "pcm_sha256": "9aba4cd215382e55609d441e57a3117e78a8ffcb96046888f4a63a943e59f8cb",
+            "byte_length": 19420,
+            "sample_count": 9688,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.211,
+            "rms": 3666.5417694990765,
+            "peak": 24862,
+            "clipped_samples": 0,
+            "silence_fraction": 0.21077621800165153,
+            "leading_silence_samples": 31,
+            "trailing_silence_samples": 150
+          }
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22970,8 +25292,22 @@
       "catalog_record_sha256": "26e68af4ad0c21d6a63befaf0bea9894764cf880c2e24b72853bdf0f8682a301",
       "transcript_sha256": "5fb6e0bab1a9c967194dc405f647f43a26838fbefff8a2ed5e1aa3e2747b0355",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:34:34.763Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَأَلْفَان",
+          "instruction_sha256": "4ecd86b296c46862bb7fee0af9453445b20f1cfcc82a0b0ef095a713c3e4e2d6",
+          "request_body_sha256": "208d651ac571847b6881eb6f0938046b030784bf6051257f72f77a7ba8223ef3",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -22989,8 +25325,22 @@
       "catalog_record_sha256": "3efd622fdeaad741420535b3b38938eccd31dcd5c8c75ec4476646be4cac0181",
       "transcript_sha256": "63a7253f9dd42288e463e0de55be882fdd1eafa84f1e246aeae8d7b7f20bfc22",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:34:37.043Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nثَلَاثَةُ آلَاف",
+          "instruction_sha256": "0ce9d3a61a78cea63eeeb79ede4bb5cf5f19a39b5dcdf9d460ad28cf76e74b79",
+          "request_body_sha256": "fa7f56ce34c021575834e72c9fdee18d5d5a0a0f6282693e0d55941ebd3f001a",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -23008,8 +25358,22 @@
       "catalog_record_sha256": "2d8a014549c7d2a6e496046773f84a1d01aeb64406dd0310d6879158148b8374",
       "transcript_sha256": "779bed8b6bbcc855dbb4b68392493695eb76f96c9d9eb74ff2f49440dc2c8dcc",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:34:40.809Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَثَلَاثَةُ آلَاف",
+          "instruction_sha256": "8ec9946f81a210c284a3405270039c88a527562c437b6309d04daa566a71731f",
+          "request_body_sha256": "0e2f19a6bef4934e0f7c5056866fe2414c340d0171ffee77cd6d19f45e5a052f",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -23027,8 +25391,22 @@
       "catalog_record_sha256": "42d60cbbfafe8bf3cf1caaf95773d012258fa471761fb9ce5817ec7010f592ac",
       "transcript_sha256": "679589698b1caf8c71761637a6916aa44daaf5e842d6897a7db975477808bdfd",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:34:44.005Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nأَرْبَعَةُ آلَاف",
+          "instruction_sha256": "9685229dd18ef2fc9d06ae9c6407461f1eb48c1f84b0463c0e54e062cfef3bbf",
+          "request_body_sha256": "00378c29bff1f52fae6c86bd267ed8efeadc4e9f42018f0e3c68e0693193029c",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",
@@ -23046,8 +25424,22 @@
       "catalog_record_sha256": "3b2bdca39e75be0d06a571a00c4398c374ba83735486948cf3cce128ebaf4ed6",
       "transcript_sha256": "1afa1a4a9b3777f983b125dd3f692c72bd2722970bae47597d5e843d14cb620b",
       "context_sha256": "71eb75bcd3e3e0f0511bd693cc8052357af4e6f7523aaf9b911c5d3766b86b16",
-      "generation_status": "PENDING",
-      "attempts": []
+      "generation_status": "FAILED",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T16:34:46.696Z",
+          "synthesis_instruction": "Read the transcript below verbatim in native Modern Standard Arabic. Use a professional, warm, natural adult female call-center voice. This is one complete pausal chunk; preserve its written internal inflection and end at a natural pause. Speak clearly at a comfortable conversational pace. Only speak the transcript: no introduction, added words, music or sound effects. Do not rush or omit words; the complete chunk must fit within 10 seconds.\n\nTranscript:\nوَأَرْبَعَةُ آلَاف",
+          "instruction_sha256": "db23e242cb9e7ed40dbbce0e855b18bf966ce4084cd4e11d902fc1a7db9882bb",
+          "request_body_sha256": "8fd3be7aa7e58234fb4281368023280a36735c20ce684e80ff57a02952a4694c",
+          "failure_code": "GEMINI_HTTP_500",
+          "provider_finish_reason": null,
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null
+        }
+      ]
     },
     {
       "catalog_version": "acdc-cardinal-v1",

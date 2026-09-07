@@ -6,6 +6,39 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Bridge deployment follow-up:** source now supports explicit verified AMQPS,
+TLS1.2 minimum, certificate/hostname verification and protected CA parsing in
+main-SH preflight. All112 bridge tests and dispatch pass `0d2bfe/b60ebe`.
+Deploy `1ff54f/02ae6d` and independent verify `9f2d32/f1ad28` pass; current
+release `24e085e77183a418ded9df942a6dd16dc5883eacb2e7ca30d85a3cc7e4ab6c76`,
+active registered consumer PID323748, automatic restarts0. Existing local
+isolated plaintext broker configuration is unchanged; no production writes or
+provider push. Real remote AMQPS/mobile delivery and durability/deadline gates
+remain open. See `doc/push_bridge_amqp_tls.md`.
+
+Five-locale cardinal media source preflight passes12 EUnit groups and private
+production/TEST compilation (`0d2bfe/b60ebe`, `/tmp/kazoo-cardinal-media.i32h6k`).
+Complete inventories/intros are verified via an independent catalog/importer
+oracle. EN map and announcement dispatch stay unchanged; no fabricated nonEN
+map, import or deployment. See `doc/acdc_cardinal_five_locale_media.md` for the
+concrete remaining integration boundary.
+
+**Current follow-up:** thirty-second offer acceptance is now a real live PASS,
+`2d290a/session16292/db354d`, evidence
+`/var/log/kazoo-acceptance/20260907T162617Z`. Installed EN offer5.171s played
+at30.054 and60.054s (each correlation0.999993), with no early/extra offer and
+quantified quiet audio before29s. Generic interval remained15; position playback
+was disabled. Normal76s call teardown, unchanged services/workers, log/core
+gates and exact-revision cleanup passed; only marked queue/callflow soft-deleted,
+unrelated documents unchanged. See `doc/acdc_callback_thirty_second_acceptance.md`.
+
+Cardinal inventory supersedes16:16UTC below:335 QA (EN31/HE80/FR160/ES25/AR39),
+542 attempts and85 cumulative retries. HE51/FR1/ES28/AR42 failed; AR127 still
+unattempted. Three AR batches stopped on HTTP500; no indeterminate request.
+New38 recordings/76 WAVs and receipts are copied to Git. Whole-ledger/offline
+WAV/SoX plus immutable-old-attempt and repo/private equality proof passes
+`9c74e0/session36821/e854e2`. No listening or cardinal runtime admission.
+
 **16:16UTC checkpoint:** bridge OAuth update is deployed through the main SH
 (`3f5035/session60404/aa39ab`), with independent verification
 `67c5ba/session51989/a1b50e`. New release

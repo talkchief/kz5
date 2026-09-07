@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "owner": "kazoo5-cardinal-authoring-run",
+  "catalog_sha256": "5703e649a1f5a2bcd0c00e9e19bf4424e024c85648452dba0d190bcf73088134",
+  "approvals_sha256": "452b815a65f726e4d221b2585f61162fae0a1c43d6fb1370a0f27bb3a37b8ea5",
+  "selected_locales": [
+    "ar-sa"
+  ],
+  "request_limit": 36,
+  "concurrency": 2,
+  "explicit_retry": false,
+  "retry_budget": 85,
+  "attempt_limit": 2,
+  "explicit_attempt_limit": false,
+  "requests_before": 524,
+  "requested": 4,
+  "status": "FAILED",
+  "started_at": "2026-09-07T16:28:34.157Z",
+  "events": [
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-500",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "6649906ad5a1fc8ba4867029feaac38e4471d7f5fd7630fd0665c44dca83a6b7"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-500",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "6db9cdfe148766268af94e32b71d248b4ee40a544b6f91ff80838c76080ab04e"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-600",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "GEMINI_HTTP_500",
+      "finish_reason": null,
+      "returned_model_version": null,
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-600",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "12c81c8ff09437c8d0c1d9c09ad22b82bc761de7c3806ac1f3126725282e0c33"
+    }
+  ],
+  "runtime_ready": false,
+  "deployed": false,
+  "finished_at": "2026-09-07T16:28:47.458Z",
+  "failure_code": "GEMINI_HTTP_500"
+}

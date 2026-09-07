@@ -236,6 +236,22 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(runtime.fcm_url, "https://fcm.googleapis.com/v1/projects/fixture-project/messages:send")
         runtime.close()
 
+    def test_tls_port_defaults_and_explicit_port_are_preserved(self):
+        for tls, explicit_port, expected in ((None, None, 5672), ("false", None, 5672),
+                                             ("true", None, 5671), ("true", "15671", 15671),
+                                             ("true", "5672", 5672)):
+            proposed = environment()
+            if tls is not None:
+                proposed["PUSH_BRIDGE_AMQP_TLS"] = tls
+            if explicit_port is not None:
+                proposed["PUSH_BRIDGE_AMQP_PORT"] = explicit_port
+            modules, _, _ = dependencies()
+            with patch.dict(sys.modules, modules):
+                runtime = bridge.BridgeRuntime(proposed)
+            self.assertEqual(runtime._settings["AMQP_PORT"], expected)
+            self.assertEqual(bool(runtime._amqp_tls_options), tls == "true")
+            runtime.close()
+
     def test_close_defers_session_cleanup_until_inflight_send_finishes_and_is_idempotent(self):
         modules, _loader, _credentials = dependencies()
         with patch.dict(sys.modules, modules):

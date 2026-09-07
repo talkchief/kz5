@@ -71,6 +71,21 @@ async function captured(collection,storage){const fixture=clone(base);await capt
     assert.equal(geminiPlan.queue.moh,'silence_stream://-1');assert.equal(geminiPlan.queue.callback.media,undefined);
     assert.deepEqual(geminiPlan.queue.callback.announcement,{enabled:true,initial_delay:3,interval:15});
     assert.equal(audioMode(undefined),'legacy');assert.throws(()=>audioMode('automatic'));groups++;
+    const thirtyPlan=plan(state,user,marker,'gemini','interval-30');
+    const thirtyFixture={...base,audio_mode:'gemini',timing_profile:'interval-30'};
+    const thirtyQueue={...thirtyPlan.queue,id:Q,agents:[]};
+    assert.deepEqual(thirtyQueue.callback.announcement,{enabled:true,initial_delay:30,interval:30});
+    assert.equal(thirtyQueue.announcements.interval,15);
+    assert.equal(thirtyQueue.announcements.position_announcements_enabled,false);
+    assertOwned(thirtyQueue,thirtyFixture,'queues');
+    assert.throws(()=>assertOwned(thirtyQueue,{...thirtyFixture,timing_profile:'default'},'queues'));
+    assert.throws(()=>assertOwned({...thirtyQueue,callback:geminiPlan.queue.callback},thirtyFixture,'queues'));
+    assert.throws(()=>plan(state,user,marker,'legacy','interval-30'));
+    for(const invalid of [null,30,'30',[],{},'unknown'])assert.throws(()=>plan(state,user,marker,'gemini',invalid));
+    const thirtyStore=store('queues');thirtyStore.document={...raw('queues'),...thirtyPlan.queue};
+    await captureOwned(thirtyStore,thirtyFixture,'queues',()=>{});
+    await deleteOwned(thirtyStore,thirtyFixture,'queues',()=>{},async()=>{});
+    assert.equal(thirtyFixture.queues_deleted,true);groups++;
     const geminiQueue={...geminiPlan.queue,id:Q,agents:[]};assertOwned(geminiQueue,geminiFixture,'queues');
     for(const wrong of [{...geminiQueue,moh:'local_stream://default'},
         {...geminiQueue,announcements:{...geminiQueue.announcements,position_announcements_enabled:true}},

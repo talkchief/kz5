@@ -24,6 +24,26 @@ def configuration():
     return value
 
 
+def synthetic_ca():
+    # Temporary keyless-input fixture: never reads a deployed key or file.
+    # The installed pinned venv supplies cryptography for fixture generation;
+    # the production launcher validates PEM with stdlib ssl only.
+    import datetime
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Synthetic offline CA")])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    certificate = (x509.CertificateBuilder().subject_name(name).issuer_name(name)
+                   .public_key(key.public_key()).serial_number(x509.random_serial_number())
+                   .not_valid_before(now - datetime.timedelta(days=1)).not_valid_after(now + datetime.timedelta(days=1))
+                   .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+                   .sign(key, hashes.SHA256()))
+    return certificate.public_bytes(serialization.Encoding.PEM)
+
+
 class ServiceTests(unittest.TestCase):
     def checked(self, data, service_account=None):
         if service_account is None:
@@ -67,6 +87,47 @@ class ServiceTests(unittest.TestCase):
                    "token_uri": "https://unexpected.example.invalid/token"}
         with self.assertRaises(ValueError):
             self.checked(configuration(), account)
+
+    def test_custom_ca_is_protected_service_file_and_never_a_private_key(self):
+        value = configuration()
+        value.update(PUSH_BRIDGE_AMQP_TLS="true", PUSH_BRIDGE_AMQP_CA_FILE="/etc/kazoo-push-bridge/broker-ca.pem")
+        account = json.dumps({"type": "service_account", "project_id": "fixture-project",
+                              "private_key": "synthetic", "client_email": "fixture@example.invalid",
+                              "token_uri": "https://oauth2.googleapis.com/token"}).encode()
+        for raw, valid in ((synthetic_ca(), True),
+                           (b"-----BEGIN CERTIFICATE-----\nsynthetic\n-----END CERTIFICATE-----", False),
+                           (b"invalid-synthetic-bundle", False),
+                           (b"-----BEGIN CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----", False)):
+            with mock.patch.object(launcher, "protected_read", side_effect=[json.dumps(value).encode(), account, raw]) as reader, \
+                    mock.patch.object(launcher.grp, "getgrnam", side_effect=KeyError):
+                if valid:
+                    self.assertEqual(launcher.load_configuration(), value)
+                else:
+                    with self.assertRaisesRegex(ValueError, "^invalid_amqp_ca_bundle$"):
+                        launcher.load_configuration()
+                self.assertEqual(reader.call_args.args, (value["PUSH_BRIDGE_AMQP_CA_FILE"], 65536, None))
+        value["PUSH_BRIDGE_AMQP_CA_FILE"] = "/root/outside-ca.pem"
+        with mock.patch.object(launcher, "protected_read", side_effect=[json.dumps(value).encode(), account]), \
+                mock.patch.object(launcher.grp, "getgrnam", side_effect=KeyError):
+            with self.assertRaisesRegex(ValueError, "^credentials_must_use_service_directory$"):
+                launcher.load_configuration()
+        self.assertIn("PUSH_BRIDGE_AMQP_CA_FILE", launcher.PROTECTED_FILE_KEYS)
+
+    def test_permission_preparation_includes_only_exact_validated_custom_ca(self):
+        value = configuration()
+        value.update(PUSH_BRIDGE_AMQP_TLS="true", PUSH_BRIDGE_AMQP_CA_FILE="/etc/kazoo-push-bridge/broker-ca.pem")
+        with mock.patch.object(launcher, "load_configuration", return_value=value), \
+                mock.patch.object(launcher.os, "geteuid", return_value=0), \
+                mock.patch.object(launcher.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=42)), \
+                mock.patch.object(launcher.os, "open", side_effect=[90, 91, 92, 93]) as opened, \
+                mock.patch.object(launcher.os, "fchown") as ownership, \
+                mock.patch.object(launcher.os, "fchmod") as modes, \
+                mock.patch.object(launcher.os, "close"):
+            self.assertEqual(launcher.main(["--prepare-permissions"]), 0)
+        self.assertEqual(opened.call_args.args[0], value["PUSH_BRIDGE_AMQP_CA_FILE"])
+        self.assertTrue(opened.call_args.args[1] & launcher.os.O_NOFOLLOW)
+        self.assertEqual(ownership.call_args.args, (93, 0, 42))
+        self.assertEqual(modes.call_args.args, (93, 0o640))
 
     def test_non_object_config(self):
         with self.assertRaises(ValueError):

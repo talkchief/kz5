@@ -16,8 +16,24 @@ inputs=(applications/acdc/src/acdc_cardinal_media.erl
         applications/acdc/src/acdc_cardinal_map.hrl
         applications/acdc/src/acdc_gemini_map.hrl
         scripts/erlang-tests/acdc_cardinal_media_tests.erl
-        scripts/test-acdc-cardinal-media.sh)
+        scripts/test-acdc-cardinal-media.sh
+        scripts/acdc-cardinal-catalog.cjs
+        scripts/import-acdc-gemini-cardinals.cjs)
 before=$(sha256sum -- "${inputs[@]}" | sha256sum | cut -d ' ' -f 1)
+# Pure authoring-source expectations only; no WAV, provider, approval or database
+# operation. Synthetic EUnit metadata must never be mistaken for a release map.
+export ACDC_CARDINAL_MEDIA_INVENTORY="$cardinal_build/inventory.term"
+node > "$ACDC_CARDINAL_MEDIA_INVENTORY" <<'NODE'
+const catalog = require('./scripts/acdc-cardinal-catalog.cjs');
+const {INTROS} = require('./scripts/import-acdc-gemini-cardinals.cjs');
+const binary = value => '<<' + JSON.stringify(value) + '>>';
+const rows = catalog.REQUIRED_LOCALES.map(locale => {
+  const intro = INTROS[locale];
+  return '{' + binary(locale) + ',[' + catalog.plan(locale).map(p => binary(p.id)).join(',') + '],{'
+    + [intro.canonical_id, intro.transcript_sha256, intro.wav_sha256].map(binary).join(',') + '}}';
+});
+process.stdout.write('[' + rows.join(',\n') + '].\n');
+NODE
 erlc -Werror -I applications/acdc/src -I applications/acdc/include \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$cardinal_build/production" \
     "${inputs[@]:0:4}"

@@ -1,5 +1,28 @@
 # Kazoo 5 project task register
 
+Bridge AMQPS support is deployed through main SH (`1ff54f/02ae6d`) and separately
+verified (`9f2d32/f1ad28`). All112 bridge tests plus installer dispatch pass;
+active consumer PID323748, zero automatic restarts. Production untouched;
+local development binding remains isolated/plaintext. Remote TLS and real phone
+delivery, durable recovery and whole-operation deadlines remain open. Five-locale
+cardinal-media preflight also passes12 EUnit groups and production/TEST compile
+(`0d2bfe/b60ebe`); actual nonEN maps and dispatch are not activated.
+
+Current September7 follow-up: actual thirty-second callback-offer acceptance
+PASS `2d290a/session16292/db354d`. Complete built-in EN audio at30.054/60.054s,
+quiet pre-offer wait through29s, no extra offer, unchanged services, zero scoped
+errors/new cores; marked test queue/callflow conditionally cleaned. See
+`doc/acdc_callback_thirty_second_acceptance.md`. This closes that timing slice,
+not combined position/MOH, all-language playback or production acceptance.
+
+Voice inventory now335/584 QA (EN31 HE80 FR160 ES25 AR39);542 historical
+requests,85 retries, no indeterminate attempt. All131 initial HE identities are
+attempted; HE51, ES28, FR1 and AR42 are FAILED; AR127 still initial-PENDING.
+Last three AR batches stopped on provider HTTP500. All38 new recordings/76 WAVs
+since17946f2 are preserved, with whole-ledger/old-success/readback verification
+`9c74e0/session36821/e854e2`. No new cardinal runtime activation or listening
+approval. All later sections below are historical unless explicitly updated.
+
 Latest16:16UTC: bridge OAuth transport fix deployed via main SH and separately
 verified (`3f5035/aa39ab`, `67c5ba/a1b50e`);103 bridge tests and installer dispatch
 PASS. Service PID301642 active, zero automatic restarts; all8 checked services
@@ -403,7 +426,7 @@ active; this new report does not postpone those priorities.
 | P0-02 | OPEN — acceptance | Re-test extension 2000 after the operator selects the intended queue agent. Observed roster Agent 12 logged out; globally ready Agent 19 unassigned; runtime knows no eligible agents. Do not reset all agents to conceal the mismatch. |
 | P0-13 | SOURCE FIX TESTED — deployment open | Live dashboard review found the outbound FSM emits `outbound` in sync replies, but `kapi_acdc_agent` excluded it from the reply status enum. The legitimate state is now accepted. Root38933 passed3 baseline groups reproducing the actual serializer/publisher failure and11 candidate groups, with broker publication substituted; evidence `/tmp/kazoo-agent-sync-status.xBuTWi`. The listener invokes that publisher synchronously, creating a potential restart path before the fix. Real listener/restart, live-call acceptance and deployment remain separate; no confirmed live crash is claimed. |
 | P0-03 | DEPLOYED — single-key EN live retry verified; broader acceptance open | Menu deployment cd4e17/6fbfad matches tested module MD5; full87 canonical tests142a1a/654902 pass after narrow mock-setup timeout correction. Strict entry-only live run d26b83/0fcc7e proves only6 at4.995s, full5.491s installed Gemini confirmation before BYE, unanswered first attempt, durable retry_wait, second reciprocal bridge, agent ready, unchanged core services and0new errors/cores. Fixture retained; independent MASTER test phones temporarily paused for memory and restored7268a4/898117. Reducer17/wrapper22/retry80/audio79/service-scope27/helper7 checks support this slice. Private OpenAPI not published; invalid user return number, actual30s/real MOH/all-language and release acceptance remain open. See doc/acdc_single_key_live_acceptance_20260907.md. |
-| P0-04 | ACTIVE — callback | Callback offer at configured 30 seconds: separate enable, initial delay and repeat interval from position/wait/generic announcements; verify saved values, runtime schedule and received audio. Invalid return numbers must not cause silent failure. |
+| P0-04 | ACTIVE — actual30-second offer slice PASS | Live `2d290a/db354d` proves saved callback initial30/interval30 independent of generic15, complete immutable EN offers at30.054/60.054s and no early/extra offer. Packet/audio, service/log/core and conditional fixture-cleanup gates pass. Position playback was disabled; combined position/MOH and all-language playback remain open. Invalid return numbers must not cause silent failure. See `doc/acdc_callback_thirty_second_acceptance.md`. |
 | P0-11 | DEPLOYED — focused regression verified; broader acceptance open | Announcement worker mailbox starvation: elapsed deadlines run before another receive; bounded pre-playback drains stop the temporary worker after256 handled events plus one overflow probe. Two regressions fail before the fix; all12 scheduler/worker tests pass afterward. Fresh production/loaded MD5 parity0ad7ce proves current acdc_announcements is deployed. Actual EN offers pass c88ff7/d9b680 at3/15-second settings over silence hold. This does not close real MOH, all-language, overload or actual30-second acceptance. See doc/acdc_announcement_mailbox_fairness.md and doc/callback_media_runtime_parity.md. |
 | P0-12 | DEPLOYED — canonical regression/runtime parity verified | Removed synchronous auxiliary metadata lookup from timed unavailable/retry/alternate branches. Built-in preflight retains its three auxiliary paths from42 reads; legacy custom menus preflight three optional assets before queue entry. Missing cache fails quietly without fallback or false registration. Full87 tests pass fada33/fee8c1, including poisoned datastore/resolver access,30ms budgets and21s ownership/completion cases. Fresh production/loaded MD5 parity0ad7ce proves this callback cohort is deployed. Actual EN offer and6+1 retry slices pass; arbitrary synchronous publishing, native audio alternatives and all-language/failure acceptance are not implied. See doc/callback_media_runtime_parity.md. |
 | P0-05 | OPEN — ACDC | Agent stability: one answered call must not log unrelated agents out. Test failed ringing, reconnect, queue-specific logout, pause/resume and reboot recovery. |

@@ -43,6 +43,26 @@ def reject_fcm_redirect(response, *args, **kwargs):
     return response
 
 
+def amqp_tls_options(settings):
+    """Explicit verified TLS only; called after configuration validation."""
+    if settings.get("AMQP_TLS", "false") == "false":
+        return {}
+    if settings.get("AMQP_TLS") != "true":
+        raise ValueError("invalid_amqp_tls_configuration")
+    try:
+        import ssl
+        context = ssl.create_default_context(cafile=settings.get("AMQP_CA_FILE"))
+        context.minimum_version = max(context.minimum_version, ssl.TLSVersion.TLSv1_2)
+        context.verify_mode = ssl.CERT_REQUIRED
+        context.check_hostname = True
+    except Exception:
+        raise ValueError("invalid_amqp_tls_configuration") from None
+    # AMQPStorm 2.11.1 IO._ssl_wrap_socket consumes these exact keys. Using
+    # only ssl=True would enter its legacy non-verifying default-context path.
+    return {"ssl": True, "ssl_options": {"context": context,
+                                         "server_hostname": settings["AMQP_HOST"]}}
+
+
 class OAuthTransportFailure(Exception):
     """Only bridge-owned fixed categories cross the refresh boundary."""
 
@@ -139,8 +159,11 @@ class BridgeRuntime:
         self.google_request = GoogleAuthRequest
         self._settings = {key[len(PREFIX):]: value for key, value in environment.items()
                           if isinstance(key, str) and key.startswith(PREFIX)}
+        if self._settings.get("AMQP_TLS") == "true" and "AMQP_PORT" not in self._settings:
+            self._settings["AMQP_PORT"] = "5671"
         for name, (default, _low, _high) in NUMBERS.items():
             self._settings[name] = int(self._settings.get(name, default))
+        self._amqp_tls_options = amqp_tls_options(self._settings)
         self.credentials = service_account.Credentials.from_service_account_file(
             self._settings["SA_FILE"], scopes=[self._settings["FCM_SCOPE"]])
         project = self.credentials.project_id
@@ -365,10 +388,7 @@ class BridgeRuntime:
                         generation["failed"] = True
 
                 try:
-                    connection = self.amqpstorm.Connection(
-                        settings["AMQP_HOST"], settings["AMQP_USER"], settings["AMQP_PASS"],
-                        port=settings["AMQP_PORT"], virtual_host=settings["AMQP_VHOST"],
-                        heartbeat=HEARTBEAT, timeout=10)
+                    connection = self._connect_amqp()
                     channel = connection.channel()
                     self._conn = connection
                     try:
@@ -439,6 +459,13 @@ class BridgeRuntime:
         except Exception:
             pass
         threading.Timer(3, lambda: os._exit(0)).start()
+
+    def _connect_amqp(self):
+        settings = self._settings
+        return self.amqpstorm.Connection(
+            settings["AMQP_HOST"], settings["AMQP_USER"], settings["AMQP_PASS"],
+            port=settings["AMQP_PORT"], virtual_host=settings["AMQP_VHOST"],
+            heartbeat=HEARTBEAT, timeout=10, **self._amqp_tls_options)
 
     def close(self):
         # shutdown(wait=False) leaves workers in flight. Do not close their

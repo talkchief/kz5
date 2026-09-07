@@ -71,7 +71,7 @@ offer_cleanup() {
 }
 offer_main() {
     local mode=${1:-} expected_md5='' live_md5 before_cores since log_errors file_errors caller_exit=0
-    local gemini=false
+    local gemini=false interval30=false hold_ms=46000
     local -a fixture_audio_options=()
     umask 077
     ((EUID==0)) || die 'Root required'
@@ -80,6 +80,7 @@ offer_main() {
     while (($#)); do
         case $1 in
             --gemini) [[ $gemini == false ]] || die 'Duplicate Gemini option'; gemini=true; fixture_audio_options=(--gemini); shift ;;
+            --gemini-30) [[ $gemini == false ]] || die 'Duplicate Gemini option'; gemini=true; interval30=true; hold_ms=76000; fixture_audio_options=(--gemini-30); shift ;;
             --runtime-md5) [[ $# -ge 2 && -z $expected_md5 && $2 =~ ^[a-f0-9]{32}$ ]] || die 'Invalid runtime MD5'; expected_md5=$2; shift 2 ;;
             *) die 'Unexpected options' ;;
         esac
@@ -118,18 +119,20 @@ offer_main() {
         > "$RUN_DIR/offer-capture.log" 2>&1 &
     offer_capture_pid=$!; ACTIVE_PIDS+=("$offer_capture_pid"); sleep 1
     kill -0 "$offer_capture_pid" || die 'Capture did not start'
-    write_caller_csv "$RUN_DIR/offer-input.csv" 1 1 46000 46000 0
+    write_caller_csv "$RUN_DIR/offer-input.csv" 1 1 "$hold_ms" "$hold_ms" 0
     sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$RUN_DIR/offer-caller.xml" -inf "$RUN_DIR/offer-input.csv" \
         -i "$LOCAL_IP" -p "$CALLER_PORT" -mi "$LOCAL_IP" -mp 47200 -min_rtp_port 47200 -max_rtp_port 47203 \
-        -m 1 -l 1 -r 1 -rp 1000 -nostdin -aa -timeout 75s -timeout_error \
+        -m 1 -l 1 -r 1 -rp 1000 -nostdin -aa -timeout 105s -timeout_error \
         -trace_stat -fd 1s -stf "$RUN_DIR/offer-caller-stats.csv" > "$RUN_DIR/offer-caller.log" 2>&1 &
     CALLER_PID=$!; ACTIVE_PIDS+=("$CALLER_PID"); offer_call_id="1-${CALLER_PID}@${LOCAL_IP}"
     jq -n --arg call "$offer_call_id" --arg queue "$offer_queue_id" --arg account "${STATE[ACCEPTANCE_ACCOUNT_ID]}" \
         '{call_id:$call,queue_id:$queue,account:$account,ip:"127.0.0.20",sip_port:15064,media_port:47200}' > "$RUN_DIR/offer-call.json"
     wait_answered_calls "$RUN_DIR/offer-caller-stats.csv" 1 || die 'Caller was not answered'
     sup -e supervisor which_children acdc_announcements_sup > "$RUN_DIR/offer-workers-during.txt"
-    if [[ $gemini == true ]]; then
+    if [[ $interval30 == true ]]; then
+        log 'Owned2098 Gemini offer at30/60 seconds; silent hold before29s, generic interval15 remains separate; no position/DTMF proof'
+    elif [[ $gemini == true ]]; then
         log 'Owned2098 Gemini offer-only: complete >5s phrase at3/18/33, silence hold, no position/DTMF proof'
     else
         log 'Owned2098 caller waits46seconds: offer3/18/33, position11/26/41; no DTMF is sent'

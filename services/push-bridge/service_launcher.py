@@ -7,6 +7,7 @@ from importlib import metadata
 import os
 from pathlib import Path
 import stat
+import ssl
 import re
 import sys
 
@@ -16,6 +17,8 @@ from validate_config import PREFIX, validate
 CONFIG = Path("/etc/kazoo-push-bridge/config.json")
 CREDENTIAL_KEYS = ("PUSH_BRIDGE_SA_FILE", "PUSH_BRIDGE_APNS_KEY_FILE",
                    "PUSH_BRIDGE_APNS_KEY_FILE_DEV")
+TRUST_KEYS = ("PUSH_BRIDGE_AMQP_CA_FILE",)
+PROTECTED_FILE_KEYS = CREDENTIAL_KEYS + TRUST_KEYS
 
 
 def unique_object(pairs):
@@ -64,7 +67,7 @@ def load_configuration():
             or any(not key.startswith(PREFIX) for key in configuration)
             or validate(configuration)):
         raise ValueError("invalid_configuration")
-    for key in CREDENTIAL_KEYS:
+    for key in PROTECTED_FILE_KEYS:
         filename = configuration.get(key)
         if not filename:
             continue
@@ -78,6 +81,16 @@ def load_configuration():
                                for field in ("project_id", "private_key", "client_email"))
                     or account.get("token_uri") != "https://oauth2.googleapis.com/token"):
                 raise ValueError("invalid_service_account")
+        elif key in TRUST_KEYS:
+            try:
+                if b"-----BEGIN CERTIFICATE-----" not in raw or b"PRIVATE KEY-----" in raw:
+                    raise ValueError()
+                # Parse the exact bounded protected bytes during installer
+                # preflight, before any service/permission mutation. No sockets
+                # or third-party dependencies are needed for this trust check.
+                ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(cadata=raw.decode("ascii"))
+            except Exception:
+                raise ValueError("invalid_amqp_ca_bundle") from None
         elif b"PRIVATE KEY-----" not in raw:
             raise ValueError("invalid_apns_key")
     return configuration
@@ -111,7 +124,7 @@ def main(argv=None):
             finally:
                 os.close(directory)
             # Exact validated files only; no recursive chmod or credential copies.
-            for filename in [str(CONFIG)] + [configuration[key] for key in CREDENTIAL_KEYS
+            for filename in [str(CONFIG)] + [configuration[key] for key in PROTECTED_FILE_KEYS
                                              if configuration.get(key)]:
                 descriptor = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
                 try:

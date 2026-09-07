@@ -10,6 +10,7 @@
   "PUSH_BRIDGE_FCM_SCOPE": "https://www.googleapis.com/auth/firebase.messaging",
   "PUSH_BRIDGE_FCM_URL_TEMPLATE": "https://fcm.googleapis.com/v1/projects/{project_id}/messages:send",
   "PUSH_BRIDGE_AMQP_PORT": "5672",
+  "PUSH_BRIDGE_AMQP_TLS": "false",
   "PUSH_BRIDGE_WORKERS": "8",
   "PUSH_BRIDGE_APNS_WORKERS": "4",
   "PUSH_BRIDGE_STALL_TIMEOUT": "70"

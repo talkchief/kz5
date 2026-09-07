@@ -200,6 +200,7 @@ class OwnerLoopTests(unittest.TestCase):
                              "AMQP_USER": "fixture", "AMQP_PASS": "fixture-not-secret",
                              "AMQP_PORT": 5672, "AMQP_VHOST": "/fixture",
                              "EXCHANGE": "pushes", "QUEUE": "fixture", "BINDING_KEY": "fixture.*"}
+        runtime._amqp_tls_options = {}
         runtime._stop = Stop()
         runtime.mark_progress = Mock()
         runtime.start_self_watchdog = Mock()

@@ -54,8 +54,177 @@ missing_wrong_metadata_and_exception_fail_closed_test() ->
           fun(_) -> {ok, {[]}} end,
           fun(_) -> error(test_failure) end]),
     ?assertEqual({error, unsupported_language},
-        acdc_cardinal_media:prepare_with(<<"fr-fr">>, ?ACCOUNT, [], assets(),
+        acdc_cardinal_media:prepare_with(<<"de-de">>, ?ACCOUNT, [], assets(),
             fun(_) -> error(must_not_read) end, fun frame/3)).
+
+%% These tuples/documents are synthetic test metadata, not new release maps or
+%% audio. Inventory and intro pins come from the independent JS authoring source
+%% exported by the focused test launcher into its retained private directory.
+source_inventory() ->
+    {ok, [Rows]} = file:consult(os:getenv("ACDC_CARDINAL_MEDIA_INVENTORY")),
+    Rows.
+
+fixture_assets(Language) ->
+    {Language, Roles, _} = lists:keyfind(Language, 1, source_inventory()),
+    [{Language, Role, <<Role/binary, "-synthetic-fixture">>, binary:copy(<<"0">>, 64),
+      <<"md5-AAAAAAAAAAAAAAAAAAAAAA==">>, 16000, binary:copy(<<"1">>, 64)} || Role <- Roles].
+
+fixture_intro(Language) ->
+    {Language, _, {Canonical, Transcript, Sha}} = lists:keyfind(Language, 1, source_inventory()),
+    Short = binary:part(Sha, 0, 16),
+    {Language, Canonical, <<Canonical/binary, "-gemini-sulafat-", Short/binary>>,
+     Sha, <<"md5-AAAAAAAAAAAAAAAAAAAAAA==">>, 16000, Transcript}.
+
+fixture_read(Assets) ->
+    fun(Id) ->
+        [Asset] = [A || A <- Assets, id(A) =:= Id],
+        {ok, doc(Asset)}
+    end.
+
+fixture_frame(Language, _, _) ->
+    {ok, [{play, <<"/system_media/", Language/binary, "/synthetic-approved-intro">>}], []}.
+
+five_locale_inventory_and_full_cardinal_playlists_test() ->
+    lists:foreach(fun({Language, Count, Maximum}) ->
+        Assets = fixture_assets(Language),
+        {Language, AuthoringRoles, Intro} = lists:keyfind(Language, 1, source_inventory()),
+        ?assertEqual(Count, length(Assets)),
+        ?assertEqual(lists:sort(AuthoringRoles), acdc_cardinal_media:expected_roles(Language)),
+        ?assertEqual(Intro, acdc_cardinal_media:intro(Language)),
+        {ok, Audio} = acdc_cardinal_media:prepare_with(Language, ?ACCOUNT, [],
+            Assets, fixture_read(Assets), fun fixture_frame/3),
+        OtherLanguage = case Language of <<"en-us">> -> <<"he-il">>; _ -> <<"en-us">> end,
+        ?assertMatch({ok, _}, acdc_cardinal_media:prepare_with(Language, ?ACCOUNT, [],
+            Assets ++ fixture_assets(OtherLanguage), fixture_read(Assets), fun fixture_frame/3)),
+        Paths = maps:from_list([{element(2, A), <<"/system_media/", Language/binary, "/", (element(3, A))/binary>>}
+                               || A <- Assets]),
+        {ok, Before, []} = fixture_frame(Language, ?ACCOUNT, []),
+        lists:foreach(fun(Number) ->
+            {ok, Roles} = acdc_cardinal_prompts:roles(Number, Language),
+            ?assertEqual(Before ++ [{play, maps:get(Role, Paths)} || Role <- Roles],
+                acdc_cardinal_media:playlist(Number, Language, Audio))
+        end, [1, 11, 12, 21, 71, 80, 81, 101, 102, 120, 121, 1000, 2000, 12000,
+              21000, 101000, 200356, 1001001, 1021000, 121121121, 999999999]),
+        ?assertEqual(Maximum + 1, length(acdc_cardinal_media:playlist(999999999, Language, Audio))),
+        ?assertEqual([], acdc_cardinal_media:playlist(1, <<"de-de">>, Audio)),
+        {ok, [One]} = acdc_cardinal_prompts:roles(1, Language),
+        ForeignPaths = Paths#{One => <<"/system_media/de-de/foreign-number">>},
+        ?assertEqual([], acdc_cardinal_media:playlist(1, Language, Audio#{assets := ForeignPaths})),
+        ?assertEqual([], acdc_cardinal_media:playlist(1, Language, Audio#{assets := invalid})),
+        ?assertEqual([], acdc_cardinal_media:playlist(1, Language, Audio#{before_number := [{say, <<"1">>}]}))
+    end, [{<<"en-us">>, 31, 14}, {<<"es-es">>, 53, 14}, {<<"fr-fr">>, 161, 8},
+          {<<"he-il">>, 131, 11}, {<<"ar-sa">>, 208, 9}]).
+
+five_locale_missing_extra_duplicate_wrong_locale_fail_before_reads_test() ->
+    lists:foreach(fun({Language, _, _}) ->
+        [First | Rest] = Assets = fixture_assets(Language),
+        WrongLanguage = case Language of <<"en-us">> -> <<"he-il">>; _ -> <<"en-us">> end,
+        Extra = setelement(2, First, <<"acdc-cardinal-v1-unapproved-extra">>),
+        lists:foreach(fun(Items) ->
+            Ref = make_ref(),
+            ?assertEqual({error, cardinal_media_unavailable},
+                acdc_cardinal_media:prepare_with(Language, ?ACCOUNT, [], Items,
+                    fun(_) -> self() ! {Ref, unexpected}, error(must_not_read) end,
+                    fun(_, _, _) -> self() ! {Ref, unexpected}, error(must_not_frame) end)),
+            receive {Ref, unexpected} -> ?assert(false) after 0 -> ok end
+        end, [Rest, [First | Assets], [Extra | Assets], [Extra | Rest],
+              [setelement(1, First, WrongLanguage) | Rest]]),
+        lists:foreach(fun(Read) ->
+            ?assertEqual({error, cardinal_media_unavailable},
+                acdc_cardinal_media:prepare_with(Language, ?ACCOUNT, [], Assets, Read, fun fixture_frame/3))
+        end, [fun(_) -> {error, not_found} end,
+              fun(_) -> {ok, doc(setelement(1, First, WrongLanguage))} end,
+              fun(_) -> {ok, doc(setelement(7, First, <<"wrong-transcript">>))} end,
+              fun(_) -> error(read_failed) end])
+    end, source_inventory()),
+    lists:foreach(fun(Language) ->
+        ?assertEqual({error, unsupported_language},
+            acdc_cardinal_media:prepare_with(Language, ?ACCOUNT, [], [],
+                fun(_) -> error(must_not_read) end, fun(_, _, _) -> error(must_not_frame) end))
+    end, [undefined, <<"EN_US">>, <<"he">>, <<"ar">>, <<"de-de">>, [<<"he-il">>]]).
+
+unchanged_compiled_map_cannot_claim_other_locales_test() ->
+    lists:foreach(fun(Language) ->
+        Ref = make_ref(),
+        ?assertEqual({error, cardinal_media_unavailable},
+            acdc_cardinal_media:prepare_with(Language, ?ACCOUNT, [], assets(),
+                fun(_) -> self() ! {Ref, unexpected}, error(must_not_read) end,
+                fun(_, _, _) -> self() ! {Ref, unexpected}, error(must_not_frame) end)),
+        receive {Ref, unexpected} -> ?assert(false) after 0 -> ok end
+    end, [<<"es-es">>, <<"fr-fr">>, <<"he-il">>, <<"ar-sa">>]).
+
+malformed_or_foreign_frame_never_reaches_cardinal_reads_test() ->
+    lists:foreach(fun({Before, After}) ->
+        Ref = make_ref(),
+        ?assertEqual({error, cardinal_media_unavailable},
+            acdc_cardinal_media:prepare_with(?LANG, ?ACCOUNT, [], assets(),
+                fun(_) -> self() ! {Ref, unexpected}, error(must_not_read) end,
+                fun(_, _, _) -> {ok, Before, After} end)),
+        receive {Ref, unexpected} -> ?assert(false) after 0 -> ok end
+    end, [{[{say, <<"1">>, <<"number">>}], []},
+          {[{play, <<"/system_media/he-il/foreign-intro">>}], []},
+          {[{prompt, <<"custom">>, <<"he-il">>, <<"A">>}], []},
+          {[{play, <<"/system_media/en-us/../foreign-intro">>}], []},
+          {[], []}, {invalid, []}, {[{play, <<"/system_media/en-us/intro">>}], invalid}]).
+
+five_locale_exact_intro_frame_verification_test_() ->
+    {timeout, 30, fun() ->
+        ok = meck:new(acdc_gemini_prompts, [passthrough, no_link]),
+        try
+            meck:expect(acdc_gemini_prompts, default_alias,
+                fun(_, Canonical, _, _, absent) -> {gemini, Canonical};
+                   (_, _, _, _, {configured, Value}) -> {custom, Value}
+                end),
+            meck:expect(acdc_gemini_prompts, default,
+                fun(_, Language, _, absent) ->
+                    case Language of
+                        <<"he-il">> -> {error, unsupported_gemini_prompt};
+                        <<"ar-sa">> -> {error, unsupported_gemini_prompt};
+                        _ -> {gemini, element(3, fixture_intro(Language))}
+                    end
+                end),
+            lists:foreach(fun({Language, _, _}) ->
+                Intro = fixture_intro(Language), Read = fixture_read([Intro]),
+                Expected = {ok, [{play, <<"/system_media/", Language/binary, "/", (element(3, Intro))/binary>>}], []},
+                ?assertEqual(Expected, acdc_cardinal_media:frame_with(Language, ?ACCOUNT, [], [Intro], Read)),
+                WrongLanguage = case Language of <<"en-us">> -> <<"he-il">>; _ -> <<"en-us">> end,
+                BadSha = setelement(4, Intro, binary:copy(<<"f">>, 64)),
+                lists:foreach(fun(Intros) ->
+                    ?assertEqual({error, cardinal_media_unavailable},
+                        acdc_cardinal_media:frame_with(Language, ?ACCOUNT, [], Intros, Read))
+                end, [[], [Intro, Intro], [Intro, BadSha], [BadSha],
+                      [setelement(1, Intro, WrongLanguage)],
+                      [setelement(2, Intro, <<"acdc-queue-you_are_at_position">>)],
+                      [setelement(7, Intro, <<"wrong-transcript">>)]]),
+                lists:foreach(fun(BadRead) ->
+                    ?assertEqual({error, cardinal_media_unavailable},
+                        acdc_cardinal_media:frame_with(Language, ?ACCOUNT, [], [Intro], BadRead))
+                end, [fun(_) -> {error, not_found} end, fun(_) -> {ok, {[]}} end,
+                      fun(_) -> {ok, doc(setelement(4, Intro, <<"wrong-sha">>))} end,
+                      fun(_) -> error(read_failed) end])
+            end, source_inventory()),
+            lists:foreach(fun(Decision) ->
+                meck:expect(acdc_gemini_prompts, default, fun(_, _, _, absent) -> Decision end),
+                lists:foreach(fun(Language) ->
+                    Intro = fixture_intro(Language),
+                    ?assertEqual({error, cardinal_media_unavailable},
+                        acdc_cardinal_media:frame_with(Language, ?ACCOUNT, [], [Intro], fixture_read([Intro])))
+                end, [<<"he-il">>, <<"ar-sa">>])
+            end, [{error, account_override_unavailable}, {error, invalid_account},
+                  {error, gemini_media_unavailable}, {gemini, <<"unapproved-version">>}]),
+            meck:expect(acdc_gemini_prompts, default, fun(_, _, _, absent) -> {custom, <<"account-intro">>} end),
+            lists:foreach(fun({Language, _, _}) ->
+                Intro = fixture_intro(Language),
+                ?assertEqual({ok, [{prompt, <<"account-intro">>, Language, <<"A">>}], []},
+                    acdc_cardinal_media:frame_with(Language, ?ACCOUNT, [], [Intro], fun(_) -> error(must_not_read) end)),
+                ?assertEqual({ok, [{prompt, <<"explicit-prefix">>, Language, <<"A">>}],
+                                  [{prompt, <<"explicit-suffix">>, Language, <<"A">>}]},
+                    acdc_cardinal_media:frame_with(Language, ?ACCOUNT,
+                        [{<<"you_are_at_position">>, <<"explicit-prefix">>}, {<<"in_the_queue">>, <<"explicit-suffix">>}],
+                        [], fun(_) -> error(must_not_read) end))
+            end, source_inventory())
+        after meck:unload(acdc_gemini_prompts) end
+    end}.
 
 frame_failure_reads_no_cardinals_test() ->
     Ref = make_ref(),

@@ -34,7 +34,8 @@ APNS_REQUIRED = (
     "APNS_HOST_PROD", "APNS_HOST_DEV",
 )
 APNS_OVERRIDES = ("APNS_KEY_FILE_DEV", "APNS_KEY_ID_DEV")
-KNOWN = frozenset(REQUIRED + tuple(NUMBERS) + APNS_REQUIRED + APNS_OVERRIDES)
+AMQP_TLS_SETTINGS = ("AMQP_TLS", "AMQP_CA_FILE")
+KNOWN = frozenset(REQUIRED + tuple(NUMBERS) + APNS_REQUIRED + APNS_OVERRIDES + AMQP_TLS_SETTINGS)
 SAFE_PATH = re.compile(r"/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\Z")
 TOPOLOGY = re.compile(r"[A-Za-z0-9_.:-]{1,255}\Z")
 BINDING = re.compile(r"[A-Za-z0-9_.*#:-]{1,255}\Z")
@@ -104,6 +105,14 @@ def validate(environment):
 
     check("SA_FILE", _path)
     check("AMQP_HOST", _host)
+    tls = values.get("AMQP_TLS", "false")
+    if tls not in ("true", "false"):
+        errors.add("AMQP_TLS:invalid_boolean")
+    if PREFIX + "AMQP_CA_FILE" in environment:
+        if not values.get("AMQP_CA_FILE") or not _path(values["AMQP_CA_FILE"]):
+            errors.add("AMQP_CA_FILE:invalid_format")
+        if tls != "true":
+            errors.add("AMQP_CA_FILE:requires_tls")
     for name in ("AMQP_USER", "AMQP_PASS", "AMQP_VHOST"):
         check(name, lambda value: len(value.encode("utf-8")) <= 255
               and value == value.strip())

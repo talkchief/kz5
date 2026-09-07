@@ -2,6 +2,14 @@
 
 ## Main installer integration (development installation verified)
 
+Latest AMQPS update: strict optional broker TLS and protected CA parsing pass112
+bridge tests and installer dispatch (`0d2bfe/b60ebe`). Main-SH deployment
+`1ff54f/02ae6d` and independent verify `9f2d32/f1ad28` pass. Enabled active
+consumer PID323748, zero automatic restarts, release
+`24e085e77183a418ded9df942a6dd16dc5883eacb2e7ca30d85a3cc7e4ab6c76`.
+Development still uses its isolated local plaintext broker; real remote AMQPS
+and mobile-device delivery remain open. See `doc/push_bridge_amqp_tls.md`.
+
 Latest OAuth transport update: dedicated reusable session,3.05-second connect
 and5-second read timeouts, redirect rejection and a64KiB decoded-body cap before
 Google-auth parsing. This is not a total refresh/send deadline. All103 bridge
@@ -76,9 +84,11 @@ Do not commit populated configuration. APNs fields use the runtime names below.
 
 The separate mobile broker settings support standalone and co-located nodes:
 selecting only bridge never installs/reconfigures RabbitMQ or Kamailio.
-Do not point a development consumer at the production mobile queue. AMQP TLS
-remains a release gap: use an appropriately isolated private network; port5671
-does not by itself enable TLS in this candidate.
+Do not point a development consumer at the production mobile queue. The new
+installer-managed bridge supports verified remote AMQPS explicitly with
+`PUSH_BRIDGE_AMQP_TLS="true"`; port5671 alone never enables TLS. Existing local
+AMQP remains available with TLS absent or `"false"`. Remote TLS deployment and
+broker acceptance have not been performed by this source change.
 
 Installation provisions Python3.11 and a private venv with hash-verified wheels
 only; checks exact versions against `requirements.lock`; and stages root-owned
@@ -196,8 +206,9 @@ The candidate policy is deliberately narrower than the imported senders:
 These are candidate deployment constraints for root review. Explicit bridge
 startup now runs this preflight before provider initialization, and the APNs
 constructor validates its explicit key/topic/host inputs. This does not prove
-transport correctness: in particular it does not add AMQP TLS or make port 5671
-imply TLS or validate credential permissions. FCM redirect rejection is a
+transport correctness: configuration shape alone does not prove an AMQPS
+handshake or make port5671 imply TLS. The protected service launcher checks
+deployment file permissions separately. FCM redirect rejection is a
 separate sender-level control, tested above.
 
 Root-owned offline test command:
@@ -229,11 +240,13 @@ remain separate from ordinary persisted Kazoo settings and from the repository.
 | Inputs | Contract |
 | --- | --- |
 | `PUSH_BRIDGE_SA_FILE` | Required Google service-account JSON path; bridge startup loads it even for APNs-only traffic. |
-| `PUSH_BRIDGE_AMQP_HOST`, `PUSH_BRIDGE_AMQP_USER`, `PUSH_BRIDGE_AMQP_PASS`, `PUSH_BRIDGE_AMQP_VHOST` | Required broker connection and credentials. The imported connection currently uses non-TLS AMQP. |
+| `PUSH_BRIDGE_AMQP_HOST`, `PUSH_BRIDGE_AMQP_USER`, `PUSH_BRIDGE_AMQP_PASS`, `PUSH_BRIDGE_AMQP_VHOST` | Required broker connection and credentials. In TLS mode this exact host is also the certificate identity; no alternate hostname override exists. |
 | `PUSH_BRIDGE_EXCHANGE`, `PUSH_BRIDGE_QUEUE`, `PUSH_BRIDGE_BINDING_KEY` | Required exact deployment topology. Durable queue; existing exchange checked passively, otherwise created as topic. No automatic account authorization is added. |
 | `PUSH_BRIDGE_FCM_SCOPE` | Required OAuth scope approved for this service account. |
 | `PUSH_BRIDGE_FCM_URL_TEMPLATE` | Required exact FCM URL from the policy above; `{project_id}` expands only after validation of the service-account project as a bounded Google project identifier. All3xx responses are rejected without following Location or consuming their bodies. |
-| `PUSH_BRIDGE_AMQP_PORT` | Optional integer; default `5672`. |
+| `PUSH_BRIDGE_AMQP_PORT` | Optional integer; default `5671` when TLS is true, otherwise `5672`. An explicitly supplied port is retained. |
+| `PUSH_BRIDGE_AMQP_TLS` | Optional exact string `"true"` or `"false"`; default `"false"`. Empty, case variants and other boolean spellings fail. True enables verified AMQPS with TLS1.2 minimum. |
+| `PUSH_BRIDGE_AMQP_CA_FILE` | Optional absolute PEM trust-bundle path, permitted only with TLS true; omit for system roots. The service launcher requires it directly under `/etc/kazoo-push-bridge`, root-owned with protected parent/file permissions, maximum64KiB and no private-key block. |
 | `PUSH_BRIDGE_WORKERS`, `PUSH_BRIDGE_APNS_WORKERS`, `PUSH_BRIDGE_STALL_TIMEOUT` | Optional integers, defaults `32`, `8`, `70` seconds respectively; explicit startup enforces the candidate bounds above. Load acceptance remains open. |
 | `PUSH_BRIDGE_APNS_KEY_FILE`, `PUSH_BRIDGE_APNS_KEY_ID`, `PUSH_BRIDGE_APNS_TEAM_ID`, `PUSH_BRIDGE_APNS_TOPIC` | Required when an APNs sender is initialized. Topic is the base bundle topic; code appends `.voip`. |
 | `PUSH_BRIDGE_APNS_HOST_PROD`, `PUSH_BRIDGE_APNS_HOST_DEV` | Both explicit canonical hosts are required when APNs is configured. TLS certificate/hostname validation and `h2` negotiation are used on port `443`; partial-response handling remains unaccepted. |
@@ -241,6 +254,57 @@ remain separate from ordinary persisted Kazoo settings and from the repository.
 | `PUSH_BRIDGE_TEST_PAYLOAD_JSON` | Required only for the explicitly invoked, real-send command-line test modes. Not a deployment default. |
 
 The provider hosts and broker binding must come from a reviewed deployment contract, not guessed endpoints. Never expose populated environment/configuration, command-line device tokens, or exception tracebacks in acceptance output. Explicit logger calls and the new main-entrypoint exception boundaries contain only fixed categories/status codes. This is not a whole-process secrecy guarantee: third-party logging, thread/future failures and direct library invocation outside those boundaries still require review.
+
+### Explicit remote AMQPS configuration
+
+For an operator-reviewed remote broker, set TLS true and its TLS listener port.
+The following fragment contains no usable authority or credentials; merge it
+into the protected service configuration only during an authorized deployment:
+
+```json
+{
+  "PUSH_BRIDGE_AMQP_HOST": "broker.example.invalid",
+  "PUSH_BRIDGE_AMQP_TLS": "true",
+  "PUSH_BRIDGE_AMQP_PORT": "5671",
+  "PUSH_BRIDGE_AMQP_CA_FILE": "/etc/kazoo-push-bridge/broker-ca.pem"
+}
+```
+
+Omit the CA key entirely when the broker chains to the system trust store.
+A custom bundle selects that trust bundle; it does not disable certificate
+validation. Start its permissions at root0600 in the protected service
+directory. The existing launcher permission-preparation path now includes this
+exact validated trust file in the root:service-group0640 set. The plain JSON
+example retains local AMQP defaults; changing TLS without changing its explicitly
+set5672 port preserves5672, so choose the actual TLS listener deliberately.
+
+The bridge creates a standard client SSLContext with `CERT_REQUIRED`, hostname
+checking and TLS1.2 minimum. Pinned AMQPStorm2.11.1 receives `ssl=True` and exactly
+`ssl_options={"context": context, "server_hostname": configured_host}`. Its
+`IO._ssl_wrap_socket` uses that supplied context directly. This bypasses the
+library's legacy no-context path, whose defaults permit `CERT_NONE` and disable
+hostname checking. No certificate/hostname-disable switch, alternate SNI name,
+client-certificate mode, or fallback to plaintext is provided. CA load errors
+fail startup with a fixed category; TLS handshake errors do not select plaintext.
+
+Offline configuration checks remain free of CA-file reads and network calls.
+The protected launcher validates the CA file's owner/mode/size and parses the
+exact protected PEM bytes with stdlib ssl during installer preflight, before
+service or permission mutations. The runtime constructs its verifying context
+before provider credentials are loaded. The socket timeout remains10seconds; this does not
+establish a total connect/reconnect/settlement deadline or durable retry policy.
+Legacy plaintext mode remains accepted for compatibility and must not be mistaken
+for encrypted remote transport.
+
+Prepared `scripts/test-push-bridge-amqp-tls.py` checks the real pinned AMQPStorm
+parameter/context handoff without opening a broker connection, then uses real
+in-memory TLS with synthetic certificates to check trusted/matching acceptance
+and hostname/untrusted-chain rejection. Config, runtime, service and settlement
+fixtures cover strict option parsing, default/explicit ports, trust-file
+protection and unchanged plaintext wiring. Root ran all112 bridge tests and
+installer dispatch successfully (`0d2bfe/b60ebe`), then deployed and independently
+verified the development service (`1ff54f/02ae6d`, `9f2d32/f1ad28`). These are
+offline TLS tests; the actual development broker remains local/plaintext.
 
 ## Candidate payload and import-safety changes
 
@@ -419,7 +483,7 @@ Other imports are Python standard-library modules (`base64`, `binascii`, `concur
 1. **Delivery loss and duplicates:** owner-thread positive-result-only ACK is now a source candidate, not full delivery acceptance. Define terminal rejection versus transient failure, bounded expiry-aware durable retry/dead-letter behavior and stable delivery identity; prove broker durability, ACK/channel ownership, reconnect and duplicate behavior with the pinned real library before activation. The current fail-closed/manual-recovery policy is not production availability. An HTTP 200 only means provider acceptance, not delivery to the phone.
 2. **Bounded work and shutdown:** per-generation admission is now capped and unsettled generations cannot reconnect automatically, but worker completion still lacks a total deadline. Google token refresh has no explicitly supplied timeout. Shared `requests.Session` thread behavior is unproven. The watchdog measures broker-loop progress, not worker completion. Signal shutdown stops without draining and force-exits after three seconds; a fatal settlement return can still wait for hung executor threads at interpreter shutdown. Add total operation deadlines, bounded cancellation/drain and shutdown tests. Do not solve loss with an unbounded requeue loop.
 3. **Input and response limits:** strict input normalization and outgoing payload caps have offline coverage, but mobile compatibility acceptance remains open. Malformed messages fail closed unacknowledged and require a reviewed poison-message policy. APNs caps and protocol fixtures pass23 offline tests. FCM closes responses without reading their bodies, including redirects, with six pinned-Requests adapter tests. OAuth response parsing and total operation bounds still need review before production acceptance.
-4. **Transport/configuration security:** AMQP TLS is not configured. FCM3xx are rejected before redirect/body processing. Numeric settings and initial provider endpoints are constrained. Protected credential permissions and the least-privilege service are installed and verified. Finish TLS and remote-broker acceptance. Never reuse the production AMQP authority in a development consumer or copy the inline production unit into Git.
+4. **Transport/configuration security:** Explicit verified AMQPS is now a source candidate with offline tests prepared; remote-broker deployment/acceptance remains open. FCM3xx are rejected before redirect/body processing. Numeric settings and initial provider endpoints are constrained. Protected credential permissions and the least-privilege service are installed and verified; the new CA-file path still needs root validation. Never reuse the production AMQP authority in a development consumer or copy the inline production unit into Git.
 5. **APNs lifecycle:** a failed lazy initialization is cached permanently until process restart. Monotonic token-cache/request budgets, actual response stream completion, and TLS-failure socket cleanup have offline coverage and are deployed in the isolated development consumer. Platform resolver/CPU cancellation remains outside the socket budget. Actual configured production/sandbox keys load offline with pinned SDKs, but provider authorization is unverified. Test initialization recovery, real HTTP/2 partial responses/GOAWAY, total worker bounds and duplicate semantics. No end-to-end delivery evidence exists.
 
 Dependency pins, the protected service and listed offline regressions are now present. Before broader activation, resolve the remaining reliability/security gaps and complete broker recovery and designated-device acceptance. Provider credentials alone do not identify an authorized test device. The development installation above is not production approval.

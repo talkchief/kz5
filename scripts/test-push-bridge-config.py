@@ -86,6 +86,29 @@ class ConfigTests(unittest.TestCase):
                 candidate[config.PREFIX + name] = value
                 self.assertIn(name + ":invalid_format", config.validate(candidate))
 
+    def test_explicit_amqp_tls_and_ca_settings_fail_closed(self):
+        for tls in ("true", "false"):
+            candidate = environment()
+            candidate[config.PREFIX + "AMQP_TLS"] = tls
+            with patch("builtins.open", side_effect=AssertionError("no trust-file I/O in shape validation")):
+                self.assertEqual(config.validate(candidate), ())
+        for tls in ("", "TRUE", "False", "1", "0", "yes", " true"):
+            candidate = environment()
+            candidate[config.PREFIX + "AMQP_TLS"] = tls
+            self.assertIn("AMQP_TLS:invalid_boolean", config.validate(candidate))
+        candidate = environment()
+        candidate[config.PREFIX + "AMQP_CA_FILE"] = "/etc/kazoo-push-bridge/broker-ca.pem"
+        self.assertIn("AMQP_CA_FILE:requires_tls", config.validate(candidate))
+        candidate[config.PREFIX + "AMQP_TLS"] = "true"
+        self.assertEqual(config.validate(candidate), ())
+        for path in ("", "relative.pem", "/etc/../ca.pem", "/tmp/ca secret.pem"):
+            candidate[config.PREFIX + "AMQP_CA_FILE"] = path
+            self.assertIn("AMQP_CA_FILE:invalid_format", config.validate(candidate))
+        for name in ("AMQP_VERIFY", "AMQP_SERVER_HOSTNAME", "AMQP_CERT_NONE"):
+            candidate = environment()
+            candidate[config.PREFIX + name] = "false"
+            self.assertIn("unknown_or_test_setting", config.validate(candidate))
+
     def test_hosts_paths_topology_and_types(self):
         for host in ("127.0.0.1", "2001:db8::1", "broker", "broker.example.invalid"):
             candidate = environment()
