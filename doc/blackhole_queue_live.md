@@ -1,4 +1,9 @@
-# Native queue-live invalidation candidate
+# Native queue-live invalidation — development deployment
+
+September 7, 2026: the backend is deployed on development and root reported a
+real HTTP/Blackhole wire smoke PASS. This is not real call-transition, complete
+mutation coverage, sustained-load or production acceptance. Historical reporting
+and workforce work remain deferred.
 
 The client subscribes to exactly `queue_live.changed.QUEUE_ID`, with an explicit
 `data.account_id`. IDs must be 32 lowercase hexadecimal characters. One binding
@@ -48,14 +53,83 @@ the session mailbox threshold, publisher overload and bulk/config mutation gaps
 can lose hints. A successful subscribe reply is not a broker binding barrier.
 There is no broad cross-tenant resync topic. The client must reconcile by HTTP
 at least every 15 seconds and refetch on reconnect; it must never infer current
-state by counting hints. Public WebSocket readiness is a separate acceptance
-decision, not enabled by this module.
+state by counting hints. The deployed HTTP handler now reports dynamic
+`websocket_updates`: true means `bh_queue_live` is present in its local Blackhole
+binding registry, false means absent or lookup failure. This describes local
+protocol registration only, not end-to-end broker/browser health, fresh-token
+success, remote-node readiness or complete event coverage.
 
 The private `bh_context` record gained a field. Rebuild the coherent Blackhole
 source set and restart its sessions during an authorized rollout; this is not
 old-record hot-upgrade support. The default module list includes `bh_queue_live`;
 an installation with an explicit custom autoload list also needs that module
 loaded. Crossbar/ACDC helper and KAPI availability are rollout prerequisites.
+
+## Development rollout and actual wire checkpoint
+
+Root deployed 74 ACDC and 30 Blackhole production modules; rollout files and
+pre-change beam backups are retained at `/tmp/kazoo-live-rollout.OYdOqh`.
+The initial smoke passed anonymous/wildcard rejection and authenticated HTTP
+overview/detail with source available, but returned `queue_live binding
+unavailable` on the authorized subscription. This was an actual registration
+gap: an older persisted autoload list overrode the new default module list.
+Fresh authorization had passed; generic hierarchy authorization was not the
+cause and was not weakened.
+
+Root started and persisted `bh_queue_live` using native Blackhole maintenance,
+preserving the other modules, and reported the real wire smoke PASS on retry.
+The latest `cb_acdc_live.beam` was also activated with the local-registration
+capability described above. The smoke's exact scope and finite limits are in
+`queue_live_wire_smoke.md`. The evidence directory is a rollout/backup location;
+no standalone smoke log there is asserted by this guide.
+
+Future upgrades must verify both actual registration and effective persisted
+autoload membership. Updating `DEFAULT_MODULES` alone does not migrate an
+existing override. Native maintenance can print an error while returning
+normally, and a node-specific override can mask a default-list update; neither
+exit status nor default-list persistence alone proves effective registration.
+Do not replace an operator's whole autoload list to add this one module.
+
+The installer now implements this migration in
+`configure_kazoo_queue_live_module`, called from the existing API registration
+flow. When ACDC, Blackhole and Crossbar are selected with local authority, it
+reads effective autoload and running lists, starts/persists only the missing
+`bh_queue_live` through native maintenance, validates every start response, then
+requires exact membership in both readbacks and preservation of every prior
+module. The read APIs are `sup blackhole_config autoload_modules` and
+`sup blackhole_bindings modules_loaded`. Already-running/effective state is
+idempotent. Masked node overrides,
+printed failures/timeouts, malformed output or lost modules fail closed rather
+than invoking a bulk configuration setter. Dry runs and installations without
+the selected local authority do not perform this migration.
+`verify_kazoo_queue_live_module` performs read-only effective/running membership
+checks; it does not repair configuration.
+
+The first 35-case isolated pass (root35772) did not model a native SUP exit-code
+detail found by the actual installer check: `blackhole_maintenance:running_modules/0`
+prints the correct atom list, but SUP exits 2 for a non-`ok` maintenance result.
+That function delegates directly to `blackhole_bindings:modules_loaded/0`;
+using this non-maintenance read API returns the same list with exit 0. The fix
+does not accept exit 2 or weaken the strict list parser.
+
+Root8385 passed all 37 updated isolated cases in
+`scripts/test-kazoo-queue-live-module.cjs`, with receipt
+`/tmp/kazoo-queue-live-module.YJfN37/receipt.json`. These cover migration,
+idempotence, preservation, scope/no-authority skips, misleading native replies,
+masked overrides, strict read-only verification, the historical maintenance
+exit-2 failure and continued rejection of genuine read failures. Source checks
+also pin the native delegation and SUP exit semantics. Root58155 reported
+the corrected helper PASS against the already-registered live state: it was
+idempotent and performed readbacks only, with no new start/persist operation.
+Neither that check nor the isolated fixture is another live migration or restart
+proof; the separate maintenance/wire checkpoint above supplies that evidence.
+
+The passing wire check is not a real call transition or proof that every stats,
+roster/config or bulk mutation publishes a hint. A separately injected hint
+tests downstream delivery, not mutation coverage. Restricted-token isolation,
+expiry/cache behavior, reconnect gaps, mixed-zone delivery, browser behavior and
+load still need their own acceptance evidence. No durable or lossless event
+claim is added.
 
 ## Packaging and scoped proof
 
@@ -80,7 +154,7 @@ production build retains the Lager transform and warnings-as-errors.
 Root62617 passed all22 cases and11 production compiles with stable inputs
 (`/tmp/kazoo-blackhole-queue-live.R6eO36`). An earlier run14311 passed the cases
 but was invalidated by an input change during execution; only62617 is accepted.
-This candidate has **not been deployed or tested against live delivery**. Existing
+Those controlled-provider receipts preceded the development deployment above. Existing
 frame/redaction/cleanup runners were updated only as necessary for the new module,
 header and ordered replay. Root25154 reran all three successfully:10 redaction
 cases (`/tmp/kazoo-blackhole-redaction.sBxLgB`),10 cleanup cases

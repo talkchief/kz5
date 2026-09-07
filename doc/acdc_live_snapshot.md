@@ -1,7 +1,8 @@
 # Live queue snapshot API — integration checkpoint
 
-September 6, 2026. This is source under integration, not a deployed dashboard
-or production acceptance report. Historical reporting, workforce reports and
+September 7, 2026. The live dashboard backend is deployed on development and
+the real HTTP/Blackhole wire smoke passed. This is not complete browser,
+call-transition, load or production acceptance. Historical reporting, workforce reports and
 ClickHouse ingestion are postponed at the operator's request.
 
 ## Current HTTP slice
@@ -11,8 +12,8 @@ by `cb_queues.erl`:
 
 - `/v2/accounts/{ACCOUNT_ID}/queues/live`: bounded queue-summary page.
 - `/v2/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/live`: the selected queue's
-  summary and bounded observed active-call collection in the same envelope.
-  Runtime queue-agent observations remain a separate integration requirement.
+  summary, bounded observed active calls and authorized saved roster/runtime-agent
+  observations in the same envelope.
 
 Overview accepts only `page_size` (1–100, default 50) and optional inclusive
 `start_queue_id`. Use the returned `next_start_queue_id` unchanged. Detail
@@ -60,7 +61,7 @@ there is no client-selectable historical range. Public timestamps are Unix
 seconds; native broker/ETS timestamps are Kazoo Gregorian seconds. Records use
 legacy call/queue-pair identity, not a guaranteed distinct queue visit.
 
-## Remaining delivery requirements
+## Detail and transport capabilities
 
 The detail route advertises `live_call_details=true`; overview reports false
 and `calls=null`. Detail returns at most 200 observed waiting/handled calls,
@@ -82,20 +83,52 @@ status. Device reachability is explicitly unverified. Missing/conflicting
 sources are not interpreted as logout or readiness. See
 `acdc_dashboard_runtime_agents.md` for the collector's limits.
 
-`websocket_updates` and `historical_reporting` still report false; native
-delivery requires its coherent rollout and acceptance, while historical
-reporting is postponed. This is not yet a completed deployed dashboard.
+`websocket_updates` is now dynamic in the deployed handler: true means
+`bh_queue_live` appears in the local Blackhole binding registry; lookup failure
+or absent registration yields false. It is a local protocol capability, not a
+probe of broker delivery, token authorization, remote Blackhole, browser health
+or complete event coverage. `historical_reporting` remains false. Clients must
+still reconcile snapshots every 15 seconds and on reconnect.
 
-Next: matching Monster UI agent integration and native Blackhole invalidation
-rollout; snapshot recovery after reconnect or missed events; OpenAPI generation; coherent
-build/deployment and actual browser/call-state tests. The existing live UI source
-still uses legacy observations, as documented in `acdc_live_dashboard_ui.md`.
+The current Monster UI source consumes the single-response calls/agents DTO and
+uses sequential native subscriptions, as documented in
+`acdc_live_dashboard_ui.md`. Backend wire acceptance below does not establish
+that the matching built UI has been accepted in a real browser. Real call-state
+transitions, missed-event/reconnect recovery and load acceptance remain required.
 
 Source tests use private build directories and controlled providers; they do
 not establish a real authenticated HTTP/broker/WebSocket round trip. Preserve
-that distinction in deployment and developer documentation.
+that distinction in deployment and developer documentation. The later live
+checkpoint below supplies separate wire evidence; it does not convert older
+controlled-provider tests into live acceptance.
 
-## Verified source checkpoint
+## Development deployment and live wire checkpoint
+
+Root deployed a private production build containing 74 ACDC and 30 Blackhole
+modules, then activated the latest `cb_acdc_live.beam` with the dynamic local
+registration capability. Rollout files and pre-change beam backups are retained
+under `/tmp/kazoo-live-rollout.OYdOqh`. Root reported the actual wire smoke PASS:
+anonymous HTTP access was rejected, authenticated overview/detail returned
+valid scoped snapshots with source available, and the native Blackhole smoke
+passed. The tool's checks and bounds are documented in
+`queue_live_wire_smoke.md`; raw tokens and response payloads are not evidence
+output. The rollout directory is not claimed to contain a standalone smoke log.
+
+The initial authorized subscription failed because the existing persisted
+Blackhole autoload list masked the newly added default module. Fresh queue
+authorization had passed; the binding handler was absent. Root loaded and
+persisted `bh_queue_live` through native maintenance, preserving the other
+modules, before the passing retry. See `blackhole_queue_live.md`.
+
+This establishes development backend deployment and the tested real wire path,
+not actual call-transition/publisher coverage, restricted-token isolation,
+multi-zone/failover, sustained load, browser acceptance or production readiness.
+An explicitly injected invalidation is not evidence of a real call mutation.
+
+## Earlier verified source checkpoints
+
+The following receipts are historical source-only checks. Their statements
+about no deployment apply to those runs, not to the later rollout above.
 
 September7 runtime-agent integration: root15218 rebuilt16 production modules,
 passed26 public-route/roster groups,24 actual-handler DTO/OpenAPI checks and
@@ -151,9 +184,9 @@ Initial extension failures remain retained: the null-field transport fixture
 silently removed its field until corrected (`/tmp/kazoo-dashboard-amqp.XHXQjs`);
 the first public compilation found two new syntax errors, corrected before
 the passing run (`/tmp/kazoo-live-snapshot.CYokzJ`). These are not live incidents.
-No new backend/UI deployment or authenticated browser acceptance is established
-by these isolated tests. Queue-agent runtime and native Blackhole delivery
-remain open.
+No new backend/UI deployment or authenticated browser acceptance was established
+by these isolated tests. The later runtime-agent and development wire checkpoints
+above supersede the then-open backend integration status.
 
 Root7042 regenerated the repository catalog. Its first verification invocation
 used an unsupported CLI option and exited2; corrected root67333 verified all11

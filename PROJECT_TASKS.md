@@ -227,7 +227,32 @@ scope change. Existing Kazoo archives are left intact. Agent rows/state inside
 the selected queue remain in scope. This override takes precedence over the
 older OPEN labels and broad requirements retained below for future reference.
 
-Latest source integration: `b3faf2d` puts authorized roster/names and bounded
+Latest live-only checkpoint (September7): production ACDC74/Blackhole30 modules
+are deployed, including the dynamic local-registration capability. Native
+`bh_queue_live` registration is persisted while preserving existing modules.
+Real HTTP/WebSocket smoke65638 passed authorized summary/detail, anonymous and
+wildcard rejection, exact subscription, deliberately triggered invalidation,
+detail refetch and unsubscribe. No actual call-state/load proof is claimed.
+UI `220b37b` passed46 offline and24 Chromium fixture groups24147; fresh production
+build `monster-owned-build.Fd3cY7` deployed32580. Real browser65670 passed all seven
+checks: summary/detail, native ACK/refetch, exact assets and acknowledged
+navigation unsubscribe, with zero console/page/HTTP errors, supplemental detail
+reads or new overview requests after detail entry. This fixes the strict-query
+cache-buster and bounded local cleanup retry bugs discovered by earlier runs.
+Installer preserving-module
+migration passed37 isolated cases8385 and real idempotent readback58155. Current
+OpenAPI is published and verified. Post-restart wire30446 is available/consensus,
+and exact roster/31 reported agent states remain unchanged. Remaining live gates:
+actual call transitions, restricted-token
+isolation and load acceptance. Historical,
+separate agent dashboard, WFM and ClickHouse remain POSTPONED.
+
+Final development check90474 repeated the available/consensus HTTP and scoped
+native event/refetch smoke successfully. The exact saved roster and31 agent
+statuses/memberships were unchanged from the pre-deployment snapshot, and all
+eight services were active. No new calls were placed by these tests.
+
+Earlier source integration: `b3faf2d` puts authorized roster/names and bounded
 runtime-agent observations in the same selected queue GET. Public/roster26,
 actual DTO24, helper2 and focused schema15 groups/297 cases passed15218.
 Transport34 passed82855 and auth14 passed36984. Publisher `0411898` passed24
@@ -281,11 +306,11 @@ a new deployed dashboard. Historical/WFM work remains postponed.
 
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
-| DASH-01 | ACTIVE — bounded snapshot UI tested; not deployed | Live queue overview using `Queues Live Dashboard Main.png`. UI `900efa8` consumes the new authorized paged snapshot, not the legacy stats fan-out. Baseline passes22 offline dashboard groups and12 Chromium fixture groups. Native Blackhole controller is now being integrated; full visual/live acceptance and deployment remain open. Unsupported SLA/handle metrics must not be invented. |
-| DASH-02 | ACTIVE — selected-call UI tested; runtime agents open | Clicking a queue opens live detail using `Queues Live Dashboard.png`. Bounded snapshot includes up to200 observed active calls with completeness/freshness metadata. Saved roster/global status are currently supplemental reads, not runtime queue membership or endpoint reachability. Implement bounded runtime agent observations, native updates and authorized supervision controls; then verify actual call transitions, isolation and design/deployment acceptance. |
-| DASH-03 | ACTIVE — HTTP/AMQP contracts tested; deployment open | Authorized `/queues/live` and `/queues/{QUEUE_ID}/live` routes use bounded local ETS collection and federated source comparison. Latest scoped proof:42 collector tests,28 transport tests,9 route groups,2 helpers and17 actual-handler/OpenAPI checks; see doc/acdc_live_snapshot.md. Missing/conflicting sources yield unavailable metrics, not zero. Runtime queue-agent collection is under implementation; coherent deployment and real broker/HTTP acceptance remain open. No full historical visit claims. |
-| DASH-04 | OPEN — events | Reuse native Blackhole for authenticated account/queue-scoped WebSocket updates, not a duplicate transport server. Snapshot/event ordering, duplicate/gap handling, reconnect/resubscribe/resync, server-side token expiry/revocation, stale indicators, bounded buffers and multi-node ownership. Native delivery is best effort and has no durable replay cursor; account-hierarchy checks are not queue permissions. No silent polling-only substitution. |
-| DASH-05 | OPEN — API + docs | Define/version dashboard request, response and event schemas. Publish HTTP contracts in OpenAPI at `/apis`, link WebSocket message/subscription/lifecycle documentation; distinguish proposals from deployed endpoints. Test schema conformance and tenant isolation. |
+| DASH-01 | ACTIVE — deployed browser verified; call/load acceptance open | Live overview uses the bounded authorized page GET and sequential native subscriptions. UI46 offline/24 Chromium fixtures24147 passed; fresh production artifact deployed32580. Actual browser65670 passed summary/detail navigation, exact served bytes and subscription cleanup. Unsupported historical SLA/handle metrics are not invented. Natural call transitions and isolation/load remain open. |
+| DASH-02 | ACTIVE — deployed single-response detail; browser verified | Clicking a queue reads one bounded response including authorized roster/names, observed runtime states/membership and up to200 active calls. Actual browser65670 verified one initial GET plus native ACK-refetch, no supplemental roster/global-state/name reads or stale overview requests, and acknowledged unsubscribe. Unknown, incomplete and reachability limits remain explicit. Natural call transitions and supervision acceptance remain open. |
+| DASH-03 | ACTIVE — deployed; real HTTP/wire passed | Coherent ACDC74/Blackhole30 production build deployed. Public27/actual DTO28/helper2, transport34 and schema297 cases passed. Real HTTP32168 reports available/consensus for overview/detail with WebSocket capability true. Missing/conflicting sources yield unavailable metrics, not zero. Multi-node failure/load and actual call transitions remain open. |
+| DASH-04 | ACTIVE — native scoped delivery verified | Native account/queue invalidations, exact subscribe/unsubscribe and anonymous/wildcard rejection passed real wire32168, including deliberate hint then detail refetch. UI reconciliation15s, sequential ACK admission and cleanup passed fixtures. Persisted module registration survives restart; actual installer idempotent readback58155 passed. Natural call-transition events, restricted-token matrix and load remain open. |
+| DASH-05 | ACTIVE — current specs published | Versioned summary/detail DTOs and native Blackhole message/lifecycle/account/queue contracts published at `/apis` (8385), with11 assets verified. Private catalog43194 and complete offline/deterministic/tamper suite82241 passed. Restricted-token isolation and actual frontend/call-transition acceptance remain open; planned history is not callable. |
 | DASH-06 | POSTPONED — UI + reporting | Queue historical dashboard using `Queue Historical Dashboard.png`: time/queue filters, call outcomes, SLA, wait/handle/talk metrics, details and export. Reconcile counts, timezone boundaries and late events. |
 | DASH-07 | POSTPONED — UI + reporting | Agent historical dashboard using `Agent Historical Dashboard.png`: agent/queue/date filters, last activity, outcomes, talk/break/idle durations, details and export. Define attribution for transfers/multiple queues. |
 | DASH-08 | OPEN — API + Next.js acceptance | Explicit company/account, queue and agent filtering contracts for snapshots and native Blackhole subscriptions. Company means Kazoo ACCOUNT_ID, not a free-text company name; enforce tenant and queue/agent permissions on the server, including wildcards and reseller/sub-account access. Document selected-queue and selected-agent examples, supported filters, unauthorized/unknown IDs and switching scope without leaking old events. Existing generic call bindings are not queue dashboard bindings. Test isolation, reconnect/resnapshot and filter changes with a real Next.js integration before marking ready. |

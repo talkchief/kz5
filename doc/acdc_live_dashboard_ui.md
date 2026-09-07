@@ -1,10 +1,13 @@
-# Live queue summary/detail — source checkpoint
+# Live queue summary/detail — development deployment
 
-September 7, 2026. The current single-GET agents DTO adapter and sequential native
-subscription controller passed 41 offline groups and 24 Chromium groups;
-older browser receipts cover earlier source. This is not a deployment
-or complete live-dashboard acceptance. Historical screens and workforce
-reporting remain postponed for future ClickHouse work.
+September 7, 2026. The corrected single-GET adapter and sequential native
+subscriptions passed 46 offline and 24 Chromium fixture groups (root24147).
+The fresh production build in `monster-owned-build.Fd3cY7/source` passed and
+was deployed32580 with exact ownership/configuration readback. Real browser65670
+passed all seven checks against the served production bytes and native socket,
+with zero console/page/HTTP errors, supplemental reads or late overview GETs.
+Historical screens and workforce reporting remain postponed for future
+ClickHouse work. No actual call-transition/load or production-readiness claim.
 
 ## Files and behavior
 
@@ -22,6 +25,9 @@ reporting remain postponed for future ClickHouse work.
   doubles and real Handlebars template checks.
 - `scripts/test-monster-acdc-live-dashboard.cjs`: Chromium coverage of the actual
   source app and templates, with in-memory API replies and blocked network.
+- `scripts/test-monster-live-deployed.cjs`: opt-in browser acceptance against
+  actual served production assets and native Blackhole, without application
+  overlays, fake API replies or injected socket events.
 
 Overview makes **one GET** to
 `/accounts/{accountId}/queues/live?page_size=50`, adding `start_queue_id` only
@@ -39,6 +45,12 @@ detail `agent_runtime=true` and an agents object; overview requires
 fails validation rather than invoking legacy reads. Neither view uses the old
 `/queues/stats` dashboard seam or requests historical statistics. Queue editor,
 callback and agent write controls remain outside this change.
+
+The three live resource definitions explicitly use `cache: true` to suppress
+Monster/jQuery's automatic `_` cache-buster query parameter. This does not add a
+client snapshot cache: the API's `Cache-Control: no-store` still governs HTTP
+caching. The backend continues to reject unknown query keys; overview accepts
+only `page_size`/`start_queue_id`, and detail accepts none.
 
 The adapter validates version/account/queue scope, pagination, capabilities,
 source metadata, metrics, call rows and agents. Call count cards use DTO metrics, not the
@@ -77,9 +89,12 @@ snapshot through 100ms coalescing. At most one snapshot batch is in flight; a
 dirty flag retains one follow-up request. Unchanged subscriptions survive
 same-scope refreshes, avoiding ACK/rebind loops. While support remains true,
 15-second reconciliation also repairs missing events and transient subscription
-failures. A failed binding has a 15-second retry floor, even if other queues keep
-emitting events or the user refreshes; admission is also paced by one second
-after an error. Failed handles, including `connect() => false`, are cancelled
+failures. Server, authentication and transport failures have a 15-second retry
+floor, even if other queues keep emitting events or the user refreshes. Only
+the framework's local `cleanup_pending` result permits up to three one-second
+retries while the previous view's unsubscribe finishes; subsequent failures
+return to the 15-second floor. A successful ACK resets that bounded allowance.
+Admission is also paced by one second after an error. Failed handles, including `connect() => false`, are cancelled
 immediately so they cannot be replayed by the framework between retries.
 
 On disconnect, the controller cancels its own framework handles and keeps only
@@ -113,8 +128,10 @@ source contract describes compared known replicas and explicitly non-atomic
 observations, not complete telephony occupancy. Server generation time is not
 source freshness. Historical reporting remains unavailable. The backend
 WebSocket capability is controlled by the backend; this UI does not turn it on.
-The latest dynamic capability change is compiled but not yet activated, and
-production staging of this UI remains pending. Support for detail
+The latest dynamic capability change is compiled and activated on the development
+server. It reports local Blackhole module registration, not end-to-end transport
+health. The corrected production UI build is deployed and owned-content verified.
+Live call-transition and full acceptance remain open. Support for detail
 call rows does not imply those rows are available in every response.
 
 Saved roster is not runtime queue membership or eligibility. The server queries
@@ -138,16 +155,72 @@ endpoint reachability or ready-to-ring eligibility; the DTO explicitly keeps
 performance ranking, daily totals or historical handle-time metric is fabricated.
 
 The client lifecycle integration does not by itself prove scoped native
-Blackhole delivery. Completion still requires its authenticated server/publisher
-integration, matching API and message contracts, a production UI build and
-actual call-state validation.
+Blackhole delivery. A separate authenticated live wire test (root65638) passed
+scoped subscription, a deliberately triggered invalidation, detail refetch and
+unsubscribe, plus anonymous/wildcard rejection. The matching production build
+and deployed browser navigation acceptance now pass; actual call-state validation
+and isolation/load acceptance remain open.
 The synthetic browser fixture does not certify token/resource authorization,
 broker delivery, runtime-agent eligibility or production deployment. Polling-only
 delivery is not a substitute for the requested native Blackhole integration.
 
 ## Test evidence
 
-Current checkpoint: root session **5676 passed all 41 offline groups** on the
+Latest source `220b37b`: root24147 passed46 offline groups and24 Chromium groups
+(`/tmp/kazoo-monster-live-dashboard.JhP4tA`). Root32580 deployed two bundles from
+`monster-owned-build.Fd3cY7`, preserving1942 files and removing none. Root65670
+passed the actual deployed runner, with receipt
+`/tmp/kazoo-monster-live-deployed.tWj7DM/receipt.json`: seven checks, two detail
+GETs (initial and native ACK-followup), zero supplemental/late-overview reads,
+three subscribe ACKs and three unsubscribe ACKs across the exercised navigation.
+No natural events occurred during this browser run; it does not prove their
+delivery. Source lifecycle regression46 reproduces delayed old-view cleanup with
+the actual patched framework and verifies the new bounded retry; server/auth
+and transport failures retain the existing15-second floor.
+
+Earlier browser90297 failed before that fix, after rendering valid detail but
+without a selected subscription within10 seconds. Receipt:
+`/tmp/kazoo-monster-live-deployed.79ZvMD/receipt.json`. The old-view unsubscribe
+was still pending when detail bound; the app previously delayed that local
+`cleanup_pending` failure for15 seconds. This was a real app issue, distinct
+from browser53986's earlier test-phase correlation problem.
+
+The deployed browser runner requires Node 20+, Playwright, explicit
+`KAZOO_TEST_ACCOUNT_ID` and `KAZOO_TEST_QUEUE_ID`, and expected production
+`KAZOO_TEST_EXPECT_MAIN_SHA256` / `KAZOO_TEST_EXPECT_TEMPLATES_SHA256` hashes.
+Use `KAZOO_TEST_REQUIRE_WEBSOCKET=true` for native acceptance. It reads the
+root-owned mode-0600 installer credential file privately, authenticates normally,
+and restricts endpoints to this server. It permits only that authentication
+write and actual scoped subscribe/unsubscribe frames; it does not change calls,
+agents, queues or saved browser sessions. Optional external fonts are omitted
+and counted. Receipts contain fixed diagnostic categories, hashes and counts,
+not credentials, raw frames, screenshots or response payloads.
+
+Its acceptance requires valid overview/detail rendering, one initial detail
+GET without supplemental reads, a correlated selected-queue native ACK followed
+by an accepted detail refetch before the 15-second repair interval, and normal
+navigation with an acknowledged selected unsubscribe. New overview requests
+after detail entry fail acceptance; late completion of earlier requests does
+not. This proves the exercised navigation lifecycle, not a broker delivery
+barrier, natural call-transition delivery, cross-tenant isolation or soak/load.
+
+Resolved query bug: the first actual deployed browser run **14971**
+authenticated normally but failed at overview, with two HTTP 400 responses and
+no WebSocket connection. Its retained receipt is
+`/tmp/kazoo-monster-live-deployed.EaRjAT/receipt.json`. Root confirmed the emitted
+query contained `page_size=50` plus `_`; direct-API wire run **32168** passed
+without that extra key. Actual Monster `defineRequest` defaults `cache` to false,
+and `request` appends `_cacheString` before jQuery sends the request. The narrow
+three-resource fix above passed43 offline/24 Chromium groups and a fresh production
+build in root12274, then deployed97771 (only main/templates changed).
+Two added offline groups guard the resource definitions and load the actual
+Monster AMD request constructor (only its AJAX boundary is substituted): all
+three corrected queries must omit `_`, while deleting the flags must reproduce
+it. All43 groups passed. The second deployed browser run53986 confirmed zero
+console/page/HTTP errors and valid overview/detail rendering; its failing native
+ACK-order assertion is being corrected in the harness, not treated as a PASS.
+
+Pre-cache-buster-fix checkpoint: root session **5676 passed all 41 offline groups** on the
 frozen agents/sequential-admission source. Root session **63756 passed all
 24 Chromium groups**, retained in
 `/tmp/kazoo-monster-live-dashboard.8MsOwE/`. These fixtures include
@@ -194,10 +267,15 @@ corrected before the successful rerun. That failure remains in
 `/tmp/kazoo-live-dashboard-ui.Lym2sS/`. These older receipts are not evidence for
 the new DTO adapter.
 
-From a test workspace with compatible Lodash and Handlebars installed:
+From a test workspace with compatible Lodash and Handlebars installed, set
+`KAZOO_MONSTER_LIFECYCLE_SOURCE` to the absolute `src/js/lib/monster.socket.js`
+path in a source stage prepared with the repository's current framework patches.
+The lifecycle regression intentionally fails if this input is absent; an
+unpatched upstream checkout is not a substitute. For the September 7 build:
 
 ```bash
-node /opt/kz5/monster-ui/acdc/tests/live-dashboard.test.cjs
+KAZOO_MONSTER_LIFECYCLE_SOURCE=/usr/local/src/kazoo5-installer/monster-owned-build.Fd3cY7/source/src/js/lib/monster.socket.js \
+  node /opt/kz5/monster-ui/acdc/tests/live-dashboard.test.cjs
 node /opt/kz5/monster-ui/acdc/tests/queue-login.test.cjs
 ```
 

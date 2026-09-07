@@ -6,6 +6,64 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Authoritative live-only checkpoint — September 7, 2026:** supersedes the
+older chronological checkpoints below. Historical queue/agent dashboards,
+workforce reporting and ClickHouse integration are postponed. Root deployed a
+coherent production build of 74 ACDC and 30 Blackhole modules, then activated
+the dynamic local-registration capability flag. Native `bh_queue_live` was
+added with the preserving, persistent maintenance API after an old configured
+autoload list masked the new default. Real loopback HTTP/WebSocket acceptance
+passed (root65638): authenticated overview/detail, anonymous and wildcard
+rejection, scoped subscribe ACK, deliberate invalidation delivery, detail
+refetch and unsubscribe ACK. This is not actual call-transition or load proof.
+
+The matching UI source (`742ff77`) passed 43 offline and 24 Chromium fixture
+groups. A real browser found Monster's automatic `_` parameter violating the
+strict API query contract; exactly three resource definitions now suppress it,
+while HTTP `no-store` remains intact. A fresh production build from
+`/usr/local/src/kazoo5-installer/monster-owned-build.y1bYgn/source` passed12274
+and deployed97771. Owned content, configuration, language assets, app inventory
+and compatibility marker were verified; its `deployment-backup` is recoverable.
+Initial adoption backups and backend backups are under
+`/tmp/kazoo-live-rollout.OYdOqh`.
+
+Subsequent browser90297 isolated a real navigation race: local unsubscribe
+cleanup received the same 15-second retry delay as a server failure. Fix
+`220b37b` permits three bounded one-second retries only for `cleanup_pending`;
+network/authentication/server backoff stays unchanged. Root24147 passed46 offline
+groups (including actual patched framework lifecycle) and24 Chromium fixtures,
+then built and verified a fresh production artifact in
+`/usr/local/src/kazoo5-installer/monster-owned-build.Fd3cY7/source`.
+Deployment32580 changed only main/templates, removed nothing and preserved1942
+files. Its `deployment-backup` is recoverable.
+
+**Actual deployed browser65670 passed all seven checks**, receipt
+`/tmp/kazoo-monster-live-deployed.tWj7DM/receipt.json`: normal login, valid
+overview/detail, exact served bytes, one initial detail GET followed by a native
+ACK-triggered GET before periodic repair, and acknowledged unsubscribe on
+navigation. Console/page/HTTP errors, supplemental reads and new overview
+requests after detail entry were all zero. Optional external fonts were omitted;
+application/API/socket replies were not mocked. Natural call-event delivery,
+restricted-token isolation and load/soak remain unverified. Wire30446 separately
+passed available/consensus snapshots, scoped native invalidation/refetch and
+negative controls. Exact roster and31 agent states/memberships remained unchanged;
+all eight services were active. `/apis` is published (8385); full offline catalog,
+deterministic rebuild and tamper checks82241 passed. Installer module migration
+`b52988c` passed37 isolated cases and actual idempotent readback58155; it handles
+the native maintenance-command exit-2 convention without accepting failed reads.
+Next: real call-transition and isolation/load
+checks. Root owns serialized jobs and service windows. No master push or
+enterprise-readiness claim; all ACDC source remains directly in kz5.
+
+Final post-deployment check90474 again passed available/consensus HTTP snapshots,
+native scoped invalidation/refetch and negative controls. Exact roster and31
+reported agent states/memberships match the pre-deployment snapshot
+(`phone-snapshot-last.json` in the private rollout directory); all eight services
+are active. The browser receipt verifies navigation, while the separate wire
+receipt verifies deliberate event delivery; neither claims real call transitions.
+
+### Earlier checkpoints (superseded by the checkpoint above)
+
 **Scope update — September 6, 2026:** the user postponed historical dashboards
 and workforce reporting because ClickHouse is available for that future work.
 The immediate dashboard delivery is ONLY the live queue summary and the clicked

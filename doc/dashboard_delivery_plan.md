@@ -1,6 +1,37 @@
 # Call-center dashboards and workforce report
 
-Status: implementation brief / open backlog, not deployed functionality.
+## Current state — September 7, 2026
+
+This banner supersedes the historical implementation brief and audit below.
+Current scope is **live queue summary and clicked-queue detail only**, including
+selected-queue call and agent observations. History, workforce reports,
+ClickHouse integration and a separate agent dashboard are deferred.
+
+The development backend is deployed: 74 ACDC and 30 Blackhole production
+modules, authorized Crossbar overview/detail routes and native
+`queue_live.changed.QUEUE_ID` invalidations. Root65638 passed real loopback
+HTTP/WebSocket smoke: authenticated snapshots, anonymous/wildcard rejection,
+scoped subscription ACK, deliberately injected invalidation, detail refetch and
+unsubscribe ACK. This is not actual call-transition, load or browser acceptance.
+`websocket_updates` now indicates local `bh_queue_live` registration, not
+end-to-end health. Hints remain lossy; reconcile snapshots every 15 seconds and
+on reconnect.
+
+Matching UI source `220b37b` passed46 offline/24 Chromium fixtures24147, and the
+fresh production UI was deployed32580. Actual deployed browser65670 passed
+summary/detail rendering, native ACK/refetch and acknowledged navigation cleanup
+with no console/page/HTTP errors. Natural call transitions and isolation/load
+remain separate acceptance gates. Follow the current
+[snapshot/backend guide](acdc_live_snapshot.md),
+[Blackhole wire/rollout guide](blackhole_queue_live.md),
+[wire-smoke scope](queue_live_wire_smoke.md), and
+[UI integration guide](acdc_live_dashboard_ui.md). The root
+[handoff](../PROJECT_HANDOFF.md) owns the latest build/deployment state.
+Do not interpret the old “no Crossbar/module” findings below as current blockers.
+
+## Original brief — historical baseline
+
+Original status: implementation brief / open backlog, not deployed functionality.
 Parent register: [PROJECT_TASKS.md](../PROJECT_TASKS.md), DASH-01–09,
 SUP-01–03 and WFM-01–04.
 Destination is the existing Monster UI ACDC application, not a separate hosted
@@ -22,7 +53,12 @@ below are retained as deferred reference, not current implementation tasks or
 live-dashboard acceptance gates. Do not present a limited in-memory window as
 complete daily/historical totals; show unavailable metrics explicitly.
 
-## Next live integration slice
+## Historical next-slice proposal — superseded by current state above
+
+The following captures the pre-integration source audit and original acceptance
+requirements. Its missing-module/route statements are historical, not a current
+inventory; retain remaining acceptance requirements without rebuilding completed
+backend components or reopening deferred history/workforce scope.
 
 The local collector is implemented and tested (see
 [collector evidence](acdc_dashboard_projection.md)); it is not yet exposed by
