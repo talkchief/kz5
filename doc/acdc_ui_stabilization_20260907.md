@@ -125,21 +125,25 @@ deployed bounded-read method and confirmed Agent12 queue membership through
 both the real UI GET and dialog without a login mutation.
 This closes wording task UI-02, not the broader intermittent-loading report.
 The browser still emitted a startup TypeError reading `acdc`; bounded frames
-were main.js 84:4859, 84:4695, 83:25753 and 83:5048. Keep that defect open.
+were main.js 84:4859, 84:4695, 83:25753 and 83:5048.
 Source mapping identifies the failed access as `i18n.active().acdc.dashboard`.
 The native app loader can clear the shared translation table during overlapping
-loads; an installer-owned single-flight fix is being prepared separately and
-is not deployed by this checkpoint.
+loads. The later installer-owned singleflight fix is now deployed with passing
+startup, navigation, account-switch and all four reconnect browser checks; see
+`monster_app_load_singleflight.md` for exact evidence and remaining outage cases.
 
 After rollout, exact before/after comparison `090482` confirmed the queue
 roster and all 31 reported agent statuses/memberships unchanged. No restore
 was performed.
 
-Current bundle SHA-256: main.js
+Initial editor/wording rollout bundle SHA-256: main.js
 `72c2055288b72a49680134694b074623680f7a0af0b4d26026eff610d0245bc1`;
 templates.js
 `fd6d1c690383e1d1dc30c73435bdfa165728434e897db2d76fc391bf7418f0bd`.
+The later loader fix supersedes main.js; see `monster_app_load_singleflight.md`
+for its current bundle and browser acceptance.
 
-Remaining: browser timeout/create acceptance, exact queue-create ownership/readback and
-cleanup, intermittent startup diagnosis, native HTTP/log checks after the
-content-type fix, storage capability404, and caller identity display.
+Remaining: browser read-timeout, editor PATCH/validation/uncertain-outcome
+acceptance; never-settling loader/outage behavior; storage
+capability404; and caller identity display. The specific queue-create success,
+owned cleanup and queue content-type HTTP/log checks above have passed.

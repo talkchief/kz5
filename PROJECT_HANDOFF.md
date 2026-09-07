@@ -6,14 +6,27 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
-**Startup loader candidate — September 7:** installer-owned singleflight patch
+**Startup loader deployed — September 7:** installer-owned singleflight patch
 passes16 actual-loader regression groups (`fe213e`/`d8fe85`), including old-source
 reproduction of missing ACDC translations. Fresh full installer patch preparation
 passed `f65634`/`96a194` at monster-owned-build.MwsDYg/source. Production build
-`c56a9e`, session26766, is in progress; do not assume deployed. The wrapper
-temporarily pauses ecallmgr/test phones and restores them on exit. Check the
-actual handle and service states before further jobs. See
+`c56a9e`/`a1f197` passed and both paused services were restored/verified active.
+Owned deployment `ec9a75`/`9f9af6` changed only main.js, preserving1,943 files;
+served index/main/configuration readback passed. Fresh browser initial view and
+login-confirmation dialog passed without page errors (`3ff064`/`eefb87`).
+Standard production smoke passed7 checks with zero page/console/HTTP errors and
+native subscribe/refetch/disposal/unsubscribe (`e5b91d`/`2241b2`). Account-switch
+smoke passed10 checks45576a/e20ac1. All four home/switched summary/detail
+reconnect cases passed7/9/10/12 checks with zero page/console/HTTP errors.
+Controlled HTTP stalls/late replies and never-settling loader delivery remain;
+do not call P0-25 closed yet. See
 `doc/monster_app_load_singleflight.md`.
+
+Final post-rollout check `fecef6`: all nine scoped services active, zero calls,
+and exact roster/all31 reported agent statuses/memberships unchanged. No jobs
+from this checkpoint remain running. Local commits: `9f695ed`, `b02f7fe`;
+master push remains pending the broader release gates. Untracked bridge source
+and viewer-load harness are not included in those tested-source commits.
 
 **Queue creation acceptance — September 7:** real deployed form PUT returned201
 and a complete editor operation; the harness incorrectly expected200. Exact
@@ -31,7 +44,7 @@ hash/export verification passed `0c9f54`/`84b347`, rollback artifact retained at
 passes six tests; matching installed baseline fails three. Source and details:
 `doc/acdc_ui_stabilization_20260907.md`. No cluster-wide reliability claim.
 
-**UI deployed checkpoint — September 7:** dashboard wording now removes observed
+**Earlier UI rollout — September 7:** dashboard wording now removes observed
 from user-facing values and uses In Progress. Root52 dashboard groups pass
 `078c38`/`a26140`; queue-login23 pass `b01286`. Actual queue-create400 was traced
 to Monster injecting ui_metadata into the strict editor body. The local
@@ -42,14 +55,15 @@ files and preserved live configuration (`6d7352`/`d9a24c`). Both temporarily
 paused services were restored and verified active. Fresh browser `cbf2ed`/`80cbbf`
 verified the plain labels and In Progress, plus confirmed membership without a
 login mutation. UI-02 is closed; broader editor error-recovery and timeout acceptance remain
-open. Startup still emits a TypeError reading acdc; do not call that resolved. See
+open. This earlier rollout still emitted a TypeError reading acdc; the later
+loader fix and passing browser checks are recorded above. See
 `doc/acdc_ui_stabilization_20260907.md` for evidence and remaining acceptance.
 
 **Newest operator issues — September 7:** P0-22 is a login VERIFICATION display
 bug, not a failed login (operator correction). Root actual read-only HTTP proof
 and selected-queue live agree Agent12 is ready and a runtime queue member.
 P0-25 tracks indefinite ACDC loading; read-deadline changes are source tested
-and deployed, with intermittent startup diagnosis still open. P0-26 tracks new
+and deployed, with controlled outage/late-reply acceptance still open. P0-26 tracks new
 queue creation400; the deployed serializer opt-out fixes unwanted ui_metadata,
 and real create/readback acceptance subsequently passed. UI-01 tracks separately
 reproduced storage404. DASH-10 requests caller name/number display with preserved
@@ -61,11 +75,10 @@ actual-browser/call acceptance. No working agent state was changed by diagnosis.
 Focused deployed-browser read-only probe `54433a`/`1326c7` displayed the initial
 dashboard and actual Agent12 queue-login dialog as "Queue membership confirmed";
 the real UI proof GET returned confirmed/ready. It sent no login mutation.
-One TypeError was observed without enough detail yet to identify its cause, and
-an earlier run timed out at shell readiness. The operator's intermittent/stale
-UI report is therefore still open, not disproven by this successful attempt.
-Source-only GET-deadline changes and content-negotiation handlers await root
-tests/deployment. Bridge source is sanitized under services/push-bridge, but
+That earlier probe emitted a TypeError and an earlier run timed out at shell
+readiness. Subsequent mapping, source tests and deployments are recorded above;
+do not mistake this historical probe for current acceptance. Bridge source is
+sanitized under services/push-bridge, but
 its installer option/activation are not ready; imported reliability/security
 gaps are explicitly documented there. Production bridge was not changed.
 

@@ -50,5 +50,63 @@ Two preceding failures were in the candidate test packet: a missing final
 patch context line, then an omitted fixture `parseVersionFile` dependency.
 Their evidence remains in olgtjR and V0OYj7; neither is claimed as a passing run.
 
-Production build/deployment and fresh-browser first-open, reopen, account/tab
-switch and reconnect checks remain required. No source test alone closes P0-25.
+Production build `c56a9e`/`a1f197` passed artifact validation at
+`/usr/local/src/kazoo5-installer/monster-owned-build.MwsDYg/source`.
+Both temporarily paused services were restored and verified active. Owned
+deployment `ec9a75`/`9f9af6` changed only main.js and preserved1,943 files;
+served index/main/configuration readback passed. Main SHA-256:
+`a75c1b18ec02365047dda3704dac2c2daaa5835313d23eb2a8d3b4b6e77415c4`.
+Templates retain
+`fd6d1c690383e1d1dc30c73435bdfa165728434e897db2d76fc391bf7418f0bd`.
+Rollback: `/usr/local/src/kazoo5-installer/monster-owned-plan.Jha2kk/rollback`.
+
+Fresh actual-browser check `3ff064`/`eefb87` passed initial dashboard rendering,
+current plain labels, the deployed singleflight method, real selected-queue
+confirmation GET and the agent Login dialog, with no page errors and no login
+mutation. Subsequent production-shell/account-switch/reconnect checks are
+recorded below. No source test alone closes P0-25.
+
+The standard actual-deployed production smoke also passed seven checks
+(`e5b91d`/`2241b2`, `/tmp/kazoo-monster-live-deployed.5gI81P/receipt.json`):
+normal login, current overview, selected-queue detail, native subscription ACK
+and refetch, controller disposal, acknowledged unsubscribe, and exact served
+asset hashes. It recorded zero page/console/HTTP/scope errors, three subscribe
+and three unsubscribe ACKs, and no injected events or calls. Ecallmgr was
+temporarily paused for browser memory admission and restored/verified active.
+
+Normal account-switch smoke passed ten checks (`45576a`/`e20ac1`,
+`/tmp/kazoo-monster-live-deployed.3FFBzz/receipt.json`), including acknowledged
+home disposal, selected account scope, and restoration of the home account.
+It also recorded zero page/console/HTTP/scope errors. This used an administrator
+switching accounts; it is not fresh restricted-principal authorization proof.
+
+Reconnect checks against the same deployed bundle:
+
+| View/scope | Evidence | Checks |
+| --- | --- | --- |
+| Summary, home account | `43b917`/`9f0cb4`, hltOHJ receipt | 7 passed |
+| Detail, home account | `1ff77a`/`74873d`, jDrUgY receipt | 9 passed |
+| Summary, switched account | `5c93b8`/`3d186b`, hcjYc6 receipt | 10 passed |
+| Detail, switched account | `2b28d4`/`6dafbe`, 2rApWe receipt | 12 passed |
+
+Receipts reside under `/tmp/kazoo-monster-live-deployed.<suffix>/receipt.json`.
+These tests close only their own browser socket, verify visible stale state,
+new-connection subscription acknowledgements and subsequent no-store readback,
+then verify navigation disposal. Periodic reconciliation was not excluded as
+an additional refresh cause; this is not a proof that reconnect alone caused
+every refresh. No calls/events were injected. Both ecallmgr and simulated test
+phones were temporarily paused for memory and restored by the wrapper; apps,
+Blackhole and the broker stayed running. An earlier summary attempt
+`ded5b8`/`889360` was refused before browser execution by the memory guard.
+
+All four reconnect receipts report zero console/page/HTTP/scope errors and
+successful return/navigation cleanup. Controlled HTTP stalls/late replies and
+never-settling loader delivery remain acceptance gaps; these successful idle
+browser tests do not establish load, active-call or cluster-failure reliability.
+
+Final snapshot `1a05df`/`d94553` and comparison `fecef6` prove the original queue
+roster and all31 reported statuses/memberships unchanged after the build and
+browser jobs. No restoration writes were performed. The same final check found
+all nine scoped services active and zero FreeSWITCH calls. Source commits are
+`9f695ed` (editor/read/wording/content-type fixes) and `b02f7fe` (loader fix).
+They are local kz5 commits, not a master push or production-readiness claim.
