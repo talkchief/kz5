@@ -15,7 +15,17 @@ reports or ClickHouse integration now. Agent state within queue detail remains
 in scope; a separate agent dashboard is deferred. Neither live screen is yet
 accepted/deployed. See the scope override in `PROJECT_TASKS.md`.
 
-**Latest live-only checkpoint — September 7:** local `a011934` adds the
+**Latest integration checkpoint — September 7:** `b3faf2d` now supplies authorized selected
+roster/names and runtime-agent observations in the same live detail response.
+Root15218 passed26 public/roster groups,24 actual DTO/OpenAPI checks,2 helpers
+and15 schema groups/297 cases. Auth14 passed36984; transport34 passed82855.
+Publisher `0411898` passed24 groups62617. Native Blackhole22/11 compiles passed
+62617, and its ordered installer migration passed60 cases82855. These are
+source/fixture results, not deployment. UI one-response adapter and sequential
+subscription admission are the current integration work. Backend private build
+and live wire smoke tooling are being prepared. Historical work stays deferred.
+
+Earlier checkpoint: local `a011934` adds the
 capability-gated native subscription controller. Root64066 passed32 offline UI
 groups; root55555 passed18 Chromium fixture groups and20 unchanged queue-login
 groups (`/tmp/kazoo-monster-live-dashboard.u5WbOa`). Local `5e6a3b6` adds bounded

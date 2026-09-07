@@ -7,12 +7,14 @@ and incident evidence; task completion must agree with the project register.
 This checklist records requested work, not production certification. The checked
 items below have the specific evidence stated; unchecked items are not finished.
 
-- [ ] DASH-01–07: implement the supplied queue overview/live drilldown and both
-  historical dashboard designs; add bounded source-backed snapshot/history APIs,
+- [ ] DASH-01–07, current live subset: implement the supplied queue overview/live
+  drilldown; add bounded source-backed snapshot APIs,
   account/queue-scoped WebSocket updates and OpenAPI/event documentation at
   `/apis`. Clicking a queue opens its live dashboard. See the
   [design and acceptance brief](dashboard_delivery_plan.md).
-- [ ] WFM-01–04: agent workforce report in the same style covering login/logout
+- [ ] POSTPONED — historical dashboards and WFM-01–04: future ClickHouse work,
+  not part of the current live-dashboard implementation. Preserve existing archives.
+  The deferred agent workforce report covers login/logout
   sessions, working hours, breaks and break types; filters, details, exports,
   durable event history, policy/timezone definitions and documented APIs.
   Multi-queue logins must not double-count working hours; unknown intervals and

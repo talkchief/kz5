@@ -227,7 +227,16 @@ scope change. Existing Kazoo archives are left intact. Agent rows/state inside
 the selected queue remain in scope. This override takes precedence over the
 older OPEN labels and broad requirements retained below for future reference.
 
-Latest live integration: UI `900efa8` now consumes the new bounded DTOs with
+Latest source integration: `b3faf2d` puts authorized roster/names and bounded
+runtime-agent observations in the same selected queue GET. Public/roster26,
+actual DTO24, helper2 and focused schema15 groups/297 cases passed15218.
+Transport34 passed82855 and auth14 passed36984. Publisher `0411898` passed24
+groups62617; native Blackhole22 and installer migration60 cases also passed.
+The matching one-response UI adapter, sequential subscriptions, coherent build
+and live HTTP/WebSocket acceptance remain underway. No new deployment or
+master push is claimed. Historical/ClickHouse/WFM stays postponed.
+
+Earlier live integration: UI `900efa8` now consumes the new bounded DTOs with
 explicit summary paging and clicked detail. Offline dashboard 22 groups and
 queue-login 20 groups passed (37074); Chromium 12 interaction groups passed
 (5608, synthetic API only). Shared auth passed 10 cases (93576). Public handler

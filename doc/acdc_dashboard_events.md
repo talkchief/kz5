@@ -94,7 +94,17 @@ the overall run failed when empty configuration JSON reached a legacy validator
 recursion. This is not a passing suite. The narrow candidate correction guards
 empty/malformed configuration objects and empty changed-hint input before that
 legacy API, with individual 200 ms negative-case deadlines. The global validator
-is unchanged; the corrected 24-group suite has not yet run.
+is unchanged.
+
+Corrected root run **62617 passed all 24 groups and eleven production-module
+compiles**, with stable inputs, under the same 128 MiB cap/768 MiB reserve and
+network namespace. Evidence: `/tmp/kazoo-dashboard-events.gK9IkK`; receipt SHA256
+`f4bed4aeb5e2cfc57d5732ae429ea4cec02a90874e0d73551685c2cca5bf9456`,
+EUnit log SHA256
+`0732193fe4c250951238667fe594a1f2c4a21910eb6aefc73b8e8696803ee3bd`.
+This is the scoped offline proof below, not native broker delivery, deployed
+subscription, service, or browser acceptance. The earlier failed evidence is
+preserved rather than relabeled as a pass.
 
 Root-coordinated command, with unchanged resource reserve and network isolation:
 
