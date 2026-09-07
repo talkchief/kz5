@@ -114,6 +114,12 @@ child_of_type(S, T) -> [P || {Ty, P, 'worker', _} <- supervisor:which_children(S
 %%------------------------------------------------------------------------------
 -spec init(any()) -> kz_types:sup_init_ret().
 init(Args) ->
+    %% Dashboard discovery is keyed, not a scan of every account's supervisor.
+    %% Observability failure must not prevent a phone agent from starting.
+    _ = case Args of
+        [AccountId, AgentId, _ | _] -> acdc_dashboard_agents:register_agent(AccountId, AgentId);
+        _ -> ok
+    end,
     RestartStrategy = 'one_for_all',
     MaxRestarts = 2,
     MaxSecondsBetweenRestarts = 2,

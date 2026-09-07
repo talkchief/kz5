@@ -40,6 +40,7 @@
         ,refresh/2
         ,current_call/1
         ,status/1
+        ,dashboard_state/2
 
         ,new_endpoint/2
         ,edited_endpoint/2
@@ -374,6 +375,15 @@ current_call(ServerRef) -> gen_statem:call(ServerRef, 'current_call').
 -spec status(pid()) -> kz_term:proplist().
 status(ServerRef) -> gen_statem:call(ServerRef, 'status').
 
+%% Closed, constant-size runtime observation; unlike status/1 it never copies
+%% call identifiers, caller data, endpoints, timers or queued state updates.
+-spec dashboard_state(pid(), pos_integer()) -> {binary(), binary(), atom(), pid() | undefined}.
+dashboard_state(ServerRef, Timeout) -> gen_statem:call(ServerRef, 'dashboard_state', Timeout).
+
+-spec dashboard_reply(gen_statem:from(), atom(), state()) -> kz_types:handle_fsm_ret(state()).
+dashboard_reply(From, StateName, #state{account_id=AccountId,agent_id=AgentId,agent_listener=Listener}=State) ->
+    {'next_state',StateName,State,{'reply',From,{AccountId,AgentId,StateName,Listener}}}.
+
 %%------------------------------------------------------------------------------
 %% @doc Creates a gen_statem process which calls Module:init/1 to
 %% initialize. To ensure a synchronized start-up procedure, this
@@ -502,6 +512,7 @@ wait('cast', 'send_sync_event', State) ->
     {'next_state', 'wait', State};
 wait('cast', Evt, State) ->
     handle_event(Evt, 'wait', State);
+wait({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,wait,State);
 wait({'call', From}, 'status', State) ->
     {'next_state', 'wait', State, {'reply', From, [{'state', <<"wait">>}]}};
 wait({'call', From}, 'current_call', State) ->
@@ -559,6 +570,7 @@ sync('cast', {'member_connect_req', _}, State) ->
     {'next_state', 'sync', State};
 sync('cast', Evt, State) ->
     handle_event(Evt, 'sync', State);
+sync({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,sync,State);
 sync({'call', From}, 'status', State) ->
     {'next_state', 'sync', State, {'reply', From, [{'state', <<"sync">>}]}};
 sync({'call', From}, 'current_call', State) ->
@@ -726,6 +738,7 @@ ready('cast', {'originate_failed', _E}, State) ->
     {'next_state', 'ready', State};
 ready('cast', Evt, State) ->
     handle_event(Evt, 'ready', State);
+ready({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,ready,State);
 ready({'call', From}, 'status', State) ->
     {'next_state', 'ready', State, {'reply', From, [{'state', <<"ready">>}]}};
 ready({'call', From}, 'current_call', State) ->
@@ -887,6 +900,7 @@ ringing('cast', {'usurp_control', _CallId}, State) ->
     {'next_state', 'ringing', State};
 ringing('cast', Evt, State) ->
     handle_event(Evt, 'ringing', State);
+ringing({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,ringing,State);
 ringing({'call', From}, 'status', #state{member_call_id=MemberCallId
                                         ,agent_call_id=ACallId
                                         }=State) ->
@@ -1171,6 +1185,7 @@ answered('cast', {'usurp_control', _CallId}, State) ->
     {'next_state', 'answered', State};
 answered('cast', Evt, State) ->
     handle_event(Evt, 'answered', State);
+answered({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,answered,State);
 answered({'call', From}, 'status', #state{member_call_id=MemberCallId
                                          ,agent_call_id=ACallId
                                          }=State) ->
@@ -1298,6 +1313,7 @@ wrapup('cast', {'originate_resp', _}, State) ->
     {'next_state', 'wrapup', State};
 wrapup('cast', Evt, State) ->
     handle_event(Evt, 'wrapup', State);
+wrapup({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,wrapup,State);
 wrapup({'call', From}, 'status', #state{wrapup_ref=Ref}=State) ->
     {'next_state', 'wrapup', State
     ,{'reply', From, [{'state', <<"wrapup">>}
@@ -1356,6 +1372,7 @@ paused('cast', {'originate_failed', _E}, State) ->
     {'next_state', 'paused', State};
 paused('cast', Evt, State) ->
     handle_event(Evt, 'paused', State);
+paused({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,paused,State);
 paused({'call', From}, 'status', #state{pause_ref=Ref}=State) ->
     {'next_state', 'paused', State
     ,{'reply', From, [{'state', <<"paused">>}
@@ -1430,6 +1447,7 @@ outbound('cast', {'usurp_control', _CallId}, State) ->
     {'next_state', 'outbound', State};
 outbound('cast', Evt, State) ->
     handle_event(Evt, 'outbound', State);
+outbound({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,outbound,State);
 outbound({'call', From}, 'status', #state{wrapup_ref=Ref
                                          ,outbound_call_ids=OutboundCallIds
                                          }=State) ->
