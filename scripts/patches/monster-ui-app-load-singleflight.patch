@@ -1,0 +1,179 @@
+diff --git a/src/js/lib/monster.apps.js b/src/js/lib/monster.apps.js
+index b3743a2..d4a3aff 100644
+--- a/src/js/lib/monster.apps.js
++++ b/src/js/lib/monster.apps.js
+@@ -7,6 +7,18 @@ define(function() {
+ 		'auth',
+ 		'core'
+ 	];
++	var appLoads = Object.create(null);
++
++	function appLoadIdentity(name, options) {
++		var metadata = monster.util.getAppStoreMetadata(name),
++			firstUrl = function(values) {
++				return _.find(_.map(values, monster.normalizeUrlPathEnding), _.isString);
++			},
++			source = firstUrl([_.get(metadata, 'source_url'), _.get(options, 'sourceUrl')]);
++
++		return JSON.stringify([source ? source.replace(/\/$/, '') : 'apps/' + name,
++			firstUrl([_.get(options, 'apiUrl'), _.get(metadata, 'api_url'), monster.config.api.default])]);
++	}
+ 
+ 	var apps = {
+ 		// Global var used to show the loading gif
+@@ -16,7 +28,7 @@ define(function() {
+ 			runningApis: 0
+ 		},
+ 
+-		monsterizeApp: function(app, callback) {
++		monsterizeApp: function(app, callback, loadState) {
+ 			var self = this;
+ 
+ 			app.css = _
+@@ -57,7 +69,8 @@ define(function() {
+ 			_.each(app.subscribe, function(callback, topic) {
+ 				var cb = typeof callback === 'string' ? app[callback] : callback;
+ 
+-				monster.sub(topic, cb, app);
++				var subscription = monster.sub(topic, cb, app);
++				if (loadState && subscription) { loadState.subscriptions.push(subscription); }
+ 			});
+ 
+ 			self._addAppCss(app);
+@@ -689,6 +702,55 @@ define(function() {
+ 		 * @param  {String}   [options.apiUrl]
+ 		 */
+ 		_loadApp: function(name, mainCallback, pOptions) {
++			var self = this, identity, flight, callback = mainCallback || _.noop;
++
++			try { identity = appLoadIdentity(name, pOptions); }
++			catch (error) { callback(error); return; }
++			// A published app can still be loading dependencies or initializing
++			// auth context. Pending construction must win over the public cache.
++			if (Object.prototype.hasOwnProperty.call(appLoads, name)) {
++				flight = appLoads[name];
++				if (flight.identity !== identity || flight.blocked || flight.callbacks.length >= 32) {
++					callback(new Error('App load conflict or capacity exceeded'));
++				} else { flight.callbacks.push(callback); }
++				return;
++			}
++			if (_.has(monster.apps, name)) {
++				var cached = monster.apps[name];
++				if (identity !== JSON.stringify([cached.appPath, monster.normalizeUrlPathEnding(cached.apiUrl)])) {
++					callback(new Error('App load source or API conflict')); return;
++				}
++				callback(null, cached); return;
++			}
++			if (Object.keys(appLoads).length >= 32) {
++				callback(new Error('App load capacity exceeded')); return;
++			}
++			flight = { identity: identity, callbacks: [callback], subscriptions: [], app: null, settled: false };
++			appLoads[name] = flight;
++			function finish(error, app) {
++				if (flight.settled) { return; }
++				flight.settled = true;
++				if (error) {
++					if (flight.app && monster.apps[name] === flight.app) { delete monster.apps[name]; }
++					_.each(flight.subscriptions, function(subscription) {
++						try { monster.unsub(subscription); }
++						catch (_) { flight.blocked = true; }
++					});
++				}
++				if (!flight.blocked) { delete appLoads[name]; }
++				var callbacks = flight.callbacks;
++				flight.callbacks = []; flight.subscriptions = [];
++				_.each(callbacks, function(done) {
++					// One consumer exception must not strand other accepted callers.
++					try { done(error, error ? undefined : app); }
++					catch (callbackError) { setTimeout(function() { throw callbackError; }, 0); }
++				});
++			}
++			try { self._loadAppUncached(name, finish, pOptions, flight); }
++			catch (error) { finish(error); }
++		},
++
++		_loadAppUncached: function(name, mainCallback, pOptions, loadState) {
+ 			var self = this,
+ 				options = pOptions || {},
+ 				getValidUrl = _.flow(
+@@ -724,6 +786,7 @@ define(function() {
+ 				]),
+ 				requireApp = _.partial(function(moduleId, pathToDirectory, name, apiUrl, version, callback) {
+ 					require([moduleId], function(app) {
++						loadState.app = app;
+ 						_.extend(app, {
+ 							appPath: pathToDirectory,
+ 							data: {
+@@ -772,30 +835,39 @@ define(function() {
+ 						path = pathSubModule + subModule + '/' + subModule;
+ 
+ 					require([path], function(module) {
+-						/* We need to be able to subscribe to the same event with many callbacks, so we can't merge the subscribes key together, or it would override some valid callbacks */
+-						var oldSubscribes = $.extend(true, {}, app.subscribe);
+-						$.extend(true, app, module);
+-						app.subscribe = oldSubscribes;
+-
+-						_.each(module.subscribe, function(callback, topic) {
+-							var cb = typeof callback === 'string' ? app[callback] : callback;
+-
+-							monster.sub(topic, cb, app);
+-						});
+-
+-						callback(null);
++						var error;
++						try {
++							/* Preserve independent subscriptions from each submodule. */
++							var oldSubscribes = $.extend(true, {}, app.subscribe);
++							$.extend(true, app, module);
++							app.subscribe = oldSubscribes;
++							_.each(module.subscribe, function(callback, topic) {
++								var cb = typeof callback === 'string' ? app[callback] : callback;
++								var subscription = monster.sub(topic, cb, app);
++								if (subscription) { loadState.subscriptions.push(subscription); }
++							});
++						} catch (caught) { error = caught; }
++						callback(error || null);
+ 					}, callback);
+ 				}, pathConfig.moduleRoot),
+ 				loadSubModules = function loadSubModules(app, callback) {
++					var firstError;
++					// Drain every sibling before reporting failure: a late require
++					// callback must not mutate this shared AMD object during retry.
+ 					monster.parallel(_
+ 						.chain(app)
+ 						.get('subModules', [])
+ 						.map(function(subModule) {
+-							return _.partial(requireSubModule, app, subModule);
++							return function(next) {
++								requireSubModule(app, subModule, function(error) {
++									firstError = firstError || error;
++									next(null);
++								});
++							};
+ 						})
+ 						.value()
+ 					, function(err) {
+-						callback(err, app);
++							callback(firstError || err, app);
+ 					});
+ 				},
+ 				loadVersion = _.partial(function(name, pathToFolder, callback) {
+@@ -828,7 +900,7 @@ define(function() {
+ 						maybeRetrieveBuildConfig,
+ 						applyConfig,
+ 						loadSubModules,
+-						_.bind(self.monsterizeApp, self)
++						function(app, callback) { self.monsterizeApp(app, callback, loadState); }
+ 					], callback);
+ 				},
+ 				initializeApp = function initializeApp(app, callback) {
+@@ -860,9 +932,6 @@ define(function() {
+ 		load: function(name, mainCallback, options) {
+ 			var self = this,
+ 				maybeLoadApp = function maybeLoadApp(name, options, callback) {
+-					if (_.has(monster.apps, name)) {
+-						return callback(null, monster.apps[name]);
+-					}
+ 					self._loadApp(name, callback, options);
+ 				};
+ 
