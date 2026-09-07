@@ -19,6 +19,13 @@ attempt connected to agent; zero scoped log errors/new cores. Evidence:
 1000 live acceptance, complete cleanup or a production release pass.
 See latest PROJECT_HANDOFF.md and doc/push_bridge_development_acceptance.md.
 
+Bridge follow-up: FCM3xx and unused response bodies are now rejected/closed
+before redirect processing. Six pinned-Requests transport tests pass, as do
+all79 earlier bridge regressions and main-SH dispatch. Main-SH redeployment
+515d94/1f29eb passes with enabled active consumer and zero automatic restarts.
+OAuth refresh/total deadlines, shared HTTP session concurrency, durable retries,
+AMQP TLS and designated-device mobile ringing remain INST-13 release gates.
+
 New or returning contributors: read [the engineering handoff](PROJECT_HANDOFF.md)
 first for achieved work, deployment status, source locations and next steps.
 

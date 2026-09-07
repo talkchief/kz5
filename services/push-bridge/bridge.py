@@ -21,6 +21,25 @@ HEARTBEAT = 30
 log = logging.getLogger("push_bridge")
 
 
+class FcmRedirectRejected(Exception):
+    """Fixed-category failure; never retain a provider URL or response body."""
+
+    def __init__(self, status):
+        super().__init__("provider_redirect_rejected")
+        self.status = status
+
+
+def reject_fcm_redirect(response, *args, **kwargs):
+    # Requests may consume a redirect body while preparing Response.next even
+    # with allow_redirects=False. A response hook runs before that processing.
+    # Close without reading it, and never send the token/payload to Location.
+    if 300 <= response.status_code < 400:
+        status = response.status_code
+        response.close()
+        raise FcmRedirectRejected(status)
+    return response
+
+
 class BridgeRuntime:
     """Explicit startup owns dependencies, credential I/O and mutable state.
 
@@ -116,7 +135,8 @@ class BridgeRuntime:
                 response = self.http.post(
                     self.fcm_url,
                     headers={"Authorization": "Bearer {}".format(self.get_access_token())},
-                    json=message, timeout=5,
+                    json=message, timeout=5, allow_redirects=False, stream=True,
+                    hooks={"response": [reject_fcm_redirect]},
                 )
                 try:
                     last_status, last_text = response.status_code, "provider_response"
@@ -126,6 +146,8 @@ class BridgeRuntime:
                         return False, last_status, last_text
                 finally:
                     response.close()
+            except FcmRedirectRejected as error:
+                return False, error.status, "provider_redirect_rejected"
             except self.requests.RequestException:
                 last_status, last_text = -1, "provider_transport_error"
             if attempt == 1 and not self._stop.is_set():

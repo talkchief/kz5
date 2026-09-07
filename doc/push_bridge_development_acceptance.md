@@ -6,6 +6,18 @@ acceptance. No notification was published or sent during these checks.
 
 ## Installation and evidence
 
+Latest focused FCM source deployment: `515d94/1f29eb` passed through the main
+SH, using all18 hash-locked dependencies and the existing protected config.
+It adds redirect rejection before Requests redirect/body processing and closes
+streamed responses without reading them. Six real pinned-Requests/fake-adapter
+tests pass (`be4d36`); all79 prior tests plus installer dispatch pass
+(`a6ee6e/73b78f`). New release
+`/usr/local/lib/kazoo-push-bridge/releases/8b6eb7b60923ba295b0ecc074c0ebf78835bbaa201360211fb87c7bb29745d23`
+is enabled/active with consumer PID111917 and automatic restarts0 (`82056a`).
+The prior release remains on disk. All eight core services remain active.
+This made no provider calls and did not change production or AMQP topology.
+Independent main-SH `--verify-only push-bridge` also passed (`3c03ae/324540`).
+
 ```sh
 sudo bash scripts/install-kazoo5.sh push-bridge
 sudo bash scripts/install-kazoo5.sh --verify-only push-bridge
@@ -60,7 +72,9 @@ claim mobile integration is finished because this idle consumer is ready.
    and its controlled bridge restart now pass on this development host.
 2. Finish bounded durable retry/dead-letter/expiry and failure recovery. Current
    uncertain-delivery exit78 requires manual recovery; it is not high availability.
-3. Complete FCM response/redirect/deadline and AMQP TLS controls; validate real
+3. Complete OAuth refresh/total deadlines, shared-session concurrency and AMQP
+   TLS controls. FCM redirects/body downloads now have six passing pinned-Requests
+   adapter tests (`be4d36`); no provider was contacted. Validate real
    pinned HTTP/2 behavior, APNs initialization recovery and worker shutdown.
 4. Use an explicitly designated test mobile device/token with the correct app
    and environment; verify native Kazoo payloads, provider acceptance, phone

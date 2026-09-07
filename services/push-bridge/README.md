@@ -15,6 +15,21 @@ provider permissions or delivery. Production bridge state/PID stayed unchanged.
 Credentials and populated configuration remain outside Git. See
 `doc/push_bridge_development_acceptance.md` for scope and remaining gates.
 
+FCM transport checkpoint: six additional offline tests (`be4d36`) use the
+installed pinned Requests session/response implementation and a socket-free
+adapter. Sends now disable redirects and stream responses without reading their
+bodies. A response hook rejects all3xx before Requests can prepare a redirect
+and consume its body, even with redirects disabled. Responses are closed on
+success, rejection and server retry. Tests cover8 redirect statuses,5 client
+statuses, success, server retry and fixed-category transport failures. Prior79
+bridge tests and installer dispatch still pass (`a6ee6e/73b78f`). This does not
+bound OAuth refresh, resolve shared-session concurrency or prove mobile delivery.
+Run the new fixture using the installed bridge venv under network isolation:
+
+```sh
+/usr/local/lib/kazoo-push-bridge/current/venv/bin/python -B -I scripts/test-push-bridge-fcm-transport.py
+```
+
 Use `sudo bash scripts/install-kazoo5.sh push-bridge`, or `--verify-only
 push-bridge` to verify. Aliases: `bridge`, `mobile-bridge`, `kazoo-push-bridge`.
 `ALL` now includes the bridge. Missing protected mobile configuration rejects
@@ -139,8 +154,9 @@ The candidate policy is deliberately narrower than the imported senders:
 - FCM is restricted to `https://www.googleapis.com/auth/firebase.messaging`
   and `https://fcm.googleapis.com/v1/projects/{project_id}/messages:send`.
   Alternate hosts, schemes, credentials, queries or format expressions fail.
-  The service-account project value is not loaded or validated here. Redirect
-  rejection and credential loading still need to be fixed in the sender.
+  The service-account project value is not loaded or validated by this lexical
+  checker. Explicit runtime validates it; FCM redirects are now rejected before
+  redirect processing as described above.
 - APNs is optional when all its main fields are absent or empty. Setting any
   APNs value requires the complete main key/team/base-topic contract and both
   explicit hosts: `api.push.apple.com` for production and
@@ -154,7 +170,8 @@ These are candidate deployment constraints for root review. Explicit bridge
 startup now runs this preflight before provider initialization, and the APNs
 constructor validates its explicit key/topic/host inputs. This does not prove
 transport correctness: in particular it does not add AMQP TLS or make port 5671
-imply TLS, prevent FCM response redirects, or validate credential permissions.
+imply TLS or validate credential permissions. FCM redirect rejection is a
+separate sender-level control, tested above.
 
 Root-owned offline test command:
 
@@ -188,7 +205,7 @@ remain separate from ordinary persisted Kazoo settings and from the repository.
 | `PUSH_BRIDGE_AMQP_HOST`, `PUSH_BRIDGE_AMQP_USER`, `PUSH_BRIDGE_AMQP_PASS`, `PUSH_BRIDGE_AMQP_VHOST` | Required broker connection and credentials. The imported connection currently uses non-TLS AMQP. |
 | `PUSH_BRIDGE_EXCHANGE`, `PUSH_BRIDGE_QUEUE`, `PUSH_BRIDGE_BINDING_KEY` | Required exact deployment topology. Durable queue; existing exchange checked passively, otherwise created as topic. No automatic account authorization is added. |
 | `PUSH_BRIDGE_FCM_SCOPE` | Required OAuth scope approved for this service account. |
-| `PUSH_BRIDGE_FCM_URL_TEMPLATE` | Required exact FCM URL from the policy above; `{project_id}` expands only after validation of the service-account project as a bounded Google project identifier. Redirect rejection remains open. |
+| `PUSH_BRIDGE_FCM_URL_TEMPLATE` | Required exact FCM URL from the policy above; `{project_id}` expands only after validation of the service-account project as a bounded Google project identifier. All3xx responses are rejected without following Location or consuming their bodies. |
 | `PUSH_BRIDGE_AMQP_PORT` | Optional integer; default `5672`. |
 | `PUSH_BRIDGE_WORKERS`, `PUSH_BRIDGE_APNS_WORKERS`, `PUSH_BRIDGE_STALL_TIMEOUT` | Optional integers, defaults `32`, `8`, `70` seconds respectively; explicit startup enforces the candidate bounds above. Load acceptance remains open. |
 | `PUSH_BRIDGE_APNS_KEY_FILE`, `PUSH_BRIDGE_APNS_KEY_ID`, `PUSH_BRIDGE_APNS_TEAM_ID`, `PUSH_BRIDGE_APNS_TOPIC` | Required when an APNs sender is initialized. Topic is the base bundle topic; code appends `.voip`. |
@@ -226,7 +243,8 @@ is normalized. The candidate does not hard-code the common 32-byte device-token
 length. These resource limits and prefix contract still need mobile acceptance
 before release. Forwarded data is capped at 3072 UTF-8 JSON bytes;
 APNs payloads are capped at 4096 bytes. The APNs transport candidate below adds
-response bounds; FCM response bounds remain open.
+response bounds; FCM now closes responses without reading their bodies. OAuth
+refresh and whole-operation deadlines remain open.
 
 Root-owned source regression command (not run by the editing agent):
 
@@ -337,8 +355,9 @@ helper can try multiple resolved addresses before returning. The budget is
 checked immediately afterward, but cannot cancel a stuck resolver or CPU/library
 operation. This is a shared I/O budget, not a hard whole-worker wall-time bound.
 Resolver/cancellation and full worker-shutdown acceptance remain mandatory.
-FCM redirect handling, bounded response reads/token refresh, durable retry,
-broker TLS, dependency pins and installer/service readiness are unchanged.
+FCM redirect/body handling is covered by the later checkpoint above. Token
+refresh, durable retry and broker TLS remain open; dependency pins and the
+development installer/service readiness are verified separately above.
 
 Root-owned isolated fixture command (not run by the editing agent):
 
@@ -372,8 +391,8 @@ Other imports are Python standard-library modules (`base64`, `binascii`, `concur
 
 1. **Delivery loss and duplicates:** owner-thread positive-result-only ACK is now a source candidate, not full delivery acceptance. Define terminal rejection versus transient failure, bounded expiry-aware durable retry/dead-letter behavior and stable delivery identity; prove broker durability, ACK/channel ownership, reconnect and duplicate behavior with the pinned real library before activation. The current fail-closed/manual-recovery policy is not production availability. An HTTP 200 only means provider acceptance, not delivery to the phone.
 2. **Bounded work and shutdown:** per-generation admission is now capped and unsettled generations cannot reconnect automatically, but worker completion still lacks a total deadline. Google token refresh has no explicitly supplied timeout. Shared `requests.Session` thread behavior is unproven. The watchdog measures broker-loop progress, not worker completion. Signal shutdown stops without draining and force-exits after three seconds; a fatal settlement return can still wait for hung executor threads at interpreter shutdown. Add total operation deadlines, bounded cancellation/drain and shutdown tests. Do not solve loss with an unbounded requeue loop.
-3. **Input and response limits:** strict input normalization and outgoing payload caps have offline coverage, but mobile compatibility acceptance remains open. Malformed messages fail closed unacknowledged and require a reviewed poison-message policy. APNs caps and protocol fixtures pass23 offline tests and are in the development release; FCM still eagerly buffers responses. Verify pinned parser/decompression limits and add FCM response caps before production acceptance.
-4. **Transport/configuration security:** AMQP TLS is not configured and FCM requests follow redirects. Numeric settings and initial provider endpoints are constrained. Protected credential permissions and the least-privilege service are now installed and verified. Finish TLS/redirect policy and remote-broker acceptance. Never reuse the production AMQP authority in a development consumer or copy the inline production unit into Git.
+3. **Input and response limits:** strict input normalization and outgoing payload caps have offline coverage, but mobile compatibility acceptance remains open. Malformed messages fail closed unacknowledged and require a reviewed poison-message policy. APNs caps and protocol fixtures pass23 offline tests. FCM closes responses without reading their bodies, including redirects, with six pinned-Requests adapter tests. OAuth response parsing and total operation bounds still need review before production acceptance.
+4. **Transport/configuration security:** AMQP TLS is not configured. FCM3xx are rejected before redirect/body processing. Numeric settings and initial provider endpoints are constrained. Protected credential permissions and the least-privilege service are installed and verified. Finish TLS and remote-broker acceptance. Never reuse the production AMQP authority in a development consumer or copy the inline production unit into Git.
 5. **APNs lifecycle:** a failed lazy initialization is cached permanently until process restart. Monotonic token-cache/request budgets, actual response stream completion, and TLS-failure socket cleanup have offline coverage and are deployed in the isolated development consumer. Platform resolver/CPU cancellation remains outside the socket budget. Actual configured production/sandbox keys load offline with pinned SDKs, but provider authorization is unverified. Test initialization recovery, real HTTP/2 partial responses/GOAWAY, total worker bounds and duplicate semantics. No end-to-end delivery evidence exists.
 
 Dependency pins, the protected service and listed offline regressions are now present. Before broader activation, resolve the remaining reliability/security gaps and complete broker recovery and designated-device acceptance. Provider credentials alone do not identify an authorized test device. The development installation above is not production approval.

@@ -6,6 +6,18 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Latest bridge transport checkpoint:** FCM sends reject3xx in a response hook
+before Requests redirect preparation and close streamed responses without
+reading bodies. Six real pinned-Requests/fake-adapter tests pass (`be4d36`),
+prior79 bridge tests plus installer dispatch pass (`a6ee6e/73b78f`). Main-SH
+deployment `515d94/1f29eb` passes and retains previous release; current release
+`/usr/local/lib/kazoo-push-bridge/releases/8b6eb7b60923ba295b0ecc074c0ebf78835bbaa201360211fb87c7bb29745d23`.
+Service enabled/active consumer PID111917, automatic restarts0, all eight core
+services active (`82056a`). No real pushes or production changes. OAuth refresh,
+whole-operation bounds, shared-session concurrency, durable recovery/retry,
+broker TLS and designated-device ringing remain open. Callback/media checkpoint
+committed/pushed to master194442e (`36c153`, `41c73d/4cbbd6`).
+
 **Latest callback deployment:** four account-local callback modules are live,
 not the other nine modules in the13-module candidate. `d116f0/6c6bb3` atomic
 binary promotion passes installed/loaded hashes; previous code retained at
