@@ -1,0 +1,119 @@
+diff --git a/kazoo_bindings/src/kazoo_bindings.erl b/kazoo_bindings/src/kazoo_bindings.erl
+index bbd9a8798..cbb12f196 100644
+--- a/kazoo_bindings/src/kazoo_bindings.erl
++++ b/kazoo_bindings/src/kazoo_bindings.erl
+@@ -672,14 +672,14 @@ fold_bind_results([#kz_responder{module=M
+         'eoq' ->
+             lager:debug("putting ~s to eoq", [M]),
+             fold_bind_results(Responders, Payload, Route, RespondersLen, [Responder|ReRunResponders]);
+-        {'error', _E}=E ->
+-            lager:debug("error: ~p", [_E]),
++        {'error', _}=E ->
++            log_binding_exception('returned_error', M, F, length(Payload), []),
+             E;
+         {'EXIT', {'undef', [{_M, _F, _A, _}|_]}} ->
+             lager:debug("undefined function ~s:~s/~b", [M, F, length(Payload)]),
+             fold_bind_results(Responders, Payload, Route, RespondersLen, ReRunResponders);
+-        {'EXIT', _E} ->
+-            lager:error("~s:~s/~p died unexpectedly: ~p", [M, F, length(Payload), _E]),
++        {'EXIT', _} ->
++            log_binding_exception('returned_exit', M, F, length(Payload), []),
+             fold_bind_results(Responders, Payload, Route, RespondersLen, ReRunResponders);
+         'ok' ->
+             fold_bind_results(Responders, Payload, Route, RespondersLen, ReRunResponders);
+@@ -692,9 +692,8 @@ fold_bind_results([#kz_responder{module=M
+         'error':'undef':ST ->
+             log_undefined(M, F, length(Payload), ST),
+             fold_bind_results(Responders, Payload, Route, RespondersLen, ReRunResponders);
+-        _T:_E:ST ->
+-            lager:error("excepted: ~s: ~p", [_T, _E]),
+-            kz_log:log_stacktrace(ST),
++        Class:_:ST ->
++            log_binding_exception(Class, M, F, length(Payload), ST),
+             fold_bind_results(Responders, Payload, Route, RespondersLen, ReRunResponders)
+     end;
+ fold_bind_results([#kz_responder{}=_R | Responders]
+@@ -718,31 +717,45 @@ fold_bind_results([], Payload, Route, RespondersLen, ReRunResponders) ->
+     end.
+ 
+ -spec log_undefined(module(), responder_fun(), non_neg_integer(), kz_log:stacktrace()) -> 'ok'.
+-log_undefined(M, F, Length, [{M, F, _Args,_}|_]) ->
+-    ?LOG_DEBUG("undefined function ~s:~s/~b", [M, F, Length]);
+-log_undefined(M, F, Length, [{RealM, RealF, RealArgs,_}|_]) ->
+-    ?LOG_DEBUG("undefined function ~s:~s/~b", [RealM, RealF, length(RealArgs)]),
+-    ?LOG_DEBUG("in call ~s:~s/~b", [M, F, Length]);
+ log_undefined(M, F, Length, ST) ->
+-    ?LOG_DEBUG("undefined function ~s:~s/~b", [M, F, Length]),
+-    kz_log:log_stacktrace(ST).
++    log_binding_exception('undef', M, F, Length, ST).
+ 
+ -spec log_function_clause(module(), responder_fun(), non_neg_integer(), kz_log:stacktrace()) -> 'ok'.
+-log_function_clause(M, F, Length, [{M, F, _Args, _}|_]) ->
+-    ?LOG_INFO("unable to find function clause for ~s:~s/~b", [M, F, Length]);
+-log_function_clause(M, F, Length, [{RealM, RealF, RealArgs, Where}|_ST]) ->
+-    ?LOG_ERROR("unable to find function clause for ~s:~s(~s) in ~s:~p"
+-              ,[RealM, RealF
+-               ,kz_binary:join([kz_term:to_binary(io_lib:format("~p",[A])) || A <- RealArgs], <<", ">>)
+-               ,props:get_value('file', Where), props:get_value('line', Where)
+-               ]
+-              ),
+-    ?LOG_ERROR("as part of ~s:~s/~p", [M, F, Length]),
+-    _ = [?LOG_ERROR("st: ~p", [ST]) || ST <- _ST],
+-    'ok';
+-log_function_clause(M, F, Lenth, ST) ->
+-    ?LOG_ERROR("no matching function clause for ~s:~s/~p", [M, F, Lenth]),
+-    kz_log:log_stacktrace(ST).
++log_function_clause(M, F, Length, ST) ->
++    log_binding_exception('function_clause', M, F, Length, ST).
++
++%% Exception terms, argument values and frame metadata can contain credentials
++%% or entire request contexts. Keep bounded MFA diagnostics only. An exception
++%% in the logging backend must not escape the responder's existing catch path.
++-spec log_binding_exception(atom(), module(), responder_fun(), non_neg_integer(), any()) -> 'ok'.
++log_binding_exception(Class, M, F, Arity, ST) ->
++    try lager:error("binding responder failure (~p): ~p; frames: ~p"
++                   ,[Class, {diagnostic_name(M), diagnostic_name(F), diagnostic_arity(Arity)}
++                    ,diagnostic_frames(ST, 8)])
++    catch _:_ -> 'ok' end,
++    'ok'.
++
++-spec diagnostic_name(any()) -> atom().
++diagnostic_name(Name) when is_atom(Name) -> Name;
++diagnostic_name(_) -> 'anonymous'.
++
++-spec diagnostic_arity(any()) -> non_neg_integer() | 'unknown'.
++diagnostic_arity(Arity) when is_integer(Arity), Arity >= 0, Arity =< 255 -> Arity;
++diagnostic_arity(Args) -> diagnostic_arg_count(Args, 0).
++
++-spec diagnostic_arg_count(any(), non_neg_integer()) -> non_neg_integer() | 'unknown'.
++diagnostic_arg_count([], N) -> N;
++diagnostic_arg_count([_|Rest], N) when N < 255 -> diagnostic_arg_count(Rest, N + 1);
++diagnostic_arg_count(_, _) -> 'unknown'.
++
++-spec diagnostic_frames(any(), non_neg_integer()) -> list().
++diagnostic_frames(_, 0) -> [];
++diagnostic_frames([{M, F, Args, _}|Rest], N) ->
++    [{diagnostic_name(M), diagnostic_name(F), diagnostic_arity(Args)}|diagnostic_frames(Rest, N - 1)];
++diagnostic_frames([{M, F, Args}|Rest], N) ->
++    [{diagnostic_name(M), diagnostic_name(F), diagnostic_arity(Args)}|diagnostic_frames(Rest, N - 1)];
++diagnostic_frames([_|Rest], N) -> ['unknown'|diagnostic_frames(Rest, N - 1)];
++diagnostic_frames(_, _) -> [].
+ 
+ -spec map_processor(kz_term:ne_binary(), payload(), kz_rt_options()) -> map_results().
+ map_processor(<<Routing/binary>>, Payload, Options) when not is_list(Payload) ->
+@@ -865,12 +878,10 @@ apply_map_responder(#kz_responder{module=M
+             maybe_log_undefined(M, F, Payload, ST),
+             {'EXIT', {'undef', ST}};
+         'error':Exp:ST ->
+-            lager:error("exception: error:~p", [Exp]),
+-            kz_log:log_stacktrace(ST),
++            log_binding_exception('error', M, F, length(Payload), ST),
+             {'EXIT', {Exp, ST}};
+-        _Type:Exp:ST ->
+-            lager:error("exception: ~s:~p", [_Type, Exp]),
+-            kz_log:log_stacktrace(ST),
++        Class:Exp:ST ->
++            log_binding_exception(Class, M, F, length(Payload), ST),
+             {'EXIT', Exp}
+     end.
+ 

@@ -6,6 +6,14 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**P0-16 source checkpoint:** binding exception logger fix is captured by the
+installer-owned `kazoo-bindings-exception-diagnostics.patch`, not a nested core
+commit. Current599852 passed8 groups; pinned baseline35d013 failed8 with actual
+integer-arity logging exceptions and disclosure cases. Production transformed
+compilation and exact installer replay passed; runtime sink assertions are
+offline and untransformed. No deployment. See
+`doc/kazoo_bindings_exception_diagnostics.md` for paths, scope and next gate.
+
 **Latest live PASS (September7):** guarded job a0d26078 passed the combined
 actual-browser/call mode on the deployed nUolDS build. Evidence:
 `/var/log/kazoo-strategy-acceptance-elItb6/` and

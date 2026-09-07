@@ -1594,6 +1594,7 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-jwt-malformed-input.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-dataplan-log-redaction.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-stacktrace-argument-redaction.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-bindings-exception-diagnostics.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-amqp-originate-reconcile.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-registration-collection.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-channel-monitoring.patch"
