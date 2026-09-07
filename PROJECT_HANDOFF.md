@@ -16,10 +16,22 @@ regression; actual resolved inventory is 412 generated + 2 reused, 170 missing.
 See `doc/acdc_cardinal_reuse_import_integration.md`; staging is not deployment.
 The separate 3.1 model experiment and exact private receipts are documented in
 `doc/acdc_cardinal_31_model_trial.md`; trial calls do not alter the legacy counts.
-Trial-only MIME compatibility passed526 offline checks and three actual clips
-(HE30/AR4/ES13), with six WAVs saved under the separate model-trial assets.
-Four total trial requests include the initial rejected-format response. Do not
-regenerate these successes or relabel them as 2.5/runtime-approved recordings.
+Trial-only MIME compatibility and narrow diagnostic passed637 offline checks.
+There are now31 separate QA candidates/62 WAVs and32 additional trial requests
+in12 saved receipts.
+Spanish artifact coverage is53/53 (25 original+26 model-trial+2 exact aliases).
+No mixed-model runtime deployment or listening approval is claimed. Candidate
+verifier447 checks and planner204 checks pass; see
+`doc/acdc_cardinal_model_recovery.md`. Do not regenerate these successes or
+relabel them as 2.5/runtime-approved recordings.
+FR89 one-shot succeeded. EN/ES/FR technical artifact coverage complete, HE95/131 and AR105/208
+still incomplete. See `doc/acdc_cardinal_fr89_one_shot.md`. The fixed private
+FR89 reservation is permanently consumed; do not remove or reset it.
+Mixed-model staging importer passes23 groups/8,016 checks. See
+`doc/acdc_cardinal_model_trial_staging.md` for index/provenance contracts.
+It stages candidates only, not runtime or listening approval.
+Actual ES53/FR161 read-only plans pass `cd6452/f2a5bf`,0 unresolved and no
+provider/database requests; exact candidate hashes are in that staging document.
 Safe prompt-feedback diagnostics are implemented and pass19 groups/377 checks
 (`a40011/893835`) without real provider calls. No speculative transcript change
 or additional identical retry batch was started.

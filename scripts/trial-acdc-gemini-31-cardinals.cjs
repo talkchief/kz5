@@ -7,6 +7,7 @@ const fs = require('node:fs'), path = require('node:path'), crypto = require('no
 const https = require('node:https'), cp = require('node:child_process');
 const pack = require('./acdc-cardinal-pack.cjs');
 const author = require('./generate-acdc-gemini-cardinal-pack.cjs');
+const fr89 = require('./acdc-cardinal-fr89-one-shot-policy.cjs');
 const MODEL = 'gemini-3.1-flash-tts-preview', VOICE = 'Sulafat';
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024, REQUEST_TIMEOUT_MS = 90000;
@@ -46,6 +47,8 @@ function options(argv) {
     const arg = argv[i]; check(!seen.has(arg), 'DUPLICATE_OPTION'); seen.add(arg);
     if (['--plan', '--generate'].includes(arg)) {
       check(!seen.has('mode'), 'CONFLICTING_MODES'); seen.add('mode'); o.mode = arg.slice(2);
+    } else if (arg === '--fr89-model-diagnostic-once') {
+      o.fr89Once = true;
     } else {
       check(Object.hasOwn(flags, arg) && argv[i + 1] && !argv[i + 1].startsWith('--'), 'INVALID_OPTION');
       o[flags[arg]] = argv[++i];
@@ -53,21 +56,30 @@ function options(argv) {
   }
   if (typeof o.identities === 'string') o.identities = o.identities.split(',');
   check(absolute(o.source) && sha(o.sourceHash) && sha(o.approvalHash), 'PINNED_SOURCE_AND_APPROVAL_REQUIRED');
-  check(Array.isArray(o.identities) && o.identities.length >= 1 && o.identities.length <= 3
-    && new Set(o.identities).size === o.identities.length
-    && o.identities.every(id => typeof id === 'string' && /^(he-il|ar-sa|es-es)\/acdc-cardinal-v1-[a-z0-9-]+$/.test(id)),
-  'SELECT_ONE_TO_THREE_EXACT_FAILED_IDENTITIES');
+  validateIdentities(o);
   check(o.mode === 'generate' ? absolute(o.output) && absolute(o.keyFile) : o.output === undefined && o.keyFile === undefined,
     'OUTPUT_AND_KEY_ONLY_FOR_EXPLICIT_GENERATION');
   return o;
+}
+function validateIdentities(o) {
+  check(o.fr89Once === undefined || o.fr89Once === true, 'INVALID_ONE_SHOT_OPTION');
+  check(Array.isArray(o.identities) && o.identities.length >= 1 && o.identities.length <= 3
+    && new Set(o.identities).size === o.identities.length
+    && (o.fr89Once ? o.identities.length === 1 && o.identities[0] === fr89.identity
+      : o.identities.every(id => typeof id === 'string' && /^(he-il|ar-sa|es-es)\/acdc-cardinal-v1-[a-z0-9-]+$/.test(id))),
+  'SELECT_ONE_TO_THREE_EXACT_FAILED_IDENTITIES');
+  if (o.fr89Once) {
+    check(o.sourceHash === fr89.source_manifest_sha256 && o.approvalHash === fr89.approvals_sha256,
+      'ONE_SHOT_SOURCE_PINS_CHANGED');
+    check(o.mode !== 'generate' || o.output === fr89.reservation_directory, 'ONE_SHOT_RESERVATION_PATH_REQUIRED');
+  }
 }
 function selection(o) {
   // Revalidate public function inputs as well as CLI inputs. This does not
   // import the credential/provider helper, create output, or call a provider.
   check(['plan', 'generate'].includes(o.mode) && absolute(o.source) && sha(o.sourceHash) && sha(o.approvalHash), 'INVALID_TRIAL_OPTIONS');
-  check(Array.isArray(o.identities) && o.identities.length >= 1 && o.identities.length <= 3
-    && new Set(o.identities).size === o.identities.length && o.identities.every(id => typeof id === 'string'
-      && /^(he-il|ar-sa|es-es)\/acdc-cardinal-v1-[a-z0-9-]+$/.test(id)), 'SELECT_ONE_TO_THREE_EXACT_FAILED_IDENTITIES');
+  validateIdentities(o);
+  if (o.fr89Once) check(absent(fr89.reservation_directory), 'ONE_SHOT_ALREADY_RESERVED');
   const sourceFile = path.join(o.source, 'manifest.json');
   const unchanged = () => {
     check(absent(path.join(o.source, '.generation.lock')), 'SOURCE_AUTHORING_IN_PROGRESS');
@@ -80,8 +92,14 @@ function selection(o) {
     const entry = manifest.prompts.find(p => `${p.locale}/${p.id}` === identity);
     check(entry && entry.generation_status === 'FAILED' && entry.attempts.length > 0
       && entry.attempts.at(-1).status === 'FAILED', 'TARGET_NOT_FAILED');
-    check(entry.attempts.length < pack.HARD_MAX_ATTEMPTS, 'SOURCE_ATTEMPT_CAP_REACHED');
     const body = pack.requestBody(entry, pack.CONCISE_SYNTHESIS_RECIPE);
+    if (o.fr89Once) {
+      check(entry.attempts.length === fr89.source_attempt_count && entry.attempts.every(a => a.status === 'FAILED')
+        && pack.digest(entry) === fr89.source_entry_sha256 && pack.digest(entry.attempts) === fr89.source_attempts_sha256
+        && entry.transcript_sha256 === fr89.transcript_sha256 && hash(JSON.stringify(body)) === fr89.request_body_sha256
+        && MODEL === fr89.model && VOICE === fr89.voice && fr89.model_request_limit === 1,
+      'ONE_SHOT_SOURCE_HISTORY_CHANGED');
+    } else check(entry.attempts.length < pack.HARD_MAX_ATTEMPTS, 'SOURCE_ATTEMPT_CAP_REACHED');
     return {identity, entry, body};
   });
   pack.requireAuthoringApproval(manifest, [...new Set(rows.map(row => row.entry.locale))], o.approvalHash);
@@ -90,6 +108,7 @@ function selection(o) {
 function plan(o) {
   const {manifest, rows} = selection(o);
   return {owner: OWNER, mode: 'PLAN_ONLY_NO_PROVIDER', model: MODEL, voice: VOICE, endpoint: ENDPOINT,
+    ...(o.fr89Once ? {one_shot_diagnostic: {...fr89}} : {}),
     source_model: manifest.model, source_manifest_sha256: o.sourceHash, approvals_sha256: o.approvalHash,
     selected: rows.map(({identity, entry, body}) => ({identity, transcript: entry.transcript,
       transcript_sha256: entry.transcript_sha256, source_entry_sha256: pack.digest(entry),
@@ -223,7 +242,14 @@ async function generate(o, deps = {}) {
   // Key failure cannot strand a new output; it is never read during a plan.
   let key = (deps.readKey || helper.readProtectedKey)(o.keyFile);
   selected.unchanged();
-  fs.mkdirSync(o.output, {mode: 0o700}); sync(path.dirname(o.output));
+  // Atomic mkdir is the one-shot reservation: a concurrent call loses before
+  // any provider request. Never remove it on failure, interruption or success.
+  try { fs.mkdirSync(o.output, {mode: 0o700}); }
+  catch (error) {
+    if (o.fr89Once && error.code === 'EEXIST') throw new TrialError('ONE_SHOT_ALREADY_RESERVED');
+    throw error;
+  }
+  sync(path.dirname(o.output));
   const root = fs.lstatSync(o.output), ledgerFile = path.join(o.output, 'trial.json');
   const checkRoot = () => {
     const now = fs.lstatSync(o.output);
@@ -231,6 +257,7 @@ async function generate(o, deps = {}) {
       && !(now.mode & 0o077) && fs.realpathSync(o.output) === o.output, 'TRIAL_DIRECTORY_CHANGED');
   };
   const ledger = {schema_version: 1, owner: OWNER, status: 'PREPARED', created_at: new Date().toISOString(),
+    ...(o.fr89Once ? {one_shot_diagnostic: {...fr89}} : {}),
     provider: 'google-gemini', model: MODEL, voice: VOICE, endpoint: ENDPOINT,
     source_model: selected.manifest.model, source_manifest_sha256: o.sourceHash,
     source_requests_reserved: selected.manifest.requests_reserved, source_retry_budget: selected.manifest.retry_request_budget,

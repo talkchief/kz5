@@ -5,7 +5,9 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), path = re
 const os = require('node:os'), crypto = require('node:crypto'), https = require('node:https');
 const {EventEmitter} = require('node:events');
 const {spawnSync} = require('node:child_process');
+const Module = require('node:module');
 const trial = require('./trial-acdc-gemini-31-cardinals.cjs'), pack = require('./acdc-cardinal-pack.cjs');
+const fr89 = require('./acdc-cardinal-fr89-one-shot-policy.cjs');
 const samples = require('./generate-acdc-gemini-samples.cjs');
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const SENTINEL = 'SYNTHETIC_PROVIDER_KEY_MUST_NEVER_BE_PERSISTED';
@@ -15,7 +17,7 @@ const realRequest = https.request; https.request = () => assert.fail('REAL HTTPS
 let checks = 0, sequence = 0;
 const equal = (a, b) => { checks++; assert.deepEqual(a, b); };
 async function rejects(fn, code) { checks++; await assert.rejects(fn, e => !code || e.code === code); }
-function sourceFixture(locale = 'he-il', n = 1, attempts = 1) {
+function sourceFixture(locale = 'he-il', n = 1, attempts = 1, exactId) {
   const dir = path.join(root, `source-${++sequence}`); fs.mkdirSync(dir, {mode: 0o700});
   const m = pack.createManifest();
   for (const approval of m.approvals) {
@@ -24,7 +26,7 @@ function sourceFixture(locale = 'he-il', n = 1, attempts = 1) {
       transcript_sha256: hash('SYNTHETIC ONLY'), wav_sha256: hash('synthetic wave')});
   }
   m.approvals_sha256 = pack.digest(m.approvals);
-  const selected = m.prompts.filter(p => p.locale === locale).slice(0, n);
+  const selected = m.prompts.filter(p => p.locale === locale && (!exactId || p.id === exactId)).slice(0, n);
   for (const entry of selected) {
     const body = pack.requestBody(entry);
     entry.generation_status = 'FAILED';
@@ -69,6 +71,30 @@ function dependencies(o, behavior = async () => response()) {
   }};
 }
 const noAccess = {loadHelper() { assert.fail('helper/key/provider load before preflight'); }};
+function isolatedPolicyModule(file, policy) {
+  // Test-only module loader: use a synthetic source pin and temporary once-path.
+  // Production exports expose no policy/endpoint/output override dependency.
+  const originalLoad=Module._load, isolated=new Module(file,module);
+  isolated.filename=file;isolated.paths=module.paths;
+  try {
+    Module._load=function(request,parent,...rest) {
+      if(parent===isolated && request==='./acdc-cardinal-fr89-one-shot-policy.cjs')return Object.freeze({...policy});
+      return originalLoad.call(this,request,parent,...rest);
+    };
+    isolated._compile(fs.readFileSync(file,'utf8'),file);return isolated.exports;
+  } finally {Module._load=originalLoad;}
+}
+function oneShotFixture() {
+  const f=sourceFixture('fr-fr',1,6,'acdc-cardinal-v1-terminal-89'),entry=f.selected[0];
+  const policy={...fr89,source_manifest_sha256:hash(fs.readFileSync(f.file)),approvals_sha256:f.m.approvals_sha256,
+    source_entry_sha256:pack.digest(entry),source_attempts_sha256:pack.digest(entry.attempts),
+    reservation_directory:path.join(root,`one-shot-${++sequence}`)};
+  const subject=isolatedPolicyModule(require.resolve('./trial-acdc-gemini-31-cardinals.cjs'),policy);
+  const args=['--fr89-model-diagnostic-once','--source-pack',f.dir,'--source-manifest-sha256',policy.source_manifest_sha256,
+    '--approval-sha256',policy.approvals_sha256,'--identities',policy.identity];
+  return {f,policy,subject,plan:subject.options(args),generate:subject.options([...args,'--generate',
+    '--output',policy.reservation_directory,'--key-file',path.join(root,'never-read.key')])};
+}
 function files(dir) { return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? files(path.join(dir, e.name)) : [path.join(dir, e.name)]); }
 function fakeHttp(spec, inspect = () => {}) {
   return (url, opts, callback) => {
@@ -197,7 +223,7 @@ Module._load=function(request,...rest){
   }
   const safeFailure='Cardinal model trial stopped safely; inspect its separate trial ledger. Original history and runtime were not modified.\n';
   for(const args of [[],['--unknown',SENTINEL],['--plan',...cliArgs,'--key-file',SENTINEL],
-    ['--plan','--generate',...cliArgs]]) {
+    ['--plan','--generate',...cliArgs],['--fr89-model-diagnostic-once',...cliArgs]]) {
     const result=cli(args);
     equal(result.status,1);equal(result.stdout,'');equal(result.stderr,safeFailure);
   }
@@ -324,6 +350,75 @@ Module._load=function(request,...rest){
     fs.appendFileSync(changed.file,' '); return response();
   });
   await rejects(()=>trial.generate(changedOptions,changedDeps),'SOURCE_MANIFEST_PIN_CHANGED'); equal(changedDeps.counts.requests,1);
+
+  // The production exception pins the exact original six failed requests.
+  const originalBytes=fs.readFileSync(path.join(__dirname,'assets/acdc-gemini-cardinals-20260907/manifest.json'));
+  const originalManifest=JSON.parse(originalBytes),originalFr=originalManifest.prompts.find(e=>`${e.locale}/${e.id}`===fr89.identity);
+  equal(hash(originalBytes),fr89.source_manifest_sha256);equal(originalManifest.approvals_sha256,fr89.approvals_sha256);
+  equal(pack.digest(originalFr),fr89.source_entry_sha256);equal(pack.digest(originalFr.attempts),fr89.source_attempts_sha256);
+  equal(originalFr.attempts.length,6);equal(originalFr.attempts.every(a=>a.status==='FAILED'),true);
+  equal(originalFr.transcript,'quatre-vingt-neuf');equal(originalFr.transcript_sha256,fr89.transcript_sha256);
+  equal(hash(JSON.stringify(pack.requestBody(originalFr,pack.CONCISE_SYNTHESIS_RECIPE))),fr89.request_body_sha256);
+  equal(fr89.reservation_directory,'/usr/local/src/kazoo5-installer/acdc-cardinal-fr89-gemini31-once-20260907');
+  equal(fr89.model,trial.MODEL);equal(fr89.voice,trial.VOICE);equal(fr89.model_request_limit,1);equal(pack.HARD_MAX_ATTEMPTS,6);
+  const once=oneShotFixture(), onceSource=fs.readFileSync(once.f.file), onceFiles=files(root);
+  const oncePlan=once.subject.plan(once.plan);
+  equal(oncePlan.one_shot_diagnostic,once.policy);equal(oncePlan.requests_maximum,1);
+  equal(oncePlan.selected[0].source_attempt_count,6);equal(files(root),onceFiles);
+  for(const change of [{fr89Once:undefined},{fr89Once:false},{identities:[p.identities[0]]},
+    {identities:[once.policy.identity,p.identities[0]]},{identities:['fr-fr/acdc-cardinal-v1-terminal-88']},
+    {sourceHash:'0'.repeat(64)},{approvalHash:'0'.repeat(64)}])
+    await rejects(async()=>once.subject.plan({...once.plan,...change}));
+  await rejects(()=>once.subject.generate({...once.generate,output:path.join(root,'relocated-once')},noAccess),
+    'ONE_SHOT_RESERVATION_PATH_REQUIRED');
+  const onceDeps=dependencies(once.generate,async({body})=>{
+    const reserved=JSON.parse(fs.readFileSync(path.join(once.policy.reservation_directory,'trial.json')));
+    equal(reserved.one_shot_diagnostic,once.policy);equal(reserved.request_limit,1);equal(reserved.requests_reserved,1);
+    equal(reserved.entries[0].status,'REQUESTING');equal(reserved.entries[0].source_attempt_count,6);
+    equal(reserved.entries[0].source_attempt_count_plus_this_trial,7);
+    equal(hash(JSON.stringify(body)),once.policy.request_body_sha256);return response();
+  });
+  await once.subject.generate(once.generate,onceDeps);equal(onceDeps.counts.requests,1);
+  const onceLedger=JSON.parse(fs.readFileSync(path.join(once.policy.reservation_directory,'trial.json')));
+  equal(onceLedger.entries[0].status,'QA_PASSED');equal(onceLedger.one_shot_diagnostic,once.policy);
+  equal(fs.readFileSync(once.f.file),onceSource);
+  await rejects(()=>once.subject.generate(once.generate,noAccess),'ONE_SHOT_ALREADY_RESERVED');
+  await rejects(async()=>once.subject.plan(once.plan),'ONE_SHOT_ALREADY_RESERVED');
+  const failedOnce=oneShotFixture(), failedOnceBefore=fs.readFileSync(failedOnce.f.file);
+  const failedOnceDeps=dependencies(failedOnce.generate,async()=>{
+    throw new trial.TrialError('GEMINI_REQUEST_TIMED_OUT');
+  });
+  await rejects(()=>failedOnce.subject.generate(failedOnce.generate,failedOnceDeps));
+  equal(failedOnceDeps.counts.requests,1);
+  equal(JSON.parse(fs.readFileSync(path.join(failedOnce.policy.reservation_directory,'trial.json'))).status,'STOPPED_ON_FAILURE');
+  equal(fs.readFileSync(failedOnce.f.file),failedOnceBefore);
+  await rejects(()=>failedOnce.subject.generate(failedOnce.generate,noAccess),'ONE_SHOT_ALREADY_RESERVED');
+  const noKey=oneShotFixture(),noKeyDeps=dependencies(noKey.generate);
+  noKeyDeps.readKey=()=>{throw new Error(SENTINEL);};
+  await rejects(()=>noKey.subject.generate(noKey.generate,noKeyDeps));equal(noKeyDeps.counts.requests,0);
+  equal(fs.existsSync(noKey.policy.reservation_directory),false);
+  equal(noKey.subject.plan(noKey.plan).requests_maximum,1);
+  // Interruption or failure at ANY stage after mkdir consumes the reservation,
+  // even before a ledger exists. No cleanup/resume/retry option reopens it.
+  for(const state of [null,'PREPARED','IN_PROGRESS','STOPPED_ON_FAILURE','TRIAL_QA_COMPLETE_NOT_APPROVED']) {
+    const interrupted=oneShotFixture();fs.mkdirSync(interrupted.policy.reservation_directory,{mode:0o700});
+    if(state)fs.writeFileSync(path.join(interrupted.policy.reservation_directory,'trial.json'),JSON.stringify({status:state}),{mode:0o600});
+    await rejects(()=>interrupted.subject.generate(interrupted.generate,noAccess),'ONE_SHOT_ALREADY_RESERVED');
+  }
+  const raced=oneShotFixture(), raceDeps=dependencies(raced.generate);
+  raceDeps.readKey=()=>{fs.mkdirSync(raced.policy.reservation_directory,{mode:0o700});return SENTINEL;};
+  await rejects(()=>raced.subject.generate(raced.generate,raceDeps),'ONE_SHOT_ALREADY_RESERVED');equal(raceDeps.counts.requests,0);
+  for(const key of ['source_entry_sha256','source_attempts_sha256','transcript_sha256','request_body_sha256']) {
+    const changedOnce=oneShotFixture(),subject=isolatedPolicyModule(require.resolve('./trial-acdc-gemini-31-cardinals.cjs'),
+      {...changedOnce.policy,[key]:'0'.repeat(64)});
+    await rejects(async()=>subject.plan(changedOnce.plan),'ONE_SHOT_SOURCE_HISTORY_CHANGED');
+  }
+  for(const count of [5,7]) {
+    const changedOnce=oneShotFixture(),subject=isolatedPolicyModule(require.resolve('./trial-acdc-gemini-31-cardinals.cjs'),
+      {...changedOnce.policy,source_attempt_count:count});
+    await rejects(async()=>subject.plan(changedOnce.plan),'ONE_SHOT_SOURCE_HISTORY_CHANGED');
+  }
+  equal(fs.readFileSync(path.join(__dirname,'assets/acdc-gemini-cardinals-20260907/manifest.json')),originalBytes);
 
   equal(trial.REQUEST_TIMEOUT_MS,90000); equal(trial.MAX_RESPONSE_BYTES,2*1024*1024);
   let transports=0;

@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "owner": "kazoo5-acdc-cardinal-model-trial-index",
+  "source_manifest_sha256": "9c97120495c327a66644330d222ae7d4705402c40b1f97b6696a486e4a5d0398",
+  "catalog_sha256": "5703e649a1f5a2bcd0c00e9e19bf4424e024c85648452dba0d190bcf73088134",
+  "approvals_sha256": "452b815a65f726e4d221b2585f61162fae0a1c43d6fb1370a0f27bb3a37b8ea5",
+  "trials": [
+    {
+      "directory": "format-rejected",
+      "sha256": "8b2fa867de24a6e389a5f26465e7105452be3988a7b9c483c0cc34930dd08936"
+    },
+    {
+      "directory": "format-compatible",
+      "sha256": "4b0cb5b5e097d2a829d19945664cca70d912e9400b8a2ee357e9ad3f899e06b9"
+    },
+    {
+      "directory": "es-batch1",
+      "sha256": "c3ccbb5a990a1e14c9f9b0ccfbe8a7bbdb54bfd163aeef90bdc463fe3be0297c"
+    },
+    {
+      "directory": "es-batch2",
+      "sha256": "8be8a8019d9deab8082549cccb2c240deceea3a3d32a34433b2c9b5823923f9b"
+    },
+    {
+      "directory": "es-batch3",
+      "sha256": "b45661158576d5a9638f892acbdb49ae850babc5ee6e48228d5ecad603e715cf"
+    },
+    {
+      "directory": "es-batch4",
+      "sha256": "a95854728bd188805d4bf50338db65d578b55e3d0da569d34629f9c9ac3280f0"
+    },
+    {
+      "directory": "es-batch5",
+      "sha256": "92546e0e2c42988c765d8a0eb3a4feb3a76d7b0eb62456e7d75f735233232046"
+    },
+    {
+      "directory": "es-batch6",
+      "sha256": "1c8bc8099fdff285e240f06acc3e06a6c8f5d9ffc45b21848743589e673ed4fd"
+    },
+    {
+      "directory": "es-batch7",
+      "sha256": "0dc30c9633596abf6c1d75418e7a081aa8b62683be563ecd7e516a56ff0e5a4b"
+    },
+    {
+      "directory": "es-batch8",
+      "sha256": "1a2ceb5bc03b21f24757618195c5d67b666b56f5f622640c4ce4729452d6207d"
+    },
+    {
+      "directory": "es-final-he-start",
+      "sha256": "00c3a9bd8f577d7d0b64491edab3f0b6b0e17f8e0fcdea31c2a82dca81791c82"
+    },
+    {
+      "directory": "fr89-once",
+      "sha256": "6e3a4976cafc2c708f3efaa7734af8e853d6828c5735c0d58f5906e13d965844"
+    }
+  ],
+  "runtime_ready": false,
+  "native_listening_approved": false
+}

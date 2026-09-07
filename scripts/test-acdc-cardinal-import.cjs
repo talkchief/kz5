@@ -22,6 +22,7 @@ const reuseSources = {
   supplemental: path.join(__dirname, 'assets/acdc-gemini-supplemental-20260906'),
   aliases: path.join(__dirname, 'acdc-cardinal-reuse-es-20260907.json')
 };
+const modelTrialSource = path.join(__dirname, 'assets/acdc-gemini-cardinal-model-trials-20260907/format-compatible');
 const inputs = [__filename, path.join(__dirname, 'import-acdc-gemini-cardinals.cjs'),
   path.join(__dirname, 'acdc-cardinal-pack.cjs'), path.join(__dirname, 'acdc-cardinal-catalog.cjs'),
   path.join(__dirname, 'import-acdc-gemini-voices.cjs'), path.join(__dirname, 'import-acdc-language-packs.cjs'),
@@ -29,6 +30,9 @@ const inputs = [__filename, path.join(__dirname, 'import-acdc-gemini-cardinals.c
   reuseSources.cardinal, reuseSources.aliases, path.join(reuseSources.supplemental, 'manifest.json'),
   ...[4, 9].map(n => path.join(reuseSources.supplemental, `es-es/acdc-number-${n}.master-24000.wav`)),
   path.join(root, 'doc/acdc_cardinal_exact_word_reuse.md')];
+inputs.push(path.join(modelTrialSource, 'trial.json'), ...['01-he-il-acdc-cardinal-v1-tens-30',
+  '03-es-es-acdc-cardinal-v1-number-13'].flatMap(base => ['master-24000', 'telephony-8000']
+  .map(variant => path.join(modelTrialSource, `${base}.${variant}.wav`))));
 const pins = () => Object.fromEntries([...new Set([...inputs, ...Object.keys(require.cache).filter(f => f.startsWith(__dirname + '/'))])]
   .sort().map(file => [file, hash(fs.readFileSync(file))]));
 const output = fs.mkdtempSync(path.join(os.tmpdir(), 'acdc-cardinal-import-proof.'));
@@ -73,7 +77,8 @@ function fixture(name) {
 }
 function source(f) { return {cardinalDirectory: f.cardinalDirectory, introFile: f.introFile, approvalSha256: f.approvalSha256,
   locale: f.locale, ...(f.aliasSha256 ? {supplementalDirectory: f.supplementalDirectory,
-    aliasFile: f.aliasFile, aliasSha256: f.aliasSha256} : {})}; }
+    aliasFile: f.aliasFile, aliasSha256: f.aliasSha256} : {}),
+  ...(f.modelTrialIndex ? {modelTrialIndex: f.modelTrialIndex, modelTrialIndexSha256: f.modelTrialIndexSha256} : {})}; }
 function save(f) { write(path.join(f.cardinalDirectory, 'manifest.json'), f.manifest); }
 function open(f) { return importer.openPlan(source(f)); }
 function localeFixture(locale) {
@@ -95,7 +100,9 @@ function localeFixture(locale) {
   save(f); return f;
 }
 function document(asset, timestamp) {
-  return {...media.document(asset, timestamp), ...(asset.resolution ? {source_cardinal_resolution: clone(asset.resolution)} : {})};
+  const doc = {...media.document(asset, timestamp), ...(asset.resolution ? {source_cardinal_resolution: clone(asset.resolution)} : {})};
+  if (asset.resolution?.source_kind === 'separate_model_trial') doc.source_voice.model = asset.resolution.model;
+  return doc;
 }
 function nativeDoc(asset) {
   const doc = document(asset, 0); doc._rev = '1-' + 'a'.repeat(32);
@@ -115,11 +122,19 @@ function assets(f) {
     const resolver = require('./acdc-cardinal-reuse.cjs').openResolution({cardinalDirectory: f.cardinalDirectory,
       supplementalDirectory: f.supplementalDirectory, aliasFile: f.aliasFile, aliasSha256: f.aliasSha256});
     const summary = open(f).summary();
+    const index = f.modelTrialIndex ? JSON.parse(fs.readFileSync(f.modelTrialIndex)) : null;
+    const trials = index ? require('./acdc-cardinal-model-trial-assets.cjs').openResolution({sourceDirectory: f.cardinalDirectory,
+      sourceManifestSha256: index.source_manifest_sha256, approvalSha256: f.approvalSha256,
+      trials: index.trials.map(t => ({directory: path.join(path.dirname(f.modelTrialIndex), t.directory), sha256: t.sha256}))}) : null;
+    const trialSummary = trials?.summary();
     const cardinal = pack.plan(f.locale).map(entry => {
-      const resolved = resolver.resolve(f.locale, entry.id), p = resolved.provenance;
       const retained = f.manifest.prompts.find(e => e.locale === f.locale && e.id === entry.id);
+      const resolved = retained.generation_status !== 'QA_PASSED' && trialSummary?.successful_identities.includes(`${f.locale}/${entry.id}`)
+        ? trials.resolve(f.locale, entry.id) : resolver.resolve(f.locale, entry.id), p = resolved.provenance;
       const file = resolved.source_kind === 'generated_cardinal'
         ? path.join(f.cardinalDirectory, retained.attempts.at(-1).telephony.file)
+        : resolved.source_kind === 'separate_model_trial'
+          ? path.join(f.location, 'model-trial', `01-${f.locale}-${entry.id}.telephony-8000.wav`)
         : path.join(f.supplementalDirectory, `${p.source_locale}/${p.source_id}.master-24000.wav`);
       return {...build(entry.id, entry.transcript_sha256, resolved.telephony, file),
         resolution: {...summary.prompts.find(p => p.id === entry.id).resolution,
@@ -175,6 +190,41 @@ function reuseFixture(name) {
     write(path.join(f.supplementalDirectory, file), fs.readFileSync(path.join(reuseSources.supplemental, file)));
   }
   save(f); return f;
+}
+function modelFixture() {
+  const f = reuseFixture('model'), retained = JSON.parse(fs.readFileSync(reuseSources.cardinal));
+  for (const [locale, id] of [['es-es', 'acdc-cardinal-v1-number-13'], ['he-il', 'acdc-cardinal-v1-tens-30']]) {
+    const index = f.manifest.prompts.findIndex(e => e.locale === locale && e.id === id);
+    f.manifest.prompts[index] = clone(retained.prompts.find(e => e.locale === locale && e.id === id));
+  }
+  f.manifest.approvals[f.manifest.approvals.findIndex(a => a.locale === 'he-il')] = clone(retained.approvals.find(a => a.locale === 'he-il'));
+  f.manifest.approvals_sha256 = f.approvalSha256 = pack.digest(f.manifest.approvals);
+  f.manifest.requests_reserved = f.manifest.prompts.reduce((n, e) => n + e.attempts.length, 0);
+  f.manifest.retry_request_budget = f.manifest.prompts.reduce((n, e) => n + Math.max(0, e.attempts.length - 1), 0);
+  f.manifest.retries_explicitly_enabled = f.manifest.retry_request_budget > 0; save(f);
+  f.modelTrialIndex = path.join(f.location, 'trial-index.json');
+  f.trialIndex = {schema_version: 1, owner: importer.TRIAL_INDEX_OWNER,
+    source_manifest_sha256: hash(fs.readFileSync(path.join(f.cardinalDirectory, 'manifest.json'))),
+    catalog_sha256: pack.CATALOG_HASH, approvals_sha256: f.approvalSha256, trials: [],
+    runtime_ready: false, native_listening_approved: false};
+  appendModelTrial(f, 'es-es', 'model-trial'); return f;
+}
+function saveIndex(f) {
+  write(f.modelTrialIndex, f.trialIndex); f.modelTrialIndexSha256 = hash(fs.readFileSync(f.modelTrialIndex));
+}
+function appendModelTrial(f, locale, relative) {
+  const ledger = JSON.parse(fs.readFileSync(path.join(modelTrialSource, 'trial.json')));
+  const entry = ledger.entries.find(e => e.locale === locale), directory = path.join(f.location, relative);
+  for (const variant of ['master', 'telephony']) {
+    const original = path.join(modelTrialSource, entry[variant].file);
+    entry[variant].file = `01-${locale}-${entry.id}.${variant === 'master' ? 'master-24000' : 'telephony-8000'}.wav`;
+    write(path.join(directory, entry[variant].file), fs.readFileSync(original));
+  }
+  Object.assign(ledger, {entries: [entry], request_limit: 1, requests_reserved: 1,
+    source_manifest_sha256: f.trialIndex.source_manifest_sha256, source_requests_reserved: f.manifest.requests_reserved,
+    source_retry_budget: f.manifest.retry_request_budget, approvals_sha256: f.approvalSha256});
+  write(path.join(directory, 'trial.json'), ledger);
+  f.trialIndex.trials.push({directory: relative, sha256: hash(fs.readFileSync(path.join(directory, 'trial.json')))}); saveIndex(f);
 }
 function treePins(directory, relative = '') {
   const result = {};
@@ -503,6 +553,91 @@ async function run() {
       let contacted = false;
       await rejectsAsync(() => snapshot.install(async () => { contacted = true; }, true)); equal(contacted, false);
     }
+  });
+  const mixed = modelFixture(), mixedTree = treePins(mixed.location), mixedPlan = open(mixed);
+  await group('model trial index is explicit, independently pinned, bounded and descendant-only', () => {
+    const s = source(mixed), args = ['--plan', '--locale', s.locale, '--cardinal-pack', s.cardinalDirectory,
+      '--intro-file', s.introFile, '--approval-sha256', s.approvalSha256,
+      '--model-trial-index', s.modelTrialIndex, '--model-trial-index-sha256', s.modelTrialIndexSha256];
+    equal(importer.options(args).source.modelTrialIndex, s.modelTrialIndex);
+    for (const key of ['modelTrialIndex', 'modelTrialIndexSha256']) {
+      const partial = {...s}; delete partial[key]; rejects(() => importer.openPlan(partial), 'INVALID_CARDINAL_OPTIONS');
+    }
+    rejects(() => importer.options(args.slice(0, -2)), 'INVALID_CARDINAL_OPTIONS');
+    rejects(() => importer.options([...args, '--model-trial-index', s.modelTrialIndex]), 'DUPLICATE_CARDINAL_OPTION');
+    rejects(() => importer.openPlan({...s, modelTrialIndexSha256: '0'.repeat(64)}), 'CARDINAL_SOURCE_HASH_MISMATCH');
+    const f = modelFixture(), original = clone(f.trialIndex);
+    for (const mutate of [v => v.extra = true, v => v.runtime_ready = true, v => v.native_listening_approved = true,
+      v => v.source_manifest_sha256 = '0'.repeat(64), v => v.trials = [], v => v.trials.push(clone(v.trials[0])),
+      v => v.trials[0].directory = '../model-trial', v => v.trials[0].directory = '/absolute/model-trial',
+      v => v.trials[0].sha256 = '0'.repeat(64)]) {
+      f.trialIndex = clone(original); mutate(f.trialIndex); saveIndex(f); rejects(() => open(f));
+    }
+    // Explicit trials cannot silently fill missing reviewed aliases or an
+    // unlisted failed cardinal. Both paths fail during planning, before DB.
+    const {supplementalDirectory, aliasFile, aliasSha256, ...noAliases} = s;
+    rejects(() => importer.openPlan(noAliases), 'CARDINAL_LOCALE_INCOMPLETE');
+    const {modelTrialIndex, modelTrialIndexSha256, ...noTrials} = s;
+    rejects(() => importer.openPlan(noTrials), 'CARDINAL_AUDIO_UNRESOLVED');
+  });
+  await group('mixed staging preserves original and reused2.5 plus real3.1 provenance without history or readiness claims', async () => {
+    const s = mixedPlan.summary(); equal(s.count, 53); equal(s.selected_generated, 50);
+    equal(s.selected_reused, 2); equal(s.selected_model_trials, 1); equal(s.additional_trial_requests, 1);
+    equal(s.selected_unresolved, 0); equal(s.historical_generated_asset_set_sha256, null);
+    equal(s.staged_candidates_only, true); equal(s.model_trial_index_sha256, mixed.modelTrialIndexSha256);
+    for (const k of ['runtime_ready', 'native_listening_approved', 'listening_verified', 'resolved_listening_approval_declared',
+      'historical_artifact_complete', 'five_language_release_ready']) equal(s[k], false);
+    const proof = s.prompts.find(p => p.id === 'acdc-cardinal-v1-number-13').resolution;
+    equal(proof.model, 'gemini-3.1-flash-tts-preview'); equal(proof.voice, 'Sulafat');
+    equal(proof.source_kind, 'separate_model_trial'); equal(proof.source_manifest_sha256, undefined);
+    equal(proof.model_trial_index_sha256, undefined); equal(proof.trial_manifest_sha256, mixed.trialIndex.trials[0].sha256);
+    const original = mixed.manifest.prompts.find(e => e.locale === 'es-es' && e.id === 'acdc-cardinal-v1-number-13');
+    equal(original.generation_status, 'FAILED'); equal(proof.source_entry_sha256, pack.digest(original));
+    const db = database(mixed), receipt = await mixedPlan.install(db.client, true);
+    equal(receipt.created, 53); equal(receipt.verified, 53);
+    for (const a of db.plan.cardinal) equal(db.docs.get(a.id).source_voice.model, a.resolution.model);
+    const trial = db.plan.cardinal.find(a => a.canonical_id === original.id);
+    equal(db.docs.get(trial.id).source_voice.model, 'gemini-3.1-flash-tts-preview');
+    equal(db.docs.get(trial.id).source_cardinal_resolution.trial_entry_sha256, proof.trial_entry_sha256);
+    equal(db.docs.get(db.plan.intro.id).source_voice.model, pack.MODEL);
+    db.calls.length = 0;
+    equal((await mixedPlan.install(db.client, true)).created, 0); equal(db.calls.every(c => c.method === 'POST'), true);
+    equal(db.docs.get(trial.id).source_voice.model, 'gemini-3.1-flash-tts-preview'); // Internal compatibility view never mutates stored data.
+    equal(treePins(mixed.location), mixedTree);
+  });
+  await group('real mixed-model readbacks and conflict winners cannot relabel3.1 as2.5 or backfill provenance', async () => {
+    for (const kind of ['model', 'voice', 'provenance', '409']) {
+      const db = database(mixed, {installed: true, hook: ({method, body, docs, plan}) => {
+        if (kind !== '409' || method !== 'PUT') return;
+        const a = plan.cardinal.find(a => a.id === body._id), doc = nativeDoc(a);
+        doc.source_voice.model = pack.MODEL; docs.set(a.id, doc);
+        return {status: 409, body: {error: 'conflict'}};
+      }});
+      const a = db.plan.cardinal.find(a => a.resolution.source_kind === 'separate_model_trial'), doc = db.docs.get(a.id);
+      if (kind === 'model') doc.source_voice.model = pack.MODEL;
+      if (kind === 'voice') doc.source_voice.voice = 'Kore';
+      if (kind === 'provenance') delete doc.source_cardinal_resolution;
+      if (kind === '409') db.docs.delete(a.id);
+      await rejectsAsync(() => mixedPlan.install(db.client, true), kind === 'provenance'
+        ? 'CARDINAL_RESOLUTION_PROVENANCE_MISMATCH' : 'CARDINAL_MODEL_PROVENANCE_MISMATCH');
+      equal(db.calls.filter(c => c.method === 'PUT').length, kind === '409' ? 1 : 0);
+    }
+  });
+  await group('index growth for unrelated Hebrew trial keeps selectedES identity and zero-write reinstall stable', async () => {
+    const f = modelFixture(), first = open(f), before = first.summary(), db = database(f);
+    await first.install(db.client, true); const documents = clone([...db.docs]);
+    appendModelTrial(f, 'he-il', 'other-model-trial');
+    rejects(() => first.summary(), 'CARDINAL_INPUT_CHANGED');
+    const next = open(f), after = next.summary();
+    equal(after.model_trial_index_sha256 === before.model_trial_index_sha256, false);
+    equal(after.additional_trial_requests, 2); equal(after.selected_model_trials, 1);
+    equal(after.cardinal_manifest_sha256, before.cardinal_manifest_sha256);
+    equal(after.resolved_asset_set_sha256, before.resolved_asset_set_sha256); equal(after.prompts, before.prompts);
+    equal(after.map_sha256, before.map_sha256);
+    db.calls.length = 0; equal((await next.install(db.client, true)).created, 0);
+    equal(db.calls.every(c => c.method === 'POST'), true); equal([...db.docs], documents);
+    fs.appendFileSync(path.join(f.location, 'model-trial/trial.json'), ' ');
+    let contacted = false; await rejectsAsync(() => next.install(async () => { contacted = true; }, true)); equal(contacted, false);
   });
   await group('final readback catches earlier mutation and exact source pins survive every operation', async () => {
     const db = database(base, {hook: ({method, body, docs, plan}) => {

@@ -93,3 +93,42 @@ that every remaining role, language or context will succeed.
 Independent saved-artifact check `a38719` reverified transcript hashes, all six
 WAV hashes, technical QA and actual SoX replay. Both original private/repository
 manifest hashes remain exactly pinned and unchanged after the trials.
+
+## Failed-only Spanish follow-up
+
+Each follow-up uses the same original source pin, approved transcript, model,
+voice, bounded three-request limit and stop-on-failure behavior. Previously
+requested identities and the two reviewed ES4/ES9 reuse candidates are excluded.
+Successful WAVs and exact receipts are saved in the model-trial asset directory.
+
+| Artifact directory | Spanish numbers | Result | Execution evidence |
+| --- | --- | --- | --- |
+| `es-batch1` | 14, 16, 17 | Three QA-passed clips / six WAVs | `b94427/session92905/63521e` |
+| `es-batch2` | 18, 19, 20 | Three QA-passed clips / six WAVs | `9bd5c6/session39386/9dddd7` |
+| `es-batch3` | 21, 23, 24 | Three QA-passed clips / six WAVs | `4f1a5c/session96228/0d86f1` |
+| `es-batch4` | 25, 26, 27 | Three QA-passed clips / six WAVs | `e73d09/session35145/3a4f88` |
+| `es-batch5` | 28, 29, 40 | Three QA-passed clips / six WAVs | `1b1c76/session82730/65d87b` |
+| `es-batch6` | 50, 60, 80 | Three QA-passed clips / six WAVs | `d8dbdb/session19325/cf10f6` |
+| `es-batch7` | 200, 300, 400 | Three QA-passed clips / six WAVs | `99e567/session55379/9cbd05` |
+| `es-batch8` | 700, 800, 900 | Three QA-passed clips / six WAVs | `207d64/session52518/3f4a43` |
+| `es-final-he-start` | before-scale21; plus HE joined-masculine3/7 | Three QA-passed clips / six WAVs | `2b7949/session94415/455cc2` |
+
+At this checkpoint there are 30 successful separate 3.1 candidate clips and
+31 total additional model-trial requests, including the original format failure.
+The original 2.5 ledger remains 412/584. Neither count establishes runtime or
+listening readiness; preserve every failed receipt as well as successful audio.
+
+Spanish source inventory is now complete: 25 original QA clips, 26 separate
+3.1 QA candidates and the two reviewed exact-word ES4/ES9 aliases cover all53
+roles. This is artifact completeness, not an imported or listening-approved
+Spanish runtime release. The checked-in index names all11 known terminal trial
+receipts: `scripts/assets/acdc-gemini-cardinal-model-trials-20260907/index.json`,
+SHA256 `9a77a94df3948b2ffadc5248f3bbe52dd489df2a8e6178e65a26227629507866`.
+Mixed-model staging and full five-language runtime gates remain open.
+
+Subsequent FR89 one-shot request passed; see `acdc_cardinal_fr89_one_shot.md`.
+Current index now contains12 terminal receipts,31 QA candidates and32 additional
+trial requests; index SHA256
+`fbd37afd26c9211ae05b5a9c1b65d29e10874693c327f99ad0e58dbf4523ca33`.
+The earlier11-receipt hash above is historical. EN/ES/FR technical artifact
+coverage is complete; HE95/131 and AR105/208 remain incomplete.

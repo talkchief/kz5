@@ -15,10 +15,24 @@ is 412 generated + 2 reused, 170 unresolved; no complete-language deployment is
 claimed. See `doc/acdc_cardinal_reuse_import_integration.md`.
 Separate model-trial results are in `doc/acdc_cardinal_31_model_trial.md`.
 Additional trial calls never reset the original ledger or its failed histories.
-Gemini3.1 format compatibility is fixed in the isolated authoring tool;526
-offline checks pass and HE30/AR4/ES13 now pass actual WAV/SoX QA. Six candidate
-WAVs and both trial receipts are saved separately. Four total trial requests;
-no runtime deployment or listening approval, legacy412 count unchanged.
+Gemini3.1 format compatibility is fixed in the isolated authoring tool;637
+offline checks pass. There are now31 separate QA candidates/62 WAVs,32 additional
+requests and12 terminal receipts. Spanish artifact coverage is53/53:25 original,
+26 new-model candidates and2 reviewed exact-word aliases. No runtime deployment
+or listening approval, legacy412 count unchanged. The read-only candidate
+verifier passes447 checks, planner204 checks; real replay passes. See
+`doc/acdc_cardinal_model_recovery.md` and the pinned model-trial asset index.
+FR89 one-shot succeeds. EN31/31, ES53/53 and FR161/161 technical artifact coverage;
+HE95/131 and AR105/208 remain open. Original412 ledger unchanged. Latest
+authoring637/verifier447/planner204 checks pass. See
+`doc/acdc_cardinal_fr89_one_shot.md`; no listening/runtime approval.
+Mixed-model candidate staging is implemented, preserving real3.1 metadata and
+safe idempotence as the index grows.23 importer groups/8,016 checks pass; see
+`doc/acdc_cardinal_model_trial_staging.md`. No database import or runtime
+activation follows from these fixture tests.
+Actual complete ES53/FR161 read-only plans also pass (`cd6452/f2a5bf`), with
+zero unresolved roles and no provider/database requests. Exact candidate hashes
+are recorded in the staging document. HE/AR recovery and runtime release remain open.
 
 INST-13 producer/consumer freshness is implemented in code and the main-SH file
 lists/patch sequence.166 offline bridge tests,35 producer checks, actual isolated
