@@ -38,18 +38,39 @@ Invalid destinations still fail safely; no routing/number checks are relaxed.
 - Private OpenAPI regeneration/validation passed (`aaee56/53c392`), with358
   paths,653 operations,504 schemas and1601 resolved references. Output:
   `/tmp/kazoo-single-key-openapi.EDdgLJ`. Not published to the live portal.
+- The subsequent standalone run cancelled during one default-five-second mock
+  setup (`e3ba68/644f8c`), not a product assertion failure. With that fixture's
+  bounded setup corrected, the full standalone canonical run **passes all87**
+  (`142a1a/654902`), including the final unchanged-input check. Details:
+  [fixture budget](callback_media_test_budget.md).
 
 OpenAPI descriptions belong to tracked `scripts/api-docs-overlays.cjs` and are
 applied before queue PATCH/editor schema copies. Do not hand-edit the untracked
 patched-upstream `queues.json` or historical import patches to preserve this
 documentation. Installation compiles the tracked ACDC production source.
 
-## Deployment and strict live acceptance remain open
+## Source deployed; isolated English live acceptance passed
 
-This source is not yet loaded on the development apps node. Earlier eight-
-module runtime parity and6+1 live receipts describe the pre-single-key code,
-not this candidate. Preserve the old module for rollback, verify current calls
-and deploy only the reviewed callback change, not unrelated dashboard records.
+**Strict entry-only live run passed** `d26b83/0fcc7e`: only6, full installed
+confirmation audio before BYE, unanswered first attempt, durable retry and
+successful second bridge. Protected evidence and limitations:
+[single-key live acceptance](acdc_single_key_live_acceptance_20260907.md).
+
+The single changed production module was deployed on the development apps node
+(`cd4e17/6fbfad`), after real zero-channel/baseline/checksum preflight. Loaded
+and disk module MD5 is `f2395173bdf3183659ac45fc0b7fa6c5`; old code was released.
+No database/provider writes, restarts or unrelated dashboard deployments.
+Rollback BEAM and receipt: `/tmp/kazoo-single-key-deployment.LKf1lf`.
+
+`scripts/deploy-single-key-callback.cjs` is a development-only, fixed-baseline
+one-module promotion helper, **not** a replacement for the general installer.
+It verifies private production build inputs/artifacts, inspects metadata locally,
+preserves service-readable0644 mode under umask077, atomically replaces only
+the menu, uses soft-purge/load verification and retains a protected backup. It
+never force-purges. If rollback cannot load, it preserves known disk/runtime
+agreement and reports failure. Seven mocked control-flow tests passed
+(`343822`); actual successful load evidence is separate. Fresh deployment through
+the main installer compiles tracked ACDC source including this change.
 
 The retry harness defaults to historical `confirm-current`. For the new flow,
 explicitly supply `--registration-mode entry-only` alongside its existing
@@ -60,10 +81,17 @@ pinned in the receipt and rechecked; old receipts gain no retroactive proof.
 Full installed-WAV delivery before server BYE, retained busy conversation,
 unanswered-first-attempt retry and exact reciprocal bridge checks remain.
 
-The dev SIP test-agent helper was temporarily stopped only after zero native
-channels were verified, to provide memory for validation. It was restored:
-`93f4d5/146ae7` confirms active/running, with all eight checked platform services
-active. This is service-state evidence, not a new call or registration proof.
+The dev MASTER test-phone helper was temporarily stopped only after zero native
+channels to provide validation memory. Restoration `4fc1cc/0b5d16` passed, then
+the live guard refused160MiB+512MiB reserve admission before any call started.
+It was paused again (`c64fa7/2c757e`); all eight checked core/web/data services
+remain active. The retry creates its own isolated tenant SIP agent. The explicit
+`--allow-paused-master-test-phones` option permits only that independent helper
+to be inactive/dead/PID0 and preserves exact before/after service snapshots.
+Default requirements remain unchanged;27 scope checks and80 retry groups pass
+(`17a4a7/4929f3`). See [scope limitation](callback_retry_paused_test_phones.md).
+Root restored the helper after the completed test and zero native channels:
+`7268a4/898117`, active/running, all eight core/web/data services active.
 Gemini remains one-time authoring only; no provider was invoked by these code,
 API or call-harness checks. Five-language/real-MOH/30-second and release gates
 remain separate from this focused fix.

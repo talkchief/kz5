@@ -10,6 +10,7 @@ readonly RETRY_BUSY_PORT=15066
 readonly RETRY_BUSY_MEDIA=43020
 RETRY_REFERENCE=
 RETRY_REGISTRATION_MODE=confirm-current
+RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=false
 RETRY_BUSY_PID=
 RETRY_BUSY_CALL_ID=
 RETRY_BUSY_PROOF=
@@ -22,6 +23,7 @@ retry_usage() {
         'Usage: test-acdc-callback-retry.sh --prepare-only --confirmation-reference FILE' \
         '       test-acdc-callback-retry.sh --live --keep-fixture --confirmation-reference FILE' \
         '       [--registration-mode entry-only|confirm-current] (default: confirm-current)' \
+        '       [--allow-paused-master-test-phones] (only an already inactive/dead helper)' \
         'Only the exact isolated local fixture is allowed. MASTER and PSTN are excluded.' \
         'Busy agent -> queued caller waits5s -> callback registration/audio proof ->' \
         'wait2s -> release busy call -> unanswered first attempt -> answered retry.' \
@@ -36,6 +38,7 @@ retry_args() {
             --keep-fixture) KEEP_FIXTURE=true ;;
             --confirmation-reference) (($# >= 2)) || die 'Missing reference'; RETRY_REFERENCE=$2; shift ;;
             --registration-mode) (($# >= 2)) || die 'Missing registration mode'; RETRY_REGISTRATION_MODE=$2; shift ;;
+            --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
             -h|--help) retry_usage; exit 0 ;;
             *) die 'Unsupported callback retry option' ;;
         esac
@@ -308,9 +311,10 @@ retry_run() {
     callback_fixture preflight || die 'Callback SUP prerequisite failed before fixture or agent writes'
     snapshot=$(retry_snapshot) || die 'Native channel inventory unavailable'
     jq -e '.row_count==0' <<<"$snapshot" >/dev/null || die 'Live retry requires zero active calls at entry'
-    before=$(systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p ActiveState -p MainPID -p NRestarts)
+    before=$(systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p LoadState -p ActiveState -p SubState -p MainPID -p NRestarts)
     printf '%s\n' "$before" > "$RUN_DIR/retry-service-before.txt"
-    [[ $(grep -c '^ActiveState=active$' <<<"$before") == 5 ]] || die 'Required services are not active'
+    node "$retry_script_dir/test-fixtures/callback-retry-service-scope.cjs" "$RUN_DIR/retry-service-before.txt" \
+        "$RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES" > "$RUN_DIR/retry-service-scope.json" || die 'Required service state failed strict scope validation'
     callback_fixture setup-retry
     callback_fixture verify
     # verify_fixture reads the actual queue and fails unless callback is enabled,
@@ -368,7 +372,9 @@ retry_run() {
     node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" || die 'Strict unanswered/retry packet, media or timing gate failed'
     agent_status verify 1 1
     wait_agent_ready 1 || die 'Agent did not return ready after retry'
-    [[ $(systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p ActiveState -p MainPID -p NRestarts) == "$before" ]] || die 'A service changed during the retry diagnostic'
+    systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p LoadState -p ActiveState -p SubState -p MainPID -p NRestarts \
+        > "$RUN_DIR/retry-service-after.txt"
+    [[ $(< "$RUN_DIR/retry-service-after.txt") == "$before" ]] || die 'A service changed during the retry diagnostic'
     record_stage callback 1 2 "$RUN_DIR/callback-original-stats.csv" 1 "$cores" "$since" "$RUN_DIR/retry-busy-stats.csv"
     log "Retained-fixture callback retry diagnostic passed; NOT full cleanup or production acceptance: $RUN_DIR"
 }

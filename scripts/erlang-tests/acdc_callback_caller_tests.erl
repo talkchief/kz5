@@ -80,15 +80,26 @@ confirmation_events_are_fail_closed_test() ->
                  acdc_callback_caller:confirmation_event(
                    confirming, <<"CHANNEL_EXECUTE_COMPLETE">>, undefined)).
 
-returned_confirmation_media_is_language_safe_test() ->
+returned_confirmation_media_is_language_safe_test_() ->
+    %% Passthrough meck recompiles the large Gemini manifest and kapps_call
+    %% modules. On the memory/CPU-capped validation host, mock construction can
+    %% exceed EUnit's implicit five seconds before any assertion executes.
+    %% Bound this fixture alone; this is not a callback/media latency allowance.
+    {timeout, 30, fun returned_confirmation_media_is_language_safe_with_mocks/0}.
+
+returned_confirmation_media_is_language_safe_with_mocks() ->
     ok = meck:new(acdc_gemini_prompts, [passthrough, no_link]),
-    ok = meck:new(kapps_call, [passthrough, no_link]),
-    meck:expect(acdc_gemini_prompts, builtin, fun(_, _) -> {error,gemini_media_unavailable} end),
-    meck:expect(kapps_call,get_prompt,fun(_,<<"fr-callback-confirmation">>,<<"fr-FR">>) ->
-        <<"prompt://legacy/fr-callback-confirmation/fr-fr">>
-    end),
-    try returned_confirmation_media_is_language_safe()
-    after meck:unload([acdc_gemini_prompts,kapps_call])
+    try
+        ok = meck:new(kapps_call, [passthrough, no_link]),
+        try
+            meck:expect(acdc_gemini_prompts, builtin, fun(_, _) -> {error,gemini_media_unavailable} end),
+            meck:expect(kapps_call,get_prompt,fun(_,<<"fr-callback-confirmation">>,<<"fr-FR">>) ->
+                <<"prompt://legacy/fr-callback-confirmation/fr-fr">>
+            end),
+            returned_confirmation_media_is_language_safe()
+        after meck:unload(kapps_call)
+        end
+    after meck:unload(acdc_gemini_prompts)
     end.
 
 returned_confirmation_media_is_language_safe() ->

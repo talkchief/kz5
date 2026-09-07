@@ -6,6 +6,44 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Latest operator scope correction:** callbacks, built-in EN/HE/FR/ES/AR
+prerecorded Gemini voices, deployment-script issues **and the mobile bridge**
+are critical and active. Only dashboard work is postponed. Keep all other
+mandatory release requirements tracked. No install/runtime/provider synthesis.
+
+**Single-key callback module DEPLOYED:** `cd4e17/6fbfad` verifies
+`acdc_callback_menu` on disk and the apps VM at MD5
+`f2395173bdf3183659ac45fc0b7fa6c5`; old code released, no service restart or
+database/provider write. Protected baseline backup/receipt:
+`/tmp/kazoo-single-key-deployment.LKf1lf`. Production source is already in
+master0b26789. No unrelated dashboard modules were deployed. Full canonical
+rerun `142a1a/654902` passes87 tests and stable source digest
+`9d8887b6e3e14d07dd7e251b56f0a228dee57192c93a14d82ca41c75385d36dd`.
+Seven offline helper cases pass (`343822`), including rollback, permissions
+under umask077, and failure receipts. Earlier56-pass cancellation was not a pass.
+
+**Single-key live callback PASS:** `d26b83/0fcc7e` exited0; protected evidence
+`/var/log/kazoo-acceptance/20260907T131946Z`. Only6 at4.995seconds, complete
+installed5.491-second EN Gemini success audio before BYE, intentionally unanswered
+first return attempt, durable retry_wait, answered second reciprocal bridge,
+agent ready, unchanged core service snapshots,0new errors/cores. Fixture retained,
+not full cleanup or all-language/production acceptance. See
+`doc/acdc_single_key_live_acceptance_20260907.md`. Fresh immutable installed
+reference `/var/log/kazoo-acceptance/gemini-reference.xERMt4/` verified without
+provider/database writes. Explicit paused-MASTER-test-phone option passes27
+service-scope and80 retry groups (`17a4a7/4929f3`); only the independent helper
+was paused to preserve512MiB memory reserve. **Helper restored after zero
+channels**: `7268a4/898117`, active/running PID1980329, all eight checked
+core/web/data services active. There is no running validation job at this point.
+
+**Provider-free exact Spanish reuse verified:** `343822/ea1b9b` passes10 groups/
+134 checks with actual SoX and unchanged source/history. Retained evidence
+`/tmp/acdc-cardinal-reuse-proof.sbXLgY`. Actual pack check `1cd618` resolves45
+generated cardinal roles plus2 existing whole-word ES recordings,537 unresolved;
+all64 historical requests/failures remain unchanged. Alias manifest and resolver
+are source-only, not imported/activated. Preserve the pinned review document
+`doc/acdc_cardinal_exact_word_reuse.md`; do not regenerate those successful clips.
+
 **Development helper restored:** after zero native channels and the temporary
 validation-memory pause, `93f4d5/146ae7` confirms kazoo-live-test-agents active/
 running (PID1941334) and apps/ecallmgr/FreeSWITCH/Kamailio/CouchDB/RabbitMQ/

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "owner": "kazoo5-acdc-cardinal-exact-word-reuse",
+  "catalog_sha256": "5703e649a1f5a2bcd0c00e9e19bf4424e024c85648452dba0d190bcf73088134",
+  "source_manifest_sha256": "dc041f104ab060cdd956ee237aaf004dea2edef1db070e654473a85c13f5b50b",
+  "recipe_sha256": "d602e86067d026f29ce9a6c310883d4f7387a5c4fe7c0049193d87f7ab5f44b1",
+  "review": {
+    "kind": "source-backed-engineering",
+    "decision": "ALLOW_EXACT_WHOLE_WORD_REUSE",
+    "evidence_sha256": "b5450b8f9f523cb8289d2f7241c1329bcf29d608369fb5e66f86459b2abe2ab8",
+    "listening_verified": false
+  },
+  "aliases": [
+    {
+      "target": {
+        "locale": "es-es",
+        "id": "acdc-cardinal-v1-number-4",
+        "transcript": "cuatro",
+        "transcript_sha256": "0b701c8a16939e2de83ebd55cb55edda407e2dac6fae7c0c627f822effef004f",
+        "catalog_record_sha256": "2d1cd07884288bf27318e96b7766aef16c753e8cbccbbe5aa463c44a33e04dd2",
+        "context_sha256": "c23189c1e99b0f5d7c22df55dc2a9cc544779cc3d20ecf276785395c7b324653",
+        "failed_entry_sha256": "5d046de1a561539b15d78a60cb9eceeadd6352a3042756bf084eb89c5b459096"
+      },
+      "source": {
+        "locale": "es-es",
+        "id": "acdc-number-4",
+        "transcript_sha256": "0b701c8a16939e2de83ebd55cb55edda407e2dac6fae7c0c627f822effef004f",
+        "provider": "google-gemini",
+        "model": "gemini-2.5-pro-preview-tts",
+        "voice": "Sulafat",
+        "entry_sha256": "c27483814379ef0a9f2bfcc437e0992b50fea2ac11ff02da6268d88e0af2c3d6",
+        "master_file": "es-es/acdc-number-4.master-24000.wav",
+        "master_sha256": "30f68cacb6c86dbbaaaa68a0f74a6624bef334b0e30107fc5123e004333d047d"
+      }
+    },
+    {
+      "target": {
+        "locale": "es-es",
+        "id": "acdc-cardinal-v1-number-9",
+        "transcript": "nueve",
+        "transcript_sha256": "2dd0926fc0ec5469943b4a81e86f0591cdc5e9bdb942b154f9484e50dbef812a",
+        "catalog_record_sha256": "51bb59387e4db7f3b873792c3382d8680c3813a7dd7a16f231c9c365da424518",
+        "context_sha256": "c23189c1e99b0f5d7c22df55dc2a9cc544779cc3d20ecf276785395c7b324653",
+        "failed_entry_sha256": "015df9910ba252b7d4909b7192542a101fc3f25e1173f93af5cf26fc20216191"
+      },
+      "source": {
+        "locale": "es-es",
+        "id": "acdc-number-9",
+        "transcript_sha256": "2dd0926fc0ec5469943b4a81e86f0591cdc5e9bdb942b154f9484e50dbef812a",
+        "provider": "google-gemini",
+        "model": "gemini-2.5-pro-preview-tts",
+        "voice": "Sulafat",
+        "entry_sha256": "18fbb6865e85470288c1aa560058ad4bce27592ac0fd2f730fc01e6853e051f3",
+        "master_file": "es-es/acdc-number-9.master-24000.wav",
+        "master_sha256": "ddc73f17793a69ebdd8fadc9fb0223d252c904185bd25de427f3a6336c914d37"
+      }
+    }
+  ],
+  "runtime_ready": false,
+  "deployed": false,
+  "full_position_numeric_range_ready": false
+}

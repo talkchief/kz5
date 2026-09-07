@@ -7,6 +7,11 @@ first for achieved work, deployment status, source locations and next steps.
 
 ### Operator priority correction — 2026-09-07 (supersedes older priorities)
 
+Latest clarification: mobile bridge remains **critical**, alongside callbacks,
+the five prerecorded Gemini language packs and deployment-script fixes. Only
+dashboard work is postponed; do not read the brief focus narrowing as dropping
+bridge delivery or any mandatory installer/release requirement.
+
 **Operator reaffirmed September7:** Gemini is permitted only for the one-time
 authoring of missing release recordings. Reuse the completed WAV artifacts;
 never call Gemini during installation, startup, queue editing, account or
@@ -34,8 +39,8 @@ previous interpretation pausing callbacks and voices was incorrect.
 4. **Mandatory release gates:** security/TLS, supervision/API acceptance,
    30-concurrent-call load, recovery/restore and all other open requirements stay
    in scope; none is waived by this ordering.
-5. **Live dashboards: lowest priority**, retain existing work and outstanding
-   acceptance. Historical dashboards remain postponed; do not resume historical
+5. **Dashboard work postponed**, retain existing live work and outstanding
+   acceptance. Historical dashboards remain postponed too; do not resume
    storage/WFM implementation without operator direction.
 
 This ordering overrides the dashboard-only/paused statements in older snapshots
@@ -279,7 +284,7 @@ proof before promotion; the handoff does not waive those safety gates.
 | P0-01 | ACTIVE — API + UI | Queue-specific Login: backend committed `4fc2a2b` with 12 isolated regression groups passing and exact fresh pinned installer-patch replay; explicit-selection UI committed `d263342` with focused/full contract passes. Source-bound OpenAPI overlay/reference committed `22b5f94`, with 9 focused groups / 45 schema cases passing. No silent roster changes or other-agent logout; membership is not readiness. Regenerate/publish `/apis`, deploy and test selected-agent ringing. |
 | P0-02 | OPEN — acceptance | Re-test extension 2000 after the operator selects the intended queue agent. Observed roster Agent 12 logged out; globally ready Agent 19 unassigned; runtime knows no eligible agents. Do not reset all agents to conceal the mismatch. |
 | P0-13 | SOURCE FIX TESTED — deployment open | Live dashboard review found the outbound FSM emits `outbound` in sync replies, but `kapi_acdc_agent` excluded it from the reply status enum. The legitimate state is now accepted. Root38933 passed3 baseline groups reproducing the actual serializer/publisher failure and11 candidate groups, with broker publication substituted; evidence `/tmp/kazoo-agent-sync-status.xBuTWi`. The listener invokes that publisher synchronously, creating a potential restart path before the fix. Real listener/restart, live-call acceptance and deployment remain separate; no confirmed live crash is claimed. |
-| P0-03 | ACTIVE — single-key source fixed; deployment/live acceptance open | Deployed Gemini6+1 diagnostic f99df0/90042a passes complete success audio before BYE, unanswered first attempt, durable retry_wait, second reciprocal bridge and agent readiness; fixture retained. New no-alternatives single-key6 reducer passes17 tests and wrapper22; strict6-only harness80+79 and focused8-module production build pass. Combined broader suite hit600s before completion, not all87 passed for new source. New menu and private OpenAPI are not yet deployed; run explicit entry-only live test after review/deployment. Invalid user return-number configuration, actual30s/real MOH/all-language and release acceptance remain open. See doc/acdc_single_key_callback.md and doc/acdc_gemini_callback_retry_acceptance_20260907.md. |
+| P0-03 | DEPLOYED — single-key EN live retry verified; broader acceptance open | Menu deployment cd4e17/6fbfad matches tested module MD5; full87 canonical tests142a1a/654902 pass after narrow mock-setup timeout correction. Strict entry-only live run d26b83/0fcc7e proves only6 at4.995s, full5.491s installed Gemini confirmation before BYE, unanswered first attempt, durable retry_wait, second reciprocal bridge, agent ready, unchanged core services and0new errors/cores. Fixture retained; independent MASTER test phones temporarily paused for memory and restored7268a4/898117. Reducer17/wrapper22/retry80/audio79/service-scope27/helper7 checks support this slice. Private OpenAPI not published; invalid user return number, actual30s/real MOH/all-language and release acceptance remain open. See doc/acdc_single_key_live_acceptance_20260907.md. |
 | P0-04 | ACTIVE — callback | Callback offer at configured 30 seconds: separate enable, initial delay and repeat interval from position/wait/generic announcements; verify saved values, runtime schedule and received audio. Invalid return numbers must not cause silent failure. |
 | P0-11 | DEPLOYED — focused regression verified; broader acceptance open | Announcement worker mailbox starvation: elapsed deadlines run before another receive; bounded pre-playback drains stop the temporary worker after256 handled events plus one overflow probe. Two regressions fail before the fix; all12 scheduler/worker tests pass afterward. Fresh production/loaded MD5 parity0ad7ce proves current acdc_announcements is deployed. Actual EN offers pass c88ff7/d9b680 at3/15-second settings over silence hold. This does not close real MOH, all-language, overload or actual30-second acceptance. See doc/acdc_announcement_mailbox_fairness.md and doc/callback_media_runtime_parity.md. |
 | P0-12 | DEPLOYED — canonical regression/runtime parity verified | Removed synchronous auxiliary metadata lookup from timed unavailable/retry/alternate branches. Built-in preflight retains its three auxiliary paths from42 reads; legacy custom menus preflight three optional assets before queue entry. Missing cache fails quietly without fallback or false registration. Full87 tests pass fada33/fee8c1, including poisoned datastore/resolver access,30ms budgets and21s ownership/completion cases. Fresh production/loaded MD5 parity0ad7ce proves this callback cohort is deployed. Actual EN offer and6+1 retry slices pass; arbitrary synchronous publishing, native audio alternatives and all-language/failure acceptance are not implied. See doc/callback_media_runtime_parity.md. |

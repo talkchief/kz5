@@ -96,6 +96,10 @@ function registrationModeProof(mode, receipt, policy, audio) {
 }
 function inspect(directory, mode = 'confirm-current') {
     const json = name => JSON.parse(safeRead(directory, name, 128 * 1024));
+    const serviceScope = json('retry-service-scope.json');
+    assert.deepEqual(serviceScope, require('./callback-retry-service-scope.cjs').inspect(
+        safeRead(directory, 'retry-service-before.txt', 8192).toString(), serviceScope.allow_paused_master_test_phones),
+        'Service scope receipt differs from the actual initial snapshot');
     const evidence = {registered: json('callback-registration-evidence.json'), first: json('retry-first-attempt.json'),
         backoff: json('retry-backoff-evidence.json'), bridged: json('retry-bridge-evidence.json'),
         busy: json('retry-busy-before-release.json'), audio: json('retry-registration-audio.json'),
@@ -133,6 +137,7 @@ function inspect(directory, mode = 'confirm-current') {
         media.negotiatedPayload(safeRead(directory, 'callback-carrier-negotiation.log', 8192).toString()));
     return {scenario: 'busy-agent-unanswered-first-callback-retry', account_id: ACCOUNT,
         ...selection, registration_input_sha256: selectionReceipt.input_sha256,
+        service_scope: serviceScope,
         retained_fixture: true, full_cleanup_acceptance: false, original_registration_audio: evidence.audio,
         confirmation_voice_family: voiceFamily,
         confirmation_prompt_id: receipt.document_id,
