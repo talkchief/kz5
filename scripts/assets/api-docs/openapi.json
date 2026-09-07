@@ -21490,7 +21490,7 @@
           "ACDC queues"
         ],
         "summary": "Read a page of observed live queue snapshots",
-        "description": "Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null and live_call_details=false. Detail has a bounded calls object and live_call_details=true, independently of calls.available. No caller name/number, agent IDs, actual queue positions, ready counts, SLA, historical reports or WebSocket updates are supplied. page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.",
+        "description": "Implemented in source; deployment-specific acceptance required. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. No caller name/number, actual queue positions, ready counts, SLA or historical reports are supplied. When websocket_updates is true, use the separate x-blackhole.queue_live protocol to invalidate and refetch this snapshot. page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.",
         "parameters": [
           {
             "name": "ACCOUNT_ID",
@@ -21580,7 +21580,7 @@
             }
           },
           "403": {
-            "description": "Account, queues/stats scope, selected queue or lookahead authorization denied",
+            "description": "Account, queues/stats scope, selected queue, roster, agent/status resource or lookahead authorization denied",
             "headers": {
               "Cache-Control": {
                 "description": "Queue-live handler responses must not be cached.",
@@ -21622,7 +21622,7 @@
             }
           },
           "503": {
-            "description": "Queue inventory or snapshot dependency unavailable; no fabricated empty inventory",
+            "description": "Queue/agent inventory or snapshot dependency unavailable or malformed; no fabricated empty inventory",
             "headers": {
               "Cache-Control": {
                 "description": "Queue-live handler responses must not be cached.",
@@ -21645,20 +21645,23 @@
         },
         "x-reject-unknown-query-parameters": true,
         "x-contract-review": "source-reviewed",
-        "x-implementation-status": "implemented-in-source; not-live-deployed",
+        "x-implementation-status": "implemented-in-source; deployment-specific acceptance required",
         "x-runtime-verification": "Offline source/schema contract only. No broker, HTTP, browser, authorization or deployment acceptance is asserted by this catalog.",
         "x-source-file": "applications/acdc/src/cb_acdc_live.erl",
         "x-source-files": [
           "applications/acdc/src/cb_queues.erl",
           "applications/acdc/src/cb_acdc_live.erl",
           "applications/acdc/src/acdc_live_auth.erl",
+          "applications/acdc/src/cb_acdc_live_agents.erl",
+          "applications/acdc/src/acdc_dashboard_agents.erl",
+          "applications/acdc/priv/couchdb/views/queues.json",
           "applications/acdc/src/acdc_dashboard_collector.erl",
           "applications/acdc/src/acdc_dashboard_projection.erl",
           "applications/acdc/src/acdc_dashboard_snapshot.erl",
           "applications/acdc/src/kapi_acdc_dashboard.erl",
           "applications/acdc/src/acdc_stats.erl"
         ],
-        "x-runtime-source-sha256": "e9c3a26e14cad61845af49ff79707aeecb09378c761764680a2899a792a7d464"
+        "x-runtime-source-sha256": "d560b56a14eca992334575f9dfe655178b9124774e91e9fa2c59d826824c12ce"
       }
     },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/live": {
@@ -21668,7 +21671,7 @@
           "ACDC queues"
         ],
         "summary": "Read an observed live snapshot for one queue",
-        "description": "Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null and live_call_details=false. Detail has a bounded calls object and live_call_details=true, independently of calls.available. No caller name/number, agent IDs, actual queue positions, ready counts, SLA, historical reports or WebSocket updates are supplied. This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.",
+        "description": "Implemented in source; deployment-specific acceptance required. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. No caller name/number, actual queue positions, ready counts, SLA or historical reports are supplied. When websocket_updates is true, use the separate x-blackhole.queue_live protocol to invalidate and refetch this snapshot. This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.",
         "parameters": [
           {
             "name": "ACCOUNT_ID",
@@ -21748,7 +21751,7 @@
             }
           },
           "403": {
-            "description": "Account, queues/stats scope, selected queue or lookahead authorization denied",
+            "description": "Account, queues/stats scope, selected queue, roster, agent/status resource or lookahead authorization denied",
             "headers": {
               "Cache-Control": {
                 "description": "Queue-live handler responses must not be cached.",
@@ -21790,7 +21793,7 @@
             }
           },
           "503": {
-            "description": "Queue inventory or snapshot dependency unavailable; no fabricated empty inventory",
+            "description": "Queue/agent inventory or snapshot dependency unavailable or malformed; no fabricated empty inventory",
             "headers": {
               "Cache-Control": {
                 "description": "Queue-live handler responses must not be cached.",
@@ -21813,20 +21816,23 @@
         },
         "x-reject-unknown-query-parameters": true,
         "x-contract-review": "source-reviewed",
-        "x-implementation-status": "implemented-in-source; not-live-deployed",
+        "x-implementation-status": "implemented-in-source; deployment-specific acceptance required",
         "x-runtime-verification": "Offline source/schema contract only. No broker, HTTP, browser, authorization or deployment acceptance is asserted by this catalog.",
         "x-source-file": "applications/acdc/src/cb_acdc_live.erl",
         "x-source-files": [
           "applications/acdc/src/cb_queues.erl",
           "applications/acdc/src/cb_acdc_live.erl",
           "applications/acdc/src/acdc_live_auth.erl",
+          "applications/acdc/src/cb_acdc_live_agents.erl",
+          "applications/acdc/src/acdc_dashboard_agents.erl",
+          "applications/acdc/priv/couchdb/views/queues.json",
           "applications/acdc/src/acdc_dashboard_collector.erl",
           "applications/acdc/src/acdc_dashboard_projection.erl",
           "applications/acdc/src/acdc_dashboard_snapshot.erl",
           "applications/acdc/src/kapi_acdc_dashboard.erl",
           "applications/acdc/src/acdc_stats.erl"
         ],
-        "x-runtime-source-sha256": "e9c3a26e14cad61845af49ff79707aeecb09378c761764680a2899a792a7d464"
+        "x-runtime-source-sha256": "d560b56a14eca992334575f9dfe655178b9124774e91e9fa2c59d826824c12ce"
       }
     },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks": {
@@ -48351,6 +48357,354 @@
         },
         "type": "object"
       },
+      "QueueLiveAgent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "agent_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "x-max-utf8-bytes": 256,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+              },
+              "observed": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "queue_member": {
+                "type": "boolean"
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "wait",
+                  "sync",
+                  "ready",
+                  "ringing",
+                  "answered",
+                  "wrapup",
+                  "paused",
+                  "outbound"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "observed"
+                ]
+              }
+            },
+            "required": [
+              "agent_id",
+              "name",
+              "observed",
+              "queue_member",
+              "state",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "agent_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{32}$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256,
+                "x-max-utf8-bytes": 256,
+                "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+              },
+              "observed": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "queue_member": {
+                "type": "boolean",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              },
+              "state": {
+                "type": "string",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "not_observed",
+                  "inconsistent_sources",
+                  "source_unavailable"
+                ]
+              }
+            },
+            "required": [
+              "agent_id",
+              "name",
+              "observed",
+              "queue_member",
+              "state",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        ],
+        "description": "One authorized user from the selected queue persisted roster. name comes only from the authorized user document, never a broker payload. observed/state/queue_member are bounded runtime observations, not endpoint reachability, ready-to-ring eligibility, staffing capacity or an agent command. Unobserved is unknown, never implicitly logged out. No PID, runtime instance digest, device identity or private user fields are exposed."
+      },
+      "QueueLiveAgents": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "enum": [
+              200
+            ]
+          },
+          "roster_complete": {
+            "type": "boolean"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "runtime_complete": {
+            "type": "boolean"
+          },
+          "endpoint_reachability_verified": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "observation_started": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds.",
+            "nullable": true
+          },
+          "observation_finished": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds.",
+            "nullable": true
+          },
+          "rows": {
+            "type": "array",
+            "maxItems": 200,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/QueueLiveAgent"
+            }
+          }
+        },
+        "required": [
+          "limit",
+          "roster_complete",
+          "truncated",
+          "runtime_complete",
+          "endpoint_reachability_verified",
+          "observation_started",
+          "observation_finished",
+          "rows"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "truncated": {
+                    "enum": [
+                      false
+                    ]
+                  },
+                  "roster_complete": {
+                    "enum": [
+                      true
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "truncated": {
+                    "enum": [
+                      true
+                    ]
+                  },
+                  "roster_complete": {
+                    "enum": [
+                      false
+                    ]
+                  },
+                  "runtime_complete": {
+                    "enum": [
+                      false
+                    ]
+                  },
+                  "rows": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/components/schemas/QueueLiveAgent"
+                    },
+                    "minItems": 200
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "runtime_complete": {
+                    "enum": [
+                      false
+                    ]
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "runtime_complete": {
+                    "enum": [
+                      true
+                    ]
+                  },
+                  "truncated": {
+                    "enum": [
+                      false
+                    ]
+                  },
+                  "observation_started": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 1,
+                    "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds."
+                  },
+                  "observation_finished": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 1,
+                    "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds."
+                  },
+                  "rows": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "uniqueItems": true,
+                    "items": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/QueueLiveAgent"
+                        },
+                        {
+                          "properties": {
+                            "observed": {
+                              "enum": [
+                                true
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "oneOf": [
+              {
+                "properties": {
+                  "observation_started": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 1,
+                    "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds."
+                  },
+                  "observation_finished": {
+                    "type": "integer",
+                    "format": "int64",
+                    "minimum": 1,
+                    "description": "Unix epoch seconds. Not Kazoo Gregorian seconds or milliseconds."
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "observation_started": {
+                    "type": "integer",
+                    "nullable": true,
+                    "enum": [
+                      null
+                    ]
+                  },
+                  "observation_finished": {
+                    "type": "integer",
+                    "nullable": true,
+                    "enum": [
+                      null
+                    ]
+                  },
+                  "runtime_complete": {
+                    "enum": [
+                      false
+                    ]
+                  },
+                  "rows": {
+                    "type": "array",
+                    "maxItems": 200,
+                    "uniqueItems": true,
+                    "items": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/QueueLiveAgent"
+                        },
+                        {
+                          "properties": {
+                            "observed": {
+                              "enum": [
+                                false
+                              ]
+                            },
+                            "reason": {
+                              "enum": [
+                                "source_unavailable"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "description": "Selected queue only; overview returns agents=null. The sole roster query fetches at most 201 selected-queue user documents, authorizes every fetched agent and its status resource (including lookahead), then returns at most 200 unique ID-sorted rows. No global user listing. roster_complete is !truncated. runtime_complete requires an available runtime observation, every displayed row observed, and no roster truncation; an available empty roster can be complete, unavailable runtime cannot. Missing runtime rows are not_observed; unavailable runtime yields source_unavailable rows and null timestamps. Observation timestamps are Unix seconds; runtime enforces finish>=start and exact authorized row identities. These cross-value/runtime checks are not fully expressible in OpenAPI. Even complete runtime observations do not verify endpoints or prove agents can accept a call."
+      },
       "QueueLiveCall": {
         "oneOf": [
           {
@@ -49014,16 +49368,10 @@
             "type": "boolean"
           },
           "agent_runtime": {
-            "type": "boolean",
-            "enum": [
-              false
-            ]
+            "type": "boolean"
           },
           "websocket_updates": {
-            "type": "boolean",
-            "enum": [
-              false
-            ]
+            "type": "boolean"
           },
           "historical_reporting": {
             "type": "boolean",
@@ -49039,7 +49387,7 @@
           "historical_reporting"
         ],
         "additionalProperties": false,
-        "description": "live_call_details is true for selected detail and false for overview; it indicates the route supports call rows, not that current rows are available. agent_runtime, websocket_updates and historical_reporting remain false."
+        "description": "live_call_details and agent_runtime are true for selected detail and false for overview; they indicate supported DTOs, not current data availability or ready eligibility. websocket_updates indicates locally registered bh_queue_live support, not broker/browser health or replay. A separate Blackhole deployment is not discovered by this flag. historical_reporting remains false."
       },
       "QueueLiveSnapshot": {
         "type": "object",
@@ -49084,6 +49432,20 @@
               }
             ]
           },
+          "agents": {
+            "oneOf": [
+              {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              },
+              {
+                "$ref": "#/components/schemas/QueueLiveAgents"
+              }
+            ]
+          },
           "pagination": {
             "$ref": "#/components/schemas/QueueLivePagination"
           },
@@ -49101,6 +49463,7 @@
           "window",
           "queues",
           "calls",
+          "agents",
           "pagination",
           "source",
           "capabilities"
@@ -49117,10 +49480,22 @@
                   null
                 ]
               },
+              "agents": {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              },
               "capabilities": {
                 "type": "object",
                 "properties": {
                   "live_call_details": {
+                    "enum": [
+                      false
+                    ]
+                  },
+                  "agent_runtime": {
                     "enum": [
                       false
                     ]
@@ -49135,10 +49510,18 @@
               "calls": {
                 "$ref": "#/components/schemas/QueueLiveCalls"
               },
+              "agents": {
+                "$ref": "#/components/schemas/QueueLiveAgents"
+              },
               "capabilities": {
                 "type": "object",
                 "properties": {
                   "live_call_details": {
+                    "enum": [
+                      true
+                    ]
+                  },
+                  "agent_runtime": {
                     "enum": [
                       true
                     ]
@@ -49173,10 +49556,22 @@
                       null
                     ]
                   },
+                  "agents": {
+                    "type": "object",
+                    "nullable": true,
+                    "enum": [
+                      null
+                    ]
+                  },
                   "capabilities": {
                     "type": "object",
                     "properties": {
                       "live_call_details": {
+                        "enum": [
+                          false
+                        ]
+                      },
+                      "agent_runtime": {
                         "enum": [
                           false
                         ]
@@ -49218,10 +49613,18 @@
                   "calls": {
                     "$ref": "#/components/schemas/QueueLiveCalls"
                   },
+                  "agents": {
+                    "$ref": "#/components/schemas/QueueLiveAgents"
+                  },
                   "capabilities": {
                     "type": "object",
                     "properties": {
                       "live_call_details": {
+                        "enum": [
+                          true
+                        ]
+                      },
+                      "agent_runtime": {
                         "enum": [
                           true
                         ]
@@ -49271,7 +49674,7 @@
         "required": [
           "data"
         ],
-        "description": "A successful selected-queue response contains exactly one queue, a calls object, live_call_details=true and never another page. Inspect calls.available and calls.complete; the capability alone is not availability."
+        "description": "A successful selected-queue response contains exactly one queue, calls and agents objects, live_call_details=true, agent_runtime=true and never another queue page. Inspect calls.available/calls.complete and agents roster/runtime completeness separately; capabilities alone are not availability or eligibility."
       },
       "CallbackPublic": {
         "type": "object",
@@ -52615,6 +53018,223 @@
         },
         "additionalProperties": true
       },
+      "BlackholeQueueLiveSubscribe": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "subscribe"
+            ]
+          },
+          "auth_token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384,
+            "writeOnly": true
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "x-max-utf8-bytes": 128
+          },
+          "data": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "account_id": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{32}$"
+                  },
+                  "binding": {
+                    "type": "string",
+                    "pattern": "^queue_live\\.changed\\.[a-f0-9]{32}$"
+                  }
+                },
+                "required": [
+                  "account_id",
+                  "binding"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "account_id": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{32}$"
+                  },
+                  "bindings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^queue_live\\.changed\\.[a-f0-9]{32}$"
+                    },
+                    "minItems": 1,
+                    "maxItems": 1
+                  }
+                },
+                "required": [
+                  "account_id",
+                  "bindings"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "auth_token",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "BlackholeQueueLiveUnsubscribe": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "unsubscribe"
+            ]
+          },
+          "auth_token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16384,
+            "writeOnly": true
+          },
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "x-max-utf8-bytes": 128
+          },
+          "data": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "account_id": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{32}$"
+                  },
+                  "binding": {
+                    "type": "string",
+                    "pattern": "^queue_live\\.changed\\.[a-f0-9]{32}$"
+                  }
+                },
+                "required": [
+                  "account_id",
+                  "binding"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "account_id": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{32}$"
+                  },
+                  "bindings": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^queue_live\\.changed\\.[a-f0-9]{32}$"
+                    },
+                    "minItems": 1,
+                    "maxItems": 1
+                  }
+                },
+                "required": [
+                  "account_id",
+                  "bindings"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "auth_token",
+          "request_id",
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "BlackholeQueueLiveHint": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "enum": [
+              1
+            ]
+          },
+          "account_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "queue_id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        },
+        "required": [
+          "version",
+          "account_id",
+          "queue_id"
+        ],
+        "additionalProperties": false
+      },
+      "BlackholeQueueLiveEvent": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "event"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "enum": [
+              "changed"
+            ]
+          },
+          "subscribed_key": {
+            "type": "string",
+            "pattern": "^queue_live\\.changed\\.[a-f0-9]{32}$"
+          },
+          "subscription_key": {
+            "type": "string",
+            "pattern": "^acdc\\.dashboard\\.changed\\.[a-f0-9]{32}\\.[a-f0-9]{32}$"
+          },
+          "routing_key": {
+            "type": "string",
+            "pattern": "^acdc\\.dashboard\\.changed\\.[a-f0-9]{32}\\.[a-f0-9]{32}$"
+          },
+          "data": {
+            "$ref": "#/components/schemas/BlackholeQueueLiveHint"
+          }
+        },
+        "required": [
+          "action",
+          "name",
+          "subscribed_key",
+          "subscription_key",
+          "routing_key",
+          "data"
+        ],
+        "additionalProperties": false,
+        "description": "Closed invalidation only. Runtime/client must match data.account_id and data.queue_id to the exact subscription and all routing fields; regex shape alone is not correlation or authorization. No counts, caller/agent fields, timestamps, revision or sequence."
+      },
       "BlackholeSubscribe": {
         "type": "object",
         "properties": {
@@ -52684,7 +53304,7 @@
           "request_id",
           "data"
         ],
-        "description": "Recommended frontend command profile: explicitly send token and correlation ID, and exactly one of binding or bindings. Server fields are more permissive. In this checkout a supplied bindings array takes precedence over binding; do not rely on upstream documentation claiming the reverse. Omitted account_id defaults to the authenticated account. Empty unsubscribe is rejected; unsubscribe the explicit tracked bindings or close the socket."
+        "description": "Generic call-namespace frontend command profile; queue_live uses its stricter BlackholeQueueLiveSubscribe/Unsubscribe schemas and fresh scope authorization. Explicitly send token and correlation ID, and exactly one of binding or bindings. Server fields are more permissive. In the generic path a supplied bindings array takes precedence over binding; do not rely on upstream documentation claiming the reverse. Omitted account_id defaults to the authenticated account. Empty unsubscribe is rejected; unsubscribe the explicit tracked bindings or close the socket."
       },
       "BlackholeUnsubscribe": {
         "type": "object",
@@ -52755,7 +53375,7 @@
           "request_id",
           "data"
         ],
-        "description": "Recommended frontend command profile: explicitly send token and correlation ID, and exactly one of binding or bindings. Server fields are more permissive. In this checkout a supplied bindings array takes precedence over binding; do not rely on upstream documentation claiming the reverse. Omitted account_id defaults to the authenticated account. Empty unsubscribe is rejected; unsubscribe the explicit tracked bindings or close the socket."
+        "description": "Generic call-namespace frontend command profile; queue_live uses its stricter BlackholeQueueLiveSubscribe/Unsubscribe schemas and fresh scope authorization. Explicitly send token and correlation ID, and exactly one of binding or bindings. Server fields are more permissive. In the generic path a supplied bindings array takes precedence over binding; do not rely on upstream documentation claiming the reverse. Omitted account_id defaults to the authenticated account. Empty unsubscribe is rejected; unsubscribe the explicit tracked bindings or close the socket."
       },
       "BlackholePing": {
         "type": "object",
@@ -53974,9 +54594,31 @@
     "filtering": {
       "company": "data.account_id selects a Kazoo account, checked against the authenticated account hierarchy.",
       "call": "call.<EVENT>.<CALL_ID>; use * in the final segment for account-wide call events.",
-      "queue_and_agent": "Dedicated dashboard selectors are not implemented. Do not use a queue/agent ID in the call-ID position or rely on client-side filtering for authorization."
+      "queue_and_agent": "queue_live.changed.QUEUE_ID is the dedicated account-and-queue invalidation source contract below; no agent selector is provided. Never use a queue/agent ID in the call-ID position or rely on client-side filtering for authorization."
     },
-    "acdc_dashboard": "Proposed: queue-scoped dashboard snapshots/events, permissions and gap/resync protocol are not yet implemented or published as callable contracts."
+    "acdc_dashboard": "Implemented in source; deployment-specific acceptance required: exact account/queue invalidation with fresh authorization, sequential ACK admission and mandatory 15-second HTTP reconciliation. No historical or durable event contract.",
+    "queue_live": {
+      "implementation_status": "implemented-in-source; deployment-specific acceptance required",
+      "runtime_verification": "Not established by this catalog",
+      "selector": "queue_live.changed.QUEUE_ID",
+      "account": "Explicit data.account_id; both IDs are 32 lowercase hexadecimal characters; no wildcard.",
+      "client_messages": {
+        "subscribe": {
+          "$ref": "#/components/schemas/BlackholeQueueLiveSubscribe"
+        },
+        "unsubscribe": {
+          "$ref": "#/components/schemas/BlackholeQueueLiveUnsubscribe"
+        }
+      },
+      "server_event": {
+        "$ref": "#/components/schemas/BlackholeQueueLiveEvent"
+      },
+      "authorization": "Fresh token through local active Crossbar authority at subscribe and each coalesced delivery; live, queues/stats and selected tenant-owned queue scopes, not merely account hierarchy. Native token caches remain; no instant global revocation guarantee. Ordinary call namespace authentication is separate.",
+      "admission": "Send one binding per frame and wait for its matching success request_id before the next subscribe. One authorization worker per socket, 3-second result deadline, at most 100 subscriptions and 100 coalesced dirty scopes. Busy/error is not success. Unsubscribe explicit tracked bindings; close cleans session ownership. Subscribe ACK is not a broker-ready barrier.",
+      "reconciliation_seconds": 15,
+      "delivery": "Lossy invalidations, not deltas. Refetch the authorized HTTP snapshot on a scoped hint and on reconnect, and reconcile overview inventory and snapshots at least every 15 seconds. Overflow, broker/federation, binding-readiness and mutation coverage gaps can lose hints. No replay, sequence, durable cursor or atomic snapshot/event boundary.",
+      "capability": "Public websocket_updates readiness is separate; do not enable clients solely from this source contract or an HTTP101 response."
+    }
   },
   "tags": [
     {

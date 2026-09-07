@@ -110,8 +110,8 @@ function queueLiveContract() {
             ],
             description: 'Consensus/coverage metadata for observed replicas, not an atomic cluster snapshot. available means consensus or an empty configured scope; unavailable means source_unavailable; every other listed reason is partial. consistent is true only for available. Source IDs, node names and internal scan counts are intentionally absent. A response timestamp is not source observation time. Partial/unavailable observations must not be presented as complete occupancy.'},
         QueueLiveCapabilities: {...strict({live_call_details: {type: 'boolean'}, agent_runtime: {type: 'boolean'},
-            websocket_updates: fixedFalse, historical_reporting: fixedFalse}),
-            description: 'live_call_details and agent_runtime are true for selected detail and false for overview; they indicate supported DTOs, not current data availability or ready eligibility. websocket_updates and historical_reporting remain false.'}
+            websocket_updates: {type: 'boolean'}, historical_reporting: fixedFalse}),
+            description: 'live_call_details and agent_runtime are true for selected detail and false for overview; they indicate supported DTOs, not current data availability or ready eligibility. websocket_updates indicates locally registered bh_queue_live support, not broker/browser health or replay. A separate Blackhole deployment is not discovered by this flag. historical_reporting remains false.'}
     };
     schemas.QueueLiveSnapshot = strict({version: {type: 'integer', enum: [1]}, account_id: id,
         generated_at: {...time, description: time.description + ' Response generation time, not proof of source freshness.'},
@@ -136,7 +136,7 @@ function queueLiveContract() {
         paths[url] = {get: {
             operationId: selected ? 'getAccountQueueLiveSnapshot' : 'getAccountQueuesLiveSnapshot', tags: ['ACDC queues'],
             summary: selected ? 'Read an observed live snapshot for one queue' : 'Read a page of observed live queue snapshots',
-            description: 'Implemented in source; not live-deployed. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. No caller name/number, actual queue positions, ready counts, SLA, historical reports or WebSocket updates are supplied. ' +
+            description: 'Implemented in source; deployment-specific acceptance required. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. No caller name/number, actual queue positions, ready counts, SLA or historical reports are supplied. When websocket_updates is true, use the separate x-blackhole.queue_live protocol to invalidate and refetch this snapshot. ' +
                 (selected ? 'This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.'
                     : 'page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.'),
             parameters: [{name: 'ACCOUNT_ID', in: 'path', required: true, schema: id}, ...(selected
@@ -153,7 +153,7 @@ function queueLiveContract() {
                 503: response('Queue/agent inventory or snapshot dependency unavailable or malformed; no fabricated empty inventory', ref('CrossbarError'))
             },
             'x-reject-unknown-query-parameters': true,
-            'x-contract-review': 'source-reviewed', 'x-implementation-status': 'implemented-in-source; not-live-deployed',
+            'x-contract-review': 'source-reviewed', 'x-implementation-status': 'implemented-in-source; deployment-specific acceptance required',
             'x-runtime-verification': 'Offline source/schema contract only. No broker, HTTP, browser, authorization or deployment acceptance is asserted by this catalog.'
         }};
     }
@@ -184,7 +184,7 @@ function applyQueueLive({spec, root}) {
         '<<"source_unavailable">>-> <<"unavailable">>; _-> <<"partial">>',
         'IncludeCalls = QueueId =/= undefined', '<<"calls">>,public_calls(IncludeCalls, ActiveCalls)',
         '<<"live_call_details">>,IncludeCalls',
-        '{<<"agent_runtime">>,IncludeCalls},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}',
+        '{<<"agent_runtime">>,IncludeCalls},{<<"websocket_updates">>,websocket_updates()},{<<"historical_reporting">>,false}',
         'AgentScope = cb_acdc_live_agents:prepare(Context,QueueId)',
         '{<<"agents">>,cb_acdc_live_agents:public(AgentScope,RuntimeAgents)}',
         'case AgentIds of undefined -> []; _ -> [{<<"Agent-IDs">>,AgentIds}] end',

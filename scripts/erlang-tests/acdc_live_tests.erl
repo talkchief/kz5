@@ -59,10 +59,11 @@ reset()->
     [put_state(K,V) || {K,V}<-[{docs,[doc(?Q)]},{doc_result,default},{denied,none},
         {auth_result,normal},{scope,true},{catalog_calls,0},{open_calls,0},{broker_calls,0},
         {roster_calls,0},{agent_docs,[agent_doc()]},{resource_permits,[]},{agent_mode,normal},
-        {node_calls,0},{permits,[]},{nodes,[?N1,?N2]},{nodes_after,same},{broker_mode,consensus}]],ok.
+        {blackhole_modules,[]},{node_calls,0},{permits,[]},{nodes,[?N1,?N2]},{nodes_after,same},{broker_mode,consensus}]],ok.
 setup()->
     T=ets:new(acdc_live_fixture,[named_table,public]),reset(),
-    meck:new([kz_datamgr,kz_nodes,kz_amqp_worker,crossbar_bindings,kz_auth_scope],[non_strict,no_link]),
+    meck:new([kz_datamgr,kz_nodes,kz_amqp_worker,crossbar_bindings,kz_auth_scope,blackhole_bindings],[non_strict,no_link]),
+    meck:expect(blackhole_bindings,modules_loaded,fun()->case state(blackhole_modules) of fail->error(unavailable);Ms->Ms end end),
     meck:expect(crossbar_bindings,pmap,fun auth/2),
     meck:expect(kz_auth_scope,all,fun(<<"fixture-token">>,[<<"fixture:queues">>])->state(scope) end),
     meck:expect(kz_datamgr,get_results,fun(Db,<<"queues/crossbar_listing">>,Opts)->
@@ -80,7 +81,7 @@ setup()->
         Call=bump(node_calls),Ns=case {Call,state(nodes_after)} of {1,_}->state(nodes); {_,same}->state(nodes); {_,Other}->Other end,
         [#kz_node{node=N,kapps=[{<<"acdc">>,#whapp_info{startup=1}}],last_heartbeat=1} || N<-Ns] end),
     meck:expect(kz_amqp_worker,call_collect,fun broker/4),T.
-teardown(T)->meck:unload([kz_datamgr,kz_nodes,kz_amqp_worker,crossbar_bindings,kz_auth_scope]),ets:delete(T).
+teardown(T)->meck:unload([kz_datamgr,kz_nodes,kz_amqp_worker,crossbar_bindings,kz_auth_scope,blackhole_bindings]),ets:delete(T).
 auth(<<"v2_resource.authorize">>,C)->
     [{Resource,Params}|_]=cb_context:req_nouns(C),
     put_state(resource_permits,[{Resource,Params}|state(resource_permits)]),
@@ -123,6 +124,7 @@ broker(Req,Publish,Until,3000)->
     end.
 
 public_route_test_()->{setup,fun setup/0,fun teardown/1,fun(_)->[
+    {"WebSocket capability follows local registration without claiming delivery health",fun websocket_capability/0},
     {"real overview and detail routes, no-store and no replica summation",fun public_success/0},
     {"detail call rows, bounded truncation and unknown versus empty",fun detail_calls/0},
     {"runtime agent observations share the authorized snapshot request",fun detail_agents/0},
@@ -136,6 +138,11 @@ public_route_test_()->{setup,fun setup/0,fun teardown/1,fun(_)->[
     {"node inventory and selected source caps are enforced",fun inventory_limits/0},
     {"empty inventory and no known source do not call broker",fun no_source/0}
 ] end}.
+websocket_capability()->
+    [begin reset(),put_state(blackhole_modules,Modules),
+        C=get(undefined,j([])),?assertEqual(success,cb_context:resp_status(C)),
+        ?assertEqual(Expected,kz_json:get_value([<<"capabilities">>,<<"websocket_updates">>],cb_context:resp_data(C)))
+    end || {Modules,Expected}<-[{[],false},{[bh_call],false},{[bh_call,bh_queue_live],true},{fail,false}]].
 public_success()->
     reset(),?assertEqual([<<"GET">>],cb_queues:allowed_methods(<<"live">>)),
     ?assertEqual([<<"GET">>],cb_queues:allowed_methods(?Q,<<"live">>)),

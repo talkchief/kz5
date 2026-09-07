@@ -42,12 +42,18 @@ get(Context, QueueId) ->
             {<<"pagination">>,obj([{<<"page_size">>,Size},{<<"next_start_queue_id">>,Next},{<<"has_more">>,Next=/=null}])},
             {<<"source">>,Source},
             {<<"capabilities">>,obj([{<<"live_call_details">>,IncludeCalls},
-                {<<"agent_runtime">>,IncludeCalls},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}])}]),
+                {<<"agent_runtime">>,IncludeCalls},{<<"websocket_updates">>,websocket_updates()},{<<"historical_reporting">>,false}])}]),
         crossbar_util:response(Data, Safe)
     catch
         throw:{live_error, Code, Message} -> crossbar_util:response(error, Message, Code, Safe);
         _:_ -> crossbar_util:response(error, <<"queue_live_unavailable">>, 503, Safe)
     end.
+
+%% Local protocol registration is a capability, not broker or browser health.
+%% Separate Blackhole deployments need their own explicitly verified integration.
+websocket_updates() ->
+    try lists:member(bh_queue_live,blackhole_bindings:modules_loaded())
+    catch _:_ -> false end.
 
 options(Query, QueueId) ->
     Allowed = case QueueId of undefined -> [<<"page_size">>,<<"start_queue_id">>]; _ -> [] end,

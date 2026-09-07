@@ -109,7 +109,7 @@ for (const required of ['scripts/build-api-docs.cjs', 'scripts/api-docs-overlays
 for (const route of ['/accounts/{ACCOUNT_ID}/queues/live', '/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/live']) {
     const operation = spec.paths[route]?.get;
     assert(operation, 'Queue-live route missing from full catalog');
-    assert.equal(operation['x-implementation-status'], 'implemented-in-source; not-live-deployed');
+    assert.equal(operation['x-implementation-status'], 'implemented-in-source; deployment-specific acceptance required');
     assert.equal(operation['x-runtime-source-sha256'], checked.get('applications/acdc/src/cb_acdc_live.erl'));
     assert(coverage.source_reviewed_operations.includes('GET ' + route), 'Reviewed route missing from coverage');
 }

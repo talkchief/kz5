@@ -9,13 +9,13 @@
   "files": [
     {
       "file": "blackhole.html",
-      "bytes": 13490,
-      "sha256": "51b802f0532710491f5825e052c2b8d8c32f41c7dd21d00683e527a88c1521bc"
+      "bytes": 17102,
+      "sha256": "81a496ca2b7c1cbcf92da9e2bb25929036dbf2bac604d7010c147c389a18d689"
     },
     {
       "file": "coverage.json",
-      "bytes": 132611,
-      "sha256": "f547f77cc5a8f3ae96eff89bd2f338990e28928ee9dd0d52b0042723ba959e20"
+      "bytes": 134101,
+      "sha256": "8ee36d9a5587bbce34cfadb8cc1df29e17e75d27b47afcc68d7370d4be2e6b46"
     },
     {
       "file": "index.html",
@@ -24,8 +24,8 @@
     },
     {
       "file": "openapi.json",
-      "bytes": 1720652,
-      "sha256": "e2671a75a364c989c591edfd69cb8e70cf9d75f2a230dd313d7c8a928bd23758"
+      "bytes": 1743650,
+      "sha256": "62428d75a7708551adefd44d35970e6628ca837ec978c9eec4253aa6ef5d919a"
     },
     {
       "file": "planned.openapi.json",

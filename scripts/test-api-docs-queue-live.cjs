@@ -62,7 +62,7 @@ async function main() {
             const op = contract.paths[url].get;
             assert.deepEqual(op.security, [{CrossbarToken: []}]);
             assert.equal(op['x-reject-unknown-query-parameters'], true);
-            assert.equal(op['x-implementation-status'], 'implemented-in-source; not-live-deployed');
+            assert.equal(op['x-implementation-status'], 'implemented-in-source; deployment-specific acceptance required');
             assert(op.description.includes('lookahead')); assert(op.description.includes('queues/stats'));
             assert.equal(op.requestBody, undefined);
             assert(!op['x-live-verification']);
@@ -126,8 +126,9 @@ async function main() {
         rejects(sourceTest, {...source, reason: 'invented'});
         const capTest = validate('QueueLiveCapabilities'), caps = snapshot().capabilities; accepts(capTest, caps);
         accepts(capTest, {...caps, live_call_details: true}); accepts(capTest, {...caps, agent_runtime: true});
+        accepts(capTest, {...caps, websocket_updates: true});
         for (const key of Object.keys(caps)) {
-            if (!['live_call_details', 'agent_runtime'].includes(key)) rejects(capTest, {...caps, [key]: true});
+            if (key === 'historical_reporting') rejects(capTest, {...caps, [key]: true});
             rejects(capTest, {...caps, [key]: null});
             const missing = {...caps}; delete missing[key]; rejects(capTest, missing);
         }
@@ -269,7 +270,7 @@ async function main() {
             ['cb_acdc_live.erl', 'acdc_live_auth:authorize(C)'],
             ['acdc_live_auth.erl', 'andalso scopes(C,Resource).'],
             ['acdc_live_auth.erl', 'kz_auth_scope:all(cb_context:auth_token(C),Required)'],
-            ['cb_acdc_live.erl', '{<<"agent_runtime">>,IncludeCalls},{<<"websocket_updates">>,false},{<<"historical_reporting">>,false}'],
+            ['cb_acdc_live.erl', '{<<"agent_runtime">>,IncludeCalls},{<<"websocket_updates">>,websocket_updates()},{<<"historical_reporting">>,false}'],
             ['cb_acdc_live_agents.erl', 'acdc_live_auth:permit(C,<<"agents">>,[I,<<"status">>])'],
             ['cb_acdc_live_agents.erl', 'selected(val(<<"queues">>,D),Q)'],
             ['cb_acdc_live_agents.erl', 'Start-?EPOCH,Finish-?EPOCH,true'],

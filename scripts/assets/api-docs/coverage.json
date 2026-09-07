@@ -1302,8 +1302,8 @@
     "POST /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}",
     "GET /websocket"
   ],
-  "schema_count": 498,
-  "internal_reference_count": 1585,
+  "schema_count": 504,
+  "internal_reference_count": 1596,
   "unresolved_reference_count": 0,
   "schema_adjustments": [
     {
@@ -2284,7 +2284,12 @@
     },
     {
       "file": "applications/acdc/src/cb_acdc_live.erl",
-      "sha256": "e9c3a26e14cad61845af49ff79707aeecb09378c761764680a2899a792a7d464",
+      "sha256": "d560b56a14eca992334575f9dfe655178b9124774e91e9fa2c59d826824c12ce",
+      "literal_binding_nouns": []
+    },
+    {
+      "file": "applications/acdc/src/cb_acdc_live_agents.erl",
+      "sha256": "2e2515b47a95ec2698c0bdf2948e1c640192ebb436a10ec49784863dbc0c4725",
       "literal_binding_nouns": []
     },
     {
@@ -2294,7 +2299,7 @@
     },
     {
       "file": "applications/acdc/src/cb_agents.erl",
-      "sha256": "fc64b5ceda99d46e6bd7c22a5e50fe662e5169feab4179de6641fabb4c512423",
+      "sha256": "c00ed6ce0fd864bc3b7f9247f6684c62c9502d67d993e51e9eccbda2723c722d",
       "literal_binding_nouns": [
         "agents"
       ]
@@ -2327,6 +2332,10 @@
   ],
   "inputs": [
     {
+      "file": "applications/acdc/priv/couchdb/views/queues.json",
+      "sha256": "b878debad73a89e6e4395baef945acd149169451c2942916fc1b9ca6a27320da"
+    },
+    {
       "file": "applications/acdc/src/acdc_agent_handler.erl",
       "sha256": "f1f90d479e904cdb1fd0f623fbbfc6e3b50b4788e6c06e47ea858184beadbb60"
     },
@@ -2339,6 +2348,10 @@
       "sha256": "79c0c21aac1a1454e9bde3780e6f2638a8fec49a914be3216ab86c279a25b112"
     },
     {
+      "file": "applications/acdc/src/acdc_dashboard_agents.erl",
+      "sha256": "f575a480567c794943efefa9543c7729bb3d8c7cf74bec5a5df119a4b143721a"
+    },
+    {
       "file": "applications/acdc/src/acdc_dashboard_collector.erl",
       "sha256": "dc6db8c9e0dee711a2b59a281d665bd93ae6beb9027eac863da919010ba1f138"
     },
@@ -2348,23 +2361,31 @@
     },
     {
       "file": "applications/acdc/src/acdc_dashboard_snapshot.erl",
-      "sha256": "d50efa852e6953ebd96118106722a710b4369d058eebacbc6613aa3ab1e94ba9"
+      "sha256": "2e3c9bfd846dca06ff770f5b3851e9cbf741132b4689683ccd05547e6d3ff807"
     },
     {
       "file": "applications/acdc/src/acdc_live_auth.erl",
-      "sha256": "7f78b0543c7154410071b3f7178f47e856525d0be0c4a03f4a8349f6df77d1a8"
+      "sha256": "8afc95e5a425c04607f63e1a9ebfc56c3f6dc55ebce2d293ccc54fc95d85a5f3"
+    },
+    {
+      "file": "applications/acdc/src/acdc_live_auth.erl",
+      "sha256": "8afc95e5a425c04607f63e1a9ebfc56c3f6dc55ebce2d293ccc54fc95d85a5f3"
     },
     {
       "file": "applications/acdc/src/acdc_stats.erl",
-      "sha256": "c9621d1e4056c7efaea2f8aaf2258c5744750d079ca15f0c5f7ac0ef8231675f"
+      "sha256": "5a61aa0b2dd1ac633cda0df99c5f8c7aa010f7b95a084491e6e62757a5db3828"
     },
     {
       "file": "applications/acdc/src/cb_acdc_agent_queue.erl",
       "sha256": "f018a57a3b8c70572033a19f78756403f30a2d8699e5db785fd40dcfc2dfbfd1"
     },
     {
+      "file": "applications/acdc/src/cb_acdc_live_agents.erl",
+      "sha256": "2e2515b47a95ec2698c0bdf2948e1c640192ebb436a10ec49784863dbc0c4725"
+    },
+    {
       "file": "applications/acdc/src/cb_acdc_live.erl",
-      "sha256": "e9c3a26e14cad61845af49ff79707aeecb09378c761764680a2899a792a7d464"
+      "sha256": "d560b56a14eca992334575f9dfe655178b9124774e91e9fa2c59d826824c12ce"
     },
     {
       "file": "applications/acdc/src/cb_acdc_queue_editor.erl",
@@ -2372,11 +2393,11 @@
     },
     {
       "file": "applications/acdc/src/cb_agents.erl",
-      "sha256": "fc64b5ceda99d46e6bd7c22a5e50fe662e5169feab4179de6641fabb4c512423"
+      "sha256": "c00ed6ce0fd864bc3b7f9247f6684c62c9502d67d993e51e9eccbda2723c722d"
     },
     {
       "file": "applications/acdc/src/cb_agents.erl",
-      "sha256": "fc64b5ceda99d46e6bd7c22a5e50fe662e5169feab4179de6641fabb4c512423"
+      "sha256": "c00ed6ce0fd864bc3b7f9247f6684c62c9502d67d993e51e9eccbda2723c722d"
     },
     {
       "file": "applications/acdc/src/cb_queues.erl",
@@ -2391,12 +2412,16 @@
       "sha256": "486ecc35e1bec38dfb8e4008f47da33a93cb2a2fa4541059fe589e26261c214c"
     },
     {
+      "file": "applications/acdc/src/kapi_acdc_dashboard_events.erl",
+      "sha256": "1b90e33420c37340bd1586dc46ecdd51d18bc21877b50381945bcc8136589510"
+    },
+    {
       "file": "applications/acdc/src/kapi_acdc_dashboard.erl",
-      "sha256": "527a615c389d7e2cc822b1f61b863e7d6e17d4c5ae5330d2dffdb6017749f458"
+      "sha256": "6930f3b06579ba629bc321c915d44d18d8b33f8fe3060d26f3502350389db6f5"
     },
     {
       "file": "applications/blackhole/src/bh_context.erl",
-      "sha256": "9cae01cddd3f09f5ea05c8d74a9845d345529a310ba50feca0550b0ab8994b22"
+      "sha256": "9ef91e8c8305feeb0b8058fa3bd2dcef7bbfeb0caecadb5dcd0382bd003ca014"
     },
     {
       "file": "applications/blackhole/src/bh_events.erl",
@@ -2420,7 +2445,7 @@
     },
     {
       "file": "applications/blackhole/src/blackhole_socket_handler.erl",
-      "sha256": "d639fa5e20f597eb82cecd4628379e5bd9f2a8f549e8a14edd25b723c7167df4"
+      "sha256": "69311f0fa12d34f04d6db756f7abb09a60600e588b05c504c6ac54931b5b7bd5"
     },
     {
       "file": "applications/blackhole/src/modules/bh_authz_subscribe.erl",
@@ -2433,6 +2458,10 @@
     {
       "file": "applications/blackhole/src/modules/bh_ping.erl",
       "sha256": "3c26df37e5672ed4b7c79725152ba1d242e20394a74d1c9d46893142b243892c"
+    },
+    {
+      "file": "applications/blackhole/src/modules/bh_queue_live.erl",
+      "sha256": "a914fe091da047e6348e3996438c68ff10ac73a6b03ef79a406233b6717de875"
     },
     {
       "file": "applications/blackhole/src/modules/bh_token_auth.erl",
@@ -2868,7 +2897,7 @@
     },
     {
       "file": "scripts/api-docs-blackhole.cjs",
-      "sha256": "9efd3137442f68dd23ed22cd38b15405fee5e7e3893faae0325bc3cdee12f7f2"
+      "sha256": "2dc14b3460b810cb0dca25ce35e1bed655bb5646e35f90798365a8f6cae005db"
     },
     {
       "file": "scripts/api-docs-members-devices.cjs",
@@ -2884,7 +2913,7 @@
     },
     {
       "file": "scripts/api-docs-queue-live.cjs",
-      "sha256": "ba2b3e037bd5c9aee2a7fa7188033c765fe67c876f4214bf2605599e78234868"
+      "sha256": "5f761a3115ee79cb957a1b53988edd3dcb4755a6d3c7ae9fa95b1c0fb3259f38"
     },
     {
       "file": "scripts/api-docs-tooling/package-lock.json",
@@ -2900,11 +2929,19 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "c17f43d09e6501a988f2192027358ae86f141305048331666ce9f9424d63539d"
+      "sha256": "7cfb8fc54d4e552555ea03455b5ad6a39fb55f973fa308d1b8568c3f4f60341b"
     },
     {
       "file": "scripts/patches/blackhole-kazoo5-integration.patch",
+      "sha256": "24bd4269df0b4a3abb0d3890059167eccb7f37a2eafb4cc53ded9649bf5d5293"
+    },
+    {
+      "file": "scripts/patches/blackhole-pre-queue-live-integration.patch",
       "sha256": "69df595de8925eba762eed419fb6e2c5b4ec6ccb9675aebe6291b2c9b874dfe2"
+    },
+    {
+      "file": "scripts/patches/blackhole-queue-live.patch",
+      "sha256": "3339b8d7b9a81ac9c0ff872c236b893c0ea43baa388c8c774f748b46074af123"
     },
     {
       "file": "scripts/patches/blackhole-redaction-to-integration.patch",

@@ -38,7 +38,9 @@ async function offline() {
     assert.deepEqual(websocket.get.security, []);
     assert.deepEqual(spec.paths['/websockets'].get.security, []);
     assert.equal(spec['x-blackhole'].externalDocs.url, '/apis/blackhole.html');
-    assert(spec['x-blackhole'].acdc_dashboard.startsWith('Proposed:'));
+    assert(spec['x-blackhole'].acdc_dashboard.startsWith('Implemented in source; deployment-specific acceptance required:'));
+    assert.equal(spec['x-blackhole'].queue_live.reconciliation_seconds, 15);
+    assert.equal(spec['x-blackhole'].queue_live.selector, 'queue_live.changed.QUEUE_ID');
     assert(!Object.keys(spec.paths).some(url => url.includes('/websocket/subscribe')));
     for (const action of ['subscribe', 'unsubscribe']) {
         const wsValidate = validate(action === 'subscribe' ? 'BlackholeSubscribe' : 'BlackholeUnsubscribe');
@@ -61,8 +63,11 @@ async function offline() {
     assert(wsPage.includes('Company, queue and agent selection'));
     assert(wsPage.includes('Call supervision is an HTTP command'));
     assert(wsPage.includes('planned, not callable'));
+    assert(wsPage.includes('Exact queue-live invalidation'));
+    assert(wsPage.includes('15 seconds'));
+    assert(wsPage.includes('matching success ACKs'));
     assert(spec['x-blackhole'].filtering.company.includes('data.account_id'));
-    assert(spec['x-blackhole'].filtering.queue_and_agent.includes('not implemented'));
+    assert(spec['x-blackhole'].filtering.queue_and_agent.includes('no agent selector'));
     assert.equal(spec['x-blackhole'].inbound_limits.default_bytes, 65536);
     assert.equal(spec['x-blackhole'].inbound_limits.maximum_configured_bytes, 1048576);
     assert.deepEqual(Object.keys(spec['x-blackhole'].inbound_limits.close_codes).sort(), ['1003', '1007', '1009']);
