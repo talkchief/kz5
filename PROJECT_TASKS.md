@@ -273,6 +273,24 @@ proof before promotion; the handoff does not waive those safety gates.
 
 ## P0 — call delivery and callback correctness
 
+### Important UI regression — Callflows → Users entitlements lookup
+
+**UI-02 — OPEN, reported September7 at13:54:21UTC.** Opening the Callflows app
+and then Users requests `GET /v2/accounts/302ae5a70c403124f764cbc54229cfcd/entitlements`.
+The server returns404 `not_found` with `data.message: not found`; the frontend
+shows “An unknown error happened, please try again in a few seconds!”
+Correlation request ID: `cb1c717e99cab3b78e149d081d312652`.
+The supplied response contains a login token: deliberately excluded from this
+register and all repository evidence.
+
+Investigate the served Users component, endpoint availability/registration and
+actual account authorization. Fix the backend contract or explicitly handle an
+unsupported optional capability without hiding real authentication/server errors.
+Acceptance: reproduce before fix; Users loads without this error after fix;
+supported entitlement data and authorization remain correct; include regression
+tests and repeatable installer deployment. Keep callbacks/voices/bridge work
+active; this new report does not postpone those priorities.
+
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
 | P0-21 | DEPLOYED — restricted-user acceptance open | Corrected legacy module spelling with an admin-only management guard. Installer refuses old unguarded backends and preserves unrelated modules. Installer22groups66cc53/cea08b and backend7groupsbcc947/c5cf88 pass; pinned baseline fails5. Deployment209651/1e3fc6 verifies actual bytes/capability/running+effective registration and unchanged31-agent states. Actual admin policy CRUD revision probe7c9f07/47ce1f passes stale412, weak412 and current-delete200+absence. Earlier run2 policy retained after harness POST-replacement mismatch. Ordinary-user HTTP denial and restricted-dashboard matrix remain unverified. See doc/scope_management_dashboard_acceptance.md. |

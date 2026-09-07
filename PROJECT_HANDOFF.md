@@ -6,6 +6,11 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**New important bug UI-02:** Callflows → Users gets404 from the account
+`/entitlements` endpoint and displays a generic error. Full sanitized report,
+request ID and acceptance requirements are in PROJECT_TASKS.md. Do not copy the
+operator's session token into source or logs.
+
 **Post-resize checkpoint September 7:** server has7488MiB usable memory,
 5970MiB available at initial check, no swap; synthetic test-agent service is
 active/running PID1991 after reboot. Named Kazoo apps/ecallmgr/freeswitch/kamailio
