@@ -5,6 +5,37 @@ first for achieved work, deployment status, source locations and next steps.
 
 ## Handover checkpoint — 2026-09-07
 
+### Operator priority correction — 2026-09-07 (supersedes older priorities)
+
+The operator clarified that ONLY historical dashboards were postponed. The
+previous interpretation pausing callbacks and voices was incorrect.
+
+1. **Priority 1: callbacks and built-in Gemini voices.** Finish key-6 handling,
+   durable registration, confirmation audio, independent offer interval,
+   valid-destination return calls and unanswered-first-attempt retries. Complete
+   EN/HE/FR/ES/AR prerecorded female packs and language selection/inheritance;
+   generate missing artifacts once, commit WAVs, and require no Gemini at
+   install/runtime. Deploy matching code/UI/media and prove actual playback.
+2. **Deployment and modular installer:** resolve coherent build/deployment gaps,
+   service readiness and fresh standalone/distributed/ALL installation acceptance.
+3. **Mobile bridge:** finish the sanitized import and reviewed installer/service
+   integration, including isolated failure/retry and ringing acceptance. Do not
+   mutate the production source server or send production notifications.
+4. **Mandatory release gates:** security/TLS, supervision/API acceptance,
+   30-concurrent-call load, recovery/restore and all other open requirements stay
+   in scope; none is waived by this ordering.
+5. **Live dashboards: lowest priority**, retain existing work and outstanding
+   acceptance. Historical dashboards remain postponed; do not resume historical
+   storage/WFM implementation without operator direction.
+
+This ordering overrides the dashboard-only/paused statements in older snapshots
+below. Source-tested work is not deployed or accepted merely by reprioritization.
+
+Resumption evidence: canonical callback media-only check `778a35/6d4296`
+passed22 tests with current production/TEST compilation and unchanged source
+digest on September7; no network/provider/runtime writes. Full lifecycle,
+deployment, actual audio and retry acceptance remain open. See newest handoff.
+
 Keep this register current whenever implementation, deployment, testing or a
 blocker changes. Each task must retain its stable ID, requested behavior,
 source/document locations, evidence, remaining acceptance and next action.
@@ -88,12 +119,10 @@ the latest engineering handoff takes precedence for current deployment state.
 See [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md) for exact build/deployment evidence,
 rollback locations, protected fixture holds and safe resumption instructions.
 
-**Current priority — 2026-09-07:** only the live queue summary and selected-queue
-detail dashboard are being finalized. Callback/voice work is paused; the
-reported key-6 and30-second announcement failures are unresolved. History,
-ClickHouse, WFM and the separate agent dashboard remain postponed. Older ACTIVE
-labels below describe unfinished work, not authorization to resume those areas.
-Current deployment and acceptance evidence is at the top of PROJECT_HANDOFF.md.
+**Current priority — corrected 2026-09-07:** callbacks, Gemini voices and their
+deployment first; installer and mobile bridge remain mandatory. Live dashboards
+are last priority. Historical work remains postponed. See the operator priority
+correction above and the latest deployment evidence in PROJECT_HANDOFF.md.
 
 Live isolation checkpoint: all17 actual HTTP/native Blackhole permission cases
 pass (`573eb1`/`0d57c2`) with4 genuine nonadmin principals. Corrected harness

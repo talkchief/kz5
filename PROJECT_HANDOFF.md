@@ -6,6 +6,33 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**OPERATOR PRIORITY CORRECTION — September7, newest instruction:** callbacks
+and built-in Gemini voices are priority #1, followed by deployment/installer
+issues and the mobile bridge installer. Live dashboards move to lowest priority.
+Only historical dashboard work was postponed; earlier statements pausing
+callbacks/voices were an agent interpretation error and are superseded.
+All installer and production release gates remain mandatory. Preserve the
+unaccepted dashboard sidecar design/source; do not deploy the rejected drain
+candidate. Resume canonical callback/media work using the source maps below,
+check current runtime/source parity before deployment, and do not regenerate
+already valid audio or invoke Gemini during install/runtime. See the corrected
+ordering at the top of PROJECT_TASKS.md. This is a scope correction, not evidence
+that any additional code/media has been deployed or validated.
+
+**Resumed callback verification — September7:** root media-only canonical runner
+`778a35/6d4296` exited0 with22 tests across the actual helper and five-language
+callback-contract suites. Production/TEST compilation and source pins passed;
+input digest `5bcd7e76678f42988001ad768c391fd272401d2ec8b6d4b48eab975a73759ea8`.
+Run used192MiB cap,512MiB reserve,180-second deadline and an isolated network
+namespace. An initial256MiB admission (`b25114`) was refused for insufficient
+available memory; no payload ran. The successful lower-cap run retained the
+reserve and did not stop services. No provider request, import, runtime change
+or live-call test occurred. This reconfirms media contracts, not full callback
+lifecycle or audible playback. Source-only agents resumed media readiness,
+native callback deployment-boundary review and bridge configuration work;
+root retains serial execution/deployment ownership. Dashboard sidecar remains
+unimplemented/unaccepted and is no longer the next implementation priority.
+
 **Drain candidate REJECTED — September7; no deployment:** root run
 `da512e/184d65` failed4 of12 groups, evidence
 `/tmp/kazoo-stats-upgrade-drain.UlbYsh`. The classifier reported completion with
