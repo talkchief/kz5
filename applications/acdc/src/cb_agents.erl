@@ -79,7 +79,7 @@ init() ->
 %% allowed to access the resource, or false if not.
 %% @end
 %%------------------------------------------------------------------------------
-%% A normal read has no resource-specific grant or veto. Explicit abstention
+%% A normal agent action has no resource-specific grant or veto. Explicit abstention
 %% preserves global authorization without manufacturing undef/function_clause
 %% results that stricter embedded-resource callers must reject.
 -spec authorize(cb_context:context()) -> boolean().
@@ -99,11 +99,7 @@ authorize(Context, _, ?RESTART_PATH_TOKEN) ->
 authorize(Context, _, ?STATUS_PATH_TOKEN) -> read_authorization(Context).
 
 -spec read_authorization(cb_context:context()) -> false.
-read_authorization(Context) ->
-    case cb_context:req_verb(Context) of
-        ?HTTP_GET -> false;
-        _ -> erlang:error(function_clause)
-    end.
+read_authorization(_Context) -> false.
 
 %%------------------------------------------------------------------------------
 %% @doc Given the path tokens related to this module, what HTTP methods are

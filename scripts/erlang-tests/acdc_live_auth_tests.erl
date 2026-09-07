@@ -185,7 +185,7 @@ authorization_test_() -> {setup,fun setup/0,fun cleanup/1,fun(_)->[
                 acdc_live_auth:permit(C,<<"agents">>,Params))
         end,[[],[?Q],[?Q,<<"status">>]])
     end},
-    {"native agent restart restrictions and non-GET failures remain",fun() ->
+    {"native agent restart contract remains and ordinary writes abstain",fun() ->
         reset(),{ok,C}=fresh(),
         Restart=agent_context(C,[?Q,<<"restart">>],<<"POST">>),
         Denied=cb_context:set_is_superduper_admin(Restart,false),
@@ -198,7 +198,7 @@ authorization_test_() -> {setup,fun setup/0,fun cleanup/1,fun(_)->[
             acdc_live_auth:permit(cb_context:set_is_superduper_admin(C,false),<<"agents">>,[?Q,<<"restart">>])),
         lists:foreach(fun(Params)->
             AgentC=agent_context(C,Params,<<"POST">>),
-            ?assertMatch([{'EXIT',_}],crossbar_bindings:pmap(<<"v2_resource.authorize.agents">>,[AgentC|Params]))
+            ?assertEqual([false],crossbar_bindings:pmap(<<"v2_resource.authorize.agents">>,[AgentC|Params]))
         end,[[],[?Q],[?Q,<<"status">>]])
     end},
     {"internal agent authorizer exceptions are not swallowed as abstention",fun() ->
