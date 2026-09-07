@@ -6,6 +6,18 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Periodic master publication — September7:** at the operator's explicit
+request,135 committed changes were fast-forwarded from remote5756082 to
+`419791716e5e9e890e684d253f6dcd3c0193bb04`. Push6ca149/f6e250 succeeded;
+independent `ls-remote` readback79d4e7 matched local HEAD and origin/master.
+No force push. Working branch is now `master`; switching identical tips
+preserved all uncommitted caller-privacy, browser-stall and bridge work. Those
+in-progress files were not published. Future reviewed/tested checkpoints should
+be committed and pushed periodically as requested; do not wait for final
+production acceptance to back up completed work. Publishing a checkpoint does
+not close release gates or certify production readiness. Older pending-push
+statements below are historical and superseded by this checkpoint.
+
 **Idle viewer load — September 7:** root14 offline groups passed c3b213/5709e0.
 Actual2/10/30 viewer cohorts each held30 seconds after all viewers were ready,
 passing fresh complete snapshots, exact subscribe/unsubscribe ACKs and zero

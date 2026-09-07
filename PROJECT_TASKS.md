@@ -35,8 +35,11 @@ the latest engineering handoff takes precedence for current deployment state.
   call/event load, cross-node failure and sustained soak remain open.
 - **UI-01 storage404 remains open.** Callback/voice issues remain recorded but
   paused under the live-dashboard priority; historical/WFM work is postponed.
-- **Delivery pending:** local branch `fix/acdc-outbound-agent-availability`,
-  checkpoint commit `208695f`; no final master push. Untracked bridge source
+- **Checkpoint published:** user requested periodic master pushes;135 committed
+  changes were fast-forwarded to remote `master` at `4197917` on September7
+  (push6ca149/f6e250, independent remote readback79d4e7). The working branch is
+  now `master`, with in-progress changes preserved and excluded from that push.
+  Final release acceptance remains pending. Untracked bridge source
   under `services/push-bridge/` is not an accepted installable service (INST-13).
   Fresh standalone/distributed/ALL installer acceptance and release gates remain.
 
