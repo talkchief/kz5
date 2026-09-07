@@ -1,5 +1,31 @@
 # French prerecorded cardinal authoring checkpoint
 
+## Latest recovery:160 of161 technical QA passes
+
+The tested explicit recovery path added22 recordings, preserving all prior
+attempts and successes. Third-attempt23-request run `110878/5e2c43` added14;
+fourth-attempt9-request run `83e270/c7174a` added4; fifth-attempt5-request run
+`02c784/4fb62d` added4. Last single sixth attempt `67a14d/7047e9` still failed.
+Remaining identity is exactly `fr-fr/acdc-cardinal-v1-terminal-89`, with
+`AUDIO_GENERATION_NOT_COMPLETE` / `OTHER` in all retained attempts. It reached
+the hard6 cap. Do not erase history, lower completion requirements or make a
+seventh request with the existing format. A further recovery decision is open.
+
+Receipts respectively:
+`run-ca2fd817-ffbe-4d50-9a59-826ebfa397cf.json`,
+`run-13f6acbc-d4a1-439e-bb9a-a740e442e10d.json`,
+`run-d5bea36b-744f-447a-9f3c-ea9831612e29.json`,
+`run-2b053d93-76df-40ec-bc98-a87de1e50295.json`.
+Full-pack retry budget is85. All44 new FR WAVs and receipts are checked in;
+offline history/byte/resampling verification passes `67c5ba/a1b50e`.
+No new FR import, listening approval or runtime deployment has occurred.
+
+Recovery tooling update September7: a separately reviewed and regression-tested
+explicit `--attempt-limit 2..6` opt-in is now available. The default remains two;
+no history or success may be reset. See `acdc_cardinal_bounded_recovery.md`.
+This supersedes only the old format's retry ceiling described below, not the
+recorded failures, missing audio, completion checks or listening requirements.
+
 ## Latest checkpoint: all initial roles attempted, one bounded retry
 
 September7, approximately15:50UTC: French now has138 QA-passed recordings and

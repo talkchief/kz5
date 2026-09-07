@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "catalog_sha256": "1595468d6556648b6a7afc62b44d794e80dcbd3de81120464e1f1a53332618d8",
+  "decision": "AUTHOR_INTROS_ONLY",
+  "review_kind": "source-backed-engineering",
+  "evidence_sha256": "1ede731cf405968cd0b7a37f4bd4c69bbd969f4712a9a35f93a55b5c09c3668b"
+}

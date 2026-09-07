@@ -1,0 +1,345 @@
+{
+  "schema_version": 1,
+  "owner": "kazoo5-cardinal-authoring-run",
+  "catalog_sha256": "5703e649a1f5a2bcd0c00e9e19bf4424e024c85648452dba0d190bcf73088134",
+  "approvals_sha256": "452b815a65f726e4d221b2585f61162fae0a1c43d6fb1370a0f27bb3a37b8ea5",
+  "selected_locales": [
+    "ar-sa"
+  ],
+  "request_limit": 32,
+  "concurrency": 2,
+  "explicit_retry": false,
+  "retry_budget": 85,
+  "attempt_limit": 2,
+  "explicit_attempt_limit": false,
+  "requests_before": 426,
+  "requested": 32,
+  "status": "FAILED",
+  "started_at": "2026-09-07T16:13:04.541Z",
+  "events": [
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-1",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "420fb9e9aa2c66f50ad8ec42866602f579fe98c07e3d0b4201134e0c745491f9"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-0",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "9f97e25295a0b5ceca4069b02b055d656b47cbcd5cf2180dd879d602a178ef6f"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-2",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "6eea3ec18b32d4c2b027b87db43d03603be93daa5d34917bc7098903b52deea9"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-1",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "0510e4829924974fd492cdb6035f8ef8c9195374874e98772e5dcdb320b91bfb"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-3",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "97a2b1e1214255c31d2578a879a9c1ea1043b73a75931251c376d13b6b703fb3"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-2",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "ba8c1fbaec00fcdff0f9e86e081ded3cf34f57be3132c95f88d7c1850ea55f67"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-4",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-3",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "dc6ad83e9d2bde6250a0f8ddd420c0362be6cc9ed218fe8deaa9b2b1dc833611"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-4",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "4c843d4d7e164f08bfabae5eddcc44b5520cce9ae5b25a7bddb340fd2fd022dd"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-5",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "649cdfaa5d5183102f40619b4e61d7e3d266f4b77245a87000c2f917ab25f8b4"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-5",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "9970d38185d179e942d8aba44a55216ec1e05fb79ea626a8544932562e8b5a2e"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-6",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "62f676a2df066fad2d1a609941c8c94a1f0bfcc114be615e8f12a9bda84edd47"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-6",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "ec04f03a114fce946d1b80e818743e20f89664184f6686ddb5b5de7d3c829973"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-7",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "79da318c1af4817a722440ee305e202127def79234b4ee45f2c32831e267ce25"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-7",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-8",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "13e4e6e1bab82f2d67d99164ad95d2d411717c2809d0499ed51969e77dd8794c"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-9",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "94ce67d937611d57114e1cb5c214f9ddf2a7a6f7a115bb9d0489b71891d6b91a"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-8",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "bf681017bd8ed939f56145ce553fdc77f41c9918cdb21d0597c92a7032757531"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-9",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "f67b3fec629eb4bbcadfb6236992ea53ccd5db9c1126b14e1af466e1754c8651"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-10",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "4aebda89f6236f40a98ba7b706344f0187c32f18c3ca898a533a9e0faeb5e277"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-10",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "2a1dcd22c006d2e646a68de5d1d50d190ceec47fdf697880e6b9f3bcb4d59542"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-11",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "3f78fa15461f6f356ea445c53f4c27b8c9ed3f245c83978c0632b4e1c5961ee3"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-11",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-12",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-12",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "ce70f0af435c6351e42ec8a5105e6dc625f555f7a3099ac2b45cc07eaf93b8de"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-13",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "8cc8154e7e8ca3cf456f84baf196c0012b40ec40758a9fc7ec8cc2d49ac203cb"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-14",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-13",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-15",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-14",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-number-16",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-v1-joined-number-15",
+      "attempt": 1,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    }
+  ],
+  "runtime_ready": false,
+  "deployed": false,
+  "finished_at": "2026-09-07T16:13:49.042Z",
+  "failure_code": "INCOMPLETE_RESPONSE_REQUIRES_EXPLICIT_RETRY"
+}

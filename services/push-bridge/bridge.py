@@ -18,6 +18,9 @@ from delivery_settlement import OwnerSettlements, SettlementFailure
 
 RECONNECT_DELAY = 5
 HEARTBEAT = 30
+OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
+OAUTH_HTTP_TIMEOUT = (3.05, 5)
+OAUTH_MAX_RESPONSE_BYTES = 64 * 1024
 log = logging.getLogger("push_bridge")
 
 
@@ -38,6 +41,78 @@ def reject_fcm_redirect(response, *args, **kwargs):
         response.close()
         raise FcmRedirectRejected(status)
     return response
+
+
+class OAuthTransportFailure(Exception):
+    """Only bridge-owned fixed categories cross the refresh boundary."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def reject_oauth_redirect(response, *args, **kwargs):
+    if 300 <= response.status_code < 400:
+        response.close()
+        raise OAuthTransportFailure("oauth_redirect_rejected")
+    return response
+
+
+class BoundedOAuthSession:
+    """Dedicated Requests owner passed to Google's Request adapter.
+
+    Google's adapter closes its supplied session in __del__. This wrapper owns
+    exactly one separate OAuth session and makes that close idempotent. Its
+    request lock also prevents a direct close underneath a refresh HTTP call.
+    Connect/read timeouts are not a total refresh or operation deadline.
+    """
+
+    def __init__(self, requests_module):
+        self._requests = requests_module
+        self._lock = threading.Lock()
+        self._closed = False
+        self._session = requests_module.Session()
+        self._session.trust_env = False
+
+    def request(self, method, url, data=None, headers=None, timeout=None, **kwargs):
+        # Only the service-account token endpoint is in scope. A caller cannot
+        # relax bounds, install alternate hooks or enable redirects via kwargs.
+        if method != "POST" or url != OAUTH_TOKEN_URL or kwargs:
+            raise OAuthTransportFailure("oauth_request_rejected")
+        with self._lock:
+            if self._closed:
+                raise OAuthTransportFailure("oauth_transport_closed")
+            try:
+                response = self._session.request(
+                    method, url, data=data, headers=headers,
+                    timeout=OAUTH_HTTP_TIMEOUT, allow_redirects=False, stream=True,
+                    hooks={"response": [reject_oauth_redirect]},
+                )
+                try:
+                    length = response.headers.get("Content-Length", "")
+                    if length.isdigit() and (len(length) > 8 or int(length) > OAUTH_MAX_RESPONSE_BYTES):
+                        raise OAuthTransportFailure("oauth_response_too_large")
+                    content = bytearray()
+                    for chunk in response.iter_content(chunk_size=4096):
+                        if len(content) + len(chunk) > OAUTH_MAX_RESPONSE_BYTES:
+                            raise OAuthTransportFailure("oauth_response_too_large")
+                        content.extend(chunk)
+                    # Google's pinned _Response.data reads .content. Populate
+                    # the Requests cache only after the decoded-byte cap passes,
+                    # before Google logging/JSON parsing can eagerly read it.
+                    response._content = bytes(content)
+                    response._content_consumed = True
+                    return response
+                finally:
+                    response.close()
+            except self._requests.RequestException:
+                raise OAuthTransportFailure("oauth_transport_error") from None
+
+    def close(self):
+        with self._lock:
+            if not self._closed:
+                self._closed = True
+                self._session.close()
 
 
 class BridgeRuntime:
@@ -83,7 +158,7 @@ class BridgeRuntime:
         self._active_sends = 0
         self._closing = False
         self._http_closed = False
-        # Last startup operation: later failures in main always close it.
+        # Startup owns both HTTP transports; later failures close all owners.
         self.http = requests.Session()
         self.http.trust_env = False
         # Lease a session exclusively for the whole send (including retry).
@@ -91,6 +166,15 @@ class BridgeRuntime:
         # Bound retained connections by the configured FCM worker count.
         self._http_sessions = [self.http]
         self._idle_http = [self.http]
+        self._oauth_session = None
+        try:
+            self._oauth_session = BoundedOAuthSession(requests)
+            self._oauth_request = GoogleAuthRequest(session=self._oauth_session)
+        except Exception:
+            self.http.close()
+            if self._oauth_session is not None:
+                self._oauth_session.close()
+            raise
 
     def mark_progress(self):
         self._last_progress = time.monotonic()
@@ -108,7 +192,13 @@ class BridgeRuntime:
     def get_access_token(self):
         with self._token_lock:
             if not self.credentials.valid:
-                self.credentials.refresh(self.google_request())
+                try:
+                    self.credentials.refresh(self._oauth_request)
+                except OAuthTransportFailure:
+                    raise
+                except Exception:
+                    # Google RefreshError can embed provider bodies or URLs.
+                    raise OAuthTransportFailure("oauth_refresh_error") from None
             return self.credentials.token
 
     def send_fcm(self, token_id, data):
@@ -173,6 +263,8 @@ class BridgeRuntime:
                     response.close()
             except FcmRedirectRejected as error:
                 return False, error.status, "provider_redirect_rejected"
+            except OAuthTransportFailure as error:
+                return False, -1, error.code
             except self.requests.RequestException:
                 last_status, last_text = -1, "provider_transport_error"
             if attempt == 1 and not self._stop.is_set():
@@ -369,6 +461,12 @@ class BridgeRuntime:
                 session.close()
             except Exception:
                 log.error("bridge_http_close_failed")
+        oauth_session = getattr(self, "_oauth_session", None)
+        if oauth_session is not None:
+            try:
+                oauth_session.close()
+            except Exception:
+                log.error("bridge_oauth_close_failed")
 
 
 def main(argv=None, environment=None):

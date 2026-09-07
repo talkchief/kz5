@@ -6,6 +6,42 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**16:16UTC checkpoint:** bridge OAuth update is deployed through the main SH
+(`3f5035/session60404/aa39ab`), with independent verification
+`67c5ba/session51989/a1b50e`. New release
+`/usr/local/lib/kazoo-push-bridge/releases/5d3745fd54bc8297f586c8ebb9c8e917de410957d9f02b6c04070c75997b5afa`;
+PID301642, zero automatic restarts and all eight checked core/bridge services
+active (`89bb9d`). All103 bridge tests plus installer dispatch pass
+`325b4d/c536f1`. OAuth has its own reusable owner, connect/read timeouts,
+redirect rejection and decoded64KiB body cap. Total operation deadlines,
+durable recovery, AMQP TLS and real designated-device delivery remain OPEN.
+
+The checked-in cardinal ledger now has297 QA recordings: EN31, HE59/131,
+FR160/161, ES25/53, AR22/208. Two separate new HE/AR intros also pass. Since
+fe02eb0,103 cardinal recordings plus2 intros (210 WAVs) are newly preserved.
+All458 attempts and prior successful bytes were independently verified against
+fe02eb0 and the private origin (`67c5ba/a1b50e`). Retry budget85. No REQUESTING
+rows or live authoring handles remain. FR terminal89 still fails after6 attempts;
+do not reset its history or keep retrying through the hard cap. HE35 and AR176
+initial roles remain pending, alongside HE37/ES28/AR10 failures.
+The locale-aware staging importer passes12 groups/3890 checks (`5ce21d/1d1d70`),
+including synthetic complete AR208 and unchanged actual EN map/installer plan.
+Five-locale runtime media integration, real import, listening and playback
+acceptance remain OPEN; no new cardinal runtime deployment occurred.
+
+**HE/AR voice progress:** two new explicit-position-number intros are authored
+and saved in `scripts/assets/acdc-gemini-cardinal-intros-20260907`; both first
+attempts passed, copy verification `b13129` passes. Read the new full language
+reviews and `doc/acdc_cardinal_he_ar_authoring_20260907.md`. The approved set
+now pins all five text/delivery/intro declarations at `452b815a65f726e4d221b2585f61162fae0a1c43d6fb1370a0f27bb3a37b8ea5`;
+old attempted EN/ES/FR records and all listening-PENDING fields are unchanged.
+EN installer pin is aligned and actual EN plan/map checks pass. First HE32
+batch yielded25 QA/7 incomplete; subsequent batches must inspect the ledger.
+The tested explicit recovery CLI now supports opt-in attempt limits2..6;
+default2 and all immutable-history/completion gates remain. See
+`doc/acdc_cardinal_bounded_recovery.md` before any further retry. No new
+cardinal runtime deployment or listening approval has occurred.
+
 **Mobile credential-source clarification:** FCM/APNs keys from10.1.0.28 were
 already retrieved read-only and configured under `/etc/kazoo-push-bridge`;
 never copy populated configuration or credentials into Git. Fresh independent

@@ -5,7 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {openPlan} = require('./import-acdc-gemini-cardinals.cjs');
 const {couchClient} = require('./import-acdc-language-packs.cjs');
-const APPROVAL = 'd5cd6e9713c30745ac06220c76a5996277b4766f6e1bfcc0620887c058e1e71e';
+// Five-locale authoring declaration; the EN staging scope below is unchanged.
+// New HE/AR approvals bind separately verified intros, not listening readiness.
+const APPROVAL = '452b815a65f726e4d221b2585f61162fae0a1c43d6fb1370a0f27bb3a37b8ea5';
 
 function checkedHeader(filename) {
   const fd = fs.openSync(filename, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);

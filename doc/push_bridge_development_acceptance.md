@@ -6,6 +6,16 @@ acceptance. No notification was published or sent during these checks.
 
 ## Installation and evidence
 
+Latest OAuth transport deployment `3f5035/session60404/aa39ab` passes main SH;
+release `5d3745fd54bc8297f586c8ebb9c8e917de410957d9f02b6c04070c75997b5afa` is
+enabled/active with registered consumer PID301642, zero automatic restarts.
+All103 bridge tests and installer dispatch pass `325b4d/c536f1`. Independent
+main-SH verification plus the15 OAuth cases in the new venv pass
+`67c5ba/a1b50e`. OAuth session reuse, request connect/read bounds, redirect
+rejection and decoded64KiB body cap are deployed; total deadline and delivery
+acceptance are not. See `push_bridge_oauth_deadline.md`. Previous releases
+remain. Production and provider notifications were untouched.
+
 Operator clarification rechecked September7: the configured FCM service-account
 and APNs keys were already retrieved read-only from production10.1.0.28 using
 the protected SSH credentials. No additional production retrieval or mutation

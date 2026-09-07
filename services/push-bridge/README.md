@@ -2,6 +2,15 @@
 
 ## Main installer integration (development installation verified)
 
+Latest OAuth transport update: dedicated reusable session,3.05-second connect
+and5-second read timeouts, redirect rejection and a64KiB decoded-body cap before
+Google-auth parsing. This is not a total refresh/send deadline. All103 bridge
+tests plus installer dispatch pass `325b4d/c536f1`; main-SH deploy
+`3f5035/aa39ab` and independent verify `67c5ba/a1b50e` pass. Current release
+`5d3745fd54bc8297f586c8ebb9c8e917de410957d9f02b6c04070c75997b5afa`,
+enabled active consumer PID301642, zero automatic restarts. No provider push or
+production change. See `doc/push_bridge_oauth_deadline.md` for exact scope.
+
 Latest FCM concurrency change: each send exclusively leases an HTTP session
 through both attempts, then returns it for connection reuse. The pool cannot
 exceed the configured FCM worker count; excess direct calls return a fixed

@@ -12,7 +12,7 @@ import sys
 import threading
 from types import ModuleType, SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 
 SOURCE = Path(__file__).resolve().parents[1] / "services/push-bridge"
@@ -55,7 +55,8 @@ def dependencies(project="fixture-project"):
     modules["google.oauth2.service_account"].Credentials = SimpleNamespace(from_service_account_file=loader)
     modules["google.oauth2"].service_account = modules["google.oauth2.service_account"]
     modules["google.auth.transport.requests"].Request = Mock()
-    modules["requests"].Session = Mock(return_value=Mock())
+    # Runtime owns separate FCM and OAuth sessions; never alias both owners.
+    modules["requests"].Session = Mock(side_effect=lambda: Mock())
     modules["requests"].RequestException = RuntimeError
     return modules, loader, credentials
 
@@ -206,14 +207,19 @@ class RuntimeTests(unittest.TestCase):
         with patch.dict(sys.modules, modules), patch("builtins.open", side_effect=AssertionError("real file access")):
             runtime = bridge.BridgeRuntime(environment())
         loader.assert_called_once_with("/fixture/nonexistent.json", scopes=[validate_config.FCM_SCOPE])
-        modules["requests"].Session.assert_called_once_with()
+        self.assertEqual(modules["requests"].Session.call_args_list, [call(), call()])
+        modules["google.auth.transport.requests"].Request.assert_called_once_with(session=runtime._oauth_session)
+        self.assertIsNot(runtime.http, runtime._oauth_session._session)
+        self.assertEqual(runtime._http_sessions, [runtime.http])
         credentials.refresh.assert_not_called()
         self.assertEqual(runtime.fcm_url, "https://fcm.googleapis.com/v1/projects/fixture-project/messages:send")
         runtime.http.post.assert_not_called()
+        runtime._oauth_session._session.request.assert_not_called()
         self.assertFalse(runtime._stop.is_set())
         self.assertIsNone(runtime._conn)
         runtime.close()
         runtime.http.close.assert_called_once_with()
+        runtime._oauth_session._session.close.assert_called_once_with()
 
     def test_runtime_initializes_only_from_the_validated_configuration_snapshot(self):
         proposed = environment()
@@ -238,13 +244,16 @@ class RuntimeTests(unittest.TestCase):
             runtime.close()
             runtime.close()
             runtime.http.close.assert_not_called()
+            runtime._oauth_session._session.close.assert_not_called()
             self.assertEqual(runtime.send_fcm("queued-fixture", {}), (False, 0, "bridge_closing"))
             return True, 200, "provider_response"
         with patch.object(runtime, "_send_fcm", side_effect=in_flight):
             self.assertEqual(runtime.send_fcm("fixture", {}), (True, 200, "provider_response"))
         runtime.http.close.assert_called_once_with()
+        runtime._oauth_session._session.close.assert_called_once_with()
         runtime.close()
         runtime.http.close.assert_called_once_with()
+        runtime._oauth_session._session.close.assert_called_once_with()
         self.assertEqual(runtime._active_sends, 0)
 
     def test_inflight_send_exception_still_releases_deferred_session_without_logging_secret(self):
@@ -258,6 +267,7 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 runtime.send_fcm("fixture", {})
         runtime.http.close.assert_called_once_with()
+        runtime._oauth_session._session.close.assert_called_once_with()
         self.assertEqual(runtime._active_sends, 0)
 
     def test_credential_project_cannot_change_fcm_endpoint(self):

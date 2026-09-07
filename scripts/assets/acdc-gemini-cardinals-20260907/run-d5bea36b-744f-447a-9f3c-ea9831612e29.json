@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "owner": "kazoo5-cardinal-authoring-run",
+  "catalog_sha256": "5703e649a1f5a2bcd0c00e9e19bf4424e024c85648452dba0d190bcf73088134",
+  "approvals_sha256": "452b815a65f726e4d221b2585f61162fae0a1c43d6fb1370a0f27bb3a37b8ea5",
+  "selected_locales": [
+    "fr-fr"
+  ],
+  "request_limit": 5,
+  "concurrency": 2,
+  "explicit_retry": true,
+  "retry_budget": 84,
+  "attempt_limit": 5,
+  "explicit_attempt_limit": true,
+  "requests_before": 420,
+  "requested": 5,
+  "status": "FAILED",
+  "started_at": "2026-09-07T16:11:32.644Z",
+  "events": [
+    {
+      "locale": "fr-fr",
+      "id": "acdc-cardinal-v1-terminal-39",
+      "attempt": 5,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "c7ceda184ceb0d142e399c3cd0b9d275e617847ae47892690d1ebc0482f40a38"
+    },
+    {
+      "locale": "fr-fr",
+      "id": "acdc-cardinal-v1-terminal-51",
+      "attempt": 5,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "3d3edbcefea704f2a07ca4d6e32fcd1f393b6ea6698aef5f6437d64bbb9b80f8"
+    },
+    {
+      "locale": "fr-fr",
+      "id": "acdc-cardinal-v1-hundred-one-9",
+      "attempt": 5,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "8d260ded5348ae4df2d61e203b9c11e310dcf48b434899a5b989f18e0192e055"
+    },
+    {
+      "locale": "fr-fr",
+      "id": "acdc-cardinal-v1-terminal-89",
+      "attempt": 5,
+      "status": "FAILED",
+      "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+      "finish_reason": "OTHER",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": null
+    },
+    {
+      "locale": "fr-fr",
+      "id": "acdc-cardinal-v1-scaled-tail-1000-38",
+      "attempt": 5,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "returned_model_version": "gemini-2.5-pro-preview-tts",
+      "telephony_sha256": "2dd5def7a45a9e40ba0297e27f0f16261bc2805356f3e5ffb459080e9117493b"
+    }
+  ],
+  "runtime_ready": false,
+  "deployed": false,
+  "finished_at": "2026-09-07T16:11:45.837Z",
+  "failure_code": "INCOMPLETE_RESPONSE_REQUIRES_EXPLICIT_RETRY"
+}

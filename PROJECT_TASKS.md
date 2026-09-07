@@ -1,5 +1,30 @@
 # Kazoo 5 project task register
 
+Latest16:16UTC: bridge OAuth transport fix deployed via main SH and separately
+verified (`3f5035/aa39ab`, `67c5ba/a1b50e`);103 bridge tests and installer dispatch
+PASS. Service PID301642 active, zero automatic restarts; all8 checked services
+active. No production change or provider notification. Total deadlines,
+durable recovery, AMQP TLS and real phone delivery still required.
+
+Voices:297/584 cardinal recordings pass technical QA (EN31, HE59, FR160, ES25,
+AR22), plus both new intros. All prior attempts/successes preserved and repo
+matches private origin; no pending provider process or indeterminate attempt.
+Remaining initial roles: HE35, AR176. Failed: HE37, FR1, ES28, AR10; FR89 reached
+6-attempt cap and needs a reviewed recovery decision, not history reset.
+All210 new WAVs since fe02eb0 are saved. Five-locale staging importer passes
+3890 checks; real full-pack import/runtime, listening and playback remain OPEN.
+
+Voice checkpoint September7: new HE/AR introductions generated successfully
+once and saved as four WAVs; independent offline hash/SoX verification PASS
+`b13129`. Source-backed language reviews are recorded; no listening approval
+is implied. HE first32 number requests yielded25 QA/7 incomplete; all50 new
+WAVs and history preserved. Five-locale authoring pin and EN installer pin are
+aligned; actual EN plan retains its exact map. Explicit bounded failed-only
+recovery passes16 generator groups/260 checks plus2542 verifier assertions
+`4f8aa5/4bdc8c`. See `doc/acdc_cardinal_he_ar_authoring_20260907.md` and
+`doc/acdc_cardinal_bounded_recovery.md`. Remaining generation, listening,
+five-locale import/runtime and live playback remain OPEN.
+
 INST-13 credential-source clarification: FCM/APNs configuration from production
 10.1.0.28 is already copied to protected local files, not Git. Repeat main-SH
 `--verify-only push-bridge` passes `8c6713/session38308/7f467d`; active/running,

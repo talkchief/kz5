@@ -113,7 +113,8 @@ function options(argv) {
     else if (arg === '--retry-failed') o.retryFailed = true;
     else {
       const key = {'--output': 'output', '--key-file': 'keyFile', '--approval-file': 'approvalFile', '--approval-sha256': 'approvalHash',
-        '--locales': 'locales', '--concurrency': 'concurrency', '--request-limit': 'requestLimit', '--retry-budget': 'retryBudget'}[arg];
+        '--locales': 'locales', '--concurrency': 'concurrency', '--request-limit': 'requestLimit', '--retry-budget': 'retryBudget',
+        '--attempt-limit': 'attemptLimit'}[arg];
       check(key && argv[i + 1] && !argv[i + 1].startsWith('--'), 'UNKNOWN_OR_INCOMPLETE_OPTION'); o[key] = argv[++i];
     }
   }
@@ -126,6 +127,12 @@ function options(argv) {
   check(!o.resume || o.mode === 'generate', 'RESUME_REQUIRES_GENERATE');
   check(!o.retryFailed || o.resume && o.mode === 'generate' && o.retryBudget !== undefined, 'EXPLICIT_RETRY_BUDGET_REQUIRED');
   check(o.retryBudget === undefined || o.retryFailed, 'RETRY_BUDGET_WITHOUT_RETRY');
+  if (o.attemptLimit !== undefined) {
+    check(integer(o.attemptLimit, pack.HARD_MAX_ATTEMPTS) && Number(o.attemptLimit) >= pack.MAX_ATTEMPTS, 'INVALID_ATTEMPT_LIMIT');
+    o.attemptLimit = Number(o.attemptLimit);
+    check(o.mode === 'generate' && o.resume && o.retryFailed && o.retryBudget !== undefined,
+      'ATTEMPT_LIMIT_REQUIRES_EXPLICIT_RECOVERY');
+  }
   if (o.mode !== 'plan') check(absolute(o.output), 'ABSOLUTE_OUTPUT_REQUIRED');
   if (o.mode === 'generate') check(o.requestLimit !== undefined, 'EXPLICIT_REQUEST_LIMIT_REQUIRED');
   return o;
@@ -145,6 +152,13 @@ async function generate(o, deps = {}) {
     && new Set(o.locales).size === o.locales.length && o.locales.every(l => locales.includes(l)), 'INVALID_GENERATION_OPTIONS');
   check(!o.retryFailed || o.resume && Number.isInteger(o.retryBudget) && o.retryBudget > 0 && o.retryBudget <= 584,
     'EXPLICIT_RETRY_BUDGET_REQUIRED');
+  check(o.retryBudget === undefined || o.retryFailed, 'RETRY_BUDGET_WITHOUT_RETRY');
+  if (o.attemptLimit !== undefined) {
+    check(Number.isInteger(o.attemptLimit) && o.attemptLimit >= pack.MAX_ATTEMPTS
+      && o.attemptLimit <= pack.HARD_MAX_ATTEMPTS, 'INVALID_ATTEMPT_LIMIT');
+    check(o.resume && o.retryFailed && Number.isInteger(o.retryBudget), 'ATTEMPT_LIMIT_REQUIRES_EXPLICIT_RECOVERY');
+  }
+  const attemptLimit = o.attemptLimit ?? pack.MAX_ATTEMPTS;
   outputTarget(o.output, !!o.resume);
   // A rejected fresh approval must not strand an empty output directory: it
   // has no manifest to resume, and a new invocation must never overwrite it.
@@ -173,7 +187,7 @@ async function generate(o, deps = {}) {
     check(!selected.some(p => p.generation_status === 'REQUESTING'), 'INDETERMINATE_REQUEST_REQUIRES_RECONCILIATION');
     // Snapshot candidates once. A failure in this run never schedules itself.
     const jobs = selected.filter(p => p.generation_status === 'PENDING'
-      || o.retryFailed && p.generation_status === 'FAILED' && p.attempts.length === 1).slice(0, o.requestLimit);
+      || o.retryFailed && p.generation_status === 'FAILED' && p.attempts.length < attemptLimit).slice(0, o.requestLimit);
     if (!jobs.length) {
       check(selected.every(p => p.generation_status === 'QA_PASSED'), 'INCOMPLETE_SELECTION_REQUIRES_EXPLICIT_RETRY');
       return summary(m, o.locales); // No provider load, key read or approval rewrite.
@@ -200,6 +214,7 @@ async function generate(o, deps = {}) {
     run = {schema_version: 1, owner: 'kazoo5-cardinal-authoring-run', catalog_sha256: pack.CATALOG_HASH,
       approvals_sha256: m.approvals_sha256, selected_locales: o.locales, request_limit: o.requestLimit,
       concurrency: o.concurrency, explicit_retry: !!o.retryFailed, retry_budget: m.retry_request_budget,
+      attempt_limit: attemptLimit, explicit_attempt_limit: o.attemptLimit !== undefined,
       requests_before: m.requests_reserved, requested: 0, status: 'PREPARED', started_at: new Date().toISOString(),
       events: [], runtime_ready: false, deployed: false};
     save(); saveRun();
@@ -211,6 +226,9 @@ async function generate(o, deps = {}) {
     async function worker() {
       while (!stopped && next < jobs.length) {
         const entry = jobs[next++], body = pack.requestBody(entry), number = entry.attempts.length + 1;
+        check(number <= attemptLimit && (entry.generation_status === 'PENDING' && number === 1
+          || o.retryFailed && entry.generation_status === 'FAILED' && entry.attempts.at(-1)?.status === 'FAILED'),
+        'ATTEMPT_NOT_ELIGIBLE');
         const a = {number, status: 'REQUESTING', reserved_at: new Date().toISOString(),
           synthesis_instruction: body.contents[0].parts[0].text, instruction_sha256: hash(body.contents[0].parts[0].text),
           request_body_sha256: hash(JSON.stringify(body)), failure_code: null, provider_finish_reason: null,

@@ -11,10 +11,16 @@ const hash = (bytes, algorithm = 'sha256', encoding = 'hex') => crypto.createHas
 const clone = value => JSON.parse(JSON.stringify(value));
 const root = path.resolve(__dirname, '..');
 const introSource = path.join(__dirname, 'assets/acdc-gemini-fixed-20260905/en-us/acdc-queue-your-current-position-is.telephony-8000.wav');
+const introSources = Object.freeze(Object.fromEntries(['en-us', 'es-es', 'fr-fr', 'he-il', 'ar-sa'].map(locale =>
+  [locale, ['he-il', 'ar-sa'].includes(locale)
+    ? path.join(__dirname, 'assets/acdc-gemini-cardinal-intros-20260907', locale,
+      'acdc-cardinal-intro-v1-current-position-number.attempt-1.telephony-8000.wav')
+    : path.join(__dirname, 'assets/acdc-gemini-fixed-20260905', locale,
+      'acdc-queue-your-current-position-is.telephony-8000.wav')])));
 const inputs = [__filename, path.join(__dirname, 'import-acdc-gemini-cardinals.cjs'),
   path.join(__dirname, 'acdc-cardinal-pack.cjs'), path.join(__dirname, 'acdc-cardinal-catalog.cjs'),
   path.join(__dirname, 'import-acdc-gemini-voices.cjs'), path.join(__dirname, 'import-acdc-language-packs.cjs'),
-  path.join(root, 'applications/acdc/src/acdc_gemini_map.hrl'), introSource, '/usr/bin/sox'];
+  path.join(root, 'applications/acdc/src/acdc_gemini_map.hrl'), ...Object.values(introSources), '/usr/bin/sox'];
 const pins = () => Object.fromEntries([...new Set([...inputs, ...Object.keys(require.cache).filter(f => f.startsWith(__dirname + '/'))])]
   .sort().map(file => [file, hash(fs.readFileSync(file))]));
 const output = fs.mkdtempSync(path.join(os.tmpdir(), 'acdc-cardinal-import-proof.'));
@@ -60,6 +66,24 @@ function fixture(name) {
 function source(f) { return {cardinalDirectory: f.cardinalDirectory, introFile: f.introFile, approvalSha256: f.approvalSha256, locale: f.locale}; }
 function save(f) { write(path.join(f.cardinalDirectory, 'manifest.json'), f.manifest); }
 function open(f) { return importer.openPlan(source(f)); }
+function localeFixture(locale) {
+  const f = fixture(locale); f.locale = locale;
+  const approval = f.manifest.approvals.find(a => a.locale === locale);
+  for (const name of ['transcript', 'delivery', 'intro']) Object.assign(approval[name], {status: 'APPROVED', evidence_sha256: '1'.repeat(64)});
+  Object.assign(approval.intro, importer.INTROS[locale]);
+  write(f.introFile, fs.readFileSync(introSources[locale]));
+  for (const entry of f.manifest.prompts.filter(e => e.locale === locale)) {
+    const a = attempt(entry, 'QA_PASSED', 1); a.raw_pcm_sha256 = pack.inspectWave(master, 24000).pcm_sha256;
+    for (const [variant, bytes, rate] of [['master', master, 24000], ['telephony', phone, 8000]]) {
+      const file = pack.fileName(entry, 1, variant); write(path.join(f.cardinalDirectory, file), bytes);
+      a[variant] = {file, ...pack.technicalQa(pack.inspectWave(bytes, rate))};
+    }
+    entry.generation_status = 'QA_PASSED'; entry.attempts = [a];
+  }
+  f.manifest.requests_reserved = f.manifest.prompts.reduce((n, e) => n + e.attempts.length, 0);
+  f.manifest.approvals_sha256 = f.approvalSha256 = pack.digest(f.manifest.approvals);
+  save(f); return f;
+}
 function nativeDoc(asset) {
   const doc = media.document(asset, 0); doc._rev = '1-' + 'a'.repeat(32);
   const attachment = doc._attachments[asset.attachment];
@@ -69,11 +93,12 @@ function nativeDoc(asset) {
 function assets(f) {
   const build = (id, transcript, bytes, file) => {
     const sha256 = hash(bytes), promptId = `${id}-gemini-sulafat-${sha256.slice(0, 16)}`;
-    return {locale: 'en-us', canonical_id: id, prompt_id: promptId, id: `en-us/${promptId}`, attachment: `${promptId}.wav`,
+    return {locale: f.locale, canonical_id: id, prompt_id: promptId, id: `${f.locale}/${promptId}`, attachment: `${promptId}.wav`,
       sha256, md5: 'md5-' + hash(bytes, 'md5', 'base64'), bytes, source_file: path.relative(root, file), transcript_sha256: transcript};
   };
-  const intro = build(importer.INTRO.canonical_id, importer.INTRO.transcript_sha256, fs.readFileSync(f.introFile), f.introFile);
-  const cardinal = f.manifest.prompts.filter(e => e.locale === 'en-us' && e.generation_status === 'QA_PASSED').map(e => {
+  const definition = importer.INTROS[f.locale];
+  const intro = build(definition.canonical_id, definition.transcript_sha256, fs.readFileSync(f.introFile), f.introFile);
+  const cardinal = f.manifest.prompts.filter(e => e.locale === f.locale && e.generation_status === 'QA_PASSED').map(e => {
     const file = path.join(f.cardinalDirectory, e.attempts.at(-1).telephony.file);
     return build(e.id, e.transcript_sha256, fs.readFileSync(file), file);
   }).sort((a, b) => a.id.localeCompare(b.id, 'en'));
@@ -94,7 +119,8 @@ function database(f, {installed = false, hook = () => undefined} = {}) {
         ? {key, id: key, doc: clone(docs.get(key))} : {key, error: 'not_found'})}};
     }
     equal(method, 'PUT'); equal(body._rev, undefined); equal(decodeURIComponent(resource), body._id);
-    const asset = plan.cardinal.find(a => a.id === body._id); assert(asset, 'Only cardinal identities may be created');
+    const asset = [...plan.cardinal, ...(['he-il', 'ar-sa'].includes(f.locale) ? [plan.intro] : [])].find(a => a.id === body._id);
+    assert(asset, 'Only selected cardinal identities and new HE/AR intros may be created');
     equal(body, media.document(asset, (body.pvt_created - 62167219200) * 1000));
     if (docs.has(asset.id)) return {status: 409, body: {error: 'conflict'}};
     docs.set(asset.id, nativeDoc(asset));
@@ -158,12 +184,17 @@ async function run() {
     equal(header, opened.renderMap()); s.prompts.length = 0; equal(opened.summary().prompts.length, 31);
   });
   await group('unsupported locales, incomplete CLI and approval pins reject before source or network access', async () => {
-    for (const locale of ['es-es', 'fr-fr', 'he-il', 'ar-sa', 'en', undefined]) {
+    for (const locale of ['en', 'he', 'ar', 'EN-US', 'de-de', 'all', undefined,
+      ['he-il'], {toString: () => 'ar-sa'}, null]) {
       rejects(() => importer.openPlan({...source(base), cardinalDirectory: '/missing/source', locale}), 'CARDINAL_LOCALE_NOT_STAGED');
     }
     rejects(() => importer.openPlan({...source(base), approvalSha256: '0'.repeat(64)}), 'INDEPENDENT_APPROVAL_PIN_REQUIRED');
     const args = ['--plan', '--locale', 'en-us', '--cardinal-pack', base.cardinalDirectory, '--intro-file', base.introFile, '--approval-sha256', base.approvalSha256];
     equal(importer.options(args).source, source(base));
+    for (const locale of Object.keys(importer.COUNTS)) {
+      const selectedArgs = [...args]; selectedArgs[2] = locale;
+      equal(importer.options(selectedArgs).source.locale, locale);
+    }
     for (const invalid of [[], ['--all-locales'], [...args, '--plan'], [...args, '--import'], [...args, '--unknown'], args.slice(0, -1)]) {
       await rejectsAsync(() => importer.main(invalid));
     }
@@ -242,6 +273,61 @@ async function run() {
       }});
       await rejectsAsync(() => opened.install(db.client, true)); equal(db.calls.filter(c => c.method === 'PUT').length, 1);
     }
+  });
+  await group('all four additional complete locales, exact intro pins, scoped maps and bounded idempotent creates', async () => {
+    for (const locale of ['es-es', 'fr-fr', 'he-il', 'ar-sa']) {
+      const f = localeFixture(locale), snapshot = open(f), beforeTree = treePins(f.location);
+      const s = snapshot.summary(), count = importer.COUNTS[locale], newIntro = ['he-il', 'ar-sa'].includes(locale);
+      equal(s.locale, locale); equal(s.count, count); equal(s.prompts.length, count);
+      equal(s.locale_catalog_sha256, pack.LOCALE_HASHES[locale]);
+      equal(s.selected_asset_set_sha256, pack.assetSetHash(f.manifest, locale));
+      equal(s.intro.wav_sha256, hash(fs.readFileSync(introSources[locale])));
+      for (const k of ['runtime_ready', 'full_position_language_ready', 'five_language_release_ready', 'listening_verified']) equal(s[k], false);
+      const header = snapshot.renderMap(), prefix = 'CARDINAL_' + locale.slice(0, 2).toUpperCase();
+      const rows = header.split('\n').filter(line => line.startsWith('    {')).map(line =>
+        JSON.parse(line.trim().replace(/^\{/, '[').replace(/\},?$/, ']').replace(/<<|>>/g, '')));
+      equal(rows.length, count); equal(rows.every(row => row[0] === locale), true);
+      equal(hash(JSON.stringify(rows)), s.map_sha256); equal(header.includes(prefix + '_INTRO_ASSET'), true);
+      equal(header.includes('CARDINAL_EN_'), false); equal(header.includes('GEMINI_ASSETS'), false);
+      const db = database(f); db.docs.delete(db.plan.intro.id);
+      await rejectsAsync(() => snapshot.install(db.client, false)); equal(db.calls.some(c => c.method === 'PUT'), false);
+      db.calls.length = 0;
+      if (!newIntro) {
+        await rejectsAsync(() => snapshot.install(db.client, true)); equal(db.calls.some(c => c.method === 'PUT'), false);
+        db.docs.set(db.plan.intro.id, nativeDoc(db.plan.intro)); db.calls.length = 0;
+      }
+      const receipt = await snapshot.install(db.client, true);
+      equal(receipt.created, count); equal(receipt.verified, count); equal(receipt.intro_created, newIntro ? 1 : 0);
+      equal(db.calls.filter(c => c.method === 'PUT').length, count + (newIntro ? 1 : 0));
+      equal(receipt.database_requests <= receipt.database_request_limit, true);
+      if (locale === 'ar-sa') equal(receipt.database_requests > 128, true);
+      equal(db.calls.filter(c => c.method === 'PUT').every(c => c.body._id.startsWith(locale + '/') && c.body._rev === undefined), true);
+      equal(db.docs.get('en-us/customer-recording'), {_id: 'en-us/customer-recording', protected: 'unchanged'});
+      db.calls.length = 0;
+      const again = await snapshot.install(db.client, true); equal(again.created, 0); equal(again.preserved, count);
+      equal(again.intro_created, 0); equal(db.calls.every(c => c.method === 'POST'), true);
+      equal(treePins(f.location), beforeTree);
+      const entry = f.manifest.prompts.find(e => e.locale === locale);
+      entry.attempts = []; entry.generation_status = 'PENDING'; f.manifest.requests_reserved--; save(f);
+      rejects(() => open(f), 'CARDINAL_LOCALE_INCOMPLETE');
+    }
+  });
+  await group('new intro source/approval substitution and cross-locale ledger corruption are rejected', async () => {
+    const f = localeFixture('he-il'), original = clone(f.manifest);
+    const approval = f.manifest.approvals.find(a => a.locale === f.locale);
+    approval.intro.wav_sha256 = importer.INTROS['ar-sa'].wav_sha256;
+    f.manifest.approvals_sha256 = f.approvalSha256 = pack.digest(f.manifest.approvals); save(f);
+    rejects(() => open(f), 'APPROVED_LOCALE_INTRO_CHANGED');
+    f.manifest = clone(original); f.approvalSha256 = original.approvals_sha256; save(f);
+    write(f.introFile, fs.readFileSync(introSources['ar-sa']));
+    rejects(() => open(f), 'CARDINAL_SOURCE_HASH_MISMATCH');
+    write(f.introFile, fs.readFileSync(introSources['he-il']));
+    const snapshot = open(f), db = database(f);
+    db.docs.get(db.plan.intro.id)._conflicts = ['2-' + 'b'.repeat(32)];
+    await rejectsAsync(() => snapshot.install(db.client, true), 'CARDINAL_MEDIA_CONFLICT');
+    equal(db.calls.some(c => c.method === 'PUT'), false);
+    f.manifest.prompts.find(e => e.locale === 'fr-fr').context_sha256 = '0'.repeat(64); save(f);
+    rejects(() => open(f), 'CATALOG_TRANSCRIPT_OR_CONTEXT_CHANGED');
   });
   await group('final readback catches earlier mutation and exact source pins survive every operation', async () => {
     const db = database(base, {hook: ({method, body, docs, plan}) => {

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "owner": "kazoo5-acdc-cardinal-intros-v1",
+  "catalog_sha256": "1595468d6556648b6a7afc62b44d794e80dcbd3de81120464e1f1a53332618d8",
+  "source_review_sha256": "2ba254e6d679610bd859f920bd2a7fe9a39e020e315580cd200c165eaf78cf2b",
+  "status": "BATCH_COMPLETE",
+  "started_at": "2026-09-07T16:00:39.232Z",
+  "request_limit": 2,
+  "explicit_retry": false,
+  "retry_budget": 0,
+  "requests_before": 0,
+  "requested": 2,
+  "events": [
+    {
+      "locale": "he-il",
+      "id": "acdc-cardinal-intro-v1-current-position-number",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "telephony_sha256": "e688f91fc0e23f4926a9be5d87ecc993042389eb895e7f10a602137d4e8ad944"
+    },
+    {
+      "locale": "ar-sa",
+      "id": "acdc-cardinal-intro-v1-current-position-number",
+      "attempt": 1,
+      "status": "QA_PASSED",
+      "failure_code": null,
+      "finish_reason": "STOP",
+      "telephony_sha256": "312fb7ff3cc60bd2a378027978679302716136504f5ddaf8a3220f6fca2b8598"
+    }
+  ],
+  "runtime_ready": false,
+  "deployed": false,
+  "finished_at": "2026-09-07T16:00:49.369Z"
+}

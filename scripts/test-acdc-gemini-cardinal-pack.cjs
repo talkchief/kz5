@@ -75,6 +75,17 @@ function prepareManifest(dir, a = approval) {
   const m = pack.createManifest(); m.approvals = clone(a.value.approvals); m.approvals_sha256 = a.value.approvals_sha256;
   save(dir, m); return m;
 }
+function failedHistory(dir, count, selected = ['en-us'], a = approval) {
+  const m = prepareManifest(dir, a);
+  for (const e of m.prompts) if (selected.includes(e.locale)) {
+    e.attempts = Array.from({length: count}, (_, i) => withAttempt(e, 'FAILED', i + 1));
+    e.generation_status = 'FAILED';
+  }
+  m.requests_reserved = m.prompts.reduce((sum, e) => sum + e.attempts.length, 0);
+  m.retry_request_budget = m.prompts.reduce((sum, e) => sum + Math.max(0, e.attempts.length - 1), 0);
+  m.retries_explicitly_enabled = m.retry_request_budget > 0;
+  m.conversion.version = pack.RESAMPLING.version; save(dir, m); return m;
+}
 function inputFiles(dir) {
   return fs.readdirSync(dir, {withFileTypes: true}).flatMap(e => e.isDirectory() ? inputFiles(path.join(dir, e.name)) : [path.join(dir, e.name)]);
 }
@@ -93,6 +104,23 @@ async function main() {
       }
       const link = nextPath('linked-parent'); fs.symlinkSync(output, link);
       checks++; assert.throws(() => generator.outputTarget(path.join(link, 'new'), false), pack.PackError);
+    });
+    await group('attempt-limit requires full explicit recovery and stays within two through six', async () => {
+      equal(pack.MAX_ATTEMPTS, 2); equal(pack.HARD_MAX_ATTEMPTS, 6);
+      for (const args of [['--attempt-limit', '3'], ['--plan', '--attempt-limit', '3'],
+        ['--verify-only', '--output', output, '--attempt-limit', '3']]) {
+        checks++; assert.throws(() => generator.options(args), pack.PackError);
+      }
+      const dir = nextPath('option-only');
+      for (const args of [['--attempt-limit', '3'], ['--resume', '--attempt-limit', '3'],
+        ['--resume', '--retry-failed', '--attempt-limit', '3'],
+        ...['0', '1', '7', '03', '3.5'].map(n => ['--resume', '--retry-failed', '--retry-budget', '1', '--attempt-limit', n])]) {
+        checks++; assert.throws(() => opts(dir, args), pack.PackError);
+      }
+      for (const n of [2, 3, 6]) equal(opts(dir, ['--resume', '--retry-failed', '--retry-budget', '1', '--attempt-limit', String(n)]).attemptLimit, n);
+      await rejects(() => generator.generate({...opts(dir), attemptLimit: 3}, noProvider), 'ATTEMPT_LIMIT_REQUIRES_EXPLICIT_RECOVERY');
+      await rejects(() => generator.generate({...opts(dir), resume: true, retryFailed: true, retryBudget: 1, attemptLimit: 7}, noProvider), 'INVALID_ATTEMPT_LIMIT');
+      equal(fs.existsSync(dir), false);
     });
     const normalDir = nextPath('recoverable-preflight');
     await group('approval/intro/context pins block before provider access or output creation', async () => {
@@ -136,6 +164,7 @@ async function main() {
       const original = hash(fs.readFileSync(path.join(dir, 'manifest.json'))), o = {...opts(dir), resume: true};
       await rejects(() => generator.generate(o, noProvider), 'INDETERMINATE_REQUEST_REQUIRES_RECONCILIATION');
       await rejects(() => generator.generate({...o, retryFailed: true, retryBudget: 1}, noProvider), 'INDETERMINATE_REQUEST_REQUIRES_RECONCILIATION');
+      await rejects(() => generator.generate({...o, retryFailed: true, retryBudget: 1, attemptLimit: 6}, noProvider), 'INDETERMINATE_REQUEST_REQUIRES_RECONCILIATION');
       equal(hash(fs.readFileSync(path.join(dir, 'manifest.json'))), original);
       const locked = mkdir('locked'); prepareManifest(locked);
       const lock = path.join(locked, '.generation.lock'); fs.writeFileSync(lock, 'stale-test-owner', {mode: 0o600});
@@ -156,6 +185,72 @@ async function main() {
       equal(fixed.prompts[0].attempts.length, 2); equal(pack.digest(fixed.prompts[0].attempts[0]), prior);
       assert(fixed.prompts[0].attempts[1].master.file.includes('.attempt-2.')); checks++;
       equal(fixed.prompts[1], m.prompts[1]);
+    });
+    await group('default refuses third attempt; explicit third preserves history and later success bytes', async () => {
+      const dir = mkdir('third-recovery'), original = failedHistory(dir, 2);
+      const retry = {...opts(dir), resume: true, retryFailed: true, retryBudget: 33};
+      const beforeBytes = hash(fs.readFileSync(path.join(dir, 'manifest.json')));
+      await rejects(() => generator.generate(retry, noProvider), 'INCOMPLETE_SELECTION_REQUIRES_EXPLICIT_RETRY');
+      equal(hash(fs.readFileSync(path.join(dir, 'manifest.json'))), beforeBytes);
+      const deps = providerDeps(dir);
+      await generator.generate({...retry, attemptLimit: 3}, deps);
+      const fixed = pack.readManifest(dir), e = fixed.prompts[0];
+      equal(deps.counts.requests, 1); equal(e.attempts.length, 3); equal(e.generation_status, 'QA_PASSED');
+      equal(e.attempts.slice(0, 2), original.prompts[0].attempts);
+      equal(fixed.prompts.slice(1), original.prompts.slice(1)); equal(fixed.requests_reserved, 63);
+      equal(e.attempts[2].request_body_sha256, e.attempts[0].request_body_sha256);
+      equal(e.attempts[2].master.file, pack.fileName(e, 3, 'master'));
+      const names = ['master', 'telephony'].map(k => path.join(dir, e.attempts[2][k].file));
+      const hashes = names.map(f => hash(fs.readFileSync(f)));
+      const runs = fs.readdirSync(dir).filter(f => /^run-.*\.json$/.test(f)).map(f => JSON.parse(fs.readFileSync(path.join(dir, f))));
+      equal(runs.length, 1); equal(runs[0].attempt_limit, 3); equal(runs[0].explicit_attempt_limit, true);
+      // A failed third attempt on the next identity must not retry itself in
+      // this invocation even though the explicitly selected ceiling is six.
+      const failed = providerDeps(dir, async () => ({candidates: [{finishReason: 'MAX_TOKENS'}]}));
+      await rejects(() => generator.generate({...retry, attemptLimit: 6}, failed), 'INCOMPLETE_RESPONSE_REQUIRES_EXPLICIT_RETRY');
+      const after = pack.readManifest(dir);
+      equal(failed.counts.requests, 1); equal(after.prompts[1].attempts.length, 3);
+      equal(after.prompts[1].generation_status, 'FAILED'); equal(after.requests_reserved, 64);
+      equal(after.prompts[1].attempts.slice(0, 2), original.prompts[1].attempts);
+      equal(after.prompts[0], e); equal(names.map(f => hash(fs.readFileSync(f))), hashes);
+    });
+    await group('sixth attempt is finite and seventh history or filenames are rejected', async () => {
+      const dir = mkdir('sixth-recovery'), original = failedHistory(dir, 5);
+      const retry = {...opts(dir), resume: true, retryFailed: true, retryBudget: 125, attemptLimit: 6};
+      const deps = providerDeps(dir); await generator.generate(retry, deps);
+      const m = pack.readManifest(dir); equal(deps.counts.requests, 1);
+      equal(m.prompts[0].attempts.length, 6); equal(m.prompts[0].attempts.slice(0, 5), original.prompts[0].attempts);
+      equal(m.prompts[0].attempts[5].telephony.file, pack.fileName(m.prompts[0], 6, 'telephony'));
+      const capped = mkdir('all-capped'); failedHistory(capped, 6);
+      const bytes = hash(fs.readFileSync(path.join(capped, 'manifest.json')));
+      await rejects(() => generator.generate({...retry, output: capped, retryBudget: 156}, noProvider), 'INCOMPLETE_SELECTION_REQUIRES_EXPLICIT_RETRY');
+      equal(hash(fs.readFileSync(path.join(capped, 'manifest.json'))), bytes);
+      checks++; assert.throws(() => pack.fileName(m.prompts[0], 7, 'master'), e => e.code === 'INVALID_AUDIO_IDENTITY');
+      const invalid = clone(m.prompts[0]); invalid.attempts.push(withAttempt(invalid, 'FAILED', 7)); invalid.generation_status = 'FAILED';
+      checks++; assert.throws(() => pack.verifyEntry(dir, invalid), e => e.code === 'INVALID_ATTEMPT_HISTORY');
+      const afterSuccess = read(normalDir).prompts[0];
+      afterSuccess.attempts.push(withAttempt(afterSuccess, 'FAILED', 2)); afterSuccess.generation_status = 'FAILED';
+      checks++; assert.throws(() => pack.verifyEntry(normalDir, afterSuccess), e => e.code === 'RETRY_OF_SUCCESS_OR_INDETERMINATE_REQUEST');
+      // Existing attempt-sequence validation also rejects any attempt after
+      // an indeterminate reservation, independent of the CLI recovery policy.
+      const bad = read(capped).prompts[0]; bad.attempts[0] = withAttempt(bad, 'REQUESTING', 1);
+      checks++; assert.throws(() => pack.verifyEntry(capped, bad), e => e.code === 'RETRY_OF_SUCCESS_OR_INDETERMINATE_REQUEST');
+    });
+    await group('recovery budgets are cumulative across attempts and locales and never exceed584', async () => {
+      const dir = mkdir('budget-recovery'); failedHistory(dir, 2);
+      const retry = {...opts(dir), resume: true, retryFailed: true, attemptLimit: 3};
+      const beforeBytes = hash(fs.readFileSync(path.join(dir, 'manifest.json')));
+      await rejects(() => generator.generate({...retry, retryBudget: 30}, noProvider), 'RETRY_BUDGET_CANNOT_DECREASE');
+      await rejects(() => generator.generate({...retry, retryBudget: 31}, noProvider), 'RETRY_BUDGET_EXHAUSTED');
+      await rejects(() => generator.generate({...retry, retryBudget: 585}, noProvider), 'EXPLICIT_RETRY_BUDGET_REQUIRED');
+      equal(hash(fs.readFileSync(path.join(dir, 'manifest.json'))), beforeBytes);
+      const all = mkdir('all-budget-used'); failedHistory(all, 2, Object.keys(pack.LOCALE_HASHES), allApproval);
+      const allBytes = hash(fs.readFileSync(path.join(all, 'manifest.json')));
+      await rejects(() => generator.generate({...opts(all, [], allApproval), resume: true, retryFailed: true,
+        retryBudget: 584, attemptLimit: 3}, noProvider), 'RETRY_BUDGET_EXHAUSTED');
+      equal(hash(fs.readFileSync(path.join(all, 'manifest.json'))), allBytes);
+      const invalid = read(all); invalid.retry_request_budget = 585; save(all, invalid);
+      checks++; assert.throws(() => pack.readManifest(all), e => e.code === 'INVALID_REQUEST_BUDGET');
     });
     await group('HTTP/transport failure stops subsequent jobs and emits only safe codes', async () => {
       for (const error of [new samples.SampleError('GEMINI_HTTP_403'), new Error(SENTINEL)]) {
@@ -217,6 +312,8 @@ async function main() {
       const snapshot = inputFiles(dir).map(f => [f, hash(fs.readFileSync(f))]);
       const o = generator.options(['--generate', '--resume', '--output', dir, '--request-limit', '1']);
       const result = await generator.generate(o, noProvider); equal(result.requests_this_run, 0); equal(result.artifact_complete, true);
+      const recovery = await generator.generate({...o, retryFailed: true, retryBudget: 1, attemptLimit: 6}, noProvider);
+      equal(recovery.requests_this_run, 0); equal(recovery.artifact_complete, true);
       equal(result.audio_listening_review, false); equal(result.runtime_ready, false);
       equal(inputFiles(dir).map(f => [f, hash(fs.readFileSync(f))]), snapshot);
     });

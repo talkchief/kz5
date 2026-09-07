@@ -12,7 +12,9 @@ const catalog = require('./acdc-cardinal-catalog.cjs');
 const OWNER = 'kazoo5-acdc-gemini-cardinal-pack';
 const MODEL = 'gemini-2.5-pro-preview-tts', VOICE = 'Sulafat';
 const MAX_MANIFEST_BYTES = 8 * 1024 * 1024, MAX_WAV_BYTES = 2 * 1024 * 1024;
-const MAX_ATTEMPTS = 2, MAX_DURATION_SECONDS = 10;
+// Two remains the default authoring policy. The verifier can read the bounded
+// extended ledger produced only by an explicitly opted-in recovery invocation.
+const MAX_ATTEMPTS = 2, HARD_MAX_ATTEMPTS = 6, MAX_DURATION_SECONDS = 10;
 const RESAMPLING = Object.freeze({tool: '/usr/bin/sox', version: '14.4.2',
   recipe: 'sox-14.4.2-rate-v-8000-pcm16le-no-dither-v1',
   argv: Object.freeze(['--no-dither', '-t', 'wav', '-', '-r', '8000', '-c', '1', '-b', '16',
@@ -85,7 +87,8 @@ function validateBase(entry) {
   return wanted;
 }
 function fileName(entry, number, variant) {
-  check(byIdentity.has(entry.locale + '/' + entry.id) && [1, 2].includes(number)
+  check(byIdentity.has(entry.locale + '/' + entry.id) && Number.isInteger(number)
+    && number >= 1 && number <= HARD_MAX_ATTEMPTS
     && ['master', 'telephony'].includes(variant), 'INVALID_AUDIO_IDENTITY');
   return `${entry.locale}/${entry.id}.attempt-${number}.${variant === 'master' ? 'master-24000' : 'telephony-8000'}.wav`;
 }
@@ -255,7 +258,7 @@ function validateAttempt(entry, attempt, index, directory, scope) {
 }
 function validateEntry(directory, entry, scope = resamplingScope()) {
   validateBase(entry);
-  check(Array.isArray(entry.attempts) && entry.attempts.length <= MAX_ATTEMPTS, 'INVALID_ATTEMPT_HISTORY');
+  check(Array.isArray(entry.attempts) && entry.attempts.length <= HARD_MAX_ATTEMPTS, 'INVALID_ATTEMPT_HISTORY');
   check(entry.generation_status === (entry.attempts.length ? entry.attempts.at(-1).status : 'PENDING'), 'ENTRY_STATUS_MISMATCH');
   entry.attempts.forEach((attempt, index) => {
     if (index) check(entry.attempts[index - 1].status === 'FAILED', 'RETRY_OF_SUCCESS_OR_INDETERMINATE_REQUEST');
@@ -371,7 +374,7 @@ function main(argv) {
     || argv.length === 4 && argv[0] === '--verify-only' && argv[2] === '--approval-sha256', 'INVALID_READ_ONLY_OPTIONS');
   console.log(JSON.stringify(verifyPack(argv[1], argv[3])));
 }
-module.exports = Object.freeze({OWNER, MODEL, VOICE, CATALOG_HASH, LOCALE_HASHES, MAX_ATTEMPTS, RESAMPLING,
+module.exports = Object.freeze({OWNER, MODEL, VOICE, CATALOG_HASH, LOCALE_HASHES, MAX_ATTEMPTS, HARD_MAX_ATTEMPTS, RESAMPLING,
   MAX_DURATION_SECONDS, PackError, digest, contexts, plan, pendingApproval, createManifest,
   fileName, requestBody, inspectWave, technicalQa, resampleMaster, verifyEntry, validateManifest, readManifest,
   assetSetHash, requireAuthoringApproval, verifyPack, main});
