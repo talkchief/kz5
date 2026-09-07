@@ -37,6 +37,13 @@ the latest engineering handoff takes precedence for current deployment state.
   `68e9e6/c09393` and `5e37b0/2a5f12`, including real named ETS transfer and
   deferred native listener activation. Before live deployment: old responder/
   archive-worker drain, direct-reader admission and coordinated replacement.
+  Maintenance `find_call/1` admission is now source-tested: before/after ready
+  owner checks pin the exact tid and reject missing/legacy/replaced/revoked or
+  timed-out sources; unavailable maintenance never publishes abandonment.
+  Root startup16 groups pass `156530/e8b860`, with13 fresh production compiles,
+  evidence `/tmp/kazoo-stats-startup.fTo5ct`. Not deployed. Remaining dynamic
+  callback admission and actual old-worker drain/replacement still gate release;
+  source-only drain helper work is not yet accepted or included in this proof.
 - **P0-25 additional source fix, not deployed:** initial pending dashboard
   views now own a disposal observer too. A detached loading view previously
   allowed its watchdog to overwrite the replacement screen. Reproduced in
@@ -61,6 +68,8 @@ the latest engineering handoff takes precedence for current deployment state.
   Final release acceptance remains pending. Untracked bridge source
   under `services/push-bridge/` is not an accepted installable service (INST-13).
   Fresh standalone/distributed/ALL installer acceptance and release gates remain.
+  Subsequent verified remote checkpoints include caller candidate `ccd31c0`
+  and staged migration `87ed290`; neither changed the installed runtime.
 
 See [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md) for exact build/deployment evidence,
 rollback locations, protected fixture holds and safe resumption instructions.

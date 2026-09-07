@@ -26,7 +26,7 @@ startup_exit() {
     exit "$startup_status"
 }
 trap startup_exit EXIT
-startup_sources=(applications/acdc/src/acdc_stats.erl
+startup_sources=(applications/acdc/src/acdc_stats.erl applications/acdc/src/acdc_maintenance.erl
     applications/acdc/src/acdc_stats_migration.erl applications/acdc/src/acdc_dashboard_caller.erl
     applications/acdc/src/acdc_agent_stats.erl applications/acdc/src/acdc_dashboard_snapshot.erl
     core/kazoo_amqp/src/gen_listener.erl core/kazoo_amqp/src/listener_utils.erl
@@ -54,7 +54,7 @@ erlc -Werror -I applications/acdc/src -o "$startup_dir" \
 startup_stage=eunit
 erl -noshell -pa "$startup_dir" -eval '
     Dir=os:getenv("KAZOO_STARTUP_OUTPUT"),
-    Modules=[acdc_stats,acdc_stats_migration,acdc_dashboard_caller,acdc_agent_stats,
+    Modules=[acdc_stats,acdc_maintenance,acdc_stats_migration,acdc_dashboard_caller,acdc_agent_stats,
              acdc_dashboard_snapshot,gen_listener,listener_utils,kz_json,kz_term,props,kz_time,kz_module],
     lists:foreach(fun(M)->
         {module,M}=code:ensure_loaded(M),

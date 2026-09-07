@@ -88,6 +88,54 @@ and post-migration successful queries/updates.
 
 ## Existing evidence and its limits
 
+### Direct maintenance reads and first-replacement drain
+
+`acdc_stats:find_call/1` now asks the stats supervisor for the actual worker,
+obtains `stats_call_read_source` admission from that worker, and pins the opaque
+call-table tid. The potentially large select stays outside the collector
+mailbox. After conversion to the existing maintenance JSON, the reader asks the
+same worker again and checks the same name/tid/owner identities. Only a ready
+worker that still owns both verified tables grants admission. A legacy worker's
+unknown-request `ok`, a missing/dead worker, either admission timeout, revoked
+admission, or a replacement table returns `{error, source_unavailable}` instead
+of a misleading `undefined` or stale JSON. Each admission call has a 1000ms
+timeout; this is not a 1000ms total operation bound (supervisor lookup and the
+existing ETS select/sort also take time). Maintenance prints unavailable and
+does not publish abandonment in that case. This is a maintenance read, not the
+public caller-identity/privacy contract.
+
+These are before/after non-atomic admission checks, not a worker reservation or
+proof that a source cannot change immediately after the final check. They do
+not drain old responders or archive tasks and do not replace the complete
+cohort upgrade requirement. The new ready worker does not migrate again in
+place; a future same-owner re-entry protocol must add a non-reusable generation
+or reservation rather than treating a ready→closed→ready cycle as equivalent.
+
+Source audit of the first replacement found that a consumer-PID dictionary scan
+and successful `soft_purge` are insufficient: native responders start through a
+`kz_process` wrapper before installing consumer metadata, and periodic archives
+hold delayed local funs in that wrapper. Purge is not acknowledgement that
+those workers completed. The next helper must run only after actual old-worker
+termination and exact retained-heir ownership verification, conservatively
+monitor the surviving `kz_process`/native `acdc_stats` initial-call cohort, and
+require actual termination before conversion/purge. It must refuse on a bounded
+deadline rather than kill workers or narrow the scan to late metadata. This
+argument is specific to the audited closed spawn graph; a one-time process
+scan is not generic quiescence proof. Dynamic reader entry gates and old direct
+code-reader checks remain separate requirements.
+
+Root startup suite now passes16 groups `156530/e8b860`, retained at
+`/tmp/kazoo-stats-startup.fTo5ct`, rebuilding13 listed production modules without
+TEST. New evidence includes actual native listener success/not-found/newest-row
+lookups; unavailable/dead/legacy owner handling; first and second admission
+timeouts; second refusal with unchanged pid/tid; actual table replacement after
+the first select; and maintenance unavailable with AMQP publication poisoned.
+The real source tables and native listener are exercised; supervisor lookup and
+external broker/config/monitor dependencies are controlled. This does not prove
+installed upgrade, full responder admission, broker consumption or live caller
+display. Invocation is through `/bin/bash scripts/test-acdc-stats-startup.sh`
+inside the root resource guard and network namespace.
+
 Migration helper11 tests passed `68e9e6/c09393`, retained at
 `/tmp/kazoo-stats-migration.YErKbj`. They use real protected ETS and actual heir
 transfer, not a mocked converter. They cover existing current identity, all

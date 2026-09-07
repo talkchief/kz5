@@ -18,13 +18,19 @@ startup_test_() -> {timeout,90,{setup,fun setup/0,fun teardown/1,fun(_)->[
     {"matching migration timeout fails; stale timeout after ready is ignored",wrap(fun timeout_tokens/0)},
     {"nonready termination never archives and legacy code_change is refused",wrap(fun termination_and_upgrade/0)},
     {"OTP status formatting excludes continuation and private dictionary",wrap(fun status_redaction/0)},
+    {"direct lookups reject missing and legacy stats owners",wrap(fun read_unavailable/0)},
+    {"unresponsive read admission has a bounded timeout",wrap(fun read_timeout/0)},
+    {"direct lookup discards a result when its table is replaced",wrap(fun read_replaced/0)},
+    {"second admission refusal with the same owner and tid withholds JSON",wrap(fun()->read_revoked(refused) end)},
+    {"second admission timeout with the same owner and tid withholds JSON",wrap(fun()->read_revoked(timeout) end)},
+    {"ready source admission refuses replacement table identities",wrap(fun ready_read_source/0)},
     {"actual gen_listener defers responder/channel setup until real migration",wrap(fun native_listener/0)}
 ] end}}.
 
 setup() ->
     T=ets:new(?COUNTS,[named_table,public,set]),
     Modules=[kz_datamgr,kapps_config,acdc_dashboard_events,kz_process,kz_monitor,
-             kz_amqp_channel,kz_amqp_assignments],
+             kz_amqp_channel,kz_amqp_assignments,acdc_stats_sup,kz_amqp_worker],
     meck:new(Modules,[non_strict,no_link]),
     meck:expect(kz_datamgr,suppress_change_notice,fun()->bump(suppress),ok end),
     meck:expect(kapps_config,get_integer,fun(_,Key,Default)->bump({config,Key}),Default end),
@@ -40,6 +46,8 @@ setup() ->
     meck:expect(kz_amqp_channel,consumer_pid,fun()->self() end),
     meck:expect(kz_amqp_channel,requisition,fun()->bump(channel),false end),
     meck:expect(kz_amqp_assignments,release_consumer,fun(_)->ok end),
+    meck:expect(acdc_stats_sup,stats_srv,fun()->{error,not_found} end),
+    meck:expect(kz_amqp_worker,cast,fun(_,_) -> bump(forbidden_publish),error(forbidden_publish) end),
     {T,Modules}.
 teardown({T,Modules}) -> meck:unload(Modules),ets:delete(T).
 bump(K) -> ets:update_counter(?COUNTS,K,1,{K,0}).
@@ -139,6 +147,8 @@ activation()->
 closed_work(S,C,T)->
     Before={lists:sort(ets:tab2list(C)),ets:tab2list(T)},R=record(1000),St=status(),
     ?assertEqual(ignore,acdc_stats:handle_event(kz_json:new(),S)),
+    ?assertEqual({reply,{error,source_unavailable},S},
+                 acdc_stats:handle_call(stats_call_read_source,{self(),make_ref()},S)),
     Messages=[{create_call,R},{update_call,<<"1">>,[{#call_stat.caller_priority,99}]},
         {flush_call,<<"1">>},{remove_call,[{'_',[],['$_']}]},
         {create_status,St#status_stat{id= <<"changed">>}},{update_status,St#status_stat.key,[{#status_stat.status,<<"paused">>}]},
@@ -232,11 +242,91 @@ status_redaction()->
     ?assertEqual(Expected,acdc_stats:format_status(normal,[[{secret,<<"PRIVATE-DICTIONARY">>}],S])),
     ?assertEqual(Expected,acdc_stats:format_status(terminate,[[],S])),
     ?assertEqual([{data,[{"Phase",unavailable}]}],acdc_stats:format_status(normal,[[],{legacy,private}])).
+read_unavailable()->
+    Unavailable={error,source_unavailable},
+    meck:expect(acdc_stats_sup,stats_srv,fun()->{error,not_found} end),
+    ?assertEqual(Unavailable,acdc_stats:find_call(<<"1">>)),
+    ?assertEqual(ok,acdc_maintenance:flush_call_stat(<<"1">>)),
+    ?assertEqual(0,count(changed)),
+    ?assertEqual(0,count(forbidden_publish)),
+    meck:expect(acdc_stats_sup,stats_srv,fun()->exit(noproc) end),
+    ?assertEqual(Unavailable,acdc_stats:find_call(<<"1">>)),
+    Pid=spawn(fun()->receive {'$gen_call',From,{'$client_call',stats_call_read_source}} ->
+        gen_server:reply(From,ok) end end),
+    Ref=monitor(process,Pid),put(startup_test_children,[Pid|get(startup_test_children)]),
+    meck:expect(acdc_stats_sup,stats_srv,fun()->{ok,Pid} end),
+    ?assertEqual(Unavailable,acdc_stats:find_call(<<"1">>)),
+    receive {'DOWN',Ref,process,Pid,normal}->ok after 1000->error(legacy_reply_timeout) end,
+    ?assertEqual(Unavailable,acdc_stats:find_call(<<"1">>)).
+read_timeout()->
+    Parent=self(),Pid=spawn(fun()->
+        receive {'$gen_call',_,{'$client_call',stats_call_read_source}} ->
+            Parent!{admission_request_received,self()},receive finish->ok end end
+    end),
+    Ref=monitor(process,Pid),put(startup_test_children,[Pid|get(startup_test_children)]),
+    meck:expect(acdc_stats_sup,stats_srv,fun()->{ok,Pid} end),
+    Started=erlang:monotonic_time(millisecond),
+    ?assertEqual({error,source_unavailable},acdc_stats:find_call(<<"1">>)),
+    Elapsed=erlang:monotonic_time(millisecond)-Started,
+    ?assert(Elapsed>=900 andalso Elapsed<4000),
+    receive {admission_request_received,Pid}->ok after 1000->error(admission_not_received) end,
+    Pid!finish,receive {'DOWN',Ref,process,Pid,normal}->ok after 1000->error(reader_exit_timeout) end.
+read_replaced()->
+    Parent=self(),Pid=spawn(fun()->
+        {Name,Opts}=options(call),Name=ets:new(Name,Opts),Tid=ets:whereis(Name),
+        ets:insert(Tid,record(1)),
+        receive {'$gen_call',First,{'$client_call',stats_call_read_source}} ->
+            gen_server:reply(First,{ok,Tid}) end,
+        receive {'$gen_call',Second,{'$client_call',stats_call_read_source}} ->
+            %% Reaching this call means the first real ETS select completed.
+            %% Keep the process alive and return the same old admission value:
+            %% the client must still reject the replacement incarnation.
+            ets:delete(Tid),Name=ets:new(Name,Opts),
+            ets:insert(Name,record(2)),Parent!{read_completed_before_replacement,self()},
+            gen_server:reply(Second,{ok,Tid}) end,
+        receive finish->ok end
+    end),
+    Ref=monitor(process,Pid),put(startup_test_children,[Pid|get(startup_test_children)]),
+    meck:expect(acdc_stats_sup,stats_srv,fun()->{ok,Pid} end),
+    ?assertEqual({error,source_unavailable},acdc_stats:find_call(<<"1">>)),
+    receive {read_completed_before_replacement,Pid}->ok after 1000->error(read_not_completed) end,
+    ?assertEqual([record(2)],ets:tab2list(acdc_stats:call_table_id())),
+    Pid!finish,receive {'DOWN',Ref,process,Pid,normal}->ok after 1000->error(reader_exit_timeout) end.
+read_revoked(Mode)->
+    Parent=self(),Pid=spawn(fun()->
+        {Name,Opts}=options(call),Name=ets:new(Name,Opts),Tid=ets:whereis(Name),
+        ets:insert(Tid,record(1)),
+        receive {'$gen_call',First,{'$client_call',stats_call_read_source}} ->
+            gen_server:reply(First,{ok,Tid}) end,
+        receive {'$gen_call',Second,{'$client_call',stats_call_read_source}} ->
+            Parent!{second_admission,self(),Tid},
+            case Mode of
+                refused->gen_server:reply(Second,{error,source_unavailable});
+                timeout->ok
+            end end,
+        receive finish->ok end
+    end),
+    Ref=monitor(process,Pid),put(startup_test_children,[Pid|get(startup_test_children)]),
+    meck:expect(acdc_stats_sup,stats_srv,fun()->{ok,Pid} end),
+    ?assertEqual({error,source_unavailable},acdc_stats:find_call(<<"1">>)),
+    Tid=receive {second_admission,Pid,T}->T after 1000->error(second_admission_missing) end,
+    ?assertEqual(Tid,ets:whereis(acdc_stats:call_table_id())),
+    ?assertEqual(Pid,ets:info(Tid,owner)),?assertEqual([record(1)],ets:tab2list(Tid)),
+    Pid!finish,receive {'DOWN',Ref,process,Pid,normal}->ok after 1000->error(reader_exit_timeout) end.
+ready_read_source()->
+    {C,_,S}=migrating([legacy(record(1))]),{Ready,_,_}=finish(S),activation(),
+    ?assertEqual({reply,{ok,C},Ready},
+        acdc_stats:handle_call(stats_call_read_source,{self(),make_ref()},Ready)),
+    ets:delete(C),{_,_}=donate(call,[record(2)],self()),
+    ?assertEqual({reply,{error,source_unavailable},Ready},
+        acdc_stats:handle_call(stats_call_read_source,{self(),make_ref()},Ready)).
 native_listener()->
     {ok,Pid}=acdc_stats:start_link(),unlink(Pid),Ref=monitor(process,Pid),
     put(startup_test_children,[Pid|get(startup_test_children)]),
+    meck:expect(acdc_stats_sup,stats_srv,fun()->{ok,Pid} end),
     try
         ?assertEqual(#{phase=>waiting_tables,reason=>undefined},gen_listener:call(Pid,stats_readiness)),
+        ?assertEqual({error,source_unavailable},acdc_stats:find_call(<<"1">>)),
         ?assertEqual([],gen_listener:responders(Pid)),?assertEqual(undefined,gen_listener:queue_name(Pid)),
         ?assertEqual(false,gen_listener:is_consuming(Pid)),no_activation(),
         {C,_}=donate(call,[legacy(record(1))],Pid),
@@ -244,6 +334,11 @@ native_listener()->
         no_activation(),{T,_}=donate(status,[status()],Pid),
         wait_ready(Pid,erlang:monotonic_time(millisecond)+5000),
         ?assertEqual([record(1)],ets:tab2list(C)),?assertEqual([status()],ets:tab2list(T)),
+        ?assertEqual(acdc_stats:call_stat_to_json(record(1)),acdc_stats:find_call(<<"1">>)),
+        ?assertEqual(undefined,acdc_stats:find_call(<<"missing">>)),
+        Newer=(record(2))#call_stat{call_id= <<"1">>},
+        gen_listener:cast(Pid,{create_call,Newer}),
+        ?assertEqual(acdc_stats:call_stat_to_json(Newer),acdc_stats:find_call(<<"1">>)),
         wait_responders(Pid,erlang:monotonic_time(millisecond)+1000),?assert(count(channel)>0),
         ?assertEqual(1,count({config,<<"archive_period_ms">>})),
         ?assertEqual(1,count({config,<<"cleanup_period_ms">>})),
@@ -253,7 +348,9 @@ native_listener()->
         [receive {'ETS-TRANSFER',Name,Pid,startup_fixture}->?assertEqual(Tid,ets:whereis(Name))
          after 1000->error(heir_return_timeout) end ||
             {Tid,Name}<-[{C,acdc_stats:call_table_id()},{T,acdc_agent_stats:status_table_id()}]],
-        ?assertEqual(self(),ets:info(C,owner)),?assertEqual([record(1)],ets:tab2list(C))
+        ?assertEqual(self(),ets:info(C,owner)),
+        ?assertEqual(lists:sort([record(1),Newer]),lists:sort(ets:tab2list(C))),
+        ?assertEqual({error,source_unavailable},acdc_stats:find_call(<<"1">>))
     after case is_process_alive(Pid) of true->exit(Pid,kill);false->ok end end.
 wait_ready(Pid,Until)->
     case gen_listener:call(Pid,stats_readiness) of

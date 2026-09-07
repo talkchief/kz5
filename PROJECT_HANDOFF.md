@@ -6,6 +6,33 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Direct maintenance read admission — September7, source tested, NOT deployed:**
+`acdc_stats:find_call/1` now requires before/after admission from the same ready
+stats owner and checks the exact opaque table identity/ownership. Missing,
+legacy, timed-out, revoked or replaced sources return explicit unavailable;
+`acdc_maintenance:flush_call_stat/1` prints that status without publishing an
+abandonment. The ETS select remains outside the collector mailbox. These are
+non-atomic read checks, not a lease, old-worker drain or a hard total read
+deadline. See `doc/dashboard_caller_identity_upgrade.md` for boundaries.
+
+Root final startup suite passes16 groups `156530/e8b860`, evidence
+`/tmp/kazoo-stats-startup.fTo5ct`. It freshly compiled13 production modules
+including stats, maintenance and real gen_listener without TEST, under the
+192MiB/512MiB-reserve/150-second guard and isolated network namespace. New tests
+cover missing/dead/legacy owners, real listener lookups/newest record selection,
+both 1000ms admission timeouts, same-owner/tid second refusal, actual table
+replacement after select, and maintenance unavailable with poisoned AMQP
+publication. Earlier13/14-group runs also passed; final evidence supersedes
+them. All root jobs are terminal; no services, live BEAMs or account data changed.
+
+**Next:** a source-only agent is preparing a separate first-replacement drain
+helper/fixture; it is not yet accepted, compiled, installed or part of this
+checkpoint. No metadata-only scan or successful soft purge may be treated as
+worker completion. Root must review and serially test that helper, integrate
+remaining dynamic callback gates and rehearse retained-heir worker replacement
+before coordinated backend/UI/OpenAPI deployment. Preserve any uncommitted
+agent files and the unrelated untracked bridge directory.
+
 **Retained stats startup migration — September7, source tested, NOT deployed:**
 `acdc_stats_migration.erl` now performs owner-only preflight, bounded conversion
 and hash/count verification; `acdc_stats` defers its native listener and timers
@@ -34,8 +61,8 @@ Earlier full-source compile76 modules passed `67b393/bf1080`; the subsequently
 corrected stats module was rebuilt in the passing lifecycle runner. Upstream10
 regressions passed `4412fa/0ce91f` before the later startup-only hardening.
 All jobs are terminal; no live BEAM, service or account mutation occurred.
-**Next gate:** implement/test old responder and archive-worker drain plus direct
-reader admission, then rehearse the controlled stats-child replacement while
+**Next gate:** implement/test old responder and archive-worker drain plus remaining
+dynamic reader admission (maintenance read admission now tested above), then rehearse the controlled stats-child replacement while
 keeping ETS managers alive. Native `gen_listener:code_change` does not delegate
 client state conversion; the direct client refusal test is not a hot-upgrade
 safety proof. See `doc/dashboard_caller_identity_upgrade.md`. Do not use a full

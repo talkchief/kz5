@@ -246,15 +246,40 @@ handle_average_wait_time_req(JObj, _Prop) ->
     Match = average_wait_time_build_match_spec(JObj),
     query_average_wait_time(Match, JObj).
 
--spec find_call(kz_term:ne_binary()) -> kz_term:api_object().
+-spec find_call(kz_term:ne_binary()) -> kz_term:api_object() | {'error', 'source_unavailable'}.
 find_call(CallId) ->
+    %% Keep the potentially large select outside the collector mailbox, but
+    %% obtain admission from the actual owner on both sides of it. Never
+    %% re-resolve the named table during a read: a replacement is not the
+    %% source that authorized this lookup. Legacy workers reply 'ok' to an
+    %% unknown call and therefore cannot accidentally authorize new readers.
+    try
+        {'ok', Pid} = acdc_stats_sup:stats_srv(),
+        {'ok', Tid} = gen_listener:call(Pid, stats_call_read_source, 1000),
+        true = current_call_source(Pid, Tid),
+        Result = find_call_in_table(Tid, CallId),
+        {'ok', Tid} = gen_listener:call(Pid, stats_call_read_source, 1000),
+        true = current_call_source(Pid, Tid),
+        Result
+    catch
+        error:{badmatch, _} -> {'error', 'source_unavailable'};
+        error:badarg -> {'error', 'source_unavailable'};
+        exit:_ -> {'error', 'source_unavailable'}
+    end.
+
+current_call_source(Pid, Tid) ->
+    is_reference(Tid) andalso ets:whereis(call_table_id()) =:= Tid
+        andalso ets:info(Tid, owner) =:= Pid.
+
+-spec find_call_in_table(ets:tid(), kz_term:ne_binary()) -> kz_term:api_object().
+find_call_in_table(Tid, CallId) ->
     MS = [{#call_stat{call_id=CallId
                      ,_ = '_'
                      }
           ,[]
           ,['$_']
           }],
-    case ets:select(call_table_id(), MS) of
+    case ets:select(Tid, MS) of
         [] -> 'undefined';
         [Stat] -> call_stat_to_json(Stat);
         Stats -> call_stat_to_json(get_recent_stat_for_call(Stats))
@@ -372,6 +397,14 @@ start_cleanup_timer() ->
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(stats_readiness, _From, #state{phase=Phase, reason=Reason}=State) ->
     {'reply', #{phase=>Phase, reason=>Reason}, State};
+handle_call(stats_call_read_source, _From, #state{phase=ready, call_tid=Tid}=State) ->
+    Reply = case startup_tables_current(State) of
+                true -> {'ok', Tid};
+                false -> {'error', 'source_unavailable'}
+            end,
+    {'reply', Reply, State};
+handle_call(stats_call_read_source, _From, State) ->
+    {'reply', {'error', 'source_unavailable'}, State};
 handle_call(_Req, _From, State) ->
     {'reply', 'ok', State}.
 

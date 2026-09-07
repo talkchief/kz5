@@ -340,6 +340,8 @@ agent_presence_id(AccountId, AgentId) ->
 -spec flush_call_stat(kz_term:ne_binary()) -> 'ok'.
 flush_call_stat(CallId) ->
     case acdc_stats:find_call(CallId) of
+        {'error', 'source_unavailable'} ->
+            io:format("call statistics are temporarily unavailable; no change made~n", []);
         'undefined' -> io:format("nothing found for call ~s~n", [CallId]);
         Call ->
             acdc_stats:call_abandoned(kz_json:get_value(<<"Account-ID">>, Call)
