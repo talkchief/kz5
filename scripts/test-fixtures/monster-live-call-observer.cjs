@@ -90,12 +90,18 @@ function readRenderedCall({accountId, queueId, overview = false}) {
         const status = row.querySelector('.acdc-status');
         if (!status) return true;
         const cells = Array.from(row.querySelectorAll('td'));
-        return visible(status) && cells.length === 4 && cells.every(visible);
+        const identity = row.getAttribute('data-call-id');
+        const observed = s.results.live.calls.rows.find(call => call.call_id === identity);
+        if (!observed) return false;
+        const name = observed.caller_id_name, number = observed.caller_id_number;
+        const caller = name && number && name !== number ? name + ' — ' + number
+            : name || number || app.i18n.active().acdc.dashboard.callerUnavailable;
+        return visible(status) && cells.length === 4 && cells.every(visible) && cells[1].textContent === caller;
     })) return {valid: false};
     const rows = tableRows
         .filter(row => row.querySelector('.acdc-status')).map(row => {
             const cells = row.querySelectorAll('td'), status = row.querySelector('.acdc-status');
-            return {callId: cells.length === 4 ? cells[1].textContent : null,
+            return {callId: cells.length === 4 ? row.getAttribute('data-call-id') : null,
                 state: status.classList.contains('acdc-live-status-waiting') ? 'waiting'
                     : status.classList.contains('acdc-live-status-handling') ? 'handled' : 'unknown'};
         });

@@ -854,6 +854,7 @@ add_new_queue_member(JObj, Priority, StampedCall, StampedCalls, Position,
                                   ,CIDName
                                   ,CIDNumber
                                   ,Priority
+                                  ,acdc_dashboard_caller:from_call(Call, kz_json:get_value(<<"Call">>,JObj), CIDName, CIDNumber)
                                   ),
 
     publish_queue_member_add(AccountId, QueueId, Call),

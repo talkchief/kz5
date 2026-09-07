@@ -156,17 +156,46 @@ async function main() {
             assert.equal(await page.locator('.acdc-live-no-match').isVisible(), true);
             assert.equal((await page.evaluate(() => ledger)).length, 3);
         });
-        await group('detail scope, signed Unix durations and no invented caller/agent fields', async () => {
+        await group('detail scope, signed Unix durations and privacy-filtered caller display', async () => {
             await page.evaluate(() => {
-                reset(); reply = dto(true); reply.calls.rows[0].caller_id_number = 'NEVER-RENDER-CALLER';
+                reset(); reply = dto(true);
+                Object.assign(reply.calls.rows[0], {caller_id_name: 'Synthetic caller', caller_id_number: '+15550000100'});
+                Object.assign(reply.calls.rows[1], {caller_id_name: null, caller_id_number: null});
                 app.renderLiveDashboard(Q);
             });
             assert.deepEqual((await page.evaluate(() => ledger)).map(r => r.resource), ['acdc.live.detail']);
             assert.deepEqual(await page.locator('.acdc-live-calls-panel .acdc-live-duration').allTextContents(), ['2:00', '—', '0:30', '0:30']);
-            assert.doesNotMatch(await page.locator('#shell').textContent(), /NEVER-RENDER-CALLER/);
+            assert.deepEqual(await page.locator('.acdc-live-caller').allTextContents(), ['Synthetic caller — +15550000100', 'Caller unavailable']);
+            assert.doesNotMatch(await page.locator('.acdc-live-calls-panel').textContent(), /waiting-call|handled-call/);
+            assert.deepEqual(await page.locator('.acdc-live-calls-panel tbody tr').evaluateAll(rows => rows.map(r => r.dataset.callId)), ['waiting-call', 'handled-call']);
             assert.equal(await page.evaluate(() => app.liveDuration(-2, 0)), '0:02');
-            assert.match(await page.locator('.acdc-live-members-panel').textContent(), /does not verify endpoint reachability/);
-            assert.deepEqual(await page.locator('.acdc-live-members-panel tbody td').allTextContents(), ['Agent', 'Ready · observed', 'Member · observed']);
+            assert.match(await page.locator('.acdc-live-members-panel').textContent(), /Ready does not guarantee that a device can receive calls/);
+            assert.deepEqual(await page.locator('.acdc-live-members-panel tbody td').allTextContents(), ['Agent', 'Ready', 'Member']);
+        });
+        await group('caller text is escaped and legacy identity never falls back to UUID', async () => {
+            await page.evaluate(() => {
+                reset(); reply = dto(true);
+                Object.assign(reply.calls.rows[0], {caller_id_name: '<img src=x onerror=alert(1)>', caller_id_number: null});
+                app.renderLiveDashboard(Q);
+            });
+            assert.deepEqual(await page.locator('.acdc-live-caller').allTextContents(), ['<img src=x onerror=alert(1)>', 'Caller unavailable']);
+            assert.equal(await page.locator('.acdc-live-caller img').count(), 0);
+            assert.equal(await page.locator('.acdc-live-caller bdi').count(), 2);
+        });
+        await group('caller bounds reject malformed UTF8 controls and partial metadata', async () => {
+            const result = await page.evaluate(() => {
+                const valid = (name, number) => {
+                    const d = dto(true); Object.assign(d.calls.rows[0], {caller_id_name: name, caller_id_number: number});
+                    return app.liveSnapshotValid(d, A, Q, paging());
+                };
+                const partial = dto(true); partial.calls.rows[0].caller_id_number = '+15550000100';
+                return {good: [valid(null, null), valid('א'.repeat(128), '1'.repeat(64)), valid(null, '+15550000100')],
+                    bad: ['', ' ', '\u0000', '\u0085', '\u202e', '\u2066', '\ud800', 'א'.repeat(129), {}, 1, undefined]
+                        .map(value => valid(value, null)),
+                    longNumber: valid(null, '1'.repeat(65)), partial: app.liveSnapshotValid(partial, A, Q, paging())};
+            });
+            assert(result.good.every(Boolean)); assert(result.bad.every(value => value === false));
+            assert.equal(result.longNumber, false); assert.equal(result.partial, false);
         });
         await group('200-row truncation uses metadata while card keeps full 201 count', async () => {
             await page.evaluate(() => {
@@ -184,7 +213,7 @@ async function main() {
             await page.evaluate(() => { reset(); app.renderLiveDashboard(null); reply = partial(); });
             await page.click('.acdc-refresh');
             assert.deepEqual(await page.locator('.acdc-live-card-metrics strong').allTextContents(), ['—', '—']);
-            assert.match(await page.locator('.acdc-live-source-state').textContent(), /Partial source.*Not every source/);
+            assert.match(await page.locator('.acdc-live-source-state').textContent(), /Partial data.*Not every source/);
             assert.equal(await page.locator('.acdc-live-refresh-error').count(), 0);
         });
         await group('unavailable calls differ from complete observed empty calls', async () => {
@@ -205,7 +234,7 @@ async function main() {
             });
             assert.equal(await page.locator('.acdc-live-calls-panel tbody tr').count(), 2);
             assert.equal(await page.locator('.acdc-live-detail-metrics strong').last().textContent(), '1');
-            assert.match(await page.locator('.acdc-live-members-panel tbody').textContent(), /Agent.*Unknown.*Runtime source unavailable.*Unknown/);
+            assert.match(await page.locator('.acdc-live-members-panel tbody').textContent(), /Agent.*Unknown.*Status service unavailable.*Unknown/);
             assert.equal(await page.evaluate(() => ledger.length), 1);
         });
         await group('malformed initial reply fails closed; refresh keeps explicit stale snapshot', async () => {
@@ -394,9 +423,22 @@ async function main() {
                 // Real MutationObserver delivery occurs after the DOM replacement.
                 assert.equal(await page.evaluate(() => socketBindings[0].cancelled), 1);
                 await page.evaluate(() => { resolve(0, reply); ack(0); invalidate(0); tick(20000); });
-                assert.equal(await page.locator('.replacement').count(), 1);
+                assert.equal(await page.locator('.replacement').count(), 1, boundary + ' replacement survives old replies and request watchdogs');
                 assert.equal(await page.evaluate(() => ledger.filter(r => r.resource === 'acdc.queues.roster').length), 0);
             }
+        });
+        await group('initial pending dashboard disposal cancels watchdog and ignores delivered late callback', async () => {
+            await page.evaluate(() => {
+                reset(); reply = dto(true); defer = true; app.renderLiveDashboard(Q);
+                app.getContentContainer().html('<p class="replacement">Replacement</p>');
+            });
+            assert.equal(await page.evaluate(() => Boolean(app.appFlags.acdc.liveDashboardController)), false);
+            assert.equal(await page.evaluate(() => clockTimers.size), 0);
+            await page.evaluate(() => { resolve(0, reply); tick(20000); });
+            assert.equal(await page.locator('.replacement').count(), 1);
+            assert.equal(await page.locator('.error, .loading, .acdc-live-calls-panel').count(), 0);
+            assert.equal(await page.evaluate(() => Boolean(app.appFlags.acdc.liveDashboardSnapshot)), false);
+            assert.equal(await page.evaluate(() => socketBindings.length), 0);
         });
         await group('automatic refresh preserves current search/filter/focus/selection including edits during held GET', async () => {
             await page.evaluate(() => {
@@ -457,10 +499,10 @@ async function main() {
             assert.deepEqual(await page.evaluate(() => ledger.map(r => r.resource)), ['acdc.live.detail']);
             assert.equal(await page.locator('.acdc-live-members-panel tbody tr').count(), 9);
             assert.equal(await page.locator('.acdc-live-members-panel img').count(), 0);
-            assert.match(await page.locator('.acdc-live-members-panel tbody tr').last().textContent(), /Unknown.*Conflicting runtime observations.*Unknown/);
-            assert.match(await page.locator('.acdc-live-agent-source').textContent(), /Runtime observations incomplete/);
+            assert.match(await page.locator('.acdc-live-members-panel tbody tr').last().textContent(), /Unknown.*Conflicting status data.*Unknown/);
+            assert.match(await page.locator('.acdc-live-agent-source').textContent(), /Some agent statuses are unknown/);
             assert.deepEqual(await page.locator('.acdc-live-members-panel tbody tr').nth(2).locator('td').allTextContents(),
-                ['Agent 2', 'Ready · observed', 'Member · observed']);
+                ['Agent 2', 'Ready', 'Member']);
         });
         await group('strict agents contradictions reject whole detail without fallback HTTP; truncation and empty runtime stay explicit', async () => {
             const rejected = await page.evaluate(() => {
@@ -486,11 +528,11 @@ async function main() {
             assert.match(await page.locator('.acdc-live-members-panel').textContent(), /total is not supplied/);
             await page.evaluate(() => { reply = dto(true); reply.agents.rows = []; app.renderLiveDashboard(Q); });
             assert.equal(await page.locator('.acdc-live-detail-metrics strong').last().textContent(), '0');
-            assert.match(await page.locator('.acdc-live-agent-source').textContent(), /Runtime observations complete/);
+            assert.match(await page.locator('.acdc-live-agent-source').textContent(), /Agent status data complete/);
             await page.evaluate(() => {
                 Object.assign(reply.agents, {observation_started: null, observation_finished: null, runtime_complete: false}); app.renderLiveDashboard(Q);
             });
-            assert.match(await page.locator('.acdc-live-agent-source').textContent(), /Runtime observations incomplete/);
+            assert.match(await page.locator('.acdc-live-agent-source').textContent(), /Some agent statuses are unknown/);
         });
         await group('50-queue asynchronous ACK admission and reconnect never submit parallel native authorization', async () => {
             await page.evaluate(() => {

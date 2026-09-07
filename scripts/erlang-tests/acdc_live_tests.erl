@@ -120,13 +120,27 @@ broker(Req,Publish,Until,3000)->
         capped->{ok,[reply(Req,Node,1,201,props:get_value(<<"To">>,Req),100,true) || Node<-[?N1,?N2]]};
         empty->{ok,[reply(Req,Node,1,0,props:get_value(<<"To">>,Req),null,true) || Node<-[?N1,?N2]]};
         missing_flag->{ok,[kz_json:delete_key(<<"Include-Calls">>,R1),R2]};
+        {caller,Left,Right}->{ok,[with_caller(R1,Left),with_caller(R2,Right)]};
         invalid->{ok,[kz_json:set_value(<<"Msg-ID">>,<<"wrong">>,R1),R2]}
     end.
+with_caller(R,legacy)->R;
+with_caller(R,{Name,Number})->
+    Path=[<<"Snapshot">>,<<"active_calls">>,<<"rows">>],
+    Rows=[{kz_json:to_proplist(Row)++[{<<"caller_id_name">>,Name},{<<"caller_id_number">>,Number}]} ||
+        Row<-kz_json:get_value(Path,R)],
+    raw_set(Path,Rows,R).
+%% Preserve hostile wire bytes; the public handler must reject, not repair.
+raw_set([K],V,{Props}) -> {lists:keystore(K,1,Props,{K,V})};
+raw_set([K|Rest],V,{Props}) ->
+    {lists:keyreplace(K,1,Props,{K,raw_set(Rest,V,proplists:get_value(K,Props))})}.
 
 public_route_test_()->{setup,fun setup/0,fun teardown/1,fun(_)->[
     {"WebSocket capability follows local registration without claiming delivery health",fun websocket_capability/0},
     {"real overview and detail routes, no-store and no replica summation",fun public_success/0},
     {"detail call rows, bounded truncation and unknown versus empty",fun detail_calls/0},
+    {"selected caller identity is exact nullable and legacy fields stay unknown",fun detail_caller_identity/0},
+    {"caller disagreement withholds replicas instead of choosing metadata",fun detail_caller_disagreement/0},
+    {"malformed native caller text cannot reach public JSON",fun detail_caller_invalid/0},
     {"runtime agent observations share the authorized snapshot request",fun detail_agents/0},
     {"embedded roster and agent permissions fail closed before broker",fun agent_authorization/0},
     {"malformed or foreign roster documents cannot enter runtime scope",fun agent_roster_scope/0},
@@ -167,8 +181,51 @@ public_success()->
     ?assertEqual(2,val(<<"observed_count">>,Calls)),
     [First|_]=val(<<"rows">>,Calls),?assertEqual(?Q,val(<<"queue_id">>,First)),
     ?assertEqual(null,val(<<"handled_at">>,First)),
-    ?assertEqual(5,length(kz_json:to_proplist(First))),
+    ?assertEqual(7,length(kz_json:to_proplist(First))),
+    ?assertEqual(null,val(<<"caller_id_name">>,First)),
+    ?assertEqual(null,val(<<"caller_id_number">>,First)),
     ?assert(abs(val(<<"entered_at">>,First)-(now_s()-?EPOCH-100))<5).
+detail_caller_identity()->
+    Name=unicode:characters_to_binary([16#0645,16#0631,16#062D,16#0628,16#0627]),
+    Number= <<"+15550000100">>,
+    [begin reset(),put_state(broker_mode,{caller,L,R}),
+        C=get(?Q,j([])),?assertEqual(success,cb_context:resp_status(C)),no_store(C),
+        D=cb_context:resp_data(C),Calls=val(<<"calls">>,D),
+        ?assertEqual(true,val(<<"available">>,Calls)),
+        ?assertEqual(<<"consensus">>,kz_json:get_value([<<"source">>,<<"reason">>],D)),
+        [begin ?assertEqual(7,length(kz_json:to_proplist(Row))),
+            ?assertEqual(Expected,{val(<<"caller_id_name">>,Row),val(<<"caller_id_number">>,Row)}),
+            [?assertEqual(undefined,val(K,Row)) || K<-[<<"name_status">>,<<"number_status">>,<<"privacy">>]]
+         end || Row<-val(<<"rows">>,Calls)]
+     end || {L,R,Expected}<-[{legacy,legacy,{null,null}},
+        {legacy,{null,null},{null,null}},{{null,null},legacy,{null,null}},
+        {{Name,Number},{Name,Number},{Name,Number}},{{Name,null},{Name,null},{Name,null}},
+        {{null,Number},{null,Number},{null,Number}}]],
+    reset(),D=cb_context:resp_data(get(undefined,j([]))),
+    ?assertEqual(null,val(<<"calls">>,D)),
+    [?assertEqual(nomatch,binary:match(iolist_to_binary(kz_json:encode(D)),K)) ||
+        K<-[<<"caller_id_name">>,<<"caller_id_number">>,Name,Number]].
+detail_caller_disagreement()->
+    A={<<"First identity">>,<<"+15550000100">>},
+    [begin reset(),put_state(broker_mode,{caller,L,R}),
+        D=cb_context:resp_data(get(?Q,j([]))),Calls=val(<<"calls">>,D),
+        ?assertEqual(<<"inconsistent_sources">>,kz_json:get_value([<<"source">>,<<"reason">>],D)),
+        ?assertEqual(false,val(<<"available">>,Calls)),?assertEqual([],val(<<"rows">>,Calls)),
+        ?assertEqual(null,val(<<"observed_count">>,Calls)),
+        [?assertEqual(null,val(<<"metrics">>,Q)) || Q<-val(<<"queues">>,D)],
+        ?assertEqual(nomatch,binary:match(iolist_to_binary(kz_json:encode(D)),<<"First identity">>))
+     end || {L,R}<-[{legacy,A},{A,legacy},{{null,null},A},{A,{null,null}},
+        {A,{<<"Other identity">>,<<"+15550000100">>}},
+        {A,{<<"First identity">>,<<"+15550000101">>}},
+        {{<<"First identity">>,null},{null,<<"+15550000100">>}}]].
+detail_caller_invalid()->
+    [begin reset(),put_state(broker_mode,{caller,legacy,{Bad,null}}),
+        D=cb_context:resp_data(get(?Q,j([]))),
+        ?assertEqual(<<"invalid_response">>,kz_json:get_value([<<"source">>,<<"reason">>],D)),
+        ?assertEqual([],kz_json:get_value([<<"calls">>,<<"rows">>],D)),
+        ?assertEqual(false,kz_json:get_value([<<"calls">>,<<"available">>],D))
+     end || Bad<-[<<"bad\nname">>,<<>>,<<" ">>,binary:copy(<<"x">>,257),<<255>>,
+        unicode:characters_to_binary([16#202E]),[],false,j([{<<"name">>,<<"PRIVATE">>}])]].
 detail_agents()->
     reset(),D=cb_context:resp_data(get(?Q,j([]))),A=val(<<"agents">>,D),
     ?assertEqual(1,state(roster_calls)),?assertEqual(1,state(broker_calls)),
@@ -368,4 +425,17 @@ replica_assessment_test()->
     assert_unknown(<<"response_limit">>,assess(lists:duplicate(64,R1),Req,[A])),
     assert_unknown(<<"source_set_changed">>,cb_acdc_live:assess({ok,[R1]},Req,[A],[B])),
     assert_unknown(<<"source_timeout">>,cb_acdc_live:assess({timeout,[R1]},Req,[A],[A])),
-    assert_unknown(<<"source_unavailable">>,cb_acdc_live:assess({error,offline},Req,[A],[A])).
+    assert_unknown(<<"source_unavailable">>,cb_acdc_live:assess({error,offline},Req,[A],[A])),
+    DetailReq=[{<<"Include-Calls">>,true}|Req],
+    Legacy=reply(DetailReq,?N1,1,2,To,100,true),
+    Unknown=with_caller(Legacy,{null,null}),
+    Named=with_caller(Legacy,{<<"Synthetic identity">>,<<"+15550000100">>}),
+    ?assertEqual(cb_acdc_live:normalized(Legacy),cb_acdc_live:normalized(Unknown)),
+    ?assertNotEqual(cb_acdc_live:normalized(Legacy),cb_acdc_live:normalized(Named)),
+    %% Even a single replica must not issue conflicting identity for one
+    %% incarnation and be selected arbitrarily after duplicate suppression.
+    assert_unknown(<<"inconsistent_sources">>,assess([Named,Legacy],DetailReq,[A])),
+    assert_unknown(<<"inconsistent_sources">>,assess([Named,
+        with_caller(Legacy,{<<"Changed identity">>,<<"+15550000100">>})],DetailReq,[A])),
+    {_,Agreement}=assess([Legacy,Unknown],DetailReq,[A]),
+    ?assertEqual(<<"consensus">>,val(<<"reason">>,Agreement)).

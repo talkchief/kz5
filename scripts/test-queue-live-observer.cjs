@@ -12,7 +12,8 @@ const CALL = 'synthetic-private-call', SECRET = 'SYNTHETIC_TOKEN_MUST_NOT_ESCAPE
 const copy = o => JSON.parse(JSON.stringify(o));
 function dto(state = 'waiting') {
     const rows = state === 'gone' ? [] : [{call_id: CALL, queue_id: Q, status: state,
-        entered_at: EPOCH / 1000 - 30, handled_at: state === 'handled' ? EPOCH / 1000 - 1 : null}];
+        entered_at: EPOCH / 1000 - 30, handled_at: state === 'handled' ? EPOCH / 1000 - 1 : null,
+        caller_id_name: null, caller_id_number: null}];
     const waiting = state === 'waiting' ? 1 : 0, handled = state === 'handled' ? 1 : 0;
     return {status: 'success', data: {version: 1, account_id: A, generated_at: EPOCH / 1000,
         window: {from: EPOCH / 1000 - 3600, to: EPOCH / 1000, seconds: 3600},

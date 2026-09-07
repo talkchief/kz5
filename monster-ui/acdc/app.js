@@ -891,6 +891,16 @@ define(function(require) {
 			return current;
 		},
 
+		watchLiveDashboardView: function(controller, view) {
+			var self = this;
+			controller.view = view;
+			if (controller.observer) { controller.observer.disconnect(); }
+			if (typeof MutationObserver !== 'undefined') {
+				controller.observer = new MutationObserver(function() { self.liveControllerActive(controller); });
+				controller.observer.observe(document.documentElement, { childList: true, subtree: true });
+			}
+		},
+
 		liveTransportState: function(controller) {
 			if (!controller || !controller.supported) { return 'unavailable'; }
 			var states = _.map(controller.bindings, 'state');
@@ -1058,6 +1068,8 @@ define(function(require) {
 				id = function(s) { return typeof s === 'string' && /^[a-f0-9]{32}$/.test(s); },
 				text = function(s) { return typeof s === 'string' && s.length > 0 && encodeURIComponent(s).replace(/%[A-F0-9]{2}/g, 'x').length <= 256; },
 				utf8 = function(s) { return encodeURIComponent(s).replace(/%([A-F0-9]{2})/g, function(match, hex) { return String.fromCharCode(parseInt(hex, 16)); }); },
+				callerText = function(value, max) { return value === null || (typeof value === 'string' && value.trim().length > 0
+					&& !/[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/.test(value) && utf8(value).length <= max); },
 				metricCounts = ['current_waiting', 'current_handled', 'records_entered', 'waiting_in_cohort', 'handled_in_cohort', 'processed_in_cohort', 'abandoned_in_cohort'],
 				reasons = ['consensus', 'empty_scope', 'source_unavailable', 'source_timeout', 'source_error', 'incomplete_source', 'inconsistent_sources', 'source_set_changed', 'invalid_response', 'response_limit'];
 			try {
@@ -1117,6 +1129,11 @@ define(function(require) {
 						|| row.entered_at > source.observation_finished_at || (row.status === 'waiting' ? row.handled_at !== null
 							: !integer(row.handled_at) || row.handled_at < row.entered_at || row.handled_at > source.observation_finished_at)
 						|| (last && (row.entered_at < last.entered_at || (row.entered_at === last.entered_at && utf8(row.call_id) <= utf8(last.call_id))))) { return false; }
+					// Legacy replies omit both fields. Never promote their internal
+					// call ID to caller text, or accept a partially supplied identity.
+					var hasName = Object.prototype.hasOwnProperty.call(row, 'caller_id_name'),
+						hasNumber = Object.prototype.hasOwnProperty.call(row, 'caller_id_number');
+					if (hasName !== hasNumber || (hasName && (!callerText(row.caller_id_name, 256) || !callerText(row.caller_id_number, 64)))) { return false; }
 					seen[row.call_id] = true; last = row; return true;
 				});
 			} catch (error) { return false; }
@@ -1213,8 +1230,10 @@ define(function(require) {
 						reason: agent.observed ? '' : labels.agentReasons[agent.reason] };
 				}) : [],
 				calls: _.map(rows, function(row) {
+					var name = row.caller_id_name, number = row.caller_id_number,
+						callerLabel = name && number && name !== number ? name + ' — ' + number : name || number || labels.callerUnavailable;
 					return { status: labels.callStatuses[row.status], statusClass: row.status === 'waiting' ? 'waiting' : 'handling',
-						callId: row.call_id,
+						callId: row.call_id, callerLabel: callerLabel,
 						wait: self.liveDuration(row.entered_at, row.status === 'waiting' ? asOf : row.handled_at),
 						talk: row.status === 'handled' ? self.liveDuration(row.handled_at, asOf) : '—' };
 				})
@@ -1246,7 +1265,12 @@ define(function(require) {
 
 			self.clearLiveDashboardTimer();
 			if (previous) { self.mountLiveDashboard(previous, generation, { updating: true }); }
-			else { self.renderLoading(self.i18n.active().acdc.states.loadingDashboard); }
+			else {
+				self.renderLoading(self.i18n.active().acdc.states.loadingDashboard);
+				// The first request has no snapshot yet. Own its loading view too,
+				// so navigation cancels its watchdog before it can replace a new screen.
+				self.watchLiveDashboardView(controller, self.getContentContainer().children().first());
+			}
 			controller.cancelRequest = self.requestLiveDashboard(queueId, function(errors, results) {
 				if (!self.liveControllerActive(controller)) { return; }
 				controller.cancelRequest = null; controller.inFlight = false;
@@ -1320,12 +1344,7 @@ define(function(require) {
 				}
 			}
 			if (controller) {
-				controller.view = view;
-				if (controller.observer) { controller.observer.disconnect(); }
-				if (typeof MutationObserver !== 'undefined') {
-					controller.observer = new MutationObserver(function() { self.liveControllerActive(controller); });
-					controller.observer.observe(document.documentElement, { childList: true, subtree: true });
-				}
+				self.watchLiveDashboardView(controller, view);
 			}
 			if (!model.stale) {
 				self.appFlags.acdc.liveDashboardTimer = setTimeout(function() {

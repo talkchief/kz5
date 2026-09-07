@@ -25,8 +25,20 @@ the latest engineering handoff takes precedence for current deployment state.
   browser edit/PATCH, validation failures and uncertain-operation recovery.
 - **P0-22:** actual queue membership confirmation now passes in the browser;
   error recovery remains to be accepted. Preserve the working login mutation.
-- **DASH-10 next implementation:** privacy-safe caller Name/Number through the
-  selected-queue API, UI and OpenAPI, with isolation and rendering tests.
+- **DASH-10 source candidate under validation, not deployed:** privacy-safe
+  caller Name/Number now flows through the selected-queue collector, native
+  codec, public API, UI and OpenAPI source. Null/legacy identity displays
+  `Caller unavailable`, never a UUID. Upstream10, collector50, native36,
+  public-route30 plus2 helper tests passed;51 actual handler DTOs pass schema
+  validation. Source Chromium27 groups pass, including caller escaping and
+  bounds. See the newest handoff for evidence and coordinated record-migration
+  gate; generated/served OpenAPI and installed code are still unchanged.
+- **P0-25 additional source fix, not deployed:** initial pending dashboard
+  views now own a disposal observer too. A detached loading view previously
+  allowed its watchdog to overwrite the replacement screen. Reproduced in
+  `13d01d/bc2755`; fixed in `monster-ui/acdc/app.js`, with27 source-browser
+  groups passing `e76537/e3eaaa` and explicit delivered-late callback coverage.
+  This is controlled source-browser proof, not deployed transport acceptance.
 - **Live idle viewer acceptance passed; soak/failure acceptance pending:** harnesses are at
   `scripts/test-queue-live-load.cjs` and
   `scripts/test-queue-live-load-offline.cjs`. Root14 offline groups pass

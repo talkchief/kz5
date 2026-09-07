@@ -211,6 +211,7 @@ normalized_calls(null) -> null;
 normalized_calls(C) ->
     {[val(K,C) || K <- [<<"limit">>,<<"observed_count">>,<<"truncated">>,<<"complete">>,<<"order">>]],
      [[val(K,R) || K <- [<<"call_id">>,<<"queue_id">>,<<"status">>,<<"entered_timestamp">>,<<"handled_timestamp">>]]
+      ++[caller(<<"caller_id_name">>,R),caller(<<"caller_id_number">>,R)]
       || R<-val(<<"rows">>,C)]}.
 public_calls(false,_) -> null;
 public_calls(true,null) ->
@@ -225,7 +226,12 @@ public_call(R) ->
     obj([{<<"call_id">>,val(<<"call_id">>,R)},{<<"queue_id">>,val(<<"queue_id">>,R)},
         {<<"status">>,val(<<"status">>,R)},
         {<<"entered_at">>,unix(val(<<"entered_timestamp">>,R))},
-        {<<"handled_at">>,unix(val(<<"handled_timestamp">>,R))}]).
+        {<<"handled_at">>,unix(val(<<"handled_timestamp">>,R))},
+        {<<"caller_id_name">>,caller(<<"caller_id_name">>,R)},
+        {<<"caller_id_number">>,caller(<<"caller_id_number">>,R)}]).
+%% Only called after the native codec validates an exact 5- or 7-key row.
+%% Legacy absence and explicit null agree; known versus unknown does not.
+caller(Key,Row) -> kz_json:get_value(Key,Row,null).
 unix(null) -> null;
 unix(N) when is_integer(N) -> N-?EPOCH.
 normalize_metrics(null,_) -> null;

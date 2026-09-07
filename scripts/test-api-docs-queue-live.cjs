@@ -43,7 +43,8 @@ function calls() {
         order: 'queue_id_entered_call_id', rows: []};
 }
 function callRow() {
-    return {call_id: 'synthetic-call', queue_id: queue, status: 'waiting', entered_at: 1700000000, handled_at: null};
+    return {call_id: 'synthetic-call', queue_id: queue, status: 'waiting', entered_at: 1700000000, handled_at: null,
+        caller_id_name: null, caller_id_number: null};
 }
 function agents() {
     return {limit: 200, roster_complete: true, truncated: false, runtime_complete: true,
@@ -169,7 +170,7 @@ async function main() {
         for (const entered_at of [-62167219199, -1, 0, 1]) accepts(test, {...row, entered_at});
         accepts(test, {...row, status: 'handled', entered_at: -100, handled_at: -10});
         accepts(test, {...row, status: 'handled', handled_at: 0});
-        for (const field of ['caller_id_name', 'caller_id_number', 'agent_id', 'position', 'entered_timestamp']) rejects(test, {...row, [field]: 'private'});
+        for (const field of ['name_status', 'number_status', 'privacy', 'agent_id', 'position', 'entered_timestamp']) rejects(test, {...row, [field]: 'private'});
         for (const key of Object.keys(row)) { const missing = {...row}; delete missing[key]; rejects(test, missing); }
         for (const status of ['processed', 'abandoned', 'ringing', null]) rejects(test, {...row, status});
         for (const entered_at of [null, 0.5, '1700000000']) rejects(test, {...row, entered_at});
@@ -177,6 +178,28 @@ async function main() {
         rejects(test, {...row, status: 'handled', handled_at: 1.5});
         for (const call_id of ['', 'x'.repeat(257), 'bad\ncall', null]) rejects(test, {...row, call_id});
         rejects(test, {...row, queue_id: 'foreign'});
+    });
+    group('caller fields are required nullable bounded privacy-filtered text, never raw or status metadata', () => {
+        const test = validate('QueueLiveCall'), row = callRow();
+        for (const caller_id_name of [null, 'Synthetic caller', 'שלום', 'مرحبا', 'Élodie', 'n'.repeat(256)]) {
+            accepts(test, {...row, caller_id_name});
+        }
+        for (const caller_id_number of [null, '+15550000100', '1'.repeat(64)]) accepts(test, {...row, caller_id_number});
+        for (const key of ['caller_id_name', 'caller_id_number']) {
+            const missing = {...row}; delete missing[key]; rejects(test, missing);
+            for (const bad of ['', ' ', '\t', 'bad\ntext', '\x7f', '\u0085', '\u202e', '\u2066', 1, true, [], {}]) {
+                rejects(test, {...row, [key]: bad});
+            }
+        }
+        rejects(test, {...row, caller_id_name: 'n'.repeat(257)});
+        rejects(test, {...row, caller_id_number: '1'.repeat(65)});
+        const fields = schemas.QueueLiveCall.oneOf[0].properties;
+        assert.equal(fields.caller_id_name['x-max-utf8-bytes'], 256);
+        assert.equal(fields.caller_id_number['x-max-utf8-bytes'], 64);
+        assert(fields.caller_id_name.description.includes('not a standard OpenAPI validator'));
+        assert(schemas.QueueLiveCall.description.includes('inconsistent_sources'));
+        // Actual byte limits/invalid UTF-8 are checked by the real Erlang codec
+        // fixture; OpenAPI maxLength counts characters, not UTF-8 bytes.
     });
     group('calls availability, null count, complete empty and capped observations cannot be conflated', () => {
         const test = validate('QueueLiveCalls'), complete = calls(); accepts(test, complete);
@@ -255,7 +278,8 @@ async function main() {
         assert.deepEqual(target.components.schemas.Preserved, {type: 'string'});
         for (const input of result.inputs) assert.equal(input.sha256, hash(fs.readFileSync(path.join(root, input.file))));
         assert(result.inputs.some(input => input.file === 'scripts/api-docs-queue-live.cjs'));
-        assert.equal(result.inputs.length, 12);
+        assert.equal(result.inputs.length, 13);
+        assert(result.inputs.some(input => input.file === 'applications/acdc/src/acdc_dashboard_caller.erl'));
         assert(result.inputs.some(input => input.file === 'applications/acdc/src/acdc_live_auth.erl'));
         assert(result.inputs.some(input => input.file === 'applications/acdc/src/cb_acdc_live_agents.erl'));
         assert(result.inputs.some(input => input.file === 'applications/acdc/priv/couchdb/views/queues.json'));
@@ -280,6 +304,11 @@ async function main() {
             ['cb_acdc_live.erl', '{<<"call_id">>,val(<<"call_id">>,R)},{<<"queue_id">>,val(<<"queue_id">>,R)}'],
             ['cb_acdc_live.erl', 'unix(N) when is_integer(N) -> N-?EPOCH'],
             ['cb_acdc_live.erl', 'normalized_calls(kz_json:get_value(<<"active_calls">>,S,null))'],
+            ['cb_acdc_live.erl', '++[caller(<<"caller_id_name">>,R),caller(<<"caller_id_number">>,R)]'],
+            ['cb_acdc_live.erl', '{<<"caller_id_name">>,caller(<<"caller_id_name">>,R)}'],
+            ['cb_acdc_live.erl', '{<<"caller_id_number">>,caller(<<"caller_id_number">>,R)}'],
+            ['kapi_acdc_dashboard.erl', 'acdc_dashboard_caller:valid({[{<<"version">>,1}'],
+            ['acdc_dashboard_caller.erl', 'unicode:characters_to_binary(B, utf8, utf8)'],
             ['acdc_dashboard_collector.erl', '-define(MAX_ACTIVE_CALLS, 200).'],
             ['kapi_acdc_dashboard.erl', 'calls_scope(true, [_]) -> true'],
             ['acdc_dashboard_snapshot.erl', 'fields(Row,[call_id,queue_id,status,']]) {

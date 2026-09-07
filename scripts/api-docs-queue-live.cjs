@@ -31,7 +31,12 @@ function queueLiveContract() {
             : key === 'max_current_wait_seconds' ? {...count, nullable: true} : count]));
     const text = {type: 'string', minLength: 1, maxLength: 256, 'x-max-utf8-bytes': 256};
     const queueFields = {id, name: text, strategy: {...text, nullable: true}};
-    const callFields = {call_id: {...text, pattern: '^[^\\x00-\\x1f\\x7f]+$'}, queue_id: id, entered_at: callTime};
+    const callerText = {type: 'string', nullable: true, minLength: 1,
+        pattern: '^(?!\\s*$)[^\\x00-\\x1f\\x7f-\\x9f\\u202a-\\u202e\\u2066-\\u2069]+$',
+        description: 'Privacy-filtered selected-call identity or null when withheld, unavailable or legacy. UTF-8 byte limits are enforced by the native codec (the x-max-utf8-bytes annotation is not a standard OpenAPI validator). Never fall back to raw caller metadata.'};
+    const callFields = {call_id: {...text, pattern: '^[^\\x00-\\x1f\\x7f]+$'}, queue_id: id, entered_at: callTime,
+        caller_id_name: {...callerText, maxLength: 256, 'x-max-utf8-bytes': 256},
+        caller_id_number: {...callerText, maxLength: 64, 'x-max-utf8-bytes': 64}};
     const callsFields = {limit: {type: 'integer', enum: [200]},
         order: {type: 'string', enum: ['queue_id_entered_call_id']}};
     const callRows = {type: 'array', maxItems: 200, uniqueItems: true, items: ref('QueueLiveCall')};
@@ -74,7 +79,7 @@ function queueLiveContract() {
             strict({...callFields, status: {type: 'string', enum: ['waiting']},
                 handled_at: {type: 'integer', nullable: true, enum: [null]}}),
             strict({...callFields, status: {type: 'string', enum: ['handled']}, handled_at: callTime})
-        ], description: 'Observed active call/queue identity, not a distinct visit or verified telephony channel. Only these five fields are exposed; no caller name/number, agent ID or queue position. Waiting has handled_at=null; handled has an integer handled_at. Runtime validation requires entered_at <= handled_at <= observation time for handled rows and entered_at <= observation time for every row.'},
+        ], description: 'Observed active call/queue identity, not a distinct visit or verified telephony channel. Exactly seven fields: call_id, queue_id, status, entered_at, handled_at, caller_id_name, caller_id_number. Caller fields are required but nullable and come only from the privacy-filtered collector marker. No identity-status, agent ID or queue position is exposed. Native legacy five-key rows become null identity; known-versus-unknown or differing known identities across replicas withhold the snapshot as inconsistent_sources rather than choosing a caller identity. Overview and Blackhole invalidation hints never include caller identity. Waiting has handled_at=null; handled has an integer handled_at. Runtime validation requires entered_at <= handled_at <= observation time for handled rows and entered_at <= observation time for every row.'},
         QueueLiveCalls: {oneOf: [
             strict({...callsFields, available: fixedFalse, complete: fixedFalse, truncated: fixedFalse,
                 observed_count: {type: 'integer', nullable: true, enum: [null]}, rows: {...callRows, maxItems: 0}}),
@@ -136,7 +141,7 @@ function queueLiveContract() {
         paths[url] = {get: {
             operationId: selected ? 'getAccountQueueLiveSnapshot' : 'getAccountQueuesLiveSnapshot', tags: ['ACDC queues'],
             summary: selected ? 'Read an observed live snapshot for one queue' : 'Read a page of observed live queue snapshots',
-            description: 'Implemented in source; deployment-specific acceptance required. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. No caller name/number, actual queue positions, ready counts, SLA or historical reports are supplied. When websocket_updates is true, use the separate x-blackhole.queue_live protocol to invalidate and refetch this snapshot. ' +
+            description: 'Implemented in source; deployment-specific acceptance required. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. Caller name/number are nullable privacy-filtered fields in selected detail only, not verified identity; overview and WebSocket hints omit them. Actual queue positions, ready counts, SLA and historical reports are not supplied. When websocket_updates is true, use the separate x-blackhole.queue_live protocol to invalidate and refetch this snapshot. ' +
                 (selected ? 'This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.'
                     : 'page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.'),
             parameters: [{name: 'ACCOUNT_ID', in: 'path', required: true, schema: id}, ...(selected
@@ -163,6 +168,7 @@ function applyQueueLive({spec, root}) {
     const handler = 'applications/acdc/src/cb_acdc_live.erl';
     const sourceFiles = ['applications/acdc/src/cb_queues.erl', handler,
         'applications/acdc/src/acdc_live_auth.erl',
+        'applications/acdc/src/acdc_dashboard_caller.erl',
         'applications/acdc/src/cb_acdc_live_agents.erl',
         'applications/acdc/src/acdc_dashboard_agents.erl',
         'applications/acdc/priv/couchdb/views/queues.json',
@@ -195,6 +201,10 @@ function applyQueueLive({spec, root}) {
         '{<<"status">>,val(<<"status">>,R)}',
         '{<<"observed_count">>,val(<<"observed_count">>,C)},{<<"order">>,val(<<"order">>,C)}',
         'normalized_calls(kz_json:get_value(<<"active_calls">>,S,null))',
+        '++[caller(<<"caller_id_name">>,R),caller(<<"caller_id_number">>,R)]',
+        '{<<"caller_id_name">>,caller(<<"caller_id_name">>,R)}',
+        '{<<"caller_id_number">>,caller(<<"caller_id_number">>,R)}',
+        'caller(Key,Row) -> kz_json:get_value(Key,Row,null)',
         '(val(<<"Include-Calls">>,R)=:=true)=:=(props:get_value(<<"Include-Calls">>,Req)=:=true)',
         '<<"entered_at">>,unix(val(<<"entered_timestamp">>,R))',
         '<<"handled_at">>,unix(val(<<"handled_timestamp">>,R))',
@@ -202,6 +212,12 @@ function applyQueueLive({spec, root}) {
         assert(source.includes(expected), 'Queue-live source contract changed: ' + expected);
     }
     for (const [file, needles] of [
+        ['applications/acdc/src/acdc_dashboard_caller.erl', [
+            'pair(Value, <<"available">>, Max) -> text(Value, Max)',
+            'pair(null, <<"unavailable">>, _) -> true',
+            'byte_size(B)=<Max', 'unicode:characters_to_binary(B, utf8, utf8)',
+            'pair(kz_json:get_value(<<"name">>,J),kz_json:get_value(<<"name_status">>,J),256)',
+            'pair(kz_json:get_value(<<"number">>,J),kz_json:get_value(<<"number_status">>,J),64)']],
         ['applications/acdc/src/cb_acdc_live_agents.erl', [
             '-define(LIMIT,200).', 'prepare(_,undefined) -> undefined',
             'acdc_live_auth:permit(C,<<"queues">>,[Q,<<"roster">>])',
@@ -233,13 +249,18 @@ function applyQueueLive({spec, root}) {
         ['applications/acdc/src/acdc_dashboard_collector.erl', ['-define(MAX_ACTIVE_CALLS, 200).',
             'gb_trees:insert({Queue, Entered, Call}, Value, Tree)', 'order=>queue_id_entered_call_id']],
         ['applications/acdc/src/kapi_acdc_dashboard.erl', ['calls_scope(true, [_]) -> true',
+            'exact_object(Row,Base) orelse',
+            'exact_object(Row,Base++[<<"caller_id_name">>,<<"caller_id_number">>])',
+            'acdc_dashboard_caller:valid({[{<<"version">>,1}',
             'bounded_integer(N,10000)', 'value(<<"limit">>,A)=:=200',
             'active_timeline(<<"waiting">>,_,null,_) -> true',
             'active_timeline(<<"handled">>,E,H,AsOf)',
             'active_count_matches(true,N,[Queue])', 'erlang:min(N,200)',
             'not maps:is_key(Identity,Seen)', 'Previous<Key']],
         ['applications/acdc/src/acdc_dashboard_snapshot.erl', ['fields(Row,[call_id,queue_id,status,',
-            'entered_timestamp,handled_timestamp])', 'scalar(undefined) -> null']]
+            'entered_timestamp,handled_timestamp])', 'scalar(undefined) -> null',
+            '{<<"caller_id_name">>,maps:get(caller_id_name,Row,null)}',
+            '{<<"caller_id_number">>,maps:get(caller_id_number,Row,null)}']]
     ]) {
         for (const needle of needles) assert(bytes[file].toString().includes(needle),
             'Queue-live source contract changed: ' + file + ': ' + needle);

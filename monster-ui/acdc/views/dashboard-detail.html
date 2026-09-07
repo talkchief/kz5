@@ -24,7 +24,7 @@
 				<h3>{{i18n.acdc.dashboard.observedCalls}}</h3><p class="acdc-panel-context">{{i18n.acdc.dashboard.callsContext}} {{i18n.acdc.dashboard.responseTime}} {{responseTime}}</p>
 				{{#if callsTruncated}}<p class="acdc-warning acdc-live-calls-truncated" role="status">{{i18n.acdc.dashboard.callsTruncated}} {{i18n.acdc.dashboard.observedCount}} {{observedCallCount}}</p>{{/if}}
 				<div class="acdc-table-scroll"><table class="acdc-table"><thead><tr><th scope="col">{{i18n.acdc.fields.status}}</th><th scope="col">{{i18n.acdc.dashboard.callIdentifier}}</th><th scope="col">{{i18n.acdc.fields.wait}}</th><th scope="col">{{i18n.acdc.dashboard.elapsedHandling}}</th></tr></thead><tbody>
-					{{#each calls}}<tr><td><span class="acdc-status acdc-live-status-{{statusClass}}">{{status}}</span></td><td>{{callId}}</td><td class="acdc-live-duration">{{wait}}</td><td class="acdc-live-duration">{{talk}}</td></tr>
+					{{#each calls}}<tr data-call-id="{{callId}}"><td><span class="acdc-status acdc-live-status-{{statusClass}}">{{status}}</span></td><td class="acdc-live-caller"><bdi>{{callerLabel}}</bdi></td><td class="acdc-live-duration">{{wait}}</td><td class="acdc-live-duration">{{talk}}</td></tr>
 					{{else}}<tr><td colspan="4" class="acdc-empty-cell">{{#if available}}{{i18n.acdc.dashboard.noObservedCalls}}{{else}}{{i18n.acdc.dashboard.statsUnavailable}}{{/if}}</td></tr>{{/each}}
 				</tbody></table></div>
 			</div>

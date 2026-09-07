@@ -26,6 +26,7 @@ live_sources=(applications/acdc/src/cb_acdc_live.erl applications/acdc/src/acdc_
     applications/acdc/src/cb_acdc_live_agents.erl applications/acdc/src/acdc_dashboard_agent_codec.erl
     applications/acdc/src/cb_agents.erl
     applications/acdc/src/kapi_acdc_dashboard.erl applications/crossbar/src/cb_context.erl
+    applications/acdc/src/acdc_dashboard_caller.erl
     applications/crossbar/src/api_util.erl applications/crossbar/src/crossbar_util.erl
     core/kazoo_documents/src/kz_doc.erl core/kazoo_data/src/kzs_util.erl
     core/kazoo_stdlib/src/kz_json.erl core/kazoo_stdlib/src/kz_term.erl

@@ -41,6 +41,10 @@
                    ,caller_id_number :: kz_term:api_binary() | '_'
                    ,caller_priority :: kz_term:api_integer() | '_'
                    ,is_archived = 'false' :: boolean() | '$2' | '$3' | '_'
+                   %% Appended DASH-10 marker; legacy raw identity is NOT a
+                   %% privacy-filtered dashboard source. Requires coordinated
+                   %% retained-ETS record migration; see acdc_dashboard_caller.
+                   ,dashboard_caller_id = 'undefined' :: tuple() | 'undefined' | '_'
                    }).
 -type call_stat() :: #call_stat{}.
 -type call_stats() :: [call_stat()].

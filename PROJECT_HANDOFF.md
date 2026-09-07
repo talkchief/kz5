@@ -6,6 +6,61 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**DASH-10 caller identity candidate and pending-view disposal — September7:**
+source-only, NOT deployed. New `acdc_dashboard_caller.erl` constructs an explicit
+privacy-filtered marker from the initialized call and original matching payload;
+missing/malformed evidence never authorizes fallback to historical raw caller
+fields. Only selected-queue call detail collects the bounded marker. Public call
+rows now require nullable `caller_id_name`/`caller_id_number`; legacy native rows
+normalize to null and conflicting identities withhold inconsistent snapshots.
+Overview and Blackhole invalidation payloads remain identity-free. The UI shows
+escaped Name/Number or `Caller unavailable`, retaining internal call IDs in row
+attributes for actions/acceptance, not as visible caller text. OpenAPI source is
+updated; generated/served assets are NOT yet updated.
+
+Root evidence, all terminal: upstream10 tests and12 production compiles
+`aa6509/8c8fcd`, `/tmp/kazoo-dashboard-caller.NgOyOw`; collector50 tests
+`5982dd/4fdd34`, `/tmp/kazoo-dashboard-collector.Kx4KMX`; native36 tests
+`75b1b8/269935`, `/tmp/kazoo-dashboard-amqp.sWiLlC`; public-route30 plus2 pure
+helper tests and51 actual production-handler DTO/schema checks
+`ce576d/d73bed`, `/tmp/kazoo-live-snapshot.zkDPRp`. Listed production sources
+were rebuilt and pinned; remaining workspace/OTP dependencies are not a fresh
+full-system build. Source-browser27 groups passed `e76537/e3eaaa`, evidence
+`/tmp/kazoo-monster-live-dashboard.FoLgrA`; paused ecallmgr and simulated phones
+were restored and verified active (`4cc2e2/eacf49`).
+
+The browser suite exposed an unrelated initial-loading disposal bug after19
+passing groups (`13d01d/bc2755`, `/tmp/kazoo-monster-live-dashboard.gbXtIK`):
+navigation created a still-loading controller without an observer; its timeout
+could replace the next screen. `watchLiveDashboardView` now owns both loading
+and mounted views. Added regression delivers the late callback and advances
+the watchdog after disposal, asserting no remount/cache/subscription. The27
+passing groups cover this in a controlled source browser; not deployed proof.
+
+**DASH-10 deployment gate:** `#call_stat{}` changes from18 to19 tuple elements.
+`upgrade_legacy/1` is only a tested pure conversion, NOT an executed migration.
+Rebuild all record readers/writers and implement/test ownership-safe retained
+ETS migration before deployment; a stats-worker restart retains old tuples via
+the ETS manager. Do not hot-load only a subset or delete unarchived records.
+Actual normal/private call payloads, replica transitions, coordinated backend/
+UI/OpenAPI deployment and live caller-display acceptance remain required.
+Source-only migration audit is captured in
+`doc/dashboard_caller_identity_upgrade.md`: implement deferred stats admission,
+owner-only resumable conversion and old responder/archive-worker drain. Do not
+substitute whole-app restart or zero FreeSWITCH calls for data preservation.
+
+Offline follow-up: schema16 groups/337 cases passed `bf9377/942138`;
+observer18, HTTP-stall8, queue observer12, idle-load14 and reconnect24 groups
+passed `518baa/dfc99e/b090f3`. An outdated static assertion for the pre-stall
+browser deadline caused the first observer run to fail; it now checks the
+actual natural-call OR HTTP-stall deadline expression. No runtime behavior
+was relaxed. All valid public-call fixture rows now carry both nullable caller
+fields; synthetic partial reconnect DTOs are intentionally not API envelopes.
+
+**Remote checkpoint:** `master` was independently read back at
+`9e846a5fd1122f6889354fb76bfaa06d2b585778` (`fd09b8`). Caller identity and the
+new loading-view disposal fix were not part of that published checkpoint.
+
 **Deployed HTTP-stall acceptance — September7:** eight offline groups pass
 51b9fc/830c4a and actual deployed browser05bc67/65a97a passes nine checks.
 Two real selected-detail responses were held past the watchdog or normal
@@ -42,9 +97,9 @@ viewers, not browser rendering or30-call capacity acceptance. Extended30 viewers
 also passed180 seconds with391 fresh snapshots, zero errors/incomplete results
 and97.5ms HTTP p95 (`2fbd95`/`90d1e4`). All four jobs are terminal. Post-run check:
 all nine scoped services active, zero calls; the same application error/crash
-log files did not grow during the measured interval. Source-only agents are working on caller
-privacy provenance (DASH-10) and controlled browser HTTP-stall acceptance
-(P0-25); neither candidate is deployed or accepted yet. DASH-10 appends the
+log files did not grow during the measured interval. The controlled HTTP-stall
+acceptance was subsequently completed as documented above. Caller identity
+(DASH-10) remains a source-only candidate. DASH-10 appends the
 call_stat record: all record consumers and retained ETS migration require
 coordinated validation/deployment; do not hot-load this partial source work.
 

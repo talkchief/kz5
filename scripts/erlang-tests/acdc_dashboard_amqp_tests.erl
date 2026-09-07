@@ -253,6 +253,68 @@ actual_detail_cap_and_error_echo_test() -> with_source(fun(T)->
     ?assertEqual(undefined,kz_json:get_value(<<"Snapshot">>,Err))
 end).
 
+%% The real collector/serializer sees only the explicit privacy marker.
+caller_identity_selected_only_test() -> with_source(fun(T)->
+    Name=unicode:characters_to_binary([16#05E9,16#05DC,16#05D5,16#05DD]),
+    Number= <<"+15550000100">>,
+    Stat=(waiting())#call_stat{dashboard_caller_id={1,Name,Number,<<"available">>,<<"available">>}},
+    ets:insert(T,Stat),
+    Overview=response(request(),self()),
+    ?assertEqual(undefined,detail(Overview)),
+    [?assertEqual(nomatch,binary:match(iolist_to_binary(kz_json:encode(Overview)),V)) ||
+        V<-[Name,Number,<<"caller_id_name">>,<<"caller_id_number">>,<<"NEVER-COPY">>]],
+    [Row]=kz_json:get_value(<<"rows">>,detail(response(detail_request(),self()))),
+    ?assertEqual(7,length(kz_json:to_proplist(Row))),
+    ?assertEqual(Name,kz_json:get_value(<<"caller_id_name">>,Row)),
+    ?assertEqual(Number,kz_json:get_value(<<"caller_id_number">>,Row)),
+    [?assertEqual(undefined,kz_json:get_value(K,Row)) || K<-[<<"name_status">>,<<"number_status">>,<<"Dashboard-Caller-ID">>]],
+    [begin ets:insert(T,Stat#call_stat{dashboard_caller_id=Marker}),
+        [Unknown]=kz_json:get_value(<<"rows">>,detail(response(detail_request(),self()))),
+        ?assertEqual(null,kz_json:get_value(<<"caller_id_name">>,Unknown)),
+        ?assertEqual(ExpectedNumber,kz_json:get_value(<<"caller_id_number">>,Unknown)),
+        ?assertEqual(nomatch,binary:match(iolist_to_binary(kz_json:encode(Unknown)),<<"NEVER-COPY">>))
+     end || {Marker,ExpectedNumber}<-[{undefined,null},
+        {{1,undefined,Number,<<"withheld">>,<<"available">>},Number},
+        {{1,<<"bad\nname">>,Number,<<"available">>,<<"available">>},null}]]
+end).
+
+caller_row(Row,Name,Number) ->
+    {[{K,V} || {K,V}<-kz_json:to_proplist(Row),
+        not lists:member(K,[<<"caller_id_name">>,<<"caller_id_number">>])]++
+        [{<<"caller_id_name">>,Name},{<<"caller_id_number">>,Number}]}.
+%% Preserve hostile wire bytes: kz_json:set_value recursively repairs UTF-8.
+raw_set([K],V,{Props}) -> {lists:keystore(K,1,Props,{K,V})};
+raw_set([K|Rest],V,{Props}) ->
+    {lists:keyreplace(K,1,Props,{K,raw_set(Rest,V,proplists:get_value(K,Props))})}.
+caller_wire_shape_and_text_test() -> with_source(fun(T)->
+    ets:insert(T,waiting()), R=response(detail_request(),self()),
+    [Row]=kz_json:get_value(<<"rows">>,detail(R)),
+    Path=[<<"Snapshot">>,<<"active_calls">>,<<"rows">>],
+    Accept=fun(New)->?assert(kapi_acdc_dashboard:snapshot_resp_v(kz_json:set_value(Path,[New],R))) end,
+    Reject=fun(New)->?assertNot(kapi_acdc_dashboard:snapshot_resp_v(raw_set(Path,[New],R))) end,
+    Legacy=kz_json:from_list([{K,V} || {K,V}<-kz_json:to_proplist(Row),
+        not lists:member(K,[<<"caller_id_name">>,<<"caller_id_number">>])]),
+    Accept(Legacy), Accept(Row),
+    Reject(kz_json:delete_key(<<"caller_id_name">>,Row)),
+    Reject(kz_json:delete_key(<<"caller_id_number">>,Row)),
+    Reject(kz_json:set_value(<<"name_status">>,<<"available">>,Row)),
+    Reject({[{<<"caller_id_name">>,null}|kz_json:to_proplist(Row)]}),
+    Utf8=unicode:characters_to_binary([16#00E9]),
+    [begin New=caller_row(Row,Name,Number), Accept(New),
+        {ok,Encoded}=kapi_acdc_dashboard:snapshot_resp(kz_json:set_value(Path,[New],R)),
+        [Decoded]=kz_json:get_value(Path,kz_json:decode(iolist_to_binary(Encoded))),
+        ?assertEqual(Name,kz_json:get_value(<<"caller_id_name">>,Decoded)),
+        ?assertEqual(Number,kz_json:get_value(<<"caller_id_number">>,Decoded))
+     end || {Name,Number}<-[{null,null},{<<"Synthetic caller">>,null},{null,<<"+15550000100">>},
+        {binary:copy(<<"n">>,256),binary:copy(<<"1">>,64)},
+        {binary:copy(Utf8,128),binary:copy(Utf8,32)}]],
+    Bad=[<<>>,<<"   ">>,<<"bad\nvalue">>,<<0>>,<<127>>,<<255>>,
+        unicode:characters_to_binary([16#0085]),unicode:characters_to_binary([16#202E]),
+        unicode:characters_to_binary([16#2066]),true,0,[],kz_json:new(),undefined],
+    [Reject(caller_row(Row,V,null)) || V<-Bad++[binary:copy(<<"n">>,257),binary:copy(Utf8,129)]],
+    [Reject(caller_row(Row,null,V)) || V<-Bad++[binary:copy(<<"1">>,65),binary:copy(Utf8,33)]]
+end).
+
 actual_empty_and_incomplete_detail_test() -> with_source(fun(T)->
     Empty=response(detail_request(),self()),
     ?assertEqual([],kz_json:get_value(<<"rows">>,detail(Empty))),

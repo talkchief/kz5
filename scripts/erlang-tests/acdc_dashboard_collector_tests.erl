@@ -50,6 +50,9 @@ scope_and_options_rejected_before_missing_source_test_() ->
         {<<"a">>, [<<"q">>], Now-10, Now, #{max_scan=>0}, invalid_collector_options},
         {<<"a">>, [<<"q">>], Now-10, Now, #{budget_ms=>1001}, invalid_collector_options},
         {<<"a">>, [<<"q">>], Now-10, Now, #{budget_ms=>-1}, invalid_collector_options},
+        {<<"a">>, [<<"q">>], Now-10, Now, #{include_caller_identity=>1}, invalid_collector_options},
+        {<<"a">>, [<<"q">>], Now-10, Now, #{include_caller_identity=>undefined}, invalid_collector_options},
+        {<<"a">>, [<<"q">>,<<"r">>], Now-10, Now, #{include_caller_identity=>true}, invalid_collector_options},
         {<<"a">>, [<<"q">>], Now-10, Now, #{unknown=>true}, invalid_collector_options},
         {<<"a">>, [<<"q">>], Now-10, Now, [], invalid_collector_options}]].
 
@@ -161,6 +164,91 @@ caller_and_misses_fields_not_copied_into_projection_test() ->
         ?assertEqual(1,maps:get(current_waiting,metrics(R))),
         Encoded=term_to_binary(R), ?assert(byte_size(Encoded)<4096),
         ?assertEqual(nomatch,binary:match(Encoded,<<"DO-NOT-RETURN-PII">>))
+    end).
+
+explicit_detail_identity_and_overview_absence_test() ->
+    with_table(fun(T) ->
+        Marker={1,<<"Synthetic caller">>,<<"+15550000100">>,<<"available">>,<<"available">>},
+        ets:insert(T,(waiting(1))#call_stat{dashboard_caller_id=Marker,
+            caller_id_name= <<"RAW-MUST-NOT-LEAK">>,caller_id_number= <<"RAW-MUST-NOT-LEAK">>}),
+        {ok,Overview}=collect(T,#{}), {ok,ExplicitFalse}=collect(T,#{include_caller_identity=>false}),
+        ?assertEqual(active_rows(Overview),active_rows(ExplicitFalse)),
+        ?assertEqual(nomatch,binary:match(term_to_binary(Overview),<<"Synthetic caller">>)),
+        {ok,Detail}=collect(T,#{include_caller_identity=>true}), [Call]=active_rows(Detail),
+        ?assertEqual(<<"Synthetic caller">>,maps:get(caller_id_name,Call)),
+        ?assertEqual(<<"+15550000100">>,maps:get(caller_id_number,Call)),
+        ?assertEqual(active_rows(Overview),[maps:without([caller_id_name,caller_id_number],Call)]),
+        ?assertEqual(1,maps:get(current_waiting,metrics(Detail))),
+        ?assertEqual(1,maps:get(scan_keys,source(Detail))),
+        ?assertEqual(nomatch,binary:match(term_to_binary(Detail),<<"RAW-MUST-NOT-LEAK">>))
+    end).
+
+detail_identity_independent_withholding_test() ->
+    with_table(fun(T) ->
+        E=now_s()-50,
+        ets:insert(T,[(row(1,<<"a">>,<<"q">>,<<"waiting">>,E))#call_stat{
+            dashboard_caller_id={1,undefined,<<"+15550000100">>,<<"withheld">>,<<"available">>}},
+            (row(2,<<"a">>,<<"q">>,<<"handled">>,E+1))#call_stat{handled_timestamp=E+2,
+            dashboard_caller_id={1,<<"Synthetic caller">>,undefined,<<"available">>,<<"unavailable">>}}]),
+        {ok,R}=collect(T,#{include_caller_identity=>true}), [First,Second]=active_rows(R),
+        ?assertEqual({null,<<"+15550000100">>},{maps:get(caller_id_name,First),maps:get(caller_id_number,First)}),
+        ?assertEqual({<<"Synthetic caller">>,null},{maps:get(caller_id_name,Second),maps:get(caller_id_number,Second)}),
+        ?assertEqual(1,maps:get(current_handled,metrics(R)))
+    end).
+
+malformed_detail_markers_preserve_occupancy_test() ->
+    BadMarkers=[undefined,#{untrusted=><<"SENTINEL">>},{1,<<"SENTINEL">>},
+        {1,binary:copy(<<"SENTINEL">>,100000),undefined,<<"available">>,<<"unavailable">>},
+        {1,<<"SENTINEL">>,binary:copy(<<"9">>,65),<<"available">>,<<"available">>},
+        {1,<<"SENTINEL">>,undefined,binary:copy(<<"x">>,100000),<<"unavailable">>},
+        {1,<<"SENTINEL">>,undefined,<<"withheld">>,<<"unavailable">>},
+        {1,<<255>>,undefined,<<"available">>,<<"unavailable">>},
+        {1,<<"SENTINEL\n">>,undefined,<<"available">>,<<"unavailable">>},
+        {1,[<<"SENTINEL">>],undefined,<<"available">>,<<"unavailable">>}],
+    with_table(fun(T) ->
+        ets:insert(T,[(waiting(I))#call_stat{dashboard_caller_id=M,
+            caller_id_name= <<"SENTINEL-RAW">>,caller_id_number= <<"SENTINEL-RAW">>} ||
+            {I,M}<-lists:zip(lists:seq(1,length(BadMarkers)),BadMarkers)]),
+        {ok,R}=collect(T,#{include_caller_identity=>true}),
+        ?assertEqual(length(BadMarkers),maps:get(current_waiting,metrics(R))),
+        ?assertEqual(length(BadMarkers),length(active_rows(R))),
+        [?assertEqual({null,null},{maps:get(caller_id_name,C),maps:get(caller_id_number,C)}) || C<-active_rows(R)],
+        ?assertEqual(nomatch,binary:match(term_to_binary(R),<<"SENTINEL">>)),
+        ?assert(byte_size(term_to_binary(R))<10000),
+        ?assertEqual(false,ets:info(T,safe_fixed))
+    end).
+
+detail_identity_foreign_and_terminal_never_returned_test() ->
+    with_table(fun(T) ->
+        E=now_s()-20, Marker={1,<<"FOREIGN-TERMINAL-SENTINEL">>,undefined,<<"available">>,<<"unavailable">>},
+        ets:insert(T,[waiting(1),
+            (row(2,<<"foreign">>,<<"q">>,<<"waiting">>,E))#call_stat{dashboard_caller_id=Marker},
+            (row(3,<<"a">>,<<"other">>,<<"waiting">>,E))#call_stat{dashboard_caller_id=Marker},
+            (row(4,<<"a">>,<<"q">>,<<"abandoned">>,E))#call_stat{abandoned_timestamp=E+1,dashboard_caller_id=Marker}]),
+        {ok,R}=collect(T,#{include_caller_identity=>true}),
+        ?assertEqual(4,maps:get(scan_keys,source(R))),
+        ?assertEqual(1,length(active_rows(R))),
+        ?assertEqual(nomatch,binary:match(term_to_binary(R),<<"FOREIGN-TERMINAL-SENTINEL">>))
+    end).
+
+detail_identity_budget_cap_and_timeline_unchanged_test() ->
+    {ok,Zero}=collect(dashboard_collector_missing,#{include_caller_identity=>true,budget_ms=>0}),
+    ?assertEqual(not_read,maps:get(availability,source(Zero))),
+    with_table(fun(T) ->
+        E=now_s()-500, M={1,<<"Synthetic">>,undefined,<<"available">>,<<"unavailable">>},
+        ets:insert(T,[(row(I,<<"a">>,<<"q">>,<<"waiting">>,E+I))#call_stat{dashboard_caller_id=M} || I<-lists:seq(1,201)]),
+        {ok,R}=collect(T,#{include_caller_identity=>true}),
+        ?assertEqual(200,length(active_rows(R))),
+        ?assertEqual(201,maps:get(current_waiting,metrics(R))),
+        ?assertEqual(true,maps:get(truncated,active(R))),
+        ?assertEqual([integer_to_binary(I) || I<-lists:seq(1,200)], [maps:get(call_id,C) || C<-active_rows(R)]),
+        {ok,Limited}=collect(T,#{include_caller_identity=>true,max_scan=>7}),
+        ?assertEqual(7,maps:get(scan_keys,source(Limited))),
+        ?assertEqual(false,maps:get(complete,active(Limited))),
+        ?assertEqual(undefined,metrics(Limited)),
+        ets:insert(T,(waiting(1))#call_stat{handled_timestamp=now_s(),dashboard_caller_id=M}),
+        ?assertEqual({error,invalid_record_timeline},collect(T,#{include_caller_identity=>true})),
+        ?assertEqual(false,ets:info(T,safe_fixed))
     end).
 
 active_row_cap_preserves_overview_test_() ->

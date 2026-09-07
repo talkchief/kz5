@@ -9,6 +9,8 @@
 %%% active_calls is a bounded INTERNAL observation, ordered by queue/entry/call,
 %%% not queue position. Complete means this local traversal only, never atomic
 %%% or cluster-complete. Its row cap does not truncate the overview projection.
+%%% include_caller_identity defaults false and requires exactly one queue.
+%%% Only explicitly privacy-marked, bounded active-call fields may be selected.
 -module(acdc_dashboard_collector).
 -export([collect/6]).
 -include("acdc_stats.hrl").
@@ -22,32 +24,35 @@
 collect(Table, Account, Queues, From, To, Options) ->
     Start = gregorian_seconds(),
     %% Scope and options must be accepted before even resolving a table name.
-    case {acdc_dashboard_projection:new(Account, Queues, From, To, Start), options(Options)} of
-        {{ok, _}, {ok, Limit, Budget}} ->
+    case {acdc_dashboard_projection:new(Account, Queues, From, To, Start), options(Options, Queues)} of
+        {{ok, _}, {ok, Limit, Budget, IncludeCaller}} ->
             Deadline = erlang:monotonic_time(millisecond)+Budget,
             case expired(Deadline) of
                 true -> project(Account, Queues, From, To, Start, [], 0, false,
                                 deadline, not_read, Limit, Budget, Deadline);
                 false -> collect_table(Table, Account, Queues, From, To, Start,
-                                       Limit, Budget, Deadline)
+                                       Limit, Budget, Deadline, IncludeCaller)
             end;
         {{error, Why}, _} -> {error, Why};
         {_, {error, Why}} -> {error, Why}
     end.
 
-options(Options) when is_map(Options), map_size(Options) =< 2 ->
+options(Options, Queues) when is_map(Options), map_size(Options) =< 3 ->
     Limit = maps:get(max_scan, Options, ?MAX_SCAN),
     Budget = maps:get(budget_ms, Options, ?MAX_BUDGET_MS),
-    case maps:keys(maps:without([max_scan, budget_ms], Options)) =:= [] andalso
+    IncludeCaller = maps:get(include_caller_identity, Options, false),
+    case maps:keys(maps:without([max_scan, budget_ms, include_caller_identity], Options)) =:= [] andalso
+         is_boolean(IncludeCaller) andalso
+         (IncludeCaller =:= false orelse (is_list(Queues) andalso length(Queues) =:= 1)) andalso
          is_integer(Limit) andalso Limit > 0 andalso Limit =< ?MAX_SCAN andalso
          is_integer(Budget) andalso Budget >= 0 andalso Budget =< ?MAX_BUDGET_MS of
-        true -> {ok, Limit, Budget};
+        true -> {ok, Limit, Budget, IncludeCaller};
         false -> {error, invalid_collector_options}
     end;
-options(_) -> {error, invalid_collector_options}.
+options(_, _) -> {error, invalid_collector_options}.
 
-collect_table(Table, Account, Queues, From, To, Start, Limit, Budget, Deadline) ->
-    Template = match_template(Account, Queues),
+collect_table(Table, Account, Queues, From, To, Start, Limit, Budget, Deadline, IncludeCaller) ->
+    Template = match_template(Account, Queues, IncludeCaller),
     try
         %% A named table may be deleted/recreated. Never re-resolve its name
         %% after this point: every read and cleanup addresses this exact tid.
@@ -116,7 +121,7 @@ scan_next(Tid, Key, Template, Limit, Deadline, Rows, N, Changed) ->
         false -> scan(Tid, ets:next(Tid, Key), Template, Limit, Deadline, Rows, N+1, Changed)
     end.
 
-match_template(Account, Queues) ->
+match_template(Account, Queues, IncludeCaller) ->
     Head = #call_stat{id='_', account_id=Account, queue_id='$1', call_id='$2',
                       status='$3', entered_timestamp='$4', handled_timestamp='$5',
                       processed_timestamp='$6', abandoned_timestamp='$7', _='_'},
@@ -124,20 +129,32 @@ match_template(Account, Queues) ->
                             false, Queues),
     Small = [binary_guard('$2', 256), binary_guard('$3', 32),
              timestamp_guard('$4'), timestamp_guard('$5'), timestamp_guard('$6'), timestamp_guard('$7')],
-    {Head, [QueueGuard|Small], QueueGuard}.
+    {Head, [QueueGuard|Small], QueueGuard, IncludeCaller}.
 
-select_row(Tid, Key, {Template, Guards, QueueGuard}) ->
+select_row(Tid, Key, {Template, Guards, QueueGuard, IncludeCaller}) ->
     Head = Template#call_stat{id=Key},
-    %% The bound key is in the match head. Return only seven bounded scalar
-    %% fields; never copy the whole record, caller PII, agent or misses list.
-    Match = [{Head, Guards, [{{'$1', '$2', '$3', '$4', '$5', '$6', '$7'}}]},
+    %% The bound key is in the match head. The default branch returns only
+    %% seven bounded scalars, never caller PII, agents or the misses list.
+    %% Optional identity is matched as five exact small scalar fields, never
+    %% returned as an arbitrary marker term. The ordinary fallback preserves
+    %% occupancy for missing, malformed or oversized display metadata.
+    Match = caller_match(Head, Guards, IncludeCaller) ++
+            [{Head, Guards, [{{'$1', '$2', '$3', '$4', '$5', '$6', '$7'}}]},
              {Head, [QueueGuard], [invalid]},
              {#call_stat{id=Key, _='_'}, [], [skip]}],
     case ets:select(Tid, Match) of
+        [{Queue, Call, Status, Entered, Handled, Processed, Abandoned, Name, Number, NameStatus, NumberStatus}] ->
+            Caller = safe_caller({1,Name,Number,NameStatus,NumberStatus}),
+            {row, #call_stat{id=Key, account_id=Template#call_stat.account_id, queue_id=Queue, call_id=Call,
+                             status=Status, entered_timestamp=Entered, handled_timestamp=Handled,
+                             processed_timestamp=Processed, abandoned_timestamp=Abandoned,
+                             dashboard_caller_id=Caller}};
         [{Queue, Call, Status, Entered, Handled, Processed, Abandoned}] ->
             {row, #call_stat{id=Key, account_id=Template#call_stat.account_id, queue_id=Queue, call_id=Call,
                              status=Status, entered_timestamp=Entered, handled_timestamp=Handled,
-                             processed_timestamp=Processed, abandoned_timestamp=Abandoned}};
+                             processed_timestamp=Processed, abandoned_timestamp=Abandoned,
+                             dashboard_caller_id=case IncludeCaller of
+                                 true -> unavailable_caller(); false -> undefined end}};
         [skip] -> skip;
         [invalid] -> throw({collector_error, invalid_source_record});
         [] ->
@@ -146,6 +163,22 @@ select_row(Tid, Key, {Template, Guards, QueueGuard}) ->
                 true -> throw({collector_error, invalid_source_record})
             end
     end.
+
+caller_match(_, _, false) -> [];
+caller_match(Head, Guards, true) ->
+    CallerHead = Head#call_stat{dashboard_caller_id={1,'$8','$9','$10','$11'}},
+    Active = {'orelse',{'=:=','$3',<<"waiting">>},{'=:=','$3',<<"handled">>}},
+    CallerGuards = [Active, optional_binary_guard('$8',256), optional_binary_guard('$9',64),
+                    binary_guard('$10',11), binary_guard('$11',11)],
+    [{CallerHead, Guards ++ CallerGuards,
+      [{{'$1','$2','$3','$4','$5','$6','$7','$8','$9','$10','$11'}}]}].
+optional_binary_guard(Var, Max) -> {'orelse',{'=:=',Var,undefined},binary_guard(Var,Max)}.
+safe_caller(Value) ->
+    case acdc_dashboard_caller:normalize(Value) of
+        undefined -> unavailable_caller();
+        Caller -> Caller
+    end.
+unavailable_caller() -> {1,undefined,undefined,<<"unavailable">>,<<"unavailable">>}.
 
 binary_guard(Var, Max) -> {'andalso', {is_binary, Var},
                          {'andalso', {'>', {byte_size, Var}, 0}, {'=<', {byte_size, Var}, Max}}}.
@@ -204,10 +237,15 @@ project_rows(P, [Row|Rest], Deadline, Active) ->
 %% the same first 200 identities regardless of ETS traversal order. The table
 %% key and projection validation enforce one call/queue identity per record.
 active_row(#call_stat{status=Status, queue_id=Queue, call_id=Call,
-                      entered_timestamp=Entered, handled_timestamp=Handled}, {N, Tree})
+                      entered_timestamp=Entered, handled_timestamp=Handled,
+                      dashboard_caller_id=Caller}, {N, Tree})
   when Status =:= <<"waiting">>; Status =:= <<"handled">> ->
-    Value = #{call_id=>Call, queue_id=>Queue, status=>Status,
-              entered_timestamp=>Entered, handled_timestamp=>Handled},
+    Base = #{call_id=>Call, queue_id=>Queue, status=>Status,
+             entered_timestamp=>Entered, handled_timestamp=>Handled},
+    Value = case Caller of
+                {1,Name,Number,_,_} -> Base#{caller_id_name=>nullable(Name),caller_id_number=>nullable(Number)};
+                undefined -> Base
+            end,
     Added = gb_trees:insert({Queue, Entered, Call}, Value, Tree),
     Bounded = case gb_trees:size(Added) > ?MAX_ACTIVE_CALLS of
                   true -> {_, _, Smaller} = gb_trees:take_largest(Added), Smaller;
@@ -215,6 +253,9 @@ active_row(#call_stat{status=Status, queue_id=Queue, call_id=Call,
               end,
     {N+1, Bounded};
 active_row(_, Active) -> Active.
+
+nullable(undefined) -> null;
+nullable(Value) -> Value.
 
 active_calls({N, Tree}, SourceComplete) ->
     Truncated = N > ?MAX_ACTIVE_CALLS,

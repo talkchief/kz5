@@ -42,7 +42,8 @@ collect(Request,Server) ->
             true ->
                 Result=acdc_dashboard_collector:collect(Tid,kz_json:get_value(<<"Account-ID">>,Request),
                     kz_json:get_value(<<"Queue-IDs">>,Request),kz_json:get_value(<<"From">>,Request),
-                    kz_json:get_value(<<"To">>,Request),#{max_scan=>10000,budget_ms=>1000}),
+                    kz_json:get_value(<<"To">>,Request),#{max_scan=>10000,budget_ms=>1000,
+                        include_caller_identity=>kz_json:get_value(<<"Include-Calls">>,Request)=:=true}),
                 case current_source(Tid,Server) of
                     false -> {error,<<"source_changed">>};
                     true ->
@@ -72,7 +73,8 @@ collection_result({error,_}) -> {error,<<"invalid_source">>}.
 digest(Term) -> kz_term:to_hex_binary(crypto:hash(sha256,term_to_binary(Term))).
 
 %% Whitelist every object level. In particular never serialize collector node,
-%% foreign-key scan counts, key identities, caller fields, or arbitrary errors.
+%% foreign-key scan counts, key identities, raw caller fields, or arbitrary errors.
+%% Selected detail alone carries the collector's privacy-filtered identity.
 snapshot(P,Request) ->
     S=maps:get(source,P), W=maps:get(window,P),
     kz_json:from_list(fields(P,[version,account_id,as_of,timestamp_unit,identity_semantics,
@@ -97,7 +99,9 @@ calls(P,Request) ->
             [{<<"active_calls">>,kz_json:from_list(fields(A,[limit,observed_count,truncated,
                 complete,order,coverage,atomic_snapshot])++
                 [{<<"rows">>,[kz_json:from_list(fields(Row,[call_id,queue_id,status,
-                    entered_timestamp,handled_timestamp])) || Row<-maps:get(rows,A)]}])}];
+                    entered_timestamp,handled_timestamp])++
+                    [{<<"caller_id_name">>,maps:get(caller_id_name,Row,null)},
+                     {<<"caller_id_number">>,maps:get(caller_id_number,Row,null)}]) || Row<-maps:get(rows,A)]}])}];
         _ -> []
     end.
 queue(Q) ->

@@ -26,6 +26,7 @@ function dto(handled = false) {
         calls: {available: true, complete: true, truncated: false, limit: 200, observed_count: 1,
             order: 'queue_id_entered_call_id', rows: [{queue_id: Q, call_id: PRIVATE,
                 entered_at: EPOCH / 1000 - 30, handled_at: handled ? EPOCH / 1000 - 1 : null,
+                caller_id_name: null, caller_id_number: null,
                 status: handled ? 'handled' : 'waiting'}]},
         agents: {limit: 200, roster_complete: true, truncated: false, runtime_complete: true,
             endpoint_reachability_verified: false, observation_started: EPOCH / 1000,

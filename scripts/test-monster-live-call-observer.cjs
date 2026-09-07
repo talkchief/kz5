@@ -13,7 +13,8 @@ const CALL = '1-123@127.0.0.52', PRIVATE = 'PRIVATE_NAME_SENTINEL', EPOCH = 1788
 const copy = x => JSON.parse(JSON.stringify(x));
 function dto(state = 'gone') {
     const rows = state === 'gone' ? [] : [{call_id: CALL, queue_id: Q, status: state,
-        entered_at: EPOCH / 1000 - 30, handled_at: state === 'handled' ? EPOCH / 1000 - 1 : null}];
+        entered_at: EPOCH / 1000 - 30, handled_at: state === 'handled' ? EPOCH / 1000 - 1 : null,
+        caller_id_name: null, caller_id_number: null}];
     const waiting = state === 'waiting' ? 1 : 0, handled = state === 'handled' ? 1 : 0;
     return {status: 'success', data: {version: 1, account_id: A, generated_at: EPOCH / 1000,
         window: {from: EPOCH / 1000 - 3600, to: EPOCH / 1000, seconds: 3600},
@@ -265,8 +266,8 @@ async function test(name, work) { await work(); groups++; console.log('PASS ' + 
         const {readRenderedCall} = fixture().exported, body = dto('waiting'), display = page(body);
         const node = extra => ({isConnected: true, nodeType: 1, parentElement: null, getClientRects: () => [{}], ...extra});
         const status = node({classList: {contains: name => name === 'acdc-live-status-waiting'}});
-        const cells = [node({}), node({textContent: CALL}), node({}), node({})];
-        const row = node({querySelector: () => status, querySelectorAll: () => cells});
+        const cells = [node({}), node({textContent: 'Caller unavailable'}), node({}), node({})];
+        const row = node({getAttribute: key => key === 'data-call-id' ? CALL : null, querySelector: () => status, querySelectorAll: () => cells});
         const waiting = node({textContent: '1'}), handled = node({textContent: '0'}), ancestor = node({});
         let stale = false, refreshError = false;
         const root = node({parentElement: ancestor, getAttribute: () => 'false', querySelectorAll: () => [row], querySelector(selector) {
@@ -277,7 +278,8 @@ async function test(name, work) { await work(); groups++; console.log('PASS ' + 
         }});
         const flags = {currentTab: 'dashboard', liveDashboardController: {accountId: A, queueId: Q, generation: 7, view: [root]},
             liveDashboardSnapshot: {accountId: A, queueId: Q, receivedAt: display.receivedAt, results: {live: body.data}}};
-        const app = {accountId: A, appFlags: {acdc: flags}, liveTransportState: () => 'acknowledged', liveSnapshotValid: () => true};
+        const app = {accountId: A, appFlags: {acdc: flags}, liveTransportState: () => 'acknowledged', liveSnapshotValid: () => true,
+            i18n: {active: () => ({acdc: {dashboard: {callerUnavailable: 'Caller unavailable'}}})}};
         const auth = {currentAccount: {id: A}};
         let activeApp = 'acdc';
         const context = {window: {require: () => ({apps: {acdc: app, auth, getActiveApp: () => activeApp}}),
@@ -285,6 +287,8 @@ async function test(name, work) { await work(); groups++; console.log('PASS ' + 
         document: {querySelector: () => root}, input: {accountId: A, queueId: Q}};
         const run = () => vm.runInNewContext('(' + readRenderedCall.toString() + ')(input)', context, {timeout: 1000});
         assert.deepEqual(copy(run()), display);
+        cells[1].textContent = CALL; assert.equal(run().valid, false); cells[1].textContent = 'Caller unavailable';
+        row.getAttribute = () => L; assert.equal(run().valid, false); row.getAttribute = () => CALL;
         stale = true; assert.equal(run().valid, false); stale = false;
         refreshError = true; assert.equal(run().valid, false); refreshError = false;
         for (const target of [root, ancestor, row, waiting, handled, status, cells[1]]) {
@@ -306,7 +310,7 @@ async function test(name, work) { await work(); groups++; console.log('PASS ' + 
         assert(main.includes('test-fixtures/monster-live-call-observer.cjs'));
         assert(main.includes("'test-fixtures/queue-live-observer.cjs', 'api-docs-queue-live.cjs'"));
         assert(main.includes("KAZOO_TEST_REQUIRE_WEBSOCKET: 'true'"));
-        assert(main.includes('natural ? 150000 : 105000'));
+        assert(main.includes('natural || httpStallMode ? 150000 : 105000'));
         assert(main.includes('async function runWithNaturalSummaryCall(options)'));
         assert(main.includes("if (summaryMode) fail('unexpected_detail_get_in_summary')"));
         assert(main.includes("'all_summary_unsubscribe_acks_required'"));

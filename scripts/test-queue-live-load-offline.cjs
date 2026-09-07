@@ -87,7 +87,8 @@ function fixture(fault = {}) {
             if (fault.http === 'incomplete') Object.assign(value.data.agents,
                 {runtime_complete: false, observation_started: null, observation_finished: null});
             if (fault.http === 'calls') {
-                const call = {call_id: 'PRIVATE_CALL_ID', queue_id: Q, status: 'waiting', entered_at: EPOCH / 1000, handled_at: null};
+                const call = {call_id: 'PRIVATE_CALL_ID', queue_id: Q, status: 'waiting', entered_at: EPOCH / 1000, handled_at: null,
+                    caller_id_name: null, caller_id_number: null};
                 value.data.calls.rows = [call]; value.data.calls.observed_count = 1;
                 value.data.queues[0].metrics.current_waiting = 1;
             }

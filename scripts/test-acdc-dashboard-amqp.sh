@@ -19,6 +19,7 @@ dashboard_exit() {
 }
 trap dashboard_exit EXIT
 dashboard_sources=(applications/acdc/src/kapi_acdc_dashboard.erl
+    applications/acdc/src/acdc_dashboard_caller.erl
     applications/acdc/src/acdc_dashboard_agents.erl
     applications/acdc/src/acdc_dashboard_agent_codec.erl
     applications/acdc/src/acdc_dashboard_snapshot.erl

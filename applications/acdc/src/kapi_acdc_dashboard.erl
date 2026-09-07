@@ -126,14 +126,31 @@ active_rows([Row|Rest],Selected,AsOf,Left,Previous,Seen) when Left>0 ->
     Call=value(<<"call_id">>,Row), Queue=value(<<"queue_id">>,Row),
     Entered=value(<<"entered_timestamp">>,Row),
     Key={Queue,Entered,Call}, Identity={Queue,Call},
-    exact_object(Row,[<<"call_id">>,<<"queue_id">>,<<"status">>,
-                      <<"entered_timestamp">>,<<"handled_timestamp">>]) andalso
+    active_row_shape(Row) andalso
     text(Call,256) andalso Queue=:=Selected andalso
     is_integer(Entered) andalso Entered>0 andalso Entered=<AsOf andalso
     active_timeline(value(<<"status">>,Row),Entered,value(<<"handled_timestamp">>,Row),AsOf) andalso
     (Previous=:=undefined orelse Previous<Key) andalso not maps:is_key(Identity,Seen) andalso
     active_rows(Rest,Selected,AsOf,Left-1,Key,maps:put(Identity,true,Seen));
 active_rows(_,_,_,_,_,_) -> false.
+%% Rolling upgrades accept only the complete legacy or complete new shape.
+%% Missing legacy identity is unknown, never permission to use raw call fields.
+active_row_shape(Row) ->
+    Base=[<<"call_id">>,<<"queue_id">>,<<"status">>,<<"entered_timestamp">>,<<"handled_timestamp">>],
+    exact_object(Row,Base) orelse
+        (exact_object(Row,Base++[<<"caller_id_name">>,<<"caller_id_number">>]) andalso
+         caller_identity(Row)).
+caller_identity(Row) ->
+    Name=value(<<"caller_id_name">>,Row), Number=value(<<"caller_id_number">>,Row),
+    %% Reuse the upstream privacy marker's exact byte/UTF-8/control validation.
+    %% This validates transported text only; it does not manufacture provenance.
+    %% Do not use from_list here: its utf8_binary coercion repairs malformed
+    %% bytes before validation and would turn an invalid wire value into text.
+    acdc_dashboard_caller:valid({[{<<"version">>,1},
+        {<<"name">>,Name},{<<"number">>,Number},
+        {<<"name_status">>,caller_status(Name)},{<<"number_status">>,caller_status(Number)}]}).
+caller_status(null) -> <<"unavailable">>;
+caller_status(_) -> <<"available">>.
 active_timeline(<<"waiting">>,_,null,_) -> true;
 active_timeline(<<"handled">>,E,H,AsOf) -> is_integer(H) andalso H>=E andalso H=<AsOf;
 active_timeline(_,_,_,_) -> false.

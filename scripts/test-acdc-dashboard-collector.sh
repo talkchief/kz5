@@ -8,6 +8,8 @@ cd "$project_root"
 export ERL_FLAGS='+S 1:1 +SDcpu 1 +SDio 1 +A 1'
 export ERL_CRASH_DUMP="$collector_test_dir/erl_crash.dump"
 collector_inputs=(applications/acdc/src/acdc_dashboard_collector.erl
+    applications/acdc/src/acdc_dashboard_caller.erl
+    applications/acdc/src/acdc_dashboard_snapshot.erl
     applications/acdc/src/acdc_dashboard_projection.erl
     applications/acdc/src/acdc_stats.hrl
     scripts/erlang-tests/acdc_dashboard_collector_tests.erl
@@ -24,11 +26,19 @@ collector_exit() {
 trap collector_exit EXIT
 sha256sum "${collector_inputs[@]}" > "$collector_test_dir/inputs.sha256"
 erlc -Werror +warn_missing_spec -I applications/acdc/src -o "$collector_test_dir" \
+    applications/acdc/src/acdc_dashboard_caller.erl \
     applications/acdc/src/acdc_dashboard_projection.erl \
     applications/acdc/src/acdc_dashboard_collector.erl
 erlc -Werror -I applications/acdc/src -o "$collector_test_dir" \
     scripts/erlang-tests/acdc_dashboard_collector_tests.erl
 erl -pa "$collector_test_dir" -noshell -eval \
-    'case eunit:test(acdc_dashboard_collector_tests, [verbose]) of ok -> halt(0); _ -> halt(1) end.' \
+    'Dir=filename:dirname(code:which(acdc_dashboard_collector_tests)),
+     lists:foreach(fun(M) ->
+         {module,M}=code:ensure_loaded(M),
+         Dir=filename:dirname(code:which(M)),
+         false=lists:any(fun({d,'"'"'TEST'"'"'}) -> true; ({d,'"'"'TEST'"'"',_}) -> true; (_) -> false end,
+             proplists:get_value(options,M:module_info(compile),[]))
+     end,[acdc_dashboard_collector,acdc_dashboard_projection,acdc_dashboard_caller]),
+     case eunit:test(acdc_dashboard_collector_tests, [verbose]) of ok -> halt(0); _ -> halt(1) end.' \
     | tee "$collector_test_dir/eunit.log"
 printf 'Collector checks passed; retained evidence: %s\n' "$collector_test_dir"

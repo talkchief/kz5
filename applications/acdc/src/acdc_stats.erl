@@ -15,7 +15,7 @@
 -behaviour(gen_listener).
 
 %% Public API
--export([call_waiting/6
+-export([call_waiting/6, call_waiting/7
         ,call_abandoned/4
         ,call_handled/4
         ,call_missed/5
@@ -69,6 +69,16 @@
                   ,kz_term:api_binary()
                   ) -> 'ok'.
 call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPriority) ->
+    call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPriority, 'undefined').
+
+-spec call_waiting(kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary(),
+                   kz_term:api_binary(), kz_term:api_binary(), kz_term:api_binary(),
+                   kz_json:object() | undefined) -> 'ok'.
+call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPriority, DashboardCaller) ->
+    SafeCaller = case acdc_dashboard_caller:valid(DashboardCaller) of
+                     true -> DashboardCaller;
+                     false -> undefined
+                 end,
     Prop = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Queue-ID">>, QueueId}
@@ -77,6 +87,7 @@ call_waiting(AccountId, QueueId, CallId, CallerIdName, CallerIdNumber, CallerPri
              ,{<<"Caller-ID-Number">>, CallerIdNumber}
              ,{<<"Entered-Timestamp">>, kz_time:now_s()}
              ,{<<"Caller-Priority">>, CallerPriority}
+             ,{<<"Dashboard-Caller-ID">>, SafeCaller}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     call_state_change(AccountId, 'waiting', Prop),
@@ -302,7 +313,7 @@ handle_cast({'create_status', #status_stat{id=_Id, status=_Status}=Stat}, State)
             {'noreply', State}
     end;
 handle_cast({'update_call', Id, Updates}, State) ->
-    lager:debug("updating call stat ~s: ~p", [Id, Updates]),
+    lager:debug("updating call stat ~s (~p fields)", [Id, length(Updates)]),
     Before = ets:lookup(call_table_id(), Id),
     case ets:update_element(call_table_id(), Id, Updates ++ [{#call_stat.is_archived, 'false'}]) of
         'true' -> dashboard_call_changed(Before, ets:lookup(call_table_id(), Id));
@@ -899,7 +910,10 @@ handle_waiting_stat(JObj, Props) ->
                         [{#call_stat.caller_id_name, kz_json:get_value(<<"Caller-ID-Name">>, JObj)}
                         ,{#call_stat.caller_id_number, kz_json:get_value(<<"Caller-ID-Number">>, JObj)}
                         ]),
-            update_call_stat(Id, Updates, Props)
+            %% Missing/legacy waiting events must revoke earlier marked
+            %% display identity rather than retain stale privacy provenance.
+            update_call_stat(Id, [{#call_stat.dashboard_caller_id,
+                acdc_dashboard_caller:from_event(JObj)}|Updates], Props)
     end.
 
 -spec handle_missed_stat(kz_json:object(), kz_term:proplist()) -> 'ok'.
@@ -1011,6 +1025,7 @@ create_call_stat(Id, JObj, Props) ->
                                                 ,caller_id_name = kz_json:get_value(<<"Caller-ID-Name">>, JObj)
                                                 ,caller_id_number = kz_json:get_value(<<"Caller-ID-Number">>, JObj)
                                                 ,caller_priority = kz_json:get_integer_value(<<"Caller-Priority">>, JObj)
+                                                ,dashboard_caller_id = acdc_dashboard_caller:from_event(JObj)
                                                 }
                       }).
 

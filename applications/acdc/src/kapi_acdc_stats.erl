@@ -90,6 +90,7 @@
 
 -define(WAITING_HEADERS, [<<"Caller-ID-Name">>, <<"Caller-ID-Number">>
                          ,<<"Entered-Timestamp">>, <<"Caller-Priority">>
+                         ,<<"Dashboard-Caller-ID">>
                          ]).
 -define(WAITING_VALUES, ?CALL_REQ_VALUES(<<"waiting">>)).
 -define(WAITING_TYPES, []).
@@ -119,7 +120,13 @@
           {'error', string()}.
 call_waiting(Props) when is_list(Props) ->
     case call_waiting_v(Props) of
-        'true' -> kz_api:build_message(Props, ?CALL_REQ_HEADERS, ?WAITING_HEADERS);
+        'true' ->
+            Marker=props:get_value(<<"Dashboard-Caller-ID">>,Props),
+            Safe=case acdc_dashboard_caller:valid(Marker) of
+                     true -> Props;
+                     false -> props:delete(<<"Dashboard-Caller-ID">>,Props)
+                 end,
+            kz_api:build_message(Safe, ?CALL_REQ_HEADERS, ?WAITING_HEADERS);
         'false' -> {'error', "Proplist failed validation for call_waiting"}
     end;
 call_waiting(JObj) ->
@@ -127,6 +134,8 @@ call_waiting(JObj) ->
 
 -spec call_waiting_v(kz_term:api_terms()) -> boolean().
 call_waiting_v(Prop) when is_list(Prop) ->
+    %% Optional display metadata must not reject otherwise valid occupancy.
+    %% The formatter and record ingestion independently discard invalid markers.
     kz_api:validate(Prop, ?CALL_REQ_HEADERS, ?WAITING_VALUES, ?WAITING_TYPES);
 call_waiting_v(JObj) ->
     call_waiting_v(kz_json:to_proplist(JObj)).
