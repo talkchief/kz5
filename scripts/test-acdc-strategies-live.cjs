@@ -193,6 +193,38 @@ async function dashboardStage(){
     }
     log('PASS natural waiting/handled/terminal dashboard call and scoped subscription cleanup; '+runDir);
 }
+function browserInputs(env,nodeMajor){
+    assert(Number.isInteger(nodeMajor)&&nodeMajor>=20,'Browser acceptance requires Node20 or newer');
+    assert(ID.test(env.KAZOO_TEST_LOGIN_QUEUE_ID||''),'Browser acceptance requires an explicit home queue');
+    for(const key of ['KAZOO_TEST_EXPECT_MAIN_SHA256','KAZOO_TEST_EXPECT_TEMPLATES_SHA256','KAZOO_TEST_EXPECT_ACCOUNT_BROWSER_SHA256'])
+        assert(/^[a-f0-9]{64}$/.test(env[key]||''),'Browser acceptance requires explicit deployed artifact hashes');
+    assert(!env.KAZOO_TEST_WEB_STAGE&&!env.KAZOO_TEST_ACDC_STAGE&&env.NODE_TLS_REJECT_UNAUTHORIZED!=='0','Browser acceptance requires deployed assets and TLS verification');
+    return {loginQueueId:env.KAZOO_TEST_LOGIN_QUEUE_ID};
+}
+async function dashboardBrowserStage(){
+    const inputs=browserInputs(process.env,Number(process.versions.node.split('.')[0]));
+    const {runWithNaturalCall}=require('./test-monster-live-deployed.cjs');
+    assert(typeof runWithNaturalCall==='function','Reviewed embedded browser observer unavailable');
+    let result=null,passed=false;
+    try{
+        await configure('round_robin');
+        await request('PATCH',route('queues',saved.queue_id),{agent_ring_timeout:12});
+        await sleep(1200);await readyAgents();
+        result=await runWithNaturalCall({accountId:state.ACCEPTANCE_ACCOUNT_ID,queueId:saved.queue_id,
+            loginAccountId:base.MASTER,loginQueueId:inputs.loginQueueId,
+            runCall:async observer=>{
+                forward();
+                return runCall('dashboard-browser-natural-call',()=>6000,p=>assert.equal(offers(p).length,1),observer);
+            }});
+        assert(result&&result.status==='PASS','Actual deployed browser call transition failed');
+        passed=true;
+    }finally{
+        write('dashboard-browser-evidence.json',JSON.stringify({passed,browser:result,
+            scope:'one isolated internal call; actual deployed browser, natural scoped hints, HTTP snapshots and rendered rows/counts',
+            unproven:['event causal correlation','restricted-principal isolation','cross-node failures','load and soak']},null,2)+'\n');
+    }
+    log('PASS deployed browser waiting/handled/terminal rendering and native subscription cleanup; '+runDir);
+}
 async function stages(){const proofs=[];
     await configure('ring_all');
     for(let n=0;n<3;n++){await readyAgents();proofs.push(await runCall('ring-all-'+(n+1),i=>i===1?1500:null,p=>{assert.deepEqual(offers(p).map(e=>e.agent).sort(),[1,2,3]);
@@ -240,7 +272,8 @@ function prepare(){state=parseState(privateRead(BASE));const local=JSON.parse(co
     assert(local.includes(state.ACCEPTANCE_SIP_PROXY_HOST),'SIP proxy must be local');assert(fs.existsSync(FSCLI),'FS diagnostic client missing');
     const sipp=cp.spawnSync('sipp',['-v'],{encoding:'utf8',timeout:5000});assert(!sipp.error&&(sipp.stdout+sipp.stderr).includes('SIPp v3.7.7-TLS-PCAP-SHA256'),'Pinned SIPp version required');
     log('Prepared only: isolated borrowed1001–1004 and marked queue2700; no API writes, registrations or calls');return local;}
-async function main(args){assert(args.length===1&&['--prepare-only','--check-live','--live','--dashboard-live','--cleanup'].includes(args[0]),'Use --prepare-only, --check-live, --live, --dashboard-live or --cleanup');
+async function main(args){assert(args.length===1&&['--prepare-only','--check-live','--live','--dashboard-live','--dashboard-browser-live','--cleanup'].includes(args[0]),'Use --prepare-only, --check-live, --live, --dashboard-live, --dashboard-browser-live or --cleanup');
+    if(args[0]==='--dashboard-browser-live')browserInputs(process.env,Number(process.versions.node.split('.')[0]));
     assert(process.getuid()===0,'Root required');const peers=prepare();if(args[0]==='--prepare-only')return;
     if(args[0]==='--check-live'){
         await authenticate();await verifyBorrowed();await noTenantCalls();
@@ -257,7 +290,7 @@ async function main(args){assert(args.length===1&&['--prepare-only','--check-liv
     const lock=await acquireLock(lockPath);
     try{process.umask(63);runDir=fs.mkdtempSync('/var/log/kazoo-strategy-acceptance-');fs.chmodSync(runDir,448);await authenticate();await verifyBorrowed();
         if(fs.existsSync(FILE))saved=validateSaved(JSON.parse(privateRead(FILE)),state);
-        else {assert(['--live','--dashboard-live'].includes(args[0]),'No saved fixture');saved={schema_version:1,owner:OWNER,deployment_id:hex(),account_id:state.ACCEPTANCE_ACCOUNT_ID,realm:state.ACCEPTANCE_REALM,device_ids:es().map(e=>e.device)};save();}
+        else {assert(['--live','--dashboard-live','--dashboard-browser-live'].includes(args[0]),'No saved fixture');saved={schema_version:1,owner:OWNER,deployment_id:hex(),account_id:state.ACCEPTANCE_ACCOUNT_ID,realm:state.ACCEPTANCE_REALM,device_ids:es().map(e=>e.device)};save();}
         current=saved.current||null;
         if(args[0]==='--cleanup'){es().forEach(e=>{if(contacts(e).includes(`sip:${e.username}@${IP}:${e.port}`))registered.add(e.index);});assert(await cleanup(),'Cleanup incomplete');return;}
         assert(!current&&!saved.agents,'An unfinished run requires --cleanup first');await noTenantCalls();es().forEach(e=>assert(contacts(e).length===0,'Borrowed identity already registered; refusing takeover'));
@@ -265,7 +298,8 @@ async function main(args){assert(args.length===1&&['--prepare-only','--check-liv
         process.on('SIGTERM',()=>shutdown(143));process.on('SIGINT',()=>shutdown(130));
         try{await ensureFixture();write('tone-440.ulaw',audio.tone([440]));for(const e of es())register(e,600);
             phones=agents().map(e=>new Phone(e,IP,peers.concat(['127.0.0.1',IP]),evt=>events.push(evt)));for(const p of phones)await p.start();await startEventReader();
-            if(args[0]==='--dashboard-live')await dashboardStage();else await stages();
+            if(args[0]==='--dashboard-live')await dashboardStage();
+            else if(args[0]==='--dashboard-browser-live')await dashboardBrowserStage();else await stages();
         }catch(error){log('Run failed before cleanup: '+error.message);throw error;}
         finally{assert(await cleanup(),'Scoped cleanup incomplete; protected recovery state retained');}
     }finally{lock.stdin.end();if(lock.exitCode===null)lock.kill('SIGTERM');finishShutdown();}}
@@ -294,5 +328,5 @@ async function acquireLock(lockPath){
         assert(lock.exitCode===null,'Shared acceptance lock exited after acknowledgement');return lock;
     }catch(error){lock.stdin.end();if(lock.exitCode===null)lock.kill('SIGTERM');throw error;}
 }
-module.exports={parseState,endpoints,validateSaved,owned,ownedChannel,channelRows,OWNER,IP};
+module.exports={parseState,endpoints,validateSaved,owned,ownedChannel,channelRows,browserInputs,OWNER,IP};
 if(require.main===module)main(process.argv.slice(2)).catch(e=>{console.error('[strategy-acceptance] FAIL: '+e.message);process.exitCode=process.exitCode||1;});

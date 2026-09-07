@@ -5,6 +5,9 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const {createRequire}=require('node:module');
 const {EventEmitter}=require('node:events');
+const harness=require('./test-acdc-strategies-live.cjs');
+const browserEnv={KAZOO_TEST_LOGIN_QUEUE_ID:'a'.repeat(32),KAZOO_TEST_EXPECT_MAIN_SHA256:'b'.repeat(64),
+    KAZOO_TEST_EXPECT_TEMPLATES_SHA256:'c'.repeat(64),KAZOO_TEST_EXPECT_ACCOUNT_BROWSER_SHA256:'d'.repeat(64)};
 const file=path.join(__dirname,'test-acdc-strategies-live.cjs'),source=fs.readFileSync(file,'utf8'),load=createRequire(file);
 function fixture(options={}){
     const events=[],mod={exports:{}};
@@ -14,7 +17,8 @@ function fixture(options={}){
     const localRequire=name=>name==='node:fs'?readFs:name==='node:child_process'?{
         spawn:()=>options.lockChild||forbidden(),execFileSync:forbidden,spawnSync:forbidden}:load(name);
     localRequire.main=null;
-    const context={require:localRequire,module:mod,__dirname,console:{log(){}},process:{getuid:()=>0,exit:code=>events.push('exit:'+code)},
+    const context={require:localRequire,module:mod,__dirname,console:{log(){}},process:{getuid:()=>0,exit:code=>events.push('exit:'+code),
+        versions:{node:'22.0.0'},env:options.browserEnv||browserEnv},
         Buffer,setTimeout,clearTimeout,setInterval,clearInterval,probeEvents:events,options};
     vm.runInNewContext(source+`
       prepare=()=>{probeEvents.push('prepare');state={};for(let i=0;i<4;i++){
@@ -35,6 +39,33 @@ function fixture(options={}){
     `,context,{filename:file,timeout:1000});
     return {events,run:args=>mod.exports.testMain(args),api:mod.exports,process:context.process};
 }
+function browserStageFixture(outcome){
+    const trace=[],writes=[],mod={exports:{}},observer=Object.freeze({waitForPhase(){}});
+    const browser={async runWithNaturalCall(options){
+        assert.deepEqual(Object.keys(options).sort(),['accountId','queueId','loginAccountId','loginQueueId','runCall'].sort());
+        assert.equal(options.accountId,'a'.repeat(32));assert.equal(options.queueId,'e'.repeat(32));
+        assert.equal(options.loginAccountId,'302ae5a70c403124f764cbc54229cfcd');
+        trace.push('browser');
+        if(outcome==='throw')throw Error('synthetic browser failure');
+        await options.runCall(observer);return {status:outcome,evidence:'/synthetic/receipt.json',checks:13,failure:null};
+    }};
+    const localRequire=name=>name==='./test-monster-live-deployed.cjs'?browser:load(name);localRequire.main=null;
+    vm.runInNewContext(source+`
+        state={ACCEPTANCE_ACCOUNT_ID:'a'.repeat(32)};saved={queue_id:'e'.repeat(32)};
+        configure=async strategy=>{assert.equal(strategy,'round_robin');trace.push('configure');};
+        request=async(method,p,data)=>{assert.equal(method,'PATCH');assert.equal(data.agent_ring_timeout,12);trace.push('patch');};
+        readyAgents=async()=>trace.push('ready');
+        runCall=async(label,policy,expected,received)=>{
+            assert.equal(label,'dashboard-browser-natural-call');assert.equal(policy(),6000);assert.equal(received,observer);
+            expected({events:[{type:'invite'}]});assert.throws(()=>expected({events:[]}));trace.push('call');return {passed:true};
+        };
+        write=(name,bytes)=>writes.push({name,body:JSON.parse(bytes)});
+        module.exports.run=dashboardBrowserStage;
+    `,{require:localRequire,module:mod,__dirname,console:{log(){}},Buffer,process:{env:browserEnv,versions:{node:'22.0.0'}},
+        setTimeout:callback=>{trace.push('settle');return setTimeout(callback,0);},clearTimeout,setInterval,clearInterval,
+        trace,writes,observer},{filename:file,timeout:1000});
+    return {run:()=>mod.exports.run(),trace,writes};
+}
 async function main(){
     let f=fixture();await f.run(['--check-live']);
     assert.deepEqual(f.events,['prepare','authenticate','identities','no_calls',
@@ -49,9 +80,25 @@ async function main(){
     }
     // Dashboard mode must reach the same shared lock boundary as ordinary live
     // acceptance, not silently become preparation or bypass locking.
-    for(const mode of ['--dashboard-live','--live']){
+    for(const mode of ['--dashboard-live','--dashboard-browser-live','--live']){
         f=fixture();await assert.rejects(f.run([mode]),/unexpected mutation or process/);
         assert.deepEqual(f.events,['prepare']);
+    }
+    assert.deepEqual(harness.browserInputs(browserEnv,22),{loginQueueId:'a'.repeat(32)});
+    for(const [key,value] of Object.entries({KAZOO_TEST_LOGIN_QUEUE_ID:'bad',KAZOO_TEST_EXPECT_MAIN_SHA256:'',
+        KAZOO_TEST_EXPECT_TEMPLATES_SHA256:'bad',KAZOO_TEST_EXPECT_ACCOUNT_BROWSER_SHA256:undefined,
+        KAZOO_TEST_WEB_STAGE:'/tmp/fake',KAZOO_TEST_ACDC_STAGE:'/tmp/fake',NODE_TLS_REJECT_UNAUTHORIZED:'0'})){
+        const env={...browserEnv,[key]:value};assert.throws(()=>harness.browserInputs(env,22));
+        f=fixture({browserEnv:env});await assert.rejects(f.run(['--dashboard-browser-live']));
+        assert.deepEqual(f.events,[],'Invalid browser inputs must fail before preparation or fixture writes');
+    }
+    assert.throws(()=>harness.browserInputs(browserEnv,18));
+    for(const outcome of ['PASS','FAIL','throw']){
+        const stage=browserStageFixture(outcome);
+        if(outcome==='PASS')await stage.run();else await assert.rejects(stage.run());
+        assert.deepEqual(stage.trace,['configure','patch','settle','ready','browser',...(outcome==='throw'?[]:['call'])]);
+        assert.equal(stage.writes.length,1);assert.equal(stage.writes[0].name,'dashboard-browser-evidence.json');
+        assert.equal(stage.writes[0].body.passed,outcome==='PASS');
     }
     let release;f=fixture({cleanupBarrier:new Promise(resolve=>{release=resolve;})});
     const s1=f.api.testShutdown(143),s2=f.api.testShutdown(130);assert.equal(s1,s2);

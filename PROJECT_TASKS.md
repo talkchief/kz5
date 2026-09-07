@@ -262,6 +262,22 @@ browser call-transition rendering, restricted-token isolation, cross-node
 failure and load/soak acceptance. Historical,
 separate agent dashboard, WFM and ClickHouse remain POSTPONED.
 
+Browser natural-call continuation (September7): a separate
+`test-acdc-strategies-live.cjs --dashboard-browser-live` candidate now connects
+the existing owned call lifecycle to actual deployed-browser observation in the
+same process. It is not yet live acceptance. Rootf3ea3d passed CLI admission,
+success/failure propagation, shared lock and signal/cleanup controls;3ebc21
+passed original SIP/ownership tests;45380 passed12 shared observer groups.
+Preflight18152 confirmed isolated users/devices, no calls/contacts and restorable
+states without fixture writes. Master snapshot18604 compared exactly with the
+original via423ce0: roster and31 statuses/memberships unchanged. Browser phase
+fixture93501 passed12 groups and company-scope fixtured3c369 passed16. Peer review
+found and the helper fixed a hidden-view false-PASS risk; every phase now checks
+visible active controller DOM. Actual run53882e was refused before payload by
+memory admission (about754MiB available;320MiB cap+512MiB reserve required).
+No fixtures/calls were created, all8 services remain active. Combined live detail
+rendering remains unproven; see `doc/monster_browser_call_acceptance.md`.
+
 Final development check90474 repeated the available/consensus HTTP and scoped
 native event/refetch smoke successfully. The exact saved roster and31 agent
 statuses/memberships were unchanged from the pre-deployment snapshot, and all

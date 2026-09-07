@@ -79,6 +79,30 @@ read-only preflight. These are not live-call PASS receipts.
 
 ## Live-dashboard result (2026-09-07)
 
+### Browser-transition acceptance candidate
+
+`--dashboard-browser-live` is a separate, opt-in candidate. It reuses the same
+marked queue2700, borrowed isolated SIP identities, shared lock, single real
+round-robin call, 12 bridge samples and scoped cleanup. The deployed browser
+runs in the same Node process to avoid a second controller. Its observer is
+called at the existing waiting/handled/gone lifecycle boundaries; it may not
+originate or terminate calls itself. It must finish normal subscription cleanup
+before the outer harness removes the owned queue.
+
+Admission requires Node20+, explicit current main/templates/account-browser
+SHA256 pins, a valid explicit `KAZOO_TEST_LOGIN_QUEUE_ID`, deployed-only assets,
+and normal TLS verification before fixture preparation. The root resource guard
+must admit the complete browser/call workload while all call-path services stay
+running. Do not stop ecallmgr, apps, broker or SIP services to fit a real-call test.
+
+Root CLI/control-flow tests f3ea3d passed success, explicit browser failure and
+thrown-error propagation plus input rejection and existing shared cleanup/signal
+boundaries. Original SIP/ownership fixture3ebc21 and shared observer12 groups45380
+passed. Browser phase fixture93501 passed12 groups and company-scope fixtured3c369
+passed16. Actual attempt53882e was refused by resource admission before payload
+execution; no call or fixture was created. Combined browser/call execution is
+still pending, not a new live PASS. See `monster_browser_call_acceptance.md`.
+
 **Latest actual run79231: PASS.** Root2519 first compiled74 ACDC and30 Blackhole
 production modules in
 `/usr/local/src/kazoo5-installer/live-dashboard-backend.0KplKA`. Root29023 deployed

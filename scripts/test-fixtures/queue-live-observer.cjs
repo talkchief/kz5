@@ -270,4 +270,4 @@ class QueueLiveObserver {
         Object.freeze(this);
     }
 }
-module.exports = {QueueLiveObserver};
+module.exports = {QueueLiveObserver, validateDetail, validateEvent};

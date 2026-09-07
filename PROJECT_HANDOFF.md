@@ -6,6 +6,18 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Next live gate (September7):** combined actual-browser/call candidate is
+`test-acdc-strategies-live.cjs --dashboard-browser-live`, documented in
+`doc/monster_browser_call_acceptance.md`. Source/offline checks passed: CLI/failure
+f3ea3d, original SIP3ebc21, shared observer12 groups45380, new browser phase12
+groups93501 and scope16 groupsd3c369. Live read-only preflight18152 passed; master
+snapshot18604 compared exactly with the original via423ce0. Actual attempt53882e
+did **not** run: the memory guard refused before payload at about754MiB available
+(320MiB cap+512MiB reserve required). All8 services active, zero calls, no strategy
+ledger. Prepared launcher: `/tmp/kazoo-live-rollout.OYdOqh/test-browser-natural-call.sh`.
+Do not stop required call services or weaken the guard to manufacture acceptance.
+This is test-source work only; the live UI remains the verified nUolDS build below.
+
 **Current UI continuation (September 7):** the user reaffirmed live summary and
 clicked queue detail only; history is postponed for future ClickHouse work.
 Company-switch acceptance exposed P0-17, an early account-picker click racing

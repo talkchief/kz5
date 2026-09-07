@@ -203,19 +203,20 @@ function endpoint(value, protocols, pathname) {
     check(protocols.includes(u.protocol) && !u.username && !u.password && !u.search && !u.hash
         && u.pathname === pathname, 'unsafe_endpoint'); return u;
 }
-async function main() {
+async function main(natural) {
+    const env = natural ? natural.env : process.env;
     process.umask(0o077);
     check(process.getuid() === 0 && Number(process.versions.node.split('.')[0]) >= 20, 'root_and_node20_required');
-    check(process.argv.length === 2 && !process.env.KAZOO_TEST_WEB_STAGE && !process.env.KAZOO_TEST_ACDC_STAGE,
+    check((natural || process.argv.length === 2) && !env.KAZOO_TEST_WEB_STAGE && !env.KAZOO_TEST_ACDC_STAGE,
         'deployed_only_no_stage_or_cli');
     check(process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0', 'tls_verification_required');
     const target = endpoint(process.env.KAZOO_TEST_UI_URL || 'http://kz5.talkchief.io/', ['http:', 'https:'], '/');
     const api = endpoint(process.env.KAZOO_TEST_API_URL || target.origin + '/v2', ['http:', 'https:'], '/v2');
     const socket = endpoint(process.env.KAZOO_TEST_WS_URL || target.origin.replace(/^http/, 'ws') + '/websocket', ['ws:', 'wss:'], '/websocket');
-    const scope = accountScopeOptions(process.env), {account, queue, loginAccount, loginName} = scope;
+    const scope = accountScopeOptions(env), {account, queue, loginAccount, loginName} = scope;
     const admission = socketAdmission(scope);
-    const requiredSocket = process.env.KAZOO_TEST_REQUIRE_WEBSOCKET === 'true';
-    check([undefined, 'true', 'false'].includes(process.env.KAZOO_TEST_REQUIRE_WEBSOCKET), 'invalid_websocket_mode');
+    const requiredSocket = env.KAZOO_TEST_REQUIRE_WEBSOCKET === 'true';
+    check([undefined, 'true', 'false'].includes(env.KAZOO_TEST_REQUIRE_WEBSOCKET), 'invalid_websocket_mode');
     const web = process.env.KAZOO_TEST_WEB_ROOT || '/var/www/html/monster-ui';
     check(path.isAbsolute(web) && fs.realpathSync(web) === web, 'unsafe_web_root');
     const buildBytes = readFile(path.join(web, 'build-config.json')), build = JSON.parse(buildBytes);
@@ -228,7 +229,9 @@ async function main() {
     const assets = ['index.html', 'js/main.js', 'js/templates.js', 'js/config.js', 'build-config.json',
         'css/style.css', 'apps/acdc/style/app.css', ...(preloadedAcdc ? [] : ['apps/acdc/app.js']),
         ...(scope.switching ? [ACCOUNT_BROWSER_ASSET, 'apps/common/style/app.css'] : [])];
-    const pins = () => Object.fromEntries([__filename, ...assets.map(p => path.join(web, p))].map(p => [p, digest(readFile(p))]));
+    const helperFiles = natural ? ['test-fixtures/monster-live-call-observer.cjs',
+        'test-fixtures/queue-live-observer.cjs', 'api-docs-queue-live.cjs'].map(p => path.join(__dirname, p)) : [];
+    const pins = () => Object.fromEntries([__filename, ...helperFiles, ...assets.map(p => path.join(web, p))].map(p => [p, digest(readFile(p))]));
     const before = pins();
     check(before[path.join(web, 'build-config.json')] === digest(buildBytes), 'preload_manifest_changed');
     const expected = [['KAZOO_TEST_EXPECT_MAIN_SHA256', 'js/main.js'],
@@ -261,7 +264,7 @@ async function main() {
         native: {required: requiredSocket, supported: null, detail_ack: false, ack_refetch: false,
             disposal_unsubscribe_sent: false, disposal_unsubscribe_ack: false,
             event_refetch_verified: false, broker_barrier_verified: false}, production_assets: {}, after: null};
-    let browser, context, phase = 'bootstrap', stopping = false, fatal = null, serial = 0;
+    let browser, context, phase = 'bootstrap', stopping = false, fatal = null, serial = 0, callObserver, observerErrorClass, summary;
     let firstDetailAck = null, firstDetailOrder = null, detailStarted = 0, detailInFlight = 0, maxDetailInFlight = 0;
     let overviewGeneration = null;
     let disposalStartOrder = null, disposalSendOrder = null, disposalAckOrder = null;
@@ -337,7 +340,7 @@ async function main() {
         checkpoint('protected_inputs_ready'); const secret = credentials();
         const {chromium} = require(process.env.KAZOO_PLAYWRIGHT_MODULE || '/tmp/kazoo-ui-browser.eXdEqS/node_modules/playwright');
         checkpoint('launching_chromium'); browser = await chromium.launch({headless: true, args: resolver ? ['--host-resolver-rules=' + resolver] : []});
-        const deadline = setTimeout(() => { fail('overall_timeout'); browser.close().catch(() => {}); }, 105000);
+        const deadline = setTimeout(() => { fail('overall_timeout'); browser.close().catch(() => {}); }, natural ? 150000 : 105000);
         try {
             context = await browser.newContext({viewport: {width: 1600, height: 1000}, serviceWorkers: 'block'});
             check(typeof context.routeWebSocket === 'function', 'playwright_socket_route_required');
@@ -441,12 +444,23 @@ async function main() {
                             if (j.action === 'event' && j.name === 'changed'
                                 && j.subscribed_key === 'queue_live.changed.' + queue
                                 && j.data?.version === 1 && j.data.account_id === account && j.data.queue_id === queue) result.counts.native_events++;
+                            if (callObserver && phase === 'detail' && j.action === 'event'
+                                && j.subscribed_key === 'queue_live.changed.' + queue) {
+                                callObserver.recordEvent(j, timeline('socket_event', 'selected_queue_subscription'));
+                            }
                             route.send(message); // No fake ACK, event or payload rewriting.
                         } catch (_) { fail('native_frame_observation_failed'); route.close(); }
                     });
                 } catch (_) { fail('socket_guard_failed'); route.close(); }
             });
             const page = await context.newPage(); page.setDefaultTimeout(15000);
+            if (natural) {
+                const {createBrowserCallObserver, readRenderedCall, BrowserCallError} = require('./test-fixtures/monster-live-call-observer.cjs');
+                observerErrorClass = BrowserCallError;
+                callObserver = createBrowserCallObserver({accountId: account, queueId: queue,
+                    readPage: () => page.evaluate(readRenderedCall, {accountId: account, queueId: queue}),
+                    getOrder: () => serial, checkClean});
+            }
             page.on('console', m => { if (!stopping && m.type() === 'error') result.counts.console_errors++; });
             page.on('pageerror', error => { if (!stopping) { result.counts.page_errors++; diagnostic(result.browser_errors, browserErrorDiagnostic(error, target.origin)); } });
             page.on('request', request => {
@@ -488,7 +502,13 @@ async function main() {
             page.on('response', response => {
                 const u = new URL(response.url()), item = requests.get(response.request());
                 if (item) item.status = response.status();
-                if (same(u, api) && u.pathname.startsWith('/v2/')) timeline('http_response', category(u), response.status(), httpOrders.get(response.request()) || null);
+                const responseOrder = same(u, api) && u.pathname.startsWith('/v2/')
+                    ? timeline('http_response', category(u), response.status(), httpOrders.get(response.request()) || null) : null;
+                if (callObserver && item && response.status() === 200) track((async () => {
+                    const bytes = await response.body(); check(bytes.length <= 2 * 1024 * 1024, 'natural_detail_body_limit');
+                    callObserver.recordResponse({body: JSON.parse(bytes.toString('utf8')), requestOrder: item.order,
+                        responseOrder, requestAt: item.time, noStore: response.headers()['cache-control'] === 'no-store'});
+                })(), 'natural_detail_validation_failed');
                 if (!stopping && response.status() >= 400) {
                     httpFailure(response.request(), response.status());
                     if (scopedRequests.has(response.request())) result.counts.failed_http++;
@@ -646,6 +666,17 @@ async function main() {
             check(maxDetailInFlight === 1 && result.counts.supplemental_gets === 0, 'detail_fanout_or_overlap');
             check(result.counts.auth === 1, 'exactly_one_normal_auth_required');
             checkClean();
+            if (natural) {
+                checkpoint('waiting_empty_detail_before_owned_call');
+                await Promise.all([...pending]); checkClean();
+                result.natural_call = {baseline: await callObserver.ready()};
+                checkpoint('observing_owned_call_in_actual_browser');
+                await natural.runCall(Object.freeze({waitForPhase: callObserver.waitForPhase}));
+                result.natural_call.observation = callObserver.finish();
+                check(maxDetailInFlight === 1 && result.counts.supplemental_gets === 0, 'natural_detail_fanout_or_overlap');
+                checkClean();
+                result.checks.push('natural_waiting_handled_gone_native_hints_gets_and_rendered_rows');
+            }
             // Normal navigation retires the local controller, then closing the
             // ephemeral context removes the session. No persistent logout write.
             phase = 'cleanup';
@@ -681,7 +712,8 @@ async function main() {
             result.status = requiredSocket ? 'PASS' : (detail.websocket ? 'PASS' : 'PASS_SNAPSHOT_ONLY');
         } finally { clearTimeout(deadline); }
     } catch (e) {
-        result.failure = fatal || (e instanceof Failure ? e.message : 'browser_or_input_step_failed');
+        result.failure = fatal || (e instanceof Failure || (observerErrorClass && e instanceof observerErrorClass)
+            ? e.message : 'browser_or_input_step_failed');
         result.failure_phase = phase; result.failure_checkpoint = result.checkpoints.at(-1) || 'preflight';
     }
     finally {
@@ -694,16 +726,36 @@ async function main() {
         if (fatal) { result.status = 'FAIL'; result.failure = fatal; }
         // Fixed codes and numeric/boolean/hash observations only. No exception,
         // response text, credentials, frames, request IDs or user/call names.
+        if (callObserver && result.status === 'FAIL') result.natural_call = {...result.natural_call, observation: callObserver.evidence()};
         fs.writeFileSync(path.join(evidenceDir, 'receipt.json'), JSON.stringify(result, null, 2) + '\n', {flag: 'wx', mode: 0o600});
-        process.stdout.write(JSON.stringify({status: result.status, evidence: path.join(evidenceDir, 'receipt.json'),
-            checks: result.checks.length, failure: result.failure || null}) + '\n');
-        if (result.status === 'FAIL') process.exitCode = 1;
+        summary = {status: result.status, evidence: path.join(evidenceDir, 'receipt.json'),
+            checks: result.checks.length, failure: result.failure || null};
+        if (!natural) {
+            process.stdout.write(JSON.stringify(summary) + '\n');
+            if (result.status === 'FAIL') process.exitCode = 1;
+        }
+    }
+    return summary;
+}
+async function runWithNaturalCall(options) {
+    try {
+        check(options && !Array.isArray(options) && Object.keys(options).sort().join(',')
+            === 'accountId,loginAccountId,loginQueueId,queueId,runCall'
+            && ['accountId', 'queueId', 'loginAccountId', 'loginQueueId'].every(k => ID.test(options[k] || ''))
+            && options.accountId !== options.loginAccountId && typeof options.runCall === 'function', 'invalid_natural_call_options');
+        const env = {...process.env, KAZOO_TEST_ACCOUNT_ID: options.accountId, KAZOO_TEST_QUEUE_ID: options.queueId,
+            KAZOO_TEST_LOGIN_ACCOUNT_ID: options.loginAccountId, KAZOO_TEST_LOGIN_QUEUE_ID: options.loginQueueId,
+            KAZOO_TEST_REQUIRE_WEBSOCKET: 'true'};
+        return await main({env, runCall: options.runCall});
+    } catch (e) {
+        return {status: 'FAIL', evidence: null, checks: 0,
+            failure: e instanceof Failure ? e.message : 'embedded_browser_preflight_failed'};
     }
 }
 module.exports = {accountScopeOptions, accountScopeInBrowser, targetAccountResponse,
     verifyTargetAccountResponse, switchTargetAccount, restoreHomeAccount, browserErrorDiagnostic, ACCOUNT_BROWSER_ASSET,
     socketAdmission, socketScopeRole, recordHomeCommand, observeHomeReply, beginHomeDisposal, closeHomeAdmission,
-    homeOverviewInBrowser, queuesDisposedInBrowser};
+    homeOverviewInBrowser, queuesDisposedInBrowser, runWithNaturalCall};
 if (require.main === module) main().catch(e => {
     process.stderr.write(JSON.stringify({status: 'FAIL', failure: e instanceof Failure ? e.message : 'preflight_failed'}) + '\n');
     process.exitCode = 1;
