@@ -23,6 +23,7 @@
         ,initial_delay_ms/1
         ,callback_offer_prompts/2
         ,resolve_callback_audio/2
+        ,resolve_position_audio/2
         ,schedule_init/2
         ,schedule_due/2
         ,schedule_wait_ms/2
@@ -77,7 +78,8 @@ init(Manager, Call, Props) ->
     CallId = kapps_call:call_id(AnnouncementCall),
     'ok' = kz_events:bind_call_id(CallId),
     try
-        ResolvedConfig = resolve_callback_audio(Config, AnnouncementCall),
+        CallbackConfig = resolve_callback_audio(Config, AnnouncementCall),
+        ResolvedConfig = resolve_position_audio(CallbackConfig, AnnouncementCall),
         %% Media verification must not restart the first-offer clocks or leave
         %% manager death unmonitored while datastore reads are in progress.
         loop(State#{config := ResolvedConfig,
@@ -104,6 +106,8 @@ get_config(Props0) ->
      ,initial_delay => max(1, min(3600, props:get_integer_value(<<"initial_delay">>, Props, 30)))
      ,announcement_language => props:get_ne_binary_value(<<"language">>, Props)
      ,announcements_media => announcements_media(Props)
+     %% Presence is significant: explicit stock-looking IDs are still overrides.
+     ,announcements_media_selection => normalize_announcements_props(props:get_value(<<"media">>, Props, []))
      ,callback_announcements_enabled => props:get_is_true(<<"enabled">>, Callback, 'false')
          andalso props:get_is_true(<<"enabled">>, Offer, 'true')
      ,callback_initial_delay => bounded_seconds(<<"initial_delay">>, Offer, 30, 1)
@@ -363,7 +367,15 @@ maybe_announce_position(#{manager := Manager
 %%------------------------------------------------------------------------------
 -spec position_prompts(kz_term:api_pos_integer(), binary(), map()) ->
           kapps_call_command:audio_macro_prompts().
-position_prompts(Position, Language, Config) when is_integer(Position), Position > 0 ->
+position_prompts(Position, Language0, Config) ->
+    case acdc_gemini_prompts:canonical(Language0) of
+        <<"en-us">> = Language ->
+            acdc_cardinal_media:playlist(Position, Language, maps:get(position_audio, Config, undefined));
+        _ -> legacy_position_prompts(Position, Language0, Config)
+    end.
+
+-spec legacy_position_prompts(any(), binary(), map()) -> list().
+legacy_position_prompts(Position, Language, Config) when is_integer(Position), Position > 0 ->
     Prefix = announcements_media_file(<<"you_are_at_position">>, Config),
     Suffix = announcements_media_file(<<"in_the_queue">>, Config),
     Number = acdc_language:number_prompts(Position, Language),
@@ -378,7 +390,28 @@ position_prompts(Position, Language, Config) when is_integer(Position), Position
             [{'prompt', localized_default(Prefix, Language, Config), Language, <<"A">>}]
                 ++ Number ++ [{'prompt', localized_default(Suffix, Language, Config), Language, <<"A">>}]
     end;
-position_prompts(_, _, _) -> [].
+legacy_position_prompts(_, _, _) -> [].
+
+%% An incomplete position pack must not disable or reset the independent
+%% callback clock. EN defaults require the verified immutable cardinal pack;
+%% other locales keep their existing behavior until their packs are complete.
+-spec resolve_position_audio(map(), kapps_call:call()) -> map().
+resolve_position_audio(#{position_announcements_enabled := false} = Config, _) -> Config;
+resolve_position_audio(Config, Call) ->
+    case acdc_gemini_prompts:canonical(kapps_call:language(Call)) of
+        <<"en-us">> = Language ->
+            Result = try acdc_cardinal_media:prepare(Language, kapps_call:account_id(Call),
+                            maps:get(announcements_media_selection, Config, []))
+                     catch _:_ -> {error, cardinal_media_unavailable}
+                     end,
+            case Result of
+                {ok, Audio} -> Config#{position_audio => Audio};
+                _ ->
+                    lager:warning("queue position audio unavailable: immutable cardinal preflight failed"),
+                    Config#{position_announcements_enabled := false, position_audio => undefined}
+            end;
+        _ -> Config
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Conditionally add wait time announcements prompts to playlist

@@ -2279,7 +2279,7 @@
     },
     {
       "file": "applications/acdc/src/cb_acdc_live.erl",
-      "sha256": "d560b56a14eca992334575f9dfe655178b9124774e91e9fa2c59d826824c12ce",
+      "sha256": "75df48318117db720de4b187c75942084820d8c517a7cdf9b434a87348ac1de5",
       "literal_binding_nouns": []
     },
     {
@@ -2339,16 +2339,32 @@
       "sha256": "e76a656873ab547d030868c26c351f11daccb810d0db456c7bef9ddae953d846"
     },
     {
+      "file": "applications/acdc/src/acdc_callback_caller.erl",
+      "sha256": "251b9216e038395fd64a9b6ae35b6ca1edc1f4a8669117163fa66ba50776f93e"
+    },
+    {
+      "file": "applications/acdc/src/acdc_callback_internal.erl",
+      "sha256": "3662403c31a56172f1de9dc9e7474121eab8d00e73f762263ad7c6322a98c888"
+    },
+    {
+      "file": "applications/acdc/src/acdc_callback_policy.erl",
+      "sha256": "37e078b62b85f44f01015237d02a6a4e661fe8c345438bfa07b26fa15cc118cc"
+    },
+    {
       "file": "applications/acdc/src/acdc_callback_store.erl",
-      "sha256": "79c0c21aac1a1454e9bde3780e6f2638a8fec49a914be3216ab86c279a25b112"
+      "sha256": "195f3cc8014cf4445216bea123b772b5e613ef4eb75aabd481b32dbc8f2bf31a"
     },
     {
       "file": "applications/acdc/src/acdc_dashboard_agents.erl",
       "sha256": "f575a480567c794943efefa9543c7729bb3d8c7cf74bec5a5df119a4b143721a"
     },
     {
+      "file": "applications/acdc/src/acdc_dashboard_caller.erl",
+      "sha256": "62a09bce014a3bce837edc0e89c853ea856816b92b25b7c1fa6bd1d69b042668"
+    },
+    {
       "file": "applications/acdc/src/acdc_dashboard_collector.erl",
-      "sha256": "dc6db8c9e0dee711a2b59a281d665bd93ae6beb9027eac863da919010ba1f138"
+      "sha256": "8fa03fa2006cd4fea2e1a788729eab34cec4c8782dbb27d199ef2fcec311b55d"
     },
     {
       "file": "applications/acdc/src/acdc_dashboard_projection.erl",
@@ -2356,7 +2372,7 @@
     },
     {
       "file": "applications/acdc/src/acdc_dashboard_snapshot.erl",
-      "sha256": "2e3c9bfd846dca06ff770f5b3851e9cbf741132b4689683ccd05547e6d3ff807"
+      "sha256": "fa182d3f4f108db38b2ccaae6acfc169758920c1d6684e782bb5e57d4a391f19"
     },
     {
       "file": "applications/acdc/src/acdc_live_auth.erl",
@@ -2368,7 +2384,7 @@
     },
     {
       "file": "applications/acdc/src/acdc_stats.erl",
-      "sha256": "5a61aa0b2dd1ac633cda0df99c5f8c7aa010f7b95a084491e6e62757a5db3828"
+      "sha256": "89c4983f9016397b4bdd6b027c97b5b41e06ca78468a966e159d70bb3422da52"
     },
     {
       "file": "applications/acdc/src/cb_acdc_agent_queue.erl",
@@ -2380,7 +2396,7 @@
     },
     {
       "file": "applications/acdc/src/cb_acdc_live.erl",
-      "sha256": "d560b56a14eca992334575f9dfe655178b9124774e91e9fa2c59d826824c12ce"
+      "sha256": "75df48318117db720de4b187c75942084820d8c517a7cdf9b434a87348ac1de5"
     },
     {
       "file": "applications/acdc/src/cb_acdc_queue_editor.erl",
@@ -2412,7 +2428,7 @@
     },
     {
       "file": "applications/acdc/src/kapi_acdc_dashboard.erl",
-      "sha256": "6930f3b06579ba629bc321c915d44d18d8b33f8fe3060d26f3502350389db6f5"
+      "sha256": "dd226a66fa252daf1182ad7bbbf14f1eed9158f035236295faf5d56311d4f263"
     },
     {
       "file": "applications/blackhole/src/bh_context.erl",
@@ -2904,7 +2920,7 @@
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "05c840a721b885e813a967ecc3a513e459765fce7696d89be1e2b1cec5fdf27b"
+      "sha256": "a17753c467a20d7af88a948ba84b5f7400d0f87830a3172a409232d2dd18baa5"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",
@@ -2912,7 +2928,7 @@
     },
     {
       "file": "scripts/api-docs-queue-live.cjs",
-      "sha256": "5f761a3115ee79cb957a1b53988edd3dcb4755a6d3c7ae9fa95b1c0fb3259f38"
+      "sha256": "ee62c13962e65c70bd359c6cf6743d8fd4fec002669a4021f1dc5ff5888facf6"
     },
     {
       "file": "scripts/api-docs-tooling/package-lock.json",
@@ -2928,7 +2944,7 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "2db6ecd3ce967002422e4f72edceb41cbd76b88d46870ae1f4c4d10a16342a21"
+      "sha256": "0cb16542acc75274f47cb70ffaaecd02a9644eb3269b20a7cd8333b2cddeda1d"
     },
     {
       "file": "scripts/patches/blackhole-kazoo5-integration.patch",

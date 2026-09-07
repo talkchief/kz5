@@ -15,7 +15,8 @@
 -define(IDENTITY_KEYS, [<<"queue_id">>, <<"original_call_id">>, <<"number">>
                        ,<<"enqueued_at">>, <<"enqueue_sequence">>, <<"priority">>
                        ,<<"language">>, <<"max_attempts">>, <<"retry_delay">>, <<"ttl">>]).
--define(AUTHORITY_KEYS, [<<"pvt_authority_id">>, <<"pvt_authority_type">>, <<"pvt_account_realm">>]).
+-define(AUTHORITY_KEYS, [<<"pvt_authority_id">>, <<"pvt_authority_type">>, <<"pvt_account_realm">>
+                         ,<<"pvt_internal_target">>]).
 -define(ACTIVE, [<<"dialing">>, <<"confirming">>, <<"connecting">>]).
 -define(TERMINAL, [<<"completed">>, <<"cancelled">>, <<"failed">>, <<"expired">>]).
 
@@ -34,9 +35,10 @@ create(AccountId, QueueId, CallId, Registration, Authority) ->
             %% queue's configured outbound identity. Inbound SIP/CID fields
             %% and caller/menu registration payloads are not authority.
             Values = kz_json:set_values(
-                       [{<<"pvt_authority_id">>, kz_json:get_value(<<"id">>, Authority)}
+                       props:filter_undefined([{<<"pvt_authority_id">>, kz_json:get_value(<<"id">>, Authority)}
                        ,{<<"pvt_authority_type">>, kz_json:get_value(<<"type">>, Authority)}
-                       ,{<<"pvt_account_realm">>, kz_json:get_value(<<"account_realm">>, Authority)}]
+                       ,{<<"pvt_account_realm">>, kz_json:get_value(<<"account_realm">>, Authority)}
+                       ,{<<"pvt_internal_target">>, kz_json:get_value(<<"internal_target">>, Authority)}])
                        ,registration_values(QueueId, CallId, Registration)),
             case valid_registration(Values) of
                 'false' -> {'error', 'invalid_registration'};

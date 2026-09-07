@@ -1,6 +1,7 @@
 %%% Immutable fixed Gemini defaults, never global aliases for customer media.
 -module(acdc_gemini_prompts).
 -export([canonical/1, default/4, default_alias/5, selection/2,
+         verified_asset/2,
          auxiliary/2, builtin/2,
          callback/5, callback_readback/2, telephone/3, capabilities/1,
          callback_media_ids/1, verified_callback_media/2, callback_media_complete/2,
@@ -305,6 +306,12 @@ asset(Language, Prompt) ->
 
 -spec media_id(tuple()) -> binary().
 media_id(A) -> <<(element(1,A))/binary,"/",(element(3,A))/binary>>.
+
+%% Shared immutable media-document contract for independently versioned packs.
+%% Audio bytes still require the create-only importer's verification.
+-spec verified_asset(tuple(), any()) -> boolean().
+verified_asset(Asset, Result) ->
+    try imported(Asset, Result) catch _:_ -> false end.
 
 -spec imported(tuple(), any()) -> boolean().
 imported({Language,Canonical,Prompt,Sha,Md5,Length,Transcript}=A, {ok,Doc}) ->

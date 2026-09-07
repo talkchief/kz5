@@ -9,7 +9,8 @@ callback_complete=false
 callback_pinned=false
 callback_modules=(acdc_gemini_prompts cf_acdc_member acdc_callback_caller
     acdc_announcements acdc_announcements_sup acdc_callback_menu acdc_language
-    kapi_acdc_callback)
+    kapi_acdc_callback acdc_callback_internal acdc_callback_policy acdc_callback_store
+    acdc_cardinal_media acdc_cardinal_prompts)
 cd "$callback_root"
 mkdir "$callback_build/ebin"
 callback_finish() {
@@ -21,8 +22,8 @@ callback_finish() {
         result=1
     fi
     [[ $callback_complete == true ]] || result=1
-    printf '{"exit_code":%s,"complete":%s,"inputs_stable":%s,"production_modules":8,"tests":false,"deployment":false,"runtime_writes":false}\n' \
-        "$result" "$callback_complete" "$stable" > "$callback_build/receipt.json"
+    printf '{"exit_code":%s,"complete":%s,"inputs_stable":%s,"production_modules":%s,"tests":false,"deployment":false,"runtime_writes":false}\n' \
+        "$result" "$callback_complete" "$stable" "${#callback_modules[@]}" > "$callback_build/receipt.json"
     printf 'Callback production build exit %s; retained evidence: %s\n' "$result" "$callback_build"
     exit "$result"
 }
@@ -50,7 +51,9 @@ export KAZOO_CALLBACK_CANDIDATE="$callback_build"
 erl -no_dot_erlang -noshell -eval '
     Dir=os:getenv("KAZOO_CALLBACK_CANDIDATE"),
     Mods=[acdc_gemini_prompts,cf_acdc_member,acdc_callback_caller,acdc_announcements,
-          acdc_announcements_sup,acdc_callback_menu,acdc_language,kapi_acdc_callback],
+          acdc_announcements_sup,acdc_callback_menu,acdc_language,kapi_acdc_callback,
+          acdc_callback_internal,acdc_callback_policy,acdc_callback_store,
+          acdc_cardinal_media,acdc_cardinal_prompts],
     Metadata=[begin
         File=filename:join([Dir,"ebin",atom_to_list(M)++".beam"]),
         {ok,{M,[{compile_info,Info},{exports,Exports},{imports,Imports}]}}=

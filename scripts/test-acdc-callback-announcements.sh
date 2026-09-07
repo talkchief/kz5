@@ -5,6 +5,7 @@ project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 test_dir=$(mktemp -d /tmp/kazoo-callback-announcements-test.XXXXXX)
 cleanup() {
     rm -f -- "$test_dir/acdc_language.beam" "$test_dir/acdc_announcements.beam" \
+        "$test_dir/acdc_cardinal_media.beam" "$test_dir/acdc_cardinal_prompts.beam" \
         "$test_dir/acdc_announcements_sup.beam" "$test_dir/acdc_queue_manager.beam" \
         "$test_dir/acdc_callback_announcement_tests.beam"
     rmdir -- "$test_dir"
@@ -19,11 +20,12 @@ export ERL_CRASH_DUMP=/dev/null
 erlc -Werror -I applications/acdc/src -I applications/acdc/include \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$test_dir" \
     applications/acdc/src/acdc_announcements.erl applications/acdc/src/acdc_announcements_sup.erl \
-    applications/acdc/src/acdc_queue_manager.erl
+    applications/acdc/src/acdc_queue_manager.erl applications/acdc/src/acdc_cardinal_media.erl \
+    applications/acdc/src/acdc_cardinal_prompts.erl
 erlc -DTEST +debug_info -Werror -I applications/acdc/src -I applications/acdc/include \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$test_dir" \
     applications/acdc/src/acdc_language.erl applications/acdc/src/acdc_announcements.erl \
-    applications/acdc/src/acdc_announcements_sup.erl
+    applications/acdc/src/acdc_announcements_sup.erl applications/acdc/src/acdc_cardinal_media.erl
 erlc -Werror -o "$test_dir" scripts/erlang-tests/acdc_callback_announcement_tests.erl
 erl -pa "$test_dir" -noshell \
     -eval 'case eunit:test(acdc_callback_announcement_tests, [verbose]) of ok -> halt(0); _ -> halt(1) end.'

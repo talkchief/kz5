@@ -6,6 +6,31 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Latest callback deployment:** four account-local callback modules are live,
+not the other nine modules in the13-module candidate. `d116f0/6c6bb3` atomic
+binary promotion passes installed/loaded hashes; previous code retained at
+`/var/lib/kazoo-internal-callback-deployment.i8kMw1`. Two earlier by-name loads
+failed new-module lookup and restored baseline; see detailed callback document.
+Current account/queue/1000 read-only request probe passes `8a22d5/239d62` with
+one native endpoint; it does not dial. OpenAPI contract rebuilt/tested and exact
+served `/apis` bytes verified `8a4484`. Real internal ringing/retry remains open.
+The separate external-route live retry regression finished exit0
+`170c04/session87038/7cfb8b`, evidence
+`/var/log/kazoo-acceptance/20260907T144250Z`: busy agent, single6 at about5s,
+full5.491s Gemini confirmation before BYE, release busy call2s later, unanswered
+first return attempt, durable retry_wait, second reciprocal agent bridge.
+The scoped log/core gate reports zero errors/new cores. Fixture retained:
+this is not full cleanup, internal1000 acceptance or production certification.
+An asynchronous question asks the operator to leave1000 registered, ignore the
+first return call and answer the second/press1; no operator response yet.
+
+**French one-time authoring:** first20 requests produced14 accepted recordings,
+six rejected incomplete results,141 initial roles still pending. No retries,
+no successful WAV regenerated. Copied28 new FR WAVs and run history into repo;
+offline manifest/SoX verification passes `2b68ec/342bc8`, total105 historical
+requests. EN31/ES25 generated unchanged, ES4/9 reuse separate. See
+`doc/acdc_cardinal_fr_authoring_20260907.md`. No new cardinal playback deployed.
+
 **14:24UTC bridge development installation:** provider credentials retrieved
 read-only from production10.1.0.28 into protected private storage. Its service
 remains enabled/active PID1226; no production changes or notifications. Main SH
@@ -25,11 +50,12 @@ Current79 bridge tests plus dispatch and13 media-adapter cases pass
 
 **Callback/media checkpoint:** full canonical run03917f/session92746 completed
 exit0,87 tests (`d91ac3`). Focused production13-module build completed exit0
-`592f91/e0e1cc`, `/tmp/kazoo-callback-media-build.qg16Ob`; not deployed yet.
+`592f91/e0e1cc`, `/tmp/kazoo-callback-media-build.qg16Ob`; the four callback
+modules were subsequently deployed as described above. Remaining nine were not.
 The strengthened media zero-read regression was rerun: all7 pass
 `b5fb19/52a682`, source digest aeeb9f4d35ae86afe69100ca5cfa6144fd07e2c89748c41fc8950f5b948a4116.
 Older pending-handle statements below are superseded. Internal caller ID1000
-is configured; account-local callback transport still needs live deployment.
+is configured; account-local callback transport needs live ringing acceptance.
 
 **14:07UTC focused work checkpoint:** all three parallel workers stopped at
 their product usage limit; root continued locally. No agent build/deployment ran.

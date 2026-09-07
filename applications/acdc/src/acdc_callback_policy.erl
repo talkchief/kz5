@@ -40,11 +40,23 @@ authorize_registration(AccountId, QueueDoc, Number) ->
         'false' -> {'error', 'invalid_authority_context'};
         'true' ->
             {AccountResult, AuthorityResult} = fetch_authority(AccountId, QueueDoc),
-            authorize_registration_with(AccountId, QueueDoc, Number
+            case acdc_callback_internal:resolve(AccountId, Number) of
+                'not_internal' -> authorize_registration_with(AccountId, QueueDoc, Number
                                         ,AccountResult, AuthorityResult
                                         ,fun(Value) -> knm_converters:normalize(Value, AccountId) end
                                         ,fun knm_converters:classify/1
-                                        ,fun knm_numbers:lookup_account/1)
+                                        ,fun knm_numbers:lookup_account/1);
+                {'error', _}=Error -> Error;
+                {'ok', Target} ->
+                    case validate_authority_context(AccountId, QueueDoc, AccountResult, AuthorityResult) of
+                        {'error', _}=Error -> Error;
+                        {'ok', Context} ->
+                            case restricted(<<"internal">>, maps:get('account', Context), maps:get('authority', Context)) of
+                                'true' -> {'error', 'call_restricted'};
+                                'false' -> {'ok', kz_json:set_value(<<"internal_target">>, Target, trusted_authority(Context))}
+                            end
+                    end
+            end
     end.
 
 -spec build_request(kz_term:ne_binary(), kz_json:object(), kz_json:object(), kz_term:ne_binary()) ->
@@ -55,11 +67,30 @@ build_request(AccountId, QueueDoc, Reservation, ReplyQueue) ->
         'false' -> {'error', 'invalid_authority_context'};
         'true' ->
             {AccountResult, AuthorityResult} = fetch_authority(AccountId, QueueDoc),
-            build_request_with(AccountId, QueueDoc, Reservation, ReplyQueue
+            case kz_json:get_value(<<"pvt_internal_target">>, Reservation) of
+                'undefined' -> build_request_with(AccountId, QueueDoc, Reservation, ReplyQueue
                               ,AccountResult, AuthorityResult
                               ,fun(Number) -> knm_converters:normalize(Number, AccountId) end
                               ,fun knm_converters:classify/1
-                              ,fun knm_numbers:lookup_account/1)
+                              ,fun knm_numbers:lookup_account/1);
+                Target -> build_internal_request(AccountId, QueueDoc, Reservation, ReplyQueue,
+                                                 AccountResult, AuthorityResult, Target)
+            end
+    end.
+
+build_internal_request(AccountId, QueueDoc, Reservation, ReplyQueue, AccountResult, AuthorityResult, Target) ->
+    case validate_authority_context(AccountId, QueueDoc, AccountResult, AuthorityResult) of
+        {'error', _}=Error -> Error;
+        {'ok', Context} ->
+            case validate_reservation_context(AccountId, QueueDoc, Reservation, ReplyQueue, Context) of
+                {'error', _}=Error -> Error;
+                'ok' ->
+                    case restricted(<<"internal">>, maps:get('account', Context), maps:get('authority', Context)) of
+                        'true' -> {'error', 'call_restricted'};
+                        'false' -> acdc_callback_internal:build_request(AccountId, QueueDoc, Reservation,
+                                                                        ReplyQueue, Context, Target)
+                    end
+            end
     end.
 
 fetch_authority(AccountId, QueueDoc) ->

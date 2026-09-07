@@ -1,5 +1,18 @@
 # Spanish one-time authoring checkpoint
 
+## Subsequent pending-only batch, September7
+
+`baa541/716050` attempted the remaining21 previously unattempted Spanish roles,
+with two workers and no retries. Eleven passed technical WAV QA; ten returned
+incomplete audio and were rejected. Terminal exit1 correctly reports an
+incomplete pack. The manifest and22 new master/telephony WAVs were preserved in
+the repository; run receipt `run-e55c791e-0553-4122-af56-d61d0ba53c0e.json`.
+Spanish now has25 generated roles,28 failed identities and no pending initial
+requests (54 historical requests including the earlier failed number4 retry).
+The separate exact-recording reuse of4 and9 remains available without a provider.
+No existing successful recording was regenerated, and no Spanish media was
+imported or activated. Listening and completion of failed identities remain open.
+
 September 7: source-reviewed Spanish text approval is in
 `acdc_cardinal_es_release_review.md`, with the separate approval proposal
 `acdc-cardinal-approvals-es-fr-20260907.json`. Existing attempted EN approval

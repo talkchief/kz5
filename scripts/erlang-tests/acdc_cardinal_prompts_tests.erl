@@ -38,8 +38,19 @@ other_locales_never_fall_back_test() ->
     lists:foreach(fun(Language) ->
         ?assertEqual({error, unsupported_language}, acdc_cardinal_prompts:roles(123, Language)),
         ?assertEqual({error, unsupported_language}, acdc_cardinal_prompts:roles(0, Language))
-    end, [<<"en">>, <<"EN">>, <<"EN-US">>, <<"en_us">>, <<"en-gb">>, <<"fr-fr">>,
-          <<"es-es">>, <<"he-il">>, <<"ar-sa">>, <<>>, undefined, null, 'en-us', "en-us", #{}]).
+    end, [<<"en">>, <<"EN">>, <<"EN-US">>, <<"en_us">>, <<"en-gb">>, <<"de-de">>,
+          <<>>, undefined, null, 'en-us', "en-us", #{}]).
+
+multilingual_catalog_parity_test_() ->
+    {timeout, 120, fun() ->
+        {ok, Cases} = file:consult(os:getenv("KAZOO_CARDINAL_MULTILINGUAL_FIXTURE")),
+        ?assertEqual(58592, length(Cases)),
+        lists:foreach(fun({Language, Number, Maximum, Expected}) ->
+            {ok, Roles} = acdc_cardinal_prompts:roles(Number, Language),
+            ?assertEqual(Expected, Roles),
+            ?assert(length(Roles) >= 1 andalso length(Roles) =< Maximum)
+        end, Cases)
+    end}.
 
 catalog_parity_test_() ->
     {timeout, 60, fun() ->

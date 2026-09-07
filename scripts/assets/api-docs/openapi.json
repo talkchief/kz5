@@ -13727,7 +13727,7 @@
             }
           }
         },
-        "description": "Queue callback policy is under data.callback. Select outbound_authority.type=user and an enabled account-owned user ID; it is the outbound authorization identity, not the callback recipient. caller_id_source=inherit derives outbound caller ID from that user/account, subject to ownership and routing checks. callback.announcement is independent of announcements: enabled default true, initial_delay default 30 seconds (1–3600), interval default 60 seconds (15–3600). Disabling the spoken offer does not disable entry_key (default 6). callback.enabled=false disables callback itself. Offer language follows announcements.language or call locale. Available voice/language assets are a deployment prerequisite; source schema presence does not prove readiness. Queue routes use a callflow node module=acdc_member, data.id=queue ID. An ordinary internal extension alone is not an authorized outbound callback route."
+        "description": "Queue callback policy is under data.callback. Select outbound_authority.type=user and an enabled account-owned user ID; it is the outbound authorization identity, not the callback recipient. caller_id_source=inherit derives external outbound caller ID from that user/account, subject to ownership and routing checks. callback.announcement is independent of announcements: enabled default true, initial_delay default 30 seconds (1–3600), interval default 60 seconds (15–3600). Disabling the spoken offer does not disable entry_key (default 6). callback.enabled=false disables callback itself. Offer language follows announcements.language or call locale. Available voice/language assets are a deployment prerequisite; source schema presence does not prove readiness. Queue routes use a callflow node module=acdc_member, data.id=queue ID. Account-local extension callbacks: numeric destinations of 1–6 digits are checked against an exact callflow in the same account. A terminal user/device callflow may return to enabled account-owned SIP devices; ambiguous, disabled/DND, forwarded, cross-account or changed targets fail closed. Patterns, catch-all and multi-action callflows are not supported by this path. The target identity is pinned privately during registration and resolved again on every attempt; no new public routing fields are required or accepted. Internal callbacks use native resource origination over AMQP, not carrier hunting. The configured outbound authority and internal call restrictions still apply. An absent exact internal route retains the existing external-number policy; a failed or unsupported matched route never falls back to a carrier. Source and runtime request-construction checks do not prove mobile/phone ringing, confirmation or retry acceptance. Current source contract: with callback.allow_alternate_number=false (default), entry_key (default 6) selects the valid current caller-ID destination and requests registration after a correlated queue pause; no additional registration digit 1 is required. With alternatives enabled, entry opens a choice menu: 1 selects the valid current number, or 2 collects an alternate followed by #, readback and 1 confirmation. Invalid current caller ID goes directly to alternate collection only when alternatives are enabled; otherwise no callback is registered and the caller returns to the live queue. The queue authorizes and durably persists registration before success audio and original-leg teardown. The returned call separately requires 1 before agent connection. Built-in EN/HE/FR/ES/AR WAVs are authored once with Gemini and packaged in the release; installation, startup, account/queue creation and live calls do not invoke Gemini. Source documentation is not deployment or single-key live acceptance evidence."
       },
       "post": {
         "operationId": "post__accounts_ACCOUNT_ID_queues_QUEUE_ID_",
@@ -13867,7 +13867,7 @@
             }
           }
         },
-        "description": "Queue callback policy is under data.callback. Select outbound_authority.type=user and an enabled account-owned user ID; it is the outbound authorization identity, not the callback recipient. caller_id_source=inherit derives outbound caller ID from that user/account, subject to ownership and routing checks. callback.announcement is independent of announcements: enabled default true, initial_delay default 30 seconds (1–3600), interval default 60 seconds (15–3600). Disabling the spoken offer does not disable entry_key (default 6). callback.enabled=false disables callback itself. Offer language follows announcements.language or call locale. Available voice/language assets are a deployment prerequisite; source schema presence does not prove readiness. Queue routes use a callflow node module=acdc_member, data.id=queue ID. An ordinary internal extension alone is not an authorized outbound callback route."
+        "description": "Queue callback policy is under data.callback. Select outbound_authority.type=user and an enabled account-owned user ID; it is the outbound authorization identity, not the callback recipient. caller_id_source=inherit derives external outbound caller ID from that user/account, subject to ownership and routing checks. callback.announcement is independent of announcements: enabled default true, initial_delay default 30 seconds (1–3600), interval default 60 seconds (15–3600). Disabling the spoken offer does not disable entry_key (default 6). callback.enabled=false disables callback itself. Offer language follows announcements.language or call locale. Available voice/language assets are a deployment prerequisite; source schema presence does not prove readiness. Queue routes use a callflow node module=acdc_member, data.id=queue ID. Account-local extension callbacks: numeric destinations of 1–6 digits are checked against an exact callflow in the same account. A terminal user/device callflow may return to enabled account-owned SIP devices; ambiguous, disabled/DND, forwarded, cross-account or changed targets fail closed. Patterns, catch-all and multi-action callflows are not supported by this path. The target identity is pinned privately during registration and resolved again on every attempt; no new public routing fields are required or accepted. Internal callbacks use native resource origination over AMQP, not carrier hunting. The configured outbound authority and internal call restrictions still apply. An absent exact internal route retains the existing external-number policy; a failed or unsupported matched route never falls back to a carrier. Source and runtime request-construction checks do not prove mobile/phone ringing, confirmation or retry acceptance. Current source contract: with callback.allow_alternate_number=false (default), entry_key (default 6) selects the valid current caller-ID destination and requests registration after a correlated queue pause; no additional registration digit 1 is required. With alternatives enabled, entry opens a choice menu: 1 selects the valid current number, or 2 collects an alternate followed by #, readback and 1 confirmation. Invalid current caller ID goes directly to alternate collection only when alternatives are enabled; otherwise no callback is registered and the caller returns to the live queue. The queue authorizes and durably persists registration before success audio and original-leg teardown. The returned call separately requires 1 before agent connection. Built-in EN/HE/FR/ES/AR WAVs are authored once with Gemini and packaged in the release; installation, startup, account/queue creation and live calls do not invoke Gemini. Source documentation is not deployment or single-key live acceptance evidence."
       }
     },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/eavesdrop": {
@@ -21560,7 +21560,7 @@
           "ACDC queues"
         ],
         "summary": "Read a page of observed live queue snapshots",
-        "description": "Implemented in source; deployment-specific acceptance required. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. No caller name/number, actual queue positions, ready counts, SLA or historical reports are supplied. When websocket_updates is true, use the separate x-blackhole.queue_live protocol to invalidate and refetch this snapshot. page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.",
+        "description": "Implemented in source; deployment-specific acceptance required. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. Caller name/number are nullable privacy-filtered fields in selected detail only, not verified identity; overview and WebSocket hints omit them. Actual queue positions, ready counts, SLA and historical reports are not supplied. When websocket_updates is true, use the separate x-blackhole.queue_live protocol to invalidate and refetch this snapshot. page_size defaults to 50, maximum 100. start_queue_id is an inclusive lower-case hexadecimal queue ID. The next page begins at next_start_queue_id, the first unreturned lookahead queue. Unknown query parameters are rejected.",
         "parameters": [
           {
             "name": "ACCOUNT_ID",
@@ -21722,6 +21722,7 @@
           "applications/acdc/src/cb_queues.erl",
           "applications/acdc/src/cb_acdc_live.erl",
           "applications/acdc/src/acdc_live_auth.erl",
+          "applications/acdc/src/acdc_dashboard_caller.erl",
           "applications/acdc/src/cb_acdc_live_agents.erl",
           "applications/acdc/src/acdc_dashboard_agents.erl",
           "applications/acdc/priv/couchdb/views/queues.json",
@@ -21731,7 +21732,7 @@
           "applications/acdc/src/kapi_acdc_dashboard.erl",
           "applications/acdc/src/acdc_stats.erl"
         ],
-        "x-runtime-source-sha256": "d560b56a14eca992334575f9dfe655178b9124774e91e9fa2c59d826824c12ce"
+        "x-runtime-source-sha256": "75df48318117db720de4b187c75942084820d8c517a7cdf9b434a87348ac1de5"
       }
     },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/live": {
@@ -21741,7 +21742,7 @@
           "ACDC queues"
         ],
         "summary": "Read an observed live snapshot for one queue",
-        "description": "Implemented in source; deployment-specific acceptance required. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. No caller name/number, actual queue positions, ready counts, SLA or historical reports are supplied. When websocket_updates is true, use the separate x-blackhole.queue_live protocol to invalidate and refetch this snapshot. This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.",
+        "description": "Implemented in source; deployment-specific acceptance required. Read-only and account-scoped. Existing queues permissions AND the underlying queues/stats scope must allow the request. Each queue in the selected page, including the lookahead queue, must be authorized before data is returned. Detail additionally requires selected queues/QUEUE_ID/roster and agents/AGENT_ID plus agents/AGENT_ID/status permissions for every fetched roster identity, including its lookahead. No configuration, roster or agent state is changed. Responses describe observed replicas, never an atomic global occupancy proof. Partial/unavailable source state is explicit and unavailable metrics are null. Selected call rows and metrics must agree across sources; disagreements withhold both, never sum replicas. Overview has calls=null, agents=null and both corresponding capabilities=false. Detail has bounded calls and agents objects and corresponding capabilities=true, independently of data availability. Agent names and IDs come only from the selected authorized roster; observed runtime is not endpoint reachability or ready-to-ring eligibility. Caller name/number are nullable privacy-filtered fields in selected detail only, not verified identity; overview and WebSocket hints omit them. Actual queue positions, ready counts, SLA and historical reports are not supplied. When websocket_updates is true, use the separate x-blackhole.queue_live protocol to invalidate and refetch this snapshot. This selected-queue route accepts no query parameters; every unexpected query parameter is HTTP 400.",
         "parameters": [
           {
             "name": "ACCOUNT_ID",
@@ -21893,6 +21894,7 @@
           "applications/acdc/src/cb_queues.erl",
           "applications/acdc/src/cb_acdc_live.erl",
           "applications/acdc/src/acdc_live_auth.erl",
+          "applications/acdc/src/acdc_dashboard_caller.erl",
           "applications/acdc/src/cb_acdc_live_agents.erl",
           "applications/acdc/src/acdc_dashboard_agents.erl",
           "applications/acdc/priv/couchdb/views/queues.json",
@@ -21902,7 +21904,7 @@
           "applications/acdc/src/kapi_acdc_dashboard.erl",
           "applications/acdc/src/acdc_stats.erl"
         ],
-        "x-runtime-source-sha256": "d560b56a14eca992334575f9dfe655178b9124774e91e9fa2c59d826824c12ce"
+        "x-runtime-source-sha256": "75df48318117db720de4b187c75942084820d8c517a7cdf9b434a87348ac1de5"
       }
     },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks": {
@@ -22056,7 +22058,7 @@
         "x-contract-review": "source-reviewed",
         "x-source-file": "applications/acdc/src/cb_queues.erl",
         "x-runtime-verification": "Source review only unless explicitly noted in the operation description.",
-        "description": "Bounded, queue-scoped list. No public callback-create endpoint exists: only a trusted live queued caller can register after confirmation. Follow next_cursor from the envelope; do not synthesize cursors."
+        "description": "Bounded, queue-scoped list. No public callback-create endpoint exists: only the trusted live queued caller selection and authorized durable-registration workflow may reserve a position. Follow next_cursor from the envelope; do not synthesize cursors. Current source contract: with callback.allow_alternate_number=false (default), entry_key (default 6) selects the valid current caller-ID destination and requests registration after a correlated queue pause; no additional registration digit 1 is required. With alternatives enabled, entry opens a choice menu: 1 selects the valid current number, or 2 collects an alternate followed by #, readback and 1 confirmation. Invalid current caller ID goes directly to alternate collection only when alternatives are enabled; otherwise no callback is registered and the caller returns to the live queue. The queue authorizes and durably persists registration before success audio and original-leg teardown. The returned call separately requires 1 before agent connection. Built-in EN/HE/FR/ES/AR WAVs are authored once with Gemini and packaged in the release; installation, startup, account/queue creation and live calls do not invoke Gemini. Source documentation is not deployment or single-key live acceptance evidence."
       }
     },
     "/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}/callbacks/{CALLBACK_ID}": {
@@ -35304,7 +35306,7 @@
               },
               "allow_alternate_number": {
                 "default": false,
-                "description": "Allow a caller to enter and explicitly reconfirm a return number other than the current caller ID",
+                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
                 "type": "boolean"
               },
               "use_local_resources": {
@@ -35319,7 +35321,7 @@
               },
               "entry_key": {
                 "default": "6",
-                "description": "Single DTMF digit that opens the callback menu while the caller is waiting",
+                "description": "Single DTMF digit selecting callback while waiting (default 6). After a correlated queue pause, valid current caller ID with allow_alternate_number=false requests durable registration immediately, without another 1. With alternatives enabled it opens the destination-choice menu. This does not bypass destination authorization or returned-call confirmation 1.",
                 "pattern": "^[0-9]$",
                 "type": "string"
               },
@@ -48152,7 +48154,7 @@
               },
               "allow_alternate_number": {
                 "default": false,
-                "description": "Allow a caller to enter and explicitly reconfirm a return number other than the current caller ID",
+                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
                 "type": "boolean"
               },
               "use_local_resources": {
@@ -48167,7 +48169,7 @@
               },
               "entry_key": {
                 "default": "6",
-                "description": "Single DTMF digit that opens the callback menu while the caller is waiting",
+                "description": "Single DTMF digit selecting callback while waiting (default 6). After a correlated queue pause, valid current caller ID with allow_alternate_number=false requests durable registration immediately, without another 1. With alternatives enabled it opens the destination-choice menu. This does not bypass destination authorization or returned-call confirmation 1.",
                 "pattern": "^[0-9]$",
                 "type": "string"
               },
@@ -48796,6 +48798,24 @@
                 "format": "int64",
                 "description": "Signed Unix epoch seconds. A retained call can predate the Unix epoch; no positive minimum is imposed. Not Gregorian seconds or milliseconds."
               },
+              "caller_id_name": {
+                "type": "string",
+                "nullable": true,
+                "minLength": 1,
+                "pattern": "^(?!\\s*$)[^\\x00-\\x1f\\x7f-\\x9f\\u202a-\\u202e\\u2066-\\u2069]+$",
+                "description": "Privacy-filtered selected-call identity or null when withheld, unavailable or legacy. UTF-8 byte limits are enforced by the native codec (the x-max-utf8-bytes annotation is not a standard OpenAPI validator). Never fall back to raw caller metadata.",
+                "maxLength": 256,
+                "x-max-utf8-bytes": 256
+              },
+              "caller_id_number": {
+                "type": "string",
+                "nullable": true,
+                "minLength": 1,
+                "pattern": "^(?!\\s*$)[^\\x00-\\x1f\\x7f-\\x9f\\u202a-\\u202e\\u2066-\\u2069]+$",
+                "description": "Privacy-filtered selected-call identity or null when withheld, unavailable or legacy. UTF-8 byte limits are enforced by the native codec (the x-max-utf8-bytes annotation is not a standard OpenAPI validator). Never fall back to raw caller metadata.",
+                "maxLength": 64,
+                "x-max-utf8-bytes": 64
+              },
               "status": {
                 "type": "string",
                 "enum": [
@@ -48814,6 +48834,8 @@
               "call_id",
               "queue_id",
               "entered_at",
+              "caller_id_name",
+              "caller_id_number",
               "status",
               "handled_at"
             ],
@@ -48838,6 +48860,24 @@
                 "format": "int64",
                 "description": "Signed Unix epoch seconds. A retained call can predate the Unix epoch; no positive minimum is imposed. Not Gregorian seconds or milliseconds."
               },
+              "caller_id_name": {
+                "type": "string",
+                "nullable": true,
+                "minLength": 1,
+                "pattern": "^(?!\\s*$)[^\\x00-\\x1f\\x7f-\\x9f\\u202a-\\u202e\\u2066-\\u2069]+$",
+                "description": "Privacy-filtered selected-call identity or null when withheld, unavailable or legacy. UTF-8 byte limits are enforced by the native codec (the x-max-utf8-bytes annotation is not a standard OpenAPI validator). Never fall back to raw caller metadata.",
+                "maxLength": 256,
+                "x-max-utf8-bytes": 256
+              },
+              "caller_id_number": {
+                "type": "string",
+                "nullable": true,
+                "minLength": 1,
+                "pattern": "^(?!\\s*$)[^\\x00-\\x1f\\x7f-\\x9f\\u202a-\\u202e\\u2066-\\u2069]+$",
+                "description": "Privacy-filtered selected-call identity or null when withheld, unavailable or legacy. UTF-8 byte limits are enforced by the native codec (the x-max-utf8-bytes annotation is not a standard OpenAPI validator). Never fall back to raw caller metadata.",
+                "maxLength": 64,
+                "x-max-utf8-bytes": 64
+              },
               "status": {
                 "type": "string",
                 "enum": [
@@ -48854,13 +48894,15 @@
               "call_id",
               "queue_id",
               "entered_at",
+              "caller_id_name",
+              "caller_id_number",
               "status",
               "handled_at"
             ],
             "additionalProperties": false
           }
         ],
-        "description": "Observed active call/queue identity, not a distinct visit or verified telephony channel. Only these five fields are exposed; no caller name/number, agent ID or queue position. Waiting has handled_at=null; handled has an integer handled_at. Runtime validation requires entered_at <= handled_at <= observation time for handled rows and entered_at <= observation time for every row."
+        "description": "Observed active call/queue identity, not a distinct visit or verified telephony channel. Exactly seven fields: call_id, queue_id, status, entered_at, handled_at, caller_id_name, caller_id_number. Caller fields are required but nullable and come only from the privacy-filtered collector marker. No identity-status, agent ID or queue position is exposed. Native legacy five-key rows become null identity; known-versus-unknown or differing known identities across replicas withhold the snapshot as inconsistent_sources rather than choosing a caller identity. Overview and Blackhole invalidation hints never include caller identity. Waiting has handled_at=null; handled has an integer handled_at. Runtime validation requires entered_at <= handled_at <= observation time for handled rows and entered_at <= observation time for every row."
       },
       "QueueLiveCalls": {
         "oneOf": [
@@ -50823,7 +50865,7 @@
                   },
                   "allow_alternate_number": {
                     "default": false,
-                    "description": "Allow a caller to enter and explicitly reconfirm a return number other than the current caller ID",
+                    "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
                     "type": "boolean"
                   },
                   "use_local_resources": {
@@ -50838,7 +50880,7 @@
                   },
                   "entry_key": {
                     "default": "6",
-                    "description": "Single DTMF digit that opens the callback menu while the caller is waiting",
+                    "description": "Single DTMF digit selecting callback while waiting (default 6). After a correlated queue pause, valid current caller ID with allow_alternate_number=false requests durable registration immediately, without another 1. With alternatives enabled it opens the destination-choice menu. This does not bypass destination authorization or returned-call confirmation 1.",
                     "pattern": "^[0-9]$",
                     "type": "string"
                   },
@@ -51342,7 +51384,7 @@
               },
               "allow_alternate_number": {
                 "default": false,
-                "description": "Allow a caller to enter and explicitly reconfirm a return number other than the current caller ID",
+                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
                 "type": "boolean"
               },
               "use_local_resources": {
@@ -51357,7 +51399,7 @@
               },
               "entry_key": {
                 "default": "6",
-                "description": "Single DTMF digit that opens the callback menu while the caller is waiting",
+                "description": "Single DTMF digit selecting callback while waiting (default 6). After a correlated queue pause, valid current caller ID with allow_alternate_number=false requests durable registration immediately, without another 1. With alternatives enabled it opens the destination-choice menu. This does not bypass destination authorization or returned-call confirmation 1.",
                 "pattern": "^[0-9]$",
                 "type": "string"
               },
@@ -51756,7 +51798,7 @@
               },
               "allow_alternate_number": {
                 "default": false,
-                "description": "Allow a caller to enter and explicitly reconfirm a return number other than the current caller ID",
+                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
                 "type": "boolean"
               },
               "use_local_resources": {
@@ -51771,7 +51813,7 @@
               },
               "entry_key": {
                 "default": "6",
-                "description": "Single DTMF digit that opens the callback menu while the caller is waiting",
+                "description": "Single DTMF digit selecting callback while waiting (default 6). After a correlated queue pause, valid current caller ID with allow_alternate_number=false requests durable registration immediately, without another 1. With alternatives enabled it opens the destination-choice menu. This does not bypass destination authorization or returned-call confirmation 1.",
                 "pattern": "^[0-9]$",
                 "type": "string"
               },

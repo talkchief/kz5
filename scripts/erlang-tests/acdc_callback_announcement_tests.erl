@@ -81,6 +81,13 @@ callback_offer_media_readiness_and_locale_test() ->
                  acdc_announcements:callback_offer_prompts(<<"he-il">>,Legacy)).
 
 mock_callback_audio() ->
+    ok=meck:new(acdc_cardinal_media,[passthrough,no_link]),
+    meck:expect(acdc_cardinal_media,prepare,fun(<<"en-us">>,_,_) ->
+        {ok,#{language => <<"en-us">>,
+              before_number => [{play,<<"/system_media/en-us/test-intro">>}],
+              after_number => [],
+              assets => #{<<"acdc-cardinal-v1-number-1">> => <<"/system_media/en-us/test-one">>}}}
+    end),
     ok=meck:new(acdc_gemini_prompts,[passthrough,no_link]),
     meck:expect(acdc_gemini_prompts,callback,fun(<<"6">>,_,_,<<"en-us">>,_) ->
         {ok,#{builtin_gemini=>true,media=>#{offer=>?BUILTIN_OFFER}}}
@@ -146,8 +153,8 @@ real_worker_timer() ->
         {Both, BothRef} = spawn_monitor(fun() -> acdc_announcements:init(Parent, Call, Combined) end),
         try
             receive {played, _, _} -> ?assert(false) after 300 -> ok end,
-            receive {played, _, [{prompt, <<"acdc-queue-your-current-position-is">>, _, _}
-                                ,{say, <<"1">>, <<"number">>}
+            receive {played, _, [{play, <<"/system_media/en-us/test-intro">>}
+                                ,{play, <<"/system_media/en-us/test-one">>}
                                 ,{play, ?BUILTIN_OFFER}]} -> ok
             after 2200 -> ?assert(false) end,
             stop(Both, BothRef),
@@ -171,7 +178,7 @@ real_worker_timer() ->
             ?assertEqual([], supervisor:which_children(Supervisor)),
             receive {played, _, _} -> ?assert(false) after 1100 -> ok end
         after exit(Supervisor, shutdown) end
-    after meck:unload(gen_listener), meck:unload(kapps_call_command), meck:unload(kz_events), meck:unload(acdc_gemini_prompts) end.
+    after meck:unload(gen_listener), meck:unload(kapps_call_command), meck:unload(kz_events), meck:unload(acdc_gemini_prompts), meck:unload(acdc_cardinal_media) end.
 
 call() ->
     kapps_call:set_account_id(<<"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">>,
@@ -238,7 +245,7 @@ worker_failure_lifecycle() ->
         receive {'DOWN', WaitingRef, process, Waiting, normal} -> ok after 1000 -> ?assert(false) end,
         receive {pending, Waiting, _} -> ?assert(false) after 0 -> ok end,
         ?assertEqual([], supervisor:which_children(Sup))
-    after exit(Sup, shutdown), meck:unload(kz_events), meck:unload(gen_listener), meck:unload(kapps_call_command), meck:unload(acdc_gemini_prompts) end.
+    after exit(Sup, shutdown), meck:unload(kz_events), meck:unload(gen_listener), meck:unload(kapps_call_command), meck:unload(acdc_gemini_prompts), meck:unload(acdc_cardinal_media) end.
 
 stop(Pid, Ref) ->
     exit(Pid, shutdown),

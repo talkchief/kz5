@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Private production and test BEAMs only. Root runs under the validation guard.
+set -Eeuo pipefail
+cardinal_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+cardinal_build=$(mktemp -d /tmp/kazoo-cardinal-media.XXXXXX)
+mkdir "$cardinal_build/production" "$cardinal_build/test"
+trap 'printf "Private cardinal media artifacts: %s\n" "$cardinal_build"' EXIT
+cd "$cardinal_root"
+export ERL_LIBS="$cardinal_root/deps:$cardinal_root/core:$cardinal_root/applications"
+export ERL_FLAGS='+S 1:1 +SDcpu 1 +SDio 1 +A 1'
+export ERL_CRASH_DUMP=/dev/null
+inputs=(applications/acdc/src/acdc_cardinal_media.erl
+        applications/acdc/src/acdc_cardinal_prompts.erl
+        applications/acdc/src/acdc_gemini_prompts.erl
+        applications/acdc/src/acdc_announcements.erl
+        applications/acdc/src/acdc_cardinal_map.hrl
+        applications/acdc/src/acdc_gemini_map.hrl
+        scripts/erlang-tests/acdc_cardinal_media_tests.erl
+        scripts/test-acdc-cardinal-media.sh)
+before=$(sha256sum -- "${inputs[@]}" | sha256sum | cut -d ' ' -f 1)
+erlc -Werror -I applications/acdc/src -I applications/acdc/include \
+    -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$cardinal_build/production" \
+    "${inputs[@]:0:4}"
+erlc -DTEST +debug_info -Werror -I applications/acdc/src -I applications/acdc/include \
+    -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$cardinal_build/test" \
+    "${inputs[@]:0:4}"
+erlc -Werror -I applications/acdc/src -o "$cardinal_build/test" "${inputs[6]}"
+erl -noshell -pa "$cardinal_build/test" \
+    -eval 'case eunit:test(acdc_cardinal_media_tests, [verbose]) of ok -> halt(0); _ -> halt(1) end.'
+after=$(sha256sum -- "${inputs[@]}" | sha256sum | cut -d ' ' -f 1)
+[[ $before == "$after" ]] || { printf '%s\n' 'Cardinal media source changed during validation' >&2; exit 1; }
+printf 'PASS cardinal media fixture; input SHA-256 %s\n' "$after"

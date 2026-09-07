@@ -4,11 +4,19 @@ Latest execution checkpoint September7: bridge installed through main SH with
 hash-pinned dependencies, protected copied FCM/APNs keys, enabled non-root
 service and actual local isolated AMQP consumer readiness; independent verify
 passes. Production10.1.0.28 remains unchanged. No real mobile sends/acceptance.
-Extension1000 internal caller ID is configured; account-local routing source
-passes29 internal/external policy tests, full canonical87 and13 production-module
-build; deployment/live acceptance remain open. All five pure cardinal grammars
-pass73240 parity cases; EN31 immutable assets are imported, ES25 generated plus
-two reuse identities. Remaining language assets/runtime still incomplete.
+Extension1000 internal caller ID is configured; four account-local callback
+modules are deployed with exact disk/runtime verification. Current account
+request probe authorizes1000 and builds one native endpoint; actual internal
+ringing/confirmation/retry remains open. Source passes29 internal/external
+policy tests, full canonical87 and13 production-module build. All five pure
+cardinal grammars pass73240 parity cases; EN31 immutable assets are imported,
+ES25 and FR14 generated plus two Spanish reuse identities. Remaining language
+assets/runtime still incomplete. `/apis` now documents internal callback routing.
+External-route live regression passed after deployment (7cfb8b): single6,
+complete Gemini confirmation before hangup, unanswered first attempt and second
+attempt connected to agent; zero scoped log errors/new cores. Evidence:
+`/var/log/kazoo-acceptance/20260907T144250Z`. Test fixture retained; not internal
+1000 live acceptance, complete cleanup or a production release pass.
 See latest PROJECT_HANDOFF.md and doc/push_bridge_development_acceptance.md.
 
 New or returning contributors: read [the engineering handoff](PROJECT_HANDOFF.md)

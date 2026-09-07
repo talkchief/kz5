@@ -82,6 +82,13 @@ async function offline() {
     assert.equal(stop({action: 'stop_monitoring', request_id, device_id}), false);
     assert.equal(callback({status: 'queued', number: 'private-number'}), false);
     const schedule = spec.components.schemas.queues.properties.callback.properties.announcement;
+    for (const method of ['post', 'patch']) {
+        const description = spec.paths['/accounts/{ACCOUNT_ID}/queues/{QUEUE_ID}'][method].description;
+        assert(description.includes('Account-local extension callbacks:'));
+        assert(description.includes('resolved again on every attempt'));
+        assert(description.includes('never falls back to a carrier'));
+        assert(!description.includes('An ordinary internal extension alone is not an authorized outbound callback route'));
+    }
     const validSchedule = ajv.compile(schedule);
     for (const data of [{}, {enabled: false}, {initial_delay: 1, interval: 15}, {initial_delay: 3600, interval: 3600}]) assert(validSchedule(data));
     for (const data of [{initial_delay: 0}, {interval: 14}, {interval: 3601}, {enabled: 'true'}]) assert.equal(validSchedule(data), false);

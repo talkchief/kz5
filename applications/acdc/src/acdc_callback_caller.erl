@@ -5,7 +5,7 @@
 -behaviour(gen_listener).
 
 -export([start_link/5, originate_ready_ack/2, cancel/2, handoff_complete/2]).
--export([handle_offnet_response/2, handle_call_event/2]).
+-export([handle_offnet_response/2, handle_resource_response/2, handle_call_event/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, handle_event/2
         ,terminate/2, code_change/3]).
 
@@ -21,6 +21,9 @@
                 ,<<"CHANNEL_EXECUTE_COMPLETE">>, <<"CHANNEL_EXECUTE_ERROR">>
                 ,<<"CHANNEL_BRIDGE">>]).
 -define(RESPONDERS, [{{?MODULE, 'handle_offnet_response'}, [{<<"resource">>, <<"offnet_resp">>}]}
+                    ,{{?MODULE, 'handle_resource_response'}, [{<<"resource">>, <<"originate_resp">>}
+                                                             ,{<<"error">>, <<"originate_resp">>}
+                                                             ,{<<"dialplan">>, <<"originate_ready">>}]}
                     ,{{?MODULE, 'handle_call_event'}, [{<<"call_event">>, <<"*">>}]}
                     ]).
 -define(DEFAULT_CONFIRM_PROMPT, <<"acdc-callback-returned-confirmation">>).
@@ -101,6 +104,10 @@ handoff_complete(Pid, LeaseToken) ->
 handle_offnet_response(JObj, Props) ->
     gen_listener:cast(props:get_value('server', Props), {'offnet_response', JObj}).
 
+-spec handle_resource_response(kz_json:object(), kz_term:proplist()) -> 'ok'.
+handle_resource_response(JObj, Props) ->
+    gen_listener:cast(props:get_value('server', Props), {'resource_response', JObj}).
+
 -spec handle_call_event(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_call_event(JObj, Props) ->
     gen_listener:cast(props:get_value('server', Props), {'call_event', JObj}).
@@ -137,6 +144,15 @@ handle_cast({'gen_listener', {'is_consuming', 'true'}}, #state{stage='starting'}
     start_attempt(State);
 handle_cast({'offnet_response', JObj}, State) ->
     handle_offnet(JObj, State);
+handle_cast({'resource_response', JObj}, #state{reservation=Reservation, caller_call_id=CallId, msg_id=MsgId}=State) ->
+    case kz_json:get_value(<<"pvt_internal_target">>, Reservation) of
+        'undefined' -> {'noreply', State};
+        _ ->
+            case acdc_callback_internal:resource_response(CallId, MsgId, JObj) of
+                {'ok', Response} -> handle_offnet(Response, State);
+                {'error', _} -> {'noreply', State}
+            end
+    end;
 handle_cast({'call_event', JObj}, State) ->
     handle_returned_event(JObj, State);
 handle_cast({'cancel', Token}, #state{lease_token=Token}=State) ->
@@ -196,13 +212,19 @@ start_attempt(#state{account_id=AccountId, queue_doc=QueueDoc
         {'error', Reason} -> terminal(Reason, 'settled', State);
         {'ok', Request} ->
             MsgId = kz_api:msg_id(Request),
-            try kapi_offnet_resource:publish_req(Request) of
+            try publish_request(Request) of
                 'ok' ->
                     {'noreply', set_timer(attempt_timeout_ms(State), 'waiting_ready'
                                          ,State#state{stage='waiting_ready', msg_id=MsgId})}
             catch
                 _:_ -> terminal('publish_uncertain', 'reconciliation_required', State)
             end
+    end.
+
+publish_request(Request) ->
+    case kz_api:event_type(Request) of
+        {<<"resource">>, <<"originate_req">>} -> kapi_resource:publish_originate_req(Request);
+        {<<"resource">>, <<"offnet_req">>} -> kapi_offnet_resource:publish_req(Request)
     end.
 
 handle_offnet(_JObj, #state{msg_id='undefined'}=State) ->

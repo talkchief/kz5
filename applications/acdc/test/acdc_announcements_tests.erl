@@ -16,17 +16,22 @@
 -define(DEFAULT_INCREASE_PROMPT, <<"queue-increase_in_call_volume">>).
 
 english_position_is_a_complete_sentence_test() ->
-    Config = acdc_announcements:get_config([]),
+    Audio = #{language => <<"en-us">>,
+              before_number => [{play, <<"/system_media/en-us/approved-intro">>}],
+              after_number => [],
+              assets => #{<<"acdc-cardinal-v1-number-1">> => <<"/system_media/en-us/approved-one">>}},
+    Config = (acdc_announcements:get_config([]))#{position_audio => Audio},
     ?assertEqual(
-       [{'prompt', <<"acdc-queue-your-current-position-is">>, <<"en-us">>, <<"A">>}
-       ,{'say', <<"1">>, <<"number">>}
+       [{play, <<"/system_media/en-us/approved-intro">>}
+       ,{play, <<"/system_media/en-us/approved-one">>}
        ], acdc_announcements:position_prompts(1, <<"en-us">>, Config)),
-    Custom = acdc_announcements:get_config(
-               [{<<"media">>, [{<<"you_are_at_position">>, <<"custom-position">>}]}]),
+    CustomAudio = Audio#{before_number := [{prompt, <<"custom-position">>, <<"en-us">>, <<"A">>}],
+                         after_number := [{play, <<"/system_media/en-us/approved-suffix">>}]},
+    Custom = Config#{position_audio := CustomAudio},
     ?assertEqual(
        [{'prompt', <<"custom-position">>, <<"en-us">>, <<"A">>}
-       ,{'say', <<"1">>, <<"number">>}
-       ,{'prompt', <<"acdc-queue-in_the_queue">>, <<"en-us">>, <<"A">>}
+       ,{play, <<"/system_media/en-us/approved-one">>}
+       ,{play, <<"/system_media/en-us/approved-suffix">>}
        ], acdc_announcements:position_prompts(1, <<"en-us">>, Custom)).
 
 initial_delay_runtime_test_() ->
@@ -36,7 +41,17 @@ initial_delay_runtime() ->
     Parent = self(),
     ok = meck:new(gen_listener, [passthrough, no_link]),
     ok = meck:new(kapps_call_command, [passthrough, no_link]),
-    meck:expect(gen_listener, call, fun(_, {queue_position, _}) -> 1 end),
+    ok = meck:new(kz_events, [passthrough, no_link]),
+    ok = meck:new(acdc_cardinal_media, [passthrough, no_link]),
+    meck:expect(kz_events, bind_call_id, fun(_) -> ok end),
+    meck:expect(kz_events, unbind_call_id, fun(_) -> ok end),
+    meck:expect(acdc_cardinal_media, prepare, fun(_, _, _) ->
+        {ok, #{language => <<"en-us">>,
+               before_number => [{play, <<"/system_media/en-us/approved-intro">>}],
+               after_number => [],
+               assets => #{<<"acdc-cardinal-v1-number-1">> => <<"/system_media/en-us/approved-one">>}}}
+    end),
+    meck:expect(gen_listener, call, fun(_, {queue_position, _}, 500) -> 1 end),
     meck:expect(kapps_call_command, audio_macro,
                 fun(Prompts, _) -> Parent ! {announcement_played, Prompts}, ok end),
     Call = kapps_call:set_language(<<"en-us">>, kapps_call:new()),
@@ -46,7 +61,7 @@ initial_delay_runtime() ->
     try
         receive {announcement_played, _} -> ?assert(false) after 200 -> ok end,
         receive
-            {announcement_played, [_Prefix, {say, <<"1">>, <<"number">>}]} ->
+            {announcement_played, [{play, _}, {play, <<"/system_media/en-us/approved-one">>}]} ->
                 ?assert(erlang:monotonic_time(millisecond) - Started >= 1000)
         after 1500 -> ?assert(false)
         end,
@@ -60,7 +75,8 @@ initial_delay_runtime() ->
         receive {announcement_played, _} -> ?assert(false) after 1100 -> ok end
     after
         exit(Pid, kill),
-        meck:unload(gen_listener), meck:unload(kapps_call_command)
+        meck:unload(gen_listener), meck:unload(kapps_call_command),
+        meck:unload(kz_events), meck:unload(acdc_cardinal_media)
     end.
 
 initial_delay_is_separate_bounded_and_never_immediate_test() ->

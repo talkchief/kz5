@@ -19,7 +19,9 @@ export ERL_LIBS="$project_root/deps:$project_root/core:$project_root/application
 export ERL_FLAGS='+S 1:1 +SDcpu 1 +SDio 1 +A 1'
 export ERL_CRASH_DUMP=/dev/null
 sources=(acdc_gemini_prompts cf_acdc_member acdc_callback_caller acdc_announcements
-         acdc_announcements_sup acdc_callback_menu acdc_language kapi_acdc_callback)
+         acdc_announcements_sup acdc_callback_menu acdc_language kapi_acdc_callback
+         acdc_callback_internal acdc_callback_policy acdc_callback_store
+         acdc_cardinal_media acdc_cardinal_prompts)
 source_files=()
 for module in "${sources[@]}"; do source_files+=("$project_root/applications/acdc/src/$module.erl"); done
 test_files=(acdc_gemini_prompts_tests acdc_gemini_canonical_callback_tests
@@ -46,6 +48,7 @@ inputs=("${source_files[@]}" "${test_sources[@]}"
         "$project_root/core/kazoo_documents/include/kazoo_documents.hrl"
         "$project_root/core/kazoo_sip/include/kzsip_uri.hrl"
         "$project_root/applications/acdc/src/acdc_gemini_map.hrl"
+        "$project_root/applications/acdc/src/acdc_cardinal_map.hrl"
         "$project_root/scripts/test-fixtures/gemini-runtime/kz_datamgr.erl"
         "$project_root/core/kazoo_amqp/src/api/kapi_dialplan.erl")
 before=$(sha256sum -- "${inputs[@]}" | sha256sum | cut -d ' ' -f 1)
