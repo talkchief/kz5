@@ -231,6 +231,10 @@ function endpoint(value, protocols, pathname) {
 async function main(natural) {
     const env = natural ? natural.env : process.env;
     const reconnectMode = reconnectOptions(env, natural);
+    const stallFlag = env.KAZOO_TEST_HTTP_STALL;
+    check([undefined, 'false', 'true'].includes(stallFlag), 'invalid_http_stall_mode');
+    const httpStallMode = stallFlag === 'true';
+    check(!httpStallMode || (!natural && !reconnectMode && env.KAZOO_TEST_REQUIRE_WEBSOCKET === 'true'), 'standalone_native_http_stall_required');
     const summaryMode = natural?.overview === true || (reconnectMode && env.KAZOO_TEST_RECONNECT_VIEW === 'summary');
     process.umask(0o077);
     check(process.getuid() === 0 && Number(process.versions.node.split('.')[0]) >= 20, 'root_and_node20_required');
@@ -256,8 +260,9 @@ async function main(natural) {
     const assets = ['index.html', 'js/main.js', 'js/templates.js', 'js/config.js', 'build-config.json',
         'css/style.css', 'apps/acdc/style/app.css', ...(preloadedAcdc ? [] : ['apps/acdc/app.js']),
         ...(scope.switching ? [ACCOUNT_BROWSER_ASSET, 'apps/common/style/app.css'] : [])];
-    const helperFiles = natural || reconnectMode ? ['test-fixtures/monster-live-call-observer.cjs',
+    const helperFiles = natural || reconnectMode || httpStallMode ? ['test-fixtures/monster-live-call-observer.cjs',
         'test-fixtures/queue-live-observer.cjs', 'api-docs-queue-live.cjs',
+        ...(httpStallMode ? ['test-fixtures/monster-live-http-stall.cjs'] : []),
         ...(reconnectMode ? ['test-fixtures/monster-live-reconnect.cjs'] : [])].map(p => path.join(__dirname, p)) : [];
     const pins = () => Object.fromEntries([__filename, ...helperFiles, ...assets.map(p => path.join(web, p))].map(p => [p, digest(readFile(p))]));
     const before = pins();
@@ -293,6 +298,7 @@ async function main(natural) {
             disposal_unsubscribe_sent: false, disposal_unsubscribe_ack: false,
             event_refetch_verified: false, broker_barrier_verified: false}, production_assets: {}, after: null};
     let browser, context, phase = 'bootstrap', stopping = false, fatal = null, serial = 0, callObserver, observerErrorClass, summary;
+    let httpStall, httpStallErrorClass;
     let firstDetailAck = null, firstDetailOrder = null, detailStarted = 0, detailInFlight = 0, maxDetailInFlight = 0;
     let firstOverviewAck = null, firstOverviewOrder = null, overviewStarted = 0, overviewInFlight = 0, maxOverviewInFlight = 0;
     let overviewGeneration = null;
@@ -378,7 +384,7 @@ async function main(natural) {
         checkpoint('protected_inputs_ready'); const secret = credentials();
         const {chromium} = require(process.env.KAZOO_PLAYWRIGHT_MODULE || '/tmp/kazoo-ui-browser.eXdEqS/node_modules/playwright');
         checkpoint('launching_chromium'); browser = await chromium.launch({headless: true, args: resolver ? ['--host-resolver-rules=' + resolver] : []});
-        const deadline = setTimeout(() => { fail('overall_timeout'); browser.close().catch(() => {}); }, natural ? 150000 : 105000);
+        const deadline = setTimeout(() => { fail('overall_timeout'); browser.close().catch(() => {}); }, natural || httpStallMode ? 150000 : 105000);
         try {
             context = await browser.newContext({viewport: {width: 1600, height: 1000}, serviceWorkers: 'block'});
             check(typeof context.routeWebSocket === 'function', 'playwright_socket_route_required');
@@ -530,6 +536,12 @@ async function main(natural) {
                 } catch (_) { fail('socket_guard_failed'); route.close(); }
             });
             const page = await context.newPage(); page.setDefaultTimeout(15000);
+            if (httpStallMode) {
+                const {createHttpStallProbe, HttpStallError} = require('./test-fixtures/monster-live-http-stall.cjs');
+                httpStallErrorClass = HttpStallError;
+                httpStall = createHttpStallProbe({page, apiOrigin: api.origin, accountId: account, queueId: queue, checkClean});
+                await httpStall.install();
+            }
             if (natural) {
                 const {createBrowserCallObserver, createBrowserSummaryObserver, readRenderedCall, BrowserCallError} = require('./test-fixtures/monster-live-call-observer.cjs');
                 observerErrorClass = BrowserCallError;
@@ -579,10 +591,12 @@ async function main(natural) {
             page.on('requestfinished', r => { if (requests.has(r)) { if (requests.get(r).overview) overviewInFlight--; else detailInFlight--; } });
             page.on('requestfailed', r => {
                 if (requests.has(r)) { if (requests.get(r).overview) overviewInFlight--; else detailInFlight--; }
+                if (httpStall && httpStall.expectedFailure(r)) return;
                 if (!stopping) { httpFailure(r, 0); if (scopedRequests.has(r)) result.counts.failed_requests++; }
             });
             page.on('response', response => {
                 const u = new URL(response.url()), item = requests.get(response.request());
+                if (httpStall) track(httpStall.response(response), 'http_stall_real_response_invalid');
                 if (item) item.status = response.status();
                 const responseOrder = same(u, api) && u.pathname.startsWith('/v2/')
                     ? timeline('http_response', category(u), response.status(), httpOrders.get(response.request()) || null) : null;
@@ -945,6 +959,13 @@ async function main(natural) {
             }
             // Normal navigation retires the local controller, then closing the
             // ephemeral context removes the session. No persistent logout write.
+            if (httpStallMode) {
+                checkpoint('holding_real_detail_get_through_watchdog');
+                await httpStall.deadlineRecovery(); checkClean();
+                result.checks.push('real_get_watchdog_retains_snapshot_error_and_manual_refresh_recovers');
+                checkpoint('holding_reconciliation_get_for_normal_disposal');
+                await httpStall.prepareDisposal();
+            }
             phase = 'cleanup';
             checkpoint(summaryMode ? 'navigating_away_from_live_overview' : 'navigating_away_from_live_detail');
             disposalStartOrder = timeline('navigation_disposal', 'selected_queue_subscription');
@@ -969,6 +990,12 @@ async function main(natural) {
                         exact_page_bindings_verified: true, all_unsubscribe_acks: true, final_subscriptions_empty: true};
                 }
             }
+            if (httpStallMode) {
+                checkpoint('releasing_real_get_after_disposal');
+                await httpStall.finishDisposal();
+                result.http_stall = httpStall.evidence();
+                result.checks.push('owned_aborted_late_response_cannot_remount_disposed_queue_detail');
+            }
             if (scope.switching) {
                 // Restore only after normal detail disposal and its real ACK.
                 // Failures instead close the ephemeral context; no logout write.
@@ -990,11 +1017,16 @@ async function main(natural) {
     } catch (e) {
         result.failure = fatal || (e instanceof Failure || (observerErrorClass && e instanceof observerErrorClass)
             || (reconnectErrorClass && e instanceof reconnectErrorClass)
+            || (httpStallErrorClass && e instanceof httpStallErrorClass)
             ? e.message : 'browser_or_input_step_failed');
         result.failure_phase = phase; result.failure_checkpoint = result.checkpoints.at(-1) || 'preflight';
     }
     finally {
         stopping = true;
+        if (httpStall) {
+            result.http_stall = httpStall.evidence();
+            await httpStall.close().catch(() => fail('http_stall_cleanup_failed'));
+        }
         if (releaseReconnect) releaseReconnect();
         if (reconnectProbe && !result.reconnect) result.reconnect = reconnectProbe.evidence();
         if (context) await context.close().catch(() => fail('context_cleanup_failed'));

@@ -16,7 +16,10 @@ the latest engineering handoff takes precedence for current deployment state.
   and duration heading read “In Progress.” Deployed and browser verified.
 - **P0-25 deployed, acceptance incomplete:** bounded reads and app-loader race
   fixes pass initial view, account switching and four reconnect scenarios.
-  Next: controlled HTTP stalls/late replies and loader-delivery failure tests.
+  Controlled real HTTP stall/recovery/disposal now passes nine deployed-browser
+  checks05bc67/65a97a and eight offline groups51b9fc/830c4a. Next: delivered-late
+  JavaScript callbacks and never-settling loader delivery (transport cancellation
+  is not execution of a late callback). See `doc/monster_live_http_stall_acceptance.md`.
 - **P0-26 deployed, acceptance incomplete:** actual queue creation returned201;
   saved settings were read back and the exact test queue was removed. Next:
   browser edit/PATCH, validation failures and uncertain-operation recovery.

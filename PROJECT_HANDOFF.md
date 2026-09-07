@@ -6,6 +6,18 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Deployed HTTP-stall acceptance — September7:** eight offline groups pass
+51b9fc/830c4a and actual deployed browser05bc67/65a97a passes nine checks.
+Two real selected-detail responses were held past the watchdog or normal
+navigation. Cached snapshot stayed intact, stale/error/usable Refresh and fresh
+GET recovery passed; canceled responses did not remount the disposed view.
+Zero unexpected browser/HTTP errors and exact native ACK cleanup. Both paused
+services restored; all nine services active and zero calls (930f79). Receipt
+`/tmp/kazoo-monster-live-deployed.SYDVca/receipt.json`; implementation and
+limitations in `doc/monster_live_http_stall_acceptance.md`. This proves canceled
+transport recovery, not execution/ignoring of a delivered late JS callback.
+P0-25 remains open for that distinction and never-settling module delivery.
+
 **Periodic master publication — September7:** at the operator's explicit
 request,135 committed changes were fast-forwarded from remote5756082 to
 `419791716e5e9e890e684d253f6dcd3c0193bb04`. Push6ca149/f6e250 succeeded;
