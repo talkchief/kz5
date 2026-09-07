@@ -834,6 +834,7 @@ define(function(require) {
 			controller.stopped = true;
 			clearTimeout(controller.coalesceTimer);
 			clearTimeout(controller.reconcileTimer);
+			clearTimeout(controller.admissionTimer);
 			if (controller.observer) { controller.observer.disconnect(); }
 			_.each(controller.bindings, function(binding) { binding.cancel && binding.cancel(); });
 			controller.bindings = {};
@@ -852,7 +853,8 @@ define(function(require) {
 			if (!controller || !controller.supported) { return 'unavailable'; }
 			var states = _.map(controller.bindings, 'state');
 			if (!states.length) { return 'empty'; }
-			return _.find(['error', 'disconnected', 'connecting'], function(state) { return states.indexOf(state) >= 0; }) || 'acknowledged';
+			return _.find(['error', 'disconnected', 'connecting'], function(state) { return states.indexOf(state) >= 0; })
+				|| (states.indexOf('queued') >= 0 ? 'connecting' : 'acknowledged');
 		},
 
 		paintLiveTransport: function(controller) {
@@ -876,49 +878,93 @@ define(function(require) {
 			}, 100);
 		},
 
+		disconnectLiveSubscriptions: function(controller) {
+			if (!this.liveControllerActive(controller)) { return; }
+			// Retire our handles so framework reconnect cannot replay them in parallel.
+			// Keep only bounded local intent; one fresh handle awaits its actual ACK.
+			controller.admitting = null;
+			controller.admissionAfter = Date.now() + 1000;
+			_.each(controller.bindings, function(binding) {
+				binding.attempt = null; binding.state = 'disconnected'; binding.retryAfter = controller.admissionAfter;
+				binding.cancel && binding.cancel(); binding.cancel = null;
+			});
+			this.paintLiveTransport(controller);
+			this.pumpLiveSubscriptions(controller);
+		},
+
+		pumpLiveSubscriptions: function(controller) {
+			var self = this;
+			if (!self.liveControllerActive(controller) || !controller.supported || controller.pumping) { return; }
+			clearTimeout(controller.admissionTimer); controller.admissionTimer = null;
+			controller.pumping = true;
+			try {
+				while (self.liveControllerActive(controller) && !controller.admitting) {
+					var pending = _.filter(controller.bindings, function(binding) { return ['queued', 'error', 'disconnected'].indexOf(binding.state) >= 0; });
+					if (!pending.length) { break; }
+					var earliest = Math.max(controller.admissionAfter || 0, _.min(_.map(pending, 'retryAfter'))), now = Date.now();
+					if (earliest > now) {
+						controller.admissionTimer = setTimeout(function() { self.pumpLiveSubscriptions(controller); }, earliest - now); break;
+					}
+					self.admitLiveSubscription(controller, _.find(pending, function(binding) { return binding.retryAfter <= now; }));
+				}
+			} finally { controller.pumping = false; }
+			self.paintLiveTransport(controller);
+		},
+
+		admitLiveSubscription: function(controller, binding) {
+			var self = this, id = binding.id, key = 'queue_live.changed.' + id, attempt = { settled: false };
+			binding.cancel && binding.cancel(); binding.cancel = null;
+			binding.attempt = attempt; binding.state = 'connecting'; controller.admitting = attempt;
+			function active() { return self.liveControllerActive(controller) && controller.bindings[id] === binding && binding.attempt === attempt; }
+			function failed(info) {
+				if (!active()) { return; }
+				if (info && info.code === 'disconnected') { self.disconnectLiveSubscriptions(controller); return; }
+				if (attempt.settled) { return; }
+				attempt.settled = true; binding.state = 'error'; binding.retryAfter = Date.now() + 15000;
+				controller.admissionAfter = Date.now() + 1000;
+				if (controller.admitting === attempt) { controller.admitting = null; }
+				binding.cancel && binding.cancel(); binding.cancel = null;
+				self.paintLiveTransport(controller); self.pumpLiveSubscriptions(controller);
+			}
+			if (!monster.socket || !_.isFunction(monster.socket.bind) || !_.isFunction(monster.socket.connect)) { failed(); return; }
+			try {
+				// Slot is reserved before bind, including synchronous shared ACKs.
+				var cancel = monster.socket.bind({ accountId: controller.accountId, binding: key, source: 'acdc',
+					callback: function(event) {
+						if (active() && binding.state === 'acknowledged' && _.isPlainObject(event) && event.version === 1
+							&& event.account_id === controller.accountId && event.queue_id === id) { self.queueLiveRefresh(controller); }
+					}, lifecycle: { timeoutMs: 3000,
+						onAck: function(info) {
+							if (!active() || attempt.settled || !info || info.accountId !== controller.accountId || info.binding !== key) { return; }
+							attempt.settled = true; binding.state = 'acknowledged';
+							if (controller.admitting === attempt) { controller.admitting = null; }
+							self.paintLiveTransport(controller); self.queueLiveRefresh(controller); self.pumpLiveSubscriptions(controller);
+						},
+						onError: failed,
+						onDisconnect: function() { if (active()) { self.disconnectLiveSubscriptions(controller); } }
+					} });
+				if (!_.isFunction(cancel)) { failed(); return; }
+				if (!active()) { cancel(); return; }
+				if (binding.state === 'error') { cancel(); return; }
+				binding.cancel = cancel;
+				if (!attempt.settled && monster.socket.connect() === false) { failed(); }
+			} catch (error) { failed(); }
+		},
+
 		syncLiveSubscriptions: function(controller, raw) {
-			var self = this, wanted = raw.capabilities.websocket_updates ? _.map(raw.queues, 'id') : [], added = false;
+			var self = this, wanted = raw.capabilities.websocket_updates ? _.map(raw.queues, 'id') : [];
 			controller.supported = raw.capabilities.websocket_updates;
 			_.each(controller.bindings, function(binding, id) {
-				if (wanted.indexOf(id) < 0 || (binding.state === 'error' && Date.now() >= binding.retryAfter)) {
-					delete controller.bindings[id]; binding.cancel && binding.cancel();
+				if (wanted.indexOf(id) < 0) {
+					if (controller.admitting === binding.attempt) { controller.admitting = null; }
+					delete controller.bindings[id]; binding.attempt = null; binding.cancel && binding.cancel();
 				}
 			});
 			_.each(wanted, function(id) {
-				if (controller.bindings[id]) { return; }
-				var binding = { state: 'connecting', cancel: null }, key = 'queue_live.changed.' + id;
-				controller.bindings[id] = binding;
-				function active() { return self.liveControllerActive(controller) && controller.bindings[id] === binding; }
-				function failed(state) {
-					if (active()) {
-						binding.state = state;
-						if (state === 'error') { binding.retryAfter = Date.now() + 15000; }
-						self.paintLiveTransport(controller);
-					}
-				}
-				if (!monster.socket || !_.isFunction(monster.socket.bind) || !_.isFunction(monster.socket.connect)) { failed('error'); return; }
-				try {
-					// Register first: an already acknowledged shared binding can ACK synchronously.
-					binding.cancel = monster.socket.bind({ accountId: controller.accountId, binding: key, source: 'acdc',
-						callback: function(event) {
-							if (active() && binding.state === 'acknowledged' && _.isPlainObject(event) && event.version === 1
-								&& event.account_id === controller.accountId && event.queue_id === id) { self.queueLiveRefresh(controller); }
-						}, lifecycle: { timeoutMs: 3000,
-							onAck: function(info) {
-								if (!active() || !info || info.accountId !== controller.accountId || info.binding !== key) { return; }
-								binding.state = 'acknowledged'; self.paintLiveTransport(controller); self.queueLiveRefresh(controller);
-							},
-							onError: function() { failed('error'); },
-							onDisconnect: function() { failed('disconnected'); }
-						} });
-					if (!_.isFunction(binding.cancel)) { binding.cancel = null; failed('error'); }
-					else { added = true; if (!active()) { binding.cancel(); } }
-				} catch (error) { failed('error'); }
+				if (!controller.bindings[id]) { controller.bindings[id] = { id: id, state: 'queued', retryAfter: 0, cancel: null, attempt: null }; }
 			});
-			if (added && self.liveControllerActive(controller)) {
-				try { if (monster.socket.connect() === false) { throw new Error('unavailable'); } }
-				catch (error) { _.each(controller.bindings, function(binding) { binding.state = 'error'; binding.retryAfter = Date.now() + 15000; }); }
-			}
+			if (!controller.supported) { clearTimeout(controller.admissionTimer); controller.admissionTimer = null; }
+			else { self.pumpLiveSubscriptions(controller); }
 			// ACK is neither a broker-binding barrier nor replay. Periodic repair stays
 			// enabled after transient subscription errors while the capability is true.
 			if (!controller.supported) { clearTimeout(controller.reconcileTimer); controller.reconcileTimer = null; }
@@ -934,11 +980,11 @@ define(function(require) {
 		},
 
 		// One bounded observation page, never a recursive all-pages inventory read.
-		// Supplementary roster/global status are not runtime queue eligibility.
+		// Detail includes authorized roster/runtime observations in the same GET.
 		requestLiveDashboard: function(queueId, callback, page) {
 			var self = this, accountId = self.accountId, generation = self.appFlags.acdc.requestGeneration,
 				controller = self.appFlags.acdc.liveDashboardController,
-				paging = page || { cursor: null, size: 50, history: [] }, results = {}, errors = {},
+				paging = page || { cursor: null, size: 50, history: [] },
 				data = { accountId: accountId, pageSize: paging.size },
 				resource = queueId ? 'acdc.live.detail' : (paging.cursor ? 'acdc.live.page' : 'acdc.live.overview');
 
@@ -955,19 +1001,7 @@ define(function(require) {
 						|| !self.liveSnapshotValid(envelope.data, accountId, queueId, paging)) {
 						callback({ live: true }, {}); return;
 					}
-					results.live = envelope.data; results.queues = envelope.data.queues;
-					if (!queueId) { callback(errors, results); return; }
-					var pending = 3;
-					_.each([{ key: 'roster', resource: 'acdc.queues.roster', complete: true },
-						{ key: 'agents', resource: 'acdc.agents.list', complete: true },
-						{ key: 'statuses', resource: 'acdc.agents.statuses' }], function(item) {
-						if (!self.isCurrentView(generation, 'dashboard', accountId) || (controller && !self.liveControllerActive(controller))) { return; }
-						var request = item.complete ? self.requestCompleteList : self.request;
-						request.call(self, item.resource, { accountId: accountId, queueId: encodeURIComponent(queueId) }, function(error, value) {
-							if (error) { errors[item.key] = true; } else { results[item.key] = value; }
-							if (--pending === 0) { callback(errors, results); }
-						});
-					});
+					callback({}, { live: envelope.data, queues: envelope.data.queues });
 				}
 			});
 		},
@@ -996,7 +1030,7 @@ define(function(require) {
 					|| (available && !source.all_known_sources_responded)
 					|| ((source.status === 'unavailable') !== (source.reason === 'source_unavailable'))
 					|| (source.status === 'unavailable' && source.all_known_sources_responded)
-					|| caps.live_call_details !== Boolean(queueId) || caps.agent_runtime !== false
+					|| caps.live_call_details !== Boolean(queueId) || caps.agent_runtime !== Boolean(queueId)
 					|| !_.isBoolean(caps.websocket_updates) || caps.historical_reporting !== false) { return false; }
 				if (source.observation_started_at === null || source.observation_finished_at === null) {
 					if (source.observation_started_at !== null || source.observation_finished_at !== null || (available && !empty)) { return false; }
@@ -1021,7 +1055,8 @@ define(function(require) {
 								&& (key !== 'max_current_wait_seconds' || integer(n)));
 						});
 				}) || (pagination.has_more && pagination.next_start_queue_id <= previous)) { return false; }
-				if (!queueId) { return raw.calls === null; }
+				if (!queueId) { return raw.calls === null && raw.agents === null; }
+				if (!this.liveAgentsValid(raw.agents)) { return false; }
 				var calls = raw.calls, last = null, seen = Object.create(null);
 				if (!_.isPlainObject(calls) || !_.isBoolean(calls.available) || !_.isBoolean(calls.complete) || !_.isBoolean(calls.truncated)
 					|| calls.limit !== 200 || calls.order !== 'queue_id_entered_call_id' || !_.isArray(calls.rows) || calls.rows.length > 200
@@ -1038,6 +1073,33 @@ define(function(require) {
 						|| (last && (row.entered_at < last.entered_at || (row.entered_at === last.entered_at && utf8(row.call_id) <= utf8(last.call_id))))) { return false; }
 					seen[row.call_id] = true; last = row; return true;
 				});
+			} catch (error) { return false; }
+		},
+
+		liveAgentsValid: function(agents) {
+			var exact = function(value, keys) { return _.isPlainObject(value) && Object.keys(value).sort().join(',') === keys; },
+				positive = function(value) { return typeof value === 'number' && isFinite(value) && Math.floor(value) === value && value > 0 && value <= 9007199254740991; },
+				previous = null, allObserved = true;
+			try {
+				if (!exact(agents, 'endpoint_reachability_verified,limit,observation_finished,observation_started,roster_complete,rows,runtime_complete,truncated')
+					|| agents.limit !== 200 || !_.isBoolean(agents.truncated) || agents.roster_complete !== !agents.truncated
+					|| !_.isBoolean(agents.runtime_complete) || agents.endpoint_reachability_verified !== false
+					|| !_.isArray(agents.rows) || agents.rows.length > 200 || (agents.truncated && agents.rows.length !== 200)) { return false; }
+				var timed = agents.observation_started !== null || agents.observation_finished !== null;
+				if (timed && (!positive(agents.observation_started) || !positive(agents.observation_finished)
+					|| agents.observation_finished < agents.observation_started)) { return false; }
+				if (!_.every(agents.rows, function(row) {
+					if (!exact(row, 'agent_id,name,observed,queue_member,reason,state') || !/^[a-f0-9]{32}$/.test(row.agent_id)
+						|| typeof row.agent_id !== 'string' || (previous !== null && row.agent_id <= previous)
+						|| typeof row.name !== 'string' || !row.name.length || /[\x00-\x1f\x7f]/.test(row.name)
+						|| encodeURIComponent(row.name).replace(/%[A-F0-9]{2}/g, 'x').length > 256 || !_.isBoolean(row.observed)) { return false; }
+					previous = row.agent_id; allObserved = allObserved && row.observed;
+					if (!timed && (row.observed || row.reason !== 'source_unavailable')) { return false; }
+					return row.observed ? _.isBoolean(row.queue_member) && row.reason === 'observed'
+						&& ['wait', 'sync', 'ready', 'ringing', 'answered', 'wrapup', 'paused', 'outbound'].indexOf(row.state) >= 0
+						: row.queue_member === null && row.state === null && ['not_observed', 'inconsistent_sources', 'source_unavailable'].indexOf(row.reason) >= 0;
+				})) { return false; }
+				return agents.runtime_complete === (timed && allObserved && !agents.truncated);
 			} catch (error) { return false; }
 		},
 
@@ -1061,12 +1123,8 @@ define(function(require) {
 				queues = _.sortBy(_.map(results.queues, function(queue) {
 					return { id: queue.id, name: self.liveQueueName(queue) };
 				}), function(queue) { return queue.name.toLowerCase(); }),
-				selected = _.find(queues, { id: queueId }), statuses = !errors.statuses && _.isPlainObject(results.statuses)
-					? self.normalizeStatuses(results.statuses) : {},
-				agents = !errors.agents && _.isArray(results.agents) ? results.agents : [],
-				rosterValid = !errors.roster && _.isArray(results.roster) && results.roster.length <= 1000
-					&& _.every(results.roster, function(id) { return typeof id === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(id); })
-					&& _.uniq(results.roster).length === results.roster.length,
+				selected = _.find(queues, { id: queueId }), agents = live.agents,
+				rosterValid = Boolean(queueId && self.liveAgentsValid(agents)),
 				rows = active && active.available ? active.rows : [],
 				cards = _.map(queues, function(queue) {
 					var observed = _.find(live.queues, { id: queue.id });
@@ -1079,8 +1137,7 @@ define(function(require) {
 
 			if (source.status !== 'available') { warnings.push(labels.statsUnavailable); }
 			if (queueId && !rosterValid) { warnings.push(labels.rosterUnavailable); }
-			if (queueId && (errors.agents || !_.isArray(results.agents))) { warnings.push(labels.namesUnavailable); }
-			if (queueId && (errors.statuses || !_.isPlainObject(results.statuses))) { warnings.push(labels.statusUnavailable); }
+			if (rosterValid && !agents.runtime_complete) { warnings.push(labels.runtimeIncomplete); }
 			return {
 				queueRows: cards, queueCount: queues.length, hasQueues: queues.length > 0,
 				hasNextPage: live.pagination.has_more, hasPreviousPage: meta.page.history.length > 0,
@@ -1095,15 +1152,19 @@ define(function(require) {
 				responseTime: asOf === null ? '—' : new Date(asOf * 1000).toLocaleTimeString(),
 				staleAfter: Math.max(1, 30000 - age),
 				warnings: warnings, hasWarnings: warnings.length > 0, rosterAvailable: rosterValid,
-				rosterCount: rosterValid ? results.roster.length : '—',
+				rosterCount: rosterValid && agents.roster_complete ? agents.rows.length : '—',
+				agentRosterStatus: rosterValid && agents.roster_complete ? labels.rosterComplete : labels.rosterTruncated,
+				agentRuntimeStatus: rosterValid && agents.runtime_complete ? labels.runtimeComplete : labels.runtimeIncomplete,
+				agentObservationTime: rosterValid && agents.observation_finished !== null ? new Date(agents.observation_finished * 1000).toLocaleTimeString() : '—',
+				agentObservationStale: rosterValid && agents.observation_finished !== null && (Date.now() - agents.observation_finished * 1000 >= 30000
+					|| agents.observation_finished * 1000 > Date.now() + 60000),
 				callsTruncated: Boolean(active && active.truncated), observedCallCount: active && active.available ? active.observed_count : '—',
-				membersTruncated: rosterValid && results.roster.length > 200,
-				members: rosterValid ? _.map(results.roster.slice(0, 200), function(id) {
-					var agent = _.find(agents, function(item) { return item && (item.id || item._id) === id; }),
-						status = statuses[id];
-					return { id: id, name: agent ? self.getAgentName(agent) : id,
-						status: typeof status === 'string' && Object.prototype.hasOwnProperty.call(labels.statuses, status)
-							? labels.statuses[status] : labels.statuses.unknown };
+				membersTruncated: rosterValid && agents.truncated,
+				members: rosterValid ? _.map(agents.rows, function(agent) {
+					return { id: agent.agent_id, name: agent.name, observed: agent.observed,
+						status: agent.observed ? labels.runtimeStates[agent.state] : labels.statuses.unknown,
+						membership: agent.observed ? (agent.queue_member ? labels.queueMember : labels.queueNotMember) : labels.statuses.unknown,
+						reason: agent.observed ? '' : labels.agentReasons[agent.reason] };
 				}) : [],
 				calls: _.map(rows, function(row) {
 					return { status: labels.callStatuses[row.status], statusClass: row.status === 'waiting' ? 'waiting' : 'handling',
@@ -1160,10 +1221,17 @@ define(function(require) {
 		mountLiveDashboard: function(snapshot, generation, state) {
 			var self = this, labels = self.i18n.active().acdc.dashboard,
 				controller = self.appFlags.acdc.liveDashboardController, transport = self.liveTransportState(controller),
+				previousSearch = controller && !snapshot.queueId && controller.view && controller.view.find('.acdc-live-search'),
+				searchFocused = previousSearch && previousSearch[0] && typeof document !== 'undefined' && document.activeElement === previousSearch[0],
+				selection = searchFocused && { start: previousSearch[0].selectionStart, end: previousSearch[0].selectionEnd, direction: previousSearch[0].selectionDirection },
 				renderState = _.assign({}, state, { transport: transport, transportStale: transport === 'error' || transport === 'disconnected' }),
 				model = self.formatLiveDashboard(snapshot.results, snapshot.errors, _.assign({}, snapshot, renderState)),
-				view = $(self.getTemplate({ name: snapshot.queueId ? 'dashboard-detail' : 'dashboard', data: model }));
+				view = $(self.getTemplate({ name: snapshot.queueId ? 'dashboard-detail' : 'dashboard', data: model })),
+				search = view.find('.acdc-live-search');
 
+			// Capture immediately before each replacement, including edits made while
+			// a GET was held. A new navigation controller never inherits this state.
+			if (previousSearch && typeof previousSearch.val() === 'string') { controller.searchQuery = previousSearch.val(); }
 			self.clearLiveDashboardTimer();
 			view.find('.acdc-refresh').on('click', function() { self.renderLiveDashboard(snapshot.queueId, undefined, snapshot.page); });
 			view.find('.acdc-live-next').on('click', function() {
@@ -1189,7 +1257,7 @@ define(function(require) {
 				self.renderQueueForm($(this).hasClass('acdc-live-add') ? undefined : snapshot.queueId);
 			});
 			view.find('.acdc-live-agents').on('click', function() { self.renderSection('agents'); });
-			view.find('.acdc-live-search').on('input', function() {
+			search.on('input', function() {
 				var query = $(this).val().toLowerCase().trim(), visible = 0;
 				view.find('.acdc-live-queue-card').each(function() {
 					var show = $(this).find('.acdc-live-queue-name').text().toLowerCase().indexOf(query) >= 0;
@@ -1197,7 +1265,14 @@ define(function(require) {
 				});
 				view.find('.acdc-live-no-match').prop('hidden', visible > 0 || !model.hasQueues);
 			});
+			if (controller && !snapshot.queueId && typeof controller.searchQuery === 'string') { search.val(controller.searchQuery).trigger('input'); }
 			self.getContentContainer().empty().append(view);
+			if (searchFocused && search[0]) {
+				search[0].focus();
+				if (typeof selection.start === 'number' && typeof selection.end === 'number') {
+					search[0].setSelectionRange(selection.start, selection.end, selection.direction);
+				}
+			}
 			if (controller) {
 				controller.view = view;
 				if (controller.observer) { controller.observer.disconnect(); }

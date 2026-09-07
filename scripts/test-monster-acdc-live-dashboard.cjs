@@ -58,6 +58,9 @@ async function main() {
                 max_current_wait_seconds: waiting ? 120 : null, records_entered: waiting + handled,
                 waiting_in_cohort: waiting, handled_in_cohort: handled, processed_in_cohort: 0, abandoned_in_cohort: 0,
                 average_answered_wait_seconds: handled ? 30 : null, average_processed_talk_seconds: null});
+            window.agentsDto = () => ({limit: 200, roster_complete: true, truncated: false, runtime_complete: true,
+                endpoint_reachability_verified: false, observation_started: Math.floor(Date.now() / 1000), observation_finished: Math.floor(Date.now() / 1000),
+                rows: [{agent_id: 'b'.repeat(32), name: 'Agent', observed: true, queue_member: true, state: 'ready', reason: 'observed'}]});
             window.dto = (detail = false) => {
                 const now = Math.floor(Date.now() / 1000);
                 return {version: 1, account_id: A, generated_at: now,
@@ -71,7 +74,8 @@ async function main() {
                     source: {coverage: 'observed_replicas', all_known_sources_responded: true, consistent: true,
                         atomic_snapshot: false, status: 'available', reason: 'consensus',
                         observation_started_at: now, observation_finished_at: now},
-                    capabilities: {live_call_details: detail, agent_runtime: false, websocket_updates: false, historical_reporting: false}};
+                    agents: detail ? agentsDto() : null,
+                    capabilities: {live_call_details: detail, agent_runtime: detail, websocket_updates: false, historical_reporting: false}};
             };
             window.partial = (detail = false, reason = 'source_timeout') => {
                 const d = dto(detail); d.source.status = 'partial'; d.source.reason = reason;
@@ -85,14 +89,16 @@ async function main() {
                 app.accountId = A; app.appFlags.acdc.currentTab = 'dashboard'; app.appFlags.acdc.requestGeneration = 0;
                 app.appFlags.acdc.container = $('#shell'); delete app.appFlags.acdc.liveDashboardSnapshot;
                 window.ledger = []; window.held = []; window.defer = false; window.mainError = null;
-                window.supplementErrors = false; window.reply = dto(false);
+                window.reply = dto(false);
                 window.socketBindings = []; window.socketConnects = 0; window.syncAck = false;
                 monster.socket = {
                     connect() { socketConnects++; return true; },
                     bind(params) {
-                        const entry = {params, cancelled: 0}; socketBindings.push(entry);
-                        if (syncAck) params.lifecycle.onAck({accountId: params.accountId, binding: params.binding, connectionGeneration: 1});
-                        return () => { entry.cancelled++; };
+                        if (socketBindings.some(b => b.pending && !b.cancelled)) throw Error('Parallel native authorization attempt');
+                        const entry = {params: {...params, lifecycle: {...params.lifecycle}}, cancelled: 0, pending: true}; socketBindings.push(entry);
+                        for (const key of ['onAck', 'onError', 'onDisconnect']) entry.params.lifecycle[key] = info => { entry.pending = false; params.lifecycle[key](info); };
+                        if (syncAck) entry.params.lifecycle.onAck({accountId: params.accountId, binding: params.binding, connectionGeneration: 1});
+                        return () => { entry.cancelled++; entry.pending = false; };
                     }
                 };
                 app.getContentContainer().empty();
@@ -103,11 +109,7 @@ async function main() {
                         if (mainError) return options.error(mainError);
                         return options.success({status: 'success', data: reply});
                     }
-                    if (!['acdc.queues.roster', 'acdc.agents.list', 'acdc.agents.statuses'].includes(options.resource)) throw Error('Unexpected request ' + options.resource);
-                    if (supplementErrors) return options.error({status: 503});
-                    options.success({status: 'success', data: options.resource === 'acdc.queues.roster' ? ['b'.repeat(32)]
-                        : options.resource === 'acdc.agents.list' ? [{id: 'b'.repeat(32), first_name: 'Agent'}]
-                            : {['b'.repeat(32)]: 'ready'}});
+                    throw Error('Unexpected supplemental request ' + options.resource);
                 };
             };
             window.resolve = (index, data, error) => {
@@ -159,12 +161,12 @@ async function main() {
                 reset(); reply = dto(true); reply.calls.rows[0].caller_id_number = 'NEVER-RENDER-CALLER';
                 app.renderLiveDashboard(Q);
             });
-            assert.deepEqual((await page.evaluate(() => ledger)).map(r => r.resource),
-                ['acdc.live.detail', 'acdc.queues.roster', 'acdc.agents.list', 'acdc.agents.statuses']);
+            assert.deepEqual((await page.evaluate(() => ledger)).map(r => r.resource), ['acdc.live.detail']);
             assert.deepEqual(await page.locator('.acdc-live-calls-panel .acdc-live-duration').allTextContents(), ['2:00', '—', '0:30', '0:30']);
             assert.doesNotMatch(await page.locator('#shell').textContent(), /NEVER-RENDER-CALLER/);
             assert.equal(await page.evaluate(() => app.liveDuration(-2, 0)), '0:02');
-            assert.match(await page.locator('.acdc-live-members-panel').textContent(), /Global status does not confirm queue login/);
+            assert.match(await page.locator('.acdc-live-members-panel').textContent(), /does not verify endpoint reachability/);
+            assert.deepEqual(await page.locator('.acdc-live-members-panel tbody td').allTextContents(), ['Agent', 'Ready · observed', 'Member · observed']);
         });
         await group('200-row truncation uses metadata while card keeps full 201 count', async () => {
             await page.evaluate(() => {
@@ -195,11 +197,16 @@ async function main() {
             assert.match(await page.locator('.acdc-live-calls-panel tbody').textContent(), /No active records were returned/);
             assert.deepEqual(await page.locator('.acdc-live-detail-metrics strong').allTextContents(), ['0', '0', '1']);
         });
-        await group('supplementary failures leave valid calls and unknown roster intact', async () => {
-            await page.evaluate(() => { reset(); reply = dto(true); supplementErrors = true; app.renderLiveDashboard(Q); });
+        await group('unavailable agent runtime preserves authorized names, valid calls and unknown membership', async () => {
+            await page.evaluate(() => {
+                reset(); reply = dto(true); Object.assign(reply.agents, {runtime_complete: false, observation_started: null, observation_finished: null});
+                Object.assign(reply.agents.rows[0], {observed: false, queue_member: null, state: null, reason: 'source_unavailable'});
+                app.renderLiveDashboard(Q);
+            });
             assert.equal(await page.locator('.acdc-live-calls-panel tbody tr').count(), 2);
-            assert.equal(await page.locator('.acdc-live-detail-metrics strong').last().textContent(), '—');
-            assert.match(await page.locator('.acdc-live-members-panel tbody').textContent(), /could not be verified/);
+            assert.equal(await page.locator('.acdc-live-detail-metrics strong').last().textContent(), '1');
+            assert.match(await page.locator('.acdc-live-members-panel tbody').textContent(), /Agent.*Unknown.*Runtime source unavailable.*Unknown/);
+            assert.equal(await page.evaluate(() => ledger.length), 1);
         });
         await group('malformed initial reply fails closed; refresh keeps explicit stale snapshot', async () => {
             await page.evaluate(() => { reset(); reply.version = 2; app.renderLiveDashboard(null); });
@@ -246,7 +253,7 @@ async function main() {
                     d => { d.source.coverage = 'cluster_complete'; }, d => { d.source.atomic_snapshot = true; },
                     d => { d.source.observation_finished_at = null; }, d => { d.source.observation_started_at = d.window.to - 1; },
                     d => { d.source.observation_finished_at = d.generated_at + 1; }, d => { d.window.seconds = 24 * 3600; },
-                    d => { d.capabilities.agent_runtime = true; }, d => { d.capabilities.live_call_details = false; },
+                    d => { d.capabilities.agent_runtime = false; }, d => { d.capabilities.live_call_details = false; },
                     d => { d.calls = null; }, d => { d.calls.available = false; },
                     d => { d.calls.limit = 201; }, d => { d.calls.observed_count = 3; },
                     d => { d.calls.complete = false; }, d => { d.calls.truncated = true; },
@@ -333,11 +340,11 @@ async function main() {
             assert.equal(await page.locator('.acdc-live-freshness.is-stale').count(), 1);
             assert.deepEqual(await page.locator('.acdc-live-card-metrics strong').allTextContents(), ['1', '1']);
             assert.match(await page.locator('.acdc-live-transport').textContent(), /disconnected/);
-            await page.evaluate(() => { ack(0, 2); tick(100); });
+            await page.evaluate(() => { tick(1000); ack(1, 2); tick(100); });
             assert.equal(await page.evaluate(() => ledger.length), 3);
             await page.evaluate(() => { reply = dto(); reply.capabilities.websocket_updates = true; tick(15000); });
             assert.equal(await page.evaluate(() => ledger.length), 4);
-            assert.equal(await page.evaluate(() => socketBindings.length), 1);
+            assert.equal(await page.evaluate(() => socketBindings.length), 2);
         });
         await group('native subscription failures back off across manual snapshots and retain periodic repair', async () => {
             await page.evaluate(() => {
@@ -388,8 +395,149 @@ async function main() {
                 assert.equal(await page.evaluate(() => socketBindings[0].cancelled), 1);
                 await page.evaluate(() => { resolve(0, reply); ack(0); invalidate(0); tick(20000); });
                 assert.equal(await page.locator('.replacement').count(), 1);
-                assert.equal(await page.evaluate(() => ledger.filter(r => r.resource === 'acdc.queues.roster').length), 1);
+                assert.equal(await page.evaluate(() => ledger.filter(r => r.resource === 'acdc.queues.roster').length), 0);
             }
+        });
+        await group('automatic refresh preserves current search/filter/focus/selection including edits during held GET', async () => {
+            await page.evaluate(() => {
+                reset(); reply.capabilities.websocket_updates = true;
+                reply.queues.push({...reply.queues[0], id: '2'.repeat(32), name: 'Bravo queue'});
+                app.renderDashboard(); defer = true;
+            });
+            await page.locator('.acdc-live-search').fill('Alpha');
+            await page.locator('.acdc-live-search').evaluate(input => input.setSelectionRange(1, 4, 'backward'));
+            await page.evaluate(() => { ack(0); tick(100); });
+            const state = () => page.locator('.acdc-live-search').evaluate(input => ({value: input.value,
+                focused: document.activeElement === input, start: input.selectionStart, end: input.selectionEnd, direction: input.selectionDirection}));
+            assert.deepEqual(await state(), {value: 'Alpha', focused: true, start: 1, end: 4, direction: 'backward'});
+            await page.locator('.acdc-live-search').fill('Bravo');
+            await page.locator('.acdc-live-search').evaluate(input => input.setSelectionRange(2, 4, 'forward'));
+            await page.evaluate(() => resolve(0, reply));
+            assert.deepEqual(await state(), {value: 'Bravo', focused: true, start: 2, end: 4, direction: 'forward'});
+            assert.equal(await page.locator('.acdc-live-queue-card:visible').count(), 1);
+            assert.match(await page.locator('.acdc-live-queue-card:visible .acdc-live-queue-name').textContent(), /Bravo/);
+            await page.evaluate(() => {
+                jQuery('<button id="outside-focus">Outside view</button>').appendTo('body')[0].focus();
+                invalidate(0); tick(100); resolve(1, null, {status: 503});
+            });
+            assert.equal((await state()).value, 'Bravo'); assert.equal((await state()).focused, false);
+            assert.equal(await page.evaluate(() => document.activeElement.id), 'outside-focus');
+            assert.equal(await page.locator('.acdc-live-queue-card:visible').count(), 1);
+            assert.equal(await page.locator('.acdc-live-refresh-error').count(), 1);
+        });
+        await group('search state resets across detail, page and account navigation without stealing external focus', async () => {
+            await page.evaluate(() => { reset(); app.renderDashboard(); });
+            await page.locator('.acdc-live-search').fill('Alpha');
+            await page.evaluate(() => { reply = dto(true); });
+            await page.locator('.acdc-open-live-queue').first().click();
+            await page.evaluate(() => { reply = dto(); }); await page.click('.acdc-live-back');
+            assert.equal(await page.locator('.acdc-live-search').inputValue(), '');
+            await page.locator('.acdc-live-search').fill('Alpha');
+            await page.evaluate(() => {
+                app.renderLiveDashboard(null, undefined, {cursor: Q, size: 50, history: [null]});
+            });
+            assert.equal(await page.locator('.acdc-live-search').inputValue(), '');
+            await page.locator('.acdc-live-search').fill('Alpha');
+            await page.evaluate(() => {
+                document.querySelector('#outside-focus').focus(); app.accountId = 'b'.repeat(32);
+                reply = dto(); reply.account_id = app.accountId; app.renderDashboard();
+            });
+            assert.equal(await page.locator('.acdc-live-search').inputValue(), '');
+            assert.equal(await page.evaluate(() => document.activeElement.id), 'outside-focus');
+        });
+        await group('single detail GET renders eight runtime states and membership separately; unknown is never logout', async () => {
+            await page.evaluate(() => {
+                reset(); reply = dto(true);
+                reply.agents.rows = ['wait', 'sync', 'ready', 'ringing', 'answered', 'wrapup', 'paused', 'outbound'].map((state, i) => ({
+                    agent_id: (i + 1).toString(16).padStart(32, '0'), name: 'Agent ' + i, observed: true, queue_member: i % 2 === 0, state, reason: 'observed'}));
+                reply.agents.rows.push({agent_id: 'f'.repeat(32), name: '<img src=x onerror=alert(1)>', observed: false,
+                    queue_member: null, state: null, reason: 'inconsistent_sources'});
+                reply.agents.runtime_complete = false; app.renderLiveDashboard(Q);
+            });
+            assert.deepEqual(await page.evaluate(() => ledger.map(r => r.resource)), ['acdc.live.detail']);
+            assert.equal(await page.locator('.acdc-live-members-panel tbody tr').count(), 9);
+            assert.equal(await page.locator('.acdc-live-members-panel img').count(), 0);
+            assert.match(await page.locator('.acdc-live-members-panel tbody tr').last().textContent(), /Unknown.*Conflicting runtime observations.*Unknown/);
+            assert.match(await page.locator('.acdc-live-agent-source').textContent(), /Runtime observations incomplete/);
+            assert.deepEqual(await page.locator('.acdc-live-members-panel tbody tr').nth(2).locator('td').allTextContents(),
+                ['Agent 2', 'Ready · observed', 'Member · observed']);
+        });
+        await group('strict agents contradictions reject whole detail without fallback HTTP; truncation and empty runtime stay explicit', async () => {
+            const rejected = await page.evaluate(() => {
+                const cases = [d => { delete d.agents; }, d => { d.capabilities.agent_runtime = false; },
+                    d => { d.agents.endpoint_reachability_verified = true; }, d => { d.agents.runtime_complete = false; },
+                    d => { d.agents.rows[0].state = 'logout'; }, d => { d.agents.rows[0].queue_member = null; },
+                    d => { d.agents.rows[0].name = '\nsecret'; }, d => { d.agents.rows[0].name = 'é'.repeat(129); },
+                    d => { d.agents.rows[0].device_id = 'PRIVATE'; }, d => { d.agents.rows.push(d.agents.rows[0]); },
+                    d => { d.agents.rows[0].observed = false; }, d => { d.agents.observation_started = null; },
+                    d => { d.agents.observation_finished = d.agents.observation_started - 1; }, d => { d.agents.roster_complete = false; }];
+                return cases.map(change => { const d = dto(true); change(d); return !app.liveSnapshotValid(d, A, Q, paging()); });
+            });
+            assert.equal(rejected.length, 14); assert(rejected.every(Boolean));
+            await page.evaluate(() => { reset(); reply = dto(true); delete reply.agents; app.renderLiveDashboard(Q); });
+            assert.equal(await page.locator('.error').count(), 1); assert.equal(await page.evaluate(() => ledger.length), 1);
+            await page.evaluate(() => {
+                reset(); reply = dto(true); Object.assign(reply.agents, {roster_complete: false, truncated: true, runtime_complete: false,
+                    rows: Array.from({length: 200}, (_, i) => ({agent_id: (i + 1).toString(16).padStart(32, '0'), name: 'Agent ' + i,
+                        observed: true, queue_member: true, state: 'ready', reason: 'observed'}))}); app.renderLiveDashboard(Q);
+            });
+            assert.equal(await page.locator('.acdc-live-members-panel tbody tr').count(), 200);
+            assert.equal(await page.locator('.acdc-live-detail-metrics strong').last().textContent(), '—');
+            assert.match(await page.locator('.acdc-live-members-panel').textContent(), /total is not supplied/);
+            await page.evaluate(() => { reply = dto(true); reply.agents.rows = []; app.renderLiveDashboard(Q); });
+            assert.equal(await page.locator('.acdc-live-detail-metrics strong').last().textContent(), '0');
+            assert.match(await page.locator('.acdc-live-agent-source').textContent(), /Runtime observations complete/);
+            await page.evaluate(() => {
+                Object.assign(reply.agents, {observation_started: null, observation_finished: null, runtime_complete: false}); app.renderLiveDashboard(Q);
+            });
+            assert.match(await page.locator('.acdc-live-agent-source').textContent(), /Runtime observations incomplete/);
+        });
+        await group('50-queue asynchronous ACK admission and reconnect never submit parallel native authorization', async () => {
+            await page.evaluate(() => {
+                reset(); reply.capabilities.websocket_updates = true;
+                reply.queues = Array.from({length: 50}, (_, i) => ({id: (i + 1).toString(16).padStart(32, '0'),
+                    name: 'Queue ' + i, strategy: null, metrics_available: true, metrics: metrics()}));
+                app.renderDashboard(); tick(999);
+            });
+            assert.equal(await page.evaluate(() => socketBindings.length), 1);
+            // Deliver ACKs in separate browser turns, not synchronously inside bind.
+            for (let i = 0; i < 50; i++) {
+                assert.equal(await page.evaluate(() => socketBindings.filter(b => b.pending && !b.cancelled).length), 1);
+                await page.evaluate(index => ack(index), i);
+            }
+            assert.equal(await page.evaluate(() => socketBindings.length), 50);
+            await page.evaluate(() => { tick(100); socketBindings[0].params.lifecycle.onDisconnect({code: 'disconnected'}); tick(1000); });
+            assert.equal(await page.evaluate(() => socketBindings.slice(0, 50).every(b => b.cancelled === 1)), true);
+            assert.equal(await page.evaluate(() => socketBindings.length), 51);
+            await page.evaluate(() => { tick(1000); ack(0, 2); });
+            assert.equal(await page.evaluate(() => socketBindings.length), 51, 'Retired ACK cannot drain queue and pending handle does not churn');
+            await page.evaluate(() => { ack(50, 2); ack(51, 2); });
+            assert.equal(await page.evaluate(() => socketBindings.length), 53);
+            await page.evaluate(() => { reply = dto(); app.renderDashboard(); });
+            assert.equal(await page.evaluate(() => socketBindings.slice(50).every(b => b.cancelled === 1)), true);
+            assert.equal(await page.evaluate(() => Object.keys(app.appFlags.acdc.liveDashboardController.bindings).length), 0);
+        });
+        await group('busy/timeout admission is paced and connect false leaves no replayable desired handle', async () => {
+            await page.evaluate(() => {
+                reset(); reply.capabilities.websocket_updates = true;
+                reply.queues.push({...reply.queues[0], id: '2'.repeat(32)}); app.renderDashboard();
+                socketBindings[0].params.lifecycle.onError({code: 'rejected'}); tick(999);
+            });
+            assert.equal(await page.evaluate(() => socketBindings.length), 1);
+            assert.equal(await page.evaluate(() => socketBindings[0].cancelled), 1);
+            await page.evaluate(() => { tick(1); ack(1); tick(100); });
+            assert.equal(await page.evaluate(() => socketBindings.length), 2);
+            await page.evaluate(() => { tick(13900); });
+            assert.equal(await page.evaluate(() => socketBindings.length), 3);
+            await page.evaluate(() => {
+                reset(); monster.socket.connect = () => false; reply = dto(true); reply.capabilities.websocket_updates = true; app.renderLiveDashboard(Q);
+                socketBindings[0].params.lifecycle.onError({code: 'timeout'}); ack(0); tick(14999);
+            });
+            assert.equal(await page.evaluate(() => socketBindings.length), 1);
+            assert.equal(await page.evaluate(() => socketBindings[0].cancelled), 1);
+            await page.evaluate(() => { monster.socket.connect = () => true; tick(1); ack(1); tick(100); });
+            assert.equal(await page.evaluate(() => socketBindings.length), 2);
+            assert.equal(await page.evaluate(() => ledger.length), 2);
         });
         assert.deepEqual(network, []); assert.deepEqual(errors, []);
     } finally { clearTimeout(deadline); await browser.close(); }

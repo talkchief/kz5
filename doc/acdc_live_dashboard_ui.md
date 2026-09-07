@@ -1,9 +1,10 @@
 # Live queue summary/detail — source checkpoint
 
-September 7, 2026. The bounded live DTO adapter and capability-gated native
-invalidation controller passed offline and Chromium fixture checks. This is
-not a deployment or complete live-dashboard acceptance. Historical screens and
-workforce reporting remain postponed for future ClickHouse work.
+September 7, 2026. The current single-GET agents DTO adapter and sequential native
+subscription controller passed 41 offline groups and 24 Chromium groups;
+older browser receipts cover earlier source. This is not a deployment
+or complete live-dashboard acceptance. Historical screens and workforce
+reporting remain postponed for future ClickHouse work.
 
 ## Files and behavior
 
@@ -13,7 +14,8 @@ workforce reporting remain postponed for future ClickHouse work.
 - `monster-ui/acdc/views/dashboard.html`: page-local search, name-sorted queue
   cards, explicit previous/next navigation, detail and existing editor links.
 - `monster-ui/acdc/views/dashboard-detail.html`: back navigation, selected queue
-  active-call observations and saved roster with observed global agent status.
+  active-call observations and authorized saved roster with separate observed
+  runtime state and queue membership.
 - `monster-ui/acdc/style/app.scss` and `i18n/en-US.json`: responsive card/detail
   styling, accessible labels and explicit source/error/stale notices.
 - `monster-ui/acdc/tests/live-dashboard.test.cjs`: offline AMD, interaction
@@ -27,16 +29,19 @@ for a subsequent page. The API/adapter limit is 100; this UI requests 50. It doe
 not fetch all pages automatically. Search, sorting and displayed queue counts
 apply to the current page, not the account's whole inventory.
 
-Detail makes **one GET** to `/accounts/{accountId}/queues/{queueId}/live`.
-Only after a valid primary reply for the active view does it make three existing
-read-only supplemental requests: saved queue roster, agent names and observed
-global agent statuses. Those legacy reads are not a bounded runtime-agent
-snapshot. Neither view uses the old `/queues/stats` dashboard seam or requests
-historical statistics. Queue editor, callback and agent write controls remain
-outside this change.
+Detail makes **exactly one GET** to
+`/accounts/{accountId}/queues/{queueId}/live`, including on reconciliation. Its
+`agents` object contains authorized roster identities/names and bounded runtime
+observations. There are no supplemental roster, global-status or name HTTP
+reads, and no fallback to them. The strict current version-1 contract requires
+detail `agent_runtime=true` and an agents object; overview requires
+`agent_runtime=false` and `agents=null`. An older incompatible detail response
+fails validation rather than invoking legacy reads. Neither view uses the old
+`/queues/stats` dashboard seam or requests historical statistics. Queue editor,
+callback and agent write controls remain outside this change.
 
 The adapter validates version/account/queue scope, pagination, capabilities,
-source metadata, metrics and call rows. Count cards use DTO metrics, not the
+source metadata, metrics, call rows and agents. Call count cards use DTO metrics, not the
 length of a capped call list. Detail distinguishes unavailable, available empty
 and truncated calls; at most 200 rows are shown, ordered by entry time rather
 than queue position. The DTO's observed count can exceed the row cap. Unix
@@ -49,15 +54,20 @@ retain only a matching previous snapshot marked stale; without one they show an
 error. Recognized 401/403/404 failures clear that cache. Cache and late-response
 guards include account, queue, page and navigation generation. API labels are
 escaped. A timer marks data stale after 30 seconds; it does not fetch updates.
+Same-scope refresh preserves overview search text, filtering, and the current
+search focus/selection, including edits made while a GET is held. It does not
+steal focus moved elsewhere. Queue, page and account navigation reset search.
 
-## Native invalidation controller — execution pending
+## Native invalidation controller
 
 `renderLiveDashboard` owns one account/queue/page controller. Only a validated DTO
 with `capabilities.websocket_updates: true` permits `monster.socket.bind` using
 the tested [subscription lifecycle API](monster_socket_lifecycle.md). The account
 is a separate `accountId` option; the exact binding is
 `queue_live.changed.QUEUE_ID`. Overview registers only the current authorized
-page's queue IDs (50 by default, at most 100); detail registers one. An event must
+page's queue IDs (50 by default, at most 100); detail registers one. At most 100
+local desired records exist, but only one subscription authorization is pending:
+the next call to `bind` waits for the preceding ACK/error. An event must
 match `{version: 1, account_id, queue_id}`. It invalidates the snapshot, never
 increments counters or supplies displayable call/agent data.
 
@@ -68,8 +78,17 @@ dirty flag retains one follow-up request. Unchanged subscriptions survive
 same-scope refreshes, avoiding ACK/rebind loops. While support remains true,
 15-second reconciliation also repairs missing events and transient subscription
 failures. A failed binding has a 15-second retry floor, even if other queues keep
-emitting events or the user refreshes. Detail reconciliation still includes its
-three supplemental reads; those remain outside runtime eligibility proof.
+emitting events or the user refreshes; admission is also paced by one second
+after an error. Failed handles, including `connect() => false`, are cancelled
+immediately so they cannot be replayed by the framework between retries.
+
+On disconnect, the controller cancels its own framework handles and keeps only
+bounded local intent. This prevents the framework's automatic reconnect from
+submitting every retained subscription in parallel. After a one-second delay it
+admits one fresh handle, which awaits its actual lifecycle ACK/error (including
+the existing three-second deadline), without per-second handle churn. Further
+subscriptions follow sequentially. First/reconnect ACKs still request a snapshot;
+the app never disconnects the shared socket to manage its own listeners.
 
 ACK is only a correlated Blackhole reply, not a broker-binding barrier, replay
 or gap-free-delivery guarantee. The screen separately reports pending,
@@ -82,8 +101,8 @@ of transport state.
 
 Queue/page/tab navigation and app rendering cancel exact returned listener
 handles; account/generation checks and DOM-detachment observation retire stale
-controllers. Disposed callbacks cannot mount data, schedule repair or launch
-late detail supplemental reads. No shared socket disconnect, automatic login,
+controllers. Disposed callbacks cannot mount data, schedule repair or advance
+subscription admission. No shared socket disconnect, automatic login,
 agent-state mutation, editor write or callback write is added. HTTP requests
 already sent are ignored after disposal, not claimed remotely cancelled.
 
@@ -92,18 +111,31 @@ already sent are ignored after disposal, not claimed remotely cancelled.
 The UI now consumes the live snapshot endpoint's collector projection. Its
 source contract describes compared known replicas and explicitly non-atomic
 observations, not complete telephony occupancy. Server generation time is not
-source freshness. Runtime-agent snapshots and historical reporting remain
-unavailable. The backend WebSocket capability stays false until its authenticated
-delivery integration is accepted; this UI does not turn it on. Support for detail
+source freshness. Historical reporting remains unavailable. The backend
+WebSocket capability is controlled by the backend; this UI does not turn it on.
+The latest dynamic capability change is compiled but not yet activated, and
+production staging of this UI remains pending. Support for detail
 call rows does not imply those rows are available in every response.
 
-Saved roster is not runtime queue membership or eligibility. Global status or
-SIP registration is not proof an agent can receive this queue's call. The UI
-validates roster IDs up to 1,000 and renders at most 200 with a truncation notice;
-an oversized, malformed or incomplete roster is unknown. Name/status failures
-fall back to IDs/unknown status. These supplementary reads do not establish
-cluster-wide agent coverage. No SLA, performance ranking, daily totals or
-historical handle-time metric is fabricated.
+Saved roster is not runtime queue membership or eligibility. The server queries
+at most 201 selected-queue user documents, authorizes the identities and their
+status resources including the lookahead, and returns at most 200 unique,
+ID-sorted rows. Names come from those authorized documents, not broker payloads.
+The UI validates the exact bounded agents/row shapes. A truncated roster has an
+unknown total count, not an invented total of 200.
+
+Observed runtime states are exactly `wait`, `sync`, `ready`, `ringing`,
+`answered`, `wrapup`, `paused` and `outbound`. An observed row has a separate
+boolean `queue_member`; an unobserved row has null state/membership and reason
+`not_observed`, `inconsistent_sources` or `source_unavailable`. Unknown never
+means logged out. Roster completeness, runtime completeness and agent observation
+time are displayed separately from call-source availability. Null runtime times
+mean unavailable observations, even for an empty roster; an available empty
+roster can be runtime-complete. Truncation prevents runtime completeness.
+Even a complete observation with `ready` plus queue membership does not prove
+endpoint reachability or ready-to-ring eligibility; the DTO explicitly keeps
+`endpoint_reachability_verified=false`. No SIP/global-status inference, SLA,
+performance ranking, daily totals or historical handle-time metric is fabricated.
 
 The client lifecycle integration does not by itself prove scoped native
 Blackhole delivery. Completion still requires its authenticated server/publisher
@@ -114,6 +146,16 @@ broker delivery, runtime-agent eligibility or production deployment. Polling-onl
 delivery is not a substitute for the requested native Blackhole integration.
 
 ## Test evidence
+
+Current checkpoint: root session **5676 passed all 41 offline groups** on the
+frozen agents/sequential-admission source. Root session **63756 passed all
+24 Chromium groups**, retained in
+`/tmp/kazoo-monster-live-dashboard.8MsOwE/`. These fixtures include
+strict agents contradictions, all eight states with either membership value,
+unknown/empty/truncated controls, search/focus preservation, one-pending native
+authorization, reconnect cancellation and failed-connect cleanup. The browser
+fixture delivers 50 queue ACKs in separate browser turns through a synthetic
+socket; it does not prove real multi-queue broker delivery.
 
 Pre-controller DTO checkpoint: root session **37074 passed all 22** updated offline
 dashboard groups and all **20** existing queue-login groups.
@@ -133,7 +175,7 @@ used the existing cached executable
 needed. Root owns serialized resource windows and any temporary development
 service pauses under a restoration trap, following a zero-call check.
 
-Controller checkpoint: root64066 passed all32 offline groups (22 existing plus
+Historical pre-agents/pre-sequential controller checkpoint: root64066 passed all32 offline groups (22 existing plus
 10 fake-clock/socket groups). Root55555 passed all18 Chromium groups (12 existing
 plus six synthetic lifecycle/clock groups), with stable source/vendor hashes;
 evidence `/tmp/kazoo-monster-live-dashboard.u5WbOa`. The same window passed all20
@@ -141,7 +183,8 @@ unchanged queue-login groups. These cover scope/capability gates, burst/held-req
 synchronous ACK, disconnect/reconnect, retry/reconciliation bounds, capability
 removal, denial and navigation/detachment. Existing queue-login coverage remains
 a separate compatibility gate. None
-of these new socket fixtures proves a live broker or authenticated WebSocket.
+of those socket fixtures proves a live broker or authenticated WebSocket, and
+those receipts do not validate the current agents/sequential-admission changes.
 
 Historical pre-DTO checkpoint **11055** passed 22 dashboard and 20 queue-login
 groups with seven stable input pins, retained in

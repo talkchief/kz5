@@ -30,10 +30,11 @@
 			</div>
 			<aside class="acdc-panel acdc-live-members-panel">
 				<h3>{{i18n.acdc.dashboard.configuredMembers}}</h3><p class="acdc-panel-context">{{i18n.acdc.dashboard.memberContext}}</p>
+				<p class="acdc-live-agent-source">{{agentRosterStatus}} · {{agentRuntimeStatus}} · {{i18n.acdc.dashboard.agentObservation}} {{agentObservationTime}}{{#if agentObservationStale}} · {{i18n.acdc.dashboard.stale}}{{/if}}</p>
 				{{#if membersTruncated}}<p class="acdc-warning" role="status">{{i18n.acdc.dashboard.membersTruncated}}</p>{{/if}}
-				<div class="acdc-table-scroll"><table class="acdc-table"><thead><tr><th scope="col">{{i18n.acdc.fields.agent}}</th><th scope="col">{{i18n.acdc.dashboard.observedGlobalStatus}}</th></tr></thead><tbody>
-					{{#each members}}<tr><td>{{name}}</td><td><span class="acdc-status neutral">{{status}}</span></td></tr>
-					{{else}}<tr><td colspan="2" class="acdc-empty-cell">{{#if rosterAvailable}}{{i18n.acdc.dashboard.noMembers}}{{else}}{{i18n.acdc.dashboard.rosterUnavailable}}{{/if}}</td></tr>{{/each}}
+				<div class="acdc-table-scroll"><table class="acdc-table"><thead><tr><th scope="col">{{i18n.acdc.fields.agent}}</th><th scope="col">{{i18n.acdc.dashboard.observedRuntimeState}}</th><th scope="col">{{i18n.acdc.dashboard.observedQueueMembership}}</th></tr></thead><tbody>
+					{{#each members}}<tr><td>{{name}}</td><td><span class="acdc-status neutral">{{status}}</span>{{#if reason}}<small>{{reason}}</small>{{/if}}</td><td>{{membership}}</td></tr>
+					{{else}}<tr><td colspan="3" class="acdc-empty-cell">{{#if rosterAvailable}}{{i18n.acdc.dashboard.noMembers}}{{else}}{{i18n.acdc.dashboard.rosterUnavailable}}{{/if}}</td></tr>{{/each}}
 				</tbody></table></div>
 				<button type="button" class="acdc-live-link acdc-live-agents">{{i18n.acdc.dashboard.openAgentControls}} <i class="fa fa-arrow-right" aria-hidden="true"></i></button>
 			</aside>

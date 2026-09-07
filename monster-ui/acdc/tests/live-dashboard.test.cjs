@@ -38,14 +38,17 @@ class Element {
 function fixture(options = {}) {
   let app, clock = now, nextTimer = 0;
   const timers = new Map(), requests = [], views = [], errors = [], navigation = [], bindings = [], observers = [], container = new Element(), content = new Element();
+  const domDocument = {documentElement: {}, activeElement: null};
   const jquery = value => value; jquery.trim = value => String(value).trim();
   jquery.contains = (root, node) => node && node.attached;
   const monster = {apps: {}, ui: {}, socket: {connects: 0,
     connect() { this.connects++; return true; },
     bind(params) {
-      const binding = {params, cancelled: 0}; bindings.push(binding);
-      if (options.syncAck) params.lifecycle.onAck({accountId: params.accountId, binding: params.binding, connectionGeneration: 1});
-      return () => { binding.cancelled++; };
+      assert.equal(bindings.filter(b => b.pending && !b.cancelled).length, 0, 'Only one pending native authorization');
+      const binding = {params: {...params, lifecycle: {...params.lifecycle}}, cancelled: 0, pending: true}; bindings.push(binding);
+      for (const key of ['onAck', 'onError', 'onDisconnect']) binding.params.lifecycle[key] = info => { binding.pending = false; params.lifecycle[key](info); };
+      if (options.syncAck) binding.params.lifecycle.onAck({accountId: params.accountId, binding: params.binding, connectionGeneration: 1});
+      return () => { binding.cancelled++; binding.pending = false; };
     }
   }};
   class Clock extends Date { static now() { return clock; } }
@@ -54,7 +57,7 @@ function fixture(options = {}) {
     Date: Clock, Math,
     setTimeout(fn, ms) { timers.set(++nextTimer, {fn, ms, at: clock + ms}); return nextTimer; },
     clearTimeout(id) { timers.delete(id); },
-    ...(options.dom ? {document: {documentElement: {}}, MutationObserver: class {
+    ...(options.dom ? {document: domDocument, MutationObserver: class {
       constructor(fn) { this.fn = fn; observers.push(this); }
       observe() { this.active = true; }
       disconnect() { this.active = false; }
@@ -64,14 +67,20 @@ function fixture(options = {}) {
   app.accountId = A;
   app.appFlags.acdc.container = container;
   app.getContentContainer = () => content;
-  app.getTemplate = spec => { const element = new Element(); element[0] = element; element.attached = true; element.spec = spec; views.push(element); return element; };
+  app.getTemplate = spec => {
+    const element = new Element(); element[0] = element; element.attached = true; element.spec = spec;
+    const search = element.find('.acdc-live-search'); search[0] = search;
+    search.focus = () => { domDocument.activeElement = search; };
+    search.setSelectionRange = (start, end, direction) => Object.assign(search, {selectionStart: start, selectionEnd: end, selectionDirection: direction});
+    views.push(element); return element;
+  };
   app.renderLoading = message => { content.empty(); navigation.push({loading: message}); };
   app.renderError = (message, retry) => { content.empty(); errors.push({message, retry}); };
   app.renderQueueForm = id => { ++app.appFlags.acdc.requestGeneration; navigation.push({editor: id}); };
   app.renderAgents = () => navigation.push({agents: true});
   const seam = app.requestLiveDashboard;
   app.requestLiveDashboard = (queueId, callback, page) => requests.push({queueId, callback, page});
-  return {app, seam, monster, requests, views, errors, navigation, content, container, timers, bindings,
+  return {app, seam, monster, requests, views, errors, navigation, content, container, timers, bindings, domDocument,
     advance(ms) { clock += ms; },
     tick(ms) {
       const end = clock + ms; let limit = 1000;
@@ -96,6 +105,10 @@ function metrics(waiting = 1, handled = 1) {
     processed_in_cohort: 0, abandoned_in_cohort: 0, average_answered_wait_seconds: handled ? 60 : null,
     average_processed_talk_seconds: null};
 }
+function agentData(rows = [{agent_id: U, name: 'Ada Agent', observed: true, queue_member: true, state: 'ready', reason: 'observed'}]) {
+  return {limit: 200, roster_complete: true, truncated: false, runtime_complete: rows.every(row => row.observed),
+    endpoint_reachability_verified: false, observation_started: timestamp, observation_finished: timestamp, rows};
+}
 function data(selected = false) {
   const queues = [{id: Q, name: 'Support', strategy: 'round_robin', metrics_available: true, metrics: metrics()}];
   if (!selected) queues.push({id: R, name: 'Sales', strategy: null, metrics_available: true, metrics: metrics(2, 0)});
@@ -104,7 +117,8 @@ function data(selected = false) {
     pagination: {page_size: selected ? 1 : 50, has_more: false, next_start_queue_id: null},
     source: {coverage: 'observed_replicas', all_known_sources_responded: true, consistent: true,
       atomic_snapshot: false, status: 'available', reason: 'consensus', observation_started_at: timestamp, observation_finished_at: timestamp},
-    capabilities: {live_call_details: selected, agent_runtime: false, websocket_updates: false, historical_reporting: false},
+    capabilities: {live_call_details: selected, agent_runtime: selected, websocket_updates: false, historical_reporting: false},
+    agents: selected ? agentData() : null,
     calls: selected ? {available: true, complete: true, truncated: false, limit: 200, observed_count: 2,
       order: 'queue_id_entered_call_id', rows: [
         {queue_id: Q, call_id: 'handled', status: 'handled', entered_at: timestamp - 100, handled_at: timestamp - 40},
@@ -123,14 +137,13 @@ test('overview read seam uses one bounded live GET, not legacy inventory/stats o
   assert.deepEqual(reads, ['acdc.live.overview']);
   reads.forEach(r => assert.equal(f.app.requests[r].verb, 'GET'));
 });
-test('detail adds only selected roster, agent names and global observed statuses', () => {
+test('detail uses one GET with authorized roster/runtime DTO and no supplemental reads', () => {
   const f = fixture(), reads = [];
   f.monster.request = o => { reads.push([o.resource, plain(o.data)]); o.success({data: data(true).live}); };
-  f.app.requestCompleteList = (r, d, cb) => { reads.push([r, plain(d)]); cb(null, []); };
-  f.app.request = (r, d, cb) => { reads.push([r, plain(d)]); cb(null, {}); };
+  f.app.requestCompleteList = f.app.request = () => assert.fail('No supplemental read is authorized by this UI seam');
   f.seam.call(f.app, Q, () => {});
-  assert.deepEqual(reads.map(r => r[0]), ['acdc.live.detail', 'acdc.queues.roster', 'acdc.agents.list', 'acdc.agents.statuses']);
-  assert.deepEqual(reads[1][1], {accountId: A, queueId: Q});
+  assert.deepEqual(reads.map(r => r[0]), ['acdc.live.detail']);
+  assert.deepEqual(reads[0][1], {accountId: A, queueId: Q, pageSize: 50});
   reads.forEach(([r]) => assert.equal(f.app.requests[r].verb, 'GET'));
 });
 test('malformed envelope and contradictory pagination cannot become observed zeroes', () => {
@@ -157,7 +170,8 @@ test('malformed, blank and oversized queue names fall back to IDs before sorting
 test('only selected queue active records and authoritative roster IDs reach detail', () => {
   const result = model(fixture());
   assert.equal(result.calls.length, 2); assert.equal(result.members.length, 1);
-  assert.equal(result.members[0].name, 'Ada Agent'); assert.equal(result.members[0].status, 'Ready (global)');
+  assert.equal(result.members[0].name, 'Ada Agent'); assert.equal(result.members[0].status, 'Ready · observed');
+  assert.equal(result.members[0].membership, 'Member · observed');
   assert.equal(result.rosterCount, 1); assert.equal(result.selectedCard.waiting, 1); assert.equal(result.selectedCard.handling, 1);
   assert(!JSON.stringify(result.calls).includes('Other queue secret'));
   assert(!JSON.stringify(result.members).includes('Other'));
@@ -182,24 +196,32 @@ test('duplicate identities and unknown statuses cannot inflate or quietly drop r
     assert.equal(f.app.liveSnapshotValid(input.live, A, Q, paging()), false);
   }
 });
-test('detail display is capped with explicit notices while counts still cover all returned rows and roster IDs', () => {
+test('detail call counts cover full DTO observations; truncated roster total stays unknown', () => {
   const f = fixture(), input = data(true);
   input.queues[0].metrics = metrics(300, 0);
   Object.assign(input.live.calls, {observed_count: 300, truncated: true, complete: false,
     rows: Array.from({length: 200}, (_, n) => ({queue_id: Q, call_id: 'call-' + n, status: 'waiting', entered_at: timestamp - 300 + n, handled_at: null}))});
-  input.roster = Array.from({length: 250}, (_, n) => 'agent-' + n);
+  input.live.agents = {...agentData(Array.from({length: 200}, (_, n) => ({agent_id: (n + 1).toString(16).padStart(32, '0'),
+    name: 'Agent ' + n, observed: true, queue_member: true, state: 'ready', reason: 'observed'}))),
+    truncated: true, roster_complete: false, runtime_complete: false};
   const result = model(f, input); assert.equal(result.calls.length, 200); assert.equal(result.members.length, 200);
-  assert.equal(result.selectedCard.waiting, 300); assert.equal(result.rosterCount, 250);
+  assert.equal(result.selectedCard.waiting, 300); assert.equal(result.rosterCount, '—');
   assert.equal(result.callsTruncated, true); assert.equal(result.membersTruncated, true);
   const html = detail({...result, i18n: strings});
   assert(html.includes(strings.acdc.dashboard.callsTruncated)); assert(html.includes(strings.acdc.dashboard.membersTruncated));
 });
-test('unverified roster or statuses remain unknown; names failure preserves verified member IDs', () => {
+test('invalid agents fail closed; unavailable runtime preserves authorized names with unknown state/member', () => {
   const f = fixture();
-  for (const roster of [null, [U, U], [{}], ['../bad']]) { const result = model(f, {...data(true), roster}); assert.equal(result.rosterCount, '—'); assert.equal(result.members.length, 0); }
-  assert.equal(model(f, data(true), {statuses: true}).members[0].status, 'Unknown');
-  assert.equal(model(f, data(true), {agents: true}).members[0].name, U);
-  assert.equal(model(f, {...data(true), roster: []}).rosterCount, 0);
+  for (const agents of [null, [U, U], {}, {rows: ['../bad']}]) {
+    const input = data(true); input.live.agents = agents;
+    assert.equal(f.app.liveSnapshotValid(input.live, A, Q, paging()), false);
+    const result = model(f, input); assert.equal(result.rosterCount, '—'); assert.equal(result.members.length, 0);
+  }
+  const input = data(true); Object.assign(input.live.agents, {runtime_complete: false, observation_started: null, observation_finished: null});
+  Object.assign(input.live.agents.rows[0], {observed: false, state: null, queue_member: null, reason: 'source_unavailable'});
+  assert.equal(model(f, input).members[0].status, 'Unknown'); assert.equal(model(f, input).members[0].membership, 'Unknown');
+  assert.equal(model(f, input).members[0].name, 'Ada Agent');
+  input.live.agents = agentData([]); assert.equal(model(f, input).rosterCount, 0);
 });
 test('observation-window timestamps and retrieval age both make snapshots stale', () => {
   const f = fixture(); assert.equal(model(f).stale, false);
@@ -271,7 +293,7 @@ test('edit and agent controls navigate to existing implementations, no automatic
 });
 test('templates escape all API labels and expose actual zero, empty, unknown and stale states', () => {
   const f = fixture(), input = data(true); input.queues[0].name = '<img src=x onerror=alert(1)>';
-  input.agents[0].first_name = '<script>alert(1)</script>'; input.live.calls.rows[0].call_id = '<svg onload=x>';
+  input.live.agents.rows[0].name = '<script>alert(1)</script>'; input.live.calls.rows[0].call_id = '<svg onload=x>';
   const result = model(f, input); const html = overview({...result, i18n: strings}) + detail({...result, i18n: strings});
   for (const unsafe of ['<img', '<script', '<svg']) assert(!html.includes(unsafe)); assert(html.includes('&lt;img'));
   assert(html.includes('role="status"')); assert(html.includes('data-queue-id="' + Q + '"'));
@@ -291,9 +313,11 @@ test('unsupported capability is manual-only; enabled capability binds exact auth
   assert.equal(f.bindings.length, 0); assert.equal(f.requests.length, 1); assert.equal(f.monster.socket.connects, 0);
   assert.equal(f.current().find('.acdc-live-transport').text(), strings.acdc.dashboard.transports.unavailable);
   f.app.renderDashboard(); f.reply(1, liveData());
+  assert.equal(f.bindings.length, 1, 'Second authorization is local-only until first ACK');
+  assert.equal(Object.keys(f.app.appFlags.acdc.liveDashboardController.bindings).length, 2); f.ack(0);
   assert.deepEqual(f.bindings.map(b => [b.params.accountId, b.params.binding, b.params.source]),
     [[A, 'queue_live.changed.' + Q, 'acdc'], [A, 'queue_live.changed.' + R, 'acdc']]);
-  assert.equal(f.monster.socket.connects, 1); assert(f.bindings.every(b => b.params.lifecycle.timeoutMs === 3000));
+  assert.equal(f.monster.socket.connects, 2); assert(f.bindings.every(b => b.params.lifecycle.timeoutMs === 3000));
 });
 test('ACK burst and invalidations coalesce; one snapshot in flight remembers one dirty follow-up', () => {
   const f = fixture(); f.app.renderDashboard(); f.reply(0, liveData()); f.ack(0); f.ack(1);
@@ -323,10 +347,10 @@ test('disconnect keeps counts stale, reconnect ACK resnapshots and periodic repa
   assert(f.current().find('.acdc-live-freshness').hasClass('is-stale'));
   assert.equal(f.current().spec.data.selectedCard.waiting, 1);
   assert.equal(f.current().find('.acdc-live-transport').text(), strings.acdc.dashboard.transports.disconnected);
-  f.ack(0, 2); f.tick(100); assert.equal(f.requests.length, 3); f.reply(2, liveData(true));
-  assert.equal(f.bindings.length, 1); f.tick(15000); assert.equal(f.requests.length, 4, 'Reconcile without any event');
+  f.tick(1000); assert.equal(f.bindings[0].cancelled, 1); f.ack(1, 2); f.tick(100); assert.equal(f.requests.length, 3); f.reply(2, liveData(true));
+  assert.equal(f.bindings.length, 2); f.tick(15000); assert.equal(f.requests.length, 4, 'Reconcile without any event');
 });
-test('subscription error retries only through bounded reconciliation while supported', () => {
+test('subscription error uses bounded backoff while periodic reconciliation continues', () => {
   const f = fixture(); f.app.renderLiveDashboard(Q); f.reply(0, liveData(true));
   f.bindings[0].params.lifecycle.onError({code: 'rejected'}); f.tick(14999); assert.equal(f.requests.length, 1);
   assert(f.current().find('.acdc-live-freshness').hasClass('is-stale'));
@@ -342,7 +366,7 @@ test('capability true to false retires bindings and periodic repair without repl
   assert.equal(f.current().spec.data.queueRows.find(q => q.id === Q).waiting, 1);
 });
 test('page shrink and navigation cancel exact listeners; stale callbacks cannot revive old scope', () => {
-  const f = fixture(); f.app.renderDashboard(); f.reply(0, liveData());
+  const f = fixture(); f.app.renderDashboard(); f.reply(0, liveData()); f.ack(0);
   const smaller = liveData(); smaller.queues.pop(); f.app.renderDashboard(); f.reply(1, smaller);
   assert.equal(f.bindings[0].cancelled, 0); assert.equal(f.bindings[1].cancelled, 1);
   f.app.renderLiveDashboard(Q); assert.equal(f.bindings[0].cancelled, 1); f.reply(2, liveData(true));
@@ -369,5 +393,109 @@ test('401/403/404 cancels supported live scope immediately and does not retry au
     assert.equal(f.app.appFlags.acdc.liveDashboardSnapshot, undefined); assert.equal(f.timers.size, 0);
     f.tick(20000); assert.equal(f.requests.length, 2);
   }
+});
+test('automatic same-page refresh preserves latest search, focus and selection through held GET and failure', () => {
+  const f = fixture({dom: true}); f.app.renderDashboard(); f.reply(0, liveData());
+  let search = f.current().find('.acdc-live-search'); search.val('Sup').trigger('input'); search.focus(); search.setSelectionRange(1, 3, 'backward');
+  f.ack(0); f.tick(100);
+  search = f.current().find('.acdc-live-search'); assert.equal(search.val(), 'Sup'); assert.equal(f.domDocument.activeElement, search);
+  assert.deepEqual([search.selectionStart, search.selectionEnd, search.selectionDirection], [1, 3, 'backward']);
+  search.val('Support latest').trigger('input'); search.setSelectionRange(4, 9, 'forward'); f.reply(1, liveData());
+  search = f.current().find('.acdc-live-search'); assert.equal(search.val(), 'Support latest'); assert.equal(f.domDocument.activeElement, search);
+  assert.deepEqual([search.selectionStart, search.selectionEnd, search.selectionDirection], [4, 9, 'forward']);
+  f.event(0); f.tick(100); f.reply(2, {}, {live: true});
+  search = f.current().find('.acdc-live-search'); assert.equal(search.val(), 'Support latest'); assert.equal(f.domDocument.activeElement, search);
+  assert.equal(f.current().spec.data.refreshFailed, true);
+});
+test('same-page refresh never steals moved focus; queue/page/account navigation resets search', () => {
+  const f = fixture({dom: true}); f.app.renderDashboard(); f.reply(0, liveData());
+  f.current().find('.acdc-live-search').val('Support').trigger('input');
+  const external = {}; f.domDocument.activeElement = external; f.ack(0); f.tick(100); f.reply(1, liveData());
+  assert.equal(f.current().find('.acdc-live-search').val(), 'Support'); assert.equal(f.domDocument.activeElement, external);
+  f.app.renderLiveDashboard(Q); f.reply(2, liveData(true)); f.app.renderDashboard(); f.reply(3, liveData());
+  assert.equal(f.current().find('.acdc-live-search').val(), '');
+  f.current().find('.acdc-live-search').val('Support').trigger('input');
+  f.app.renderLiveDashboard(null, undefined, {cursor: Q, size: 50, history: [null]}); f.reply(4, liveData());
+  assert.equal(f.current().find('.acdc-live-search').val(), '');
+  f.current().find('.acdc-live-search').val('Support').trigger('input'); f.app.accountId = B; f.app.renderDashboard();
+  const foreign = liveData(); foreign.live.account_id = B; f.reply(5, foreign);
+  assert.equal(f.current().find('.acdc-live-search').val(), ''); assert.equal(f.domDocument.activeElement, external);
+});
+test('strict agents DTO rejects scope/cap/identity/state/completeness contradictions', () => {
+  const f = fixture(), changes = [
+    d => { delete d.agents; }, d => { d.capabilities.agent_runtime = false; },
+    d => { d.agents.limit = 201; }, d => { d.agents.endpoint_reachability_verified = true; },
+    d => { d.agents.extra = 'private'; }, d => { d.agents.roster_complete = false; },
+    d => { d.agents.truncated = true; d.agents.roster_complete = false; d.agents.runtime_complete = false; },
+    d => { d.agents.runtime_complete = false; }, d => { d.agents.observation_started = null; },
+    d => { d.agents.observation_finished = d.agents.observation_started - 1; },
+    d => { d.agents.rows.push(d.agents.rows[0]); }, d => { d.agents.rows[0].agent_id = '../foreign'; },
+    d => { d.agents.rows[0].pid = '<0.1.0>'; }, d => { d.agents.rows[0].name = '\nsecret'; },
+    d => { d.agents.rows[0].name = 'é'.repeat(129); }, d => { d.agents.rows[0].state = 'logout'; },
+    d => { d.agents.rows[0].queue_member = null; }, d => { d.agents.rows[0].observed = false; },
+    d => { d.agents.rows[0].reason = 'source_unavailable'; },
+    d => { d.agents.rows = Array(201).fill(d.agents.rows[0]); }
+  ];
+  changes.forEach(change => { const input = data(true); change(input.live); assert.equal(f.app.liveSnapshotValid(input.live, A, Q, paging()), false); });
+  const overviewData = data(); overviewData.live.agents = agentData(); assert.equal(f.app.liveSnapshotValid(overviewData.live, A, null, paging()), false);
+});
+test('all eight observed runtime states permit either membership without claiming reachability; unknown reasons stay unknown', () => {
+  const f = fixture();
+  for (const state of ['wait', 'sync', 'ready', 'ringing', 'answered', 'wrapup', 'paused', 'outbound']) for (const member of [true, false]) {
+    const input = data(true); Object.assign(input.live.agents.rows[0], {state, queue_member: member});
+    assert.equal(f.app.liveSnapshotValid(input.live, A, Q, paging()), true);
+    assert.equal(model(f, input).members[0].membership, member ? strings.acdc.dashboard.queueMember : strings.acdc.dashboard.queueNotMember);
+  }
+  for (const reason of ['not_observed', 'inconsistent_sources', 'source_unavailable']) {
+    const input = data(true); input.live.agents.runtime_complete = false;
+    Object.assign(input.live.agents.rows[0], {observed: false, queue_member: null, state: null, reason});
+    assert.equal(f.app.liveSnapshotValid(input.live, A, Q, paging()), true);
+    assert.equal(model(f, input).members[0].status, 'Unknown'); assert.equal(model(f, input).members[0].membership, 'Unknown');
+  }
+  assert(strings.acdc.dashboard.memberContext.includes('does not verify endpoint reachability'));
+});
+test('available and unavailable empty agent rosters have distinct runtime completeness', () => {
+  const f = fixture(), input = data(true); input.live.agents = agentData([]);
+  assert.equal(f.app.liveSnapshotValid(input.live, A, Q, paging()), true); assert.equal(model(f, input).rosterCount, 0);
+  Object.assign(input.live.agents, {observation_started: null, observation_finished: null, runtime_complete: false});
+  assert.equal(f.app.liveSnapshotValid(input.live, A, Q, paging()), true);
+  assert.equal(model(f, input).agentRuntimeStatus, strings.acdc.dashboard.runtimeIncomplete);
+  input.live.agents.runtime_complete = true; assert.equal(f.app.liveSnapshotValid(input.live, A, Q, paging()), false);
+});
+test('100 local subscriptions admit exactly one pending authorization and drain only on asynchronous ACKs', () => {
+  const f = fixture(), input = liveData(); input.queues.splice(0, input.queues.length, ...Array.from({length: 100}, (_, i) => ({
+    id: (i + 1).toString(16).padStart(32, '0'), name: 'Queue ' + i, strategy: null, metrics_available: true, metrics: metrics()})));
+  input.live.pagination.page_size = 100;
+  f.app.renderLiveDashboard(null, undefined, {cursor: null, size: 100, history: []}); f.reply(0, input);
+  assert.equal(f.bindings.length, 1); assert.equal(Object.keys(f.app.appFlags.acdc.liveDashboardController.bindings).length, 100);
+  f.tick(999); assert.equal(f.bindings.length, 1, 'Do not churn a pending handle');
+  for (let i = 0; i < 100; i++) { assert.equal(f.bindings.length, i + 1); f.ack(i); }
+  assert.equal(f.bindings.length, 100); assert(f.bindings.every(b => !b.pending));
+  f.tick(100); assert.equal(f.requests.length, 2, '100 ACKs coalesce to one snapshot');
+});
+test('busy rejection releases one slot with pacing, not a parallel burst or immediate retry loop', () => {
+  const f = fixture(); f.app.renderDashboard(); f.reply(0, liveData());
+  f.bindings[0].params.lifecycle.onError({code: 'rejected'}); f.tick(999); assert.equal(f.bindings.length, 1);
+  f.tick(1); assert.equal(f.bindings.length, 2); f.ack(1); f.tick(100); f.reply(1, liveData());
+  f.tick(13899); assert.equal(f.bindings.length, 2); f.tick(1); assert.equal(f.bindings.length, 3);
+  assert.equal(f.bindings[2].params.binding, 'queue_live.changed.' + Q); assert.equal(f.bindings[0].cancelled, 1);
+});
+test('disconnect cancels framework replay handles and reconnect admits one handle awaiting real ACK', () => {
+  const f = fixture(); f.app.renderDashboard(); f.reply(0, liveData()); f.ack(0); f.ack(1); f.tick(100); f.reply(1, liveData());
+  f.bindings[0].params.lifecycle.onDisconnect({code: 'disconnected'});
+  assert(f.bindings.every(b => b.cancelled === 1)); f.tick(1000); assert.equal(f.bindings.length, 3);
+  f.tick(1000); assert.equal(f.bindings.length, 3, 'One pending handle waits, no per-second churn');
+  f.ack(0, 2); assert.equal(f.bindings.length, 3, 'Old callback cannot advance admission');
+  f.ack(2, 2); assert.equal(f.bindings.length, 4); f.ack(3, 2); f.tick(100);
+  assert.equal(f.requests.length, 3); assert(f.bindings.slice(2).every(b => !b.pending));
+  f.app.renderSection('agents'); assert(f.bindings.slice(2).every(b => b.cancelled === 1)); assert.equal(f.timers.size, 0);
+});
+test('connect false immediately cancels its desired handle; late timeout/ACK cannot replay before retry', () => {
+  const f = fixture(); f.monster.socket.connect = () => false;
+  f.app.renderLiveDashboard(Q); f.reply(0, liveData(true)); assert.equal(f.bindings[0].cancelled, 1);
+  f.bindings[0].params.lifecycle.onError({code: 'timeout'}); f.ack(0); f.tick(14999);
+  assert.equal(f.bindings.length, 1); assert.equal(f.requests.length, 1);
+  f.monster.socket.connect = () => true; f.tick(1); assert.equal(f.bindings.length, 2); f.ack(1); f.tick(100);
+  assert.equal(f.bindings[0].cancelled, 1); assert.equal(f.requests.length, 2);
 });
 console.log(JSON.stringify({result: 'PASS', groups, network: false, browser: false, live_writes: false}));
