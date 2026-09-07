@@ -6,6 +6,40 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Drain candidate REJECTED — September7; no deployment:** root run
+`da512e/184d65` failed4 of12 groups, evidence
+`/tmp/kazoo-stats-upgrade-drain.UlbYsh`. The classifier reported completion with
+zero captured workers while real compiled `kz_process` wrappers remained paused
+before metadata/local-fun invocation. Diagnostic `301ed2/872ff5` confirmed their
+immutable `initial_call` is `{erlang,apply,2}`, NOT `kz_process`. The experimental
+helper is therefore unsafe and has been moved OUT of `applications/acdc/src`.
+
+Manual expected-failure reproducer:
+`scripts/experiments/reproduce-stats-upgrade-drain.sh`; candidate:
+`scripts/erlang-tests/candidates/acdc_stats_upgrade_drain.erl`; fixture:
+`scripts/erlang-tests/acdc_stats_upgrade_drain_tests.erl`.
+Relocated run `f41056/47cf55` again failed4/passed8, retained at
+`/tmp/kazoo-stats-upgrade-drain.o2itUk`. Both candidate and actual production
+`kz_process` were freshly compiled without TEST; no live BEAMs installed.
+Do not treat the eight passing cases as worker-drain acceptance, copy this
+candidate into production sources, or narrow its failing test assertions.
+
+Read-only target-node metadata RPC `2ac240` found11 anonymous apply/2 processes,
+including permanent OTP loader/application/code/error/global/RPC/logger roles
+and a media retry scanner. Simply adding apply/2 to the cohort would wait forever
+on unrelated infrastructure. Native ETS managers also spawn anonymous successor
+finders after inheritance; those wait for a replacement while the proposed gate
+requires the stats child stopped. Current stack or late dictionary filtering is
+not a sound fix. All root jobs are terminal; no service/account changes occurred.
+
+**Next investigation:** the source-only agent is comparing a retained caller-
+metadata sidecar that preserves the existing18-field stats layout with native-
+role attestation/targeted keeper suspension. Caller/privacy/API requirements
+must remain unchanged; no alternative is accepted yet. A full native keeper
+rehearsal and safe coordinated deployment are still required for any chosen
+path. There is no accepted worker-drain helper. Installer readiness checkpoint
+`0236c57` is pushed and independently read back (`350395/745f88`, `49fbf2`).
+
 **Installer stats readiness — September7, source tested, NOT deployed:**
 New `sup acdc_maintenance stats_ready` returns exact `ready` only for the same
 current stats child with verified table admission before/after a true native

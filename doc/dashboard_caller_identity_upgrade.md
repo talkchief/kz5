@@ -90,6 +90,45 @@ and post-migration successful queries/updates.
 
 ## Existing evidence and its limits
 
+### Rejected worker-identity experiment — read before rollout
+
+The proposed immutable-initial-call classifier is invalid. Root12-group run
+`da512e/184d65` failed4 tests: paused actual production `kz_process` wrappers were
+not captured and the helper incorrectly returned verified completion. Evidence
+is `/tmp/kazoo-stats-upgrade-drain.UlbYsh`. Actual isolated process inspection
+`301ed2/872ff5` showed `{erlang,apply,2}` as their initial call. The wrapper's
+module appeared only in its current stack, which is not immutable provenance.
+
+The rejected module is quarantined at
+`scripts/erlang-tests/candidates/acdc_stats_upgrade_drain.erl`, outside the
+application build. Reproduce manually (expected nonzero; NOT a release gate):
+
+```sh
+bash scripts/run-kazoo-validation.sh --memory-mib 128 --reserve-mib 512 \
+  --runtime-sec 60 -- /usr/bin/unshare --net /bin/bash \
+  /opt/kz5/scripts/experiments/reproduce-stats-upgrade-drain.sh
+```
+
+The relocated packet again failed4/passed8 in `f41056/47cf55`, retained at
+`/tmp/kazoo-stats-upgrade-drain.o2itUk`. Its real OTP supervisor/unregistered
+keeper fixtures corrected an earlier source mismatch, but keeper internals are
+controlled and do not reproduce the complete native successor-finder lifecycle.
+The classifier's completion result must never authorize conversion or purge.
+
+Read-only target RPC `2ac240` found11 apply/2 processes, including permanent
+unrelated OTP and media roles. Capturing all apply/2 processes cannot finish on
+this runtime. Additionally native retained managers start anonymous `find_me`
+workers after old-owner death; these cannot finish while stats remains stopped.
+Generic current-function or late consumer/application metadata exclusions are
+not proof that a delayed old callback is absent.
+
+Next source investigation compares (a) preserving the18-field layout with a
+retained privacy-metadata sidecar and coherent collection, against (b) exact
+native-role provenance attestation and narrowly controlled keeper suspension.
+Neither design is accepted. Both must preserve the requested caller/privacy
+contract and existing statistics. No full application restart, table deletion,
+unsafe purge or relaxation of the failed assertions is authorized by this note.
+
 ### Installer readiness source checkpoint
 
 `acdc_maintenance:stats_ready/0` obtains the current supervisor child, requires
@@ -141,14 +180,13 @@ Source audit of the first replacement found that a consumer-PID dictionary scan
 and successful `soft_purge` are insufficient: native responders start through a
 `kz_process` wrapper before installing consumer metadata, and periodic archives
 hold delayed local funs in that wrapper. Purge is not acknowledgement that
-those workers completed. The next helper must run only after actual old-worker
-termination and exact retained-heir ownership verification, conservatively
-monitor the surviving `kz_process`/native `acdc_stats` initial-call cohort, and
-require actual termination before conversion/purge. It must refuse on a bounded
-deadline rather than kill workers or narrow the scan to late metadata. This
-argument is specific to the audited closed spawn graph; a one-time process
-scan is not generic quiescence proof. Dynamic reader entry gates and old direct
-code-reader checks remain separate requirements.
+those workers completed. The subsequent initial-call experiment failed as
+documented above; it is not a usable drain implementation. Any replacement
+must prove the actual old workers completed before conversion/purge and must
+not kill unrelated workers or substitute late metadata. A one-time process scan
+is not generic quiescence proof. Under a fully proven closed spawn graph, the
+normal non-responder maintenance reader is `find_call/1` (now gated), but
+already-running old direct code still needs quiescence before conversion.
 
 Root startup suite now passes16 groups `156530/e8b860`, retained at
 `/tmp/kazoo-stats-startup.fTo5ct`, rebuilding13 listed production modules without

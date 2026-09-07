@@ -50,6 +50,14 @@ the latest engineering handoff takes precedence for current deployment state.
   with exit zero. Root startup17 groups `8ecdb9/dff757`, installer5 groups
   `e8f999/b6a8d2` and read-only safety `f77e99` pass. Not deployed; actual broker
   ACK, safe retained-table replacement and fresh/split-host acceptance remain.
+  **Drain candidate rejected:** root `da512e/184d65` failed4/12 groups by missing
+  live paused anonymous wrappers. Relocated manual reproducer `f41056/47cf55`
+  repeats the failure. Candidate is quarantined under
+  `scripts/erlang-tests/candidates`, not production sources. Actual target
+  metadata `2ac240` shows permanent unrelated apply/2 processes, so broadening
+  that classifier is not a usable fix. Compare retained sidecar/compatible
+  record storage against authoritative role attestation before further rollout;
+  requirements and caller/privacy acceptance stay unchanged.
 - **P0-25 additional source fix, not deployed:** initial pending dashboard
   views now own a disposal observer too. A detached loading view previously
   allowed its watchdog to overwrite the replacement screen. Reproduced in
