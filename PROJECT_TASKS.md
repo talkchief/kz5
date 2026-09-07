@@ -7,6 +7,16 @@ first for achieved work, deployment status, source locations and next steps.
 
 ### Operator priority correction — 2026-09-07 (supersedes older priorities)
 
+**Operator reaffirmed September7:** Gemini is permitted only for the one-time
+authoring of missing release recordings. Reuse the completed WAV artifacts;
+never call Gemini during installation, startup, queue editing, account or
+sub-account creation, or calls. The supported built-in languages remain exactly
+EN/HE/FR/ES/AR. No service/runtime TTS dependency or provider-key requirement may
+be introduced. This is a development system; the operator explicitly permits
+service restarts needed for implementation, deployment and testing. Preserve
+account/configuration data and inspect current calls before disruptive changes;
+do not treat restart permission as a reason to repeatedly ask for approval.
+
 The operator clarified that ONLY historical dashboards were postponed. The
 previous interpretation pausing callbacks and voices was incorrect.
 
@@ -52,6 +62,15 @@ source/document locations, evidence, remaining acceptance and next action.
 Distinguish source complete, deployed, verified and remotely delivered; do not
 close a task on a unit-test pass alone. Older snapshots below are historical;
 the latest engineering handoff takes precedence for current deployment state.
+
+Priority1 media checkpoint September7: missing English cardinal31/31 recordings
+have been authored once (31requests,no retries) and verified offline. WAVs and
+ledger: `scripts/assets/acdc-gemini-cardinals-20260907/`. These preserve the210
+existing callback/intro/digit artifacts; remaining locales, composed listening,
+runtime integration/import and live position playback are still open. Current
+Gemini offer harness offline checks pass; initial live attempt stopped before
+SIP because its Couch attachment GET needed explicit JSON content negotiation.
+Exact evidence/next action are at the top of `PROJECT_HANDOFF.md`.
 
 - **UI-02 complete:** removed user-facing “observed” wording; progress labels
   and duration heading read “In Progress.” Deployed and browser verified.

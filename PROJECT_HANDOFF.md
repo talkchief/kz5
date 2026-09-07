@@ -6,6 +6,37 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**One-time English cardinal authoring completed — September7:**31/31 missing
+English number-composition recordings passed technical QA, exactly31 initial
+Gemini requests,zero retries (`adff0f/ea936c`). Preserved existing210 callback/
+intro/digit recordings. New62 WAVs (24kHz masters and8kHz telephony) and durable
+request ledger are copied into `scripts/assets/acdc-gemini-cardinals-20260907/`;
+the original authoring directory remains
+`/usr/local/src/kazoo5-installer/acdc-cardinal-release-20260907`.
+Independent network-isolated verification passes `8b19ab/ac152a`; English
+asset-set SHA256 `a84e012ec30e87a5f0a8aa2036185938d8cee405af81bc8499e88416113e3245`.
+Approval/text evidence: `doc/acdc-cardinal-approvals-20260907.json` and
+`doc/acdc_cardinal_en_release_review.md`. These are authoring artifacts, NOT
+listening-approved, runtime integrated or deployed cardinal playback. Other
+locales remain pending in this separate584-role catalog. Never regenerate
+these successful English identities or invoke Gemini from installer/runtime.
+
+**Current Gemini offer acceptance harness:** root offline29 fixture groups,
+36 audio groups and scenario checks pass `d2d1b6/9ff0e4`; prepare-only passes
+`99e573/ef7ce0`. First live attempt `86061c/1ca5a4` stopped before fixture
+creation/SIP traffic because CouchDB returned multipart attachments to a JSON
+parser. Safe read-only probe `58db30/870334` confirms HTTP200 multipart/related.
+Evidence directory `/var/log/kazoo-acceptance/20260907T115400Z`; no fixture receipt
+was created. Fix explicit JSON content negotiation and rerun; this is a harness
+failure, not a callback acceptance result. No service restart occurred.
+
+**Latest operator reaffirmation — September7:** Gemini is release-authoring only,
+used once for missing EN/HE/FR/ES/AR recordings; reuse finished WAVs in Git with
+no Gemini at install/startup/account creation/edit/call time. The operator again
+confirms this is a development system and authorizes restarting services as
+needed. Preserve customer/configuration state, inspect live calls and retain
+rollback evidence, but do not pause awaiting redundant restart permission.
+
 **Current callback runtime verified — September7:** all eight focused canonical
 callback media modules already match fresh production compilation AND actual
 loaded module MD5s (`760395/afb084`, `7b9401/fcf084`, `0ad7ce`). Older statements

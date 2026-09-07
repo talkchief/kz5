@@ -29,7 +29,9 @@ c46a546d41836a4e27f359299f1d8664cdd3d27a11dbcf570db354000ff22208
 dc041f104ab060cdd956ee237aaf004dea2edef1db070e654473a85c13f5b50b
 ```
 
-No cardinal recordings or authoring approval artifact are packaged under
+Historical pre-authoring checkpoint (superseded for English by the September7
+31-recording batch and approval files listed in `PROJECT_HANDOFF.md`):
+no cardinal recordings or authoring approval artifact were packaged under
 `scripts/assets`. The missing catalog is exactly EN31 + ES53 + FR161 + HE131 +
 AR208 = 584 role recordings / 1,168 master-and-telephony WAVs, before any newly
 versioned introductions. Telephone digits are not presumed reusable cardinal
