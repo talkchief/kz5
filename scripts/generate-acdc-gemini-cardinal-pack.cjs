@@ -146,6 +146,15 @@ async function generate(o, deps = {}) {
   check(!o.retryFailed || o.resume && Number.isInteger(o.retryBudget) && o.retryBudget > 0 && o.retryBudget <= 584,
     'EXPLICIT_RETRY_BUDGET_REQUIRED');
   outputTarget(o.output, !!o.resume);
+  // A rejected fresh approval must not strand an empty output directory: it
+  // has no manifest to resume, and a new invocation must never overwrite it.
+  // Resume still reads/applies approvals only while holding its existing lock.
+  let initialManifest;
+  if (!o.resume) {
+    check(absolute(o.keyFile) && !o.keyFile.startsWith(o.output + '/'), 'PROTECTED_EXTERNAL_KEY_PATH_REQUIRED');
+    initialManifest = pack.createManifest();
+    applyApprovals(initialManifest, readApprovals(o.approvalFile, o.approvalHash), o.locales);
+  }
   if (!o.resume) { fs.mkdirSync(o.output, {mode: 0o700}); syncDirectory(path.dirname(o.output)); }
   const root = ownedDirectory(o.output, true), lockFile = path.join(o.output, '.generation.lock'); let lock, provider, key;
   try { lock = fs.openSync(lockFile, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600); }
@@ -158,7 +167,7 @@ async function generate(o, deps = {}) {
   };
   const saveRun = () => { checkRoot(); runHash = atomicJson(o.output, runName, run, runHash); };
   try {
-    m = o.resume ? pack.readManifest(o.output) : pack.createManifest();
+    m = o.resume ? pack.readManifest(o.output) : initialManifest;
     manifestHash = o.resume ? hash(readOwned(path.join(o.output, 'manifest.json'))) : null;
     const selected = m.prompts.filter(p => o.locales.includes(p.locale));
     check(!selected.some(p => p.generation_status === 'REQUESTING'), 'INDETERMINATE_REQUEST_REQUIRES_RECONCILIATION');
@@ -170,7 +179,7 @@ async function generate(o, deps = {}) {
       return summary(m, o.locales); // No provider load, key read or approval rewrite.
     }
     check(absolute(o.keyFile) && !o.keyFile.startsWith(o.output + '/'), 'PROTECTED_EXTERNAL_KEY_PATH_REQUIRED');
-    applyApprovals(m, readApprovals(o.approvalFile, o.approvalHash), o.locales);
+    if (o.resume) applyApprovals(m, readApprovals(o.approvalFile, o.approvalHash), o.locales);
     if (o.retryFailed) {
       check(o.retryBudget >= m.retry_request_budget, 'RETRY_BUDGET_CANNOT_DECREASE');
       m.retry_request_budget = o.retryBudget; m.retries_explicitly_enabled = true;

@@ -6,6 +6,34 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Current callback runtime verified — September7:** all eight focused canonical
+callback media modules already match fresh production compilation AND actual
+loaded module MD5s (`760395/afb084`, `7b9401/fcf084`, `0ad7ce`). Older statements
+that this cohort is undeployed are superseded. Full canonical87 tests pass
+`fada33/fee8c1`. See `doc/callback_media_runtime_parity.md` for hashes, retained
+build, scope and next actual-call gate. Do not redeploy identical code or deploy
+unrelated dashboard candidates as a presumed callback fix. Existing offer
+harness prepare-only passes `8d4b3b/70b363`, but its legacy audio references need
+an explicit Gemini mode before current built-in playback can be judged.
+
+**Voice-authoring fix tested:** rejected fresh approval now leaves no stranded
+empty output directory. Corrected approval can reuse that untouched path.
+Root `f3037b/83a87f` passes12 groups/177 checks,11 mock requests,zero real requests
+or keys, with actual SoX resampling. Evidence:
+`/tmp/acdc-cardinal-generator-proof.bf2n5X`. Historical generator injected only
+into a private process require cache fails the new no-output assertion
+`6b22f7` (`/tmp/acdc-cardinal-generator-proof.ThBYPt`,zero mock requests).
+The earlier baseline wrapper `2e43bd` failed module-cache loading before the
+test and is not a product regression proof. No existing WAVs changed.
+
+**Mobile bridge source milestone:** root reviewed sanitized provider/broker
+source and configuration example; no populated credentials/endpoints were
+imported. Offline configuration validator passes8 tests `71f4f8` with no
+provider/broker access. Source import is not activation-ready: failure ACK,
+retry/backpressure, TLS, dependency and systemd/installer work remain explicit
+requirements in `services/push-bridge/README.md`. Nothing was deployed or sent
+to production. All root jobs referenced here are terminal.
+
 **OPERATOR PRIORITY CORRECTION — September7, newest instruction:** callbacks
 and built-in Gemini voices are priority #1, followed by deployment/installer
 issues and the mobile bridge installer. Live dashboards move to lowest priority.

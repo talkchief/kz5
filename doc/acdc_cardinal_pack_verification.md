@@ -64,8 +64,12 @@ bash scripts/run-kazoo-validation.sh \
   /opt/kz5/scripts/test-acdc-cardinal-pack.cjs
 ```
 
-Next: implement the bounded one-time generator using this recipe and durable
-request ledger, finish contextual transcript/intro review, author missing
-artifacts once, verify/listen, implement create-only import and native playback,
-then deploy and perform actual five-language call acceptance. Installation,
-queue editing and future account creation must never invoke Gemini.
+The bounded one-time generator now exists at
+`scripts/generate-acdc-gemini-cardinal-pack.cjs`; its initial offline proof passed
+12 groups / 173 checks (root39271). See the [cardinal design](acdc_prerecorded_cardinal_design.md)
+for that receipt and [current authoring readiness](acdc_cardinal_authoring_readiness.md)
+for the next source correction and exact approval workflow. Next: finish the
+finite transcript/intro review, author missing artifacts once, verify/listen,
+implement create-only import and normal recorded playback, then deploy and
+perform actual five-language call acceptance. Installation, queue editing and
+future account creation must never invoke Gemini.

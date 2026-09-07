@@ -36,6 +36,16 @@ passed22 tests with current production/TEST compilation and unchanged source
 digest on September7; no network/provider/runtime writes. Full lifecycle,
 deployment, actual audio and retry acceptance remain open. See newest handoff.
 
+Subsequent root checkpoint: full canonical87 tests pass `fada33/fee8c1`.
+Fresh production build and actual loaded MD5 comparison prove all eight focused
+callback media modules already match current source (`0ad7ce`); blanket
+undeployed claims for that cohort are stale. Actual playback remains open;
+the old offer harness needs Gemini rather than legacy reference bytes.
+Voice generator no-output/retry fix passes12 groups/177 checks and reproduces
+failure with the historical generator. Sanitized mobile bridge import and its
+configuration preflight (8 offline tests) are ready to track, NOT activate.
+See `doc/callback_media_runtime_parity.md` and latest handoff for exact evidence.
+
 Keep this register current whenever implementation, deployment, testing or a
 blocker changes. Each task must retain its stable ID, requested behavior,
 source/document locations, evidence, remaining acceptance and next action.

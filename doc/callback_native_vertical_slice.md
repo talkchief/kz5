@@ -5,6 +5,95 @@ audio fix, native execution result or deployment acceptance. Development service
 replacement/restarts are already authorized; the remaining blockers below are
 technical, not a request for new deployment permission.
 
+## Priority correction: reproduce current WAV behavior before choosing a native lane
+
+The private owned-audio implementation below is an experimental solution, **not
+an established prerequisite** for callbacks or Gemini recordings. Normal
+FreeSWITCH playback already uses the normal codec/RTP/SRTP path. Restrictions of
+the private writer must not be attributed to ordinary WAV playback.
+
+There is narrower historical real-call evidence on the existing transport:
+[callback controls deployment](callback_controls_deployment.md) records the
+`20260905T193537Z` independent-offer/position audio PASS, and the
+`20260905T210254Z` legacy-English callback PASS: complete6.124-second confirmation,
+unanswered first attempt and confirmed/bridged retry after the configured
+minimum backoff. These do not certify current canonical Gemini playlists,
+arbitrary/custom endless hold, all five languages or ownership races.
+
+The current source still exposes a concrete transport question:
+
+- `acdc_announcements:maybe_play_announcements/2` calls
+  `kapps_call_command:audio_macro/2`. Member menu/readback/feedback and returned
+  confirmation likewise use ordinary queued PLAY/noop commands. Those queue
+  envelopes omit `Insert-At`, whose call-control default is `tail`.
+- `ecallmgr_call_command:get_fs_app/4` maps hold to `kz_endless_playback`.
+  `acdc_queue_fsm:callback_pause_request/3` pauses selection and stops the
+  announcement producer; it does not itself terminate native hold.
+- Simply changing insertion to `now` is not a verified fix:
+  `ecallmgr_call_control:insert_command/3` sets `call_cmd_sync(true)` and executes
+  from the control process. Native `kazoo_node.c:execute_or_queue_command`
+  then calls `switch_ivr_parse_event` synchronously. Conversely, `sync=false`
+  queues a private event; enqueue success is not playback/ordering/ownership
+  proof. `flush` performs `uuid_break ... all` and clears the control queue,
+  so it is not owner-scoped cancellation.
+
+The immediate gate is therefore a measured **current-source, normal-transport
+WAV test**, not completion of a new RTP framework. Required behavior remains:
+audible independent offers while waiting, complete registration confirmation,
+responsive call control throughout playback, safe terminal/ownership handling,
+and settled unanswered-first-attempt retry. Keep every private admission gate
+closed unless that implementation separately satisfies its acceptance criteria.
+
+### Bounded parity and reproduction plan (root-run only)
+
+1. Before changing runtime, establish zero calls and retain non-secret loaded
+   module MD5/path parity. For example, `sup -e cf_acdc_member module_info md5`
+   and equivalent checks for `acdc_gemini_prompts`, `acdc_announcements`,
+   `acdc_announcements_sup`, `acdc_callback_caller`, `acdc_callback_menu`,
+   `acdc_language` and `kapi_acdc_callback`; check `kapps_call_command`,
+   `kapi_dialplan`, `ecallmgr_call_control` and `ecallmgr_call_command` on their
+   actual owning nodes. Compare with freshly compiled no-TEST artifacts and
+   verify actual `code:which/1` paths, not only files on disk. Read only the
+   selected queue's language/callback/offer settings and scoped asset metadata;
+   do not dump complete call/config documents or credentials.
+2. Those eight ACDC modules form the focused canonical media test cohort in
+   `scripts/test-acdc-gemini-canonical-callback.sh`. They are not a replacement
+   for checking the installed queue FSM/listener/manager/member and callback
+   store/policy/recovery/probe dependencies. Deploy only a reviewed coherent
+   callback delta after parity checks. In particular, do not deploy the entire
+   current ACDC directory merely to update audio: unrelated DASH-10 queue-manager
+   and stats-layout candidates require separate coordination.
+3. Re-run the full canonical callback suite before deployment. Root's latest
+   media-only run `778a35/6d4296` passed22 tests with unchanged input digest
+   `5bcd7e76678f42988001ad768c391fd272401d2ec8b6d4b48eab975a73759ea8`;
+   it did not deploy code or execute native media/lifecycle acceptance.
+4. Prepare the existing isolated offer harness with
+   `bash scripts/test-acdc-callback-offer-calls.sh --prepare-only`. Its armed
+   form requires `--live --runtime-md5 HEX`. First reproduce its independent
+   schedules with the current playlist/normal transport; then verify the actual
+   configured30-second initial offer separately. Capture received RTP against
+   the exact installed WAV, noop ordering, hold continuation and producer
+   cleanup. A scheduler timestamp or native enqueue acknowledgement is not
+   audible-media evidence.
+5. Use one authorized, dialable return destination; the recent `kz5_test`
+   nonnumeric caller with alternate entry disabled correctly failed validation.
+   Do not weaken that check. Prepare
+   `scripts/test-acdc-callback-retry.sh --prepare-only --confirmation-reference FILE`
+   using a protected verified reference for the selected actual recording.
+   The armed historical runner additionally requires `--live --keep-fixture`;
+   review its retained-resource constraints before reuse. Verify key6/menu,
+   durable registration before complete success audio/BYE, first-attempt
+   CANCEL/settlement, configured backoff, second confirmation and one bridge.
+   Do not rewrite ambiguous historical tickets to make cleanup pass.
+6. Target the missing regression directly: a current built-in playlist longer
+   than five seconds over the actual endless hold, with an ownership/terminal
+   event during playback. Prove control responsiveness, no late queued audio
+   after bridge/usurp, correlated completion and preserved queue position on
+   resume. Repeat with the configured normal codec/security mode; a PCMU-only
+   capture does not establish every codec/SRTP combination. This may identify a
+   bounded normal-transport correction; choose it from evidence rather than
+   assuming the private owned lane is necessary.
+
 ## Canonical scope
 
 Current tracked callback code (`a75806c`, following `81b7c15`) uses recorded

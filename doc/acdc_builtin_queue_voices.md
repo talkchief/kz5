@@ -22,8 +22,8 @@ are PCM16 mono 24 kHz; telephony files are PCM16 mono 8 kHz. Resampling is done
 once during authoring. Installers verify and import the checked-in telephony
 bytes into shared system media for all current and future accounts.
 
-The existing effective inventory contains 145 fixed messages (29 per locale)
-and 20 Hebrew/Arabic telephone digits. The supplemental callback catalog adds:
+The packaged effective inventory contains 145 fixed messages (29 per locale),
+20 Hebrew/Arabic telephone digits and the following 45 supplemental assets:
 
 | Code context | ACDC-scoped recording | Count |
 | --- | --- | --- |
@@ -32,11 +32,20 @@ and 20 Hebrew/Arabic telephone digits. The supplemental callback catalog adds:
 | Enter an alternative callback number | `acdc-callback-enter-number` | Five locales |
 | Telephone-number readback | `acdc-number-0` through `acdc-number-9` | EN/FR/ES: 30 |
 
-These 45 clips are **missing additions**, not a request to regenerate valid
-existing recordings. Their exact text lives in
+These 45 clips are **already generated and packaged**. Their 47 requests retain
+two incomplete first attempts and their successful explicit retries; none is
+pending. The combined inventory is 210 effective assets / 420 tracked WAVs,
+42 assets per locale. Do not regenerate those valid recordings. Their text lives in
 `scripts/acdc-gemini-supplemental-catalog.cjs`. Number-entry text must match the
 reducer's pound-to-finish and star-to-remain-queued behavior. Generic global
 prompt IDs and customer recordings must not be overwritten.
+
+The September 7 source-only inventory audit and finite next authoring steps are
+in [cardinal authoring readiness](acdc_cardinal_authoring_readiness.md). The
+separate 584-role cardinal generator is implemented and offline-tested, but its
+recordings have not been authored. Source-backed transcript/context review can
+authorize that one-time work; it must not claim native-speaker listening or
+runtime acceptance that has not occurred.
 
 ## Acceptance still required
 

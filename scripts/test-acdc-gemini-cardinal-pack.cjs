@@ -94,19 +94,25 @@ async function main() {
       const link = nextPath('linked-parent'); fs.symlinkSync(output, link);
       checks++; assert.throws(() => generator.outputTarget(path.join(link, 'new'), false), pack.PackError);
     });
-    await group('approval/intro/context pins block before provider access', async () => {
-      await rejects(() => generator.generate(opts(nextPath('pending-review'), [], noApproval), noProvider), 'AUTHORING_APPROVAL_PENDING');
+    const normalDir = nextPath('recoverable-preflight');
+    await group('approval/intro/context pins block before provider access or output creation', async () => {
+      await rejects(() => generator.generate(opts(normalDir, [], noApproval), noProvider), 'AUTHORING_APPROVAL_PENDING');
+      equal(fs.existsSync(normalDir), false);
       const wrong = opts(nextPath('wrong-pin')); wrong.approvalHash = '0'.repeat(64);
       await rejects(() => generator.generate(wrong, noProvider), 'APPROVAL_FILE_CHANGED');
+      equal(fs.existsSync(wrong.output), false);
       const inside = nextPath('inside-key'), o = opts(inside); o.keyFile = path.join(inside, 'key');
       await rejects(() => generator.generate(o, noProvider), 'PROTECTED_EXTERNAL_KEY_PATH_REQUIRED');
+      equal(fs.existsSync(inside), false);
       const changed = clone(approval.value); changed.approvals.find(a => a.locale === 'en-us').intro.semantic_frame = 'ticket-number';
       changed.approvals_sha256 = pack.digest(changed.approvals);
       const file = nextPath('wrong-context.json'); fs.writeFileSync(file, JSON.stringify(changed), {mode: 0o600});
-      await rejects(() => generator.generate(opts(nextPath('wrong-context'), [], {file, value: changed}), noProvider), 'APPROVAL_CONTEXT_CHANGED');
+      const wrongContext = opts(nextPath('wrong-context'), [], {file, value: changed});
+      await rejects(() => generator.generate(wrongContext, noProvider), 'APPROVAL_CONTEXT_CHANGED');
+      equal(fs.existsSync(wrongContext.output), false);
     });
-    const normalDir = nextPath('normal'), normalOpts = opts(normalDir), normalDeps = providerDeps(normalDir);
-    await group('bounded new authoring uses real helpers/SoX and reserves before transport', async () => {
+    const normalOpts = opts(normalDir), normalDeps = providerDeps(normalDir);
+    await group('corrected approval reuses its untouched path and reserves before transport', async () => {
       const result = await generator.generate(normalOpts, normalDeps);
       equal(result.requests_this_run, 1); equal(result.selected_qa_passed, 1); equal(result.selected_complete, false);
       equal(result.artifact_complete, false); equal(result.runtime_ready, false); equal(result.audio_listening_review, false);
