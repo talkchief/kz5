@@ -2,7 +2,7 @@
 // Pure plans and in-memory Couch compare-and-swap; no protected state/live API.
 const assert=require('node:assert/strict');
 const {plan,assertOwned,assertRawOwned,assertExpectedConfiguration,captureOwned,deleteOwned,assertNoReferences,conditionalSaveArguments,
-    erlangTerm,fingerprint,ACCOUNT,ENCODED_DATABASE}=require('./callback-offer-queue.cjs');
+    erlangTerm,fingerprint,audioMode,geminiAssets,geminiReferences,getReference,referenceDocument,ACCOUNT,ENCODED_DATABASE}=require('./callback-offer-queue.cjs');
 const Q='11111111111111111111111111111111',F='22222222222222222222222222222222',U='33333333333333333333333333333333';
 const marker='acdc-offer-'+'a'.repeat(24),rev='1-'+'b'.repeat(32),next='2-'+'c'.repeat(32);
 const state={ACCEPTANCE_ACCOUNT_ID:ACCOUNT,ACCEPTANCE_REALM:'acceptance-abcdef123456.invalid',
@@ -43,6 +43,75 @@ function store(collection,hook=()=>{}) {
 }
 async function captured(collection,storage){const fixture=clone(base);await captureOwned(storage,fixture,collection,()=>{});storage.calls.length=0;return fixture;}
 (async()=>{
+    const transportRequests=[],jsonResponse={ok:true,status:200,headers:{get:()=> 'application/json; charset=utf-8'},
+        arrayBuffer:async()=>Buffer.from('{"safe":true}')};
+    const fetched=await getReference('en-us%2Ffixture?attachments=true',5984,'Basic OFFLINE_SENTINEL','json',async(url,options)=>{
+        transportRequests.push({url,options});return jsonResponse;
+    });
+    assert.deepEqual(referenceDocument(fetched),{safe:true});
+    assert.equal(transportRequests[0].url,'http://127.0.0.1:5984/system_media/en-us%2Ffixture?attachments=true');
+    assert.equal(transportRequests[0].options.headers.accept,'application/json');
+    assert.equal(transportRequests[0].options.redirect,'error');
+    assert(transportRequests[0].options.signal instanceof AbortSignal);groups++;
+    for(const contentType of ['multipart/related; boundary=OFFLINE_SECRET','text/plain','']) {
+        await assert.rejects(getReference('fixture',5984,'Basic OFFLINE_SENTINEL','json',async()=>({...jsonResponse,
+            headers:{get:()=>contentType},arrayBuffer:async()=>assert.fail('Do not read non-JSON body')})),
+            error=>error.message==='Installed media reference is not application/json');
+    }groups++;
+    assert.throws(()=>referenceDocument(Buffer.from('01OFFLINE_SECRET')),
+        error=>error.message==='Invalid installed media reference JSON');
+    await getReference('fixture.wav',5984,'Basic OFFLINE_SENTINEL','wav',async(_url,options)=>{
+        assert.equal(options.headers.accept,'audio/wav, application/octet-stream');
+        return {...jsonResponse,headers:{get:()=> 'audio/wav'}};
+    });groups++;
+    const geminiPlan=plan(state,user,marker,'gemini'),geminiFixture={...base,audio_mode:'gemini'};
+    assert.equal(geminiPlan.queue.announcements.position_announcements_enabled,false);
+    assert.equal(geminiPlan.queue.announcements.wait_time_announcements_enabled,false);
+    assert.equal(geminiPlan.queue.announcements.language,'en-us');
+    assert.equal(geminiPlan.queue.moh,'silence_stream://-1');assert.equal(geminiPlan.queue.callback.media,undefined);
+    assert.deepEqual(geminiPlan.queue.callback.announcement,{enabled:true,initial_delay:3,interval:15});
+    assert.equal(audioMode(undefined),'legacy');assert.throws(()=>audioMode('automatic'));groups++;
+    const geminiQueue={...geminiPlan.queue,id:Q,agents:[]};assertOwned(geminiQueue,geminiFixture,'queues');
+    for(const wrong of [{...geminiQueue,moh:'local_stream://default'},
+        {...geminiQueue,announcements:{...geminiQueue.announcements,position_announcements_enabled:true}},
+        {...geminiQueue,callback:{...geminiQueue.callback,media:{offer:'legacy'}}}])
+        assert.throws(()=>assertOwned(wrong,geminiFixture,'queues'));groups++;
+    const geminiStore=store('queues');geminiStore.document={...raw('queues'),...geminiPlan.queue};
+    await captureOwned(geminiStore,geminiFixture,'queues',()=>{});
+    await deleteOwned(geminiStore,geminiFixture,'queues',()=>{},async()=>{});
+    assert.equal(geminiFixture.queues_deleted,true);assert.equal(geminiStore.document.pvt_deleted,true);groups++;
+    const changedGemini=store('queues'),changedGeminiFixture={...base,audio_mode:'gemini'};
+    changedGemini.document={...raw('queues'),...geminiPlan.queue};
+    await captureOwned(changedGemini,changedGeminiFixture,'queues',()=>{});changedGemini.document._rev=next;
+    await assert.rejects(deleteOwned(changedGemini,changedGeminiFixture,'queues',()=>{},async()=>{}),/revision or full document changed/);
+    assert.equal(changedGemini.document.pvt_deleted,undefined);groups++;
+    const assets=geminiAssets(),importer=require('../import-acdc-gemini-voices.cjs');
+    const docs=new Map(assets.map(a=>{const d=importer.document(a,0);d._rev=rev;d._attachments[a.attachment].digest=a.md5;return [a.id,d];}));
+    const gets=[],get=async relative=>{assert(relative.endsWith('?attachments=true'));const key=decodeURIComponent(relative.split('?')[0]);gets.push(key);
+        assert(docs.has(key),'Missing immutable asset');return Buffer.from(JSON.stringify(docs.get(key)));};
+    const verified=await geminiReferences(assets,get);
+    assert.equal(gets.length,43);assert.equal(new Set(gets).size,42);
+    assert(verified.receipt.duration_seconds>5&&verified.receipt.duration_seconds<7);
+    assert.equal(verified.receipt.installed_callback_assets_verified,42);
+    assert.equal(require('node:crypto').createHash('sha256').update(verified.wav).digest('hex'),verified.receipt.wav_sha256);groups++;
+    const offer=assets.find(a=>a.canonical_id==='acdc-callback-offer-6'),original=clone(docs.get(offer.id));
+    for(const mutate of [d=>d.source_type='foreign',d=>d.source_voice.voice='Other',
+        d=>d.source_voice.sha256='0'.repeat(64),d=>d._attachments[offer.attachment].data=Buffer.from('wrong').toString('base64'),
+        d=>d._id='en-us/acdc-callback-offer-6']) {
+        const bad=clone(original);mutate(bad);docs.set(offer.id,bad);
+        await assert.rejects(geminiReferences(assets,get));
+    }docs.set(offer.id,original);groups++;
+    const missingAsset=assets.at(-1);docs.delete(missingAsset.id);
+    await assert.rejects(geminiReferences(assets,get),/Missing immutable asset/);
+    const restored=importer.document(missingAsset,0);restored._rev=rev;restored._attachments[missingAsset.attachment].digest=missingAsset.md5;
+    docs.set(missingAsset.id,restored);
+    await assert.rejects(geminiReferences(assets.slice(1),get));
+    await assert.rejects(geminiReferences([...assets.slice(1),assets[1]],get));groups++;
+    let offerReads=0;
+    await assert.rejects(geminiReferences(assets,async relative=>{
+        if(decodeURIComponent(relative.split('?')[0])===offer.id&&++offerReads===2)return Buffer.from(JSON.stringify({...original,_rev:next}));
+        return get(relative);
+    }),/changed during reference capture/);groups++;
     for(const collection of ['queues','callflows']) {
         const storage=store(collection),fixture=await captured(collection,storage),saved=[];
         assert.equal(fixture[collection+'_couch'].revision,rev);

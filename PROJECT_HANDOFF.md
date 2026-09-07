@@ -6,6 +6,23 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Fresh complete Gemini EN offer runner PASS:** `c88ff7/d9b680` exits0,
+`/var/log/kazoo-acceptance/20260907T120840Z`. Three complete5.171s offers at
+3.069/18.089/33.069s; no early offer, zero capture drops, normal46.011s teardown.
+Service PID/restart comparisons, announcement-worker cleanup, fresh journal/
+file error and no-new-core checks pass. Exact conditional fixture cleanup passes,
+zero agents changed, unrelated documents unchanged. No restart/provider request.
+See `doc/acdc_gemini_offer_acceptance_20260907.md`. Key6 confirmation/retries,
+real MOH, all languages, new cardinal integration and full release remain open.
+
+**Gemini EN offer audio verified — September7:** retained zero-drop call capture
+`/var/log/kazoo-acceptance/20260907T120047Z` passes the corrected40-group-tested
+checker (`6071a3/ff00b0`): complete5.171s offers at3.114/18.114/33.114s, no early
+offer, normal46.012s teardown and exact conditional cleanup. No provider
+request. See `doc/acdc_gemini_offer_acceptance_20260907.md` for limits, earlier
+harness failures and numeric startup-gap evidence. Full live runner post-audio
+service/log checks and key6/retry acceptance remain separate gates.
+
 **One-time English cardinal authoring completed — September7:**31/31 missing
 English number-composition recordings passed technical QA, exactly31 initial
 Gemini requests,zero retries (`adff0f/ea936c`). Preserved existing210 callback/
@@ -29,6 +46,37 @@ parser. Safe read-only probe `58db30/870334` confirms HTTP200 multipart/related.
 Evidence directory `/var/log/kazoo-acceptance/20260907T115400Z`; no fixture receipt
 was created. Fix explicit JSON content negotiation and rerun; this is a harness
 failure, not a callback acceptance result. No service restart occurred.
+
+Follow-up: explicit JSON negotiation plus body-free errors now pass32 fixture
+groups,36 audio groups and scenario checks (`667209/ac6781`). Live rerun
+`9e03a9/d9377b` placed/completed the isolated call, but audio acceptance correctly
+rejected6 kernel capture drops. Evidence:
+`/var/log/kazoo-acceptance/20260907T115817Z`. Exact conditional cleanup passed,
+zero agents changed, unrelated documents unchanged. Capture buffer is now
+bounded8MiB with the zero-drop rule unchanged; scenario/syntax checks pass
+`fd51ed`. Await the next live result; do not treat the lossy recording as proof.
+
+**Source-only parallel candidates awaiting root verification:** two new HE/AR
+intro authoring identities are implemented separately in
+`scripts/acdc-cardinal-intro-pack.cjs`,
+`scripts/generate-acdc-gemini-cardinal-intros.cjs`,
+`scripts/test-acdc-gemini-cardinal-intros.cjs`, documented in
+`doc/acdc_cardinal_intro_authoring.md`. Root read all three source/test files;
+offline verification `96b914/64a1be` passes12 groups/215 checks,12 mock requests,
+zero real requests/keys, actual SoX with unchanged source hashes. Evidence:
+`/tmp/acdc-cardinal-intros-proof.NWjyDb`. Those two real intro recordings are not
+yet authored or approved for listening. Bridge explicit
+startup/payload validation candidate is in `services/push-bridge/`, with
+`scripts/test-push-bridge-runtime.py`; tests and source review remain pending.
+Neither candidate is activated, committed or accepted by the voice commit.
+
+Installer media regression rerun `623f42/c7d0bf` passed inventory/13 negative
+receipt cases and create-only210 preservation checks, then its128MiB validation
+unit was OOM-killed (journal `20c4f9`, unit
+`kazoo-validation-fd216e15-2c90-41a0-bd25-de6b11ad968b`). Full installer suite did
+not complete; do not report a pass. This was a resource-contained offline test,
+not an application service crash or runtime import. Rerun with adequate admitted
+memory while retaining the512MiB reserve; no provider calls are required.
 
 **Latest operator reaffirmation — September7:** Gemini is release-authoring only,
 used once for missing EN/HE/FR/ES/AR recordings; reuse finished WAVs in Git with

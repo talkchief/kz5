@@ -1,6 +1,6 @@
 'use strict';
 // Synthetic exact-dialog SIP/RTP PCAP; does not call SIPp or any live service.
-const assert=require('node:assert/strict'),{inspect,assertCaptureLog}=require('./assert-callback-offer-audio.cjs');
+const assert=require('node:assert/strict'),{inspect,assertCaptureLog,assertReferenceReceipt,assertGeminiEntrySilence}=require('./assert-callback-offer-audio.cjs');
 const call='1-999@127.0.0.20',expected={call_id:call,queue_id:'1'.repeat(32),ip:'127.0.0.20',sip_port:15064,media_port:47200,queue_entry:100};
 function reference(length,seed){const b=Buffer.alloc(length);for(let i=0;i<length;i++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;b[i]=(seed>>>24)&127;}return b;}
 const refs={offer:reference(32000,41),position:reference(12000,79)};
@@ -20,12 +20,16 @@ function capture(options={}) {
     sip(99.95,'INVITE sip:2098@acceptance.invalid SIP/2.0',2,'INVITE',true,sdp('127.0.0.20',47200),'');
     sip(100,'SIP/2.0 200 OK',2,'INVITE',false,sdp(options.remote||'127.0.0.1',30000));
     if(!options.noAck)sip(100.01,'ACK sip:2098@acceptance.invalid SIP/2.0',2,'ACK',true,'',options.badTag?'wrong':'remote');
-    const audio=Buffer.alloc(46*8000,255);
-    for(const at of options.offer||[3,18,33])refs.offer.copy(audio,at*8000);
-    for(const at of options.position||[11,26,41])refs.position.copy(audio,at*8000);
-    for(let offset=0;offset<audio.length;offset+=160){if((options.loss&&offset===3*8000+160)||offset===options.lossAt*8000)continue;
+    const audio=Buffer.alloc(46*8000,options.noiseByte===undefined?255:options.noiseByte);
+    const selectedRefs=options.refs||refs;
+    for(const at of options.offer||[3,18,33])selectedRefs.offer.copy(audio,at*8000);
+    for(const at of options.position||[11,26,41])selectedRefs.position.copy(audio,at*8000);
+    if(options.partialEntry)selectedRefs.offer.subarray(0,3200).copy(audio,400);
+    if(options.transient)selectedRefs.offer.subarray(0,160).copy(audio,1600);
+    for(let offset=0;offset<audio.length;offset+=160){if((options.loss&&offset===3*8000+160)||offset===options.lossAt*8000
+        ||offset<(options.skipRtpBefore||0)*8000)continue;
         const rtp=Buffer.alloc(172);rtp[0]=128;rtp.writeUInt16BE(offset/160,2);rtp.writeUInt32BE(offset,4);rtp.writeUInt32BE(77,8);audio.copy(rtp,12,offset,offset+160);
-        udp(100+offset/8000,rtp,options.foreign?'127.0.0.2':'127.0.0.1','127.0.0.20',30000,47200);}
+        udp(100+offset/8000+(options.rtpStartShift||0),rtp,options.foreign?'127.0.0.2':'127.0.0.1','127.0.0.20',30000,47200);}
     if(options.dtmf){const b=Buffer.alloc(16);b[0]=128;b[1]=101;udp(108,b,'127.0.0.20','127.0.0.1',47200,30000);}
     sip(146,'BYE sip:2098@acceptance.invalid SIP/2.0',3,'BYE',true);
     if(!options.noByeAck)sip(146.01,'SIP/2.0 200 OK',3,'BYE',false);
@@ -44,6 +48,56 @@ for(const [options,pattern] of [[{offer:[0,18,33]},/schedule/],[{offer:[3,17,31]
 assert.throws(()=>inspect(valid,refs,{...expected,call_id:'1-888@127.0.0.20'}),/Foreign dialog/);groups++;
 assert.throws(()=>inspect(valid.subarray(0,-1),refs,expected),/Truncated/);groups++;
 assert.throws(()=>inspect(valid,{...refs,offer:Buffer.alloc(56000,17)},expected),/shorter than7/);groups++;
+const geminiRefs={offer:reference(41368,41)},geminiExpected={...expected,audio_mode:'gemini'};
+const geminiCapture=options=>capture({refs:geminiRefs,position:[],...options});
+const geminiResult=inspect(geminiCapture(),geminiRefs,geminiExpected);
+assert.equal(geminiResult.position_verified,false);assert.equal(geminiResult.scope,'offer_only_silence_hold');
+assert.deepEqual(geminiResult.expected_position_seconds,[]);assert.equal(geminiResult.position,undefined);
+assert.equal(geminiResult.offer_duration_seconds,5.171);
+assert.deepEqual(geminiResult.offer.map(m=>m.complete_end_after_queue_entry_seconds),[8.171,23.171,38.171]);groups++;
+assert.equal(geminiResult.entry_silence.observed_energetic_windows,0);
+assert.equal(geminiResult.entry_silence.end_after_queue_entry_seconds,2);groups++;
+const startupResult=inspect(geminiCapture({rtpStartShift:.034}),geminiRefs,geminiExpected);
+assert.equal(startupResult.entry_silence.pre_rtp_gap_seconds,.034);
+assert.equal(startupResult.entry_silence.first_after_queue_entry_seconds,.034);
+assert.equal(startupResult.entry_silence.allowed_startup_gap_ms,100);
+assert.equal(startupResult.entry_silence.startup_gap_is_observed_silence,false);
+assert(startupResult.entry_silence.samples>=15200);groups++;
+for(const options of [{rtpStartShift:.101},{skipRtpBefore:.12}])
+    assert.throws(()=>inspect(geminiCapture(options),geminiRefs,geminiExpected),/Insufficient Gemini entry-silence observation/);groups++;
+assert.throws(()=>inspect(geminiCapture({rtpStartShift:.034,partialEntry:true}),geminiRefs,geminiExpected),
+    /energetic audio before Gemini/);groups++;
+const incompleteTimes=Float64Array.from({length:8000},(_,i)=>101+i/8000);
+assert.throws(()=>assertGeminiEntrySilence(Buffer.alloc(8000,255),incompleteTimes,100),error=>{
+    const prefix='Insufficient Gemini entry-silence observation: ';
+    assert(error.message.startsWith(prefix));
+    assert.deepEqual(JSON.parse(error.message.slice(prefix.length)),{samples:8000,
+        first_after_queue_entry_seconds:1,last_after_queue_entry_seconds:1.999875});return true;
+});groups++;
+for(const options of [{partialEntry:true},{offer:[0,3,18,33]}])
+    assert.throws(()=>inspect(geminiCapture(options),geminiRefs,geminiExpected),/energetic audio before Gemini/);groups++;
+for(const options of [{noiseByte:239},{transient:true},{offer:[2,18,33]}])
+    assert.equal(inspect(geminiCapture(options),geminiRefs,geminiExpected).result,'PASS');groups++;
+// The new silence guard is opt-in; legacy comparison retains its old scope.
+assert.equal(inspect(capture({partialEntry:true}),refs,expected).result,'PASS');groups++;
+for(const [options,pattern] of [[{offer:[0,18,33]},/energetic audio|schedule/],[{offer:[3,18]},/exactly3/],
+    [{offer:[3,16,33]},/schedule/],[{lossAt:8},/Missing RTP/],[{dtmf:true},/DTMF/]])
+    assert.throws(()=>inspect(geminiCapture(options),geminiRefs,geminiExpected),pattern);groups++;
+assert.throws(()=>inspect(valid,refs,geminiExpected),/longer-than-five/);
+assert.throws(()=>inspect(valid,refs,{...expected,audio_mode:'other'}),/audio mode/);groups++;
+const hash=bytes=>require('node:crypto').createHash('sha256').update(bytes).digest('hex');
+const wavHash='a'.repeat(64),prompt='acdc-callback-offer-6-gemini-sulafat-'+wavHash.slice(0,16);
+const receipt={audio_mode:'gemini',scope:'offer_only_silence_hold',position_verified:false,
+    offer:{document_id:'en-us/'+prompt,revision:'1-'+'b'.repeat(32),attachment:prompt+'.wav',wav_sha256:wavHash,
+        immutable_path:'/system_media/en-us/'+prompt,canonical_prompt_id:'acdc-callback-offer-6',
+        installed_callback_assets_verified:42,duration_seconds:5.171,ulaw_sha256:hash(geminiRefs.offer)}};
+assertReferenceReceipt(receipt,geminiRefs,'gemini');groups++;
+for(const mutate of [r=>r.audio_mode='legacy',r=>r.position_verified=true,r=>r.offer.installed_callback_assets_verified=41,
+    r=>r.offer.document_id='en-us/acdc-callback-offer-6',r=>r.offer.immutable_path='/account_media/foreign',
+    r=>r.offer.duration_seconds=4,r=>r.offer.ulaw_sha256='0'.repeat(64)]) {
+    const bad=JSON.parse(JSON.stringify(receipt));mutate(bad);assert.throws(()=>assertReferenceReceipt(bad,geminiRefs,'gemini'));
+}groups++;
+assert.throws(()=>assertReferenceReceipt(receipt,geminiRefs,'legacy'));groups++;
 const captureLog='2304 packets captured\n4608 packets received by filter\n0 packets dropped by kernel\n';
 assertCaptureLog(captureLog);groups++;
 for(const bad of ['', captureLog.replace('0 packets dropped','1 packets dropped'),

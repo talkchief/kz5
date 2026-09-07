@@ -70,11 +70,21 @@ offer_cleanup() {
     trap - EXIT; exit "$result"
 }
 offer_main() {
-    local mode=${1:-} expected_md5=${3:-} live_md5 before_cores since log_errors file_errors caller_exit=0
+    local mode=${1:-} expected_md5='' live_md5 before_cores since log_errors file_errors caller_exit=0
+    local gemini=false
+    local -a fixture_audio_options=()
     umask 077
     ((EUID==0)) || die 'Root required'
     [[ $mode == --prepare-only || $mode == --live ]] || die 'Use --prepare-only or --live --runtime-md5 HEX'
-    [[ $# == 1 || ($# == 3 && $2 == --runtime-md5 && $expected_md5 =~ ^[a-f0-9]{32}$) ]] || die 'Unexpected options'
+    shift
+    while (($#)); do
+        case $1 in
+            --gemini) [[ $gemini == false ]] || die 'Duplicate Gemini option'; gemini=true; fixture_audio_options=(--gemini); shift ;;
+            --runtime-md5) [[ $# -ge 2 && -z $expected_md5 && $2 =~ ^[a-f0-9]{32}$ ]] || die 'Invalid runtime MD5'; expected_md5=$2; shift 2 ;;
+            *) die 'Unexpected options' ;;
+        esac
+    done
+    [[ $mode == --live || -z $expected_md5 ]] || die 'Runtime MD5 applies only to live mode'
     load_state; validate_state; resolve_local_ip; ensure_sipp
     [[ ${STATE[ACCEPTANCE_ACCOUNT_ID]} == 7807ad61761269a1ccec833dde63f621 && $LOCAL_IP == 127.0.0.20 ]] || die 'Wrong isolated local fixture'
     ip -o route get "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}" | grep -Eq '(^| )local .* dev lo( |$)' || die 'SIP proxy must route locally'
@@ -96,12 +106,14 @@ offer_main() {
     node "$offer_scenario" "$RUN_DIR" "$SCENARIO_DIR/caller-to-queue.xml"
     before_cores=$(core_count); since=$(date +%s); capture_log_baseline offer
     offer_fixture_started=true
-    KAZOO_ACCEPTANCE_STATE_FILE=$STATE_FILE node "$offer_fixture" setup "$RUN_DIR"
+    KAZOO_ACCEPTANCE_STATE_FILE=$STATE_FILE node "$offer_fixture" setup "$RUN_DIR" "${fixture_audio_options[@]}"
     offer_queue_id=$(jq -er '.queue_id' "$RUN_DIR/offer-fixture.json")
     sup -e supervisor which_children acdc_announcements_sup > "$RUN_DIR/offer-workers-before.txt"
     STATE[ACCEPTANCE_QUEUE_EXTENSION]=2098
     register_caller offer "$CALLER_PORT"
-    tcpdump -q -n -s 0 -i any --immediate-mode -U -w "$RUN_DIR/offer-rtp.pcap" \
+    # Bounded8MiB capture buffer tolerates scheduling jitter under the shared
+    # validation CPU cap. The zero-kernel-drop acceptance gate stays strict.
+    tcpdump -q -n -s 0 -B 8192 -i any --immediate-mode -U -w "$RUN_DIR/offer-rtp.pcap" \
         'udp and host 127.0.0.20 and (port 15064 or port 47200)' \
         > "$RUN_DIR/offer-capture.log" 2>&1 &
     offer_capture_pid=$!; ACTIVE_PIDS+=("$offer_capture_pid"); sleep 1
@@ -117,7 +129,11 @@ offer_main() {
         '{call_id:$call,queue_id:$queue,account:$account,ip:"127.0.0.20",sip_port:15064,media_port:47200}' > "$RUN_DIR/offer-call.json"
     wait_answered_calls "$RUN_DIR/offer-caller-stats.csv" 1 || die 'Caller was not answered'
     sup -e supervisor which_children acdc_announcements_sup > "$RUN_DIR/offer-workers-during.txt"
-    log 'Owned2098 caller waits46seconds: offer3/18/33, position11/26/41; no DTMF is sent'
+    if [[ $gemini == true ]]; then
+        log 'Owned2098 Gemini offer-only: complete >5s phrase at3/18/33, silence hold, no position/DTMF proof'
+    else
+        log 'Owned2098 caller waits46seconds: offer3/18/33, position11/26/41; no DTMF is sent'
+    fi
     wait "$CALLER_PID" || caller_exit=$?
     printf '%s\n' "$caller_exit" > "$RUN_DIR/offer-caller-exit-code.txt"
     ((caller_exit==0)) || die "Offer SIPp caller failed with exit status $caller_exit"

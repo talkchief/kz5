@@ -72,6 +72,18 @@ Gemini offer harness offline checks pass; initial live attempt stopped before
 SIP because its Couch attachment GET needed explicit JSON content negotiation.
 Exact evidence/next action are at the top of `PROJECT_HANDOFF.md`.
 
+Gemini EN offer audio now verified from the zero-drop live capture: complete
+5.171s phrases at3.114/18.114/33.114s, no early offer, normal46.012s call teardown
+(`6071a3/ff00b0`). Exact conditional fixture cleanup passed. This is offer-only
+over silence hold, not key6 registration/confirmation/retry or all-language
+acceptance. See `doc/acdc_gemini_offer_acceptance_20260907.md`; keep P0 callback
+and full language/runtime integration tasks open.
+
+Fresh full EN offer runner subsequently passed `c88ff7/d9b680`, including
+service/log/core/worker checks and exact conditional cleanup. Evidence:
+`/var/log/kazoo-acceptance/20260907T120840Z`. Only this offer-over-silence slice
+is accepted; key6/retry, real MOH, five-language and installer/release gates remain.
+
 - **UI-02 complete:** removed user-facing “observed” wording; progress labels
   and duration heading read “In Progress.” Deployed and browser verified.
 - **P0-25 deployed, acceptance incomplete:** bounded reads and app-loader race

@@ -30,6 +30,7 @@ try {
     const harness = fs.readFileSync(path.join(root, 'scripts/test-acdc-callback-offer-calls.sh'), 'utf8');
     assert(harness.includes('-sf "$RUN_DIR/offer-caller.xml"'));
     assert(harness.includes('--immediate-mode -U'));
+    assert(harness.includes('-B 8192 -i any'), 'Bounded capture buffer must survive constrained scheduling');
     assert(harness.includes('wait "$CALLER_PID" || caller_exit=$?'));
     assert(harness.includes('((caller_exit==0)) || die'));
     assert(!harness.includes('-audiotolerance'));

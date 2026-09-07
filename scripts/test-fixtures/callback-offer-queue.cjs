@@ -12,13 +12,17 @@ const DATABASE='account/'+ACCOUNT.slice(0,2)+'/'+ACCOUNT.slice(2,4)+'/'+ACCOUNT.
 const ENCODED_DATABASE=encodeURIComponent(DATABASE);
 const fingerprint=document=>sha(canonical(document));
 const contentFingerprint=document=>fingerprint(Object.fromEntries(Object.entries(document).filter(([key])=>key!=='_rev')));
-function plan(state,user,marker) {
+function audioMode(value='legacy') {
+    assert(['legacy','gemini'].includes(value),'Unexpected offer audio mode');return value;
+}
+function plan(state,user,marker,mode='legacy') {
+    audioMode(mode);
     assert(state.ACCEPTANCE_ACCOUNT_ID===ACCOUNT && /^acceptance-[a-f0-9]{12}\.invalid$/.test(state.ACCEPTANCE_REALM)
         && /^Kazoo5 Acceptance [a-f0-9]{12}$/.test(state.ACCEPTANCE_ACCOUNT_NAME),'Not the isolated acceptance tenant');
     assert(id(state.ACCEPTANCE_AGENT_1_USER_ID) && user.id===state.ACCEPTANCE_AGENT_1_USER_ID && user.enabled!==false,'Callback authority must be the existing enabled fixture user');
     assert(/^acdc-offer-[a-f0-9]{24}$/.test(marker),'Invalid fixture marker');
     const queue={name:marker,kazoo_acceptance_fixture:marker,enter_when_empty:true,connection_timeout:90,
-        strategy:'round_robin',moh:'silence_stream://-1',announcements:{position_announcements_enabled:true,
+        strategy:'round_robin',moh:'silence_stream://-1',announcements:{position_announcements_enabled:mode==='legacy',
             wait_time_announcements_enabled:false,initial_delay:11,interval:15,language:'en-us'},
         callback:{enabled:true,entry_key:'6',allow_alternate_number:false,use_local_resources:true,
             caller_id_source:'inherit',outbound_authority:{type:'user',id:user.id},max_attempts:1,
@@ -37,6 +41,15 @@ function assertOwned(document,fixture,collection) {
         assert.equal(document.callback.enabled,true);assert.equal(document.callback.entry_key,'6');
         assert.deepEqual(document.callback.announcement,{enabled:true,initial_delay:3,interval:15});
         assert.equal(document.announcements.initial_delay,11);assert.equal(document.announcements.interval,15);
+        if(audioMode(fixture.audio_mode)==='gemini') {
+            assert.equal(document.moh,'silence_stream://-1');
+            assert.equal(document.announcements.language,'en-us');
+            assert.equal(document.announcements.position_announcements_enabled,false);
+            assert.equal(document.announcements.wait_time_announcements_enabled,false);
+            assert(document.callback.media===undefined || (document.callback.media &&
+                !Array.isArray(document.callback.media) && Object.keys(document.callback.media).length===0),
+                'Gemini probe must use built-in defaults without media overrides');
+        }
     }
 }
 function assertRawOwned(document,fixture,collection) {
@@ -141,33 +154,92 @@ function readEnv(file,encoded=false) {
         assert(!/[\r\n]/.test(value));return [key,value];
     }));
 }
-async function references(run) {
+function geminiAssets() {
+    const importer=require('../import-acdc-gemini-voices.cjs'),root=path.resolve(__dirname,'../..');
+    const assets=importer.loadPlan(path.join(root,'scripts/assets/acdc-gemini-fixed-20260905'),
+        path.join(root,'scripts/assets/acdc-gemini-completion-20260905'),['en-us'],
+        path.join(root,'scripts/assets/acdc-gemini-supplemental-20260906'));
+    assert.equal(assets.length,42,'Complete built-in callback inventory required');
+    // Match the complete selected-locale rows of the actual compiled helper map.
+    const erl=v=>Number.isInteger(v)?String(v):'<<'+JSON.stringify(v)+'>>';
+    const expected=assets.map(a=>'    {'+[a.locale,a.canonical_id,a.prompt_id,a.sha256,a.md5,a.bytes.length,a.transcript_sha256].map(erl).join(',')+'}').sort();
+    const actual=fs.readFileSync(path.join(root,'applications/acdc/src/acdc_gemini_map.hrl'),'utf8')
+        .split('\n').filter(line=>line.startsWith('    {<<"en-us">>,' )).map(line=>line.replace(/,$/,'')).sort();
+    assert.deepEqual(actual,expected,'Importer assets differ from canonical runtime map');return assets;
+}
+async function getReference(relative,port,authorization,format='json',fetcher=fetch) {
+    assert(Number.isInteger(port)&&port>0&&port<65536&&['json','wav'].includes(format),'Invalid reference request');
+    const response=await fetcher('http://127.0.0.1:'+port+'/system_media/'+relative,
+        {headers:{authorization,accept:format==='json'?'application/json':'audio/wav, application/octet-stream'},
+            redirect:'error',signal:AbortSignal.timeout(15000)});
+    assert(response.ok,'Installed media HTTP '+response.status);
+    // CouchDB may otherwise select multipart/related for attachments=true.
+    // Do not feed multipart bytes (or an error body) into JSON diagnostics.
+    if(format==='json')assert((response.headers.get('content-type')||'').split(';')[0].trim().toLowerCase()==='application/json',
+        'Installed media reference is not application/json');
+    const data=Buffer.from(await response.arrayBuffer());assert(data.length<4*1024*1024,'Oversized installed media reference');return data;
+}
+function referenceDocument(bytes) {
+    try{return JSON.parse(bytes.toString());}
+    catch(_){throw Error('Invalid installed media reference JSON');}
+}
+async function geminiReferences(assets,get) {
+    const importer=require('../import-acdc-gemini-voices.cjs');
+    assert(Array.isArray(assets)&&assets.length===42&&new Set(assets.map(a=>a.id)).size===42
+        &&assets.every(a=>a.locale==='en-us'),'Complete unique EN callback inventory required');
+    const offer=assets.filter(a=>a.canonical_id==='acdc-callback-offer-6');assert.equal(offer.length,1);
+    const a=offer[0];assert(a.duration_seconds>5&&a.duration_seconds<7,'Gemini offer must cross five seconds and fit the unchanged timing window');
+    let document;
+    for(const asset of assets) {
+        const doc=referenceDocument(await get(encodeURIComponent(asset.id)+'?attachments=true'));
+        importer.verifyDocument(asset,doc);if(asset===a)document=doc;
+    }
+    const after=referenceDocument(await get(encodeURIComponent(a.id)+'?attachments=true'));
+    assert.equal(importer.verifyDocument(a,after),document._rev,'Immutable offer changed during reference capture');
+    return {wav:Buffer.from(document._attachments[a.attachment].data,'base64'),
+        receipt:{document_id:a.id,revision:document._rev,attachment:a.attachment,wav_sha256:a.sha256,
+            canonical_prompt_id:a.canonical_id,immutable_path:'/system_media/'+a.id,
+            installed_callback_assets_verified:42,duration_seconds:a.duration_seconds}};
+}
+async function references(run,mode='legacy') {
+    audioMode(mode);
     // Installer deployment values are base64 data, not shell assignments.
     const env=readEnv('/etc/kazoo/deployment.env',true);
     assert(['127.0.0.1','localhost'].includes(env.KAZOO_COUCHDB_HOST),'Couch references must remain on localhost');
     const port=Number(env.KAZOO_COUCHDB_PORT||5984);assert(Number.isInteger(port)&&port>0&&port<65536);
     assert(env.KAZOO_COUCHDB_USER&&env.KAZOO_COUCHDB_PASSWORD&&!env.KAZOO_COUCHDB_USER.includes(':'));
     const authorization='Basic '+Buffer.from(env.KAZOO_COUCHDB_USER+':'+env.KAZOO_COUCHDB_PASSWORD).toString('base64');
-    async function get(relative) {
-        const response=await fetch('http://127.0.0.1:'+port+'/system_media/'+relative,{headers:{authorization},redirect:'error',signal:AbortSignal.timeout(15000)});
-        assert(response.ok,'Installed media HTTP '+response.status);const data=Buffer.from(await response.arrayBuffer());assert(data.length<4*1024*1024);return data;
-    }
-    const receipt={};
+    const get=(relative,format)=>getReference(relative,port,authorization,format);
+    const receipt=mode==='gemini'?{audio_mode:'gemini',scope:'offer_only_silence_hold',position_verified:false}:{};
+    if(mode==='gemini') {
+        const verified=await geminiReferences(geminiAssets(),get);
+        const converted=spawnSync('sox',['-t','wav','-','-t','raw','-r','8000','-c','1','-e','mu-law','-'],
+            {input:verified.wav,timeout:15000,maxBuffer:4*1024*1024});
+        assert(converted.status===0,'Immutable offer conversion failed');const raw=converted.stdout;
+        assert(raw.length>40000&&raw.length<56000&&Math.abs(raw.length/8000-verified.receipt.duration_seconds)<.001,
+            'Complete immutable offer duration mismatch');
+        fs.writeFileSync(path.join(run,'offer-reference.ulaw'),raw,{mode:384});
+        receipt.offer={...verified.receipt,ulaw_sha256:sha(raw)};
+    } else {
     for(const [key,prompt] of [['offer','acdc-callback-offer-6'],['position','acdc-queue-your-current-position-is']]) {
-        const documentId='en-us/'+prompt, document=JSON.parse((await get(encodeURIComponent(documentId))).toString());
+        const documentId='en-us/'+prompt, document=referenceDocument(await get(encodeURIComponent(documentId)));
         assert(document._id===documentId && /^[1-9][0-9]*-[a-f0-9]{32}$/.test(document._rev));
         const names=Object.keys(document._attachments||{});assert(names.length===1&&names[0]===prompt+'.wav','Unexpected installed prompt attachment');
-        const wav=await get(encodeURIComponent(documentId)+'/'+encodeURIComponent(names[0]));
-        const after=JSON.parse((await get(encodeURIComponent(documentId))).toString());assert(after._rev===document._rev,'Installed recording changed during reference capture');
+        const wav=await get(encodeURIComponent(documentId)+'/'+encodeURIComponent(names[0]),'wav');
+        const after=referenceDocument(await get(encodeURIComponent(documentId)));assert(after._rev===document._rev,'Installed recording changed during reference capture');
         const converted=spawnSync('sox',['-t','wav','-','-t','raw','-r','8000','-c','1','-e','mu-law','-'],{input:wav,maxBuffer:4*1024*1024});
         assert(converted.status===0,'Installed reference conversion failed');const raw=converted.stdout;
         assert(raw.length>=512&&raw.length<56000,'Installed '+key+' phrase must be shorter than7seconds; timing policy was not changed');
         fs.writeFileSync(path.join(run,key+'-reference.ulaw'),raw,{mode:384});
         receipt[key]={document_id:documentId,revision:document._rev,attachment:names[0],wav_sha256:sha(wav),ulaw_sha256:sha(raw),duration_seconds:raw.length/8000};
     }
+    }
     fs.writeFileSync(path.join(run,'offer-reference-receipt.json'),JSON.stringify(receipt,null,2)+'\n',{mode:384});
 }
-async function runtime(action,run) {
+async function runtime(action,run,option) {
+    assert(option===undefined||option==='--gemini','Unexpected fixture option');
+    assert(option===undefined||action==='setup','Audio option applies only to setup; cleanup uses the protected receipt');
+    const mode=option==='--gemini'?'gemini':'legacy';
     assert(['setup','cleanup','recover','entry'].includes(action)&&path.isAbsolute(run));
     const s=fs.lstatSync(run);assert(s.isDirectory()&&!s.isSymbolicLink()&&s.uid===0&&(s.mode&511)===448);
     assert(fs.realpathSync(run)===run&&run.startsWith('/var/log/kazoo-acceptance/'));
@@ -224,11 +296,12 @@ async function runtime(action,run) {
     const baseline=async omit=>{const hashes={};for(const collection of ['users','queues','callflows'])for(const summary of await inventory(collection)){
         assert(id(summary.id));if(omit.includes(summary.id))continue;const d=(await api('GET',collection+'/'+summary.id)).data;hashes[collection+'/'+summary.id]=sha(canonical(d));}return hashes;};
     if(action==='setup') {
-        assert(!fs.existsSync(file),'Fixture already exists');await references(run);
+        assert(!fs.existsSync(file),'Fixture already exists');await references(run,mode);
         assert(!(await inventory('callflows')).some(flow=>(flow.numbers||[]).includes('2098')),'Extension2098 occupied');
         const user=(await api('GET','users/'+state.ACCEPTANCE_AGENT_1_USER_ID)).data;
         const fixture={account:ACCOUNT,marker:'acdc-offer-'+crypto.randomBytes(12).toString('hex'),extension:'2098',baseline:await baseline([])};
-        const desired=plan(state,user,fixture.marker);persist(fixture);
+        if(mode==='gemini')fixture.audio_mode=mode;
+        const desired=plan(state,user,fixture.marker,mode);persist(fixture);
         for(const collection of ['queues','callflows']) {
             const key=collection==='queues'?'queue_id':'callflow_id',body=collection==='queues'?desired.queue:desired.route(fixture.queue_id);
             const created=(await api('PUT',collection,body)).data;assert(id(created.id));fixture[key]=created.id;persist(fixture);
@@ -273,7 +346,7 @@ async function runtime(action,run) {
             // Explicit receipt repair only, never a delete or refreshed CAS.
             // Reconstruct the original fixture body; retain altered documents.
             assert.deepEqual(await baseline([fixture.queue_id,fixture.callflow_id].filter(Boolean)),fixture.baseline,'Unrelated documents changed before recovery');
-            const desired=plan(state,(await api('GET','users/'+state.ACCEPTANCE_AGENT_1_USER_ID)).data,fixture.marker);
+            const desired=plan(state,(await api('GET','users/'+state.ACCEPTANCE_AGENT_1_USER_ID)).data,fixture.marker,audioMode(fixture.audio_mode));
             for(const collection of ['callflows','queues']) {
                 const documentId=fixture[collection==='queues'?'queue_id':'callflow_id'];
                 if(!documentId||fixture[collection+'_couch'])continue;
@@ -296,5 +369,5 @@ async function runtime(action,run) {
     }
 }
 module.exports={plan,assertOwned,assertRawOwned,assertExpectedConfiguration,captureOwned,deleteOwned,assertNoReferences,conditionalSaveArguments,
-    erlangTerm,fingerprint,contentFingerprint,ACCOUNT,DATABASE,ENCODED_DATABASE};
+    erlangTerm,fingerprint,contentFingerprint,audioMode,geminiAssets,geminiReferences,getReference,referenceDocument,ACCOUNT,DATABASE,ENCODED_DATABASE};
 if(require.main===module)runtime(...process.argv.slice(2)).catch(error=>{console.error('Callback offer fixture FAIL: '+error.message);process.exitCode=1;});
