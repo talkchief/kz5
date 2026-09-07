@@ -1,5 +1,34 @@
 # One-time cardinal synthesis recovery experiment
 
+Latest bounded batch `ae1af9/session14124/7926c4` made12 Hebrew attempt2 requests
+with concise-v2 and recovered masculine13, masculine15 and joined-masculine15.
+Nine requests remain failed. Inventory is409/584 technical QA,692 historical
+requests and108 cumulative retries (EN31/HE89/FR160/ES25/AR104);175 FAILED,
+none PENDING/REQUESTING. Six WAVs and
+`scripts/assets/acdc-gemini-cardinals-20260907/run-5c7ba1b2-ae43-4a16-b0c8-b1cf83cb10db.json`
+are preserved. Verification `1bcc6e/session29370/73ddde` passes full ledger,
+hash/WAV/actual-SoX checks, repo/private equality, unchanged approval records
+and every old attempt prefix/success from `0c63727`. No runtime import or
+listening approval. Older counts below describe earlier batches.
+
+Read-only Hebrew follow-up:89/131 identities pass;42 fail (13 failed under both
+v1/v2 and29 have only a first v1 attempt). All13 v2 failures report one candidate,
+OTHER and zero content/audio/text parts. Successes include both joined/plain
+forms and diacritics, so there is no evidence to blame one prefix or remove
+approved spelling. No further identical requests are automatically scheduled.
+Next authoring diagnostic should safely classify provider finish/prompt-feedback
+categories before choosing another bounded experiment; never store raw provider
+text, change approved transcripts or reset the ledger to manufacture success.
+
+The authoring receipt now records an allowlisted `prompt_block_reason` (null
+when absent, UNKNOWN when unrecognized) and a boolean indicating whether the
+first candidate has `finishMessage`. Its contents are never retained. Enum
+source: [Google PromptFeedback.BlockReason](https://ai.google.dev/api/generate-content#BlockReason).
+Requests, recipes, existing manifests and STOP rejection are unchanged.
+`a40011/session45916/893835` passes19 generator groups/377 checks under network
+isolation, including raw-text redaction and malformed enums; zero real provider
+calls/key reads. Receipt: `/tmp/acdc-cardinal-generator-proof.6i8Dqi`.
+
 Additional bounded HE experiment `982b59/session1670/4a1521`: four serialized
 attempt2 requests recovered joined-masculine9 and10; joined-masculine8 and
 joined-feminine10 remained incomplete. Same approved text/model/Sulafat and

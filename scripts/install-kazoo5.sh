@@ -4233,6 +4233,7 @@ configure_kazoo_kamailio() {
     apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-registration-sequences.patch"
     apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-registered-source-credentials.patch"
     apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-dispatcher-reload-bookkeeping.patch"
+    apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-push-freshness.patch"
     run mkdir -p "$KAZOO_CONFIG_DIR/kamailio"
     run rsync -a \
         --exclude db/ --exclude local.d/ --exclude defs.d/ \
@@ -5252,7 +5253,7 @@ push_bridge_preflight() {
 
 push_bridge_fingerprint() {
     local source_dir="$SCRIPT_DIR/../services/push-bridge" file
-    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py \
+    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
         service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
         [[ -f $source_dir/$file && ! -L $source_dir/$file ]] || die 'Bridge release source is missing or linked'
         sha256sum "$source_dir/$file" | awk -v name="$file" '{ print $1 "  " name }'
@@ -5288,7 +5289,7 @@ install_push_bridge() {
     if [[ $previous != "$release" ]]; then
         [[ ! -L $release ]] || die 'Bridge release directory must not be a symlink'
         run install -d -o root -g root -m 0755 "$release"
-        for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py \
+        for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
             service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
             run install -o root -g root -m 0644 "$source_dir/$file" "$release/$file"
         done
@@ -5299,7 +5300,7 @@ install_push_bridge() {
     fi
     run "$release/venv/bin/python" -I -m pip --isolated check
     run "$release/venv/bin/python" -B -I "$release/service_launcher.py" --check-dependencies
-    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py \
+    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
         service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
         cmp -s "$source_dir/$file" "$release/$file" || die 'Bridge release bytes do not match source'
     done
@@ -5330,7 +5331,7 @@ verify_push_bridge() {
     local base=/usr/local/lib/kazoo-push-bridge release file actual
     release="$base/releases/$(push_bridge_fingerprint)"
     [[ -L $base/current && $(readlink "$base/current") == "$release" ]] || die 'Active bridge release differs from requested source'
-    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py \
+    for file in bridge.py apns_sender.py delivery_settlement.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
         service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
         cmp -s "$SCRIPT_DIR/../services/push-bridge/$file" "$release/$file" || die 'Bridge release verification failed'
     done

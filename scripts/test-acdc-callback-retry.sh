@@ -55,7 +55,8 @@ retry_args() {
     validate_protected_file "$RETRY_REFERENCE"
     validate_protected_file "${RETRY_REFERENCE%/*}/reference-receipt.json"
     node "$retry_script_dir/test-fixtures/callback-gemini-reference.cjs" verify "$RETRY_REFERENCE" \
-        >/dev/null || die 'Reference does not match installed-prompt receipt'
+        | jq -e '.voice_family == "gemini-sulafat"' >/dev/null || \
+        die 'Current callback acceptance requires a verified Gemini reference, not legacy audio'
 }
 
 retry_snapshot() {

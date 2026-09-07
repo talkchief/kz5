@@ -7,8 +7,8 @@
   "model": "gemini-2.5-pro-preview-tts",
   "voice": "Sulafat",
   "initial_request_budget": 584,
-  "retry_request_budget": 96,
-  "requests_reserved": 680,
+  "retry_request_budget": 108,
+  "requests_reserved": 692,
   "retries_explicitly_enabled": true,
   "automatic_retries": 0,
   "conversion": {
@@ -17613,6 +17613,20 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T17:47:18.629Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nוְאַחַד עָשָׂר",
+          "instruction_sha256": "35ff785ab09d0c855ecbb3fd556b0433116d635a092e6561d2b33780dfb4fe21",
+          "request_body_sha256": "be6022c5ccaab2ee1ab095b378e30a7d6d28bae0685b03c3f8940760de9df62d",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null,
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -17705,6 +17719,20 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T17:47:18.675Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nוְאַחַת עֶשְׂרֵה",
+          "instruction_sha256": "91ef5e578aca3506a872e520a0a430d76537cfb742742f1d41463447055da912",
+          "request_body_sha256": "83ef10aa1a1fe0de3dfa30222b0ba094c59dad21ac3e613a452a2f214d5ca410",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null,
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -17969,7 +17997,7 @@
       "catalog_record_sha256": "eb28862aba2938dfb9dbcb9e67fa187f51c761231ab205791e8f836fdd6b3f26",
       "transcript_sha256": "b5ed461e5e49bac5ceee7141e7552f8a5584670e528b04c0299aacb3e8d0db05",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "FAILED",
+      "generation_status": "QA_PASSED",
       "attempts": [
         {
           "number": 1,
@@ -17983,6 +18011,52 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T17:47:20.813Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nשְׁלוֹשָׁה עָשָׂר",
+          "instruction_sha256": "3566fadbd6f68665421a05d7b511559e711b382cfbfcab224d54fede47fddcd5",
+          "request_body_sha256": "511e190f3daa3cf5d5a247e299bd131ba49249eab61edb095acabf45a39b68cd",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "a0c66c33f4e7eac4e3fd2ef1fdc01138c52be1c386c24eec693f86c03cebec17",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-masculine-13.attempt-2.master-24000.wav",
+            "sha256": "3c1eba15f8fb93aeb520f2d943a7c284082eb81a02e67847c490180494646b0c",
+            "pcm_sha256": "a0c66c33f4e7eac4e3fd2ef1fdc01138c52be1c386c24eec693f86c03cebec17",
+            "byte_length": 83130,
+            "sample_count": 41543,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.7309583333333334,
+            "rms": 3027.412246818621,
+            "peak": 20930,
+            "clipped_samples": 0,
+            "silence_fraction": 0.31230291505187396,
+            "leading_silence_samples": 144,
+            "trailing_silence_samples": 6153
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-masculine-13.attempt-2.telephony-8000.wav",
+            "sha256": "75596dde861245c3be660b67ac8962fe0e7299a9378a78c580f5823a36646e7d",
+            "pcm_sha256": "e0cd0dff4744888b740a6d1710dbc2848a0e90037a889f2a379ca93099f466e7",
+            "byte_length": 27740,
+            "sample_count": 13848,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.731,
+            "rms": 2666.395516376833,
+            "peak": 20840,
+            "clipped_samples": 0,
+            "silence_fraction": 0.33073367995378394,
+            "leading_silence_samples": 49,
+            "trailing_silence_samples": 2051
+          },
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -18261,6 +18335,20 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T17:47:21.389Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nוְאַרְבָּעָה עָשָׂר",
+          "instruction_sha256": "e8b75db5f17a7c26e68aa1aa9a2d5bf0286ba840d99ae2ed6bf6a9172c2036ee",
+          "request_body_sha256": "a30a7edab2db579bc5a6ec3b7b17cb44b180bb0f832d041e3814f52614770f6e",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null,
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -18291,6 +18379,20 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T17:47:23.174Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nאַרְבַּע עֶשְׂרֵה",
+          "instruction_sha256": "c98bf0b4c356624ef27473e9cc076b6911eec371003e5d02d1da12d674bbd524",
+          "request_body_sha256": "43fc9235eff2bec7f07382b287ee38070dbff0add78651fc706f12c85e313f2f",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null,
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -18321,6 +18423,20 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T17:47:24.066Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nוְאַרְבַּע עֶשְׂרֵה",
+          "instruction_sha256": "252b19a7db7ea2b951ad1d3334b7a4aa8c2ee5d1eb5f4cf616b97629801ef625",
+          "request_body_sha256": "748bb6c6e6eb99a2d1b5133e1124b0826881b1082ad2fbce9698c7b0010e2203",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null,
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -18337,7 +18453,7 @@
       "catalog_record_sha256": "60fbbccb4542666d978ef638c3bed239c8ea01f35d73c7604dd3c266ba4befd8",
       "transcript_sha256": "e8beb42bb64366f46b7d16d7d132b850ef051ad5e0b0812e76d06dc1f480c57a",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "FAILED",
+      "generation_status": "QA_PASSED",
       "attempts": [
         {
           "number": 1,
@@ -18351,6 +18467,52 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T17:47:26.102Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nחֲמִשָּׁה עָשָׂר",
+          "instruction_sha256": "ea05eb8f829fbd82818d74473851bb581bc7e25ae51ff2600f741f8b928cb2b3",
+          "request_body_sha256": "80dbce419bb32a4b246d4b3e4b28fb808f24d53bf90417278fe259a904068e93",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "c7b37cecfc70f8c199188a7fed3a24335393f6028cce5e005fdb6b5d41df4df2",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-masculine-15.attempt-2.master-24000.wav",
+            "sha256": "e2439b13759cab95ac9d5eeed1d7dc5ae6d19b794eaae9c2fc2d82583b7eed22",
+            "pcm_sha256": "c7b37cecfc70f8c199188a7fed3a24335393f6028cce5e005fdb6b5d41df4df2",
+            "byte_length": 71610,
+            "sample_count": 35783,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.4909583333333334,
+            "rms": 3864.3828658830807,
+            "peak": 24103,
+            "clipped_samples": 0,
+            "silence_fraction": 0.22172540032976554,
+            "leading_silence_samples": 59,
+            "trailing_silence_samples": 16
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-masculine-15.attempt-2.telephony-8000.wav",
+            "sha256": "3a24bca429242566a39a52888c0fa76a2c149fc478f3e7cf54575aaa9cd75232",
+            "pcm_sha256": "263b6675a1b3c21f2fc8070916f6d59169abbaa4377eaadeec38877b5fb49dce",
+            "byte_length": 23900,
+            "sample_count": 11928,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 1.491,
+            "rms": 2957.527079145108,
+            "peak": 17710,
+            "clipped_samples": 0,
+            "silence_fraction": 0.24052649228705567,
+            "leading_silence_samples": 36,
+            "trailing_silence_samples": 72
+          },
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -18367,7 +18529,7 @@
       "catalog_record_sha256": "a64b3b5b0c4c60ed5fef24aff67874694a3e2da26ab6abe67727a30755ca1145",
       "transcript_sha256": "7c0bca4b32a0db140c1e365bb0172dd77533258618b325948b6f00a0e8627482",
       "context_sha256": "afe1b6d0956d260a12387ce935b4f893eac3197ecd6bbd6ccee74d3b12c92f18",
-      "generation_status": "FAILED",
+      "generation_status": "QA_PASSED",
       "attempts": [
         {
           "number": 1,
@@ -18381,6 +18543,52 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "QA_PASSED",
+          "reserved_at": "2026-09-07T17:47:26.672Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nוַחֲמִשָּׁה עָשָׂר",
+          "instruction_sha256": "22eaa2d8868df6a55befdb58990fe4be6fdf8573dec24a12c3aceeec0886e1a1",
+          "request_body_sha256": "195bddd55e3887049ea5704ea0d1eb5cad59fb52beab7d6b236f6ed32854170b",
+          "failure_code": null,
+          "provider_finish_reason": "STOP",
+          "raw_pcm_sha256": "9ab6e98b29e4a28ff41d6d0fd63f4693b45df1e1fcb2f4cb40e13c1721595d0e",
+          "master": {
+            "file": "he-il/acdc-cardinal-v1-joined-masculine-15.attempt-2.master-24000.wav",
+            "sha256": "bfd48369a3389fc9038fc8c22e7e131aa627cf46093e429090408225cf02dcb1",
+            "pcm_sha256": "9ab6e98b29e4a28ff41d6d0fd63f4693b45df1e1fcb2f4cb40e13c1721595d0e",
+            "byte_length": 98490,
+            "sample_count": 49223,
+            "sample_rate_hz": 24000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 2.0509583333333334,
+            "rms": 3906.807092429428,
+            "peak": 22936,
+            "clipped_samples": 0,
+            "silence_fraction": 0.19769213579017939,
+            "leading_silence_samples": 59,
+            "trailing_silence_samples": 1586
+          },
+          "telephony": {
+            "file": "he-il/acdc-cardinal-v1-joined-masculine-15.attempt-2.telephony-8000.wav",
+            "sha256": "ae8cbf5131939041cbd90d35186b4a23af3a81b088609c59379d3b1a915ba37c",
+            "pcm_sha256": "fd93ab0e49b34f502fe685dc01c2371c974b64ce53370cd1132c1cefefbf986c",
+            "byte_length": 32860,
+            "sample_count": 16408,
+            "sample_rate_hz": 8000,
+            "channels": 1,
+            "bits_per_sample": 16,
+            "duration_seconds": 2.051,
+            "rms": 3656.6151735652384,
+            "peak": 21920,
+            "clipped_samples": 0,
+            "silence_fraction": 0.20496099463676257,
+            "leading_silence_samples": 42,
+            "trailing_silence_samples": 528
+          },
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -18411,6 +18619,20 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T17:47:28.868Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nחֲמֵשׁ עֶשְׂרֵה",
+          "instruction_sha256": "0de6eeed9ca6fc16628350b747cb1d58bc942d3c160df10eb112e078438c6385",
+          "request_body_sha256": "89f5ff7ed7e26b78bb6357b6ce3e676fa4cc80e162388c59ade518457ef2444c",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null,
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -18441,6 +18663,20 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T17:47:30.341Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nוַחֲמֵשׁ עֶשְׂרֵה",
+          "instruction_sha256": "f3e0a28b1c1cb3403862855013037136e0015d340a5cd99853e997df5829269e",
+          "request_body_sha256": "4b1ccc07a27fb59c7cc9b7cf38c1590e97b3a059e304ed5e90d961421278984e",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null,
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -18657,6 +18893,20 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T17:47:31.131Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nוְשֵׁשׁ עֶשְׂרֵה",
+          "instruction_sha256": "99f6f8d9f5a45c2850b58ed33bcf8d3fcf25e48f37677367d926401bf2d33017",
+          "request_body_sha256": "b7207c15f4532b993646cc9c1a22e7bb862c569fedc27ed00476b4ea84ce2b38",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null,
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },
@@ -18935,6 +19185,20 @@
           "raw_pcm_sha256": null,
           "master": null,
           "telephony": null
+        },
+        {
+          "number": 2,
+          "status": "FAILED",
+          "reserved_at": "2026-09-07T17:47:32.682Z",
+          "synthesis_instruction": "Speak the following transcript verbatim in Israeli Hebrew with a professional, warm, natural adult female voice.\n\nTranscript:\nשְׁמוֹנָה עָשָׂר",
+          "instruction_sha256": "274f1609ae76cd74ae0c8caebec51fa75d89f86ef500ce8cbd2fa8c258daf34b",
+          "request_body_sha256": "e09d42342813c88e5cc7258a1b4e821a2f4ec975c2ec807835133413b13e71d7",
+          "failure_code": "AUDIO_GENERATION_NOT_COMPLETE",
+          "provider_finish_reason": "OTHER",
+          "raw_pcm_sha256": null,
+          "master": null,
+          "telephony": null,
+          "synthesis_recipe": "cardinal-concise-v2"
         }
       ]
     },

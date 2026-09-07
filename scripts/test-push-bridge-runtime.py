@@ -324,6 +324,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_delivery_normalizes_before_provider_calls_and_preserves_results(self):
         runtime = bridge.BridgeRuntime.__new__(bridge.BridgeRuntime)
+        runtime._settings = {}
         runtime.send_fcm = Mock(return_value=(True, 200, "provider_response"))
         runtime.deliver_apns = Mock(return_value=(False, 503, "provider_response"))
         self.assertEqual(runtime.deliver(wire()), (True, 200, "provider_response"))

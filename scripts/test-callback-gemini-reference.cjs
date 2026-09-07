@@ -25,4 +25,26 @@ assert.equal(validateReceipt(legacy, legacy.reference_ulaw_sha256), 'legacy'); c
 assert.throws(() => validateReceipt(legacy, 'f'.repeat(64))); checks++;
 assert.throws(() => validateReceipt({...legacy, attachment_name: 'wrong.wav'}, legacy.reference_ulaw_sha256)); checks++;
 assert.throws(() => assetFor('../private')); checks++;
+// Execute the actual retry argument/preflight function with a synthetic verifier.
+// No state helper, API, SIP, provider, real credentials or temporary files.
+const fs = require('node:fs'), path = require('node:path'), {spawnSync} = require('node:child_process');
+const retrySource = fs.readFileSync(path.join(__dirname, 'test-acdc-callback-retry.sh'), 'utf8');
+const argsFunction = retrySource.slice(retrySource.indexOf('retry_args() {'), retrySource.indexOf('\nretry_snapshot() {'));
+assert(argsFunction.startsWith('retry_args() {')); checks++;
+for (const [proof, expected] of [
+    ['{"voice_family":"gemini-sulafat"}', 0],
+    ['{"voice_family":"legacy"}', 78], ['{}', 78], ['not-json', 78]
+]) {
+    const result = spawnSync('/usr/bin/bash', ['-c', `set -euo pipefail
+CALLBACK_PREPARE=false; CALLBACK_LIVE=false; KEEP_FIXTURE=false
+CALLBACK_TEST_TRANSPORT=external; RETRY_REGISTRATION_MODE=confirm-current
+retry_script_dir=/synthetic; RETRY_REFERENCE=
+die() { exit 78; }
+validate_protected_file() { :; }
+node() { printf '%s\\n' "$FIXTURE_PROOF"; }
+${argsFunction}
+retry_args --prepare-only --confirmation-reference "$1"
+`, 'fixture', __filename], {env: {PATH: '/usr/bin:/bin', FIXTURE_PROOF: proof}, timeout: 5000, encoding: 'utf8'});
+    assert.ifError(result.error); assert.equal(result.status, expected); checks += 2;
+}
 console.log('PASS ' + checks + ' callback Gemini reference identity/conversion and legacy compatibility checks');

@@ -75,7 +75,7 @@ class OwnerSettlements:
                 or type(result[2]) is not str):
             return False
         if result[1] == 0:
-            return (result[2] == "invalid_push_payload"
+            return (result[2] in ("invalid_push_payload", "push_freshness_invalid", "push_freshness_expired")
                     or provider == "apns" and result[2] == "invalid_device_token")
         # These are current-request rejections, never a device-token deletion
         # instruction. APNs400 is deliberately excluded: it can mean IdleTimeout.

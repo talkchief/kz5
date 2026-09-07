@@ -109,12 +109,23 @@ function finishReason(response) {
 function responseDiagnostics(response) {
   const candidates = Array.isArray(response?.candidates) ? response.candidates : [];
   const parts = Array.isArray(candidates[0]?.content?.parts) ? candidates[0].content.parts : [];
+  const own = (value, key) => value !== null && typeof value === 'object' && !Array.isArray(value)
+    && Object.prototype.hasOwnProperty.call(value, key);
+  // Gemini GenerateContent PromptFeedback.BlockReason (official API reference).
+  // null means the field is absent; even a present null/invalid type is UNKNOWN.
+  // Do not stringify provider values or preserve free-form finishMessage text.
+  const feedback = response?.promptFeedback;
+  const blockReason = own(feedback, 'blockReason') ? feedback.blockReason : undefined;
+  const blockReasons = ['BLOCK_REASON_UNSPECIFIED', 'SAFETY', 'OTHER', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'IMAGE_SAFETY'];
   const cap = n => Math.min(n, 1000);
   return {candidate_count: cap(candidates.length), first_candidate_part_count: cap(parts.length),
     inline_audio_parts: cap(parts.filter(p => typeof p?.inlineData?.mimeType === 'string'
       && /^audio\//.test(p.inlineData.mimeType)).length),
     text_parts: cap(parts.filter(p => typeof p?.text === 'string').length),
-    finish_reason: finishReason(response)};
+    finish_reason: finishReason(response),
+    prompt_block_reason: !own(feedback, 'blockReason') ? null
+      : typeof blockReason === 'string' && blockReasons.includes(blockReason) ? blockReason : 'UNKNOWN',
+    first_candidate_finish_message_present: own(candidates[0], 'finishMessage')};
 }
 function options(argv) {
   const o = {mode: 'plan', locales: [...locales], concurrency: 1, resume: false, retryFailed: false}, seen = new Set();

@@ -1,12 +1,36 @@
 # Kazoo 5 project task register
 
-Current voice inventory: **406/584 technical QA**,680 historical requests and
-96 retries; EN31/HE86/FR160/ES25/AR104. Four bounded HE concise-v2 retries recovered
-two recordings (four WAVs); two still incomplete. No pending provider job or
-initial identities remain. Failed178; listening/complete cardinal runtime open.
+Current voice inventory: **409/584 technical QA**,692 historical requests and
+108 retries; EN31/HE89/FR160/ES25/AR104. Twelve bounded HE concise-v2 retries
+recovered three recordings (six WAVs); nine still incomplete. No pending provider
+job or initial identities remain. Failed175; listening/complete cardinal runtime open.
 See `doc/acdc_cardinal_concise_synthesis.md`. Older counts below are historical.
+Authoring diagnostics now retain only allowlisted prompt-block categories and
+finish-message presence, never raw provider text.19 groups/377 checks pass
+`a40011/893835`; no new real provider request. Voice completion remains open.
 
-Latest focused stabilization: live isolated internal1001 callback retry passes
+INST-13 producer/consumer freshness is implemented in code and the main-SH file
+lists/patch sequence.166 offline bridge tests,35 producer checks, actual isolated
+Kamailio timestamp/unchanged-payload execution and real isolated broker expiry
+quarantine all pass. See `doc/push_bridge_freshness.md` for configuration,
+evidence and boundaries. Strict mode requires explicit quorum configuration;
+do not treat legacy development routing as an activated freshness deployment.
+Bridge deployment through main SH passes `d092dc/1e7b45`; independent verify-only
+passes `b9e8bb/be5ab7`. Releasec9d8055d8f92, PID448604, NRestarts0. All nine
+stack services active at readback. Detailed receipt in the freshness document.
+Main-SH Kamailio producer deployment also passes `0de2e3/95d41c`, including
+SIP/AMQP/dispatcher/database/RPC/SBC and current journal/JWT checks. PID451713,
+NRestarts0; protected backup retained. Earlier malformed-Via attribution remains
+open and its logs preserved; no acceptance gate was weakened.
+
+Latest post-deployment internal1001 callback retry passes `21d377/55fb32`:
+full confirmation, missed first return, durable retry, second native bridge and
+final agent/service/log gates. Evidence `/var/log/kazoo-acceptance/20260907T181123Z`.
+An initial rerun used an obsolete legacy audio reference; corrected read-only
+analysis proves Gemini was delivered. New preflight rejects that operator error
+before calls. See `doc/development_warmup_20260907.md` for both outcomes.
+
+Earlier focused stabilization: live isolated internal1001 callback retry passes
 `6e1abf/session73991/6fd51b`, including full Gemini confirmation, unanswered first
 return, durable retry and second reciprocal agent bridge. Extension1000 read-only
 routing passes. Warm-up verifies210 installed Gemini clips and420 running mappings,

@@ -1,5 +1,13 @@
 # Kamailio effective AMQP endpoint verification
 
+September7 follow-up: main-SH producer-freshness deployment
+`0de2e3/session54822/95d41c` passes the full SIP/AMQP/dispatcher/database/RPC/SBC
+and current journal/JWT checks. This was a required configuration deployment,
+not a restart to erase a failed gate. Backup:
+`/var/lib/kazoo-kamailio-freshness.5xk2fp/kamailio`. Prior malformed-Via evidence
+below remains preserved; its sender and cause remain unproven. No journal
+filter or acceptance condition was weakened. See `push_bridge_freshness.md`.
+
 The installer previously probed `KAZOO_AMQP_HOST/PORT` even when the rendered
 Kamailio configuration used a different explicit `KAZOO_AMQP_URI`. It also
 queried the default vhost of any active local RabbitMQ service. This could reject

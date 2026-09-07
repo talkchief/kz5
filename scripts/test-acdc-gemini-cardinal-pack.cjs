@@ -93,20 +93,61 @@ async function main() {
   let exit = 1;
   try {
     await group('structural response diagnostics cannot leak text or approve incomplete audio', async () => {
-      const metadata={candidate_count:1,first_candidate_part_count:2,inline_audio_parts:1,text_parts:1,finish_reason:'OTHER'};
+      const metadata={candidate_count:1,first_candidate_part_count:2,inline_audio_parts:1,text_parts:1,finish_reason:'OTHER',
+        prompt_block_reason:'UNKNOWN',first_candidate_finish_message_present:true};
       const rejected=response();rejected.candidates[0].finishReason='OTHER';
       rejected.candidates[0].content.parts.push({text:SENTINEL});rejected.responseId=SENTINEL;
+      rejected.candidates[0].finishMessage=SENTINEL;
+      rejected.promptFeedback={blockReason:SENTINEL,blockReasonMessage:SENTINEL,safetyRatings:[{category:SENTINEL}]};
       equal(generator.responseDiagnostics(rejected),metadata);
-      equal(generator.responseDiagnostics(null),{candidate_count:0,first_candidate_part_count:0,inline_audio_parts:0,text_parts:0,finish_reason:'UNKNOWN'});
+      equal(generator.responseDiagnostics(null),{candidate_count:0,first_candidate_part_count:0,inline_audio_parts:0,text_parts:0,finish_reason:'UNKNOWN',
+        prompt_block_reason:null,first_candidate_finish_message_present:false});
       equal(generator.responseDiagnostics({candidates:Array(1001).fill({finishReason:SENTINEL})}).candidate_count,1000);
       const dir=nextPath('diagnostics'), deps=providerDeps(dir,async()=>rejected);
       await rejects(()=>generator.generate(opts(dir),deps),'INCOMPLETE_RESPONSE_REQUIRES_EXPLICIT_RETRY');
       const manifest=pack.readManifest(dir), attempt=manifest.prompts[0].attempts[0];
       equal(attempt.status,'FAILED');equal(attempt.master,null);equal(attempt.telephony,null);
       equal(attempt.provider_finish_reason,'OTHER');
+      equal(Object.hasOwn(attempt,'response_diagnostics'),false);
+      equal(Object.hasOwn(attempt,'prompt_block_reason'),false);
+      equal(JSON.stringify(manifest).includes(SENTINEL),false);
       const run=JSON.parse(fs.readFileSync(path.join(dir,fs.readdirSync(dir).find(f=>/^run-.*\.json$/.test(f)))));
       equal(run.events[0].response_diagnostics,metadata);
       equal(JSON.stringify(run).includes(SENTINEL),false);
+    });
+    await group('prompt feedback enums and finish-message presence are bounded and redacted', async () => {
+      const blockReasons=['BLOCK_REASON_UNSPECIFIED','SAFETY','OTHER','BLOCKLIST','PROHIBITED_CONTENT','IMAGE_SAFETY'];
+      for(const blockReason of blockReasons) {
+        const diagnostics=generator.responseDiagnostics({promptFeedback:{blockReason},candidates:[]});
+        equal(diagnostics.prompt_block_reason,blockReason);
+        equal(diagnostics.first_candidate_finish_message_present,false);
+      }
+      for(const blockReason of [SENTINEL,'NEW_PROVIDER_ENUM','safety','SAFETY '+SENTINEL,'',null,undefined,0,true,
+        ['SAFETY'],{toString(){throw new Error('provider values must never be coerced');}}]) {
+        const diagnostics=generator.responseDiagnostics({promptFeedback:{blockReason}});
+        equal(diagnostics.prompt_block_reason,'UNKNOWN');
+        equal(JSON.stringify(diagnostics).includes(SENTINEL),false);
+      }
+      for(const promptFeedback of [undefined,null,{},[],SENTINEL,Object.create({blockReason:'SAFETY'})])
+        equal(generator.responseDiagnostics({promptFeedback}).prompt_block_reason,null);
+      // This is strictly own-field presence, not content/length/type inspection:
+      // empty and malformed present values remain distinct from absent fields.
+      for(const finishMessage of [SENTINEL,'',null,undefined,0,false,[SENTINEL],{text:SENTINEL}]) {
+        const diagnostics=generator.responseDiagnostics({candidates:[{finishMessage}]});
+        equal(diagnostics.first_candidate_finish_message_present,true);
+        equal(JSON.stringify(diagnostics).includes(SENTINEL),false);
+        equal(Object.hasOwn(diagnostics,'finishMessage'),false);
+      }
+      for(const candidates of [[],[{}],[null],[SENTINEL],[[]],[Object.create({finishMessage:SENTINEL})],
+        [{},{finishMessage:SENTINEL}]])
+        equal(generator.responseDiagnostics({candidates}).first_candidate_finish_message_present,false);
+      const diagnostic=generator.responseDiagnostics({promptFeedback:{blockReason:'SAFETY',text:SENTINEL},
+        candidates:[{finishReason:'STOP',finishMessage:SENTINEL,content:{parts:[{text:SENTINEL}]}}]});
+      equal(Object.keys(diagnostic).sort(),['candidate_count','first_candidate_finish_message_present',
+        'first_candidate_part_count','finish_reason','inline_audio_parts','prompt_block_reason','text_parts'].sort());
+      equal(diagnostic.prompt_block_reason,'SAFETY');
+      equal(diagnostic.first_candidate_finish_message_present,true);
+      equal(JSON.stringify(diagnostic).includes(SENTINEL),false);
     });
     await group('strict options and authoring-only output boundaries', async () => {
       equal(generator.options([]).mode, 'plan'); equal(generator.options(['--plan']).mode, 'plan');

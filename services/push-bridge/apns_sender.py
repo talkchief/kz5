@@ -10,6 +10,8 @@ import time
 
 from push_payload import InvalidPush, MAX_APNS_BYTES, apns_payload, normalize, normalize_apns_token
 from validate_config import APNS_HOSTS, APPLE_ID, TOPIC, _path
+from freshness import FreshnessFailure
+from freshness_runtime import remaining as freshness_remaining
 
 log = logging.getLogger("push_bridge.apns")
 
@@ -134,7 +136,7 @@ class ApnsSender(object):
                     pass
             raise
 
-    def send(self, device_token, payload, sandbox=False):
+    def send(self, device_token, payload, sandbox=False, freshness=None):
         token = self.normalize_token(device_token)
         if not token:
             return False, 0, "invalid_device_token"
@@ -153,7 +155,11 @@ class ApnsSender(object):
         sock = None
         try:
             deadline = time.monotonic() + REQUEST_TIMEOUT
+            if freshness is not None:
+                deadline = min(deadline, time.monotonic() + freshness_remaining(freshness) / 1000)
             authorization = self._provider_token.get(deadline=deadline)
+            if freshness is not None:
+                freshness_remaining(freshness)
             _remaining(deadline)
             sock = self._open(host, deadline)
             conn = self._h2_connection.H2Connection()
@@ -166,8 +172,12 @@ class ApnsSender(object):
                 ("apns-expiration", "0"), ("content-length", str(len(body))),
             ]
             stream_id = conn.get_next_available_stream_id()
+            if freshness is not None:
+                freshness_remaining(freshness)
             conn.send_headers(stream_id, headers)
             conn.send_data(stream_id, body, end_stream=True)
+            if freshness is not None:
+                freshness_remaining(freshness)
             _sendall(sock, conn.data_to_send(), deadline)
             status, response_bytes, wire_bytes = None, 0, 0
             while True:
@@ -217,7 +227,14 @@ class ApnsSender(object):
                 out = conn.data_to_send()
                 if out:
                     _sendall(sock, out, deadline)
+        except FreshnessFailure as error:
+            return False, 0, error.code
         except Exception:
+            if freshness is not None:
+                try:
+                    freshness_remaining(freshness)
+                except FreshnessFailure as error:
+                    return False, 0, error.code
             return False, -1, "apns_transport_error"
         finally:
             if sock is not None:

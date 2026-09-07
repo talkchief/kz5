@@ -1,0 +1,26 @@
+diff --git a/kamailio/pusher-role.cfg b/kamailio/pusher-role.cfg
+--- a/kamailio/pusher-role.cfg
++++ b/kamailio/pusher-role.cfg
+@@ -105,5 +105,13 @@ route[PUSHER_PREPARE_PUSH_PAYLOAD]
+ {
+ 
++   # Capture once before preparing the transaction's immutable payload.
++   # Kamailio 6.1 on LP64 keeps PV/script-variable arithmetic as signed long.
++   # TV(sn) samples wall time; TV(un) reads microseconds from that SAME sample.
++   # Sending/retrying the saved AVP must never renew this 60-second deadline.
++   $var(PushCreatedSeconds) = $TV(sn);
++   $var(PushCreatedAtMs) = ($var(PushCreatedSeconds) * 1000) + ($TV(un) / 1000);
++   $var(PushDeadlineMs) = $var(PushCreatedAtMs) + 60000;
++
+    $var(TokenID) = $hdr(X-KAZOO-PUSHER-Token-ID);
+    $var(TokenType) = $hdr(X-KAZOO-PUSHER-Token-Type);
+    $var(TokenApp) = $hdr(X-KAZOO-PUSHER-Token-App);
+@@ -141,7 +149,7 @@ route[PUSHER_PREPARE_PUSH_PAYLOAD]
+ 
+ 
+    $var(PushPayload) = $_s({"call-id" : "$ci", "proxy" : "$var(TokenProxy)", "caller-id-number" : "$var(from_user)", "caller-id-name" : "$var(from_name)", "registration-token" : "$var(TokenReg)" $var(AccountRef)});
+-   $var(Payload) = $_s({ "Event-Category" : "notification", "Event-Name" : "push_req",  "Call-ID" : "$ci", "Token-ID" : "$var(TokenID)", "Token-Type" : "$var(TokenType)", "Token-App" : "$var(TokenApp)", "Alert-Key" : "IC_SIL", "Alert-Params" : ["$var(from)"], "Sound" : "ring.caf", "Payload" : $var(PushPayload) });
++   $var(Payload) = $_s({ "Event-Category" : "notification", "Event-Name" : "push_req",  "Call-ID" : "$ci", "Token-ID" : "$var(TokenID)", "Token-Type" : "$var(TokenType)", "Token-App" : "$var(TokenApp)", "Alert-Key" : "IC_SIL", "Alert-Params" : ["$var(from)"], "Sound" : "ring.caf", "Payload" : $var(PushPayload), "Push-Freshness" : { "version" : 1, "created_at_ms" : $var(PushCreatedAtMs), "deadline_ms" : $var(PushDeadlineMs) } });
+ 
+    $avp(push_routing_key) = "notification.push." + $var(TokenType) + "." + $var(TokenID);
+    $avp(push_payload) = $var(Payload);

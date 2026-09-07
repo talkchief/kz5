@@ -6,13 +6,34 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
-**Current voice inventory:**406/584 technical QA (EN31/HE86/FR160/ES25/AR104),
-680 requests,96 retries,178 failed and no pending/indeterminate identity. Four
-bounded concise-v2 Hebrew retries recovered two recordings; four WAVs saved.
+**Current voice inventory:**409/584 technical QA (EN31/HE89/FR160/ES25/AR104),
+692 requests,108 retries,175 failed and no pending/indeterminate identity. Twelve
+bounded concise-v2 Hebrew retries recovered three recordings; six WAVs saved.
 See `doc/acdc_cardinal_concise_synthesis.md`; older counts below are historical.
 No new cardinal runtime activation or listening approval is implied.
+Safe prompt-feedback diagnostics are implemented and pass19 groups/377 checks
+(`a40011/893835`) without real provider calls. No speculative transcript change
+or additional identical retry batch was started.
 
-**Latest warm-up and callback proof:** all210 deployed Gemini clips and420
+**Bridge freshness:** versioned producer metadata and worker/auth/transport
+expiry checks are implemented;166 offline bridge tests,35 producer checks,
+actual private Kamailio route execution and real isolated broker quarantine pass.
+See `doc/push_bridge_freshness.md`. Strict activation requires reviewed quorum
+configuration and patched producers; legacy development routing is unchanged.
+Main-SH bridge deployment `d092dc/1e7b45` and independent verification
+`b9e8bb/be5ab7` pass; releasec9d8055d8f92, PID448604, NRestarts0.
+Main-SH Kamailio producer deployment `0de2e3/95d41c` passes all current
+integration/journal checks; PID451713, NRestarts0. Configuration backup retained,
+prior malformed-Via logs preserved, their attribution still open.
+
+**Latest post-deployment callback proof:** `21d377/session53798/55fb32` exits0,
+including full Gemini confirmation, missed first return, retry/second native
+bridge and final SIP/RTP/agent/service/log gates. Evidence:
+`/var/log/kazoo-acceptance/20260907T181123Z`. The failed legacy-reference trial
+and corrected analysis are documented in `doc/development_warmup_20260907.md`;
+new preflight rejects legacy references before any calls.
+
+**Earlier warm-up and callback proof:** all210 deployed Gemini clips and420
 running cache mappings verify; extension1000 native request construction passes.
 Live isolated1001 retry `6e1abf/session73991/6fd51b` proves confirmation, missed
 first return, durable retry and second native agent bridge. See

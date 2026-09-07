@@ -10,11 +10,14 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 from push_payload import InvalidPush, apns_payload, normalize
 from validate_config import NUMBERS, PREFIX, validate
 from delivery_settlement import OwnerSettlements, SettlementFailure
 from amqp_topology import TopologyFailure, configure as configure_topology
+from freshness import FreshnessFailure
+from freshness_runtime import capture_body, remaining as freshness_remaining
 
 
 RECONNECT_DELAY = 5
@@ -225,13 +228,23 @@ class BridgeRuntime:
                     raise OAuthTransportFailure("oauth_refresh_error") from None
             return self.credentials.token
 
-    def send_fcm(self, token_id, data):
+    def _check_freshness(self, freshness):
+        if freshness is None and self._settings.get("FRESHNESS", "legacy") == "legacy":
+            return None
+        return freshness_remaining(freshness)
+
+    def send_fcm(self, token_id, data, freshness=None):
+        try:
+            self._check_freshness(freshness)
+        except FreshnessFailure as error:
+            return False, 0, error.code
         with self._lifecycle_lock:
             if self._closing:
                 return False, 0, "bridge_closing"
             self._active_sends += 1
         try:
-            return self._send_fcm(token_id, data)
+            return (self._send_fcm(token_id, data, freshness) if freshness is not None
+                    else self._send_fcm(token_id, data))
         finally:
             with self._lifecycle_lock:
                 self._active_sends -= 1
@@ -241,7 +254,7 @@ class BridgeRuntime:
             if close_http:
                 self._close_http()
 
-    def _send_fcm(self, token_id, data):
+    def _send_fcm(self, token_id, data, freshness=None):
         with self._lifecycle_lock:
             if self._closing:
                 return False, 0, "bridge_closing"
@@ -255,12 +268,12 @@ class BridgeRuntime:
                 # Do not queue an unbounded number of public/direct sends.
                 return False, 0, "provider_capacity_exhausted"
         try:
-            return self._send_fcm_with_session(http, token_id, data)
+            return self._send_fcm_with_session(http, token_id, data, freshness)
         finally:
             with self._lifecycle_lock:
                 self._idle_http.append(http)
 
-    def _send_fcm_with_session(self, http, token_id, data):
+    def _send_fcm_with_session(self, http, token_id, data, freshness=None):
         message = {
             "message": {
                 "token": token_id,
@@ -271,10 +284,18 @@ class BridgeRuntime:
         last_status, last_text = 0, ""
         for attempt in (1, 2):
             try:
+                self._check_freshness(freshness)
+                token = self.get_access_token()
+                # Token refresh and worker/HTTP lease contention may consume
+                # the event lifetime. Recheck immediately before each POST.
+                left_ms = self._check_freshness(freshness)
+                if left_ms is not None:
+                    message["message"]["android"]["ttl"] = "{}.{:03d}s".format(*divmod(left_ms, 1000))
                 response = http.post(
                     self.fcm_url,
-                    headers={"Authorization": "Bearer {}".format(self.get_access_token())},
-                    json=message, timeout=5, allow_redirects=False, stream=True,
+                    headers={"Authorization": "Bearer {}".format(token)},
+                    json=message, timeout=min(5, left_ms / 1000) if left_ms is not None else 5,
+                    allow_redirects=False, stream=True,
                     hooks={"response": [reject_fcm_redirect]},
                 )
                 try:
@@ -285,6 +306,8 @@ class BridgeRuntime:
                         return False, last_status, last_text
                 finally:
                     response.close()
+            except FreshnessFailure as error:
+                return False, 0, error.code
             except FcmRedirectRejected as error:
                 return False, error.status, "provider_redirect_rejected"
             except OAuthTransportFailure as error:
@@ -322,11 +345,18 @@ class BridgeRuntime:
                     log.error("apns_initialization_failed environment=%s", environment)
         return self._apns_senders.get(environment)
 
-    def deliver_apns(self, push):
+    def deliver_apns(self, push, freshness=None):
+        try:
+            self._check_freshness(freshness)
+        except FreshnessFailure as error:
+            return False, 0, error.code
         sender = self.get_apns_sender(push.sandbox)
         if sender is None:
             return False, 0, "apns_initialization_failed"
-        result = sender.send(push.token_id, apns_payload(push), sandbox=push.sandbox)
+        options = {"sandbox": push.sandbox}
+        if freshness is not None:
+            options["freshness"] = freshness
+        result = sender.send(push.token_id, apns_payload(push), **options)
         ok, status, _text = result
         if ok:
             log.info("apns_delivery_accepted")
@@ -336,15 +366,22 @@ class BridgeRuntime:
             log.error("apns_delivery_failed status=%s", status)
         return result
 
-    def deliver(self, raw_body):
+    def deliver(self, raw_body, freshness=None):
+        try:
+            if freshness is None:
+                freshness = capture_body(raw_body, self._settings.get("FRESHNESS", "legacy"))
+            self._check_freshness(freshness)
+        except FreshnessFailure as error:
+            return False, 0, error.code
         try:
             push = normalize(raw_body)
         except InvalidPush:
             log.warning("invalid_push_payload")
             return False, 0, "invalid_push_payload"
         if push.provider == "apns":
-            return self.deliver_apns(push)
-        result = self.send_fcm(push.token_id, push.data)
+            return self.deliver_apns(push, freshness) if freshness is not None else self.deliver_apns(push)
+        result = (self.send_fcm(push.token_id, push.data, freshness) if freshness is not None
+                  else self.send_fcm(push.token_id, push.data))
         ok, status, _text = result
         if ok:
             log.info("fcm_delivery_accepted")
@@ -383,7 +420,15 @@ class BridgeRuntime:
                                 target = apns_pool
                         except InvalidPush:
                             pass
-                        generation["settlements"].submit(target, self.deliver, message, body, provider=provider)
+                        worker = self.deliver
+                        if settings.get("FRESHNESS", "legacy") != "legacy":
+                            try:
+                                lease = capture_body(body, settings["FRESHNESS"])
+                                worker = partial(self.deliver, freshness=lease)
+                            except FreshnessFailure as error:
+                                outcome = (False, 0, error.code)
+                                worker = lambda _body, outcome=outcome: outcome
+                        generation["settlements"].submit(target, worker, message, body, provider=provider)
                     except Exception:
                         # Libraries may catch callback exceptions internally;
                         # retain a fixed owner-loop failure instead of relying

@@ -22,6 +22,7 @@ import amqpstorm
 from amqp_management import ManagementVerificationFailure, verify_topology
 from amqp_topology import configure, plan
 from delivery_settlement import OwnerSettlements
+from bridge import BridgeRuntime
 
 
 def main():
@@ -105,7 +106,8 @@ def main():
             if delivered.body != body:
                 raise RuntimeError("synthetic_message_mismatch")
             with ThreadPoolExecutor(max_workers=1) as executor:
-                settlements.submit(executor, lambda _body: outcome, delivered, body, provider=provider)
+                worker = outcome if callable(outcome) else lambda _body: outcome
+                settlements.submit(executor, worker, delivered, body, provider=provider)
                 deadline = time.monotonic() + 5
                 while settlements.pending_count:
                     if time.monotonic() >= deadline:
@@ -123,6 +125,23 @@ def main():
                 raise RuntimeError("synthetic_quarantine_mismatch")
             quarantined.ack()
         receipt["checks"].append("owner_quarantines_synthetic_invalid_and_permanent_results_to_real_dlq")
+        strict = BridgeRuntime.__new__(BridgeRuntime)
+        strict._settings = {"FRESHNESS": "unix-ms-v1"}
+        def forbidden_provider(*_args, **_kwargs):
+            raise RuntimeError("unexpected_synthetic_provider_dispatch")
+        strict.send_fcm = forbidden_provider
+        strict.deliver_apns = forbidden_provider
+        for metadata in (None, {"version": 1, "created_at_ms": 1000, "deadline_ms": 2000}):
+            event = {"Token-ID": "synthetic-token", "Call-ID": identity}
+            if metadata is not None:
+                event["Push-Freshness"] = metadata
+            expired = json.dumps(event)
+            settle_synthetic(expired, strict.deliver, "fcm")
+            quarantined = receive(wanted.dead_queue)
+            if quarantined.body != expired:
+                raise RuntimeError("synthetic_freshness_quarantine_mismatch")
+            quarantined.ack()
+        receipt["checks"].append("strict_runtime_quarantines_missing_and_expired_freshness_without_provider")
         settle_synthetic("fixture-accepted", (True, 200, "provider_response"), "fcm")
         # Synchronous declare confirms earlier ACKs have been processed. No
         # consumer exists that could hide a wrongly retained ready message.

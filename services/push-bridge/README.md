@@ -1,5 +1,9 @@
 # Mobile push bridge: modular installer candidate
 
+Versioned producer expiry is now available as an explicit quorum-only opt-in.
+See [freshness configuration, tests and release boundaries](../../doc/push_bridge_freshness.md).
+It does not silently change legacy routing or prove real phone delivery.
+
 ## Main installer integration (development installation verified)
 
 Verified `quorum-v1` mode now quarantines malformed payloads and conservative
