@@ -6,7 +6,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 
-function digitPcap(payload) {
+function digitPcap(payload, transport='external') {
+    const endpointIp=require('./callback-internal-scenarios.cjs').endpointIp(transport);
     assert(Number.isInteger(payload) && payload >= 96 && payload <= 127);
     const header = Buffer.alloc(24);
     header.writeUInt32LE(0xa1b2c3d4); header.writeUInt16LE(2, 4); header.writeUInt16LE(4, 6);
@@ -16,7 +17,7 @@ function digitPcap(payload) {
         const packet = Buffer.alloc(58), udp = 34, rtp = 42;
         packet.writeUInt16BE(0x0800, 12); packet[14] = 0x45;
         packet.writeUInt16BE(44, 16); packet[22] = 64; packet[23] = 17;
-        Buffer.from([127, 0, 0, 30]).copy(packet, 26);
+        Buffer.from(endpointIp.split('.').map(Number)).copy(packet, 26);
         Buffer.from([127, 0, 0, 1]).copy(packet, 30);
         packet.writeUInt16BE(44000, udp); packet.writeUInt16BE(20000, udp + 2);
         packet.writeUInt16BE(24, udp + 4);
@@ -33,7 +34,8 @@ function digitPcap(payload) {
     return Buffer.concat(records);
 }
 
-function generate(directory) {
+function generate(directory, transport='external') {
+    require('./callback-internal-scenarios.cjs').target(transport);
     const stat = fs.lstatSync(directory);
     assert(stat.isDirectory() && !stat.isSymbolicLink() && stat.uid === 0 && (stat.mode & 0o077) === 0,
         'Generator requires an existing private root-owned fixture directory');
@@ -42,7 +44,7 @@ function generate(directory) {
     const choices = [], branches = [];
     for (let payload = 96; payload <= 127; payload++) {
         const pcap = path.join(directory, `callback-digit1-${payload}.pcap`);
-        fs.writeFileSync(pcap, digitPcap(payload), {flag: 'wx', mode: 0o600});
+        fs.writeFileSync(pcap, digitPcap(payload, transport), {flag: 'wx', mode: 0o600});
         choices.push(`  <nop><action><test assign_to="is_dtmf_${payload}" variable="dtmf_payload" compare="equal" value="${payload}"/></action></nop>\n  <nop test="is_dtmf_${payload}" next="dtmf_${payload}"/>`);
         branches.push(`  <label id="dtmf_${payload}"/>\n  <nop><action><ereg regexp="(^| )${payload}( |$)" search_in="var" variable="audio_payloads" check_it="true" assign_to="media_mapping_${payload}"/><exec play_pcap_audio="${pcap}"/></action></nop>\n  <Reference variables="media_mapping_${payload}"/>\n  <nop next="dtmf_done"/>`);
     }
@@ -60,8 +62,8 @@ function generate(directory) {
 module.exports = {digitPcap, generate};
 if (require.main === module) {
     try {
-        assert.equal(process.argv.length, 3, 'Usage: create-callback-carrier-scenario.cjs PRIVATE_DIRECTORY');
-        console.log(generate(process.argv[2]));
+        assert([3,4].includes(process.argv.length), 'Usage: create-callback-carrier-scenario.cjs PRIVATE_DIRECTORY [external|internal]');
+        console.log(generate(process.argv[2],process.argv[3]||'external'));
     } catch (error) {
         console.error('Callback scenario generation failed: ' + error.message);
         process.exitCode = 1;

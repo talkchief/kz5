@@ -66,6 +66,19 @@ const good = {registered: {...base, status: 'queued', attempts: 0},
         agent: {id: 'agent1', account, bridge_to: 'busy', contact_host: '127.0.0.20', contact_port: '15100', answered: '100'}},
     audio: {confirmation_end_epoch_seconds: 115, original_bye_epoch_seconds: 116}, release: 118};
 assert.deepEqual(lifecycle(good), {callerCallId: 'second@fs', agentCallId: 'agent2@fs'}); checks++;
+const native = structuredClone(good);
+for (const doc of [native.registered, native.first.callback, native.backoff, native.bridged.callback]) {
+    doc.number = '1001';
+    doc.internal_target = {number:'1001',type:'user',id:'1'.repeat(32),flow_id:'2'.repeat(32)};
+}
+assert.deepEqual(lifecycle(native, 'internal'), {callerCallId:'second@fs',agentCallId:'agent2@fs'}); checks++;
+assert.throws(() => lifecycle(native)); checks++;
+assert.throws(() => lifecycle(good, 'internal')); checks++;
+assert.throws(() => lifecycle(good, 'automatic')); checks++;
+for (const change of [e=>{e.registered.internal_target=null;},e=>{e.backoff.internal_target.id='3'.repeat(32);},
+    e=>{e.bridged.callback.number='+12025550101';},e=>{e.first.callback.internal_target.flow_id='4'.repeat(32);}]) {
+    const modified=structuredClone(native);change(modified);assert.throws(()=>lifecycle(modified,'internal'));checks++;
+}
 const failures = [
     e => {e.registered.status = 'completed';}, e => {e.registered.attempts = 1;},
     e => {e.first.callback.id = 'other';}, e => {e.first.caller.account = 'wrong';},

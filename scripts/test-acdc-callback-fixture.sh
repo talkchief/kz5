@@ -27,6 +27,8 @@ MASTER_TOKEN=
 MASTER_ACCOUNT_ID=
 ACCEPTANCE_ACCOUNT_ID=
 ACCEPTANCE_CALLER_DEVICE_ID=
+ACCEPTANCE_CALLER_USER_ID=
+ACCEPTANCE_CALLER_CALLFLOW_ID=
 ACCEPTANCE_QUEUE_ID=
 ACCEPTANCE_ACCOUNT_NAME=
 ACCEPTANCE_QUEUE_EXTENSION=
@@ -91,7 +93,7 @@ load_acceptance_state() {
         [[ $line == *=* ]] || fixture_die 'Malformed acceptance state line'
         key=${line%%=*}; encoded=${line#*=}
         case $key in
-            ACCEPTANCE_ACCOUNT_ID|ACCEPTANCE_CALLER_DEVICE_ID|ACCEPTANCE_QUEUE_ID|ACCEPTANCE_ACCOUNT_NAME|ACCEPTANCE_QUEUE_EXTENSION) ;;
+            ACCEPTANCE_ACCOUNT_ID|ACCEPTANCE_CALLER_DEVICE_ID|ACCEPTANCE_CALLER_USER_ID|ACCEPTANCE_CALLER_CALLFLOW_ID|ACCEPTANCE_QUEUE_ID|ACCEPTANCE_ACCOUNT_NAME|ACCEPTANCE_QUEUE_EXTENSION) ;;
             *) continue ;;
         esac
         value=$(printf '%s' "$encoded" | base64 --decode 2>/dev/null) || fixture_die "Invalid acceptance state value: $key"
@@ -335,7 +337,8 @@ callback_evidence() {
           {id:._id,status,original_call_id,enqueued_at,enqueue_sequence,attempts,
            account_id:.pvt_account_id,queue_id,number,max_attempts,retry_delay,next_attempt_at,last_cause,
            caller_call_id:.pvt_caller_call_id,agent_call_id:.pvt_agent_call_id,
-           selected_agents:.pvt_selected_agents,reconciliation_required}] end' <<<"$response"
+           selected_agents:.pvt_selected_agents,reconciliation_required,
+           internal_target:(.pvt_internal_target | if type=="object" then {number,flow_id,type,id} else null end)}] end' <<<"$response"
 }
 
 fixture_cleanup_scope() {
@@ -371,8 +374,13 @@ fixture_channel_snapshot() {
 }
 
 fixture_terminal_document() {
-    jq -e --arg account "$ACCEPTANCE_ACCOUNT_ID" --arg queue "$ACCEPTANCE_QUEUE_ID" --arg number "$CALLBACK_NUMBER" '
-        .account_id==$account and .queue_id==$queue and .number==$number and
+    jq -e --arg account "$ACCEPTANCE_ACCOUNT_ID" --arg queue "$ACCEPTANCE_QUEUE_ID" --arg number "$CALLBACK_NUMBER" \
+        --arg mode "${KAZOO_CALLBACK_TEST_TRANSPORT:-external}" \
+        --arg user "${ACCEPTANCE_CALLER_USER_ID:-}" --arg flow "${ACCEPTANCE_CALLER_CALLFLOW_ID:-}" '
+        .account_id==$account and .queue_id==$queue and
+        (if $mode=="external" then .number==$number else
+         $mode=="internal" and .number=="1001" and ($user|test("^[a-f0-9]{32}$")) and ($flow|test("^[a-f0-9]{32}$")) and
+         .internal_target=={number:"1001",type:"user",id:$user,flow_id:$flow} end) and
         (.id|type)=="string" and (.id|test("^acdc-callback-[a-f0-9]{64}$")) and
         (.original_call_id|type)=="string" and (.original_call_id|test("^1-[1-9][0-9]*@127\\.0\\.0\\.20$")) and
         (.status=="completed" or .status=="cancelled" or .status=="failed" or .status=="expired") and
@@ -405,7 +413,8 @@ fixture_channel_dump() {
 }
 
 teardown_completed_test_pair() {
-    local document=$1 snapshot caller agent caller_id agent_id response attempt
+    local document=$1 snapshot caller agent caller_id agent_id response attempt returned_ip=$CARRIER_IP
+    if [[ ${KAZOO_CALLBACK_TEST_TRANSPORT:-external} == internal ]]; then returned_ip=127.0.0.20; fi
     if ! fixture_terminal_document "$document" || [[ $(jq -r '.status' <<<"$document") != completed ]]; then
         fixture_die 'Invalid completed fixture callback; retained'
     fi
@@ -422,7 +431,7 @@ teardown_completed_test_pair() {
     caller=$(fixture_channel_dump "$caller_id") || fixture_die 'Caller identity unavailable; retained'
     agent=$(fixture_channel_dump "$agent_id") || fixture_die 'Agent identity unavailable; retained'
     jq -e --argjson document "$document" --argjson caller "$caller" --argjson agent "$agent" \
-        --arg account "$ACCEPTANCE_ACCOUNT_ID" --arg ip "$CARRIER_IP" --arg port "$CARRIER_PORT" '
+        --arg account "$ACCEPTANCE_ACCOUNT_ID" --arg ip "$returned_ip" --arg port "$CARRIER_PORT" '
         $caller["Unique-ID"]==$document.caller_call_id and $agent["Unique-ID"]==$document.agent_call_id and
         $caller["variable_ecallmgr_Account-ID"]==$account and $agent["variable_ecallmgr_Account-ID"]==$account and
         $caller["variable_ecallmgr_Callback-ID"]==$document.id and

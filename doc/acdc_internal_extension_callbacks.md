@@ -1,7 +1,8 @@
 # Account-local extension callbacks
 
-September7: focused four-module deployment and current-account request
-construction pass. End-to-end internal callback/ringing acceptance remains open.
+September7: focused four-module deployment, current-account request construction
+and isolated internal1001 retry acceptance pass. The separate operator MicroSIP
+1000 test and broader release acceptance remain open.
 
 The reported MicroSIP device sent `kz5_test` as caller ID. It now has internal
 caller-ID number1000, changed through Crossbar and read back (`da514d`); its
@@ -83,3 +84,64 @@ reciprocal bridge all passed. Scoped error logs/new cores were zero. This used
 the isolated loopback carrier, not the new internal transport or real PSTN.
 The diagnostic retained its fixture; it is not full cleanup or production
 acceptance. It must not be substituted for the internal1000 live test.
+
+## Isolated native-transport retry harness
+
+`scripts/test-acdc-callback-retry.sh` now accepts `--transport internal` in
+addition to its default external mode. Internal mode uses only the existing
+isolated account7807ad61761269a1ccec833dde63f621, numeric extension1001 and its
+registered `acceptance1001` SIP device. The returned phone listens at
+127.0.0.20:16060, with media44000. It does not replace the user's MicroSIP1000
+registration or change the main account. A preflight refuses an already
+registered fixture identity. Its absence check recognizes only the installed
+Kamailio RPC's exact `error: 500 - AOR not found in location table` result;
+arbitrary errors are not evidence of absence.
+
+Internal mode requires a privately pinned user/flow target in the durable
+callback, unchanged across both attempts. Packet gates require the native
+username and dedicated localhost endpoint; external-carrier evidence fails the
+internal contract and vice versa. It retains the existing single6, complete
+Gemini audio before BYE, busy-agent release, unanswered first attempt, durable
+backoff, completed digit1 before the agent INVITE, reciprocal bridge and media
+checks. Cleanup additionally binds the internal target to the exact borrowed
+user/flow IDs and returned endpoint; it cannot terminate arbitrary1001 calls.
+
+Run under the serialized validation guard, with no other active calls:
+
+```sh
+bash scripts/test-acdc-callback-retry.sh --live --keep-fixture \
+  --registration-mode entry-only --transport internal \
+  --confirmation-reference /protected/verified/acdc-callback-success.ulaw
+```
+
+The first trial stopped on an overly narrow registrar preflight. The second
+stopped on REGISTER timeout using127.0.0.30; both stopped before callback calls.
+The revised trial uses the existing phone-side127.0.0.20 address. Later trials
+proved that the early native channel can omit `sip_call_id`: the expected
+outbound UUID is retained with an explicit source label, and final packet proof
+must independently match it. It is not treated as an observed channel variable.
+
+Trial `20260907T151923Z` exposed a test-phone response bug: saving `[last_Via:]`
+inside the initial receive action produced an empty value, so the actual100/180
+responses had no Via headers and the proxy retransmitted the INVITE. The native
+unanswered scenario now explicitly extracts the second received Via occurrence,
+alongside the existing first header, and preserves both in INVITE responses.
+CANCEL/ACK retain their independently verified top-hop transaction. Duplicate
+packet validation also rejects changes in the second Via. This follows SIPp's
+[header-occurrence extraction](https://sipp.readthedocs.io/en/latest/scenarios/actions.html).
+These changes are test-harness fixes, not callback runtime changes.
+
+The corrected run `b6e938/session58987/493a66` finished exit0. Evidence directory:
+`/var/log/kazoo-acceptance/20260907T152609Z`. It proves busy-agent single6 callback
+registration, full Gemini confirmation before BYE, initial-call release2s after
+audio proof, unanswered first native return, positive CANCEL/487/ACK settlement,
+durable retry_wait and a digit1-confirmed second return reciprocally bridged to
+the agent. Final packet/media, agent-ready and unchanged-service gates pass;
+scoped errors0/0 and new cores0. Its fixture is retained, not fully deleted.
+This fixture is still not the separate operator1000 phone test or a production
+release certificate. The default external-route regression was rerun on this
+same parameterized harness: `c26844/session62944/efcaac` exit0, evidence
+`/var/log/kazoo-acceptance/20260907T153203Z`. Its full packet/media diagnostic,
+unanswered-first retry, reciprocal agent bridge and service/log checks pass.
+That route uses the isolated loopback carrier, not real PSTN, and retains its
+fixture too.

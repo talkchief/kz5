@@ -11,16 +11,27 @@ const media = require('./assert-callback-confirmation-pcap.cjs');
 const ACCOUNT = '7807ad61761269a1ccec833dde63f621';
 const GREGORIAN_UNIX_OFFSET = 62167219200;
 const id = value => typeof value === 'string' && /^[A-Za-z0-9@._:-]{1,128}$/.test(value);
-function lifecycle({registered, first, backoff, bridged, busy, audio, release}) {
+function lifecycle({registered, first, backoff, bridged, busy, audio, release}, transport = 'external') {
+    require('./callback-internal-scenarios.cjs').target(transport);
+    const number = transport === 'internal' ? '1001' : '+12025550101';
     const doc = bridged.callback, caller = bridged.caller, agent = bridged.agent;
     assert(registered.account_id === ACCOUNT && registered.status === 'queued' && registered.attempts === 0,
         'Original callback was not durably queued while agent was busy');
     for (const current of [first.callback, backoff, doc]) {
         assert(current.id === registered.id && current.account_id === ACCOUNT && current.queue_id === registered.queue_id
-            && current.original_call_id === registered.original_call_id && current.number === '+12025550101'
+            && current.original_call_id === registered.original_call_id && current.number === number
             && current.enqueued_at === registered.enqueued_at && current.enqueue_sequence === registered.enqueue_sequence
             && current.max_attempts === 2 && current.retry_delay === 15 && current.reconciliation_required !== true,
         'Retry changed callback identity, ordering, policy, ownership or settlement');
+    }
+    if (transport === 'internal') {
+        const target = registered.internal_target;
+        assert(target && target.number === '1001' && target.type === 'user'
+            && /^[a-f0-9]{32}$/.test(target.id) && /^[a-f0-9]{32}$/.test(target.flow_id),
+            'Internal registration did not pin an account-local user route');
+        for (const current of [first.callback, backoff, doc]) {
+            assert.deepEqual(current.internal_target, target, 'Pinned internal route changed across attempts');
+        }
     }
     assert(first.callback.attempts === 1 && id(first.caller.sip_call_id)
         && first.caller.id === first.callback.caller_call_id && first.caller.account === ACCOUNT
@@ -49,8 +60,9 @@ function lifecycle({registered, first, backoff, bridged, busy, audio, release}) 
     'Initial call ended before complete received confirmation plus two seconds');
     return {callerCallId: caller.sip_call_id, agentCallId: agent.sip_call_id};
 }
-function firstOffer(buffer, expected) {
-    const found = media.packets(buffer).filter(packet => packet.dst === '127.0.0.30' && packet.dport === 16060
+function firstOffer(buffer, expected, transport='external') {
+    const endpointIp=require('./callback-internal-scenarios.cjs').endpointIp(transport);
+    const found = media.packets(buffer).filter(packet => packet.dst === endpointIp && packet.dport === 16060
         && packet.payload.subarray(0, 7).toString('latin1') === 'INVITE ');
     assert(found.length > 0, 'No second returned INVITE');
     for (const packet of found) {
@@ -94,7 +106,8 @@ function registrationModeProof(mode, receipt, policy, audio) {
     assert.deepEqual(audio.observed_registration_digits, expected, 'Audio observed digits disagree with run mode');
     return {registration_mode: mode, expected_registration_digits: expected, observed_registration_digits: expected};
 }
-function inspect(directory, mode = 'confirm-current') {
+function inspect(directory, mode = 'confirm-current', transport = 'external') {
+    require('./callback-internal-scenarios.cjs').target(transport);
     const json = name => JSON.parse(safeRead(directory, name, 128 * 1024));
     const serviceScope = json('retry-service-scope.json');
     assert.deepEqual(serviceScope, require('./callback-retry-service-scope.cjs').inspect(
@@ -110,7 +123,7 @@ function inspect(directory, mode = 'confirm-current') {
         assert.equal(crypto.createHash('sha256').update(safeRead(directory, name, 128 * 1024)).digest('hex'), hash,
             'Scenario bytes differ from explicit registration-mode receipt');
     }
-    const proof = lifecycle(evidence);
+    const proof = lifecycle(evidence, transport);
     const busyDown = json('retry-busy-both-down.json');
     assert(Array.isArray(busyDown.rows) && busyDown.rows.every(row => typeof row.uuid === 'string'
         && row.uuid !== evidence.busy.caller.id && row.uuid !== evidence.busy.agent.id),
@@ -120,7 +133,7 @@ function inspect(directory, mode = 'confirm-current') {
     const voiceFamily = require('./callback-gemini-reference.cjs').validateReceipt(receipt, rawHash);
     assert(evidence.audio.reference_sha256 === rawHash,
     'Received audio reference does not match installed-prompt receipt');
-    const first = require('./assert-callback-unanswered.cjs').inspect(safeRead(directory, 'retry-unanswered.pcap'));
+    const first = require('./assert-callback-unanswered.cjs').inspect(safeRead(directory, 'retry-unanswered.pcap'), undefined, transport);
     assert(first.firstCallerSipId === evidence.first.caller.sip_call_id, 'Unanswered packets belong to another native caller');
     assert(first.offerAt >= evidence.release, 'Callback originated while the only agent was still busy');
     const firstDown = json('retry-first-both-down.json');
@@ -128,15 +141,15 @@ function inspect(directory, mode = 'confirm-current') {
         && row.uuid !== evidence.first.caller.id && row.uuid !== evidence.registered.original_call_id),
     'First returned caller did not have independent native absence proof before retry');
     const secondCapture = safeRead(directory, 'retry-returned.pcap');
-    const timing = retryTiming(first, firstOffer(secondCapture, proof.callerCallId), evidence.backoff);
+    const timing = retryTiming(first, firstOffer(secondCapture, proof.callerCallId,transport), evidence.backoff);
     for (const name of ['callback-original.log', 'callback-carrier.log', 'callback-agent-1.log', 'retry-busy.log']) {
         assert(!/Could not (?:bind port for|open socket for|set up media IP for) RTP streaming/i.test(safeRead(directory, name).toString()),
             'SIP success masked an RTP streaming failure');
     }
     const second = media.inspect(secondCapture, proof,
-        media.negotiatedPayload(safeRead(directory, 'callback-carrier-negotiation.log', 8192).toString()));
+        media.negotiatedPayload(safeRead(directory, 'callback-carrier-negotiation.log', 8192).toString()), transport);
     return {scenario: 'busy-agent-unanswered-first-callback-retry', account_id: ACCOUNT,
-        ...selection, registration_input_sha256: selectionReceipt.input_sha256,
+        ...selection, transport, registration_input_sha256: selectionReceipt.input_sha256,
         service_scope: serviceScope,
         retained_fixture: true, full_cleanup_acceptance: false, original_registration_audio: evidence.audio,
         confirmation_voice_family: voiceFamily,
@@ -150,8 +163,8 @@ function inspect(directory, mode = 'confirm-current') {
 module.exports = {lifecycle, retryTiming, firstOffer, inspect, registrationModeProof, GREGORIAN_UNIX_OFFSET};
 if (require.main === module) {
     try {
-        assert([3, 4].includes(process.argv.length), 'Usage: assert-callback-retry.cjs protected-run-directory [entry-only|confirm-current]');
-        const result = inspect(process.argv[2], process.argv[3] || 'confirm-current');
+        assert([3, 4, 5].includes(process.argv.length), 'Usage: assert-callback-retry.cjs protected-run-directory [entry-only|confirm-current] [external|internal]');
+        const result = inspect(process.argv[2], process.argv[3] || 'confirm-current', process.argv[4] || 'external');
         fs.writeFileSync(path.join(process.argv[2], 'retry-packet-evidence.json'), JSON.stringify(result, null, 2) + '\n', {mode: 0o600, flag: 'wx'});
         console.log('PASS exact busy/confirmation/retry lifecycle and phase-scoped SIP/RTP evidence; fixture retained');
     } catch (error) {console.error('Callback retry evidence FAIL: ' + error.message); process.exitCode = 1;}

@@ -17,12 +17,13 @@ function message(packet) {
     }
     const one = name => {assert(headers[name]?.length === 1, 'Missing/ambiguous unanswered SIP header'); return headers[name][0];};
     const callId = one('call-id'), cseq = /^(\d+) (INVITE|CANCEL|ACK)$/.exec(one('cseq'));
-    const via = one('via'), branches = [...via.matchAll(/(?:^|;)branch=([^;\s]+)/g)], branch = branches[0];
+    assert(Array.isArray(headers.via) && headers.via.length >= 1 && headers.via.length <= 2, 'Unsupported unanswered Via chain');
+    const via = headers.via[0], branches = [...via.matchAll(/(?:^|;)branch=([^;\s]+)/g)], branch = branches[0];
     assert(validId(callId) && cseq && Number.isSafeInteger(Number(cseq[1]))
         && branches.length === 1 && /^z9hG4bK[-A-Za-z0-9._]+$/.test(branch[1]), 'Invalid unanswered transaction identity');
     const length = one('content-length'), body = text.slice(split + 4);
     assert(/^\d+$/.test(length) && Number(length) === Buffer.byteLength(body, 'latin1'), 'Invalid unanswered SIP body length');
-    return {...packet, first, callId, sequence: Number(cseq[1]), method: cseq[2], via, branch: branch[1],
+    return {...packet, first, callId, sequence: Number(cseq[1]), method: cseq[2], via, vias:headers.via, branch: branch[1],
         from: one('from'), to: one('to'), body};
 }
 function unique(messages, name) {
@@ -31,9 +32,12 @@ function unique(messages, name) {
     for (const item of messages) for (const key of ['first', 'callId', 'sequence', 'method', 'via', 'from', 'to', 'body', 'src', 'dst', 'sport', 'dport']) {
         assert(item[key] === first[key], 'Ambiguous unanswered ' + name);
     }
+    for (const item of messages) assert.deepEqual(item.vias, first.vias, 'Ambiguous unanswered Via chain');
     return messages.reduce((before, item) => item.time < before.time ? item : before);
 }
-function inspect(buffer, busyAgentSipId) {
+function inspect(buffer, busyAgentSipId, transport = 'external') {
+    const target = require('./callback-internal-scenarios.cjs').target(transport);
+    const endpointIp = require('./callback-internal-scenarios.cjs').endpointIp(transport);
     assert(busyAgentSipId === undefined || validId(busyAgentSipId), 'Invalid permitted busy-agent dialog');
     const groups = {offer: [], ringing: [], cancel: [], cancelOk: [], terminated: [], ack: [], trying: []};
     for (const packet of packets(buffer)) {
@@ -42,8 +46,8 @@ function inspect(buffer, busyAgentSipId) {
             const id = message(packet).callId;
             assert(busyAgentSipId !== undefined && id === busyAgentSipId, 'Agent offered before unanswered callback settled');
         }
-        const incoming = packet.dst === '127.0.0.30' && packet.dport === 16060;
-        const outgoing = packet.src === '127.0.0.30' && packet.sport === 16060;
+        const incoming = packet.dst === endpointIp && packet.dport === 16060;
+        const outgoing = packet.src === endpointIp && packet.sport === 16060;
         if ((!incoming && !outgoing) || !/^(?:INVITE |CANCEL |ACK |SIP\/2\.0 )/.test(start)) continue;
         const item = message(packet);
         let key;
@@ -59,7 +63,10 @@ function inspect(buffer, busyAgentSipId) {
     }
     const offer = unique(groups.offer, 'INVITE'), ringing = unique(groups.ringing, '180'), cancel = unique(groups.cancel, 'CANCEL');
     const ok = unique(groups.cancelOk, '200 CANCEL'), terminated = unique(groups.terminated, '487 INVITE'), ack = unique(groups.ack, 'ACK');
-    const uri = /^INVITE (sip:\+12025550101@127\.0\.0\.30(?::16060)?(?:;transport=udp)?) SIP\/2\.0$/.exec(offer.first)?.[1];
+    assert.equal(offer.vias.length,transport==='internal'?2:1,'Wrong route Via chain');
+    for(const item of [ringing,terminated,...groups.trying]) assert.deepEqual(item.vias,offer.vias,'Response dropped original INVITE Via chain');
+    for(const item of [cancel,ok,ack]) assert.deepEqual(item.vias,[offer.via],'Invalid CANCEL/ACK top-hop Via chain');
+    const uri = new RegExp('^INVITE (sip:' + target + '@'+endpointIp.replaceAll('.','\\.')+'(?::16060)?(?:;transport=udp)?) SIP/2\\.0$').exec(offer.first)?.[1];
     assert(uri && offer.method === 'INVITE' && cancel.first === 'CANCEL ' + uri + ' SIP/2.0'
         && cancel.method === 'CANCEL' && ack.first === 'ACK ' + uri + ' SIP/2.0' && ack.method === 'ACK',
     'Unanswered request destination/method mismatch');

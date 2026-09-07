@@ -157,14 +157,16 @@ function uniqueTransaction(messages, description) {
         && message.body === first.body), 'Ambiguous ' + description + ' or media renegotiation');
     return messages.reduce((before, current) => current.time < before.time ? current : before);
 }
-function inspect(buffer, proof, logPayload) {
+function inspect(buffer, proof, logPayload, transport = 'external') {
+    const target = require('./callback-internal-scenarios.cjs').target(transport);
+    const IP = {carrier:require('./callback-internal-scenarios.cjs').endpointIp(transport),agent:'127.0.0.20'};
     assert(validId(proof?.callerCallId) && validId(proof?.agentCallId), 'Missing expected fixture dialogs');
     const all = packets(buffer), offers = [], answers = [], acknowledgements = [], agentInvites = [], agentAnswers = [], agentAcks = [];
     for (const packet of all) {
         const first = packet.payload.subarray(0, 16).toString('latin1');
         if (packet.dst === IP.carrier && packet.dport === PORT.carrierSip && first.startsWith('INVITE ')) {
             const message = sip(packet);
-            assert(message.callId === proof.callerCallId && /^INVITE sip:\+12025550101@\S+ SIP\/2.0$/.test(message.first),
+            assert(message.callId === proof.callerCallId && new RegExp('^INVITE sip:' + target + '@\\S+ SIP/2.0$').test(message.first),
                 'Unrelated returned-caller INVITE');
             offers.push(message);
         } else if (packet.src === IP.carrier && packet.sport === PORT.carrierSip && first.startsWith('SIP/2.0 200 ')) {

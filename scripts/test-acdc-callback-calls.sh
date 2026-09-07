@@ -8,10 +8,11 @@ callback_test_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 KAZOO_CALLS_LIBRARY=true source "$callback_test_dir/test-kazoo-calls.sh"
 
 readonly CALLBACK_FIXTURE_HELPER=${callback_test_dir}/test-acdc-callback-fixture.sh
-readonly CALLBACK_NUMBER=+12025550101
+CALLBACK_NUMBER=+12025550101
+CALLBACK_TEST_TRANSPORT=external
 readonly OUTBOUND_CALLER_ID=+12025550100
 readonly CALLBACK_ENTRY_KEY=6
-readonly CARRIER_IP=127.0.0.30
+CARRIER_IP=127.0.0.30
 readonly CARRIER_PORT=16060
 readonly CARRIER_MEDIA_PORT=44000
 readonly CALLBACK_ORIGINAL_MEDIA_PORT=43000
@@ -126,7 +127,10 @@ start_returned_carrier() {
     local csv=$RUN_DIR/callback-carrier-input.csv stats=$RUN_DIR/callback-carrier-stats.csv
     local output=$RUN_DIR/callback-carrier.log
     write_returned_carrier_csv "$csv"
-    node "$callback_test_dir/test-fixtures/create-callback-carrier-scenario.cjs" "$RUN_DIR" >/dev/null
+    node "$callback_test_dir/test-fixtures/create-callback-carrier-scenario.cjs" "$RUN_DIR" "$CALLBACK_TEST_TRANSPORT" >/dev/null
+    if [[ $CALLBACK_TEST_TRANSPORT == internal ]]; then
+        node "$callback_test_dir/test-fixtures/callback-internal-scenarios.cjs" returned "$RUN_DIR"
+    fi
     # This endpoint generates rtp_stream audio. Do not also enable -rtp_echo:
     # echo reserves min/+2 and starves streaming of its advertised local port.
     sipp -ci 127.0.0.1 -sf "$RUN_DIR/callback-returned.xml" -inf "$csv" \
@@ -216,7 +220,7 @@ callback_document() {
 }
 
 callback_fixture() {
-    KAZOO_ACCEPTANCE_STATE_FILE=$STATE_FILE "$CALLBACK_FIXTURE_HELPER" "$@"
+    KAZOO_CALLBACK_TEST_TRANSPORT=$CALLBACK_TEST_TRANSPORT KAZOO_ACCEPTANCE_STATE_FILE=$STATE_FILE "$CALLBACK_FIXTURE_HELPER" "$@"
 }
 
 callback_channel() {
@@ -225,9 +229,10 @@ callback_channel() {
     raw=$(timeout 5 /usr/local/freeswitch/bin/fs_cli -x "uuid_dump $id json" 2>/dev/null) || return 1
     # Raw channel variables can contain internal credentials; only this fixed
     # projection is ever retained or emitted by the harness.
-    jq -e --arg id "$id" 'select(.["Unique-ID"]==$id) |
+    jq -e --arg id "$id" --arg transport "$CALLBACK_TEST_TRANSPORT" 'select(.["Unique-ID"]==$id) |
         {id:.["Unique-ID"],account:.["variable_ecallmgr_Account-ID"],bridge_to:.variable_bridge_to,
-         sip_call_id:.variable_sip_call_id}' <<<"$raw"
+         sip_call_id:(.variable_sip_call_id // (if $transport=="internal" and ($id|test("^[a-f0-9]{32}$")) then $id else null end)),
+         sip_call_id_source:(if .variable_sip_call_id then "channel_variable" else "native_outbound_id_requires_packet_proof" end)}' <<<"$raw"
 }
 
 wait_callback_registered() {
@@ -368,7 +373,13 @@ callback_cleanup() {
     best_effort_clear_acceptance_calls
     if [[ $CALLBACK_LIVE == true && -n $RUN_DIR ]]; then
         ((AGENTS_REGISTERED == 0)) || best_effort_deregister_agents "$AGENTS_REGISTERED"
-        [[ $CALLER_REGISTERED != true ]] || best_effort_deregister_caller "$CALLER_PORT" callback-cleanup-caller
+        if [[ $CALLER_REGISTERED == true ]]; then
+            if [[ $CALLBACK_TEST_TRANSPORT == internal ]]; then
+                LOCAL_IP=$CARRIER_IP best_effort_deregister_caller "$CARRIER_PORT" callback-cleanup-caller
+            else
+                best_effort_deregister_caller "$CALLER_PORT" callback-cleanup-caller
+            fi
+        fi
         ((STATUS_AGENT_MAX == 0)) || agent_status logout 1 "$STATUS_AGENT_MAX" >/dev/null 2>&1 || true
         if [[ $FIXTURE_CREATED == true && -n $CALLBACK_ORIGINAL_CALL_ID ]]; then
             callback_fixture cancel-original "$CALLBACK_ORIGINAL_CALL_ID" >/dev/null 2>&1 || {

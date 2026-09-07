@@ -6,6 +6,38 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**External-route regression on the same harness:** `c26844/session62944/efcaac`
+finished exit0, evidence `/var/log/kazoo-acceptance/20260907T153203Z`. The full
+single6/audio/unanswered-first/retry/second-agent-bridge packet/media diagnostic
+passes in default external mode too. Both new live runs retain their fixtures;
+neither is real PSTN, operator MicroSIP1000 or mobile-device acceptance.
+
+**15:30UTC native callback acceptance:** `b6e938/session58987/493a66` finished
+exit0. Evidence `/var/log/kazoo-acceptance/20260907T152609Z` proves the isolated
+account's registered internal1001 callback: busy agent, single6, full Gemini
+confirmation before BYE, busy call released2s after proof, first return left
+unanswered with valid CANCEL/487/ACK, durable retry_wait, second return confirmed
+with digit1 and reciprocally bridged to the agent. Final strict SIP/RTP gate,
+agent-ready and unchanged-service gates pass; scoped errors0/0, new cores0.
+Fixture retained, not full cleanup or operator MicroSIP1000 acceptance. No
+production Erlang modules changed in this checkpoint. The test harness fixes
+native expected SIP identity and preserves both original INVITE Via headers;
+see `doc/acdc_internal_extension_callbacks.md` for earlier failed diagnostics.
+
+**French authoring update:** second32-initial-request batch added24 accepted
+recordings, rejected8 incomplete results, and retried none. Current pack totals:
+EN31 QA; ES25 QA/28 failed; FR38 QA/14 failed/109 pending; HE131 and AR208
+pending. All48 new French master/telephony WAVs and immutable history are saved
+under `scripts/assets/acdc-gemini-cardinals-20260907`. Historical requests137;
+no successful clip regenerated. The fixed210-clip deployed pack is unchanged;
+new French cardinal playback/listening and remaining languages are not finished.
+Offline verification `ad0253/session21190/516fa8` passes manifest identities,
+all accepted WAV hashes and deterministic SoX resampling, with network disabled.
+Prior combined run `679ac2/c90d95` passed the helper,48 unanswered,88 retry,
+96 confirmation,32 carrier-payload and13 cleanup groups plus shellcheck; its
+final artifact check rejected a relative path, corrected to the required
+absolute directory in the successful independent run above.
+
 **Latest bridge transport checkpoint:** FCM sends reject3xx in a response hook
 before Requests redirect preparation and close streamed responses without
 reading bodies. Six real pinned-Requests/fake-adapter tests pass (`be4d36`),

@@ -23,6 +23,7 @@ retry_usage() {
         'Usage: test-acdc-callback-retry.sh --prepare-only --confirmation-reference FILE' \
         '       test-acdc-callback-retry.sh --live --keep-fixture --confirmation-reference FILE' \
         '       [--registration-mode entry-only|confirm-current] (default: confirm-current)' \
+        '       [--transport external|internal] (default: external; internal uses isolated1001)' \
         '       [--allow-paused-master-test-phones] (only an already inactive/dead helper)' \
         'Only the exact isolated local fixture is allowed. MASTER and PSTN are excluded.' \
         'Busy agent -> queued caller waits5s -> callback registration/audio proof ->' \
@@ -38,6 +39,7 @@ retry_args() {
             --keep-fixture) KEEP_FIXTURE=true ;;
             --confirmation-reference) (($# >= 2)) || die 'Missing reference'; RETRY_REFERENCE=$2; shift ;;
             --registration-mode) (($# >= 2)) || die 'Missing registration mode'; RETRY_REGISTRATION_MODE=$2; shift ;;
+            --transport) (($# >= 2)) || die 'Missing transport'; CALLBACK_TEST_TRANSPORT=$2; shift ;;
             --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
             -h|--help) retry_usage; exit 0 ;;
             *) die 'Unsupported callback retry option' ;;
@@ -45,6 +47,8 @@ retry_args() {
         shift
     done
     [[ $RETRY_REGISTRATION_MODE == entry-only || $RETRY_REGISTRATION_MODE == confirm-current ]] || die 'Invalid registration mode'
+    [[ $CALLBACK_TEST_TRANSPORT == external || $CALLBACK_TEST_TRANSPORT == internal ]] || die 'Invalid transport'
+    if [[ $CALLBACK_TEST_TRANSPORT == internal ]]; then CALLBACK_NUMBER=1001; CARRIER_IP=127.0.0.20; fi
     [[ $CALLBACK_PREPARE != "$CALLBACK_LIVE" ]] || die 'Choose exactly prepare-only or live'
     [[ $CALLBACK_LIVE != true || $KEEP_FIXTURE == true ]] || die 'Historical fixture is retained: --keep-fixture is mandatory'
     [[ -n $RETRY_REFERENCE && -f $RETRY_REFERENCE && ! -L $RETRY_REFERENCE ]] || die 'A verified local confirmation reference is required'
@@ -68,9 +72,11 @@ retry_channel() {
     local id=$1 raw
     [[ $id =~ ^[A-Za-z0-9@._:-]{1,128}$ ]] || return 1
     raw=$(timeout 5 /usr/local/freeswitch/bin/fs_cli -x "uuid_dump $id json" 2>/dev/null) || return 1
-    jq -ce --arg id "$id" 'select(.["Unique-ID"]==$id) |
+    jq -ce --arg id "$id" --arg transport "$CALLBACK_TEST_TRANSPORT" 'select(.["Unique-ID"]==$id) |
         {id:.["Unique-ID"],account:.["variable_ecallmgr_Account-ID"],bridge_to:.variable_bridge_to,
-         sip_call_id:.variable_sip_call_id,contact_host:.variable_sip_contact_host,
+         sip_call_id:(.variable_sip_call_id // (if $transport=="internal" and ($id|test("^[a-f0-9]{32}$")) then $id else null end)),
+         sip_call_id_source:(if .variable_sip_call_id then "channel_variable" else "native_outbound_id_requires_packet_proof" end),
+         contact_host:.variable_sip_contact_host,
          contact_port:.variable_sip_contact_port,answered:.["Caller-Channel-Answered-Time"],
          authority:.["variable_ecallmgr_Authorizing-ID"],agent_id:.["variable_ecallmgr_Agent-ID"],
          callback_id:.["variable_ecallmgr_Callback-ID"]}' <<<"$raw" 2>/dev/null
@@ -145,7 +151,7 @@ retry_clear_busy() {
 
 retry_capture() {
     local phase=$1 filter
-    filter="udp and (((src host 127.0.0.20 and (src port 15064 or src port 15066 or src port 15100 or src port 43000 or src port 43020 or src port 40000)) or (dst host 127.0.0.20 and (dst port 15064 or dst port 15066 or dst port 15100 or dst port 43000 or dst port 43020 or dst port 40000))) or ((src host 127.0.0.30 and (src port 16060 or src port 44000)) or (dst host 127.0.0.30 and (dst port 16060 or dst port 44000))))"
+    filter="udp and (((src host 127.0.0.20 and (src port 15064 or src port 15066 or src port 15100 or src port 43000 or src port 43020 or src port 40000)) or (dst host 127.0.0.20 and (dst port 15064 or dst port 15066 or dst port 15100 or dst port 43000 or dst port 43020 or dst port 40000))) or ((src host $CARRIER_IP and (src port 16060 or src port 44000)) or (dst host $CARRIER_IP and (dst port 16060 or dst port 44000))))"
     RTP_PCAP=$RUN_DIR/retry-$phase.pcap
     RTP_CAPTURE_LOG=$RUN_DIR/retry-$phase-capture.log
     # -U flushes the output writer, not libpcap's kernel capture buffer.
@@ -199,7 +205,9 @@ retry_start_original() {
 }
 
 retry_start_unanswered() {
-    sipp -ci 127.0.0.1 -sf "$SCENARIO_DIR/callback-unanswered.xml" -i "$CARRIER_IP" -p "$CARRIER_PORT" \
+    local scenario=$SCENARIO_DIR/callback-unanswered.xml
+    if [[ $CALLBACK_TEST_TRANSPORT == internal ]]; then scenario=$RUN_DIR/callback-unanswered-internal.xml; fi
+    sipp -ci 127.0.0.1 -sf "$scenario" -i "$CARRIER_IP" -p "$CARRIER_PORT" \
         -m 1 -l 1 -nostdin -timeout 90s -timeout_error -trace_stat -fd 1s \
         -stf "$RUN_DIR/retry-unanswered-stats.csv" -trace_logs \
         -log_file "$RUN_DIR/retry-unanswered-events.log" >"$RUN_DIR/retry-unanswered.log" 2>&1 &
@@ -234,8 +242,12 @@ retry_wait_first_attempt() {
     while ((SECONDS < deadline)); do
         doc=$(callback_document) || return 1
         if jq -e '.attempts==1 and (.caller_call_id|type)=="string"' <<<"$doc" >/dev/null; then
-            if caller=$(retry_channel "$(jq -r '.caller_call_id' <<<"$doc")") &&
-                jq -e --arg account "$RETRY_ACCOUNT_ID" --arg callback "$CALLBACK_TICKET_ID" '
+            if caller=$(retry_channel "$(jq -r '.caller_call_id' <<<"$doc")"); then
+                # Restricted projection only, for diagnosing a failed invariant
+                # without dumping raw SIP/channel variables or credentials.
+                jq -n --argjson callback "$doc" --argjson caller "$caller" '{callback:$callback,caller:$caller}' \
+                    > "$RUN_DIR/retry-first-observed.json"
+                if jq -e --arg account "$RETRY_ACCOUNT_ID" --arg callback "$CALLBACK_TICKET_ID" '
                     .account==$account and .callback_id==$callback and
                     (.answered==null or (.answered|tonumber)==0) and
                     (.bridge_to==null or .bridge_to=="") and
@@ -243,6 +255,7 @@ retry_wait_first_attempt() {
                 jq -n --argjson callback "$doc" --argjson caller "$caller" '{callback:$callback,caller:$caller}' \
                     > "$RUN_DIR/retry-first-attempt.json"
                 return 0
+                fi
             fi
         fi
         [[ $(jq -r '.attempts' <<<"$doc") != 2 ]] || return 1
@@ -254,6 +267,8 @@ retry_wait_first_attempt() {
 retry_wait_bridge() {
     local deadline=$((SECONDS + 75)) doc caller agent
     while ((SECONDS < deadline)); do
+        # Assigned by start_returned_carrier in the sourced callback library.
+        # shellcheck disable=SC2153
         kill -0 "$CARRIER_PID" 2>/dev/null || return 1
         doc=$(callback_document) || return 1
         if [[ $(jq -r '.status' <<<"$doc") == completed ]]; then
@@ -317,6 +332,11 @@ retry_run() {
         "$RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES" > "$RUN_DIR/retry-service-scope.json" || die 'Required service state failed strict scope validation'
     callback_fixture setup-retry
     callback_fixture verify
+    if [[ $CALLBACK_TEST_TRANSPORT == internal ]]; then
+        node "$retry_script_dir/test-fixtures/callback-internal-scenarios.cjs" preflight "$STATE_FILE"
+        node "$retry_script_dir/probe-internal-callback.cjs" "$RETRY_ACCOUNT_ID" "${STATE[ACCEPTANCE_QUEUE_ID]}" 1001 \
+            > "$RUN_DIR/internal-request-probe.txt" || die 'Internal native endpoint preflight failed'
+    fi
     # verify_fixture reads the actual queue and fails unless callback is enabled,
     # entry_key is6, alternatives are false, and tenant/authority/routing match.
     jq -n --arg mode "$RETRY_REGISTRATION_MODE" --arg account "$RETRY_ACCOUNT_ID" \
@@ -328,7 +348,11 @@ retry_run() {
     cores=$(core_count); since=$(date +%s)
     capture_log_baseline callback
     start_monitor callback
-    register_caller callback "$CALLER_PORT" 600
+    if [[ $CALLBACK_TEST_TRANSPORT == internal ]]; then
+        LOCAL_IP=$CARRIER_IP register_caller callback "$CARRIER_PORT" 600
+    else
+        register_caller callback "$CALLER_PORT" 600
+    fi
     register_agents callback 1 600
     start_agent_uas callback 1 1
     agent_status login 1 1
@@ -369,7 +393,7 @@ retry_run() {
     assert_agent_stats callback 1 2
     retry_stop_capture
     stop_monitor
-    node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" || die 'Strict unanswered/retry packet, media or timing gate failed'
+    node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" "$CALLBACK_TEST_TRANSPORT" || die 'Strict unanswered/retry packet, media or timing gate failed'
     agent_status verify 1 1
     wait_agent_ready 1 || die 'Agent did not return ready after retry'
     systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p LoadState -p ActiveState -p SubState -p MainPID -p NRestarts \
@@ -401,6 +425,9 @@ main_retry() {
     sha256sum "$RETRY_REFERENCE" | awk '{print $1}' > "$RUN_DIR/retry-registration-reference-sha256.txt"
     cp -- "${RETRY_REFERENCE%/*}/reference-receipt.json" "$RUN_DIR/retry-registration-reference-receipt.json"
     node "$retry_script_dir/test-fixtures/create-callback-retry-scenarios.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE"
+    if [[ $CALLBACK_TEST_TRANSPORT == internal ]]; then
+        node "$retry_script_dir/test-fixtures/callback-internal-scenarios.cjs" unanswered "$RUN_DIR"
+    fi
     retry_run
 }
 

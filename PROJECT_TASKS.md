@@ -1,5 +1,30 @@
 # Kazoo 5 project task register
 
+External-route compatibility rerun also PASS on the same updated harness:
+`c26844/session62944/efcaac`, `/var/log/kazoo-acceptance/20260907T153203Z`.
+This is the isolated loopback carrier, not actual PSTN. Fixture remains retained.
+
+Latest15:30UTC callback follow-up: internal1001 live retry diagnostic PASS
+(`b6e938/session58987/493a66`, `/var/log/kazoo-acceptance/20260907T152609Z`).
+Single6, complete Gemini confirmation before hangup, busy-call release2s later,
+unanswered first native return, durable retry_wait and second confirmed return
+bridged to the agent all pass strict SIP/RTP validation. Agent returns ready;
+service state unchanged, scoped errors0/0 and new cores0. Fixture retained;
+operator MicroSIP1000 and full cleanup/production acceptance remain OPEN.
+Harness now tests internal vs external routes explicitly and preserves both
+INVITE Via headers in the unanswered native endpoint. No new runtime deployment.
+
+Current cardinal asset counts supersede the older snapshot below: EN31 accepted,
+ES25 accepted/28 failed, FR38 accepted/14 failed/109 pending, HE131 pending and
+AR208 pending. New48 French WAV files and authoring history are preserved for
+Git; no successful clip regenerated, no runtime/provider integration introduced.
+Listening, remaining authoring and new cardinal runtime deployment remain OPEN.
+Offline accepted-file hashes/SoX conversion verification passes
+`ad0253/516fa8`, no provider access. All affected callback helper/48 unanswered/
+88 retry/96 confirmation/32 carrier-payload/13 cleanup groups and shellcheck
+pass `679ac2/c90d95`; the same run's relative-path artifact invocation was
+rejected and separately rerun successfully with the required absolute path.
+
 Latest execution checkpoint September7: bridge installed through main SH with
 hash-pinned dependencies, protected copied FCM/APNs keys, enabled non-root
 service and actual local isolated AMQP consumer readiness; independent verify

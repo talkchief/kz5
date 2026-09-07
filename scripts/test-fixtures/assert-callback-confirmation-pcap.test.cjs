@@ -74,6 +74,12 @@ function records(payload = 101) {
 module.exports = {proof, records, capture, sdp, sip, packet};
 if (require.main === module) {
     let cases = 0;
+    const native = records().map(p=>({...p,src:p.src==='127.0.0.30'?'127.0.0.20':p.src,dst:(p.dst||'127.0.0.30')==='127.0.0.30'?'127.0.0.20':p.dst,
+        payload:p.payload[0]>>6===2?p.payload:Buffer.from(p.payload.toString().replaceAll('127.0.0.30','127.0.0.20'))}));
+    native[0].payload = Buffer.from(native[0].payload.toString().replace('sip:+12025550101@','sip:acceptance1001@'));
+    assert.doesNotThrow(()=>inspect(capture(native,1,true),proof,101,'internal'));cases++;
+    assert.throws(()=>inspect(capture(native,1,true),proof,101));cases++;
+    assert.throws(()=>inspect(capture(records(),1,true),proof,101,'internal'));cases++;
     for (const link of [1, 113, 276]) for (const little of [true, false]) {
         const result = inspect(capture(records(), link, little), proof, 101);
         assert.equal(result.first_agent_invite_after_digit_ms, 1000);

@@ -78,6 +78,7 @@ if [[ $TASK == cleanup ]]; then cleanup_fixture; else cancel_original_callback; 
 `;
     const number = n => JSON.stringify({status:'success',data:{id:n,state:'in_service',kazoo_acceptance_fixture:'kazoo-acdc-callback-local-v1'}});
     const env = {PATH:'/usr/bin:/bin',LANG:'C',TASK:options.task||'cancel',MODE:options.mode||'normal',PHASE:options.down?'down':'live',
+        KAZOO_CALLBACK_TEST_TRANSPORT:options.transport||'external',ACCEPTANCE_CALLER_USER_ID:'5'.repeat(32),ACCEPTANCE_CALLER_CALLFLOW_ID:'6'.repeat(32),
         ACCEPTANCE_ACCOUNT_ID:options.master?M:A,MASTER_ACCOUNT_ID:M,FIXTURE_ACCOUNT_ID:options.master?M:A,
         ACCEPTANCE_ACCOUNT_NAME:'Kazoo5 Acceptance abcdef123456',ACCEPTANCE_QUEUE_ID:Q,ACCEPTANCE_CALLER_DEVICE_ID:D,
         FIXTURE_ORIGINAL_QUEUE:JSON.stringify(options.savedQueue||{id:Q,name:'Acceptance Queue 2000'}),FIXTURE_RESOURCE_ID:R,FIXTURE_STATE_FILE:'/private/exact-fixture-state',
@@ -121,6 +122,17 @@ test('Exact two-attempt retry completion keeps every identity and live-leg safeg
     const old = {...doc,id:'acdc-callback-'+'5'.repeat(64),original_call_id:'1-778@127.0.0.20',
         status:'cancelling',reconciliation_required:true};
     denied(run({task:'cleanup',down:true,documents:[retry,old]}));
+});
+test('Internal1001 cleanup requires the exact pinned fixture user/flow and returned endpoint',()=>{
+    const internal={...doc,number:'1001',internal_target:{number:'1001',type:'user',id:'5'.repeat(32),flow_id:'6'.repeat(32)}};
+    const options={transport:'internal',document:internal,caller:{variable_sip_contact_host:'127.0.0.20'}};
+    assert.equal(run(options).status,0);
+    assert.equal(run({...options,down:true}).status,0);
+    denied(run({...options,transport:'external'}));
+    denied(run({...options,caller:{variable_sip_contact_host:'127.0.0.30'}}));
+    for(const patch of [{id:M},{flow_id:M},{type:'device'},{number:'1000'}]) {
+        denied(run({...options,document:{...internal,internal_target:{...internal.internal_target,...patch}}}));
+    }
 });
 test('MASTER, changed identity, duplicate original callback and unmarked fixture are refused',()=>{
     for(const o of [{master:true},{wrongName:true},{savedQueue:{}},{savedQueue:{id:R,name:'Acceptance Queue 2000'}},

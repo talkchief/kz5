@@ -62,6 +62,18 @@ function validateXml(text) {
 let count = 0;
 function test(name, body) {body(); count++; console.log('PASS: ' + name);}
 test('Actual unanswered XML saves original transaction and has only100/180/200CANCEL/487INVITE', () => validateXml(source));
+test('Internal wire contract cannot be confused with external carrier target', () => {
+    const r = records().map(p => ({...p,src:p.src==='127.0.0.30'?'127.0.0.20':p.src,dst:p.dst==='127.0.0.30'?'127.0.0.20':p.dst,
+        payload:Buffer.from(p.payload.toString('latin1').replaceAll('sip:+12025550101@','sip:acceptance1001@').replaceAll('127.0.0.30','127.0.0.20'),'latin1')}));
+    for(const index of [0,1,2,5]) r[index].payload=Buffer.from(r[index].payload.toString('latin1')
+        .replace(/\r\nVia:([^\r\n]+)/,'\r\nVia:$1\r\nVia: SIP/2.0/UDP 127.0.0.1:5070;branch=z9hG4bKnative-upstream'),'latin1');
+    assert.equal(inspect(capture(r),undefined,'internal').firstCallerSipId,id);
+    assert.throws(()=>inspect(capture(r)));
+    assert.throws(()=>inspect(capture(records()),undefined,'internal'));
+    const changed={...r[0],time:1.05,payload:Buffer.from(r[0].payload.toString('latin1')
+        .replace('branch=z9hG4bKnative-upstream','branch=z9hG4bKother-upstream'),'latin1')};
+    assert.throws(()=>inspect(capture([...r,changed]),undefined,'internal'), /Ambiguous unanswered Via chain/);
+});
 for (const [name, alter] of [
     ['wrong final response CSeq source', s => s.replace('[$invite_cseq]\n      Content-Length: 0\n    ]]>\n  </send>\n  <recv request="ACK"', '[last_CSeq:]\n      Content-Length: 0\n    ]]>\n  </send>\n  <recv request="ACK"')],
     ['answer instead of ringing', s => s.replace('180 Ringing', '200 OK')],

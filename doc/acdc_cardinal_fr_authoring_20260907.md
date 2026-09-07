@@ -1,5 +1,20 @@
 # French prerecorded cardinal authoring checkpoint
 
+Latest batch September7: `422e91/session3932/df710f` made32 bounded initial
+requests (two workers, no retries). Twenty-four additional recordings passed
+technical WAV QA; eight incomplete results were rejected. French totals are now
+38 QA-passed,14 failed identities and109 pending initial roles. Historical
+requests across the pack total137; no indeterminate requests remain. Receipt:
+`run-31cf1e26-e793-4163-b502-921f4e40a983.json`. The48 new master/telephony WAVs
+and immutable request history were copied to the repository. Successful existing
+WAVs were not regenerated. No new French media was imported or deployed.
+Independent offline verification `ad0253/session21190/516fa8` passes complete
+manifest identity/history checks, accepted WAV hashes and deterministic SoX
+resampling for this latest copy. Network access was disabled; no provider calls.
+The pack correctly remains `artifact_complete=false`.
+
+The following table records the earlier first-batch checkpoint, not latest totals.
+
 First French batch, September7: `7672c3/1d038c` made20 explicitly bounded initial
 requests, two workers, no automatic retries. Fourteen recordings passed technical
 WAV QA; six incomplete results were rejected. The command exited1 because the
