@@ -30,9 +30,10 @@ define(function(require) {
 		},
 
 		requests: {
-			'acdc.live.overview': { url: 'accounts/{accountId}/queues/live?page_size={pageSize}', verb: 'GET', generateError: false },
-			'acdc.live.page': { url: 'accounts/{accountId}/queues/live?page_size={pageSize}&start_queue_id={startQueueId}', verb: 'GET', generateError: false },
-			'acdc.live.detail': { url: 'accounts/{accountId}/queues/{queueId}/live', verb: 'GET', generateError: false },
+			// Suppress Monster/jQuery's extra `_` query key; the API sends no-store.
+			'acdc.live.overview': { url: 'accounts/{accountId}/queues/live?page_size={pageSize}', verb: 'GET', cache: true, generateError: false },
+			'acdc.live.page': { url: 'accounts/{accountId}/queues/live?page_size={pageSize}&start_queue_id={startQueueId}', verb: 'GET', cache: true, generateError: false },
+			'acdc.live.detail': { url: 'accounts/{accountId}/queues/{queueId}/live', verb: 'GET', cache: true, generateError: false },
 			'acdc.editor.new': { url: 'accounts/{accountId}/queues/editor', verb: 'GET', generateError: false },
 			'acdc.editor.get': { url: 'accounts/{accountId}/queues/{queueId}/editor', verb: 'GET', generateError: false },
 			'acdc.editor.create': { url: 'accounts/{accountId}/queues/editor', verb: 'PUT', generateError: false },

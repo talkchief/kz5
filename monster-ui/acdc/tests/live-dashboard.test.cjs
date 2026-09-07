@@ -146,6 +146,48 @@ test('detail uses one GET with authorized roster/runtime DTO and no supplemental
   assert.deepEqual(reads[0][1], {accountId: A, queueId: Q, pageSize: 50});
   reads.forEach(([r]) => assert.equal(f.app.requests[r].verb, 'GET'));
 });
+test('all three strict live resources suppress the transport cache-buster without changing unrelated resources', () => {
+  const {app} = fixture();
+  for (const id of ['acdc.live.overview', 'acdc.live.page', 'acdc.live.detail']) {
+    assert.equal(app.requests[id].cache, true); assert.equal(app.requests[id].verb, 'GET');
+  }
+  assert.equal(app.requests['acdc.queues.list'].cache, undefined);
+  assert.equal(app.requests['acdc.editor.get'].cache, undefined);
+});
+test('actual Monster defineRequest/request constructor emits exact live query keys; former default reproduces forbidden underscore', () => {
+  const framework = process.env.KAZOO_MONSTER_REQUEST_SOURCE || '/usr/local/src/kazoo5-installer/monster-ui/src/js/lib/monster.js';
+  assert(path.isAbsolute(framework));
+  const bytes = fs.readFileSync(framework), sent = [], publications = [];
+  const jquery = {each: lodash.forEach, ajax: settings => { sent.push(settings); return settings; }};
+  const dependencies = {jquery, lodash, handlebars: Handlebars,
+    cookies: {get() {}, set() {}, remove() {}}, postal: {channel: () => ({}), publish: m => publications.push(m)}};
+  let actual;
+  vm.runInNewContext(bytes.toString('utf8'), {
+    define(factory) { actual = factory(name => dependencies[name] || {}); },
+    window: {location: {protocol: 'https:', hostname: 'fixture.invalid'}}, console
+  }, {filename: framework, timeout: 1000});
+  actual.config = {api: {default: 'https://fixture.invalid/v2/'}};
+  const {app} = fixture(); app.getAuthToken = () => 'synthetic-never-sent';
+  const rows = [
+    ['acdc.live.overview', {accountId: A, pageSize: 50}, '/v2/accounts/' + A + '/queues/live?page_size=50'],
+    ['acdc.live.page', {accountId: A, pageSize: 50, startQueueId: R}, '/v2/accounts/' + A + '/queues/live?page_size=50&start_queue_id=' + R],
+    ['acdc.live.detail', {accountId: A, queueId: Q, pageSize: 50}, '/v2/accounts/' + A + '/queues/' + Q + '/live']
+  ];
+  for (const [resource, data, expected] of rows) {
+    actual._defineRequest(resource, app.requests[resource], app);
+    actual.request({resource, data});
+    const settings = sent.pop(), url = new URL(settings.url);
+    assert.equal(settings.type, 'GET'); assert.equal(settings.cache, true);
+    assert.equal(url.pathname + url.search, expected); assert.equal(url.searchParams.has('_'), false);
+    const baseline = {...app.requests[resource]}; delete baseline.cache;
+    actual._defineRequest(resource, baseline, app); actual.request({resource, data});
+    const previous = sent.pop();
+    assert.equal(previous.cache, false); assert.equal(new URL(previous.url).searchParams.has('_'), true);
+  }
+  assert.equal(publications.length, 0, 'AJAX boundary is substituted; no headers, authentication or network executed');
+  assert(bytes.equals(fs.readFileSync(framework)), 'Actual request source changed during fixture');
+  console.log('INFO actual Monster request source SHA256 ' + require('crypto').createHash('sha256').update(bytes).digest('hex'));
+});
 test('malformed envelope and contradictory pagination cannot become observed zeroes', () => {
   const invalidPage = data().live; invalidPage.pagination.has_more = true;
   for (const response of [null, {status: 'error'}, {data: {}}, {data: invalidPage}]) {
