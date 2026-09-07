@@ -15860,6 +15860,16 @@
         "responses": {
           "200": {
             "description": "Successful operation"
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
           }
         },
         "summary": "Get all scope_restrictions",
@@ -15873,7 +15883,11 @@
           {
             "CrossbarToken": []
           }
-        ]
+        ],
+        "description": "Scope-policy management requires a native account administrator or superadmin. Existing account hierarchy and token restrictions still apply; this guard does not grant cross-company access. Ordinary nonadmin users receive 403 before policy reads or writes. Policies are mutable authorization inputs: do not delete an assigned policy while its issued tokens may still authenticate. ",
+        "x-auth-review": "Source-reviewed management role guard v1; full route and restricted-principal acceptance remain separate.",
+        "x-auth-source-file": "applications/crossbar/src/modules/cb_scope_restrictions.erl",
+        "x-auth-source-sha256": "d78c3f7799d636a5853eb2baeb58ddf45560d44b6c6ab47974f5de1bb55496c5"
       },
       "put": {
         "operationId": "PutAccountsAccountIdScopeRestrictions",
@@ -15894,6 +15908,16 @@
         "responses": {
           "200": {
             "description": "Successful operation"
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
           }
         },
         "summary": "Add an instance of scope_restrictions",
@@ -15907,7 +15931,11 @@
           {
             "CrossbarToken": []
           }
-        ]
+        ],
+        "description": "Scope-policy management requires a native account administrator or superadmin. Existing account hierarchy and token restrictions still apply; this guard does not grant cross-company access. Ordinary nonadmin users receive 403 before policy reads or writes. Policies are mutable authorization inputs: do not delete an assigned policy while its issued tokens may still authenticate. ",
+        "x-auth-review": "Source-reviewed management role guard v1; full route and restricted-principal acceptance remain separate.",
+        "x-auth-source-file": "applications/crossbar/src/modules/cb_scope_restrictions.erl",
+        "x-auth-source-sha256": "d78c3f7799d636a5853eb2baeb58ddf45560d44b6c6ab47974f5de1bb55496c5"
       }
     },
     "/accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}": {
@@ -15924,6 +15952,16 @@
         "responses": {
           "200": {
             "description": "Successful operation"
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
           }
         },
         "summary": "Delete an instance of scope_restrictions",
@@ -15937,7 +15975,11 @@
           {
             "CrossbarToken": []
           }
-        ]
+        ],
+        "description": "Scope-policy management requires a native account administrator or superadmin. Existing account hierarchy and token restrictions still apply; this guard does not grant cross-company access. Ordinary nonadmin users receive 403 before policy reads or writes. Policies are mutable authorization inputs: do not delete an assigned policy while its issued tokens may still authenticate. ",
+        "x-auth-review": "Source-reviewed management role guard v1; full route and restricted-principal acceptance remain separate.",
+        "x-auth-source-file": "applications/crossbar/src/modules/cb_scope_restrictions.erl",
+        "x-auth-source-sha256": "d78c3f7799d636a5853eb2baeb58ddf45560d44b6c6ab47974f5de1bb55496c5"
       },
       "get": {
         "operationId": "GetAccountsAccountIdScopeRestrictionsScopeRestriction",
@@ -15952,6 +15994,16 @@
         "responses": {
           "200": {
             "description": "Successful operation"
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
           }
         },
         "summary": "Get a scope_restrictions by ID",
@@ -15965,7 +16017,11 @@
           {
             "CrossbarToken": []
           }
-        ]
+        ],
+        "description": "Scope-policy management requires a native account administrator or superadmin. Existing account hierarchy and token restrictions still apply; this guard does not grant cross-company access. Ordinary nonadmin users receive 403 before policy reads or writes. Policies are mutable authorization inputs: do not delete an assigned policy while its issued tokens may still authenticate. ",
+        "x-auth-review": "Source-reviewed management role guard v1; full route and restricted-principal acceptance remain separate.",
+        "x-auth-source-file": "applications/crossbar/src/modules/cb_scope_restrictions.erl",
+        "x-auth-source-sha256": "d78c3f7799d636a5853eb2baeb58ddf45560d44b6c6ab47974f5de1bb55496c5"
       },
       "post": {
         "operationId": "PostAccountsAccountIdScopeRestrictionsScopeRestriction",
@@ -15989,6 +16045,16 @@
         "responses": {
           "200": {
             "description": "Successful operation"
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
           }
         },
         "summary": "Update an instance of scope_restrictions",
@@ -16002,7 +16068,11 @@
           {
             "CrossbarToken": []
           }
-        ]
+        ],
+        "description": "Scope-policy management requires a native account administrator or superadmin. Existing account hierarchy and token restrictions still apply; this guard does not grant cross-company access. Ordinary nonadmin users receive 403 before policy reads or writes. Policies are mutable authorization inputs: do not delete an assigned policy while its issued tokens may still authenticate.  POST replaces public policy fields while preserving private metadata. Send the complete desired public policy, not a partial PATCH fragment.",
+        "x-auth-review": "Source-reviewed management role guard v1; full route and restricted-principal acceptance remain separate.",
+        "x-auth-source-file": "applications/crossbar/src/modules/cb_scope_restrictions.erl",
+        "x-auth-source-sha256": "d78c3f7799d636a5853eb2baeb58ddf45560d44b6c6ab47974f5de1bb55496c5"
       }
     },
     "/scopes": {

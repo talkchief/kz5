@@ -1,6 +1,8 @@
 # Revision-safe soft deletion — P0-19
 
-Source candidate, not deployed. This is a prerequisite for safely cleaning up
+Deployed on September7; administrator scope-policy HTTP revision acceptance
+passes (stale412, weak412, current-delete200 and absence). Restricted-user,
+queue/user side-effect and cluster acceptance remain open. This is a prerequisite for safely cleaning up
 restricted-user live-dashboard acceptance fixtures, not a dashboard feature or
 proof that restricted-user acceptance has passed. Historical/ClickHouse work
 remains postponed.
@@ -105,9 +107,10 @@ deployed a production module or opened restricted-dashboard fixture admission.
 
 ## Gates still open
 
-- Full deployed Crossbar HTTP precondition/route acceptance. The private Cowboy
-  fixture proves412 versus409 behavior through its explicit adapters, not the
-  complete API resource/bindings/authorization path.
+- Broader deployed Crossbar route acceptance. The administrator scope-policy
+  route now passes3 real HTTP checks (`7c9f07`/`47ce1f`); the private Cowboy
+  fixture additionally proves412 versus409 behavior through explicit adapters.
+  Neither proves all resource types or restricted-principal authorization.
 - Transport fault behavior and secondary replication; the combined P0-19/P0-20
   native primary CAS probe now passes, but isolated primary CAS is not cluster proof.
 - Revision-preserving cleanup of exact owned users, policies and queues. Queue
@@ -116,8 +119,12 @@ deployed a production module or opened restricted-dashboard fixture admission.
   user deletion, not cascade deletion.
 - Token invalidation before deleting mutable scope policies. Keep the live
   isolation harness unconditionally closed until these gates are proven.
-- Controlled build/deployment and post-deployment validation of this backend
-  module. No runtime module was replaced or service restarted for these tests.
+
+Deployment `489b41`/`b291e2` verified exact installed/loaded modules and unchanged
+31-agent state; backup `/tmp/kazoo-revision-deployment.19HpQo`. The subsequent
+full-route receipt and retained failed-probe fixture are documented in
+`scope_management_dashboard_acceptance.md`. Older no-deployment statements
+above describe their individual earlier test slices.
 
 See `queue_live_isolation.md` for the retained-fixture policy and why neither
 legacy-token deletion nor user-secret rotation alone proves JWT revocation.

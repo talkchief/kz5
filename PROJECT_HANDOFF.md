@@ -6,7 +6,61 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
-**Primary cleanup fixes verified, NOT DEPLOYED — September 7:** P0-19 private
+**Current scope and acceptance checkpoint — September 7:** work is limited to
+the live queue summary and selected-queue detail dashboard. Callback fixes and
+voices are paused alongside history, ClickHouse, WFM and the separate agent
+dashboard; they are not complete. The reported key-6/30-second callback path
+remains unresolved. This scope statement supersedes older continuation plans.
+
+The scope-management prerequisite P0-21 is now deployed: `209651`/`1e3fc6`,
+receipt `/tmp/kazoo-scope-deployment.rwm5y2/runtime.json`, verifies guarded
+module bytes, loaded MD5s, capability1 and running/effective registration. Only
+apps restarted; the exact roster and31 agent states stayed unchanged. Actual
+full-route policy revision test `7c9f07`/`47ce1f` passes stale412+unchanged,
+weak412+unchanged and current DELETE200+absence. Journal:
+`/tmp/kazoo-crossbar-revision-http.zRwU7L/run3/journal.json`. One exact owned
+unreferenced policy was soft-deleted. Earlier run2 remains retained after a
+harness error (native POST replaces public fields; it does not merge them).
+See `doc/scope_management_dashboard_acceptance.md` for recovery boundaries.
+
+Restricted dashboard acceptance is still hard closed, not passed. Its offline
+fixture passed28 groups/79 explicit rejection checks (`caacb6`/`9ff5b9`). The
+next correction is safe adoption of server-generated IDs for its optional
+empty denied queue, before any restricted users or tokens are created. Existing
+finite-expiry-plus-actual401 cleanup gates remain mandatory. These results do
+not imply cross-node, load, installer-wide or production acceptance.
+
+Matching OpenAPI assets were regenerated (`2c63af`/`5bf86b`), passed the complete
+offline deterministic/tamper suite (`c040d5`/`87aabe`), and published at `/apis`
+(`f93301`/`0a3f65`). All11 served asset hashes, no-store, redirect308 and missing404
+passed. Recoverable previous assets:
+`/usr/local/src/kazoo5-installer/api-docs-rollback.obvYfs/previous`. The5 native
+scope-policy operations now document their role guard and public-field POST
+replacement; their remaining upstream schemas are not promoted to fully
+reviewed contracts. This static reference publication did not restart services.
+
+**Latest cleanup prerequisite checkpoint — September 7:** P0-19/P0-20 are now
+deployed: guarded deployment `489b41`/`b291e2` replaced only `crossbar_doc.beam`
+and `kz_couch_doc.beam` from the tested `Sm4MLU` build. Runtime MD5/installed-byte
+checks pass on the relevant nodes; rollback artifacts and receipts are at
+`/tmp/kazoo-revision-deployment.19HpQo`. Only apps/ecallmgr restarted. All nine
+services are active, and the exact queue roster and all31 agent states/memberships
+are unchanged. This supersedes the not-deployed labels in older checkpoints.
+
+The new separate `scripts/test-crossbar-revision-live.cjs` passed15 offline
+groups (`7a1a9f`). Actual run `592766` stopped **before any fixture write**:
+account GET succeeds, but scope-policy collection/selected GET returns404.
+Effective Crossbar autoload contains misspelled `cb_scope_retrictions`; source
+default in `crossbar.hrl` has the same typo. Do not simply enable policy
+management before checking its authorization: the native resource has no local
+role guard. Journal `/tmp/kazoo-crossbar-revision-http.zRwU7L/run/journal.json`
+records no writes. The protected admin token alongside it is not a fixture JWT
+and must never be printed or committed. Restricted-dashboard admission remains
+closed pending safe registration, full-route proof and existing token gates.
+Live summary/detail remains the only current dashboard scope; history/WFM and
+ClickHouse integration are postponed, not removed or migrated.
+
+**Earlier primary cleanup source checkpoint — September 7:** P0-19 private
 Cowboy wire suite passes10 cases (`51f026`), with two204→409 race reproducers on
 baseline. Actual native primary CouchDB checks exposed P0-20: single hard-delete
 bulk conflict rows were reported as success. New required installer patch

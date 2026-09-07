@@ -110,6 +110,29 @@ function applyOverlays(spec, root) {
     }
     inputs.push(...require('./api-docs-members-devices.cjs').applyMembersDevices({spec, root}).inputs);
     inputs.push(...require('./api-docs-blackhole.cjs').applyBlackhole({spec, root}).inputs);
+    const scopeFile = 'applications/crossbar/src/modules/cb_scope_restrictions.erl';
+    const scopeBytes = fs.readFileSync(path.join(root, scopeFile));
+    if (!/management_guard_version\(\)\s*->\s*1\./.test(scopeBytes.toString())) {
+        throw new Error('Scope management access contract requires the guarded source');
+    }
+    const scopeHash = crypto.createHash('sha256').update(scopeBytes).digest('hex');
+    inputs.push({file: scopeFile, sha256: scopeHash});
+    for (const [url, verbs] of [
+        ['/accounts/{ACCOUNT_ID}/scope_restrictions', ['get', 'put']],
+        ['/accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}', ['get', 'post', 'delete']]
+    ]) for (const verb of verbs) {
+        const op = spec.paths[url]?.[verb];
+        if (!op) throw new Error('Missing scope management operation');
+        op.security = [{CrossbarToken: []}];
+        op.description = 'Scope-policy management requires a native account administrator or superadmin. Existing account hierarchy and token restrictions still apply; this guard does not grant cross-company access. Ordinary nonadmin users receive 403 before policy reads or writes. Policies are mutable authorization inputs: do not delete an assigned policy while its issued tokens may still authenticate. ' + (op.description || '');
+        op.responses['403'] = defaultErrors[403];
+        op['x-auth-review'] = 'Source-reviewed management role guard v1; full route and restricted-principal acceptance remain separate.';
+        op['x-auth-source-file'] = scopeFile;
+        op['x-auth-source-sha256'] = scopeHash;
+        if (verb === 'post') op.description += ' POST replaces public policy fields while preserving private metadata. Send the complete desired public policy, not a partial PATCH fragment.';
+        // Do not promote the other inherited request/response schemas to a
+        // fully reviewed contract based only on this access-control overlay.
+    }
     return {inputs};
 }
 function plannedSpec() {

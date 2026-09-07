@@ -1,5 +1,17 @@
 # Restricted queue-live acceptance — live DEFERRED / HARD CLOSED
 
+Latest checkpoint, September7: the offline fixture now passes28 groups and79
+explicit rejection checks (`caacb6`/`9ff5b9`), source SHA
+`e5ae0b3ad57ab36b261a6a0b0ffc8e89e8af0863f51b7c3ed540b4d0528c651b`.
+P0-19/P0-20 are deployed. P0-21 guarded scope-policy registration is also
+deployed (`209651`/`1e3fc6`), and the separate administrator HTTP revision probe
+passes all3 checks (`7c9f07`/`47ce1f`). This supersedes the earlier404/registration
+blocker below; see `scope_management_dashboard_acceptance.md`. The restricted
+matrix itself has not run. Its optional owned denied-queue setup still needs
+safe server-generated ID adoption before admission; native default PUT ignores
+public onboarding IDs. Do not change global onboarding settings for the test.
+Expiry-plus-actual401 and ambiguous-write retention remain mandatory.
+
 `scripts/test-queue-live-isolation.cjs` is an explicitly armed development-only
 fixture, separate from the successful administrator wire smoke. Its offline
 fixture is `scripts/test-queue-live-isolation-offline.cjs`; root47083 passed19
@@ -120,7 +132,13 @@ revision. Nine controlled groups, ten private-Cowboy HTTP cases and isolated
 native primary CouchDB checks pass; the pinned baseline reproduces the overwrite.
 The CouchDB check also exposed P0-20 single hard-delete false success, now fixed
 in a second installer-owned candidate and verified against real primary CAS.
-Both changes are **not deployed**. Controlled HTTP adapters and data routing/
+Both changes are now **deployed** with exact runtime checks and unchanged31-agent
+state; see `/tmp/kazoo-revision-deployment.19HpQo` and the latest
+[handoff](../PROJECT_HANDOFF.md). The first separate full-route policy probe
+stopped before writes because the native scope-policy API returns404: effective
+autoload uses the upstream `cb_scope_retrictions` typo. Correct registration and
+its management authorization need review before enabling that endpoint.
+Controlled HTTP adapters and data routing/
 cache/publication seams do not prove the full deployed API authorization path,
 cluster behavior or token invalidation. Source ownership, reproduction,
 evidence and remaining gates are in

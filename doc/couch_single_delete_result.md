@@ -1,6 +1,6 @@
 # Single-document CouchDB deletion result — P0-20
 
-Source candidate, not deployed. Discovered during real-datastore checks for
+Deployed on September7; full resource acceptance remains open. Discovered during real-datastore checks for
 restricted-user live-dashboard fixture cleanup. No historical reporting work.
 
 ## Failure
@@ -117,7 +117,12 @@ Hard-deleted test bodies may remain in CouchDB revisions until compaction;
 they were synthetic test documents, not user data. The failed-baseline
 fixtures are deliberately retained for comparison, not automatically retried.
 
-Next are controlled deployment and post-deployment HTTP acceptance.
+Deployment `489b41`/`b291e2` is complete with exact runtime module verification
+and unchanged31-agent state (`/tmp/kazoo-revision-deployment.19HpQo`). Subsequent
+administrator scope-policy HTTP acceptance passes stale412, weak412 and
+current-delete200+absence (`7c9f07`/`47ce1f`); it is a soft-delete route check,
+not a second live hard-delete or cluster proof. See
+`scope_management_dashboard_acceptance.md` for receipts and retained fixtures.
 Restricted-user dashboard fixtures remain
 hard closed until cleanup and token-lifecycle requirements are met. Preserve
 the expiry-plus401 policy; do not use unverified secret rotation as a shortcut.

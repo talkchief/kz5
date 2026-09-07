@@ -1,0 +1,74 @@
+diff --git a/src/crossbar.hrl b/src/crossbar.hrl
+index 7dd78ccf..f194a650 100644
+--- a/src/crossbar.hrl
++++ b/src/crossbar.hrl
+@@ -94,7 +94,7 @@
+                          ,'cb_resources'
+                          ,'cb_schemas'
+                          ,'cb_scopes'
+-                         ,'cb_scope_retrictions'
++                         ,'cb_scope_restrictions'
+                          ,'cb_screenpops'
+                          ,'cb_search'
+                          ,'cb_security'
+diff --git a/src/crossbar_config.erl b/src/crossbar_config.erl
+--- a/src/crossbar_config.erl
++++ b/src/crossbar_config.erl
+@@ -33,7 +33,13 @@ autoload_modules(Default) ->
+ 
+ -spec remove_versioned_modules(kz_term:binaries() | kz_term:atoms()) -> kz_term:binaries().
+ remove_versioned_modules(Modules) ->
+-    lists:usort(lists:map(fun remove_module_version/1, Modules)).
++    lists:usort([normalize_scope_module(remove_module_version(Module)) || Module <- Modules]).
++
++%% Repair only the historical default alias, including persisted overrides.
++%% Leave every other configured module and the existing version rules intact.
++-spec normalize_scope_module(binary()) -> binary().
++normalize_scope_module(<<"cb_scope_retrictions">>) -> <<"cb_scope_restrictions">>;
++normalize_scope_module(Module) -> Module.
+ 
+ -spec remove_module_version(binary() | atom()) -> binary().
+ remove_module_version(Module)
+diff --git a/src/modules/cb_scope_restrictions.erl b/src/modules/cb_scope_restrictions.erl
+index 49d8f0fe..1acb8e7a 100644
+--- a/src/modules/cb_scope_restrictions.erl
++++ b/src/modules/cb_scope_restrictions.erl
+@@ -12,6 +12,7 @@
+ 
+ -include("crossbar.hrl").
+ -export([init/0
++        ,management_guard_version/0
+         ,allowed_methods/0, allowed_methods/1
+         ,resource_exists/0, resource_exists/1
+         ,validate/1, validate/2
+@@ -79,11 +80,28 @@ resource_exists(_ScopeRestriction) -> 'true'.
+ %%------------------------------------------------------------------------------
+ -spec validate(cb_context:context()) -> cb_context:context().
+ validate(Context) ->
+-    validate_scope_restriction(Context, cb_context:req_verb(Context)).
++    case may_manage(Context) of
++        'true' -> validate_scope_restriction(Context, cb_context:req_verb(Context));
++        'false' -> cb_context:add_system_error('forbidden', Context)
++    end.
+ 
+ -spec validate(cb_context:context(), path_token()) -> cb_context:context().
+ validate(Context, ScopeRestriction) ->
+-    validate_scope_restriction(Context, ScopeRestriction, cb_context:req_verb(Context)).
++    case may_manage(Context) of
++        'true' -> validate_scope_restriction(Context, ScopeRestriction, cb_context:req_verb(Context));
++        'false' -> cb_context:add_system_error('forbidden', Context)
++    end.
++
++%% Management is admin-only, including reads. Global hierarchy, token and
++%% scope authorization still runs before this validation-stage restriction.
++%% Installers must verify this capability before activating a legacy module.
++-spec management_guard_version() -> 1.
++management_guard_version() -> 1.
++
++-spec may_manage(cb_context:context()) -> boolean().
++may_manage(Context) ->
++    cb_context:is_superduper_admin(Context)
++        orelse cb_context:is_account_admin(Context).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc

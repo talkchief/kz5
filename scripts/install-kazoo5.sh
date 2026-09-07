@@ -1608,6 +1608,8 @@ ensure_kazoo_sources() {
     apply_kazoo_integration_patch crossbar
     apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
         "$SCRIPT_DIR/patches/crossbar-soft-delete-revision.patch"
+    apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
+        "$SCRIPT_DIR/patches/crossbar-scope-management-guard.patch"
     apply_kazoo_integration_patch blackhole
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"
@@ -2743,6 +2745,7 @@ verify_acdc_language_packs() (
 
 configure_kazoo_api_modules() {
     local module output
+    configure_kazoo_scope_management
     for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers cb_members; do
         output=$(timeout 30 sup crossbar_maintenance start_module "$module" </dev/null) || \
             die "Could not register Kazoo Crossbar module ${module}"
@@ -2750,6 +2753,59 @@ configure_kazoo_api_modules() {
     done
     log 'Registered and persisted ACDC and Monster UI Crossbar APIs'
     configure_kazoo_queue_live_module
+}
+
+configure_kazoo_scope_management() {
+    local output before_autoload before_running after_autoload after_running module
+    [[ $DRY_RUN != true ]] || { log 'Would register admin-guarded scope management with preserving readback'; return 0; }
+    monster_registration_available || return 0
+    # Monster-only installs also reach registration. Never expose an older,
+    # unguarded backend merely because the corrected module name exists.
+    output=$(timeout 30 sup cb_scope_restrictions management_guard_version </dev/null) || die 'Install the guarded Kazoo applications backend before enabling scope management'
+    [[ $output == 1 ]] || die 'Scope management guard version is not supported'
+    output=$(timeout 30 sup crossbar_config autoload_modules </dev/null) || die 'Could not read effective Crossbar modules'
+    # Both services use the same bounded native atom/binary-list grammar.
+    before_autoload=$(kazoo_blackhole_module_output autoload "$output") || die 'Invalid Crossbar autoload list'
+    output=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || die 'Could not read running Crossbar modules'
+    before_running=$(kazoo_blackhole_module_output running "$output") || die 'Invalid running Crossbar list'
+    if [[ $'\n'"$before_autoload"$'\n' == *$'\n'cb_scope_restrictions$'\n'* &&
+          $'\n'"$before_running"$'\n' == *$'\n'cb_scope_restrictions$'\n'* ]]; then
+        log 'PASS guarded scope management already running and effective'
+        return 0
+    fi
+    output=$(timeout 30 sup crossbar_maintenance start_module cb_scope_restrictions </dev/null) || die 'Could not register guarded scope management'
+    [[ $output != *'failed to start'* ]] || die 'Scope management failed to start'
+    output=$(timeout 30 sup crossbar_config autoload_modules </dev/null) || die 'Could not verify Crossbar autoload modules'
+    after_autoload=$(kazoo_blackhole_module_output autoload "$output") || die 'Invalid Crossbar autoload readback'
+    output=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || die 'Could not verify running Crossbar modules'
+    after_running=$(kazoo_blackhole_module_output running "$output") || die 'Invalid running Crossbar readback'
+    [[ $'\n'"$after_autoload"$'\n' == *$'\n'cb_scope_restrictions$'\n'* &&
+       $'\n'"$after_running"$'\n' == *$'\n'cb_scope_restrictions$'\n'* ]] || die 'Guarded scope management is not running/effective; inspect node overrides'
+    while IFS= read -r module; do
+        [[ -z $module || $'\n'"$after_autoload"$'\n' == *$'\n'"$module"$'\n'* ]] || die 'Scope registration lost an existing autoload module'
+    done <<<"$before_autoload"
+    while IFS= read -r module; do
+        [[ -z $module || $'\n'"$after_running"$'\n' == *$'\n'"$module"$'\n'* ]] || die 'Scope registration lost a running module'
+    done <<<"$before_running"
+    log 'PASS guarded scope management running/effective; existing modules preserved'
+}
+
+verify_kazoo_scope_management() {
+    local output kind modules
+    [[ $DRY_RUN != true ]] || return 0
+    monster_registration_available || return 0
+    output=$(timeout 30 sup cb_scope_restrictions management_guard_version </dev/null) || die 'Scope management guard is unavailable'
+    [[ $output == 1 ]] || die 'Scope management guard version is not supported'
+    for kind in autoload running; do
+        if [[ $kind == autoload ]]; then
+            output=$(timeout 30 sup crossbar_config autoload_modules </dev/null) || die 'Could not verify Crossbar autoload modules'
+        else
+            output=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || die 'Could not verify running Crossbar modules'
+        fi
+        modules=$(kazoo_blackhole_module_output "$kind" "$output") || die 'Invalid Crossbar module verification output'
+        [[ $'\n'"$modules"$'\n' == *$'\n'cb_scope_restrictions$'\n'* ]] || die "Scope management missing from ${kind}; install kazoo-apps"
+    done
+    log 'PASS guarded scope management registration (read-only)'
 }
 
 kazoo_queue_live_selected() {
@@ -2867,6 +2923,7 @@ verify_kazoo_queue_live_module() {
 
 verify_acdc_interfaces() {
     local modules module credential_hash auth_body token account_id endpoint result
+    verify_kazoo_scope_management
     modules=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || \
         die 'Could not inspect Crossbar module registrations'
     for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers cb_members; do

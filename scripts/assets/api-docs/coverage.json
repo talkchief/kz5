@@ -1114,11 +1114,6 @@
     "GET /schemas",
     "GET /schemas/{SCHEMA_NAME}",
     "PUT /schemas/{SCHEMA_NAME}/validation",
-    "GET /accounts/{ACCOUNT_ID}/scope_restrictions",
-    "PUT /accounts/{ACCOUNT_ID}/scope_restrictions",
-    "GET /accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}",
-    "POST /accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}",
-    "DELETE /accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}",
     "GET /scopes",
     "PUT /scopes",
     "GET /scopes/{SCOPE}",
@@ -1303,7 +1298,7 @@
     "GET /websocket"
   ],
   "schema_count": 504,
-  "internal_reference_count": 1596,
+  "internal_reference_count": 1601,
   "unresolved_reference_count": 0,
   "schema_adjustments": [
     {
@@ -2092,7 +2087,7 @@
     },
     {
       "file": "applications/crossbar/src/modules/cb_scope_restrictions.erl",
-      "sha256": "48e98addeff3aeb6b73805a7bc24b59acb3e696d9e573825c17d4f98c345f67c",
+      "sha256": "d78c3f7799d636a5853eb2baeb58ddf45560d44b6c6ab47974f5de1bb55496c5",
       "literal_binding_nouns": [
         "scope_restrictions"
       ]
@@ -2888,6 +2883,10 @@
       "sha256": "4f83a0e8d60d49f1ebe336f035f4e0a1fb7d3c46bd632cfa61be8a20645c8cc0"
     },
     {
+      "file": "applications/crossbar/src/modules/cb_scope_restrictions.erl",
+      "sha256": "d78c3f7799d636a5853eb2baeb58ddf45560d44b6c6ab47974f5de1bb55496c5"
+    },
+    {
       "file": "applications/crossbar/src/modules/cb_websockets.erl",
       "sha256": "cc79f4dbe7a754a46667920388e97c2b9a17692a432ed9dcde6e0cf3d799451e"
     },
@@ -2905,7 +2904,7 @@
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "558402901c2cf34beed6801ddf7b33f3866caf54e7fc761958c7f33d7b034f45"
+      "sha256": "05c840a721b885e813a967ecc3a513e459765fce7696d89be1e2b1cec5fdf27b"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",
@@ -2929,7 +2928,7 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "7cfb8fc54d4e552555ea03455b5ad6a39fb55f973fa308d1b8568c3f4f60341b"
+      "sha256": "2db6ecd3ce967002422e4f72edceb41cbd76b88d46870ae1f4c4d10a16342a21"
     },
     {
       "file": "scripts/patches/blackhole-kazoo5-integration.patch",

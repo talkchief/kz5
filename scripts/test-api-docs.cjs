@@ -147,6 +147,18 @@ async function offline() {
     assert.deepEqual(spec.components.schemas.QueueEditorLanguageCapabilities.properties.backend_mode.enum, ['legacy']);
     const members = spec.paths['/accounts/{ACCOUNT_ID}/members/devices'].get;
     assert.equal(members['x-implementation-status'], 'implemented-source-reviewed');
+    for (const [route, verbs] of [
+        ['/accounts/{ACCOUNT_ID}/scope_restrictions', ['get', 'put']],
+        ['/accounts/{ACCOUNT_ID}/scope_restrictions/{SCOPE_RESTRICTION}', ['get', 'post', 'delete']]
+    ]) for (const verb of verbs) {
+        const op = spec.paths[route][verb];
+        assert(op.description.includes('requires a native account administrator or superadmin'));
+        assert(op.description.includes('do not delete an assigned policy'));
+        assert(op.responses['403']);
+        assert.deepEqual(op.security, [{CrossbarToken: []}]);
+        assert.equal(op['x-contract-review'], 'upstream-generated; not individually verified');
+        assert.match(op['x-auth-source-sha256'], /^[a-f0-9]{64}$/);
+    }
     assert.equal(members['x-required-integration'].built_in_custom_route, 'members');
     assert.equal(members['x-required-integration'].preserve_existing_custom_routes, true);
     assert.equal(members.responses['200'].headers['Cache-Control'].schema.enum[0], 'no-store');
