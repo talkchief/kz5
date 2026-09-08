@@ -65,8 +65,7 @@ async function runtime(action,run){
     const get=async()=>{const d=(await api('GET',editorPath)).data;assert(d.queue.id===state.ACCEPTANCE_QUEUE_ID);return {queue:d.queue,roster:d.roster,revisions:d.revisions};};
     stage='editor_read';
     const current=await get();
-    if(action==='preflight'){console.log('PASS pending-language helper identity/auth/editor preflight; no queue writes');return;}
-    if(action==='edit'){
+    if(action==='edit'||action==='preflight'){
         stage='registered_language';
         assert(!fs.existsSync(file)&&current.queue.announcements.language==='en-us');
         const registered=JSON.parse(privateRead(path.join(run,'callback-registration-evidence.json')));
@@ -80,6 +79,10 @@ async function runtime(action,run){
         const r=await fetch('http://'+host+':'+port+'/system_media/'+encodeURIComponent(asset.id)+'?attachments=true',{
             headers:{Authorization:'Basic '+Buffer.from(deployment.KAZOO_COUCHDB_USER+':'+deployment.KAZOO_COUCHDB_PASSWORD).toString('base64')},redirect:'error',signal:AbortSignal.timeout(15000)});
         assert(r.ok);const doc=await r.json();importer.verifyDocument(asset,doc);
+        if(action==='preflight'){
+            media.ulaw(asset.bytes);
+            console.log('PASS pending-language helper identity/auth/editor/saved-registration/installed-audio preflight; no writes');return;
+        }
         fs.writeFileSync(path.join(run,'callback-return-language.ulaw'),media.ulaw(asset.bytes),{flag:'wx',mode:384});
         receipt={account:ACCOUNT,queue:state.ACCEPTANCE_QUEUE_ID,state:'edit_intent',before:current,callback:registered.id,
             reference_sha256:asset.sha256,reference_revision:doc._rev,body:patchBody(current,'fr-fr',current.revisions.queue)};
