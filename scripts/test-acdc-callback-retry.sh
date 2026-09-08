@@ -15,6 +15,7 @@ RETRY_LANGUAGE=en-us
 RETRY_LANGUAGE_EXPLICIT=false
 RETRY_LANGUAGE_ARGS=()
 RETRY_EDIT_PENDING_LANGUAGE=false
+RETRY_SHORT_CONFIRMATION_WINDOW=false
 RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=false
 RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=false
 RETRY_BUSY_PID=
@@ -31,6 +32,7 @@ retry_usage() {
         '       [--registration-mode entry-only|confirm-current] (default: confirm-current)' \
         '       [--language en-us|he-il|fr-fr|es-es|ar-sa] (explicit owned queue language; absent preserves queue)' \
         '       [--edit-pending-language] (main isolated fixture only; EN admission then FR queue edit and conditional restore)' \
+        '       [--short-confirmation-window] (main isolated EN fixture only; response timeout3, full existing prompt, conditional restore)' \
         '       [--fixture-account ACCOUNT_ID] (must match canonical protected isolated state)' \
         '       [--transport external|internal] (default: external; internal uses isolated1001)' \
         '       [--allow-paused-master-test-phones] (only an already inactive/dead helper)' \
@@ -64,6 +66,7 @@ retry_args() {
                 RETRY_LANGUAGE=$2; RETRY_LANGUAGE_EXPLICIT=true; RETRY_LANGUAGE_ARGS=("$2"); shift ;;
             --transport) (($# >= 2)) || die 'Missing transport'; CALLBACK_TEST_TRANSPORT=$2; shift ;;
             --edit-pending-language) [[ $RETRY_EDIT_PENDING_LANGUAGE == false ]] || die 'Repeated pending-language mode'; RETRY_EDIT_PENDING_LANGUAGE=true ;;
+            --short-confirmation-window) [[ $RETRY_SHORT_CONFIRMATION_WINDOW == false ]] || die 'Repeated short-confirmation mode'; RETRY_SHORT_CONFIRMATION_WINDOW=true ;;
             --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
             --allow-absent-master-test-phones) RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=true ;;
             -h|--help) retry_usage; exit 0 ;;
@@ -73,7 +76,8 @@ retry_args() {
     done
     [[ $RETRY_REGISTRATION_MODE == entry-only || $RETRY_REGISTRATION_MODE == confirm-current ]] || die 'Invalid registration mode'
     [[ $CALLBACK_TEST_TRANSPORT == external || $CALLBACK_TEST_TRANSPORT == internal ]] || die 'Invalid transport'
-    if [[ $RETRY_EDIT_PENDING_LANGUAGE == true ]]; then
+    [[ $RETRY_EDIT_PENDING_LANGUAGE != true || $RETRY_SHORT_CONFIRMATION_WINDOW != true ]] || die 'Choose only one pending queue edit case'
+    if [[ $RETRY_EDIT_PENDING_LANGUAGE == true || $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then
         [[ $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 && $RETRY_LANGUAGE_EXPLICIT == true &&
            $RETRY_LANGUAGE == en-us && $CALLBACK_TEST_TRANSPORT == internal && $RETRY_REGISTRATION_MODE == entry-only ]] ||
             die 'Pending-language case requires main isolated fixture, explicit EN, internal transport and entry-only'
@@ -346,6 +350,12 @@ retry_cleanup() {
             status=1
         }
     fi
+    if [[ $RETRY_SHORT_CONFIRMATION_WINDOW == true && -f $RUN_DIR/callback-confirmation-deadline-edit.json ]]; then
+        node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" restore "$RUN_DIR" deadline || {
+            warn 'Short confirmation-window restoration failed; inspect retained receipt, no blind overwrite'
+            status=1
+        }
+    fi
     # This existing helper cancels/settles ONLY the current original callback.
     # Historical unknown tickets/resources remain untouched in keep mode.
     (exit "$status") || callback_cleanup
@@ -412,6 +422,8 @@ retry_run() {
     wait_callback_registered || die 'Busy-agent callback did not remain queued with zero attempts'
     if [[ $RETRY_EDIT_PENDING_LANGUAGE == true ]]; then
         node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" edit "$RUN_DIR" || die 'Pending callback language edit failed'
+    elif [[ $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then
+        node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" edit "$RUN_DIR" deadline || die 'Pending callback short confirmation-window edit failed'
     fi
     retry_stop_capture
     node "$retry_script_dir/test-fixtures/assert-callback-registration-audio.cjs" \
@@ -431,7 +443,14 @@ retry_run() {
     retry_stop_capture
     retry_capture returned
     # Start the answering endpoint inside the configured 15s backoff window.
-    start_returned_carrier
+    if [[ $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then
+        # EN prompt is4.331s. Six seconds after ACK is after the full prompt
+        # but inside its three-second response window; waveform proof below
+        # checks the actual times, not just this nominal schedule.
+        start_returned_carrier 6000
+    else
+        start_returned_carrier
+    fi
     retry_wait_backoff || die 'First unanswered attempt did not durably enter retry_wait with positive settlement'
     retry_wait_bridge || die 'Second returned attempt did not durably complete an exact native bridge'
     log 'First attempt unanswered; durable retry_wait observed; second attempt completed with reciprocal native bridge'
@@ -444,6 +463,8 @@ retry_run() {
     node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" "$CALLBACK_TEST_TRANSPORT" "${RETRY_LANGUAGE_ARGS[@]}" || die 'Strict unanswered/retry packet, media or timing gate failed'
     if [[ $RETRY_EDIT_PENDING_LANGUAGE == true ]]; then
         node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" verify "$RUN_DIR" || die 'Returned callback did not prove admitted-language audio after queue edit'
+    elif [[ $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then
+        node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" verify "$RUN_DIR" deadline || die 'Returned callback did not prove full prompt and short response window'
     fi
     agent_status verify 1 1
     wait_agent_ready 1 || die 'Agent did not return ready after retry'

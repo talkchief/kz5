@@ -117,16 +117,18 @@ write_callback_request_csv() {
 }
 
 write_returned_carrier_csv() {
-    local file=$1
+    local file=$1 delay=${2:-$CALLBACK_CARRIER_CONFIRM_DELAY_MS}
+    [[ $# -le 2 && ( $delay == 8000 || $delay == 6000 ) ]] || die 'Unsupported returned confirmation test delay'
     printf 'SEQUENTIAL\n%s;%s;%s\n' "$CALLBACK_NUMBER" \
-        "$CALLBACK_CARRIER_CONFIRM_DELAY_MS" "$CALLBACK_BRIDGE_HOLD_MS" > "$file"
+        "$delay" "$CALLBACK_BRIDGE_HOLD_MS" > "$file"
     chmod 600 "$file"
 }
 
 start_returned_carrier() {
     local csv=$RUN_DIR/callback-carrier-input.csv stats=$RUN_DIR/callback-carrier-stats.csv
     local output=$RUN_DIR/callback-carrier.log
-    write_returned_carrier_csv "$csv"
+    [[ $# -le 1 ]] || die 'Unexpected returned carrier arguments'
+    write_returned_carrier_csv "$csv" "${1:-$CALLBACK_CARRIER_CONFIRM_DELAY_MS}"
     node "$callback_test_dir/test-fixtures/create-callback-carrier-scenario.cjs" "$RUN_DIR" "$CALLBACK_TEST_TRANSPORT" >/dev/null
     if [[ $CALLBACK_TEST_TRANSPORT == internal ]]; then
         node "$callback_test_dir/test-fixtures/callback-internal-scenarios.cjs" returned "$RUN_DIR"

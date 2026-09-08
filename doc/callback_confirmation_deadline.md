@@ -58,9 +58,40 @@ Observe that exact job; do not restart it because output is quiet. Do not sync
 additional source into main during the build. Completion/runtime parity and
 static `/apis` publication remain pending.
 
-The existing retry fixture currently installs `confirmation_timeout:15` in
-`scripts/test-acdc-callback-fixture.sh`; an ordinary retry PASS therefore cannot
-prove the new minimum-window case. Prepare an explicitly armed, exact-fixture
-short-window adjustment with fresh readback and conditional restoration before
-claiming native validation at3 seconds. The existing >4-second recording must
-be retained, not shortened or regenerated to make the test pass.
+The ordinary retry fixture installs `confirmation_timeout:15`; an ordinary
+retry PASS therefore cannot prove this minimum-window case. The new explicit
+`--short-confirmation-window` mode uses the same retained main fixture and
+busy-agent/unanswered-first/retry flow, but adjusts only that field15->3 through
+the unified editor after queued registration. It verifies the saved value,
+keeps EN and the exact installed >4-second recording, and schedules digit1
+six seconds after ACK rather than the normal eight. The existing strict full
+returned-audio gate must prove completion before digit1 with a positive gap
+of at most3 seconds. The recording must not be shortened or regenerated.
+
+The option requires explicit main fixture, EN, internal transport and entry-only
+registration, rejects duplicates, and cannot combine with the queue-language
+edit case. Existing private shared-lock, tenant, revision and ambiguous-write
+guards are reused. Cleanup settles the owned call first, then restores3->15
+only if the exact edited queue revision/content/roster still match. Uncertain
+or intervening writes are retained for inspection, not automatically overwritten.
+This restores the timeout adjustment, not every retained historical fixture.
+
+Pre-live checks: deadline patch/prior-value/revision guards pass50d4f3; all12
+synthetic CLI/reference/configuration/CSV groups pass54990/f32637. The first CSV
+test used `/dev/stdout`, which is not reopenable for that spawned output handle
+(e05b61); the corrected test uses a private temporary CSV and checks0600 mode.
+No database, provider or SIP activity occurred in those checks.
+
+On main, after deployment completes, add the mode to the existing native flow:
+
+```sh
+bash scripts/test-acdc-callback-retry.sh --live --keep-fixture \
+  --fixture-account 8310dc3170a18de37f205d0da172df65 \
+  --transport internal --language en-us --registration-mode entry-only \
+  --short-confirmation-window --allow-absent-master-test-phones \
+  --confirmation-reference /var/log/kazoo-acceptance/gemini-reference.main44-en-us.P5mWcmOn/acdc-callback-success.ulaw
+```
+
+Use a bounded unit and protected log. The mode retains
+`callback-confirmation-deadline-edit.json` alongside normal packet/bridge
+evidence. It is implemented, not yet native-validated.
