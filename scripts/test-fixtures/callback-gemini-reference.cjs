@@ -3,6 +3,7 @@
 // content, not merely an arbitrary receipt claiming a content-addressed name.
 const fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
 const assert = require('node:assert/strict'), {spawnSync} = require('node:child_process');
+const os = require('node:os'), net = require('node:net');
 const importer = require('../import-acdc-gemini-voices.cjs');
 const root = path.resolve(__dirname, '../..');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -62,6 +63,14 @@ function deployment() {
             const value = bytes.toString(); assert(!/[\r\n]/.test(value)); return [key, value];
         }));
 }
+function localMediaHost(host, interfaces = os.networkInterfaces()) {
+    if (host === 'localhost' || host === '127.0.0.1') return '127.0.0.1';
+    assert(typeof host === 'string' && net.isIP(host) === 4 &&
+        Object.values(interfaces).some(entries => Array.isArray(entries) &&
+            entries.some(entry => entry.family === 'IPv4' && entry.address === host)),
+        'Reference source must be an address assigned to this host');
+    return host;
+}
 async function capture(directory, locale = 'en-us') {
     language(locale);
     assert(path.isAbsolute(directory) && fs.realpathSync(directory) === directory &&
@@ -70,11 +79,12 @@ async function capture(directory, locale = 'en-us') {
     assert(stat.isDirectory() && !stat.isSymbolicLink() && stat.uid === 0 && (stat.mode & 0o777) === 0o700 &&
         fs.readdirSync(directory).length === 0, 'Empty protected reference directory required');
     const env = deployment(), port = Number(env.KAZOO_COUCHDB_PORT || 5984);
-    assert(['127.0.0.1', 'localhost'].includes(env.KAZOO_COUCHDB_HOST) && Number.isInteger(port) && port > 0 && port < 65536 &&
+    const host = localMediaHost(env.KAZOO_COUCHDB_HOST);
+    assert(Number.isInteger(port) && port > 0 && port < 65536 &&
         env.KAZOO_COUCHDB_USER && !env.KAZOO_COUCHDB_USER.includes(':') && env.KAZOO_COUCHDB_PASSWORD,
     'Local authenticated media reference source required');
     const asset = assetFor('acdc-callback-success', locale);
-    const url = 'http://127.0.0.1:' + port + '/system_media/' + encodeURIComponent(asset.id) + '?attachments=true';
+    const url = 'http://' + host + ':' + port + '/system_media/' + encodeURIComponent(asset.id) + '?attachments=true';
     const headers = {accept: 'application/json', authorization: 'Basic ' + Buffer.from(env.KAZOO_COUCHDB_USER + ':' + env.KAZOO_COUCHDB_PASSWORD).toString('base64')};
     const get = async () => {
         const response = await fetch(url, {headers, redirect: 'error', signal: AbortSignal.timeout(15000)});
@@ -96,7 +106,7 @@ async function capture(directory, locale = 'en-us') {
     fs.writeFileSync(path.join(directory, 'reference-receipt.json'), JSON.stringify(receipt, null, 2) + '\n', {flag: 'wx', mode: 0o600});
     return {result: 'PASS', document_id: asset.id, duration_seconds: raw.length / 8000, database_writes: 0};
 }
-module.exports = {LOCALES, language, assetFor, ulaw, validateReceipt, capture};
+module.exports = {LOCALES, language, assetFor, ulaw, validateReceipt, capture, localMediaHost};
 if (require.main === module) {
     (async () => {
         const [action, target, locale = 'en-us'] = process.argv.slice(2); assert([4,5].includes(process.argv.length));

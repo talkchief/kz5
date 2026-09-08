@@ -72,3 +72,18 @@ never rewrite unresolved historical callbacks just to pass a test.
 not replace five-language registration, retry, waveform and clean-log checks.
 The previous five-language old-host evidence remains archived as documented in
 `focused_acceptance_20260908.md`.
+
+## Native preparation findings
+
+Sourcec1fd9f8 was pushed and synced to main. Actual no-HOME SUP preflight now
+passes (`70318/d8e416`) where the previous source failed `dc247c`.
+The first reference command used a non-allowed directory prefix (`cb10bb`);
+the next correctly scoped directory exposed the helper's loopback-only host
+restriction (`bae0b3`, sanitized stack `f51e02`). Safe field-presence readback
+`1f834e` confirms local CouchDB is configured as10.1.0.44:5984, with credentials
+present. The reference helper now permits only loopback or an IPv4 address
+actually assigned to this host, connects to that same verified local address,
+and still checks exact document/attachment hashes and stable revision. Remote
+addresses, hostnames and malformed values remain refused; no credentials are
+sent to another server. Locale/reference regressions cover this distinction.
+No Gemini generation, database write or SIP call occurred in these checks.
