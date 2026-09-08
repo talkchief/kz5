@@ -52,7 +52,7 @@ function credentials() {
     let phase = 'login';
     try {
         const page = await browser.newPage(), issues = [];
-        page.on('pageerror', () => issues.push('javascript-exception'));
+        page.on('pageerror', error => issues.push('javascript-exception-' + error.name));
         page.on('response', r => {if (r.status() >= 400 && r.url().startsWith(ORIGIN)) issues.push('http-' + r.status());});
         page.on('requestfailed', r => {if (r.url().startsWith(ORIGIN)) issues.push(r.failure().errorText);});
         page.on('request', r => {if (r.url().startsWith('http:')) issues.push('insecure-request');});
@@ -80,7 +80,18 @@ function credentials() {
             assert.equal(body.status, 'success');
             assert.equal(typeof body.data.capabilities, 'object');
             phase = prefix + '-list-render';
-            await page.locator('.entity-edition:visible').waitFor({timeout: 15000});
+            try {
+                await page.locator('.entity-edition:visible').waitFor({timeout: 15000});
+            } catch (error) {
+                console.log(JSON.stringify({phase, issues, layout: await page.evaluate(() =>
+                    Array.from(document.querySelectorAll('.entity-edition')).map(element => ({
+                        display: getComputedStyle(element).display,
+                        width: element.getBoundingClientRect().width,
+                        height: element.getBoundingClientRect().height,
+                        rows: element.querySelectorAll('.list-element[data-id]').length
+                    })))}));
+                throw error;
+            }
             await page.waitForTimeout(2000);
             const actualCount = await page.locator('.entity-edition .list-element[data-id]:visible').count();
             console.log(JSON.stringify({phase, expected_users: expectedCount, visible_users: actualCount}));
