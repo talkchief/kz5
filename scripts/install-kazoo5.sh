@@ -3515,15 +3515,20 @@ verify_acdc_interfaces() {
     account_id=$(jq -er '.data.account_id' <<<"$auth_body") || die 'Crossbar master login did not return an account ID'
     [[ $token =~ ^[a-zA-Z0-9._-]+$ && $account_id =~ ^[a-zA-Z0-9_-]+$ ]] || \
         die 'Crossbar returned invalid authentication identifiers'
-    for endpoint in queues agents external_numbers; do
+    for endpoint in queues agents external_numbers entitlements; do
         result=$(printf 'header = "X-Auth-Token: %s"\n' "$token" | \
             curl --config - --fail --silent --show-error --connect-timeout 5 --max-time 30 \
             "http://127.0.0.1:8000/v2/accounts/${account_id}/${endpoint}") || \
             die "Kazoo authenticated ${endpoint} API failed"
-        jq -e '.status == "success" and (.data | type == "array")' <<<"$result" >/dev/null || \
-            die "Kazoo ${endpoint} API did not return a successful collection"
+        if [[ $endpoint == entitlements ]]; then
+            jq -e '.status == "success" and (.data.capabilities | type == "object") and (.data.enrollments | type == "object")' <<<"$result" >/dev/null || \
+                die 'Kazoo entitlement API did not return capabilities and enrollments'
+        else
+            jq -e '.status == "success" and (.data | type == "array")' <<<"$result" >/dev/null || \
+                die "Kazoo ${endpoint} API did not return a successful collection"
+        fi
     done
-    log 'PASS Crossbar administrator login, ACDC queue/agent APIs, and Monster UI external-number API'
+    log 'PASS Crossbar administrator login, ACDC queue/agent APIs, and Monster UI external-number/entitlement APIs'
 }
 
 install_ecallmgr() {

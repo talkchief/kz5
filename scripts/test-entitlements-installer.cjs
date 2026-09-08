@@ -13,6 +13,8 @@ assert(extract('ensure_kazoo_sources').includes('patches/kazoo-entitlements-mast
 assert.match(extract('configure_kazoo_api_modules'), /for module in [^\n]* cb_entitlements; do/);
 assert(extract('configure_kazoo_api_modules').includes('    verify_kazoo_entitlements_module\n'));
 assert(extract('verify_acdc_interfaces').includes('    verify_kazoo_entitlements_module\n'));
+assert(extract('verify_acdc_interfaces').includes('for endpoint in queues agents external_numbers entitlements; do'));
+assert(extract('verify_acdc_interfaces').includes('.data.capabilities | type == "object"'));
 const script = `set -Eeuo pipefail
 die(){ exit 77; }
 timeout(){

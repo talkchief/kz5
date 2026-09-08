@@ -81,7 +81,9 @@ function credentials() {
             assert.equal(typeof body.data.capabilities, 'object');
             phase = prefix + '-list-render';
             try {
-                await page.locator('.entity-edition:visible').waitFor({timeout: 15000});
+                // Callflows positions its child panels independently; the wrapper
+                // can have zero height while the actual controls/rows are visible.
+                await page.locator('.entity-edition .list-add:visible').waitFor({timeout: 15000});
             } catch (error) {
                 console.log(JSON.stringify({phase, issues, layout: await page.evaluate(() =>
                     Array.from(document.querySelectorAll('.entity-edition')).map(element => ({
