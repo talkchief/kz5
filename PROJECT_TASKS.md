@@ -70,6 +70,11 @@
   language retention work; uninterrupted-playout/strict timing is not accepted.
   Inspect the media playback timestamp path using this capture before any new
   live run. Do not weaken the strict checker or regenerate voices to hide it.
+  Pinned-source diagnostic d0c54a now reproduces the exact extra20ms/marker
+  through the default timerfd path consuming two expirations, without changing
+  audio. This is not captured runtime-branch proof; no global timer/RTP change
+  is justified. Any further native investigation must trace that transition,
+  not repeat an uninstrumented callback to hunt for a PASS.
   See `doc/acdc_callback_language_snapshot.md` for exact receipts and limits.
 
 - **UI-01 focused source fix DEPLOYED / browser PASS:** Common's storage selector

@@ -163,6 +163,43 @@ No global RTP workaround is justified solely to make this assertion pass.
 The separate, reproduced short confirmation-deadline defect is tracked in
 `doc/callback_confirmation_deadline.md` and takes priority over that workaround.
 
+### Narrowed timer path (no global RTP change)
+
+Further source/config inspection de7840/ae403a shows this build defines
+`HAVE_TIMERFD_CREATE`, defaults `TFD=2`, and has no explicit
+`enable-softtimer-timerfd` override in its active switch configuration. Its
+`soft` timer therefore defaults to `_timerfd_next`, not the matrix-timer
+resynchronization branch discussed above. This is build/config evidence, not
+instrumentation of the historical call's private timer state.
+
+`_timerfd_next` reads the number of elapsed timerfd expirations and advances
+`tick` by that count, then derives `samplecount = tick * samples`.
+`get_next_write_ts` uses that sample count and marks an oversized timestamp
+advance. At8kHz/20ms, two expirations yield a320-sample timestamp delta for the
+next160-sample packet: exactly an extra20ms and a marker bit. The following
+single expiration resumes ordinary160-sample deltas. This path does not itself
+discard or alter the supplied audio payload.
+
+The offline diagnostic below extracts and compiles those two **unchanged,
+SHA-pinned production function bodies**, injecting only the timerfd read count
+and the minimal type/call wrappers. Run d0c54a reproduces the normal/extra/normal
+sequence and marker; no calls, sockets, service changes or runtime provider
+requests are involved. Initial874e36 was a diagnostic C-string escaping error,
+corrected before this successful result, not a platform regression.
+
+```sh
+node scripts/test-fixtures/diagnose-callback-timerfd.cjs \
+  /usr/local/src/kazoo5-installer/freeswitch-1.11.3
+```
+
+This narrows the candidate explanation to accumulated timerfd expirations.
+It does **not** prove which branch ran during the captured call or certify
+endpoint playout. Keep CALLBACK-RTP-01 open and preserve the original strict
+failure. Do not disable timerfd, force global linear timestamps, regenerate
+audio, or rebuild FreeSWITCH just to satisfy the assertion. Further native
+work on this item must capture the relevant per-call timer/clock transition;
+another uninstrumented retry would not answer the remaining question.
+
 ## Resumed announcement-worker consistency correction
 
 A second source defect was reproduced: after an EN admission, serializing the

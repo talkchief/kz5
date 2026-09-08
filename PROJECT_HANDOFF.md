@@ -15,8 +15,12 @@ Both jobs and offline replay44e6d4 are terminal. Do not repeat them. The replay
 confirms full4.331s English payload, digit1 received1.045s after completion,
 and connected retry with no sequence loss. Strict timing remains failed on
 a20ms in-prompt timestamp gap; native negative expiry is still unverified.
-Next: CALLBACK-RTP-01 source diagnosis from the retained captures, not another
-call or voice regeneration. See `doc/callback_confirmation_deadline.md`.
+Pinned-source timerfd diagnostic d0c54a subsequently reproduced the extra20ms
+and marker when two expirations are consumed. The captured runtime branch is
+not proven; another uninstrumented callback cannot establish it. Do not apply
+a global timing workaround or regenerate voices. See
+`doc/callback_confirmation_deadline.md` and the timer-path section of
+`doc/acdc_callback_language_snapshot.md` for evidence and the remaining gap.
 
 **VOICE-01 queue locale spelling UI correction deployed.** Backend
 `HE_IL`/`HE-IL` was displayed and saved as English by the editor. Source now
