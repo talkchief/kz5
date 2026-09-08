@@ -1,5 +1,22 @@
 # Main development SIP/RTP acceptance — September 8
 
+## Current capacity recheck
+
+Source8a5329b on main `/opt/kz5`; unit `kz5-capacity-contentfix-20260908`,
+observer76609, verified active/MainPID378858 (`e2b655`). Started only after
+readback `ef5f87` confirmed no capacity units and zero FreeSWITCH calls.
+Command: `bash scripts/test-kazoo-calls.sh --stress --live --no-install-deps
+--stages 30 --queued-excess 5 --run-root
+/var/log/kazoo-acceptance/main44-capacity-contentfix-20260908`.
+Protected log `/root/kz5-acceptance/capacity-contentfix-20260908.log`.
+Bounds:1536MiB memory, zero swap,200% CPU,512 tasks,1200 seconds; same180s
+simultaneous hold and full drain/RTP/log checks. Actual browser activity will
+overlap calls; installer unauthenticated health probes will not overlap.
+This run is not yet passed. The Crossbar fixes and both build-helper fixes
+are deployed through the normal installer; isolated browser/file/journal
+gate already passes. Details: `crossbar_content_defaults_acceptance_20260908.md`.
+All older capacity units/results below are terminal historical evidence.
+
 ## Scope and safety
 
 Tests run on `10.1.0.44` from `/opt/kz5`, using the dedicated 30-agent tenant

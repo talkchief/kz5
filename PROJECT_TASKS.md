@@ -29,22 +29,26 @@
   release, SUP completion, activation and selected-role verification. Native
   callback exports pass83083/dabfb9; HTTPS browser passes76601/52c6e4. A mixed
   log window counted the simultaneous verifier's intentional informational401;
-  repeat browser/log in isolation. ALL44779 failed retained16:50 Kamailio errors
+  a separate isolated browser/log repeat passed below. ALL44779 failed retained16:50 Kamailio errors
   from the fixed negative SIP fixture. With0 calls, dev Kamailio restarted;
   read-only ALL retry64780 passesfe58e6. Isolated UI79330 passes e6baef with0
-  file/journal matchesb50240. All installers terminal. Next30+5 capacity with
+  file/journal matchesb50240. All installers terminal. Current30+5 capacity with
   browser activity, without overlapping unauthenticated installer probes.
-  Deploy/recheck remains required. Details:
+  Load acceptance remains required. Details:
   `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
-- **LOAD-01 TERMINAL10423 / LOG GATE OPEN:** 30+5 calls completed with35/0
+- **LOAD-01 RUNNING76609 / LOG GATE OPEN:** current source8a5329b run uses
+  unit `kz5-capacity-contentfix-20260908`, verified active/MainPID378858
+  (`e2b655`). It retains30+5 calls,180s hold, all RTP/log checks and1200s bound.
+  Browser activity will run inside this window; no installer health probes.
+  Previous terminal10423 run:30+5 calls completed with35/0
   caller and35/0 agent successes/failures,180s concurrent hold, RTP and ready
   checks passed. Final gate failed on eight application error lines during
   overlapping browser acceptance. Seven are missing Crossbar content-type
   callback arities; one is missing apps-store doc handling for the imported
-  company. Fix and regression-test those source paths before revalidation;
-  do not hide the errors or mark the whole run passed. Unit is inactive/PID0,
-  zero calls and all nine services enabled/active. No capacity job remains.
+  company. Those source fixes are now deployed and browser/log validated;
+  do not hide the errors or retroactively mark the old run passed. Old unit
+  was inactive/PID0, with zero calls and all nine services enabled/active.
   See `doc/main44_call_acceptance_20260908.md`.
 
 - **DEV-HTTPS-PATH-01 OPEN:** source-host public-IP HTTPS probe to46.225.31.248
@@ -1827,7 +1831,7 @@ verified; do not toggle global deletion settings to run a dashboard test.
 | INST-12 | DEPLOYED — forced-build/source checks retained; atomicity open | Installer forces Erlang recompilation and selected number/MIME regeneration despite restored input mtimes or future-dated artifacts; content snapshots reject changed inputs/artifacts before same-invocation ecallmgr reuse. September6 Make/erlc fixtures remain valid evidence (doc/installer_build_identity.md). Full fresh23557/5db474 and repeated ALL48019/6236b8 builds now pass, including immutable prerecorded media and native runtime checks; deployment is no longer held by the earlier voice-build gate. Concurrent mutation/crash-atomic build/deploy snapshots and broader linguistic readiness remain separate unproven requirements. |
 | SEC-01 | DEPLOYED — original and .44 HTTPS/WSS PASS; renewal open | Original-host TLS90345/4232b3 and browser72297/af0738 pass. New .44 hostname kz5-dev.talkchief.io independently deployed50206/267490; ten catalog URLs migrated with CAS receipts; real normal-TLS browser90351/a3c1e3 and subsequent20021/2b3a50 pass HTTPS API/WSS and UI. Tests route that hostname to private .44 without bypassing certificate validation; public-IP certificate validity is not claimed. Renewal lifecycle remains unverified. See doc/dev44_https_acceptance_20260908.md. |
 | SEC-02 | OPEN — operations | Network exposure, least privilege, secrets, SELinux policy, auth/tenant isolation, audit logs, backups, retention, monitoring/alerts and resource/disk limits. Do not equate active services with enterprise certification. |
-| LOAD-01 | ACTIVE — .44 1/5/10/20 PASS;30+5 call/RTP pass, log gate failed | Run10423 terminal:35/0 caller and35/0 agent counters,180s hold, bidirectional RTP, ready checks and0 new cores. Eight fresh file-log errors during overlapping browser acceptance keep overall acceptance failed. Fix Crossbar content-type callback arities and imported apps-store missing-document handling, then revalidate. Zero calls/unit PID0 and nine enabled/active services confirmed. See doc/main44_call_acceptance_20260908.md. No CPS certification or old-host incident closure. |
+| LOAD-01 | ACTIVE — .44 1/5/10/20 PASS;30+5 rerun76609 running | Unit kz5-capacity-contentfix-20260908 at source8a5329b, active/MainPID378858 verifiede2b655,1200s bound. Crossbar source fixes deployed; isolated UI/file/journal gate passes. Previous10423 call/RTP checks passed but eight log errors made that run fail; retained as failed evidence. Current combined browser/load gate unproven. See doc/main44_call_acceptance_20260908.md. No CPS certification or old-host incident closure. |
 | HA-01 | OPEN — acceptance | Backup/restore, failure injection, multi-node ownership, distributed queues/broker/database failover, reconnect and no duplicate callbacks/bridges. |
 | REL-01 | OPEN — release | Review and credential-scan all task changes, commit source/tests/assets/docs and record exact build/test evidence. Update this register rather than marking untested features done. |
 | REL-02 | ACTIVE — reviewed master checkpoints pushed; release pending | Protected GitHub authentication is verified. Latest prior checkpoint9288a780cd034373b1bcc2fb472fa5bd751b0d02 pushed to master and independently read back73e135; earlier b190ba7 and27e7c69 are also remote. Continue explicit reviewed staging, credential-free scans, commits and verified non-force master pushes. New dirty candidates are not automatically included or accepted. Full requested release remains open. Select provider-specific credentials from protected storage without printing/committing them; never reuse the exposed chat token. |

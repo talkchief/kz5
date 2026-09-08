@@ -8,7 +8,11 @@ fresh file/journal error matches both0 (`b50240`). All nine roles pass the fresh
 activation verifier (`fe58e6`). Earlier ALL44779 retained16:50 Kamailio errors
 from the fixed SIP fixture; dev Kamailio restarted with0 calls and logs preserved.
 The mixed browser/verifier401 window is documented, not marked clean.
-Next:30+5 capacity with browser activity, without installer health probes.
+Current:30+5 capacity with browser activity, without installer health probes.
+Unit `kz5-capacity-contentfix-20260908`, observer76609, source8a5329b;
+verified active/MainPID378858 (`e2b655`), not yet passed. Protected log
+`/root/kz5-acceptance/capacity-contentfix-20260908.log` and result root
+`/var/log/kazoo-acceptance/main44-capacity-contentfix-20260908`.
 Full paths/evidence in `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
 **Historical retry98460 is terminal exit2 before restart.** Full release
@@ -18,8 +22,8 @@ real make/no-HOME/pinned replay regressions now pass70253/f26aa0. Both old units
 (51560 and98460) are terminal; do not poll them as live jobs. The next normal
 retry must include the new completion patch. Existing services stayed active.
 Nine production-callback regressions and pinned installer patch replay pass.
-Deployment, combined browser log check and renewed capacity acceptance remain
-open. Both existing apps/eCallMgr processes are active. Full evidence,
+Deployment and combined browser log check subsequently passed as recorded above;
+renewed capacity acceptance is running. Full evidence,
 command/bounds/log and public-HTTPS packet diagnosis:
 `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
@@ -27,7 +31,7 @@ command/bounds/log and public-HTTPS packet diagnosis:
 succeeded, the30-call hold lasted180 seconds, and RTP/agent-ready checks passed.
 The final gate found eight application log errors; investigation identifies
 seven missing Crossbar content-type callback arities and one missing imported
-account apps-store document during the overlapping UI check. These are still
+account apps-store document during the overlapping UI check. These are
 now corrected and browser/log validated above, not grounds to waive that old run's log gate. Zero calls,
 unit PID0 and all nine enabled/active services were independently confirmed.
 See `doc/main44_call_acceptance_20260908.md`. Do not poll old handles or start
