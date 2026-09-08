@@ -16,7 +16,12 @@ function requestAllowed(input) {
         if (!line) { ended = true; continue; }
         if (ended) return false;
         const match = /^([^=]+)=(.*)$/.exec(line);
-        if (!match || Object.hasOwn(fields, match[1])) return false;
+        if (!match) return false;
+        // Modern Git sends repeated capability/challenge array attributes.
+        // They are metadata only: never use them to select host/path/token or
+        // advertise a new authentication mode. Continue legacy Basic output.
+        if (['capability[]', 'wwwauth[]'].includes(match[1])) continue;
+        if (Object.hasOwn(fields, match[1])) return false;
         fields[match[1]] = match[2];
     }
     return fields.protocol === 'https' && fields.host === 'github.com' &&

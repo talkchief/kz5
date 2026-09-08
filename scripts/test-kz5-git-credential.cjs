@@ -14,6 +14,15 @@ test('only exact HTTPS repository accepted', () => {
     assert.equal(requestAllowed(request.replace('kz5.git', 'kz5')), true);
     assert.equal(requestAllowed(request.replace('\n\n', '\nusername=x-access-token\n\n')), true);
 });
+test('Git capability/challenge arrays do not alter credential scope', () => {
+    const metadata = 'capability[]=authtype\ncapability[]=state\nwwwauth[]=Basic realm="GitHub"\n';
+    assert.equal(requestAllowed(metadata + request), true);
+    assert.equal(requestAllowed(metadata + request.replace('github.com', 'elsewhere.example')), false);
+    assert.equal(requestAllowed(metadata + request.replace('talkchief/kz5.git', 'other/private.git')), false);
+    assert.equal(requestAllowed(metadata + request.replace('protocol=https\n', '')), false);
+    assert.equal(requestAllowed(metadata + request + 'host=github.com\n'), false);
+    assert.equal(requestAllowed(metadata + 'host=github.com\n' + request), false);
+});
 test('foreign or ambiguous scope rejected before reading a token', () => {
     for (const input of [
         request.replace('https', 'http'), request.replace('github.com', 'github.com.evil'),
