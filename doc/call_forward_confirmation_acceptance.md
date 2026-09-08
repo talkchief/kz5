@@ -61,7 +61,24 @@ silence and duration checks pass. Authoring manifests remain unchanged by runtim
 tests; their `native_speaker_review` and `runtime_verified` fields are not release
 certifications. Operational evidence is recorded here separately.
 
+Authoring credential location for future maintainers: `/root/key.key`, protected
+as a root-owned mode-0600 file and already used for ACDC WAV generation. Reuse the
+Gemini-specific credential reader in `scripts/generate-acdc-gemini-samples.cjs`;
+never copy the key value into source, documentation or logs. The five completed
+recordings are shipped in Git. A fresh deployment needs no Gemini credential or
+online synthesis; merge this branch into the release and use the normal installer.
+
 ## Completed checks
+
+`bb9c13`: a clean export of committed Git objects at `d6bcde5` contains the five
+masters, five telephony WAVs, manifest, compiled asset map, three patches and
+installer integration. With networking disabled and credential/provider helpers
+set to fail if invoked, the exported pack validates all five recordings and the
+compiled map, imports five documents into an empty media fixture, reads back exact
+bytes and creates zero documents on repeat import. Credential reads and provider
+calls are both zero. This checks the committed feature payload and import path;
+the actual full development installer result is recorded below. The private
+receipt is `git-release-verification.json` in the feature acceptance work directory.
 
 `24649/d164a4`: production compilation and seven focused Erlang groups pass.
 Both endpoint v4/v5 and directory forwarding/failover select all five assets;

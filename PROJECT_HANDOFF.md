@@ -21,6 +21,12 @@ at `https://kz5.talkchief.io/apis/`. Branch:
 `feat/account-forward-confirmation-languages`, isolated worktree
 `/opt/kz5-fwd-review`; the user will merge it. Preserve the other team's staged
 fresh-server/TLS work and the feature source in the running shared workspace.
+Authoring credential: protected `/root/key.key`, the same file used for ACDC WAV
+generation; use the Gemini-specific reader in `generate-acdc-gemini-samples.cjs`.
+Keep only this location in the handoff, never the key value. All five recordings
+are committed. Clean Git-export check bb9c13 imported and byte-verified them in
+an empty media fixture with networking disabled and no credential reads or
+provider calls. Normal installer hooks install and verify the packaged assets.
 Physical cellphone/PSTN and native-speaker certification are not claimed.
 [Acceptance and developer handoff](doc/call_forward_confirmation_acceptance.md).
 
