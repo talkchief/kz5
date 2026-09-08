@@ -1,5 +1,16 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Current callback acceptance:** main-host EN retry unit
+`kz5-callback-main44-en-20260908`, observer20300, sourcefeebbd5; verified
+active/MainPID417369 (`4f6d6d`). Do not duplicate or restart on an observer
+timeout. Protected log `/root/kz5-acceptance/callback-main44-en-20260908.log`.
+All five installed Gemini confirmation references pass038efd; prepare-only
+main fixture8310dc3170a18de37f205d0da172df65 passes61bea0. No Gemini generation.
+New explicit fixture ownership, local-reference addressing, no-HOME SUP and
+optional absent test-phone helper fixes are pushed/synced. Native call outcome
+still unproven; details and reference paths in
+`doc/main44_callback_acceptance_20260908.md`.
+
 **Normal installer74822 and independent ALL64780 passed; no installer remains active.**
 Sourceec2ec69 build took12m3s, apps/eCallMgr restarted and selected roles verified.
 Native callback exports pass;30 fixture agents remain logged out. Isolated

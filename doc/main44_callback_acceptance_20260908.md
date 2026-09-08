@@ -1,5 +1,31 @@
 # Main development callback acceptance
 
+## Current native run
+
+Main sourcefeebbd5; EN unit `kz5-callback-main44-en-20260908`, observer20300,
+verified active/MainPID417369 (`4f6d6d`). Protected log
+`/root/kz5-acceptance/callback-main44-en-20260908.log`. Bounds512MiB memory,
+zero swap,200% CPU,512 tasks,900-second outer deadline. Uses internal transport,
+entry-only registration, explicit absent-master-test-phone allowance and
+owned account8310dc3170a18de37f205d0da172df65. The prepare-only check passed
+16453/61bea0. Native callback outcome is not yet known.
+
+All five installed confirmation references passed55230/038efd, with zero
+database writes or Gemini calls. Protected directories under
+`/var/log/kazoo-acceptance/` (each contains `acdc-callback-success.ulaw` and
+`reference-receipt.json`):
+
+| Language | Directory |
+| --- | --- |
+| EN | gemini-reference.main44-en-us.P5mWcmOn |
+| HE | gemini-reference.main44-he-il.B4uWEpFv |
+| FR | gemini-reference.main44-fr-fr.Qrg2xlQF |
+| ES | gemini-reference.main44-es-es.jVuDIczo |
+| AR | gemini-reference.main44-ar-sa.aCEHmxp4 |
+
+This is installed-byte/revision verification, not yet five-language call/audio
+acceptance. The earlier failed empty reference directories remain for diagnosis.
+
 ## Source portability fixes
 
 The original retry diagnostic pinned the old development account in its shell
