@@ -1,0 +1,43 @@
+diff --git a/src/apps/core/app.js b/src/apps/core/app.js
+--- a/src/apps/core/app.js
++++ b/src/apps/core/app.js
+@@ -720,7 +720,9 @@
+ 				return;
+ 			}
+ 
+-			self.request.counter++;
++			// A completion may arrive for a request started before subscription.
++			// Recover older underflow state without losing this new request.
++			self.request.counter = Math.max(0, self.request.counter) + 1;
+ 
+ 			// If we start a request, we cancel any existing timeout that was checking if the loading was over
+ 			clearTimeout(self.indicator.endTimeout);
+@@ -732,7 +734,7 @@
+ 			// And we start a timeout that will check if there are still some active requests after %waitTime%.
+ 			// If yes, it will then show the indicator. We do this to avoid showing the indicator to often, and just show it on long requests.
+ 			self.indicator.startTimeout = setTimeout(function() {
+-				if (self.request.counter && !$indicator.hasClass('active')) {
++				if (self.request.counter > 0 && !$indicator.hasClass('active')) {
+ 					$indicator.addClass('active');
+ 				}
+ 
+@@ -751,7 +753,7 @@
+ 				return;
+ 			}
+ 
+-			self.request.counter--;
++			self.request.counter = Math.max(0, self.request.counter - 1);
+ 
+ 			// If there are no active requests, we set a timeout that will check again after %waitTime%
+ 			// If there are no active requests after the timeout, then we can safely remove the indicator.
+@@ -759,8 +761,9 @@
+ 			if (!self.request.counter) {
+ 				self.request.active = false;
++				clearTimeout(self.indicator.startTimeout);
+ 
+ 				self.indicator.endTimeout = setTimeout(function() {
+-					if ($indicator.hasClass('active')) {
++					if (self.request.counter === 0 && $indicator.hasClass('active')) {
+ 						$indicator.removeClass('active');
+ 					}
+ 

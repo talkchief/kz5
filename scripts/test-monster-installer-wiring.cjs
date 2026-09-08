@@ -68,6 +68,7 @@ test('New settings are persisted, fingerprinted and passed through the real sour
         'configure-monster-runtime.cjs', 'monster-ui-branding-billing.patch', 'monster-ui-account-picker-readiness.patch', 'monster-ui-websocket-config.patch',
         'monster-ui-websocket-subscription-lifecycle.patch',
         'monster-ui-dialog-resize-lifecycle.patch',
+        'monster-ui-request-indicator-lifecycle.patch',
         'monster-ui-optional-integrations.patch']) assert(fingerprint.includes(name), 'Missing build identity input: ' + name);
     const configureApi = functionSource('configure_monster_ui_api');
     assert(configureApi.includes('"$KAZOO_API_URL" "$MONSTER_UI_WEBSOCKET_URL" "$MONSTER_UI_REMOTE_BRANDING" "$MONSTER_UI_BRAINTREE"'));
@@ -247,7 +248,7 @@ test('Transition + readiness + branding/billing + socket/lifecycle + optional pa
     const pin = '7ef735eada6fd0e2b96c06f32c0bb868867f7d18';
     assert.equal(cp.execFileSync('git', ['-C', framework, 'rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(), pin);
     const files = new Map(), patches = ['monster-ui-myaccount-transition.patch', 'monster-ui-branding-billing.patch', 'monster-ui-account-picker-readiness.patch',
-        'monster-ui-websocket-config.patch', 'monster-ui-websocket-subscription-lifecycle.patch', 'monster-ui-dialog-resize-lifecycle.patch', 'monster-ui-optional-integrations.patch'];
+        'monster-ui-websocket-config.patch', 'monster-ui-websocket-subscription-lifecycle.patch', 'monster-ui-dialog-resize-lifecycle.patch', 'monster-ui-request-indicator-lifecycle.patch', 'monster-ui-optional-integrations.patch'];
     for (const patchName of patches) {
         const patchPath = path.join(__dirname, 'patches', patchName);
         const patch = fs.readFileSync(patchPath, 'utf8');

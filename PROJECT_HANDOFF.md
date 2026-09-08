@@ -1,5 +1,13 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Latest operator follow-up:** original server will be deleted; keep current
+source and remaining work at `/opt/kz5` on10.1.0.44. Thin top loading line is a
+separate reproduced bug: global counter underflows to-1 in SmartPBX and ACDC;
+previous browser checks covered only the in-app spinner. See UI-PROGRESS-01 in
+`PROJECT_TASKS.md` for source fix and deployment gate. Talkchief currently exists
+only in the isolated compatibility lab; DEV-COMPANY-01 tracks preparing a safe,
+main-UI-visible test copy. Do not report it as already present in the main UI.
+
 **Primary Kazoo5 development host: `10.1.0.44`**, designated by the user on
 September8. Keep its installed stack and `/opt/kz5` checkout for future work.
 Canonical Git remote remains `https://github.com/talkchief/kz5.git`, branch

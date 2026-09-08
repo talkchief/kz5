@@ -1,5 +1,31 @@
 # Kazoo 5 project task register
 
+## Immediate operator follow-up — September8
+
+- **UI-PROGRESS-01 ACTIVE:** the thin blue global loading line remains active
+  in SmartPBX and ACDC even after their content loads. Actual browser77543 and
+  28271 reproduce `core.request.counter=-1` and `.progress-indicator.active`.
+  Earlier spinner acceptance inspected in-app loading elements only and did
+  not cover this global indicator. Source patch prevents counter underflow,
+  rejects negative counts as active work, and clears the pending start timer
+  when requests drain. Actual-handler regression reproduces the old failure;
+  fixed lifecycle tests pass303420. Normal source installer deployment and
+  browser checks of the top line in both apps remain required.
+- **DEV-COMPANY-01 ACTIVE:** operator expects Talkchief visible in the main
+  `kz5-dev` account selector. The requested company snapshot exists only in the
+  isolated compatibility lab, so it is not currently visible in the main UI.
+  Prepare a separate development-visible test copy from the protected snapshot;
+  check account/realm/tree collisions and production-facing configuration before
+  import. Preserve the original lab baseline and never connect to production
+  services or activate copied production outbound/push/webhook behavior blindly.
+- **HOST-HANDOFF-01 REQUIRED:** original development server will be deleted.
+  Canonical checkout and installed stack must remain on10.1.0.44 at `/opt/kz5`,
+  latest pushed master. Preserve outstanding source work and durable guidance on
+  that host; do not leave required changes solely in original-host `/tmp` files.
+- Compatibility refresh-write diagnostic is paused for these operator issues.
+  Its source and offline RPC fixture tests pass94834/382d12; native execution
+  is not yet performed. No additional lab/production writes occurred.
+
 ## Primary development host — September8 operator decision
 
 - `10.1.0.44` is now the main Kazoo5 development server. Retain the stack and
