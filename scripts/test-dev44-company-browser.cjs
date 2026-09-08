@@ -10,6 +10,7 @@ const usersOnly = process.argv.slice(2).join(' ') === '--callflows-users';
 const queueFormOnly = process.argv.slice(2).join(' ') === '--queue-create-form';
 const queueSave = process.argv.slice(2).join(' ') === '--queue-create-save --allow-fixture-writes';
 const queueLogin = process.argv.slice(2).join(' ') === '--queue-login-check --allow-fixture-writes';
+const storageSelector = process.argv.slice(2).join(' ') === '--storage-selector-check';
 
 function privateText(file) {
     const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
@@ -35,7 +36,7 @@ function credentials() {
         const input = fs.readFileSync(0, 'utf8'); assert(input.length < 65536);
         result = JSON.parse(input);
     } else {
-        assert(process.argv.length === 2 || usersOnly || queueFormOnly || queueSave || queueLogin);
+        assert(process.argv.length === 2 || usersOnly || queueFormOnly || queueSave || queueLogin || storageSelector);
         const auth = envFields(privateText('/etc/kazoo/installer-secrets.env'));
         const config = envFields(privateText('/etc/kazoo/deployment.env'));
         result = {account: Buffer.from(config.KAZOO_MASTER_ACCOUNT_NAME, 'base64').toString('utf8'),
@@ -120,6 +121,39 @@ function credentials() {
         await page.goto(ORIGIN + '/#/apps/acdc', {waitUntil: 'domcontentloaded'});
         assert.equal((await masterLive).status(), 200);
         await page.waitForTimeout(2000);
+        if (storageSelector) {
+            phase = 'optional-storage-selector';
+            assert.deepEqual(issues, []);
+            await page.route(ORIGIN + '/v2/accounts/**', async route => {
+                if (!['GET', 'HEAD', 'OPTIONS'].includes(route.request().method())) {
+                    issues.push('unexpected-storage-write'); await route.abort();
+                } else {await route.continue();}
+            });
+            const responses = [];
+            page.on('response', response => {if (response.status() >= 400) responses.push(response);});
+            const outcome = await page.evaluate(() => new Promise((resolve, reject) => {
+                const timer = setTimeout(() => reject(Error('Storage selector did not settle')), 10000);
+                // Exercise the public Common component subscriber with a real
+                // HTTP response. This is not a user click or a fake response.
+                monster.pub('common.storageSelector.render', {
+                    callback() {clearTimeout(timer); reject(Error('Unexpected selection success'));},
+                    error(error) {clearTimeout(timer); resolve({status: error.status});}
+                });
+            }));
+            assert.equal(outcome.status, 404);
+            assert.equal(responses.length, 1);
+            assert.equal(responses[0].status(), 404);
+            assert.equal(new URL(responses[0].url()).pathname, '/v2/accounts/' + MASTER + '/storage');
+            await page.locator('.toast-message').filter({hasText: 'Storage options are unavailable for this account.'})
+                .waitFor({state: 'visible', timeout: 2000});
+            assert.deepEqual(issues, ['http-404']); // Exact native optional-resource response above, not hidden.
+            assert.equal(await page.evaluate(() => monster.apps.core.request.counter), 0);
+            assert.equal(await page.locator('.progress-indicator.active').count(), 0);
+            console.log(JSON.stringify({status:'PASS', native_storage_status:404, selector_error_settled:true,
+                visible_unavailable_message:true, inactive_global_indicator:true, writes:0,
+                scope:'actual Common subscriber and native HTTP; not a user-click test'}));
+            return;
+        }
         if (queueLogin) {
             phase = 'isolated-queue-login';
             await require('./test-fixtures/queue-login-browser.cjs')(page, issues);

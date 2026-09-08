@@ -1,0 +1,80 @@
+--- a/src/apps/common/submodules/storageSelector/storageSelector.js
++++ b/src/apps/common/submodules/storageSelector/storageSelector.js
+@@ -13,8 +13,20 @@
+ 		storageSelectorRender: function(args) {
+ 			var self = this;
+ 
+-			self.storageSelectorGetData(args, function(data) {
++			self.storageSelectorGetData(args, function(error, data) {
++				if (error) {
++					if (error.status === 404) {
++						monster.ui.toast({ type: 'warning', message: self.i18n.active().storageSelector.unavailable });
++					}
++					args.error && args.error(error);
++					return;
++				}
+ 				var formattedData = self.storageSelectorFormatData(data);
++				if (_.isEmpty(formattedData.storageChoices)) {
++					monster.ui.toast({ type: 'warning', message: self.i18n.active().storageSelector.unavailable });
++					args.error && args.error({ code: 'no_storage_options' });
++					return;
++				}
+ 
+ 				monster.ui.fullScreenPicker({
+ 					mainTitle: self.i18n.active().storageSelector.mainTitle,
+@@ -43,10 +55,17 @@
+ 			self.callApi({
+ 				resource: 'storage.get',
+ 				data: {
+-					accountId: self.accountId
++					accountId: self.accountId,
++					generateError: false
+ 				},
+ 				success: function(data) {
+-					callback && callback(data.data);
++					callback && callback(null, data.data);
++				},
++				error: function(data, response, globalHandler) {
++					// Missing optional storage is unavailable, not a configured
++					// empty plan. Always settle; never invoke selection success.
++					callback && callback({ status: response && response.status || 0 });
++					if (!response || response.status !== 404) { globalHandler(data); }
+ 				}
+ 			});
+ 		},
+@@ -59,13 +78,13 @@
+ 					if (args.hasOwnProperty('data')) {
+ 						callback && callback(null, args.data);
+ 					} else {
+-						self.storageSelectorGetStorage(function(data) {
+-							callback && callback(null, data);
++						self.storageSelectorGetStorage(function(error, data) {
++							callback && callback(error, data);
+ 						});
+ 					}
+ 				}
+ 			}, function(err, results) {
+-				callback && callback(results);
++				callback && callback(err, results);
+ 			});
+ 		},
+ 
+@@ -74,7 +93,7 @@
+ 				storageChoices: []
+ 			};
+ 
+-			if (data.hasOwnProperty('storage') && data.storage.hasOwnProperty('attachments') && !_.isEmpty(data.storage.attachments)) {
++			if (_.get(data, 'storage.attachments') && !_.isEmpty(data.storage.attachments)) {
+ 				_.each(data.storage.attachments, function(attachment, id) {
+ 					formattedData.storageChoices.push({
+ 						id: id,
+--- a/src/apps/common/i18n/en-US.json
++++ b/src/apps/common/i18n/en-US.json
+@@ -1578,6 +1578,7 @@
+ 	"__comment": "UI-2765",
+ 	"__version": "4.1",
+ 	"storageSelector": {
++		"unavailable": "Storage options are unavailable for this account.",
+ 		"mainTitle": "Your Storage Options.",
+ 		"subTitle": "Please select from the following storage options available on this account",
+ 		"select": "Use Selected Storage Option"
