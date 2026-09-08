@@ -22,9 +22,15 @@
   rerun85919 exposed JSON formatting dropping public datastore file permissions
   under umask077 and triggered fresh-node restarts. Apps stopped on .44 to end
   the loop. Formatter mode preservation/public runtime JSON repair are pushed
-  (`1e7e40b`); normal rerun23557 is active. SIP template permissions under
+  (`1e7e40b`); normal rerun23557/5db474 **PASS**, including apps/eCallMgr,
+  fresh administrator/API/SUP checks and 796 shared prerecorded media documents.
+  Both services are enabled/active with zero automatic restarts; the requested
+  `kazoo-applications.service` alias resolves correctly. SIP template permissions under
   umask077 are also fixed/tested (`c40fd2d`), with untouched secrets/custom files.
-  Accepting apps/eCallMgr/media/SIP remains P0. The user confirms HTTPS
+  FreeSWITCH sound traversal/readability and existing-audio preservation are
+  fixed/tested (`237716e`). Normal FreeSWITCH/Kamailio install84616 is running
+  on .44. SIP/media acceptance, current local-stack UI and final fresh ALL
+  verification remain P0. The user confirms HTTPS
   login works; the new server uses verified private-network TLS for that host.
 - [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).
 - FWD branch through `52c8d85` merged into master; no local redeployment performed.

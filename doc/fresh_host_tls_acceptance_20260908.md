@@ -254,3 +254,39 @@ Normal rerun23557 uses unit `kz5-fresh-apps-jsonmodes-20260908.service`, source
 `1e7e40b`, and deliberately retains umask077 to prove the correction. Protected
 full log: `/root/kz5-acceptance/apps-jsonmodes-install.log`. Earlier failed runs
 remain recorded; no full fresh-stack pass is claimed yet.
+
+### Fresh apps/eCallMgr — normal installation PASS
+
+Rerun23557/5db474 exited0 after 12m57.878s. Full dependency/core/application
+compilation, release assembly and production-BEAM checks passed under umask077.
+Apps and eCallMgr are enabled/active, private-bound, and report zero automatic
+restarts. Current-activation checks670eef found no CRASH/eacces messages and
+public datastore defaults/account views are readable. Alias checkeeae49 confirms
+`kazoo-applications.service` resolves to the enabled, active apps unit.
+
+Fresh master administrator login, Crossbar queue/agent/external-number APIs,
+ACDC listener/migration readiness, SUP, callback node authority, event framing,
+and Blackhole scope/live modules passed the installer checks. Media proof checked
+175 official English attachments, five immutable forwarding clips, and 796
+owned queue media documents (210 fixed clips, 584 cardinals, two intros), with
+exact readback and both prompt maps. No synthesis/provider request was made.
+This is artifact/mapping readiness, not formal native-language certification;
+existing native/full linguistic readiness flags remain false. FreeSWITCH had
+not yet been installed, so media-node checks were explicitly deferred.
+
+### Fresh SIP/media installation — running
+
+Source `237716e` adds actual service-user readability verification for required
+FreeSWITCH sounds. Public sound directories/files are installed0755/0644 even
+under umask077; existing customer audio bytes/modes remain unchanged. Actual
+rsync/unprivileged-read fixtures and unreadable-file negatives pass50237/ca461f
+and3549/e27242. The stale prompt fixture count now matches the210-clip pack.
+
+Normal entry-point `freeswitch kamailio` installation84616 is running as
+`kz5-fresh-sip-20260908.service`; protected log:
+`/root/kz5-acceptance/sip-install.log`. It uses explicit root home, umask077,
+four jobs, 2GiB memory, CPU400%, no swap and a one-hour deadline on .44 only.
+FreeSWITCH1.11.3 and Kazoo integration are compiling. Do not change remote source
+while this installer is running. Next: SIP/media acceptance, rebuild current UI
+against the independent local .44 stack, then independent `--verify-only ALL`.
+Original development services were not restarted during these fresh-host runs.
