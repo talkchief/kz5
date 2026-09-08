@@ -4987,7 +4987,8 @@ verify_kamailio_journal() {
     stats=$(timeout --signal=KILL 10 /usr/sbin/kamcmd htable.stats) || die 'Could not read Kamailio JWT table statistics'
     query=$(timeout --signal=KILL 10 /usr/sbin/kamcmd pv.shvGet jwt_keys_query) || die 'Could not read Kamailio JWT retry state'
     report=$(timeout --signal=KILL 30 journalctl -u kazoo-kamailio.service --boot="$boot_id" \
-        --since "$active_since" --output=json --no-pager 2>/dev/null | \
+        --since "$active_since" --output=json \
+        --output-fields=_BOOT_ID,_PID,__MONOTONIC_TIMESTAMP,MESSAGE --no-pager 2>/dev/null | \
         python3 -B -I "$SCRIPT_DIR/verify-kamailio-jwt-journal.py" --boot-id "$boot_id" \
             --active-usec "$active_usec" --stats "$stats" --query "$query" --config-dir "$KAZOO_CONFIG_DIR") || \
         die "Kamailio journal/JWT verification failed: ${report}"

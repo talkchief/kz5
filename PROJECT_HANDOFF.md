@@ -6,9 +6,43 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**FULL APPS/ECALLMGR INSTALLER PASS:** session48353, terminal `f4275e`,
+exit0 at approximately06:52UTC September8 from pushed `981f317`.
+Normal `install-kazoo5.sh kazoo-apps ecallmgr` completed compilation, release
+assembly, both service restarts, readiness, all796 prerecorded documents in
+both maps, measured five-language selection publication, final verification
+and root-only `/etc/kazoo/deployment.env` persistence. No build bypass and no
+Gemini calls. Unit `kazoo-validation-af990f40-1680-48f8-877a-16e56a20f4cb.service`
+used one worker,384MiB cap,512MiB reserve and3600s runtime. This is a same-host
+installation pass, not fresh/split-host acceptance. Source freeze is released.
+
+**Independent installed-stack verification PASS:** session56291,
+terminal `3f1242`, exit0 at~07:04UTC, normal `--verify-only ALL`,
+384MiB/512MiB reserve/900s. All nine component checks passed, including
+Kamailio's full journal/JWT cache, Monster UI's ten apps and bridge consumer
+readiness. No live installer/test job remains. Do not repeat the build or this
+verification merely to refresh evidence. Final service readback `0a2d67`
+confirms all nine units enabled/active with restart counters0.
+Apps1614512, eCallMgr1637256, bridge1172968 and nginx1108648 are running.
+`kazoo-applications.service` resolves to kazoo-apps.
+The unrelated untracked `doc/dashboard_caller_sidecar_design.md` remains
+excluded from commits.
+
+The first independent run45977 exited1 (`bc78ef`): Kamailio's journal verifier
+hit its aggregate32MiB/100000-record limit on this long-running service.
+Focused fix streams the full activation history with constant retained state,
+keeps the1MiB record cap and30s journal deadline, and requests only required
+JSON fields. It does not tail/drop historical errors.13 regression tests and
+43 AMQP fixtures pass34186/2eb247. Actual corrected ALL verification passed
+above. Service journals for apps/eCallMgr/bridge/nginx contained zero
+priority0–3 entries since06:35UTC at readback9be99d; this is not a claim about
+every application log or indefinite crash freedom.
+
 **Latest operator request: finalize ASAP; do not keep expanding tooling.**
-Next actions are explicit commit/push of tested changes and normal apps/eCallMgr
-installation with the verified3600s guard. Five-language success/retry and
+Tested changes are already committed and pushed in `981f317`; the normal
+apps/eCallMgr installer and independent `--verify-only ALL` passed. Publish
+this focused checkpoint; retain the explicit external/release gates below. Do
+not start another build merely to refresh evidence. Five-language success/retry and
 registered-consumer/DLQ recovery evidence is below. Returned-audio supplemental
 proof remains incomplete: HE50498/53cce7 failed coverage, and diagnostic79134/
 7eacd4 found160 missing RTP samples inside its matched phrase, correlation
@@ -37,6 +71,26 @@ five synthetic groups pass38329/92034c. Hebrew reference capture passed, but
 offline replay50498 failed strict coverage as detailed above. The current success
 audio proof does not establish that separate recording's actual playback.
 No real push notifications or production changes have been made.
+
+### Remaining acceptance, not new implementation scope
+
+- Local full apps/eCallMgr installation and independent ALL verification are
+  complete. No further local rebuild is needed for this checkpoint.
+- Real Android/iPhone delivery requires test-device tokens plus the APNs topic
+  and environment; registered-consumer/broker tests are not phone-delivery proof.
+- Fresh-server and split-host installation remain unaccepted. The standalone UI
+  catalog proposal is private and not part of the released installer.
+- Complete returned-call waveform coverage/native voice review, HTTPS/WSS and
+  production load/failure/recovery acceptance remain open. Do not label this
+  release 100% production-ready.
+- Historical dashboards are postponed; live dashboards are below the urgent
+  callback, prerecorded-voice and deployment priorities.
+
+### Archived execution history — superseded by the live snapshot above
+
+The paragraphs below retain earlier evidence and decisions. Their words such
+as “next,” “running,” “pending,” and “no live job” describe their original
+checkpoint, not current instructions. Do not repeat completed work from them.
 
 Last installer job is TERMINAL, not successful: apps/eCallMgr rerun from pushed9642413,
 session4728, initialf18428, guarded unit

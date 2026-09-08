@@ -2,13 +2,32 @@
 
 ## Current focused release checkpoint — 2026-09-08
 
+- **Full normal apps/eCallMgr installer PASS:** pushed981f317, session48353,
+  terminal `f4275e`, exit0 at~06:52UTC September8. Compilation, release,
+  apps/eCallMgr restarts, runtime/API/SUP readiness,796 prerecorded documents
+  in both maps, five-language capability publication, final verification and
+  root-only deployment settings persistence all completed. No Gemini calls.
+  Same-host pass only; no fresh/split-host or production-ready claim.
+- **Independent `--verify-only ALL` PASS:**56291/3f1242, exit0 at~07:04UTC,
+  384MiB/512MiB admission reserve/900s. All nine component checks passed,
+  including Kamailio journal/JWT, served UI/catalog and bridge consumer.
+  All nine units enabled/active with restart counters0 in0a2d67. No live job
+  remains; do not repeat the build/check merely to refresh this evidence.
+- **Focused Kamailio verification fix:** first ALL45977/bc78ef exited1 on
+  journal aggregate input limit, after service/AMQP/ACL checks passed. Stream
+  full activation history with bounded retained state/per-record size and
+  existing30s deadline; do not discard old errors.13 regression tests and43
+  AMQP fixtures pass34186/2eb247. Corrected actual ALL rerun passes above.
+
 This newest checkpoint supersedes older chronological snapshots below; a
 historical ACTIVE/OPEN label is not a fresh runtime observation. Reproduction
 commands and exact scope: `doc/focused_acceptance_20260908.md`.
 
 - **Operator priority reset — finalize ASAP:** stop adding implementation scope
-  and validation tooling. Commit/push tested callback, bridge and guard work;
-  finish normal apps/eCallMgr installer with the verified3600s outer window.
+  and validation tooling. Tested callback, bridge and guard work is pushed in
+  `981f317`; the normal apps/eCallMgr installer passed with the
+  verified3600s outer window and independent ALL verification passed. Commit/
+  push the final status. Do not start another build to refresh evidence.
   Existing five-language callback registration/retry and broker-recovery
   results remain accepted only within their documented scope. Returned-audio
   supplemental proof is incomplete: HE replay50498 failed strict RTP coverage;

@@ -46,18 +46,20 @@ def classify(lines, boot_id, active_usec, stats, query, config_dir="/etc/kazoo")
     require(isinstance(active_usec, int) and active_usec > 0, "invalid service activation clock")
     count = readiness(stats, query)
     failure_pattern, loaded_pattern = patterns(config_dir)
-    failures, loads, other_errors = [], [], []
-    total = records = 0
+    failures, loads = [], []
+    records = 0
     # systemctl's human timestamp supplied to journalctl --since is truncated
     # to wall-clock seconds. Inspect this bounded prefix too: never discard an
     # included record or forgive an ERROR just because it predates activation.
     earliest_usec = max(0, active_usec - 1_000_000)
     last = earliest_usec
     for line in lines:
-        total += len(line)
         records += 1
-        require(total <= 32 * 1024 * 1024 and records <= 100000 and len(line) <= 1024 * 1024,
-                "journal evidence exceeds bounded input limit")
+        # Stream the complete activation history: healthy long-running services
+        # must not fail merely because ordinary SIP logs exceed 32MiB/100k rows.
+        # The caller bounds journalctl runtime; cap each record and retained
+        # recovery state here instead of truncating or dropping older errors.
+        require(len(line) <= 1024 * 1024, "journal record exceeds bounded input limit")
         try:
             record = json.loads(line)
             message = record["MESSAGE"]
@@ -81,12 +83,12 @@ def classify(lines, boot_id, active_usec, stats, query, config_dir="/etc/kazoo")
             require((failure or loaded).group("worker") == pid, "JWT worker prefix disagrees with journal metadata")
             if failure:
                 failures.append((stamp, pid))
-            else:
+                require(len(failures) == 1, "JWT failure is recurring, not a single recovered startup error")
+            elif len(loads) < 3:
                 loads.append((stamp, pid, (loaded.group("kind") or "keys").strip(), int(loaded.group("count"))))
         elif ERROR.search(message) or "failed to load JWT keys" in message:
-            other_errors.append(stamp)
+            raise EvidenceError("runtime integration errors remain")
     require(records > 0, "journal evidence is empty")
-    require(not other_errors, "runtime integration errors remain; count=" + str(len(other_errors)))
     if not failures:
         return "PASS Kamailio journal and current JWT cache readiness; cached_entries=" + str(count)
     require(len(failures) == 1, "JWT failure is recurring, not a single recovered startup error")

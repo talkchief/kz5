@@ -139,6 +139,30 @@ class JournalTests(unittest.TestCase):
             self.assertNotIn("MUST_NOT_LEAK", result.stdout + result.stderr)
             self.assertNotIn("Traceback", result.stderr)
 
+    def test_long_service_history_is_streamed_without_hiding_old_or_late_errors(self):
+        # Exceeds both previous aggregate limits while retaining bounded state.
+        ordinary = json.dumps(event(80, "healthy SIP event " + "x" * 300)) + "\n"
+        def history():
+            yield from (json.dumps(row) + "\n" for row in recovered())
+            for _ in range(100001):
+                yield ordinary
+        self.assertGreater(len(ordinary) * 100001, 32 * 1024 * 1024)
+        self.assertTrue(mod.classify(history(), BOOT, ACTIVE, STATS, QUERY).startswith("WARNING"))
+        def late_error():
+            yield from history()
+            yield json.dumps(event(81, " ERROR: late failure")) + "\n"
+        with self.assertRaises(mod.EvidenceError):
+            mod.classify(late_error(), BOOT, ACTIVE, STATS, QUERY)
+        def early_error():
+            yield json.dumps(event(1, " ERROR: early failure")) + "\n"
+            yield from history()
+        with self.assertRaises(mod.EvidenceError):
+            mod.classify(early_error(), BOOT, ACTIVE, STATS, QUERY)
+
+    def test_repeated_successes_do_not_hide_a_later_failure(self):
+        rows = [event(n, "loaded 1 entries into jtw.keys table") for n in range(1, 10)]
+        self.rejected(rows + recovered())
+
     def test_actual_shell_hook_rejects_failed_journal_rpc_or_helper(self):
         source = (HERE / "install-kazoo5.sh").read_text()
         hook = re.search(r"^verify_kamailio_journal\(\) \{[\s\S]*?^\}", source, re.M).group()
@@ -166,6 +190,7 @@ python3(){ [[ $* == '-B -I /fixture/verify-kamailio-jwt-journal.py --boot-id '* 
                                     env=env, capture_output=True, text=True, timeout=5)
             self.assertEqual(result.returncode, 42 if failing else 0, result.stderr)
         self.assertIn("ActiveEnterTimestampMonotonic --value) ==", hook)
+        self.assertIn("--output-fields=_BOOT_ID,_PID,__MONOTONIC_TIMESTAMP,MESSAGE", hook)
 
 
 if __name__ == "__main__":

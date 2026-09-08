@@ -6,6 +6,33 @@ No Gemini generation occurs in any of these acceptance commands.
 
 ## Installer validation window
 
+**Latest result: normal apps/eCallMgr installation PASS.** From pushed981f317,
+session48353 exited0 (`f4275e`) at approximately06:52UTC September8 after
+about40minutes. The unmodified main entry point completed compile/release,
+apps and eCallMgr restarts, authenticated API/SUP readiness,796 prerecorded
+documents and1592 runtime mappings, measured five-language selection capability,
+final verification and `/etc/kazoo/deployment.env` persistence. One worker,
+384MiB cap,512MiB admission reserve,3600s runtime; no skip-build and no Gemini
+generation. Services read back enabled/active with restart counters0 (`f9b8a8`).
+**Independent `--verify-only ALL` PASS:**56291/3f1242, exit0 at~07:04UTC.
+All nine components passed, including Kamailio SIP/AMQP/dispatcher/JWT cache,
+served Monster UI/catalog and bridge dependency/config/consumer readiness.
+Final readback0a2d67 confirms all nine service units enabled and active with
+restart counters0. No live job remains. Its first run
+45977/bc78ef failed on the Kamailio journal aggregate-size limit. The focused
+fix retains all activation-history error checks with constant retained state,
+a1MiB record limit and the existing30s journal deadline, and limits journal
+JSON fields rather than truncating records.13 regression tests (including
+over100000 records/32MiB and early/late errors) plus43 AMQP fixtures pass
+34186/2eb247. RabbitMQ CLI emitted a non-fatal locale warning; its broker
+authentication/health checks passed. This is not a
+fresh-server, split-host, real-phone or production load acceptance claim.
+
+No priority0–3 journal entries were found for apps/eCallMgr/bridge/nginx since
+06:35UTC in9be99d. Other logs, TLS and long-term reliability are separate gates.
+
+Earlier failure retained for provenance:
+
 The normal apps/eCallMgr installer from pushed `9642413` compiled the release,
 restarted apps, passed datastore readiness and verified 796 media documents in
 both runtime maps. The outer validation unit stopped it at its 1800-second
@@ -18,7 +45,7 @@ task128 limit, protected global lock and memory admission are unchanged.
 The private92-case regression suite passed48334/9b13b6 and repository rerun
 53441 passed. Actual short unit e2026b confirmed RuntimeMaxUSec=1h, CPU500ms
 per second, selected256MiB cap, swap0 and tasks128 while executing the12-case
-DLQ regression suite successfully. A full installer rerun is still required.
+DLQ regression suite successfully. The full installer rerun has now passed above.
 See `validation_resource_guard.md`. Do not increase a running job's timer or
 restart merely because a tool observation timed out.
 
