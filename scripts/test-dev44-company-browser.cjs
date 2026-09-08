@@ -100,8 +100,41 @@ function credentials() {
             if (app === 'acdc') assert.equal(await page.locator('.acdc-live-queue-card:visible').count(), 4);
             assert.deepEqual(issues, []);
         }
+        phase = 'queue-language-read-only';
+        // Inspect the real deployed editor without allowing this copied tenant
+        // to be changed. Language selections below are local drafts; never save.
+        await page.route(ORIGIN + '/v2/accounts/' + COMPANY + '/**', async route => {
+            if (!['GET', 'HEAD', 'OPTIONS'].includes(route.request().method())) {
+                issues.push('unexpected-company-mutation');
+                await route.abort();
+            } else {await route.continue();}
+        });
+        await page.locator('.acdc-open-live-queue:visible').first().click();
+        await page.locator('.acdc-live-edit:visible').click();
+        const form = page.locator('.acdc-queue-form:visible');
+        await form.waitFor({state: 'visible', timeout: 30000});
+        const language = form.locator('select[name="announcements.language"]');
+        assert.equal(await language.count(), 1);
+        const languageValues = ['ar-sa', 'en-us', 'es-es', 'fr-fr', 'he-il'];
+        assert.deepEqual(await language.locator('option').evaluateAll(options =>
+            options.map(option => option.value).sort()), languageValues);
+        assert.equal(await language.locator('option:disabled').count(), 0);
+        for (const value of languageValues) {
+            await language.selectOption(value);
+            assert.equal(await language.inputValue(), value);
+        }
+        assert.equal(await form.locator('[name="announcements.interval"]').count(), 1);
+        assert.equal(await form.locator('[name="callback.announcement.interval"]').count(), 1);
+        await form.locator('.acdc-cancel').click();
+        await form.waitFor({state: 'hidden', timeout: 15000});
+        await page.waitForTimeout(2000);
+        assert.deepEqual(issues, []);
+        assert.equal(await page.evaluate(() => monster.apps.core.request.counter), 0);
+        assert.equal(await page.locator('.progress-indicator.active').count(), 0);
         console.log(JSON.stringify({status: 'PASS', account_picker: true, collections: counts,
             smartpbx: true, acdc_queue_cards: 4, inactive_global_indicator: true,
+            queue_language_options: languageValues, separate_announcement_interval_controls: true,
+            queue_editor_inspection: 'local draft selections only; no save permitted',
             scope: 'private-route HTTPS browser with certificate verification; inspection copy only, no calls'}));
     } catch (error) {
         console.error('Development company browser check failed at ' + phase + '; credentials and customer data withheld.');

@@ -2,7 +2,7 @@
 
 ## Immediate operator follow-up — September8
 
-- **VOICE-MAIN44-SCHEDULE-01 SOURCE TESTED / NATIVE OPEN:** the periodic
+- **VOICE-MAIN44-SCHEDULE-01 FIVE-LANGUAGE NATIVE PASS:** the periodic
   callback-offer/full-position-one harness now supports explicit protected
   fixture selection, absent manual-phone helper, non-truncating shared lock,
   caller-contact absence and live resource ownership gates. It accepts only
@@ -12,7 +12,15 @@
   Original new-account refusal reproducedeb643e; actual entry/service wiring
   tests1596ad,metadata trust-chain tests and existing33ownership/52audio/10reference
   cases pass8c37ce. Native main-host30/60s callback offers and45/75s full
-  position-one audio remain required. See doc/acdc_five_language_live_audio_acceptance.md.
+  position-one audio now pass in all five locales: English48661/2cb3e8 and
+  remaining-locale45450/07eef3 exit0. No entry/extra speech, complete received
+  audio, normal teardown, unchanged services,0 errors/cores and conditional
+  owned queue/callflow cleanup pass. Independent4f7417 confirms0 calls, terminal
+  batchPID0 and all nine enabled/active services; all30 agents remain logged
+  out7c439e. Browser0b7f2c checks exactly five selectable language choices and
+  separate interval controls without saves. Not native pronunciation/wider
+  number/wait/MOH/all-response or inheritance acceptance. See
+  `doc/main44_periodic_audio_acceptance_20260908.md`.
   Actual installed-reference CLI subsequently passes10b220; all-five index
   `/root/kazoo-prerecorded-reference.main44-cli.crP0f4Ny/index.json`, SHA256
   `62ba5a55668dd60a52a8f3470ffa2dc09fe314ac4e7a138228e66877172d887b`.
@@ -1840,11 +1848,11 @@ verified; do not toggle global deletion settings to run a dashboard test.
 | VOICE-01 | OPEN — media + UI | Finalize EN/HE/AR/FR/ES prompt-language override, queue/call/account defaults and reseller/sub-account inheritance; report incomplete packs rather than enabling unverified choices. |
 | VOICE-05 | DEPLOYED — five-language single-key registration audio/retry PASS; broader composition open | Immutable built-in callback media and recorded digits are deployed; no runtime Gemini requests. Full87 canonical regressions pass fada33/fee8c1. Later EN/HE/FR/ES/AR runs listed in P0-10 prove exactly key6, complete locale-specific installed success audio before BYE, durable retry and second bridge. Receipt readback0aa77b confirms PASS and only digit6 for all five; evidence is now archived root-only on .44 (see focused acceptance). Complete prerecorded position/MOH composition and all alternate responses are separate; additive returned-confirmation HE waveform proof failed strict packet coverage and is not silently counted as passed. See doc/focused_acceptance_20260908.md. |
 | VOICE-02 | VERIFIED — generated assets and installer byte check | Existing165 effective Gemini entries /330 WAVs remain unchanged. September6 supplemental generation completed45 missing callback clips /90 WAVs in47 requests (two French digits retried once, previous failures retained). Combined immutable lookup210 assets /420 WAVs, committed0904240. Actual installer media-import19674 verified210, preserved210 and created0; nonsecret receipt at /usr/local/share/kazoo5-installer/acdc-gemini-media.json. This is not runtime mapping activation, five-language playback certification or complete prerecorded queue-position speech. |
-| VOICE-03 | OPEN — media | Build voices once into versioned shared artifacts for all present/future accounts and sub-accounts. No Gemini generation during installation, account creation, queue editing or calls. Finish missing numeric/auxiliary audio and native listening checks. |
-| VOICE-04 | ACTIVE — generation authorized | User explicitly renewed authorization on September 6 to use Gemini from protected /root/key.key for missing built-in queue WAVs. The file is root-owned mode 0600 and contains distinct Gemini and GitHub credentials; select by provider without logging either. Supplemental generation is no longer blocked on approval. Native listening and five-language call acceptance remain required. |
-| VOICE-06 | ACTIVE — source tested; browser/deployment open | Commit61bf505 implements exactly one Queue language dropdown: EN, HE, FR, ES, AR; no sixth inheritance/custom choice or voice picker. Built-in adoption removes obsolete queue prompt references even when saving the current English choice without a change event. UI30215 and all42 editor tests71128 pass; wire null deletion markers persist as absent fields, media documents remain unchanged, and readiness includes42 callback assets plus15 transitional official prerequisites. Matching compiled UI deployment/browser acceptance and all-Gemini position coverage remain open; selection must ultimately govern every queue/callback response path. |
-| VOICE-07 | ACTIVE — immutable WAV generation | Generate missing fixed, numeric and auxiliary phrases once using Gemini, reusing valid existing Sulafat recordings. Produce PCM16 mono masters and telephony-rate WAVs; retain transcripts, language/voice/model provenance, hashes and duration/clipping checks. Cover agent-invalid_choice, menu-invalid_entry and cf-enter_number in all five languages, plus complete position/telephone numeric composition. No native robotic SAY or mixed-voice fallback in the finished standard pack. Never regenerate during install, account/sub-account creation, queue editing or calls. User reiterated this as the most important requirement on September 6: generate everything needed for THIS release now; ship it in Git and require no further Gemini usage or credential for the supported release. Missing artifacts must fail installation/readiness explicitly, never trigger online synthesis. Test installer/runtime paths with Gemini access unavailable and no provider key. |
-| VOICE-08 | OPEN — backend + build | Integrate the built-in pack in canonical tracked ACDC, not only a private patch or deployed BEAM. One queue-language value drives every prompt path and the persisted callback call context. Package WAVs, maps, import/readback logic, schema/UI changes and tests in kz5; repeated and standalone apps-node installation consumes those artifacts without a provider key. New accounts and sub-accounts use shared installed defaults automatically. |
+| VOICE-03 | DEPLOYED SHARED ARTIFACTS — broader language acceptance open | Shared fixed/cardinal packs are checked into kz5 and installed on .44 through the normal SH; retained runtime proof covers796 media documents and1,592 mappings. Main-host all-five callback success/retry passes; periodic offer/position validation is tracked in VOICE-MAIN44-SCHEDULE-01. Native listening, wider spoken numbers/wait-time/alternate-response call paths and explicit new-account/sub-account inheritance acceptance remain open. Never generate during installation, account creation, queue editing or calls. |
+| VOICE-04 | HISTORICAL AUTHORING AUTHORITY — no generation job active | September6 authorization allowed one-time authoring of missing release WAVs; those saved assets are now in the deployed fixed/cardinal packs. Reuse them without provider credentials. This row is not a request to regenerate completed clips or introduce runtime TTS. Native language review and remaining call-path gates are distinct from generation. |
+| VOICE-06 | DEPLOYED — five-choice browser PASS; save/inheritance gates open | Commit61bf505 introduced one Queue language dropdown and built-in adoption. Main-host deployed editor browser0b7f2c now proves exactly EN/HE/AR/FR/ES, no disabled or sixth option, successful local selection of each, and separate callback/position interval controls. Cancel returns with request counter0 and inactive top indicator; no page/HTTP errors. Network interception forbids copied-company writes during inspection. This is not save/reload, new-account/sub-account inheritance, every prompt branch or native pronunciation approval. Earlier UI30215/all42 editor tests71128 cover deletion/adoption; native callback playback and periodic clocks have separate receipts. |
+| VOICE-07 | DEPLOYED IMMUTABLE PACK — full linguistic/call-path gate open | Fixed/numeric/auxiliary release assets, PCM16 masters, telephony WAVs, transcripts, provenance and hashes are retained in Git. Normal .44 installer validates796 installed media documents; read-only native preparation10b220 reuses the installed/source-pinned packs with0 provider requests. Five-language callback success/retry is measured separately. Full natural-female-voice review, wider number/telephone composition, all auxiliary responses and wait-time audio remain unproven; no broad linguistic certification. No native robotic SAY or mixed-voice fallback may substitute for missing built-ins. Missing artifacts fail readiness/installation, never trigger online synthesis or require a provider key. Do not regenerate completed assets. |
+| VOICE-08 | DEPLOYED CANONICAL SOURCE — distributed/inheritance acceptance open | ACDC, prerecorded maps, shared WAVs, import/readback logic and installer wiring are tracked in kz5; .44 has no nested ACDC Git metadata. Normal apps/eCallMgr deployment and actual runtime media/map proof passed; all-five callback success tests retain the selected language. Explicit new-account/sub-account inheritance, every response path and separated apps-node installation remain required. A passing single-host install does not close distributed deployment or all language-context paths. |
 | VOICE-09 | OPEN — deployment acceptance; development deployment authorized | User confirmed September 6 this is a development environment with no active calls and explicitly authorized replacement/deployment as needed. Verify current call state before restart; preserve account data and rollback artifacts. Prove the selected queue uses the expected Gemini assets for position, independent callback interval, key-6 menu/success, invalid/alternate-number responses and returned-call confirmation in each language. Listen for natural female speech, correct words/numbers/language, no clipping or silence. Deploy matching source/backend/UI/assets through the installer. Imported files or successful TTS generation alone do not close this task. |
 | API-01 | VERIFIED — single-server scope | Supervision eavesdrop/whisper/barge/join and stop have prior isolated audio/auth tests and OpenAPI entries. Cross-node/failover/real-traffic acceptance remains OPEN. |
 | SUP-01 | OPEN — audio acceptance | Listen / silent monitor / spy uses action eavesdrop: supervisor hears both agent and customer; neither party hears supervisor. Whisper: supervisor hears the conversation and speaks only to the selected agent leg; customer must not hear supervisor. Barge-in: supervisor, agent and customer hear one another; join is the existing full-audio alias. Revalidate each directional audio matrix, target-leg selection and safe stop without ending the original call. Existing single-host evidence in API-01 does not close this release gate. |
@@ -1879,14 +1887,18 @@ verified; do not toggle global deletion settings to run a dashboard test.
 
 ## Work order and release rules
 
-1. P0-01/P0-03/P0-04 in parallel source work, with serialized resource-capped tests.
+1. Callbacks and the five built-in prerecorded language packs are first:
+   complete remaining announcement/response/language acceptance. Preserve
+   already verified main-host key6, retry and audio results; no runtime Gemini.
 2. P0 live acceptance without interrupting operator calls or changing rosters
    without an explicit selection; queue-login API and UI ship together.
 3. Correct production UI build and installer gates; matching deployment/browser
    checks; complete language handling without recurring TTS calls.
-4. Immediate dashboard priority: DASH-03/04/05 establish trustworthy live
-   data/events alongside DASH-01/02 UI work. Historical dashboards, separate
-   agent dashboard and workforce reporting are postponed for future ClickHouse
-   work; do not implement them or block live delivery on them.
-5. Clean/distributed installation, security, sustained load, restore/failover and
-   authenticated remote release. Document external blockers, not fictitious passes.
+4. Mobile bridge remains mandatory as an installable stack role, alongside
+   clean/distributed installation, security, sustained load, restore/failover
+   and authenticated release. The physical-phone push check was user-waived;
+   do not turn that waiver into a provider-delivery pass or waive other gates.
+5. Live queue summary/detail dashboards are the lowest priority, after the
+   callback/voice/installer/bridge work. Historical dashboards, separate agent
+   history and workforce reports remain postponed for future ClickHouse work.
+   Do not promote older dashboard-first plans over the operator's correction.

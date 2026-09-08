@@ -35,11 +35,22 @@ position-one acceptance remains a separate main-host gate; result/reference path
 execution. Protected index
 `/root/kazoo-prerecorded-reference.main44-cli.crP0f4Ny/index.json`, SHA256
 `62ba5a55668dd60a52a8f3470ffa2dc09fe314ac4e7a138228e66877172d887b`.
-This is reference preparation, not main-host periodic call acceptance. The
-preparation unit is terminal; do not poll old98305 as a live job. All native
-retry/preparation jobs recorded above have ended. Next: isolated periodic
-offer30/60s and full position-one45/75s call/audio checks, one locale at a time;
-see `doc/acdc_five_language_live_audio_acceptance.md`.
+Preparation alone is not call acceptance; the separate native all-five periodic
+tests have now passed. English48661/2cb3e8 and remaining-locale45450/07eef3 are
+terminal exit0. Exact callback offers30/60s and full position-one45/75s,
+no entry/extra speech, complete received audio, unchanged services, clean logs
+and conditional owned-fixture cleanup all pass. Independent4f7417 confirms
+zero calls, batch inactive/PID0 and all nine services enabled/active; all30
+fixture agents remain logged out7c439e without status writes.
+Expanded deployed-browser check0b7f2c proves exactly five enabled queue-language
+choices and separate interval controls, local selection/cancel only with
+copied-company writes blocked. Source test is retained for future runs.
+All retry/reference/periodic jobs are terminal; do not poll old observer IDs
+or start duplicates. Evidence and replay guidance:
+`doc/main44_periodic_audio_acceptance_20260908.md`.
+Remaining voice gates include native pronunciation review, wider number/wait
+playback, actual MOH, alternative response paths and save/inheritance checks;
+these are not marked complete by the measured position-one/offer/success tests.
 
 **Normal installer74822 and independent ALL64780 passed; no installer remains active.**
 Sourceec2ec69 build took12m3s, apps/eCallMgr restarted and selected roles verified.
@@ -64,7 +75,7 @@ with no status repair writes. Protected log
 This proves bounded30-call concurrency at2 starts/sec, not30/80CPS, long soak,
 failover or complete production readiness. Main-host callback retry portability
 and all-five acceptance subsequently passed above; periodic announcement timing
-remains open in VOICE-MAIN44-SCHEDULE-01 in `PROJECT_TASKS.md`.
+also passed within VOICE-MAIN44-SCHEDULE-01's explicit position-one/offer scope.
 No capacity job remains active.
 Full paths/evidence in `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
