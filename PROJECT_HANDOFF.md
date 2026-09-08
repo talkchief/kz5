@@ -1,5 +1,20 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Current capacity observer is10423, unit `kz5-capacity-agentdrain-20260908` on
+.44; pending, not passed.** Earlier runs31826 and93793 are terminal. The former
+exposed the fixture's 120s queue wait, incompatible with six-minute calls;
+owned-fixture provisioner23a265c now sets/verifies600s (live readback a0f19a).
+The latter completed the timed hold and caller drain but prematurely signaled
+two agents' final 500ms pauses. Pinned SIPp's SIGUSR1/call-limit interaction
+reproduces in real loopback test59701/b38b3c. Fix53ed7d8 waits for all completed
+agent counters before signaling idle listeners; real child failures still fail.
+The new run retains30+5 calls,180s hold and all RTP/log gates. Root log:
+`/root/kz5-acceptance/capacity-agentdrain-20260908.log`;1200s deadline.
+Do not start another test on an observation timeout. Main source now includes
+the separate capacity-only preflight scope a4c87f1, preserving ordinary callback
+fixture policies. All diagnostics and test evidence are in
+`doc/main44_call_acceptance_20260908.md`.
+
 **Main-host load update: 1/5/10/20 concurrent calls PASS; final 30+5 rerun
 pending.** Original staged run `11093/59ad9e` is terminal exit1. Its 30-agent
 stage used a 60-second arrival allowance for callers intentionally delayed

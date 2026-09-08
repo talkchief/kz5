@@ -106,6 +106,66 @@ Only the corrected final stage is rerunning, not the already passed smaller
 stages: unit `kz5-capacity-delayedfix-20260908`, observer session `31826`, log
 `/root/kz5-acceptance/capacity-delayedfix-20260908.log`, results under
 `/var/log/kazoo-acceptance/main44-capacity-delayedfix-20260908/`. Same memory,
-swap, CPU and task bounds; 1200-second deadline. This run is **pending**.
-Poll that same unit/session; do not restart on an SSH observation timeout or
-count launch as a passed 30-call test.
+swap, CPU and task bounds; 1200-second deadline. This run is **terminal exit1**
+(`31826/823714`): it reached all 35 answers but failed during the hold when
+queued callers received server BYEs. Live queue readback `20ca45` showed
+`connection_timeout: 120`. Caller 33 received an unexpected BYE 257 seconds
+after SIPp startup (`5e53ff`), consistent with its delayed arrival plus that
+120-second queue wait. Both the callflow wrapper and queue FSM enforce this
+configured timeout. The six-minute main conversations could not release agents
+before that two-minute queued-caller deadline. No core-service restarts occurred
+(`fb599f`); the test subsequently cleaned up to zero calls/PID0 (`f0d7ae`).
+
+Fixture fix `23a265c` provisions a 600-second wait for the **owned acceptance
+queue only**, not a change to production queue defaults. The actual stale
+fixture fails its new read-only preflight (`29802/0a7049`). Normal provisioner
+convergence `91419/1fa500` passes all resources and 30-agent logout/login/runtime
+checks; independent API readback `a0f19a` confirms 600 seconds. Typed policy,
+wrong identity and insufficient-timeout regressions pass `9f653d`.
+
+Follow-up `a4c87f1` confines the long-wait gate to explicit `--verify-capacity`
+and normal fixture provisioning. Stress/all modes call it before creating
+calls; ordinary status and callback tests may retain their own shorter waits.
+Actual dispatch regression `7463/4da657` covers both scopes, unchanged arrival/
+hold budgets and SIP control bindings. A separate stale offline cleanup test
+lacked the transport variable introduced by the earlier callback work. Its
+fixture now covers internal and external contact cleanup, retaining failure
+statuses: 8 groups pass `48094/e8ca8d`, along with 8 locale groups. Prior retry
+88 and exact fixture-cleanup 13 groups passed `3416/d0b95d`; the original missing
+variable failure is retained in that run, not presented as a runtime crash.
+
+The corrected queue-policy run started at source `23a265c` and is **terminal exit1**:
+unit `kz5-capacity-queuewait-20260908`, observer `93793`, log
+`/root/kz5-acceptance/capacity-queuewait-20260908.log`, results under
+`/var/log/kazoo-acceptance/main44-capacity-queuewait-20260908/`. Same 1536 MiB,
+no-swap, 200% CPU, 512-task and 1200-second bounds. It completed the timed
+concurrent hold and caller-side drain before failing in agent shutdown
+(`93793/79f613`). At the first drain readback `b4fd8a`, 30 caller/agent successes
+and five live agent calls were present, with no SIP failures. Final agent stats
+were 33 successes / 2 failures (`777bca`), so this is not an overall pass; RTP
+and final log assertions after shutdown were not reached.
+
+Agents 4 and 5 had both completed two INVITE/ACK/BYE/200 exchanges and were in
+their final 500 ms timewait when the harness sent SIGUSR1. Pinned SIPp sets
+`quitting=1` on reaching `-m`; its SIGUSR1 handler adds 10, and `quitting>=11`
+aborts outstanding tasks (`a64911`). That race counted the final pause as a
+failed call despite completed SIP teardown (`331bf7`). No timeout or unexpected
+SIP message counter was recorded on those two agents. Cleanup finished with
+PID0/inactive and zero native calls (`76fcfe`). Result directory:
+`/var/log/kazoo-acceptance/main44-capacity-queuewait-20260908/20260908T171607Z/`.
+
+Fix `53ed7d8` requires all expected successful agent completions and zero active
+agent calls before signaling remaining idle listeners. Missing counters, real
+failures, excess calls and nonzero child exit statuses still fail the gate;
+waiting has a 30-second bound. Actual helper regression `0202ba` passes.
+Real loopback-only SIPp regression `59701/b38b3c` reproduces the immediate-signal
+failure and verifies normal successful exit after the pause. No production
+service code, SIP/RTP scenario timing or concurrency requirement was changed.
+
+Current run is **pending**, started only after the previous unit became
+terminal: `kz5-capacity-agentdrain-20260908`, observer `10423`, protected log
+`/root/kz5-acceptance/capacity-agentdrain-20260908.log`, result root
+`/var/log/kazoo-acceptance/main44-capacity-agentdrain-20260908/`. Source
+`53ed7d8`, same 30+5 calls, 180-second hold and resource/deadline bounds. All
+earlier capacity units are terminal; poll this run and do not start duplicates.
+No overall capacity pass until its terminal hold/drain/RTP/log/cleanup evidence.

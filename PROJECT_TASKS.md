@@ -2,6 +2,16 @@
 
 ## Immediate operator follow-up — September8
 
+- **LOAD-01 CURRENT RUN10423 / AGENT-DRAIN FIX:** stages1/5/10/20 remain passed.
+  Later30+5 run93793 completed timed hold/caller drain but failed because the
+  harness signaled two agents' final post-BYE pauses. Native SIPp reproduction
+  and actual helper tests pass; source53ed7d8 waits for full agent completions.
+  Fixture wait was also corrected to600s via the normal owned provisioner,
+  with an explicitly scoped capacity preflight. Current unit:
+  `kz5-capacity-agentdrain-20260908`, session10423, pending. Earlier31826/93793
+  are terminal and cleaned up. Do not mark overall30-call acceptance complete
+  or launch duplicates. See `doc/main44_call_acceptance_20260908.md`.
+
 - **LOAD-01: 1/5/10/20 PASS; CORRECTED 30+5 RUN PENDING.** Original run11093
   ended exit1 after smaller stages passed clean SIP/RTP/log/idle checks. Final
   arrival allowance was shorter than its intentional queued-caller delay;
@@ -1784,7 +1794,7 @@ verified; do not toggle global deletion settings to run a dashboard test.
 | INST-12 | DEPLOYED — forced-build/source checks retained; atomicity open | Installer forces Erlang recompilation and selected number/MIME regeneration despite restored input mtimes or future-dated artifacts; content snapshots reject changed inputs/artifacts before same-invocation ecallmgr reuse. September6 Make/erlc fixtures remain valid evidence (doc/installer_build_identity.md). Full fresh23557/5db474 and repeated ALL48019/6236b8 builds now pass, including immutable prerecorded media and native runtime checks; deployment is no longer held by the earlier voice-build gate. Concurrent mutation/crash-atomic build/deploy snapshots and broader linguistic readiness remain separate unproven requirements. |
 | SEC-01 | DEPLOYED — original and .44 HTTPS/WSS PASS; renewal open | Original-host TLS90345/4232b3 and browser72297/af0738 pass. New .44 hostname kz5-dev.talkchief.io independently deployed50206/267490; ten catalog URLs migrated with CAS receipts; real normal-TLS browser90351/a3c1e3 and subsequent20021/2b3a50 pass HTTPS API/WSS and UI. Tests route that hostname to private .44 without bypassing certificate validation; public-IP certificate validity is not claimed. Renewal lifecycle remains unverified. See doc/dev44_https_acceptance_20260908.md. |
 | SEC-02 | OPEN — operations | Network exposure, least privilege, secrets, SELinux policy, auth/tenant isolation, audit logs, backups, retention, monitoring/alerts and resource/disk limits. Do not equate active services with enterprise certification. |
-| LOAD-01 | ACTIVE — .44 1/5/10/20 PASS, corrected 30+5 pending | Dedicated tenant stages pass SIP/RTP, agent idle, clean logs and core checks (dedfd3). First 30 stage hit a test deadline shorter than its intentional caller delay, not a demonstrated capacity failure; original run cleaned up. Source0433788 corrects only arrival allowance, preserves 180s simultaneous hold; final stage reruns in unit kz5-capacity-delayedfix-20260908/session31826. See doc/main44_call_acceptance_20260908.md. Full30 hold/drain still required; this is not CPS certification or old-host memory/AMQP incident closure. |
+| LOAD-01 | ACTIVE — .44 1/5/10/20 PASS, final30+5 run10423 pending | Smaller stages pass SIP/RTP, idle, clean logs/core checks. Corrected arrival allowance0433788 and owned queue600s wait23a265c let the next30+5 run complete timed hold/caller drain, but a SIPp final-pause shutdown race produced two agent failures. Fix53ed7d8 is reproduced/tested and the full final stage reruns in unit kz5-capacity-agentdrain-20260908/session10423. All previous units terminal/cleaned up. See doc/main44_call_acceptance_20260908.md. Final RTP/log/cleanup gates still required; no CPS certification or old-host incident closure. |
 | HA-01 | OPEN — acceptance | Backup/restore, failure injection, multi-node ownership, distributed queues/broker/database failover, reconnect and no duplicate callbacks/bridges. |
 | REL-01 | OPEN — release | Review and credential-scan all task changes, commit source/tests/assets/docs and record exact build/test evidence. Update this register rather than marking untested features done. |
 | REL-02 | ACTIVE — reviewed master checkpoints pushed; release pending | Protected GitHub authentication is verified. Latest prior checkpoint9288a780cd034373b1bcc2fb472fa5bd751b0d02 pushed to master and independently read back73e135; earlier b190ba7 and27e7c69 are also remote. Continue explicit reviewed staging, credential-free scans, commits and verified non-force master pushes. New dirty candidates are not automatically included or accepted. Full requested release remains open. Select provider-specific credentials from protected storage without printing/committing them; never reuse the exposed chat token. |
