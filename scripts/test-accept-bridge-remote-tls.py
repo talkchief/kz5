@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline remote-proof authority and TLS-failure classification tests."""
 import importlib.util
+import json
 from pathlib import Path
 import socket
 import ssl
@@ -35,6 +36,66 @@ class RemoteTests(unittest.TestCase):
     def test_exact_fixture(self):
         value = self.fixture()
         self.assertEqual(remote.validate_fixture(value), value)
+
+    def cleanup_settings(self):
+        prefix = 'remote-' + 'a'*32
+        return {'QUEUE': prefix + '.quorum-v1', 'EXCHANGE': prefix + '.pushes',
+                'AMQP_HOST': '10.1.0.44', 'AMQP_PORT': 35671, 'AMQP_VHOST': 'kz5-bridge-proof',
+                'AMQP_USER': 'kz5-bridge-proof', 'AMQP_TLS': 'true'}
+
+    def test_cleanup_exact_drained_fixture_and_native_delete_shape(self):
+        connection = MagicMock(); channel = connection.channel.return_value
+        channel.queue.declare.return_value = {'message_count': 0, 'consumer_count': 0}
+        channel.queue.delete.return_value = {'message_count': 0}
+        settings = self.cleanup_settings()
+        remote.cleanup_owned_resources(connection, settings)
+        self.assertEqual(channel.queue.delete.call_count, 2)
+        self.assertEqual(channel.queue.delete.call_args_list[0].kwargs, {'queue': settings['QUEUE']})
+        self.assertEqual(channel.queue.delete.call_args_list[1].kwargs, {'queue': settings['QUEUE'] + '.dlq'})
+        channel.close.assert_called_once()
+
+    def test_cleanup_unsafe_scope_never_connects(self):
+        for key, value in [('AMQP_HOST', '10.1.0.28'), ('AMQP_PORT', 5672), ('AMQP_VHOST', '/'),
+                           ('AMQP_USER', 'guest'), ('AMQP_TLS', 'false'), ('QUEUE', 'customer'),
+                           ('EXCHANGE', 'other')]:
+            connection = MagicMock()
+            with self.assertRaises(ValueError):
+                remote.cleanup_owned_resources(connection, dict(self.cleanup_settings(), **{key: value}))
+            connection.channel.assert_not_called()
+
+    def test_cleanup_never_deletes_nonempty_or_active_or_unknown_queue(self):
+        for observed in [{'message_count': 1, 'consumer_count': 0}, {'message_count': 0, 'consumer_count': 1},
+                         {'message_count': False, 'consumer_count': 0}, {'message_count': 0}]:
+            connection = MagicMock(); channel = connection.channel.return_value
+            channel.queue.declare.return_value = observed
+            with self.assertRaises(ValueError): remote.cleanup_owned_resources(connection, self.cleanup_settings())
+            channel.queue.delete.assert_not_called(); channel.exchange.delete.assert_not_called()
+
+    def test_cleanup_refuses_unexpected_deleted_count(self):
+        connection = MagicMock(); channel = connection.channel.return_value
+        channel.queue.declare.return_value = {'message_count': 0, 'consumer_count': 0}
+        channel.queue.delete.return_value = {'message_count': 1}
+        with self.assertRaises(ValueError): remote.cleanup_owned_resources(connection, self.cleanup_settings())
+        channel.exchange.delete.assert_not_called()
+
+    def test_management_identity_requires_cluster_and_node(self):
+        settings = {'AMQP_USER': 'synthetic', 'AMQP_PASS': 'synthetic', 'AMQP_MANAGEMENT_CA_FILE': 'ca.pem'}
+        for cluster, node, valid in [('rabbit_kz5_bridgeproof@dev-testing', 'rabbit_kz5_bridgeproof@localhost', True),
+                                     ('rabbit@dev-testing', 'rabbit@dev-testing', False),
+                                     ('rabbit_kz5_bridgeproof@dev-testing', 'rabbit@localhost', False),
+                                     ('rabbit_kz5_bridgeproof@localhost', 'rabbit_kz5_bridgeproof@localhost', False)]:
+            with patch('requests.Session') as factory:
+                session = factory.return_value.__enter__.return_value
+                response = session.get.return_value.__enter__.return_value
+                response.status_code = 200
+                response.iter_content.return_value = [json.dumps({'cluster_name': cluster, 'node': node}).encode()]
+                if valid: remote.check_broker_identity(settings)
+                else:
+                    with self.assertRaises(ValueError): remote.check_broker_identity(settings)
+                self.assertFalse(session.trust_env)
+                self.assertEqual(session.get.call_args.args, ('https://10.1.0.44:35672/api/overview',))
+                self.assertFalse(session.get.call_args.kwargs['allow_redirects'])
+                self.assertEqual(session.get.call_args.kwargs['verify'], 'ca.pem')
 
     def test_foreign_or_ambiguous_fixture_before_network(self):
         with patch.object(remote.socket, 'create_connection') as network:

@@ -80,8 +80,38 @@ def check_broker_identity(settings):
                 body.extend(chunk)
                 if len(body) > 131072: raise ValueError('broker_identity_too_large')
             value = json.loads(body, object_pairs_hook=unique_object)
-            if value.get('cluster_name') != 'rabbit_kz5_bridgeproof@localhost':
+            # RabbitMQ's default display cluster name uses the OS hostname;
+            # the Erlang node retains its explicitly configured localhost name.
+            if (value.get('cluster_name') != 'rabbit_kz5_bridgeproof@dev-testing'
+                    or value.get('node') != 'rabbit_kz5_bridgeproof@localhost'):
                 raise ValueError('wrong_broker_cluster')
+
+
+def cleanup_owned_resources(connection, settings):
+    # RabbitMQ3.13 quorum queues reject if-unused/if-empty delete flags (the
+    # whole AMQP connection closes). This is NOT a general queue cleanup tool:
+    # only this fixed isolated instance and fresh UUID-local fixture are in
+    # scope, after its sole producer/consumer have stopped. Read both queues
+    # before any deletion and require the broker to report zero deleted bodies.
+    queue, exchange = settings.get('QUEUE', ''), settings.get('EXCHANGE', '')
+    match = re.fullmatch(r'(remote-[0-9a-f]{32})\.quorum-v1', queue)
+    if (not match or exchange != match[1] + '.pushes' or settings.get('AMQP_HOST') != HOST
+            or settings.get('AMQP_PORT') != 35671 or settings.get('AMQP_VHOST') != IDENTITY
+            or settings.get('AMQP_USER') != IDENTITY or settings.get('AMQP_TLS') != 'true'):
+        raise ValueError('cleanup_scope_refused')
+    channel = connection.channel()
+    for name in (queue, queue + '.dlq'):
+        observed = channel.queue.declare(queue=name, passive=True)
+        if any(type(observed.get(field)) is not int or observed[field] != 0
+               for field in ('message_count', 'consumer_count')):
+            raise ValueError('cleanup_not_drained')
+    for name in (queue, queue + '.dlq'):
+        deleted = channel.queue.delete(queue=name)
+        if type(deleted.get('message_count')) is not int or deleted['message_count'] != 0:
+            raise ValueError('cleanup_deleted_messages')
+    for name in (queue + '.dlx', exchange):
+        channel.exchange.delete(exchange=name, if_unused=True)
+    channel.close()
 
 
 def main():
@@ -140,14 +170,7 @@ def main():
                                         verify_topology, receipt)
         driver.run()
         receipt['checks'].append('native_consumer_retry_over_remote_amqps_and_https_topology')
-        # ConsumerProof has closed its consumer and verified both queues empty.
-        # Delete only this run's exact newly generated, unused empty resources.
-        channel = connection.channel()
-        for queue in (driver.wanted.work_queue, driver.wanted.dead_queue):
-            channel.queue.delete(queue=queue, if_unused=True, if_empty=True)
-        for exchange in (driver.wanted.dead_exchange, settings['EXCHANGE']):
-            channel.exchange.delete(exchange=exchange, if_unused=True)
-        channel.close()
+        cleanup_owned_resources(connection, settings)
         receipt['isolated_queue_resources_removed'] = True
         receipt['complete'] = True
     except Exception as error:

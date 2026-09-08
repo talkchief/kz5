@@ -2,6 +2,17 @@
 
 ## Immediate operator follow-up — September8
 
+- **BRIDGE-REMOTE-01 NATIVE REMOTE TLS/CONSUMER PASS:** actual .26 client to
+  isolated native .44 RabbitMQ6035/ef7ad0 passes TLS1.3, certificate negative
+  cases, authenticated HTTPS exact-broker checks, registered consumer,503→200
+  retry/companion progress and three-attempt exhaustion/DLQ readback. No provider
+  constructors/requests, production routing or main broker changes. Source
+  pins stable; passing run's empty UUID resources removed. Temporary broker
+  stoppedab490b; main RabbitPID2355/restarts0 and all nine services unchanged.
+  Receipts preserved on .44 under `/root/kz5-acceptance/bridge-remote-tls/`.
+  Normal installed-service remote topology and outage/reconnect remain open;
+  this runtime acceptance does not close all INST-13 gates. Details and failed
+  setup/identity/cleanup attempts: `doc/push_bridge_remote_tls_acceptance_20260908.md`.
 - **REL-GATES-01 CURRENT VERIFIER PASS / TRACKER RECONCILED:** independent
   .44 normal `--verify-only ALL`66591/18787a passed in1m40.208s, peak293.1MiB,
   without deploying/restarting services. Datastore/broker, apps/SUP/auth/APIs,
@@ -1680,7 +1691,7 @@ verified; do not toggle global deletion settings to run a dashboard test.
 
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
-| INST-13 | PASS — fresh/repeat/reboot installation and scoped retry; remote/recovery gates open | Main SH supports push-bridge/aliases/ALL. Fresh .44 install71358/87daf7 and independent9339/0454fe pass, followed by normal ALL48019/6236b8 and post-reboot ALL76710/8722b4. Protected external provider files, hash-locked dependencies, non-root service and registered consumer are verified. Actual isolated consumer retry83390/9d4620 and unavailable-DLQ-route retention52763/f08152 pass; these are synthetic provider outcomes, not phone delivery. Physical FCM/APNs delivery test is explicitly WAIVED by user, not failed/passed or still awaiting a device. Real remote AMQPS, broker/process failure recovery, filled-DLQ behavior and production routing remain open. Status78 fail-stopped behavior is not automatic recovery. See doc/focused_acceptance_20260908.md and doc/fresh_host_tls_acceptance_20260908.md. |
+| INST-13 | PASS — fresh/repeat/reboot and native remote TLS consumer; service/recovery gates open | Main SH supports push-bridge/aliases/ALL. Fresh .44 install71358/87daf7 and independent9339/0454fe pass, followed by normal ALL48019/6236b8 and post-reboot ALL76710/8722b4. Protected external provider files, hash-locked dependencies, non-root service and registered consumer are verified. Actual isolated consumer retry83390/9d4620, unavailable-DLQ-route retention52763/f08152 and separate-host native AMQPS/HTTPS consumer6035/ef7ad0 pass with synthetic provider outcomes. Physical FCM/APNs delivery is user-WAIVED, not passed or awaiting a device. Normal installed-service remote TLS deployment, broker/process failure recovery, filled-DLQ behavior and production routing remain open. Status78 fail-stopped behavior is not automatic recovery. See doc/push_bridge_remote_tls_acceptance_20260908.md, focused acceptance and fresh-host reports. |
 | INST-01 | PASS — measured fresh/repeat/reboot scope | One modular main SH supports all nine roles including bridge and ALL. Normal fresh roles, repeated normal ALL48019/6236b8 and post-reboot independent ALL76710/8722b4 pass, with source fixes for restrictive umask, dependencies, readiness, standalone catalog routing and delayed IP assignment. See doc/fresh_host_tls_acceptance_20260908.md. Arbitrary topology, HA and production capacity are not certified. |
 | INST-02 | VERIFIED — current/fresh/reboot scope | All nine named services enabled/active, zero automatic restarts after second fresh reboot (a833e2); `kazoo-applications` alias and SUP pass. Pivot port reservation and previous test-phone preservation fixes retained. Custom-root and remaining topology variations are separate acceptance. |
 | INST-03 | VERIFIED — fresh and current SIP integration | Fresh normal FreeSWITCH/Kamailio62607/2c4b73 passes SIP OPTIONS, eCallMgr link, dispatcher, exact AMQP endpoint/consumer queues, module inventory, database/RPC and JWT-cache/journal checks. Combined fresh66513/f83cde, post-reboot76710/8722b4 and current66591/18787a ALL verification have finished successfully, not still running. No live-call/capacity claim from these probes. |

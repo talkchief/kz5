@@ -1,5 +1,14 @@
 # Kazoo 5 — start here / engineering handoff
 
+Latest bridge gate: actual cross-host native AMQPS/HTTPS consumer6035/ef7ad0
+passes TLS trust/hostname negatives, counted retry/companion progress and
+three-attempt exhaustion/DLQ with synthetic providers only. Temporary broker
+on .44 is stopped, main RabbitMQ PID2355/restarts0 and all nine services remain
+unchanged. Code/receipts retained on the main dev host. Normal installed-service
+remote-broker deployment and outage/reconnect are still open, not covered by
+this harness. See `doc/push_bridge_remote_tls_acceptance_20260908.md` and
+BRIDGE-REMOTE-01 before reusing its fixed, short-lived test fixture.
+
 **Latest operator follow-up:** original server will be deleted; keep current
 source and remaining work at `/opt/kz5` on10.1.0.44. Thin top loading line is a
 separate reproduced bug, now fixed: global counter underflowed to-1 in SmartPBX and ACDC;
