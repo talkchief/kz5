@@ -353,6 +353,46 @@ Private evidence:
 
 ## Deployment decision and recovery boundaries
 
+### Follow-up: native refresh write decomposition
+
+After the separate main-UI inspection copy was completed, lab-only native
+diagnostic8037/36fadb ran `company-compat-rpc.escript audit-refresh-writes`.
+It confirmed:
+
+- Static `kz_datamgr:refresh_views/1` removes the generated
+  `_design/numbers.views.reconcile_services` definition. The intermediate
+  document content and revision both differ from the starting document.
+- Native `kazoo_numbers_maintenance:update_number_services_view/1` restores
+  the generated map/reduce. Final content is exactly equal to the initial
+  content, but its revision differs.
+- Native `kapps_maintenance:ensure_aggregate_account/1` leaves the synthetic
+  aggregate account content equal while advancing its revision.
+
+The helper restores the generated view in an `after` block if intermediate
+inspection fails, then verifies map/reduce presence and whole-document equality
+excluding revision. It fails closed on unexpected restore/readback results. The
+native updater's unchanged branch returns `no_return`; its updating branch
+actually returns `ok` from logging, despite the narrower source specification.
+Both recognized results still require independent readback.
+
+Offline `test-company-compat-refresh-audit.py` passed94834/382d12: seven actual
+workflow fixtures cover successful update/no-op, failed refresh with restoration,
+failed restore, wrong restored content, missing restored view, and wrong scope.
+Six return-classifier cases and host-namespace refusal also pass. Actual native
+execution completed in512ms, reported `generated_view_restored=true`, and did not
+touch main .44 or production databases. This duration is the entire diagnostic,
+**not** a measurement of the missing-view window or an actual Kazoo4 call outage.
+
+This distinguishes two concerns previously hidden by equal final hashes:
+avoidable write/index/replication work and an intermediate missing generated
+view. No production-compatible core change has been inferred or deployed from
+this observation. The exact deployed Kazoo4 callers/version and concurrent
+request behavior remain unverified. The diagnostic occurred after the main-UI
+copy's source-unchanged check; its subsequent lab revision changes do not undo
+that earlier point-in-time copy verification. Baselines remain separate.
+
+### Recommended isolation
+
 Keep Kazoo5 on separate CouchDB storage/credentials and separate broker/event
 infrastructure while production Kazoo4 owns the production company. An Erlang
 zone name alone cannot isolate shared document writes, design definitions or

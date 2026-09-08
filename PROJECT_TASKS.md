@@ -52,9 +52,12 @@
   `/root/key.key` is not present there: future GitHub write credentials must be
   provisioned securely if the original host is removed. Do not copy mixed
   provider/production secrets indiscriminately into the repo or handoff.
-- Compatibility refresh-write diagnostic is paused for these operator issues.
-  Its source and offline RPC fixture tests pass94834/382d12; native execution
-  is not yet performed. No additional lab/production writes occurred.
+- Compatibility refresh-write diagnostic has now run in the lab only,
+  8037/36fadb: static refresh removes the generated number-service view, native
+  updater restores exactly equal final content with a new revision, and aggregate
+  account content stays equal while its revision advances. Offline workflow,
+  return-shape and namespace tests pass94834/382d12. View restoration verified;
+  no main/production writes by this diagnostic. See COMPAT-01 findings.
 
 ## Primary development host — September8 operator decision
 
@@ -165,6 +168,13 @@ account revisions still advance. See findings for the fixed lab override path,
 upgrade precautions, private evidence and deployment/recovery boundaries. Main
 stack binaries/services were not changed by this compatibility-lab fix; future
 normal module compilation receives the required tracked patch.
+
+Native write-decomposition8037/36fadb now confirms the static/generated numbers
+view replacement window and aggregate-account revision churn described in the
+findings. Final generated view restored and content equality verified. This is
+not a measured Kazoo4 call outage or production-compatible fix. Exact Kazoo4
+application host/release was requested again for the remaining runtime contract
+checks; company-only inspection copy in main .44 is separately documented above.
 
 ## Fresh-server and TLS continuation — 2026-09-08
 

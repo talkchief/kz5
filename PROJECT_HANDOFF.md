@@ -20,6 +20,14 @@ Original lab source and baselines are unchanged. See
 `doc/dev44_company_visible_copy_20260908.md` for transformations, private receipts,
 reusable browser acceptance and next-step boundaries.
 
+Latest COMPAT-01 evidence: native lab-only write audit8037/36fadb confirms an
+intermediate missing generated number-service view, restored to equal final
+content with advanced revision, plus aggregate-account revision churn. Source
+helper/tests are already in Git; generated-view restoration is verified. Do not
+interpret equal final hashes as write-free maintenance. Exact production Kazoo4
+application host/version is still needed; production remains read-only and the
+shared-writable-database recommendation remains NO-GO.
+
 **Primary Kazoo5 development host: `10.1.0.44`**, designated by the user on
 September8. Keep its installed stack and `/opt/kz5` checkout for future work.
 Canonical Git remote remains `https://github.com/talkchief/kz5.git`, branch

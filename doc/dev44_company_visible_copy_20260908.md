@@ -113,8 +113,13 @@ publication in13.1 seconds. Native scoped refresh45388/ca3b54 returnsok. Its six
 values, not `undef` exceptions; no error/failed/conflict/timeout markers found.
 
 Post-import source verificationd54b2d proves the entire lab working account
-document hash is unchanged:
+document hash was unchanged at completion of the import:
 `7c6258ac1afd10a6f4bb9e24c6f2f69f78417105c3dbdbcf5d9e7915c3f11af1`.
+The later, separate COMPAT-01 write-decomposition diagnostic8037 advances lab
+working revisions while restoring equal content; it must not be confused with
+a mutation caused by this GET-only copy preparation. The frozen source hash in
+the plan is a point-in-time record, not an assertion that future lab work cannot
+change working revisions.
 Main account and aggregate readbacks confirm disabled status, development realm,
 parent tree and ownership. Actual Chromium81140/36603d selects the visible
 account, verifies four queues, and loads SmartPBX/ACDC with no request/page errors
