@@ -1,5 +1,13 @@
 # Kazoo 5 project task register
 
+## Queued after current finalization — Kazoo 4/5 CouchDB coexistence assessment
+
+| ID | Status | Requirement / acceptance |
+| --- | --- | --- |
+| COMPAT-01 | QUEUED — after current installer/reboot finalization | Assess whether an isolated Kazoo5 zone can safely coexist with existing Kazoo4 infrastructure without incompatible shared CouchDB writes. Authorized production read source:10.1.0.10, company/account d8520ce3f29c5b6db692289e782c92af. Use existing protected SSH credentials and separately supplied CouchDB administrator credentials; never put secrets or customer records in Git/log output. Inventory and copy only databases belonging to this exact account, including its account database and any account-scoped MODB/ACDC data actually present. Keep production strictly read-only; do not refresh views, migrate, write, restart, replicate back, or connect development Kazoo5 to production brokers/databases. Restore to an isolated development CouchDB instance or collision-safe namespace, not over active development data. Record snapshot consistency/update sequences and protected backup locations. Capture before/after documents, design documents, view/index definitions, schema/type/version fields and relevant migrations, then exercise normal Kazoo5 maintenance and representative account/queue/device/callflow API operations against the copy. Compare with the current production Kazoo4 source/runtime contract and, where available, an isolated Kazoo4 runtime using the changed copy. Identify shared system/config/design-document effects separately; copying or mutating global production databases is not authorized by this account-scoped task. Produce a clear compatibility report with exact changes, breaking/unknown cases, required isolation boundaries, recovery plan and a GO/NO-GO recommendation. A passing account-only test is not proof of whole-cluster coexistence; unresolved global effects must remain explicit. |
+
+Detailed assessment plan: [Kazoo4/5 CouchDB coexistence](doc/kazoo4_kazoo5_couchdb_coexistence_plan.md).
+
 ## Fresh-server and TLS continuation — 2026-09-08
 
 - Physical FCM/APNs testing: **WAIVED / closed by user**, not a delivery pass.

@@ -1,5 +1,12 @@
 # Kazoo 5 — start here / engineering handoff
 
+Queued next after current finalization: `COMPAT-01`, read-only snapshot of
+company `d8520ce3f29c5b6db692289e782c92af` from production CouchDB `10.1.0.10`
+into isolated development storage, then assess Kazoo5 writes/migrations against
+Kazoo4 compatibility. No production access/copy performed yet. See
+[assessment plan](doc/kazoo4_kazoo5_couchdb_coexistence_plan.md); never point the
+development apps at production dependencies or put credentials/backups in Git.
+
 Latest continuation: [fresh-host/TLS acceptance](doc/fresh_host_tls_acceptance_20260908.md).
 Physical mobile delivery testing was waived by the user. HTTPS is deployed and
 browser transport checks pass. Fresh data services and separate UI on 10.1.0.44
