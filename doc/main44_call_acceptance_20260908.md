@@ -162,10 +162,30 @@ Real loopback-only SIPp regression `59701/b38b3c` reproduces the immediate-signa
 failure and verifies normal successful exit after the pause. No production
 service code, SIP/RTP scenario timing or concurrency requirement was changed.
 
-Current run is **pending**, started only after the previous unit became
+The final run is **terminal, log gate failed**, started only after the previous unit became
 terminal: `kz5-capacity-agentdrain-20260908`, observer `10423`, protected log
 `/root/kz5-acceptance/capacity-agentdrain-20260908.log`, result root
 `/var/log/kazoo-acceptance/main44-capacity-agentdrain-20260908/`. Source
 `53ed7d8`, same 30+5 calls, 180-second hold and resource/deadline bounds. All
-earlier capacity units are terminal; poll this run and do not start duplicates.
-No overall capacity pass until its terminal hold/drain/RTP/log/cleanup evidence.
+capacity units are terminal; do not poll old observers or start duplicates.
+
+Readback `fcea07` records35 caller successes/0 failures and35 agent successes/0
+failures, verified concurrent hold180s, peak sampled whole-host CPU31%, minimum
+available memory20497424KiB, zero journal errors and zero new cores. All30 agent
+RTP endpoint assertions passed; aggregate caller packets632513 incoming/629973
+outgoing (`90ddbd`). Result directory is `20260908T173035Z`. Final file-log gate
+found8 errors, so this is **not an overall acceptance pass**. Cleanup readback
+`d4a12e` confirms zero FreeSWITCH calls; unit inactive/PID0. All nine services
+enabled/active independently confirmed `a4fd9c`.
+
+Diagnostic `93b923` identifies the8 lines at17:37:30–17:37:51, overlapping the
+private HTTPS browser check: seven `undef` reports for
+`cb_apps_store:content_types_provided/1`, `cb_vmboxes:content_types_provided/1,2`
+and `cb_directories:content_types_provided/1`; one `cb_apps_util` error fetching
+the imported company's absent apps-store document. Source inspection confirms
+those callback arities are absent. The browser succeeded using fallback paths,
+but this does not make server-side error logging acceptable. Next: add explicit
+default content-type handlers where appropriate, cover missing optional
+apps-store handling without masking real datastore errors, then rebuild/deploy
+and repeat combined UI/log and capacity acceptance. Do not weaken the matcher
+or claim the errors prove a SIP failure; the measured SIP counters are above.

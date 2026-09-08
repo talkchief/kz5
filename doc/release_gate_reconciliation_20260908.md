@@ -56,8 +56,14 @@ Mocked/offline fixtures remain useful regressions but cannot close these rows.
 
 ## Other mandatory release gates still open
 
-- Sustained30 concurrent calls followed by complete drain and log/resource
-  checks. This is not30 calls/second and does not certify80 CPS.
+- The30-call/180s hold,35-call drain and RTP checks now pass in run10423, but
+  eight Crossbar/application error lines during overlapping browser activity
+  fail its final clean-log gate. Fix and revalidate; see
+  `main44_call_acceptance_20260908.md`. This is not30 calls/second or80 CPS.
+- Public-IP HTTPS from the original host currently times out, including a
+  no-proxy probe (`c431d2`); private-route HTTPS browser acceptance passes.
+  Determine path/provider filtering or intended source restrictions before
+  declaring public reachability. No firewall policy was changed.
 - Broker/node failure, backup/restore, multi-node ownership and duplicate-call
   prevention under recovery. Previously tested isolated retries and restored
   DLQ routing do not establish all failure cases.

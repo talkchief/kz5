@@ -2,37 +2,35 @@
 
 ## Immediate operator follow-up — September8
 
-- **LOAD-01 CURRENT RUN10423 / AGENT-DRAIN FIX:** stages1/5/10/20 remain passed.
-  Later30+5 run93793 completed timed hold/caller drain but failed because the
-  harness signaled two agents' final post-BYE pauses. Native SIPp reproduction
-  and actual helper tests pass; source53ed7d8 waits for full agent completions.
-  Fixture wait was also corrected to600s via the normal owned provisioner,
-  with an explicitly scoped capacity preflight. Current unit:
-  `kz5-capacity-agentdrain-20260908`, session10423, pending. Earlier31826/93793
-  are terminal and cleaned up. Do not mark overall30-call acceptance complete
-  or launch duplicates. See `doc/main44_call_acceptance_20260908.md`.
+- **LOAD-01 TERMINAL10423 / LOG GATE OPEN:** 30+5 calls completed with35/0
+  caller and35/0 agent successes/failures,180s concurrent hold, RTP and ready
+  checks passed. Final gate failed on eight application error lines during
+  overlapping browser acceptance. Seven are missing Crossbar content-type
+  callback arities; one is missing apps-store doc handling for the imported
+  company. Fix and regression-test those source paths before revalidation;
+  do not hide the errors or mark the whole run passed. Unit is inactive/PID0,
+  zero calls and all nine services enabled/active. No capacity job remains.
+  See `doc/main44_call_acceptance_20260908.md`.
 
-- **LOAD-01: 1/5/10/20 PASS; CORRECTED 30+5 RUN PENDING.** Original run11093
-  ended exit1 after smaller stages passed clean SIP/RTP/log/idle checks. Final
-  arrival allowance was shorter than its intentional queued-caller delay;
-  fixed `0433788` keeps the full 180-second simultaneous hold. Original run
-  cleaned up to zero calls and PID0. Current unit is
-  `kz5-capacity-delayedfix-20260908`, session31826; monitor it, not old11093.
-  Details/receipts: `doc/main44_call_acceptance_20260908.md`. No 30-call pass yet.
+- **DEV-HTTPS-PATH-01 OPEN:** source-host public-IP HTTPS probe to46.225.31.248
+  times out, including explicit no-proxy curl; private HTTPS browser works.
+  Prior destination capture saw no incoming SYN. Check route/provider filtering
+  or intentional source restrictions; do not infer universal public outage or
+  change firewall policy without establishing the intended exposure.
+
 - **HANDOFF CALLBACK EVIDENCE PRESERVED:** five original language runs are now
   archived root-only on .44; matching SHA/readback a8b60d and paths recorded in
   `doc/focused_acceptance_20260908.md`. P0-10/VOICE-05/INST-13 rows reconciled
   with later live evidence, retaining the narrower untested gates explicitly.
 
-- **CALL-MAIN44-01 FUNCTIONAL PASS / LOAD-01 RUNNING:** `.44` actual functional
+- **CALL-MAIN44-01 FUNCTIONAL PASS:** `.44` actual functional
   SIP/RTP run `91284/2464e2` passes queue wait, answer/bridge, RTP, hangup/ready
   and clean logs/core gate. Source fixes `5167a32` and `ae87595` are pushed and
   synced: exact pinned SIPp tag, all-fixture logout isolation, explicit negative
   REGISTER outcome without spurious BYE. Offline real-SIPp rejection cases pass.
-  Zero calls after cleanup. The staged capacity job is pending (unit
-  `kz5-capacity-stages-20260908`, session `11093`); do not claim 30-call capacity
-  until its simultaneous hold/drain/RTP/log evidence passes. Protected paths
-  and first failed run are in `doc/main44_call_acceptance_20260908.md`.
+  Zero calls after cleanup. Current capacity status is the first LOAD-01 entry;
+  older observer handles are historical, not running jobs. Protected paths and
+  failed runs remain in `doc/main44_call_acceptance_20260908.md`.
 
 - **DEV-SOURCE-01 / UI-PROGRESS-01 REVERIFIED:** main dev `/opt/kz5` and GitHub
   master match `557505a` before this documentation checkpoint (`383cbf`). Actual
@@ -1794,7 +1792,7 @@ verified; do not toggle global deletion settings to run a dashboard test.
 | INST-12 | DEPLOYED — forced-build/source checks retained; atomicity open | Installer forces Erlang recompilation and selected number/MIME regeneration despite restored input mtimes or future-dated artifacts; content snapshots reject changed inputs/artifacts before same-invocation ecallmgr reuse. September6 Make/erlc fixtures remain valid evidence (doc/installer_build_identity.md). Full fresh23557/5db474 and repeated ALL48019/6236b8 builds now pass, including immutable prerecorded media and native runtime checks; deployment is no longer held by the earlier voice-build gate. Concurrent mutation/crash-atomic build/deploy snapshots and broader linguistic readiness remain separate unproven requirements. |
 | SEC-01 | DEPLOYED — original and .44 HTTPS/WSS PASS; renewal open | Original-host TLS90345/4232b3 and browser72297/af0738 pass. New .44 hostname kz5-dev.talkchief.io independently deployed50206/267490; ten catalog URLs migrated with CAS receipts; real normal-TLS browser90351/a3c1e3 and subsequent20021/2b3a50 pass HTTPS API/WSS and UI. Tests route that hostname to private .44 without bypassing certificate validation; public-IP certificate validity is not claimed. Renewal lifecycle remains unverified. See doc/dev44_https_acceptance_20260908.md. |
 | SEC-02 | OPEN — operations | Network exposure, least privilege, secrets, SELinux policy, auth/tenant isolation, audit logs, backups, retention, monitoring/alerts and resource/disk limits. Do not equate active services with enterprise certification. |
-| LOAD-01 | ACTIVE — .44 1/5/10/20 PASS, final30+5 run10423 pending | Smaller stages pass SIP/RTP, idle, clean logs/core checks. Corrected arrival allowance0433788 and owned queue600s wait23a265c let the next30+5 run complete timed hold/caller drain, but a SIPp final-pause shutdown race produced two agent failures. Fix53ed7d8 is reproduced/tested and the full final stage reruns in unit kz5-capacity-agentdrain-20260908/session10423. All previous units terminal/cleaned up. See doc/main44_call_acceptance_20260908.md. Final RTP/log/cleanup gates still required; no CPS certification or old-host incident closure. |
+| LOAD-01 | ACTIVE — .44 1/5/10/20 PASS;30+5 call/RTP pass, log gate failed | Run10423 terminal:35/0 caller and35/0 agent counters,180s hold, bidirectional RTP, ready checks and0 new cores. Eight fresh file-log errors during overlapping browser acceptance keep overall acceptance failed. Fix Crossbar content-type callback arities and imported apps-store missing-document handling, then revalidate. Zero calls/unit PID0 and nine enabled/active services confirmed. See doc/main44_call_acceptance_20260908.md. No CPS certification or old-host incident closure. |
 | HA-01 | OPEN — acceptance | Backup/restore, failure injection, multi-node ownership, distributed queues/broker/database failover, reconnect and no duplicate callbacks/bridges. |
 | REL-01 | OPEN — release | Review and credential-scan all task changes, commit source/tests/assets/docs and record exact build/test evidence. Update this register rather than marking untested features done. |
 | REL-02 | ACTIVE — reviewed master checkpoints pushed; release pending | Protected GitHub authentication is verified. Latest prior checkpoint9288a780cd034373b1bcc2fb472fa5bd751b0d02 pushed to master and independently read back73e135; earlier b190ba7 and27e7c69 are also remote. Continue explicit reviewed staging, credential-free scans, commits and verified non-force master pushes. New dirty candidates are not automatically included or accepted. Full requested release remains open. Select provider-specific credentials from protected storage without printing/committing them; never reuse the exposed chat token. |

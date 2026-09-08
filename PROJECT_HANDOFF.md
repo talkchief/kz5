@@ -1,31 +1,32 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Current capacity observer is10423, unit `kz5-capacity-agentdrain-20260908` on
-.44; pending, not passed.** Earlier runs31826 and93793 are terminal. The former
+**Capacity run10423 is terminal, not passed:** all35 caller and agent calls
+succeeded, the30-call hold lasted180 seconds, and RTP/agent-ready checks passed.
+The final gate found eight application log errors; investigation identifies
+seven missing Crossbar content-type callback arities and one missing imported
+account apps-store document during the overlapping UI check. These are still
+open source/data-handling issues, not grounds to waive the log gate. Zero calls,
+unit PID0 and all nine enabled/active services were independently confirmed.
+See `doc/main44_call_acceptance_20260908.md`. Do not poll old handles or start
+another load run before addressing the findings.
+
+Earlier runs31826 and93793 are terminal. The former
 exposed the fixture's 120s queue wait, incompatible with six-minute calls;
 owned-fixture provisioner23a265c now sets/verifies600s (live readback a0f19a).
 The latter completed the timed hold and caller drain but prematurely signaled
 two agents' final 500ms pauses. Pinned SIPp's SIGUSR1/call-limit interaction
 reproduces in real loopback test59701/b38b3c. Fix53ed7d8 waits for all completed
 agent counters before signaling idle listeners; real child failures still fail.
-The new run retains30+5 calls,180s hold and all RTP/log gates. Root log:
+The latest run retained30+5 calls,180s hold and all RTP/log gates. Root log:
 `/root/kz5-acceptance/capacity-agentdrain-20260908.log`;1200s deadline.
-Do not start another test on an observation timeout. Main source now includes
+Main source includes
 the separate capacity-only preflight scope a4c87f1, preserving ordinary callback
 fixture policies. All diagnostics and test evidence are in
 `doc/main44_call_acceptance_20260908.md`.
 
-**Main-host load update: 1/5/10/20 concurrent calls PASS; final 30+5 rerun
-pending.** Original staged run `11093/59ad9e` is terminal exit1. Its 30-agent
-stage used a 60-second arrival allowance for callers intentionally delayed
-120 seconds. Fixed in `0433788` without reducing the 180-second simultaneous
-hold; regressions pass. Original cleanup finished, zero calls/PID0 (`719c6f`).
-Now monitor ONLY unit `kz5-capacity-delayedfix-20260908`, observer `31826`, log
-`/root/kz5-acceptance/capacity-delayedfix-20260908.log` on .44. It reruns the
-final 30-agent/five-queued stage, with a 1200-second deadline. Do not launch
-another or claim capacity until its hold/drain/RTP/log gates pass. Smaller
-stages had zero SIP failures, log errors or new cores. Full results and first
-failure are in `doc/main44_call_acceptance_20260908.md`.
+The earlier 1/5/10/20 stages passed. Failed 30-call attempts and their cleanup
+are historical evidence in `doc/main44_call_acceptance_20260908.md`; do not
+treat their old observer handles as running jobs.
 
 **Five-language callback evidence is now preserved on the main dev host.**
 Archive `/root/kz5-handoff/callback-acceptance-20260908/five-language-acceptance.tar.gz`
@@ -43,13 +44,18 @@ spurious BYE. Actual loopback rejection regressions and live functional rerun
 pass. Caller/agent each 1 success / 0 failures, bidirectional RTP, hangup/ready,
 zero fresh log errors or core dumps; zero calls after cleanup. Source is pushed
 and present in `.44:/opt/kz5`. See `doc/main44_call_acceptance_20260908.md`.
-The next staged 1/5/10/20/30 plus five queued callers run is **pending**, unit
-`kz5-capacity-stages-20260908`, observer `11093`, protected log
-`/root/kz5-acceptance/capacity-stages-20260908.log`. Poll this run rather than
-launching another; the capacity gate is not yet passed. This supersedes the
-unfinished SIPp/functional note below, not the unrelated release gates.
+Use the current capacity status at the top, not historical observer handles.
 
 ## Latest source-retention and loading-bar recheck — September 8
+
+Latest local source regression `de7d2c` passes against the cached upstream
+Monster UI source, including original-bug reproduction and installer wiring.
+The first invocation lacked its required source argument (`ab68e7`); that was
+a test invocation error, not a failed product regression. Main-host readback
+`a4fd9c` reconfirms tracked ACDC without nested Git and all nine services
+enabled/active. This documentation checkpoint is pushed to master and then
+fast-forwarded into the main `/opt/kz5` checkout; no service restart is needed
+for documentation. The earlier browser proof remains scoped to private HTTPS.
 
 The operator's requested source fix is committed in `2a593ee`, in
 `scripts/patches/monster-ui-request-indicator-lifecycle.patch`, and applied by
@@ -67,16 +73,11 @@ at `557505a` before this documentation checkpoint. The main checkout is clean,
 ACDC is tracked in kz5 without nested Git metadata, and its protected Git
 credential is present mode0600. All nine services are active (`d551db`). Future
 work starts there; see `doc/dev44_git_handoff.md` for independent Git access.
-This documentation checkpoint must also be pushed and fast-forwarded there.
-
-Separate unfinished call validation must not be confused with this UI pass:
-the SIPp preparation unit is now inactive after reporting `SIPp feature
-verification failed` (`383cbf`). Inspect its protected log at
-`/root/kz5-acceptance/sipp-tools-20260908.log` on .44 before retrying. The new
-dedicated 30-agent acceptance fixture remains provisioned; no functional or
-30-concurrent-call pass is claimed. The original host's untracked
-`scripts/test-functional-agent-isolation.sh` is unfinished work, not a deployed
-fix. Preserve it separately before removing that host.
+That checkpoint and subsequent code fixes have been pushed and synchronized.
+The original SIPp preparation failure is retained in its protected log, but
+is fixed, not a current blocker. The functional-isolation regression is now
+tracked and deployed with the test harness. Current call acceptance is reported
+separately above; the UI check does not establish telephone capacity.
 
 **In-flight uncertainty containment now has native broker/HTTP evidence:
 42712/afe573 passes.** A separate child ran the production consumer/settlement/
