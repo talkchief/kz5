@@ -2318,6 +2318,10 @@ build_kazoo() {
     # Remove only generated BEAMs that carry the TEST define so make rebuilds
     # their production variants. Source files and runtime data are untouched.
     remove_test_compiled_kazoo_beams
+    # The MIME source target also compiles its module with lager_transform.
+    # A fresh checkout therefore needs dependency BEAMs before generators, not
+    # only when the later top-level core target runs. This is cached by make.
+    FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT" JOBS="$KAZOO_MAKE_JOBS" deps
     # kazoo_numbers expands its SOURCES list while parsing its Makefile.  Under
     # a parallel top-level build, that can happen before its generated ISO-3166
     # modules are written, leaving erlc with a source path that does not exist.
