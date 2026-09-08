@@ -17,7 +17,16 @@ Only these numeric options are accepted before the required `--`:
 | --- | ---: | ---: |
 | `--memory-mib` | 384 | 128–384 |
 | `--reserve-mib` | 768 | 512–4096 |
-| `--runtime-sec` | 900 | 10–1800 |
+| `--runtime-sec` | 900 | 10–3600 |
+
+The longer runtime requires an explicit `--runtime-sec` value; the default is
+still 900 seconds. Select up to 3600 seconds only for an already authorized,
+trusted foreground build/install whose observed work exceeds the shorter
+window. This does not increase CPU, memory, swap or task limits, lower the
+admission reserve, bypass serialization, permit background work, or convert a
+previous timeout into a successful installation. Inspect the prior unit's
+terminal state before starting another attempt; a client observation timeout
+alone is not proof that its service has stopped.
 
 The reserve is a headroom check, not reserved RAM. Service growth or unrelated
 commands outside the guard can still exhaust the host. Choose a lower allowed

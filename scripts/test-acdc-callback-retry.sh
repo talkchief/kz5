@@ -10,6 +10,9 @@ readonly RETRY_BUSY_PORT=15066
 readonly RETRY_BUSY_MEDIA=43020
 RETRY_REFERENCE=
 RETRY_REGISTRATION_MODE=confirm-current
+RETRY_LANGUAGE=en-us
+RETRY_LANGUAGE_EXPLICIT=false
+RETRY_LANGUAGE_ARGS=()
 RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=false
 RETRY_BUSY_PID=
 RETRY_BUSY_CALL_ID=
@@ -23,6 +26,7 @@ retry_usage() {
         'Usage: test-acdc-callback-retry.sh --prepare-only --confirmation-reference FILE' \
         '       test-acdc-callback-retry.sh --live --keep-fixture --confirmation-reference FILE' \
         '       [--registration-mode entry-only|confirm-current] (default: confirm-current)' \
+        '       [--language en-us|he-il|fr-fr|es-es|ar-sa] (explicit owned queue language; absent preserves queue)' \
         '       [--transport external|internal] (default: external; internal uses isolated1001)' \
         '       [--allow-paused-master-test-phones] (only an already inactive/dead helper)' \
         'Only the exact isolated local fixture is allowed. MASTER and PSTN are excluded.' \
@@ -32,6 +36,9 @@ retry_usage() {
 }
 
 retry_args() {
+    # Only this CLI's explicit option may authorize a fixture language write.
+    # Clear inherited overrides before preflight, setup, evidence or cleanup.
+    unset -v KAZOO_CALLBACK_TEST_LANGUAGE || die 'Cannot isolate callback fixture language environment'
     while (($#)); do
         case $1 in
             --prepare-only) CALLBACK_PREPARE=true ;;
@@ -39,6 +46,10 @@ retry_args() {
             --keep-fixture) KEEP_FIXTURE=true ;;
             --confirmation-reference) (($# >= 2)) || die 'Missing reference'; RETRY_REFERENCE=$2; shift ;;
             --registration-mode) (($# >= 2)) || die 'Missing registration mode'; RETRY_REGISTRATION_MODE=$2; shift ;;
+            --language)
+                (($# >= 2)) && [[ $RETRY_LANGUAGE_EXPLICIT == false ]] || die 'Missing or repeated language'
+                case $2 in en-us|he-il|fr-fr|es-es|ar-sa) ;; *) die 'Unsupported callback retry language' ;; esac
+                RETRY_LANGUAGE=$2; RETRY_LANGUAGE_EXPLICIT=true; RETRY_LANGUAGE_ARGS=("$2"); shift ;;
             --transport) (($# >= 2)) || die 'Missing transport'; CALLBACK_TEST_TRANSPORT=$2; shift ;;
             --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
             -h|--help) retry_usage; exit 0 ;;
@@ -54,8 +65,8 @@ retry_args() {
     [[ -n $RETRY_REFERENCE && -f $RETRY_REFERENCE && ! -L $RETRY_REFERENCE ]] || die 'A verified local confirmation reference is required'
     validate_protected_file "$RETRY_REFERENCE"
     validate_protected_file "${RETRY_REFERENCE%/*}/reference-receipt.json"
-    node "$retry_script_dir/test-fixtures/callback-gemini-reference.cjs" verify "$RETRY_REFERENCE" \
-        | jq -e '.voice_family == "gemini-sulafat"' >/dev/null || \
+    node "$retry_script_dir/test-fixtures/callback-gemini-reference.cjs" verify "$RETRY_REFERENCE" "$RETRY_LANGUAGE" \
+        | jq -e --arg language "$RETRY_LANGUAGE" '.voice_family == "gemini-sulafat" and .language == $language' >/dev/null || \
         die 'Current callback acceptance requires a verified Gemini reference, not legacy audio'
 }
 
@@ -331,8 +342,13 @@ retry_run() {
     printf '%s\n' "$before" > "$RUN_DIR/retry-service-before.txt"
     node "$retry_script_dir/test-fixtures/callback-retry-service-scope.cjs" "$RUN_DIR/retry-service-before.txt" \
         "$RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES" > "$RUN_DIR/retry-service-scope.json" || die 'Required service state failed strict scope validation'
-    callback_fixture setup-retry
-    callback_fixture verify
+    if [[ $RETRY_LANGUAGE_EXPLICIT == true ]]; then
+        KAZOO_CALLBACK_TEST_LANGUAGE=$RETRY_LANGUAGE callback_fixture setup-retry
+        KAZOO_CALLBACK_TEST_LANGUAGE=$RETRY_LANGUAGE callback_fixture verify
+    else
+        callback_fixture setup-retry
+        callback_fixture verify
+    fi
     if [[ $CALLBACK_TEST_TRANSPORT == internal ]]; then
         node "$retry_script_dir/test-fixtures/callback-internal-scenarios.cjs" preflight "$STATE_FILE"
         node "$retry_script_dir/probe-internal-callback.cjs" "$RETRY_ACCOUNT_ID" "${STATE[ACCEPTANCE_QUEUE_ID]}" 1001 \
@@ -341,7 +357,9 @@ retry_run() {
     # verify_fixture reads the actual queue and fails unless callback is enabled,
     # entry_key is6, alternatives are false, and tenant/authority/routing match.
     jq -n --arg mode "$RETRY_REGISTRATION_MODE" --arg account "$RETRY_ACCOUNT_ID" \
-        '{registration_mode:$mode,account_id:$account,entry_key:"6",allow_alternate_number:false,fixture_verified:true}' \
+        --arg language "${RETRY_LANGUAGE_ARGS[0]:-}" \
+        '{registration_mode:$mode,account_id:$account,entry_key:"6",allow_alternate_number:false,fixture_verified:true}
+         + (if $language=="" then {} else {language:$language} end)' \
         > "$RUN_DIR/retry-registration-policy.json"
     FIXTURE_CREATED=true
     STATUS_AGENT_MAX=${STATE[ACCEPTANCE_AGENT_COUNT]}
@@ -394,7 +412,7 @@ retry_run() {
     assert_agent_stats callback 1 2
     retry_stop_capture
     stop_monitor
-    node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" "$CALLBACK_TEST_TRANSPORT" || die 'Strict unanswered/retry packet, media or timing gate failed'
+    node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" "$CALLBACK_TEST_TRANSPORT" "${RETRY_LANGUAGE_ARGS[@]}" || die 'Strict unanswered/retry packet, media or timing gate failed'
     agent_status verify 1 1
     wait_agent_ready 1 || die 'Agent did not return ready after retry'
     systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p LoadState -p ActiveState -p SubState -p MainPID -p NRestarts \

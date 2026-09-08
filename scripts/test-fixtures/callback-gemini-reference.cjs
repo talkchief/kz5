@@ -6,13 +6,18 @@ const assert = require('node:assert/strict'), {spawnSync} = require('node:child_
 const importer = require('../import-acdc-gemini-voices.cjs');
 const root = path.resolve(__dirname, '../..');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
-let inventory;
-function assetFor(prompt) {
+const LOCALES = ['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa'];
+const inventory = new Map();
+function language(value = 'en-us') {
+    assert(typeof value === 'string' && LOCALES.includes(value), 'Unsupported explicit reference language'); return value;
+}
+function assetFor(prompt, locale = 'en-us') {
+    language(locale);
     assert(['acdc-callback-success', 'acdc-callback-offer-6', 'acdc-queue-your-current-position-is'].includes(prompt),
         'Unexpected acceptance prompt');
-    inventory ||= importer.loadPlan(path.join(root, 'scripts/assets/acdc-gemini-fixed-20260905'),
-        path.join(root, 'scripts/assets/acdc-gemini-completion-20260905'), ['en-us']);
-    const asset = inventory.find(p => p.canonical_id === prompt);
+    if (!inventory.has(locale)) inventory.set(locale, importer.loadPlan(path.join(root, 'scripts/assets/acdc-gemini-fixed-20260905'),
+        path.join(root, 'scripts/assets/acdc-gemini-completion-20260905'), [locale]));
+    const asset = inventory.get(locale).find(p => p.locale === locale && p.canonical_id === prompt);
     assert(asset, 'Missing checked-in Gemini reference'); return asset;
 }
 function ulaw(wav) {
@@ -21,17 +26,19 @@ function ulaw(wav) {
     assert(!result.error && result.status === 0 && result.stdout.length >= 512, 'Reference conversion failed');
     return result.stdout;
 }
-function validateReceipt(receipt, referenceHash) {
+function validateReceipt(receipt, referenceHash, locale = 'en-us') {
+    language(locale);
     assert(receipt && /^[a-f0-9]{64}$/.test(referenceHash) && receipt.reference_ulaw_sha256 === referenceHash,
         'Reference digest mismatch');
+    assert(receipt.language === undefined || receipt.language === locale, 'Reference language mismatch');
     if (receipt.document_id === 'en-us/acdc-callback-success') {
         // Historical diagnostic evidence remains readable, with its original
         // explicit limitation: installed legacy audio, not Gemini or semantics.
-        assert(receipt.attachment_name === 'acdc-callback-success.wav' &&
+        assert(locale === 'en-us' && receipt.attachment_name === 'acdc-callback-success.wav' &&
             /^[a-f0-9]{64}$/.test(receipt.installed_wav_sha256), 'Invalid legacy audio receipt');
         return 'legacy';
     }
-    const asset = assetFor('acdc-callback-success');
+    const asset = assetFor('acdc-callback-success', locale);
     assert(receipt.schema_version === 1 && receipt.voice_family === 'gemini-sulafat' &&
         receipt.document_id === asset.id && receipt.attachment_name === asset.attachment &&
         receipt.installed_wav_sha256 === asset.sha256 &&
@@ -55,7 +62,8 @@ function deployment() {
             const value = bytes.toString(); assert(!/[\r\n]/.test(value)); return [key, value];
         }));
 }
-async function capture(directory) {
+async function capture(directory, locale = 'en-us') {
+    language(locale);
     assert(path.isAbsolute(directory) && fs.realpathSync(directory) === directory &&
         directory.startsWith('/var/log/kazoo-acceptance/gemini-reference.'), 'Unexpected reference directory');
     const stat = fs.lstatSync(directory);
@@ -65,7 +73,7 @@ async function capture(directory) {
     assert(['127.0.0.1', 'localhost'].includes(env.KAZOO_COUCHDB_HOST) && Number.isInteger(port) && port > 0 && port < 65536 &&
         env.KAZOO_COUCHDB_USER && !env.KAZOO_COUCHDB_USER.includes(':') && env.KAZOO_COUCHDB_PASSWORD,
     'Local authenticated media reference source required');
-    const asset = assetFor('acdc-callback-success');
+    const asset = assetFor('acdc-callback-success', locale);
     const url = 'http://127.0.0.1:' + port + '/system_media/' + encodeURIComponent(asset.id) + '?attachments=true';
     const headers = {accept: 'application/json', authorization: 'Basic ' + Buffer.from(env.KAZOO_COUCHDB_USER + ':' + env.KAZOO_COUCHDB_PASSWORD).toString('base64')};
     const get = async () => {
@@ -77,25 +85,27 @@ async function capture(directory) {
     const doc = await get(), raw = ulaw(Buffer.from(doc._attachments[asset.attachment].data, 'base64'));
     assert((await get())._rev === doc._rev, 'Installed reference changed during capture');
     const receipt = {schema_version: 1, voice_family: 'gemini-sulafat',
+        ...(locale === 'en-us' ? {} : {language: locale}),
         source: 'local CouchDB system_media attachment, authenticated read only',
         document_id: asset.id, attachment_name: asset.attachment, revision: doc._rev,
         canonical_prompt_id: asset.canonical_id, installed_wav_sha256: asset.sha256,
         reference_ulaw_sha256: sha(raw), duration_seconds: raw.length / 8000,
         claim_limit: 'Exact checked-in and installed Gemini audio delivery only; not independent transcription or native-speaker approval.'};
-    validateReceipt(receipt, sha(raw));
+    validateReceipt(receipt, sha(raw), locale);
     fs.writeFileSync(path.join(directory, 'acdc-callback-success.ulaw'), raw, {flag: 'wx', mode: 0o600});
     fs.writeFileSync(path.join(directory, 'reference-receipt.json'), JSON.stringify(receipt, null, 2) + '\n', {flag: 'wx', mode: 0o600});
     return {result: 'PASS', document_id: asset.id, duration_seconds: raw.length / 8000, database_writes: 0};
 }
-module.exports = {assetFor, ulaw, validateReceipt, capture};
+module.exports = {LOCALES, language, assetFor, ulaw, validateReceipt, capture};
 if (require.main === module) {
     (async () => {
-        const [action, target] = process.argv.slice(2); assert(process.argv.length === 4);
-        if (action === 'capture') console.log(JSON.stringify(await capture(target)));
+        const [action, target, locale = 'en-us'] = process.argv.slice(2); assert([4,5].includes(process.argv.length));
+        language(locale);
+        if (action === 'capture') console.log(JSON.stringify(await capture(target, locale)));
         else {
             assert(action === 'verify');
             const receipt = JSON.parse(protectedFile(path.join(path.dirname(target), 'reference-receipt.json')));
-            console.log(JSON.stringify({voice_family: validateReceipt(receipt, sha(protectedFile(target)))}));
+            console.log(JSON.stringify({voice_family: validateReceipt(receipt, sha(protectedFile(target)), locale), language: locale}));
         }
     })().catch(() => {console.error('Installed callback reference verification failed safely.'); process.exitCode = 1;});
 }

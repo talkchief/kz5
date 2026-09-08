@@ -123,12 +123,29 @@ try {
     assert(minLaunch.includes('--property=MemoryMax=128M'));assert(minLaunch.includes('--property=RuntimeMaxSec=10s'));
     assert(minLaunch.includes(String((128+512)*1024)));
     assert.equal(run(['--reserve-mib','4096','--runtime-sec','1800','--','/usr/bin/true']).status,0);
+    // Longer foreground work is an explicit opt-in, not a new default or
+    // opportunity to relax any service property, lock or admission check.
+    for(const seconds of ['1801','3599','3600']) {
+        const extended=run(['--runtime-sec',seconds,'--',...payload]);
+        assert.equal(extended.status,0,extended.stderr);
+        const extendedRaw=extended.events.find(e=>e[0]==='transport');
+        assert.equal(extendedRaw[1],seconds);
+        const extendedBoundary=extendedRaw.indexOf('--');
+        assert.deepEqual(extendedRaw.slice(2,extendedBoundary),options.map(option=>
+            option==='--property=RuntimeMaxSec=900s'?'--property=RuntimeMaxSec='+seconds+'s':option));
+        assert.deepEqual(literalExecArguments(extendedRaw.slice(extendedBoundary+1)),wrapped);
+        assert.deepEqual(extended.events.map(e=>e[0]),['flock','memory','flock','transport']);
+    }
+    noTransport(run(['--runtime-sec','3600','--','/usr/bin/true'],{TEST_LOCK_STATUS:'75'}),75);
+    noTransport(run(['--runtime-sec','3600','--','/usr/bin/true'],{TEST_AVAILABLE:String((384+768)*1024-1)}),69);
+    assert.equal(run(['--runtime-sec','3600','--','/usr/bin/true'],{TEST_EXIT:'124'}).status,124);
     const invalid=[[],['/usr/bin/true'],['--'],['--','true'],['--','/nonexistent/command'],['--user'],['--scope'],
         ['--host','remote'],['--machine','container'],['--runner','/usr/bin/true'],['--property','MemoryMax=infinity'],
         ['--memory-mib'],['--memory-mib','128','--memory-mib','128','--','/usr/bin/true']];
     for(const [flag,values] of [['--memory-mib',['127','385','0128','128M','1e3','-1','999999999999999','128;false','']],
-        ['--reserve-mib',['511','4097','0']],['--runtime-sec',['9','1801','infinity']]])
+        ['--reserve-mib',['511','4097','0']],['--runtime-sec',['9','3601','9999','03600','3600s','infinity','0','-1','1e3','3600;false']]])
         for(const value of values)invalid.push([flag,value,'--','/usr/bin/true']);
+    invalid.push(['--runtime-sec','1800','--runtime-sec','3600','--','/usr/bin/true']);
     for(const args of invalid)noTransport(run(args),64);
     const secretFailure=run(['--synthetic-sensitive-fixture','--','/usr/bin/true']);
     noTransport(secretFailure,64);assert(!secretFailure.stderr.includes('synthetic-sensitive-fixture'));
@@ -181,6 +198,23 @@ try {
     assert.notEqual(direct('validation_prepare_lock "$1" "$2"',[parent,directory]).status,0);
     assert.notEqual(direct('validation_stat(){ printf "%s\\n" "1000:0:700:directory:1:0"; }; validation_secure_directory "$1" 700',[directory]).status,0);
     const script=fs.readFileSync(source,'utf8');
+    // Execute the actual transport body with only its fixed-path timeout
+    // invocation replaced by a private argv recorder. Never call systemd.
+    const transportMatches=[...script.matchAll(/^validation_transport\(\) \{[\s\S]*?^\}/gm)];
+    assert.equal(transportMatches.length,1);
+    const transportDefinition=transportMatches[0][0];
+    assert.equal(transportDefinition.split('/usr/bin/timeout').length,2);
+    const capturedTransport=transportDefinition.replace('/usr/bin/timeout','validation_timeout_capture');
+    for(const seconds of ['900','1800','3600']) {
+        const transport=direct('validation_timeout_capture() { printf "%s\\0" "$@"; };\n'+capturedTransport+
+            '\nvalidation_transport "$@"',[seconds,'--system','--','/usr/bin/true']);
+        assert.equal(transport.status,0,transport.stderr);
+        assert.deepEqual(transport.stdout.split('\0').slice(0,-1),[
+            '--signal=TERM','--kill-after=10s',String(Number(seconds)+45)+'s',
+            '/usr/bin/env','-i','PATH=/usr/bin:/bin','LANG=C',
+            'SYSTEMD_LOG_LEVEL=err','SYSTEMD_LOG_TARGET=console','SYSTEMD_BUS_TIMEOUT=15s',
+            '/usr/bin/systemd-run','--system','--','/usr/bin/true']);
+    }
     assert(script.includes('/usr/bin/timeout --signal=TERM --kill-after=10s "$((runtime+45))s"'));
     assert(script.includes('/usr/bin/systemd-run "$@"'));
     assert(script.includes('/usr/bin/env -i PATH=/usr/bin:/bin LANG=C'));

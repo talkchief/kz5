@@ -2,6 +2,90 @@
 
 ## Current focused release checkpoint — 2026-09-08
 
+This newest checkpoint supersedes older chronological snapshots below; a
+historical ACTIVE/OPEN label is not a fresh runtime observation. Reproduction
+commands and exact scope: `doc/focused_acceptance_20260908.md`.
+
+- **Operator priority reset — finalize ASAP:** stop adding implementation scope
+  and validation tooling. Commit/push tested callback, bridge and guard work;
+  finish normal apps/eCallMgr installer with the verified3600s outer window.
+  Existing five-language callback registration/retry and broker-recovery
+  results remain accepted only within their documented scope. Returned-audio
+  supplemental proof is incomplete: HE replay50498 failed strict RTP coverage;
+  diagnostic79134/7eacd4 found one160-sample gap inside the matched phrase
+  despite0.999992 correlation. Do not label full returned-phrase coverage proved
+  or substitute the untested phrase-only private relaxation (it cannot fix an
+  inside-phrase gap). Original call evidence is unchanged. Standalone catalog
+  automation draft remains PRIVATE/unreviewed/unintegrated at
+  `/opt/kz5-remote-catalog-implementation.dCYuYn/HANDOFF.md`; no remote effects.
+
+- **Bridge registered-consumer acceptance PASS:**83390/9d4620 exercises the
+  actual runtime against UUID-isolated local broker resources. Counts0→1
+  recover503→200 without blocking a companion; exhaustion0→1→2 reaches DLQ.
+  One consumer, zero work Basic.Get, zero provider calls, stable sources and
+  both temporary resources removed. Receipt db017d0e-c514-4bbe-8874-296d8a0d69fe
+  under `/var/log/kazoo-acceptance/kz5-retry-proof-*/receipt.json`.
+- **Missing-DLQ-route acceptance needs corrected window:**40711/644081 exited1
+  with recovery_deadline after the route was restored. The test waited60s;
+  installed RabbitMQ's no-route retry timer is180s. This does not establish
+  loss or recovery. Both UUID resources were cleaned; no provider calls.
+- **Callback language extension integrated, regressions PASS:**53441/32d30a
+  completes92 guard cases,8 locale groups,88 retry groups,13 cleanup groups,
+ 79 registration-audio cases,96 packet cases and27 service-scope cases.
+  New explicit `--language` is limited to the isolated retry account; inherited
+  overrides cannot mutate queue language. Hebrew8443/53f15d and French
+ 15515/f1b8d1 and Spanish37303/93b8d4 pass using installed references and
+  entry-only key6. Evidence `20260908T010737Z`, `20260908T011230Z` and
+ `20260908T011714Z` under `/var/log/kazoo-acceptance`.
+  Arabic56725/d5de4c also passes at`20260908T012152Z`. These passes prove registration
+  success audio and retries, not complete returned-confirmation audio. An
+  additive read-only replay checker for retained PCAPs is being prepared;
+  existing callback projections omit language, so historical persisted-language
+  continuity is not claimed.
+
+- **Corrected unbound-DLQ acceptance PASS:**52763/f08152, runtime420s guard,
+  recovery240s/case300s/channelRPC10s. Private cf725c and repository e2026b
+  pass12 cases, including the180s broker timer. Actual readback ac566a confirms
+  one publish/dispatch, no republish, exact retained-body recovery174934ms
+  after restoration, stable sources and both temporary resources removed.
+  Receipt209af0aa-e241-441e-9b65-5e30b9a6438a under the protected acceptance
+  root. No provider sends/full-DLQ/restart claim. Actual guard e2026b confirms the optional
+ 1h RuntimeMaxSec with unchanged CPU/memory/swap/task constraints.
+
+- **Full apps/eCallMgr rerun timed out, not accepted:** committed/pushed9642413
+  (`10480/872635`), no unrelated files staged. Guarded normal installer
+  session4728, initialf18428, unit
+  `kazoo-validation-e15ec615-0dda-496a-9e29-05367204c3fb.service`, started
+ around00:29UTC. Zero FreeSWITCH channels verified first; one build worker,
+ 384MiB validation cap and1800s deadline. Terminal session result b741fb is
+ exit1; journal f5c7d5 confirms runtime timeout at00:59:06UTC, not a compiler
+ failure. Compilation/release assembly, apps startup/datastore readiness and
+ 796 media documents/1592 mappings passed before timeout. Apps, eCallMgr and
+ bridge remain active. Full installer finalization/eCallMgr dispatch was not
+ completed; an explicit longer bounded validation window is being reviewed.
+ Source freeze is released now that the exact job is terminal. The only unrelated untracked file remains
+  `doc/dashboard_caller_sidecar_design.md` and must not be staged.
+- **Earlier private bridge preparation (now tested above):**
+  `/opt/kz5-bridge-consumer-proposal.lb2qJ4` adds a real
+  `BridgeRuntime.run`/basic.consume harness using synthetic provider outcomes,
+  exact UUID-isolated broker resources and existing protected cleanup. Proposed
+  cases:503→200 with companion progress,0→1→2 exhaustion/DLQ, one consumer
+  registration and no work-queue Basic.Get. Root reviewed; separate offline
+  regressions are prepared and read by root. Use `proposal-v2.patch` plus
+  `tests.patch` (exact pins in PROJECT_HANDOFF.md). Both files are now integrated;
+  repository10 consumer +9 DLQ +10 baseline cases passed21449/6e9d43.
+- **Earlier installer phase:** at~00:35UTC4728 passed210
+  fixed voices,584 cardinals/approved intros and current Crossbar integration;
+  core compilation subsequently completed before the timeout above. Capability file was preserved at its verified
+ 198866b70bc0805b32ae8eab385355a172931e114939960c59ea1c69d1290221 hash.
+  No provider calls were made. This phase result is not final installer success.
+- **Prepared acceptance gaps (updated by results above):** private unbound-DLQ driver
+  and nine offline cases are at `/opt/kz5-bridge-dlq-retention.Hkh8Ez`; root
+  reviewed. The test-only language option is now integrated for the existing
+  EN-only retry/reference harness, so HE/FR/ES/AR full confirmation and retry
+  can be tested live without touching runtime logic or generating any audio.
+  Existing all-five position/offer results are not substituted for those tests.
+
 - **Bridge deadline deployed through main SH:** repository205 tests and main
   installer smoke checks pass82499/98c851; bridge dispatch/rollback checks
   pass82966. Normal `install-kazoo5.sh push-bridge` followed by independent

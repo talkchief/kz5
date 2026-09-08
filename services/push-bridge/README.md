@@ -1,4 +1,23 @@
-# Mobile push bridge: modular installer candidate
+# Mobile push bridge: modular installation and validation
+
+## Current deployment checkpoint — September 8
+
+Main-SH installation and independent verification pass74779/c9f0f1. Current
+development release is `0a3a5ba26bdf26caa9fea2343fb565c3ce218079cf976eb5be801ac9143e94da`;
+source205 tests and installer smoke checks pass82499/98c851. It includes
+unfinished-worker deadlines and bounded process exit78 before blocked cleanup;
+see [worker deadline](../../doc/push_bridge_worker_deadline.md).
+Registered-consumer readiness is verified, not actual mobile ringing.
+Quorum/freshness/counted retries remain opt-in; native production traffic is
+not connected to this development acceptance queue. Actual registered-consumer
+retry passed83390/9d4620 with synthetic503/200 outcomes and isolated local
+broker resources: companion progress, counts0→1, exhaustion0→1→2 and DLQ
+readback. Zero provider calls, stable source pins and exact resource cleanup.
+See [focused acceptance commands and receipts](../../doc/focused_acceptance_20260908.md).
+DLQ-failure retention, remote AMQPS and designated-phone tests remain open.
+
+The following implementation checkpoints retain historical release identities;
+they do not supersede the current release above.
 
 Explicit strict-quorum FCM500/503 retries without Retry-After are a source candidate only.
 See [counted retry policy and open broker acceptance gates](../../doc/push_bridge_counted_retry.md).

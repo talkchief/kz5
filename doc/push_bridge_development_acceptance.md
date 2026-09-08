@@ -6,6 +6,30 @@ acceptance. No notification was published or sent during these checks.
 
 ## Installation and evidence
 
+### Current deployment — September 8
+
+Main-SH bridge install and separate verify74779/c9f0f1 passed with release
+`0a3a5ba26bdf26caa9fea2343fb565c3ce218079cf976eb5be801ac9143e94da`.
+PID1172968, active registered consumer, automatic restarts0 at readback4aaccc;
+installed source hashes match. All205 repository Python tests and installer
+smoke checks pass82499/98c851; dispatch/rollback checks pass82966.
+
+This release includes the earlier transport, session-ownership, opt-in quorum,
+freshness and counted-retry work plus unfinished-worker admission deadlines.
+The default60-second deadline is observed by a healthy owner loop; uncertain
+work fails stopped with exit78 before potentially blocked cleanup, without
+automatic replay. See `push_bridge_worker_deadline.md` for limitations.
+Development routing remains isolated, legacy retry/topology defaults remain,
+and no actual FCM/APNs send or production server change was made. Actual
+consumer-loop retry now passes83390/9d4620 against isolated real broker
+resources with synthetic provider outcomes. Unbound-DLQ retention remains
+unverified:40711/644081 exhausted a60s window that is shorter than the broker's
+180s no-route retry timer; a corrected bounded test is pending. Both test
+runs removed their generated vhost/user. See `focused_acceptance_20260908.md`
+for receipts, exact scope and reproducible commands.
+
+### Earlier deployment evidence
+
 Latest AMQPS-support deployment: `1ff54f/session31649/02ae6d` passed main SH;
 independent verify and installed-venv TLS regression passed
 `9f2d32/session48034/f1ad28`. Current release
@@ -113,13 +137,14 @@ claim mobile integration is finished because this idle consumer is ready.
 
 1. Reboot, remote broker and failure/recovery acceptance. Repeat installation
    and its controlled bridge restart now pass on this development host.
-2. Finish bounded durable retry/dead-letter/expiry and failure recovery. Current
+2. Validate implemented quorum retry/dead-letter/expiry through the actual
+   registered-consumer loop and full/unavailable DLQ retention. Current
    uncertain-delivery exit78 requires manual recovery; it is not high availability.
-3. Complete OAuth refresh/total deadlines and AMQP TLS controls. FCM sessions
-   now have tested exclusive leases bounded by worker count. Redirect/body
-   controls remain tested in the expanded nine pinned-Requests
-   adapter tests (`be4d36`); no provider was contacted. Validate real
-   pinned HTTP/2 behavior, APNs initialization recovery and worker shutdown.
+3. Validate deployed OAuth transport, worker admission deadlines and AMQP TLS
+   at their real failure boundaries. FCM sessions have tested exclusive leases
+   bounded by worker count; completed provider acceptance is not phone delivery.
+   Blocked broker-loop behavior, ordinary signal draining, remote AMQPS,
+   pinned HTTP/2 behavior and APNs initialization recovery remain open.
 4. Use an explicitly designated test mobile device/token with the correct app
    and environment; verify native Kazoo payloads, provider acceptance, phone
    ringing, registration and answered calls. No test device is inferred from

@@ -9,7 +9,7 @@ validation_error() {
 }
 
 validation_usage() {
-    printf '%s\n' 'Usage: run-kazoo-validation.sh [--memory-mib 128..384] [--reserve-mib 512..4096] [--runtime-sec 10..1800] -- /absolute/command [arguments...]'
+    printf '%s\n' 'Usage: run-kazoo-validation.sh [--memory-mib 128..384] [--reserve-mib 512..4096] [--runtime-sec 10..3600] -- /absolute/command [arguments...]'
 }
 
 validation_number() {
@@ -175,7 +175,7 @@ validation_main() (
                 case $option in
                     --memory-mib) validation_number "$value" 128 384 || { validation_error 64 'memory must be 128 through 384 MiB'; return; }; memory=$value ;;
                     --reserve-mib) validation_number "$value" 512 4096 || { validation_error 64 'reserve must be 512 through 4096 MiB'; return; }; reserve=$value ;;
-                    --runtime-sec) validation_number "$value" 10 1800 || { validation_error 64 'runtime must be 10 through 1800 seconds'; return; }; runtime=$value ;;
+                    --runtime-sec) validation_number "$value" 10 3600 || { validation_error 64 'runtime must be 10 through 3600 seconds'; return; }; runtime=$value ;;
                 esac
                 shift 2 ;;
             *) validation_error 64 'unsupported option; use bounded options then --'; return ;;

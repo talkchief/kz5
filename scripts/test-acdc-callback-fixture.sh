@@ -64,6 +64,10 @@ fixture_die() { printf '[kazoo-callback-fixture] ERROR stage=%s: %s\n' "${FIXTUR
 fixture_log() { printf '[kazoo-callback-fixture] %s\n' "$*"; }
 
 parse_fixture_args() {
+    if [[ -n ${KAZOO_CALLBACK_TEST_LANGUAGE:-} ]]; then
+        case $KAZOO_CALLBACK_TEST_LANGUAGE in en-us|he-il|fr-fr|es-es|ar-sa) ;; *) fixture_die 'Unsupported explicit callback fixture language' ;; esac
+        [[ ${1:-} == setup-retry || ${1:-} == verify ]] || fixture_die 'Explicit language only applies to owned retry setup/verification'
+    fi
     if (($# == 2)) && [[ $1 == cancel-original ]]; then
         [[ $2 =~ ^1-[1-9][0-9]*@127\.0\.0\.20$ ]] || fixture_die 'Unexpected local callback caller ID'
         ACTION=cancel-original
@@ -261,6 +265,15 @@ configure_acceptance_queue() {
           retry_delay:15,originate_timeout:$ring_timeout,confirmation_timeout:15,
           ready_ack_timeout:5,handoff_timeout:5}')
     updated=$(jq -c --argjson callback "$callback" '.callback=$callback' <<<"$current")
+    if [[ -n ${KAZOO_CALLBACK_TEST_LANGUAGE:-} ]]; then
+        [[ $ACTION == setup-retry && $ACCEPTANCE_ACCOUNT_ID == 7807ad61761269a1ccec833dde63f621 &&
+           $FIXTURE_ACCOUNT_ID == "$ACCEPTANCE_ACCOUNT_ID" && -n $FIXTURE_ORIGINAL_QUEUE ]] ||
+            fixture_die 'Explicit language requires the exact saved isolated retry fixture'
+        updated=$(jq -ce --arg language "$KAZOO_CALLBACK_TEST_LANGUAGE" '
+            if (.announcements==null or (.announcements|type)=="object") then
+                .announcements=(.announcements // {}) | .announcements.language=$language
+            else error("invalid existing announcements") end' <<<"$updated") || fixture_die 'Unsafe existing announcement configuration'
+    fi
     body=$(jq -cn --argjson data "$updated" '{data:$data}')
     api_request POST "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID" "$body" >/dev/null
 }
@@ -319,6 +332,12 @@ verify_fixture() {
          .data.callback.outbound_authority == {id:$authority,type:"device"} and
          .data.callback.outbound_caller_id.number == $cid' <<<"$response" >/dev/null || \
         fixture_die 'Acceptance queue callback configuration verification failed'
+    if [[ -n ${KAZOO_CALLBACK_TEST_LANGUAGE:-} ]]; then
+        [[ $ACCEPTANCE_ACCOUNT_ID == 7807ad61761269a1ccec833dde63f621 ]] || fixture_die 'Wrong explicit language account'
+        jq -e --arg language "$KAZOO_CALLBACK_TEST_LANGUAGE" '.data.announcements.language==$language
+            and .data.callback.media==null and .data.callback.return_confirmation_prompt==null' <<<"$response" >/dev/null ||
+            fixture_die 'Explicit built-in callback language was not persisted exactly'
+    fi
     fixture_log 'PASS: tenant-local carrier, fictional number ownership, authority, and queue callback settings verified'
 }
 
@@ -521,6 +540,8 @@ cancel_original_callback() {
 
 setup_fixture() {
     local response
+    [[ -z ${KAZOO_CALLBACK_TEST_LANGUAGE:-} || $ACCEPTANCE_ACCOUNT_ID == 7807ad61761269a1ccec833dde63f621 ]] ||
+        fixture_die 'Explicit language is confined to the isolated retry account before fixture writes'
     fixture_sup_preflight
     FIXTURE_STAGE=setup-scope
     if [[ -n $FIXTURE_ACCOUNT_ID && $FIXTURE_ACCOUNT_ID != "$ACCEPTANCE_ACCOUNT_ID" ]]; then

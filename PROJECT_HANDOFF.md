@@ -6,13 +6,88 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Latest operator request: finalize ASAP; do not keep expanding tooling.**
+Next actions are explicit commit/push of tested changes and normal apps/eCallMgr
+installation with the verified3600s guard. Five-language success/retry and
+registered-consumer/DLQ recovery evidence is below. Returned-audio supplemental
+proof remains incomplete: HE50498/53cce7 failed coverage, and diagnostic79134/
+7eacd4 found160 missing RTP samples inside its matched phrase, correlation
+0.999992. Do not misreport that as a full waveform pass. The original callback
+pass is unchanged. No need to rerun live calls to publish this checkpoint.
+Private standalone catalog implementation is not integrated/tested:
+`/opt/kz5-remote-catalog-implementation.dCYuYn/HANDOFF.md`.
+
+Current acceptance details/commands: `doc/focused_acceptance_20260908.md`.
+Registered-consumer real broker proof83390/9d4620 PASS; exact counters,
+source pins and generated-resource cleanup independently checked2d7db8.
+Unbound-DLQ test40711/644081 failed its60s recovery window; broker default
+no-route retry is180s. A bounded240s recovery/300s case revision passed12
+offline cases and now passes actual broker proof52763/f08152. All resources from the failed test were
+removed. Callback/guard repository suites53441/32d30a PASS. Hebrew8443/53f15d
+and French15515/f1b8d1 live single-key6 retries PASS against installed prerecorded
+success audio; directories20260908T010737Z and20260908T011230Z. Spanish
+37303/93b8d4 also PASS at20260908T011714Z; Arabic56725/d5de4c PASS at
+20260908T012152Z. Corrected unbound-DLQ actual test52763/f08152 PASS:
+exact body recovered174934ms after restoration, one publish/dispatch, no
+republish, stable sources and both temporary resources removed (ac566a).
+The1h opt-in guard itself was verified by actual unit
+readback e2026b, retaining the other resource limits.
+The additive returned-confirmation waveform checker is integrated and its
+five synthetic groups pass38329/92034c. Hebrew reference capture passed, but
+offline replay50498 failed strict coverage as detailed above. The current success
+audio proof does not establish that separate recording's actual playback.
+No real push notifications or production changes have been made.
+
+Last installer job is TERMINAL, not successful: apps/eCallMgr rerun from pushed9642413,
+session4728, initialf18428, guarded unit
+`kazoo-validation-e15ec615-0dda-496a-9e29-05367204c3fb.service` (~00:29UTC).
+Zero channels checked; one worker,384MiB cap,1800s deadline. Session b741fb
+ exited1; journal f5c7d5 confirms RuntimeMaxSec timeout at00:59:06UTC.
+ Compilation/release assembly, apps startup/datastore and796 media documents/
+1592 mappings passed first. Apps/eCallMgr/bridge are active. Full installer
+ completion remains unproven. No live job or source freeze remains. A longer
+ explicitly bounded validation window is under private review; memory/CPU and
+ global serialization limits must remain unchanged.
+
+Original private bridge proposal is `/opt/kz5-bridge-consumer-proposal.lb2qJ4`;
+agent `installer_review` finished its offline regressions. It exercises the
+actual registered-consumer loop with synthetic providers in UUID-local broker
+resources. It is now integrated, offline-tested and actual-broker-tested above. No phones,
+production broker credentials or production server changes are authorized by
+this harness. The full installer freeze ended with its confirmed timeout.
+
+Use `proposal-v2.patch` (SHA256
+`c4cf514b04ba376f858c15313d2aeaf90c6956387cf78dc842f55f28b9c4b35b`), not the
+original proposal, plus `tests.patch` (SHA256
+`5f3c5da7aaed52534e0a5eaae362ef65a406ae8644b394e65063f4528b3bbdfa`). Root
+read both private source files; next is network-isolated
+`test-accept-push-bridge-consumer.py` using the installed bridge Python3.11 venv,
+then the explicitly local broker command documented in private PROPOSAL.md.
+Separate unbound-DLQ proposal is ready at
+`/opt/kz5-bridge-dlq-retention.Hkh8Ez/proposal.patch` (SHA256
+`92d86c7a6eeb4db42e3c080541071e832f087032ef7ab4afef5c8f761f2beb87`).
+Root read the new driver/CLI and nine proposed offline cases. Run its private
+`test-push-bridge-dlq-retention.py` plus baseline
+`test-accept-push-bridge-retry.py` offline before any local-broker proof.
+It tests one confirmed publish/reject while the owned dead binding is absent,
+then exact readback after restoration with no republish. No full-queue or
+restart claim. Both broker proposals have now been executed with separate
+pass/failure outcomes above; do not reuse their initial pending status.
+
+Agent `arabic_review` prepared the integrated test-only locale extension to the
+EN-only callback-retry harness/reference helper. Preserve EN defaults and allow
+only EN/HE/FR/ES/AR; set only the isolated fixture queue language and require a
+matching installed confirmation reference. No runtime or generation changes.
+After source review/offline tests, use it to run actual full-confirmation and
+missed-first-attempt retry in the other four locales after this deployment.
+
 Bridge deadline is now deployed: source205 tests/smoke82499/98c851 and actual
 main-SH install plus independent verify74779/c9f0f1 PASS. New release
 `0a3a5ba26bdf26caa9fea2343fb565c3ce218079cf976eb5be801ac9143e94da`,
 PID1172968 active, restart count0, installed source hashes match. No actual
 provider sends. Dispatch/rollback suite and actual Crossbar formatter transition
 pass82966/00c47b; preflight `/tmp/kazoo-integration-preflight.LLkrRB` retained.
-Next: commit/push these fixes and run the complete apps/eCallMgr main installer.
+These fixes are pushed in9642413; the complete installer is running above.
 
 Latest source work: full apps/eCallMgr installation39751/8e209c stopped before
 compilation/restarts on three build-formatted Crossbar schemas. Exact known
@@ -20,11 +95,10 @@ formatter transition is now implemented;110 transition cases, installer smoke
 and12 catalog tests passed26154/15c456. Full installer rerun remains required.
 Unknown/mixed schema changes remain refused rather than overwritten.
 
-Bridge worker-deadline proposal passed205 private offline tests12055/09efad and
-is applied to repository source, not yet deployed. Default60s monotonic admission
-deadline, no uncertain ACK/replay, and production exit78 before blocked cleanup.
-See `doc/push_bridge_worker_deadline.md`. Run source tests and main-SH deployment;
-actual registered-consumer retry/DLQ failure and phone delivery remain open.
+Bridge deadline behavior and its earlier private205-test proof12055/09efad are
+documented in `doc/push_bridge_worker_deadline.md`. Source tests and main-SH
+deployment subsequently passed above. Actual registered-consumer retry/DLQ
+failure and phone delivery remain open.
 
 Final focused verification `90006/cb79bd` PASS: cache15, readiness26,
 current-build checks, finalization32, actual deployed editor-language functions,
