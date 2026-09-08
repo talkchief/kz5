@@ -32,6 +32,29 @@ network console and must not be reported as eliminated by this UI correction.
 Configuring actual external storage and capability-based request gating remain
 separate work; this patch only fixes the broken selector error interaction.
 
+## Native API installer correction
+
+Follow-up f0eb1c confirms the main dev server still lacks `cb_storage` in both
+effective autoload and running bindings. Source `configure_kazoo_api_modules`
+now calls `configure_kazoo_storage_module`. It starts the native module only
+when needed, checks exact startup/runtime membership, and confirms that all
+previous modules remain. Malformed reads, failed start, missing persistence,
+node-override mismatch and lost existing entries fail visibly. It does not
+overwrite node overrides or fabricate storage plans. Already-registered and
+dry-run paths do not mutate configuration.
+
+`verify_acdc_interfaces` now includes read-only storage module verification
+and a genuine administrator `/v2/storage/plans` collection read. It does not
+require every account to have a custom storage document. Native module
+authorization and provider configuration remain unchanged; no provider
+credentials or imported company documents are edited.
+
+Focused test `node scripts/test-storage-installer.cjs`: baseline ad354e fails
+the missing installer wiring; candidate0e35e6 passes14 registration/preservation
+cases. The adjacent entitlement verifier also passes8 cases. Native deployment
+and authenticated collection readback are pending; the earlier UI-only browser
+receipt is not evidence of backend registration.
+
 ## Focused verification
 
 Offline actual AMD-source check:

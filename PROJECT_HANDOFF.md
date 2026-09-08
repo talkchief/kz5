@@ -1,5 +1,13 @@
 # Kazoo 5 — start here / engineering handoff
 
+**In progress: UI-01 native storage registration deployment.** Main f0eb1c
+confirms `cb_storage` absent from startup and runtime. Root installer source now
+registers it with exact membership/preservation checks; verify-only never repairs
+and the authenticated probe uses `/storage/plans`. Fourteen focused checks and
+eight adjacent entitlement checks pass. No account/provider plan is fabricated.
+Deploy the scoped installer function and verify the real collection; an absent
+optional account plan may legitimately remain404. See `doc/monster_optional_storage.md`.
+
 **Priority: P0-CALLBACK-CONFIRM-01 deployed; native strict-media gate failed.**
 A legal three-second returned-caller response timer began before its4.331s
 English recording finished. Source now separates the bounded playback phase

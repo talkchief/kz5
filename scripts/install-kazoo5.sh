@@ -3307,7 +3307,53 @@ configure_kazoo_api_modules() {
     done
     log 'Registered and persisted ACDC and Monster UI Crossbar APIs'
     verify_kazoo_entitlements_module
+    configure_kazoo_storage_module
     configure_kazoo_queue_live_module
+}
+
+configure_kazoo_storage_module() {
+    local output before_autoload before_running after_autoload after_running module
+    [[ $DRY_RUN != true ]] || { log 'Would register native storage API without provisioning storage plans'; return 0; }
+    output=$(timeout 30 sup crossbar_config autoload_modules </dev/null) || die 'Could not read Crossbar autoload modules before storage registration'
+    before_autoload=$(kazoo_blackhole_module_output autoload "$output") || die 'Invalid Crossbar autoload list before storage registration'
+    output=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || die 'Could not read running Crossbar modules before storage registration'
+    before_running=$(kazoo_blackhole_module_output running "$output") || die 'Invalid running Crossbar list before storage registration'
+    if [[ $'\n'"$before_autoload"$'\n' == *$'\n'cb_storage$'\n'* &&
+          $'\n'"$before_running"$'\n' == *$'\n'cb_storage$'\n'* ]]; then
+        log 'PASS native storage API already running and effective'
+        return 0
+    fi
+    # Preserve all existing modules. Do not create account/system storage plans,
+    # change provider credentials, or hide an absent optional plan with fake data.
+    output=$(timeout 30 sup crossbar_maintenance start_module cb_storage </dev/null) || die 'Could not register native storage API'
+    [[ $output != *'failed to start'* ]] || die 'Native storage API failed to start'
+    output=$(timeout 30 sup crossbar_config autoload_modules </dev/null) || die 'Could not verify storage startup registration'
+    after_autoload=$(kazoo_blackhole_module_output autoload "$output") || die 'Invalid storage autoload readback'
+    output=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || die 'Could not verify running storage registration'
+    after_running=$(kazoo_blackhole_module_output running "$output") || die 'Invalid storage runtime readback'
+    [[ $'\n'"$after_autoload"$'\n' == *$'\n'cb_storage$'\n'* &&
+       $'\n'"$after_running"$'\n' == *$'\n'cb_storage$'\n'* ]] || die 'Native storage API is not running/effective; inspect node overrides'
+    while IFS= read -r module; do
+        [[ -z $module || $'\n'"$after_autoload"$'\n' == *$'\n'"$module"$'\n'* ]] || die 'Storage registration lost an existing autoload module'
+    done <<<"$before_autoload"
+    while IFS= read -r module; do
+        [[ -z $module || $'\n'"$after_running"$'\n' == *$'\n'"$module"$'\n'* ]] || die 'Storage registration lost a running module'
+    done <<<"$before_running"
+    log 'PASS native storage API running/effective; existing modules preserved; no storage plans provisioned'
+}
+
+verify_kazoo_storage_module() {
+    local kind output modules
+    [[ $DRY_RUN != true ]] || return 0
+    for kind in autoload running; do
+        if [[ $kind == autoload ]]; then
+            output=$(timeout 30 sup crossbar_config autoload_modules </dev/null) || die 'Could not inspect storage startup registration'
+        else
+            output=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || die 'Could not inspect storage runtime registration'
+        fi
+        modules=$(kazoo_blackhole_module_output "$kind" "$output") || die 'Invalid storage registration output'
+        [[ $'\n'"$modules"$'\n' == *$'\n'cb_storage$'\n'* ]] || die "cb_storage missing from ${kind}; install kazoo-apps"
+    done
 }
 
 verify_kazoo_entitlements_module() {
@@ -3494,6 +3540,7 @@ verify_acdc_interfaces() {
     local modules module credential_hash auth_body token account_id endpoint result
     verify_kazoo_scope_management
     verify_kazoo_entitlements_module
+    verify_kazoo_storage_module
     modules=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || \
         die 'Could not inspect Crossbar module registrations'
     for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers cb_members cb_entitlements; do
@@ -3528,7 +3575,14 @@ verify_acdc_interfaces() {
                 die "Kazoo ${endpoint} API did not return a successful collection"
         fi
     done
-    log 'PASS Crossbar administrator login, ACDC queue/agent APIs, and Monster UI external-number/entitlement APIs'
+    # Account /storage can legitimately be absent. The administrator's native
+    # plan collection proves the module works without inventing an empty plan.
+    result=$(printf 'header = "X-Auth-Token: %s"\n' "$token" | \
+        curl --config - --fail --silent --show-error --connect-timeout 5 --max-time 30 \
+        'http://127.0.0.1:8000/v2/storage/plans') || die 'Kazoo native storage-plan collection failed'
+    jq -e '.status == "success" and (.data | type == "array")' <<<"$result" >/dev/null || \
+        die 'Kazoo storage-plan API did not return a successful collection'
+    log 'PASS Crossbar administrator login, ACDC APIs, and Monster UI external-number/entitlement/storage-plan APIs'
 }
 
 install_ecallmgr() {
