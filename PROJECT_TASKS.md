@@ -9,7 +9,9 @@
   KVS; resumed workers honor it, next-queue admission replaces it, and legacy
   calls retain fallback behavior. All12 language tests44618/5b971e pass,
   including all five locales and inherited HE_IL normalization. No new audio
-  or account defaults; normal kazoo-apps deployment pending. See
+  or account defaults. Source18eef3e pushed/synced; normal kazoo-apps deployment
+  running as `kz5-announcement-language-install-main44-20260908` (observer35217).
+  Terminal result and runtime parity pending; do not restart the live job. See
   `doc/acdc_callback_language_snapshot.md`.
 
 - **VOICE-01 callback language snapshot DEPLOYED:** queue edits could

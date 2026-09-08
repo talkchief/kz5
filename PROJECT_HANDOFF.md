@@ -6,7 +6,11 @@ after the queue changed. Admission now pins effective language in serialized
 call KVS; workers honor it while subsequent queue admission and legacy fallback
 remain correct. All12 language tests44618/5b971e pass. No voice generation,
 account-language changes or FreeSWITCH rebuild. Queue-schema/OpenAPI wording
-is updated; deployment of this second correction remains pending. See
+is updated. Source18eef3e pushed/synced; normal kazoo-apps deployment is running
+as `kz5-announcement-language-install-main44-20260908`, observer35217. Its log is
+`/root/kz5-acceptance/announcement-language-install-main44-20260908.log`.
+Wait for this exact job's terminal result and then verify runtime parity; no
+duplicate install. Deployment completion remains pending. See
 `doc/acdc_callback_language_snapshot.md`.
 
 **VOICE-01 callback language snapshot source correction deployed on main.**

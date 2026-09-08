@@ -173,7 +173,13 @@ No audio assets or voice-generation behavior changed.
 Final source tests44618/5b971e pass all12 language tests, including all five
 locales through call serialization, next-queue override, inherited HE_IL
 canonicalization and legacy fallback. Queue-schema documentation now states
-this admission contract. Deployment of this second correction is pending;
+this admission contract. Source18eef3e is pushed and synced to main; deployment
+of this second correction is running through normal `kazoo-apps` installation:
+unit `kz5-announcement-language-install-main44-20260908`, observer35217,
+protected log `/root/kz5-acceptance/announcement-language-install-main44-20260908.log`.
+The pre-install native call count was zero31aa97. Observe this same job to its
+terminal result; do not restart it because the log is quiet. Final deployment
+and runtime-parity verification remain pending;
 account/reseller default resolution and actual worker-failure lifecycle
 acceptance remain separate from these deterministic language checks.
 
