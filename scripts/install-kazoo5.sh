@@ -1729,6 +1729,8 @@ ensure_kazoo_sources() {
         "$SCRIPT_DIR/patches/crossbar-scope-management-guard.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
         "$SCRIPT_DIR/patches/crossbar-optional-content-defaults.patch"
+    apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
+        "$SCRIPT_DIR/patches/crossbar-module-autoload-scope.patch"
     apply_kazoo_integration_patch blackhole
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"

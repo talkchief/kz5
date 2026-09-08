@@ -1,5 +1,12 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Next deployment: INSTALL-MODULE-SCOPE-01.** Root installer patch fixes native
+Crossbar start/stop writing a node/zone override into cluster default. It now
+updates the effective setting's owner and preserves other scopes. Baseline6/9
+fail; candidate9/9 plus repeatable source-patch replay pass039b20. Native apps
+deployment and module parity are still pending. Do not modify live autoload
+overrides merely to test this. See `doc/crossbar_module_autoload_scope.md`.
+
 **UI-01 native storage registration DEPLOYED / scoped PASS.** Main f0eb1c
 confirms `cb_storage` absent from startup and runtime. Root installer source now
 registers it with exact membership/preservation checks; verify-only never repairs

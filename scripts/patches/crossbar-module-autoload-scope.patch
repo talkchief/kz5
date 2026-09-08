@@ -1,0 +1,52 @@
+diff --git a/src/crossbar_maintenance.erl b/src/crossbar_maintenance.erl
+index f93f1bfc..b651498c 100644
+--- a/src/crossbar_maintenance.erl
++++ b/src/crossbar_maintenance.erl
+@@ -167,12 +167,37 @@ maybe_autoload_module(Module) ->
+ 
+ -spec persist_module(kz_term:ne_binary(), kz_term:ne_binaries()) -> 'ok'.
+ persist_module(Module, Mods) ->
+-    {'ok', _} = crossbar_config:set_default_autoload_modules(
++    {'ok', _} = set_effective_autoload_modules(
+                   [kz_term:to_binary(Module)
+                   | lists:delete(kz_term:to_binary(Module), Mods)
+                   ]),
+     'ok'.
+ 
++%% Keep the effective setting in its owning node/zone/default scope. Copying a
++%% node's list into default both loses other nodes' modules and fails to persist
++%% the new module for the node whose override still shadows that default.
++-spec set_effective_autoload_modules(kz_term:ne_binaries()) ->
++          {'ok', kz_json:object()} | {'error', any()}.
++set_effective_autoload_modules(Modules) ->
++    case kapps_config:get_category(?CONFIG_CAT, 'false') of
++        {'ok', Config} ->
++            Node = kz_term:to_binary(node()),
++            Zone = kz_term:to_binary(kz_config:zone()),
++            Scope = autoload_scope([Node, Zone], Config),
++            kapps_config:set_node(?CONFIG_CAT, <<"autoload_modules">>, Modules, Scope);
++        {'error', 'not_found'} ->
++            kapps_config:set_node(?CONFIG_CAT, <<"autoload_modules">>, Modules, <<"default">>);
++        {'error', _}=Error -> Error
++    end.
++
++-spec autoload_scope(kz_term:ne_binaries(), kz_json:object()) -> kz_term:ne_binary().
++autoload_scope([], _Config) -> <<"default">>;
++autoload_scope([Scope | Scopes], Config) ->
++    case kz_json:get_value([Scope, <<"autoload_modules">>], Config) of
++        'undefined' -> autoload_scope(Scopes, Config);
++        _ -> Scope
++    end.
++
+ %%------------------------------------------------------------------------------
+ %% @doc
+ %% @end
+@@ -181,7 +206,7 @@ persist_module(Module, Mods) ->
+ stop_module(Module) ->
+     'ok' = crossbar_init:stop_mod(Module),
+     Mods = crossbar_config:autoload_modules(),
+-    {'ok', _} = crossbar_config:set_default_autoload_modules(lists:delete(kz_term:to_binary(Module), Mods)),
++    {'ok', _} = set_effective_autoload_modules(lists:delete(kz_term:to_binary(Module), Mods)),
+     ?SUP_LOG_INFO("stopped and removed ~s from autoloaded modules~n", [Module]).
+ 
+ %%------------------------------------------------------------------------------

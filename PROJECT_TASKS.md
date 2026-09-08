@@ -2,6 +2,16 @@
 
 ## Immediate operator follow-up — September8
 
+- **INSTALL-MODULE-SCOPE-01 SOURCE FIX — deployment pending:** native Crossbar
+  start/stop read node/zone autoload overrides but overwrote cluster default,
+  leaving their own startup list unchanged. Root-owned patch now persists to
+  the setting's actual node/zone/default owner and preserves other scopes.
+  Baseline f53f5a fails6/9; final039b20 passes9/9 plus clean-source/double-patch
+  byte replay. No live overrides changed for testing. Applies to the normal
+  installer and SUP module commands, not only storage. Native deployment/parity
+  pending; concurrent writers and real split-host reboot are not proven.
+  See `doc/crossbar_module_autoload_scope.md`.
+
 - **UI-01 native storage API installer gap — DEPLOYED / scoped PASS:**
   Main readback f0eb1c confirms `cb_storage` absent from both effective autoload
   and running bindings. The normal API setup now registers it, verifies exact
