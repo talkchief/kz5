@@ -75,6 +75,37 @@ staged harness at `ae87595`: unit `kz5-capacity-stages-20260908`, observer
 session `11093`, log `/root/kz5-acceptance/capacity-stages-20260908.log`, results
 under `/var/log/kazoo-acceptance/main44-capacity-20260908/`. It includes five
 queued excess callers at the 30-agent stage. Boundaries: 1536 MiB memory, no
-swap, CPU 200%, 512 tasks, 2400-second deadline. This run is pending; poll the
-same unit/session and inspect its terminal receipt, never restart because an
-SSH observation times out. Do not count launch as a passed load test.
+swap, CPU 200%, 512 tasks, 2400-second deadline. This run is now **terminal,
+exit1 (`11093/59ad9e`)**; the 30-call arrival assertion failed as detailed below.
+
+| Stage | Caller successes/failures | Agent successes/failures | Peak sampled host CPU | Minimum available memory KiB | New log errors / cores |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1 / 0 | 1 / 0 | 7% | 21241044 | 0 / 0 |
+| 5 | 5 / 0 | 5 / 0 | 14% | 21192312 | 0 / 0 |
+| 10 | 10 / 0 | 10 / 0 | 23% | 21113652 | 0 / 0 |
+| 20 | 20 / 0 | 20 / 0 | 28% | 20991072 | 0 / 0 |
+
+Each completed stage also passed bidirectional RTP and agent-ready checks.
+These are whole-host sampled CPU values, not per-call or per-core CPU costs.
+Readback `dedfd3`; result directory `20260908T165536Z`.
+
+The 30-agent stage intentionally delays five excess callers by 120 seconds,
+but the old arrival helper allowed only 60 seconds for all 35 answers. This
+could not satisfy its own test scenario. At failure the caller's maximum answer
+count was 30, SIP failures zero, with all 30 agent processes having received a
+call (`95ba14`). That does not prove sustained simultaneous answered capacity.
+After cleanup, unit PID0/inactive and zero FreeSWITCH calls (`719c6f`).
+
+Source fix `0433788` adds the intentional delay only to the arrival allowance;
+the ordinary 60-second budget and full 180-second simultaneous hold remain.
+Virtual-time tests cover success, missing arrivals, both orchestration budgets
+and unchanged hold; control-binding/SIP/RTP argument regression also passes
+(`64549/904861`). No server capacity limit was raised or error ignored.
+
+Only the corrected final stage is rerunning, not the already passed smaller
+stages: unit `kz5-capacity-delayedfix-20260908`, observer session `31826`, log
+`/root/kz5-acceptance/capacity-delayedfix-20260908.log`, results under
+`/var/log/kazoo-acceptance/main44-capacity-delayedfix-20260908/`. Same memory,
+swap, CPU and task bounds; 1200-second deadline. This run is **pending**.
+Poll that same unit/session; do not restart on an SSH observation timeout or
+count launch as a passed 30-call test.

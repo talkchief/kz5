@@ -1,5 +1,26 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Main-host load update: 1/5/10/20 concurrent calls PASS; final 30+5 rerun
+pending.** Original staged run `11093/59ad9e` is terminal exit1. Its 30-agent
+stage used a 60-second arrival allowance for callers intentionally delayed
+120 seconds. Fixed in `0433788` without reducing the 180-second simultaneous
+hold; regressions pass. Original cleanup finished, zero calls/PID0 (`719c6f`).
+Now monitor ONLY unit `kz5-capacity-delayedfix-20260908`, observer `31826`, log
+`/root/kz5-acceptance/capacity-delayedfix-20260908.log` on .44. It reruns the
+final 30-agent/five-queued stage, with a 1200-second deadline. Do not launch
+another or claim capacity until its hold/drain/RTP/log gates pass. Smaller
+stages had zero SIP failures, log errors or new cores. Full results and first
+failure are in `doc/main44_call_acceptance_20260908.md`.
+
+**Five-language callback evidence is now preserved on the main dev host.**
+Archive `/root/kz5-handoff/callback-acceptance-20260908/five-language-acceptance.tar.gz`
+contains the five original EN/HE/FR/ES/AR retry runs (435 entries); root0600,
+parent0700, SHA256 verified `a8b60d`. Details/hash in
+`doc/focused_acceptance_20260908.md`. These are private captures/receipts, not
+new calls or regenerated voices. P0-10/VOICE-05/INST-13 task rows now reflect
+the later proven acceptance scopes instead of stale pre-deployment wording;
+fallback/position-composition, uncertain-send recovery and other gates remain.
+
 **Main-host single-call SIP/RTP gate now passes `91284/2464e2`.** Source fixes
 `5167a32` restore pinned SIPp release metadata and isolate one fixture agent;
 `ae87595` requires an actual REGISTER rejection and avoids the negative test's

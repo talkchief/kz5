@@ -110,6 +110,21 @@ full-DLQ, broker-restart or exactly-once claim.
 
 ## Explicit callback language acceptance
 
+### Main-host preservation before original-host deletion
+
+All five evidence directories listed below (EN, HE, FR, ES and AR) are retained
+as a protected archive on `10.1.0.44`:
+`/root/kz5-handoff/callback-acceptance-20260908/five-language-acceptance.tar.gz`.
+SHA256: `6e4631f5e3a1de0f6a85a1c83f02f7012e1798905cd42881dc2626bd348ddf7f`.
+Independent remote readback `a8b60d` matches the original archive, confirms
+root:root mode0600 and 435 archive entries. Its parent is mode0700. These are
+private test captures/receipts, not Git assets or public documentation; retain
+their access restrictions. No runtime configurations were restored or changed.
+Local readback `0aa77b` confirms all five registration-audio receipts report
+PASS, entry-only mode, and exactly one observed digit6. This preserves existing
+acceptance, not a new five-language call test on .44. The immutable voice assets
+themselves already live in the repository; no Gemini call was made.
+
 `test-acdc-callback-retry.sh` now accepts `--language` with exactly `en-us`,
 `he-il`, `fr-fr`, `es-es` or `ar-sa`. It changes the existing isolated fixture
 queue's announcement language only when explicitly selected, verifies readback,
