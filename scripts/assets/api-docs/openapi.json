@@ -35587,7 +35587,7 @@
                 "type": "integer"
               },
               "language": {
-                "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used.",
+                "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used. Newly admitted calls snapshot their effective language for position announcements, callback offers and responses, including resumed announcement workers and callback retries. Later queue edits affect new admissions; entering another queue takes a new snapshot. Legacy calls without a snapshot retain the prior worker fallback behavior. Built-in audio uses installed recordings, never runtime voice generation.",
                 "maxLength": 35,
                 "minLength": 2,
                 "pattern": "^[a-z]{2,3}(-[a-z0-9]{2,8})*$",
@@ -48435,7 +48435,7 @@
                 "type": "integer"
               },
               "language": {
-                "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used.",
+                "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used. Newly admitted calls snapshot their effective language for position announcements, callback offers and responses, including resumed announcement workers and callback retries. Later queue edits affect new admissions; entering another queue takes a new snapshot. Legacy calls without a snapshot retain the prior worker fallback behavior. Built-in audio uses installed recordings, never runtime voice generation.",
                 "maxLength": 35,
                 "minLength": 2,
                 "pattern": "^[a-z]{2,3}(-[a-z0-9]{2,8})*$",
@@ -51807,7 +51807,7 @@
                     "type": "integer"
                   },
                   "language": {
-                    "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used.",
+                    "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used. Newly admitted calls snapshot their effective language for position announcements, callback offers and responses, including resumed announcement workers and callback retries. Later queue edits affect new admissions; entering another queue takes a new snapshot. Legacy calls without a snapshot retain the prior worker fallback behavior. Built-in audio uses installed recordings, never runtime voice generation.",
                     "maxLength": 35,
                     "minLength": 2,
                     "pattern": "^[a-z]{2,3}(-[a-z0-9]{2,8})*$",
@@ -52325,7 +52325,7 @@
                 "type": "integer"
               },
               "language": {
-                "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used.",
+                "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used. Newly admitted calls snapshot their effective language for position announcements, callback offers and responses, including resumed announcement workers and callback retries. Later queue edits affect new admissions; entering another queue takes a new snapshot. Legacy calls without a snapshot retain the prior worker fallback behavior. Built-in audio uses installed recordings, never runtime voice generation.",
                 "maxLength": 35,
                 "minLength": 2,
                 "pattern": "^[a-z]{2,3}(-[a-z0-9]{2,8})*$",
@@ -52740,7 +52740,7 @@
                 "type": "integer"
               },
               "language": {
-                "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used.",
+                "description": "Optional lowercase BCP 47 prompt language override. When omitted, the caller/account prompt language is used. Newly admitted calls snapshot their effective language for position announcements, callback offers and responses, including resumed announcement workers and callback retries. Later queue edits affect new admissions; entering another queue takes a new snapshot. Legacy calls without a snapshot retain the prior worker fallback behavior. Built-in audio uses installed recordings, never runtime voice generation.",
                 "maxLength": 35,
                 "minLength": 2,
                 "pattern": "^[a-z]{2,3}(-[a-z0-9]{2,8})*$",

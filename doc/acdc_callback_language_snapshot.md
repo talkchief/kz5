@@ -137,9 +137,49 @@ media playback path; retain the strict timing failure rather than silently
 relaxing the assertion. No additional call or Gemini generation is needed to
 inspect this existing evidence.
 
+Source inspection on main confirms FreeSWITCH revision
+`ef32e205295e29f034f1453ad245ba5efb07b94a` and SIP profile `rtp-timer-name=soft`.
+The inspected `src/switch_rtp.c` SHA256 is
+`a0a0b95ece6342d9089660f3b242aa25cd97d6956136c10f030b30038f542f87`;
+`src/switch_time.c` is
+`ca714f0454f02b1bc57713a70fbb2d3d0aac2bfcf2fd868163c85e5f8b286284`.
+`get_next_write_ts` uses the writer timer's sample count, and soft `timer_next`
+can resynchronize an overdue timer rather than replay missed ticks. This is a
+source-supported candidate explanation, not instrumentation proving which
+branch ran during the retained call. RTP sequence counts packets while its
+timestamp represents a media sampling clock; a timestamp gap alone does not
+prove packet loss ([RFC3550 section5.1](https://www.rfc-editor.org/rfc/rfc3550.html#section-5.1)).
+No global timestamp workaround, FreeSWITCH patch/rebuild, new call or voice
+generation was performed for this investigation. Audible playout quality and
+the strict timing failure remain distinct from the verified language result.
+
+## Resumed announcement-worker consistency correction
+
+A second source defect was reproduced: after an EN admission, serializing the
+call and resuming its announcement worker with the queue's updated FR settings
+changed its position/offer language to FR, while callback responses remained EN.
+Corrected actual-source baseline1483/ff1843 fails exactly that assertion; the
+initial baseline63732/96935a lacked configuration mocks needed by ordinary call
+serialization and is not the behavioral reproduction.
+
+Queue admission now stores the canonical effective language in the call's
+existing serialized Key-Value-Store (`acdc_admitted_queue_language`). Resumed
+announcement workers honor that value. Admission to another queue replaces it;
+legacy calls without it retain their prior queue-override behavior. This is
+per-call metadata, not a new CouchDB schema field or a change to saved account
+defaults. Explicit queue language avoids unnecessary inherited-default reads.
+No audio assets or voice-generation behavior changed.
+
+Final source tests44618/5b971e pass all12 language tests, including all five
+locales through call serialization, next-queue override, inherited HE_IL
+canonicalization and legacy fallback. Queue-schema documentation now states
+this admission contract. Deployment of this second correction is pending;
+account/reseller default resolution and actual worker-failure lifecycle
+acceptance remain separate from these deterministic language checks.
+
 The real queue-edit case proves language retention, with the separate RTP
 timing discrepancy above still open. Prior
 five-language audio/retry results predate this correction and are not proof of
 the new queue-edit case. New-account/reseller default inheritance and language
-changes during restarted position-announcement workers remain separate review
-items; this correction does not close all of VOICE-01.
+defaults remain separate review items; these corrections do not close all of
+VOICE-01.

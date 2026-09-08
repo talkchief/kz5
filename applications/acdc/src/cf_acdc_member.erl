@@ -106,10 +106,17 @@ handle(Data, Call) ->
 %% saved original call used by the returned caller, not only position prompts.
 -spec queue_announcement_call(kz_json:object(), kapps_call:call()) -> kapps_call:call().
 queue_announcement_call(QueueJObj, Call) ->
-    case kz_json:get_ne_binary_value([<<"announcements">>, <<"language">>], QueueJObj) of
-        'undefined' -> Call;
-        Language -> kapps_call:set_language(acdc_language:canonical(Language), Call)
-    end.
+    Selected = case kz_json:get_ne_binary_value([<<"announcements">>, <<"language">>], QueueJObj) of
+                   'undefined' -> kapps_call:language(Call);
+                   Override -> Override
+               end,
+    Language = acdc_language:canonical(Selected),
+    %% A resumed announcement worker receives the manager's latest settings.
+    %% Pin admission language in serialized call state so periodic prompts and
+    %% callback responses cannot diverge after an intervening queue edit.
+    %% Admission to a subsequent queue deliberately replaces this snapshot.
+    kapps_call:kvs_store(<<"acdc_admitted_queue_language">>, Language,
+                        kapps_call:set_language(Language, Call)).
 
 -spec lookup_priority(kz_json:object(), kapps_call:call()) -> kz_term:api_binary().
 lookup_priority(Data, Call) ->

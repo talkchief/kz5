@@ -2956,7 +2956,7 @@
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "113e0650c53804a647e9c760f19960b2d58c297a8a335d287429e213d1a40570"
+      "sha256": "b29694a6db22e7e8df1c53610b1b70b866188a460f64e0de3d3c6c34eecc9d7f"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",

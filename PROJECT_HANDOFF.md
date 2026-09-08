@@ -1,5 +1,14 @@
 # Kazoo 5 — start here / engineering handoff
 
+**VOICE-01 resumed-worker language source fix ready for normal deployment.**
+Baseline1483/ff1843 reproduces a resumed announcement worker switching EN toFR
+after the queue changed. Admission now pins effective language in serialized
+call KVS; workers honor it while subsequent queue admission and legacy fallback
+remain correct. All12 language tests44618/5b971e pass. No voice generation,
+account-language changes or FreeSWITCH rebuild. Queue-schema/OpenAPI wording
+is updated; deployment of this second correction remains pending. See
+`doc/acdc_callback_language_snapshot.md`.
+
 **VOICE-01 callback language snapshot source correction deployed on main.**
 Queue edits could switch admitted callers' callback language. A focused source
 regression reproduces this; corrected registration/restoration/confirmation

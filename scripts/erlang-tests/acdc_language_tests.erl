@@ -34,6 +34,42 @@ callback_reservation_restores_snapshot_not_current_call_defaults_test() ->
     end, [<<"en-us">>, <<"he-il">>, <<"ar-sa">>, <<"fr-fr">>, <<"es-es">>]),
     ?assertEqual(Call, acdc_callback_caller:reservation_call(kz_json:new(), Call)).
 
+resumed_announcements_keep_admitted_queue_language_test() ->
+    meck:new(kapps_config, [passthrough, no_link]),
+    try
+    meck:expect(kapps_config, get_ne_binary, fun(_, _, Default) -> Default end),
+    meck:expect(kapps_config, get_binary, fun(_, _, Default) -> Default end),
+    meck:expect(kapps_config, get_ne_binaries, fun(_, _, Default) -> Default end),
+    Queue = kz_json:set_value([<<"announcements">>, <<"language">>], <<"en-us">>, kz_json:new()),
+    Call = cf_acdc_member:queue_announcement_call(Queue, kapps_call:new()),
+    Serialized = kapps_call:from_json(kapps_call:to_json(Call)),
+    ChangedConfig = acdc_announcements:get_config([{<<"language">>, <<"fr-fr">>}]),
+    Resumed = acdc_announcements:maybe_set_announcement_language(Serialized, ChangedConfig),
+    ?assertEqual(<<"en-us">>, kapps_call:language(Resumed)),
+    NextQueue = kz_json:set_value([<<"announcements">>, <<"language">>], <<"HE_IL">>, Queue),
+    NextCall = cf_acdc_member:queue_announcement_call(NextQueue, Resumed),
+    ?assertEqual(<<"he-il">>, kapps_call:language(
+        acdc_announcements:maybe_set_announcement_language(NextCall, ChangedConfig))),
+    lists:foreach(fun(Language) ->
+        Selected = kz_json:set_value([<<"announcements">>, <<"language">>], Language, Queue),
+        Admitted = cf_acdc_member:queue_announcement_call(Selected, kapps_call:new()),
+        Restored = kapps_call:from_json(kapps_call:to_json(Admitted)),
+        ?assertEqual(Language, kapps_call:language(
+            acdc_announcements:maybe_set_announcement_language(Restored, ChangedConfig)))
+    end, [<<"en-us">>, <<"he-il">>, <<"ar-sa">>, <<"fr-fr">>, <<"es-es">>]),
+    Inherited = cf_acdc_member:queue_announcement_call(kz_json:new(),
+                    kapps_call:set_language(<<"HE_IL">>, kapps_call:new())),
+    ?assertEqual(<<"he-il">>, kapps_call:language(
+        acdc_announcements:maybe_set_announcement_language(Inherited, ChangedConfig)))
+    after meck:unload(kapps_config)
+    end.
+
+legacy_announcement_call_still_uses_queue_override_test() ->
+    Legacy = kapps_call:set_language(<<"en-us">>, kapps_call:new()),
+    Config = acdc_announcements:get_config([{<<"language">>, <<"HE_IL">>}]),
+    ?assertEqual(<<"he-il">>, kapps_call:language(acdc_announcements:maybe_set_announcement_language(Legacy, Config))),
+    ?assertEqual(Legacy, acdc_announcements:maybe_set_announcement_language(Legacy, acdc_announcements:get_config([]))).
+
 registration_settings_do_not_overwrite_admitted_language_test() ->
     Queue = kz_json:from_list([{<<"announcements">>, kz_json:from_list([{<<"language">>, <<"fr-fr">>}])}]),
     Call = kapps_call:set_call_id(<<"language-fixture">>,

@@ -164,9 +164,15 @@ announcements_media(Props) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec maybe_set_announcement_language(kapps_call:call(), map()) -> kapps_call:call().
-maybe_set_announcement_language(Call, #{announcement_language := 'undefined'}) -> Call;
-maybe_set_announcement_language(Call, #{announcement_language := Language}) ->
-    kapps_call:set_language(acdc_language:canonical(Language), Call).
+maybe_set_announcement_language(Call, #{announcement_language := QueueLanguage}) ->
+    case kapps_call:kvs_fetch(<<"acdc_admitted_queue_language">>, Call) of
+        Language when is_binary(Language), byte_size(Language) > 0 ->
+            kapps_call:set_language(acdc_language:canonical(Language), Call);
+        _ when QueueLanguage =:= 'undefined' -> Call;
+        _ ->
+            %% Calls admitted before snapshot support retain legacy behavior.
+            kapps_call:set_language(acdc_language:canonical(QueueLanguage), Call)
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Initialize state for the announcements process

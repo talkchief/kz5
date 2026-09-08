@@ -26,6 +26,8 @@ KAZOO_LANGUAGE_TEST_MODE="$language_test_mode" erl -pa "$test_dir" -noshell \
     -eval 'Tests = case os:getenv("KAZOO_LANGUAGE_TEST_MODE") of
         "--snapshot-only" -> [{timeout, 30, fun acdc_language_tests:callback_response_keeps_admitted_language_after_queue_edit_test/0},
                               fun acdc_language_tests:callback_reservation_restores_snapshot_not_current_call_defaults_test/0,
-                              fun acdc_language_tests:registration_settings_do_not_overwrite_admitted_language_test/0];
+                              fun acdc_language_tests:registration_settings_do_not_overwrite_admitted_language_test/0,
+                              fun acdc_language_tests:resumed_announcements_keep_admitted_queue_language_test/0,
+                              fun acdc_language_tests:legacy_announcement_call_still_uses_queue_override_test/0];
         "all" -> acdc_language_tests end,
         case eunit:test(Tests, [verbose]) of ok -> halt(0); _ -> halt(1) end.'

@@ -2,6 +2,16 @@
 
 ## Immediate operator follow-up — September8
 
+- **VOICE-01 resumed announcement language SOURCE FIXED:** a resumed worker
+  reapplied current FR queue settings to a serialized EN admission, unlike the
+  callback's retained EN language. Baseline1483/ff1843 reproduces the mismatch.
+  Queue admission now stores its effective language in existing serialized call
+  KVS; resumed workers honor it, next-queue admission replaces it, and legacy
+  calls retain fallback behavior. All12 language tests44618/5b971e pass,
+  including all five locales and inherited HE_IL normalization. No new audio
+  or account defaults; normal kazoo-apps deployment pending. See
+  `doc/acdc_callback_language_snapshot.md`.
+
 - **VOICE-01 callback language snapshot DEPLOYED:** queue edits could
   overwrite the admitted caller language at registration and returned-call
   confirmation. Actual-source regression reproduces EN switching to FR. The
