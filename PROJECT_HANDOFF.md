@@ -1,6 +1,18 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Next focused queue gap: actual browser Save, not initial form loading.**
+**Actual browser Create/Save now PASS on main.** Unit
+`kz5-queue-browser-schedule-save-main44-20260908`, source6ebb5fd, observer97969/d810a2
+exits0 in20.619s. Real create + all-five language saves + final callback-disable
+Save, fresh API readbacks and reopened UI preserve generic17/callback30. No
+captured browser errors; blue bar inactive. Retained queue
+51765a97f9c6dcdffbab1d80cd5d0ef8 belongs only to the protected acceptance account,
+has no agents/extension and callbacks disabled; no copied-company writes/calls.
+Private receipt `/var/log/kazoo-acceptance/browser-queue-save.p3Qg3O/receipt.json`.
+See `doc/queue_browser_save_acceptance.md` for evidence, first safe harness
+failure and repeatable armed command. Do not rerun or delete retained fixtures
+blindly. Restricted principals, inheritance and uncertain-save recovery stay open.
+
+**Earlier initial form loading check also PASS.**
 Main Add queue/default validation check64600/e4b274 passes in10.969s with zero
 storage requests, no captured errors, five language choices and inactive blue
 bar; local draft/cancel only, writes blocked. Sourcef9b5bf7 adds repeatable

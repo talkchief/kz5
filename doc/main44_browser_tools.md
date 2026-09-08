@@ -12,6 +12,8 @@ sudo bash scripts/run-dev44-company-browser.sh
 sudo bash scripts/run-dev44-company-browser.sh --callflows-users
 # Reported queue-create/default-validation/loading path, without saving:
 sudo bash scripts/run-dev44-company-browser.sh --queue-create-form
+# Explicit write acceptance in the protected fixture; retains one test queue:
+sudo bash scripts/run-dev44-company-browser.sh --queue-create-save --allow-fixture-writes
 ```
 
 Setup supports Rocky Linux 9 x86_64 only. It installs missing browser OS libraries
@@ -56,3 +58,10 @@ Focused Add queue/form validation passed on main (sourcef9b5bf7,
 a local draft name, checks native default validity and five language choices,
 asserts no storage requests/errors/active blue bar, then cancels. Mutations are
 blocked. It does not submit Save or validate optional external-storage screens.
+
+The separately armed `--queue-create-save --allow-fixture-writes` mode now proves
+actual Save on the protected fixture only. It uses the shared acceptance lock,
+checks fixture identity and guards each real browser mutation. It is NOT a
+read-only mode: one queue is retained without agents/extension and with callbacks
+disabled after six verified saves. See `queue_browser_save_acceptance.md` before
+running it; no automatic retry or cleanup follows an uncertain response.

@@ -2,6 +2,17 @@
 
 ## Immediate operator follow-up — September8
 
+- **P0-26 / EDITOR-MAIN44-LANGUAGE-01 ACTUAL BROWSER SAVE PASS:** real create,
+  EN/HE/AR/FR/ES saves, fresh readbacks and final reopened form succeed on main.
+  Generic17/callback30 intervals persist; final sixth Save disables callbacks.
+  No injected requests/responses, exact editor body guard, no captured browser
+  errors and inactive blue bar. Unit97969/d810a2 exits0 in20.619s, source6ebb5fd.
+  One test queue51765a97f9c6dcdffbab1d80cd5d0ef8 is retained in the isolated fixture,
+  empty roster/no extension/callbacks disabled; copied Talkchief untouched.
+  Evidence and replay: `doc/queue_browser_save_acceptance.md`.
+  Restricted principals, inherited defaults and uncertain-save recovery remain
+  separate gaps; this is not a whole-platform release sign-off.
+
 - **P0-26 / UI-01 focused current-form check PASS:** actual Add queue click on
   kz5-dev renders the create form, accepts the named draft with default HTML
   validation, offers exactly EN/HE/AR/FR/ES, makes zero `/storage` requests,
@@ -16,7 +27,7 @@
   would not establish a fix. No module/plan/config was changed for this check.
   Do not fabricate a storage document or success response to hide the error.
   Replay: `bash scripts/run-dev44-company-browser.sh --queue-create-form`.
-  Actual browser Save remains the next queue-create acceptance gap.
+  Actual browser Save subsequently passed in the focused sequence above.
 
 - **UI-03 FIXED / MAIN BROWSER PASS:** Callflows → Users entitlement404 was
   missing Crossbar registration. Registration also exposed master ancestry
@@ -38,7 +49,7 @@
   npm rejects the same empty config path for user/global; corrected to separate
   protected empty files in7db656f. Prior stage retained, system Node unchanged.
   Guidance:
-  `doc/main44_browser_tools.md`. Actual browser Save remains a separate open gate.
+  `doc/main44_browser_tools.md`. Focused actual browser Save now passes above.
 
 - **EDITOR-MAIN44-LANGUAGE-01 NATIVE MASTER-ADMIN API PASS:** port the armed
   unified-editor acceptance to the main host's protected fixture and locally
