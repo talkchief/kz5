@@ -2,13 +2,15 @@
 
 ## Immediate operator follow-up — September8
 
-- **VOICE-01 locale spelling UI SOURCE FIXED:** existing `HE_IL`/`HE-IL`
+- **VOICE-01 locale spelling UI DEPLOYED:** existing `HE_IL`/`HE-IL`
   queues were selected and adopted as English despite backend Hebrew playback.
   Baseline a9f2bc reproduces it. The dropdown now canonicalizes supported
   spellings; fifteen variant cases preserve the same language on Save, and
   unready packs remain disabled with their original values preserved. Full UI
-  contract4ac811 passes. Normal Monster deployment and served-artifact check
-  pending. See `doc/queue_language_spelling_fix.md`. Broader inheritance remains
+  contract4ac811 passes. Normal Monster installer21645/6f16cc exits0 in79.083s;
+  served bundled AMD checkef38b2 passes all15 variants and unready preservation
+  with zero account writes. Source d4eb7ad is on master and main.
+  See `doc/queue_language_spelling_fix.md`. Broader inheritance remains
   open; do not equate spelling normalization with changing account defaults.
 
 - **VOICE-01 resumed announcement language DEPLOYED:** a resumed worker
