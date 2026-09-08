@@ -1,0 +1,27 @@
+diff --git a/kazoo_media/src/kazoo_media_maintenance.erl b/kazoo_media/src/kazoo_media_maintenance.erl
+--- a/kazoo_media/src/kazoo_media_maintenance.erl
++++ b/kazoo_media/src/kazoo_media_maintenance.erl
+@@ -11,7 +11,7 @@
+ 
+ -export([remove_empty_media_docs/0
+         ,remove_empty_media_docs/1
+-        ,migrate/0, migrate_prompts/0
++        ,migrate/0, migrate/1, migrate_prompts/0
+         ,import_prompts/1, import_prompts/2
+         ,import_prompt/1, import_prompt/2
+         ,set_account_language/2
+@@ -32,6 +32,14 @@ migrate() ->
+ 
+     'no_return'.
+ 
++%% Account-scoped maintenance dispatches the same migration binding with an
++%% account list. Media currently has only system_config migrations; those must
++%% run exclusively through migrate/0, never as a side effect of migrating one
++%% company. Accept the scoped hook without invoking global work.
++-spec migrate(kz_term:ne_binaries()) -> 'ok'.
++migrate(AccountDbs) when is_list(AccountDbs) ->
++    'ok'.
++
+ -spec migrate_prompts() -> 'no_return'.
+ migrate_prompts() ->
+     io:format("Now updating existing system_media docs to be internationalizable!~n", []),

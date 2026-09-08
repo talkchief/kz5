@@ -156,7 +156,7 @@ physical `.couch` file downgrade compatibility.
 
 ## Still required
 
-- Additional view keys/edge cases, repeat-migration/idempotence and live call
+- Additional view keys/edge cases and live call
   behavior under both versions; the representative API/edit tests below do
   not prove every endpoint or call feature works.
 - Full system/config/global migration semantics. The selected-company native
@@ -235,6 +235,10 @@ not execution of the full global migration command.
 Actual run99861/408605 returned normally. Its private log reports seven refreshes,
 account-config/failover completion, two hook results and24 migrated documents;
 no matching failure/warning lines were found in that captured command output.
+**Repeat-test correction:** the original helper counted hook results without
+checking them. A later stricter run found the media hook returned an `EXIT` error
+despite the outer call completing. Do not interpret this first run as complete
+hook success. The source fix and successful post-fix checks are recorded below.
 Native functions can absorb internal errors, so the independent differences
 and post-migration API tests are the stronger evidence:
 
@@ -284,3 +288,92 @@ original labels verified unchanged) and `company-migration-native-2.log`.
 `monthly-view-query-comparison.json` holds the12 real MODB endpoint comparisons.
 Do not overwrite evidence paths or replay edits from an interrupted journal
 without inspecting restoration state.
+
+## Repeat test and media migration hook fix
+
+The first strict repeat21306/78469d returned failure with hook statuses
+`[error,ok]`. Read-only native hook inventory79755/613d3d identifies
+`kazoo_media_maintenance:migrate/0` but no `/1`, whereas Crossbar exports both.
+Account-selected maintenance dispatches the account list as one argument;
+the media responder therefore fails with `undef`. The media module's migration
+body only updates global `system_config` settings, so forwarding the scoped call
+to `/0` would be an incorrect fix.
+
+`scripts/patches/kazoo-media-scoped-migration.patch` adds a list-guarded `/1`
+that returns `ok` without running global work; `/0` is unchanged. This is a
+**required normal-installer core patch**, registered in `ensure_kazoo_sources`.
+Core is a separately pinned dependency under ignored `/core/`, so committing a
+loose edit there would not preserve the fix in kz5. The patch and regression
+fixture are tracked in kz5; no commit is made to the core or ACDC repositories.
+
+`scripts/test-kazoo-media-scoped-migration.sh` replays the real installer helper
+against a clean archive of core5defa1d: first application, idempotent reapplication,
+and incompatible/missing-source rejection all pass. It compiles both old and
+patched source with the production Lager parse transform and `-Werror`.
+All four regression cases fail before and pass after (86339/3811e6).
+Installer base/modular/deployment suites pass61019/36b389, as do lab startup
+generation checks and six pure hook-status classifier checks.
+
+Deployment is **lab-only**: its startup command now prepends
+`/var/lib/kazoo-compat-runtime/apps/overrides`. The only override is the tested
+`kazoo_media_maintenance.beam`, SHA256
+`b460c6e05c5bd5ee5fd9de3645e0a699c637f87154aa8dc0cb4d0ffbe49f9317`.
+Runtime proof3858b2 checks actual code origin, running-module MD5 versus the
+artifact, both exported arities, and production parse-transform metadata.
+The main .44 shared BEAMs were not overwritten, and neither main nor production
+services were restarted. Do not mistake the lab override for deployment to the
+main stack. Future normal compilation applies the tracked required patch.
+When upgrading the lab's base core later, rebuild/revalidate this override or
+remove it only after verifying the base artifact includes the fix; otherwise
+an older override can shadow newer base code. Never copy overrides into Git.
+
+With the production-compiled artifact, selected migration98564/4be170 returns
+both hook statuses `[ok,ok]`, no further document migrations and no matching
+failure/warning lines in its captured output. Full seven-DB comparison shows
+unchanged working content hashes and unchanged baseline metadata (7fc9a7).
+All nine main services and three lab services remain active.
+
+This proves **content stability for this repeat**, not a write-free operation:
+the first repeat advanced `_design/numbers`' revision without changing its body,
+and the synthetic global `accounts` revision sequence also advanced. Working
+account DB metadata advances on subsequent repeats; monthly metadata remains
+stable. These writes may affect replication/index workload and remain a
+separate follow-up, not evidence of changed business data or corruption.
+
+Private evidence:
+
+- `databases-before-repeat.ndjson`, SHA256
+  `d8797df5c56d32a25e6757dcec6ff7f8de3a2acf62fd0eff7ddde84cc16a9737`.
+- `databases-after-production-repeat.ndjson`, SHA256
+  `9209e719b58334d3e6caeb18acced66147a404ed31d7ece8844dba447638814d`.
+- `comparison-before-repeat.json`, `comparison-after-repeat.json`,
+  `company-migration-repeat.log`, `company-migration-production-repeat.log`.
+  Earlier `after-repeat`/`after-fixed-repeat` captures are retained as intermediate
+  evidence, not substituted for the final production-artifact measurement.
+
+## Deployment decision and recovery boundaries
+
+Keep Kazoo5 on separate CouchDB storage/credentials and separate broker/event
+infrastructure while production Kazoo4 owns the production company. An Erlang
+zone name alone cannot isolate shared document writes, design definitions or
+authentication/provider settings. Do not put production CouchDB endpoints into
+the development installer's deployment configuration as a shortcut.
+
+The present recommendation is **NO-GO for concurrent shared writable production
+databases**. Removed view contracts, changed failover representation and
+unverified production global/auth semantics are sufficient reasons to withhold
+approval even though the migrated sample is editable in Kazoo5. Remaining
+version4 runtime/call tests require the actual deployed application version or
+host; this assessment has not established that version from a CouchDB snapshot.
+
+For the current assessment, recovery means retaining the unchanged private
+baseline/snapshots and creating a fresh isolated working copy for another test;
+do not restore over the main development account or reverse-replicate into
+production. Existing restore helpers deliberately refuse collisions. For any
+future authorized production cutover, require a verified production backup,
+single-writer cutover boundary, explicit global/config/design ownership and a
+tested restoration plan that accounts for writes made after the snapshot.
+Replacing only old design documents is not sufficient to undo transformed
+user/device data, and this logical export does not prove a physical CouchDB
+3.5→3.3 file downgrade is safe. No automatic production rollback, migration,
+DNS change or data deletion is authorized or implemented by this assessment.

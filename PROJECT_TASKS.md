@@ -47,9 +47,26 @@ readbacks pass200 (93347/340c36). Two additional legacy service-view endpoints
 return200 on baseline and404 on working in all six MODBs (64718/b919f6).
 Tools and regression coverage are in kz5; raw journals remain private on .44.
 Remaining: exact deployed Kazoo4 version/runtime contract (operator asked),
-additional view/call edge cases, repeat-migration/idempotence, full system/global
+additional view/call edge cases, full system/global
 semantics, and rollout/rollback decision. The seven-DB native component test
 does not run broad global `migrate/0`; no whole-cluster coexistence approval.
+
+Repeat-check continuation: strict hook checking exposed `undef` in the media
+migration responder: only `/0` existed, while company-scoped dispatch calls `/1`.
+The earlier outer normal return did not establish hook success. Fixed through
+required installer patch `kazoo-media-scoped-migration.patch` in kz5 (core itself
+is a pinned dependency, not root-tracked source). Four regressions fail before
+and pass after; clean installer patch apply/reapply/rejection and native
+production compile pass86339/3811e6. Installer base/modular/deployment suites
+pass61019/36b389. Lab-only deployed artifact/runtime proof68481/dec473 verifies
+actual origin/MD5, production transform and Media/Crossbar/ACDC/Callflow/Blackhole
+running. Final native repeat98564/4be170 returns hook statuses `[ok,ok]`; all
+seven content hashes and baseline metadata remain unchanged. This is content
+stability, not write-free idempotence: `_design/numbers` and synthetic aggregate
+account revisions still advance. See findings for the fixed lab override path,
+upgrade precautions, private evidence and deployment/recovery boundaries. Main
+stack binaries/services were not changed by this compatibility-lab fix; future
+normal module compilation receives the required tracked patch.
 
 ## Fresh-server and TLS continuation — 2026-09-08
 

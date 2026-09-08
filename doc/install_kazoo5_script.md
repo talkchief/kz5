@@ -48,6 +48,18 @@ values, not shell code; do not source it. Base64 is not encryption: protect
 this file and keep it out of version control. `KAZOO_DEPLOYMENT_CONFIG` selects
 a different state file. Verification and dry runs do not rewrite it.
 
+The installer also applies `scripts/patches/kazoo-media-scoped-migration.patch`
+before compiling the pinned core. This fixes a missing account-scoped media
+migration hook (`migrate/1`) without running the global `migrate/0` settings
+changes for a single company. Do not keep this fix only as a loose edit under
+the ignored `core/` checkout. Its regression and real installer patch replay
+test is `scripts/test-kazoo-media-scoped-migration.sh`.
+
+This patch is not authorization or certification to share production Kazoo4
+CouchDB with Kazoo5. Company-copy tests found removed view contracts and changed
+legacy failover fields; see [coexistence findings](kazoo4_kazoo5_couchdb_findings.md)
+before pointing a new deployment at existing databases.
+
 ## Requirements
 
 - Rocky Linux 9 using systemd. Other RHEL-derived distributions are not yet

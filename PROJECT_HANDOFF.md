@@ -78,10 +78,34 @@ views; add `--summarize-existing` to read its completed private evidence safely.
 Current working account has28 non-design changes versus the untouched baseline
 (migration plus earlier auth/API effects),38 changed designs and8 additions.
 Private journals/hash references and exact limits are in the findings doc.
-Next: repeat-migration/idempotence, remaining view/call cases, deployed Kazoo4
+Next: remaining view/call cases, deployed Kazoo4
 code/runtime and shared-global semantics. All native/test/copy jobs are terminal;
 all9 main and3 lab services active at941cb5. Preserve the unrelated untracked
 `doc/dashboard_caller_sidecar_design.md` when committing/syncing.
+
+Latest repeat-test finding/fix: the old helper counted migration-hook results
+without checking errors. Stricter repeat21306/78469d found `[error,ok]` because
+the media hook lacked `migrate/1`. Fixed with a scoped no-op (global `/0`
+unchanged), tracked as required installer patch
+`scripts/patches/kazoo-media-scoped-migration.patch`; do not commit directly to
+the ignored/pinned `core` Git checkout. Regression/installer replay test is
+`scripts/test-kazoo-media-scoped-migration.sh` (four fail before/pass after,
+production Lager compile, apply/reapply/mismatch checks;86339/3811e6).
+
+Lab startup now supports its private `apps/overrides` directory; currently only
+`kazoo_media_maintenance.beam` is present, production-built SHA256
+`b460c6e05c5bd5ee5fd9de3645e0a699c637f87154aa8dc0cb4d0ffbe49f9317`.
+The real lab module path/MD5/compiler transform and five required running apps
+pass `company-compat-rpc.escript verify-media-fix` (68481/dec473). Only lab apps
+were restarted; main .44 and production binaries/services untouched. Rebuild
+or deliberately retire this override when upgrading the base core later so
+stale code cannot shadow it. Normal deployments use the required source patch.
+Final selected repeat98564/4be170 has hooks `[ok,ok]`, no additional business
+content changes across seven DBs, baseline metadata unchanged. `_design/numbers`
+and synthetic aggregate account revisions advance: **content stable, not
+write-free**. Findings now correct the earlier incomplete hook-success evidence
+and include explicit NO-GO deployment/recovery boundaries. Main deployment of
+this narrow delta has not been performed as part of the isolated assessment.
 
 Latest continuation: [fresh-host/TLS acceptance](doc/fresh_host_tls_acceptance_20260908.md).
 Physical mobile delivery testing was waived by the user. HTTPS is deployed and

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import importlib.util
 import pathlib
+import subprocess
 import unittest
 
 spec = importlib.util.spec_from_file_location('apps_lab', pathlib.Path(__file__).with_name('prepare-company-compat-apps.py'))
@@ -27,6 +28,9 @@ class AppsLabTests(unittest.TestCase):
         self.assertIn('/var/lib/kazoo-compat-runtime/apps/ra', start)
         self.assertNotIn('/opt/kazoo/var/lib/ra', start)
         self.assertNotIn('/etc/kazoo', start)
+        # Lab-only tested BEAM overrides avoid changing shared main-stack code.
+        self.assertIn('-pa /var/lib/kazoo-compat-runtime/apps/overrides', start)
+        subprocess.run(['sh', '-n'], input=start, text=True, check=True)
 
     def test_cookie_section_has_no_incorrect_hostname_selector(self):
         # Kazoo INI host is a section selector, not a listening address.

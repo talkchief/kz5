@@ -75,6 +75,7 @@ export ERL_CRASH_DUMP_BYTES=10485760
 export ERL_CRASH_DUMP_SECONDS=5
 exec /usr/bin/erl -name kazoo_compat@127.0.0.1 \\
     -kernel inet_dist_use_interface '{127,0,0,1}' \\
+    -pa /var/lib/kazoo-compat-runtime/apps/overrides \\
     -args_file /opt/kz5/rel/dev.vm.args -config /opt/kz5/rel/sys.config \\
     -ra data_dir '"/var/lib/kazoo-compat-runtime/apps/ra"' \\
     -lager log_root '"/var/lib/kazoo-compat-runtime/apps"' \\
@@ -102,7 +103,7 @@ def prepare():
         os.chown(str(path), owner.pw_uid, owner.pw_gid)
     def write(relative, content, mode=0o600):
         lab.write_exclusive(BASE / relative, content, mode, owner)
-    for relative in ['broker', 'broker/home', 'broker/mnesia', 'broker/log', 'broker/plugins', 'apps', 'apps/home', 'apps/log', 'apps/ra']:
+    for relative in ['broker', 'broker/home', 'broker/mnesia', 'broker/log', 'broker/plugins', 'apps', 'apps/home', 'apps/log', 'apps/ra', 'apps/overrides']:
         directory(relative)
     credentials = json.loads((BASE / 'credentials.json').read_text())
     broker_password, app_cookie = secrets.token_hex(32), secrets.token_hex(32)

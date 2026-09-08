@@ -1,6 +1,15 @@
 #!/usr/bin/env escript
 %%! +S 1:1 +SDcpu 1 +SDio 1 +A 2
 %% Fixed-scope RPC helper; run inside the dedicated lab network namespace.
+main(["self-test"]) ->
+    %% Pure return-shape tests: no namespace, credentials or network access.
+    ok = hook_status(ok),
+    ok = hook_status({ok, <<"private fixture">>}),
+    error = hook_status({error, <<"private fixture">>}),
+    error = hook_status({'EXIT', {private_fixture, []}}),
+    error = hook_status({badrpc, timeout}),
+    unknown = hook_status({unrecognized, <<"private fixture">>}),
+    io:format("hook_return_shape_tests=6 passed=true~n");
 main(Args) ->
     try
         put(stage, namespace),
@@ -33,6 +42,36 @@ run(["status"], Node) ->
     io:format("otp=~p~n", [rpc:call(Node, erlang, system_info, [otp_release], 15000)]);
 run(["api-modules"], Node) ->
     print_api_modules(Node);
+run(["verify-media-fix"], Node) ->
+    Path = "/var/lib/kazoo-compat-runtime/apps/overrides/kazoo_media_maintenance.beam",
+    Path = rpc:call(Node, code, which, [kazoo_media_maintenance], 15000),
+    {ok, {kazoo_media_maintenance, Md5}} = beam_lib:md5(Path),
+    Md5 = rpc:call(Node, kazoo_media_maintenance, module_info, [md5], 15000),
+    Compile = rpc:call(Node, kazoo_media_maintenance, module_info, [compile], 15000),
+    Options = proplists:get_value(options, Compile, []),
+    true = lists:member({parse_transform, lager_transform}, Options),
+    false = lists:member(export_all, Options),
+    true = rpc:call(Node, erlang, function_exported, [kazoo_media_maintenance, migrate, 0], 15000),
+    true = rpc:call(Node, erlang, function_exported, [kazoo_media_maintenance, migrate, 1], 15000),
+    Apps = rpc:call(Node, application, which_applications, [], 15000),
+    true = is_list(Apps),
+    true = lists:all(fun(App) -> lists:keymember(App, 1, Apps) end,
+                     [kazoo_media, crossbar, acdc, callflow, blackhole]),
+    io:format("media_fix_origin_verified=true runtime_md5_matches=true production_transform=true required_apps_running=true~n");
+run(["migration-hooks"], Node) ->
+    %% Inspect responder MFAs and accepted arities without invoking a hook or
+    %% printing bound payloads (which may contain customer data).
+    Bindings = rpc:call(Node, kazoo_bindings, bindings, [<<"maintenance.migrate">>], 15000),
+    true = is_list(Bindings),
+    lists:foreach(fun({kz_binding, _, _, Responders, _}) ->
+        lists:foreach(fun({kz_responder, M, F, Payload}) when is_atom(M), is_atom(F) ->
+            io:format("hook_module=~p function=~p bound_payload=~p arity0=~p arity1=~p~n", [M, F,
+                Payload =/= undefined,
+                rpc:call(Node, erlang, function_exported, [M, F, 0], 15000),
+                rpc:call(Node, erlang, function_exported, [M, F, 1], 15000)]);
+            (_) -> io:format("hook_shape=unsupported~n")
+        end, queue:to_list(Responders))
+    end, Bindings);
 run(["prepare-api"], Node) ->
     %% Match the normal installer's explicitly registered API modules. Starting
     %% the ACDC application alone does not register its Crossbar endpoints.
@@ -73,6 +112,9 @@ run(["migrate-company"], Node) ->
     %% Native components can log internally handled failures even when they
     %% return ok. Inspect captured logs and document changes independently.
     io:format("account_migration_hook_results=~p~n", [length(Results)]),
+    Statuses = [hook_status(Result) || Result <- Results],
+    io:format("account_migration_hook_statuses=~p~n", [Statuses]),
+    true = not lists:member(error, Statuses),
     io:format("selected_company_migration_steps_returned_normally=true~n");
 run(["refresh-account"], Node) ->
     %% No arbitrary modules/functions, broad migration or user-selected account.
@@ -85,6 +127,16 @@ run(["refresh-account"], Node) ->
 run(_, _) -> halt(2).
 
 api_modules() -> [cb_queues, cb_agents, cb_acdc_call_stats, cb_external_numbers, cb_members].
+
+hook_status(ok) -> ok;
+hook_status(no_return) -> no_return;
+hook_status(true) -> true;
+hook_status(false) -> false;
+hook_status({ok, _}) -> ok;
+hook_status({error, _}) -> error;
+hook_status({'EXIT', _}) -> error;
+hook_status({badrpc, _}) -> error;
+hook_status(_) -> unknown.
 
 print_api_modules(Node) ->
     Running = rpc:call(Node, crossbar_maintenance, running_modules, [], 15000),

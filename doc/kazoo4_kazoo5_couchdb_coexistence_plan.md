@@ -79,6 +79,11 @@ findings continuation for exact evidence and remaining limits.
   step is exposed. Reads its generated lab cookie from a protected file, never
   argv. Namespace checks precede distribution. Capture native maintenance output
   privately; returned `ok` does not prove every internally handled operation.
+  The helper now checks hook error/EXIT returns, exposes a read-only
+  `migration-hooks` arity inventory and has six offline `self-test` cases.
+  A missing media `/1` hook was found and fixed as a required installer patch;
+  regression/production compilation and native lab rerun evidence are in the
+  findings. `verify-media-fix` checks the actual lab override and required apps.
 - `inspect-company-compat.py` and `query-company-compat-views.py`: private
   before/after evidence and real query comparison with sanitized public summaries.
   Never print raw captured account/API rows. All helpers live in `scripts/`;
@@ -100,6 +105,9 @@ findings continuation for exact evidence and remaining limits.
   unique phase labels; never overwrite evidence to rerun an interrupted test.
   New tests: `test-exercise-company-compat-api.py` and
   `test-compare-company-compat-databases.py`; full Python suite is60 cases.
+  `test-kazoo-media-scoped-migration.sh` additionally proves four regressions
+  against a clean pinned source, real installer apply/reapply/rejection and
+  production compilation. Use the resource guard for all local test scripts.
 
 The first source attempts safely refused CouchDB's canonical-design-route
 redirect. Only three1,021-byte metadata `.partial` files were left privately on
