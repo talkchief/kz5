@@ -202,6 +202,15 @@ class ConsumerCases(unittest.TestCase):
         self.assertEqual({record[3] for record in broker.settlements if record[0] == "nack"}, {driver.owner})
         self.assertNotEqual(driver.owner, threading.get_ident())
 
+    def test_consumer_uses_production_tls_builder_for_its_settings(self):
+        driver, _broker, receipt = self.fixture()
+        driver.settings['AMQP_TLS'] = 'true'
+        with patch.object(harness, 'amqp_tls_options', return_value={'ssl': True}) as options:
+            driver.run()
+        self.assertTrue(receipt['registered_consumer_tested'])
+        options.assert_called_once()
+        self.assertEqual(options.call_args.args[0]['AMQP_TLS'], 'true')
+
     def test_faults_cannot_produce_acceptance(self):
         for fault in ("counter", "body", "unconfirmed", "reconnect", "companion_late", "lost_ack"):
             with self.subTest(fault=fault):

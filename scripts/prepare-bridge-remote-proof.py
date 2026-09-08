@@ -69,7 +69,7 @@ def service_unit():
         'RABBITMQ_LOG_BASE': str(BASE / 'log'),
         'RABBITMQ_PID_FILE': str(BASE / 'state/rabbitmq.pid'),
         'RABBITMQ_ENABLED_PLUGINS_FILE': str(BASE / 'enabled_plugins'),
-        'RABBITMQ_PLUGINS_EXPAND_DIR': str(BASE / 'plugins'),
+        'RABBITMQ_PLUGINS_EXPAND_DIR': str(BASE / 'state/plugins'),
         'RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS': '+S 2:2 +SDcpu 1 +SDio 2 +A 4 -kernel inet_dist_use_interface {127,0,0,1}',
     }
     return ('[Unit]\nDescription=Isolated Kazoo bridge remote TLS acceptance broker\n'
@@ -88,6 +88,7 @@ def write(path, content, mode=0o600, uid=0, gid=0):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode)
     try:
         os.fchown(fd, uid, gid)
+        os.fchmod(fd, mode)
         with os.fdopen(fd, 'w', closefd=False) as output:
             output.write(content); output.flush(); os.fsync(fd)
     finally:
@@ -115,12 +116,14 @@ def create():
     identity = pwd.getpwnam(USER)
     BASE.mkdir(mode=0o750)
     os.chown(BASE, 0, identity.pw_gid)
-    for name in ['home', 'mnesia', 'log', 'plugins', 'state']:
+    os.chmod(BASE, 0o750)
+    for name in ['home', 'mnesia', 'log', 'state']:
         directory = BASE / name
         directory.mkdir(mode=0o700)
         os.chown(directory, identity.pw_uid, identity.pw_gid)
     (BASE / 'tls').mkdir(mode=0o750)
     os.chown(BASE / 'tls', 0, identity.pw_gid)
+    os.chmod(BASE / 'tls', 0o750)
     write(BASE / 'home/.erlang.cookie', secrets.token_hex(32) + '\n', 0o400,
           identity.pw_uid, identity.pw_gid)
     password = secrets.token_hex(32)
@@ -160,11 +163,35 @@ def create():
     print('PASS isolated TLS broker prepared, not started or enabled; main broker unchanged')
 
 
+def refresh_owned_unit():
+    """Repair only the exact first-version proof unit; never arbitrary services."""
+    if os.geteuid() != 0 or socket.gethostname() != 'dev-testing':
+        raise ValueError('wrong_development_host')
+    marker = BASE / 'setup-receipt.json'
+    for file in [marker, UNIT]:
+        info = file.lstat()
+        if file.is_symlink() or not file.is_file() or info.st_uid or info.st_nlink != 1 or info.st_mode & 0o022:
+            raise ValueError('unowned_fixture')
+    if json.loads(marker.read_text()).get('owner') != USER:
+        raise ValueError('unowned_fixture')
+    wanted = service_unit()
+    previous = wanted.replace('RABBITMQ_PLUGINS_EXPAND_DIR=' + str(BASE / 'state/plugins'),
+                              'RABBITMQ_PLUGINS_EXPAND_DIR=' + str(BASE / 'plugins'))
+    current = UNIT.read_text()
+    if current == wanted: return
+    if current != previous: raise ValueError('changed_fixture_unit_refused')
+    temporary = UNIT.with_suffix('.service.next')
+    write(temporary, wanted, 0o644)
+    os.replace(temporary, UNIT)
+    run(['systemctl', 'daemon-reload'])
+    print('PASS exact owned proof unit updated; no service started')
+
+
 if __name__ == '__main__':
     try:
-        if sys.argv[1:] != ['--create-on-development-44']:
-            raise ValueError('explicit_creation_required')
-        create()
+        if sys.argv[1:] == ['--create-on-development-44']: create()
+        elif sys.argv[1:] == ['--refresh-owned-unit-on-development-44']: refresh_owned_unit()
+        else: raise ValueError('explicit_action_required')
     except Exception:
         print('Remote bridge proof preparation refused; inspect private state before retrying.', file=sys.stderr)
         sys.exit(1)

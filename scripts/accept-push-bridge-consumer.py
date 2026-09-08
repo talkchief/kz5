@@ -20,7 +20,7 @@ spec = importlib.util.spec_from_file_location(
     "isolated_retry_acceptance", HERE.with_name("accept-push-bridge-retry.py"))
 proof = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(proof)
-from bridge import BridgeRuntime
+from bridge import BridgeRuntime, amqp_tls_options
 from delivery_retry import delivery_count
 
 proof.FAILURES = proof.FAILURES | frozenset((
@@ -132,7 +132,7 @@ class ConsumerProof(proof.RetryProof):
         runtime.amqpstorm = amqpstorm
         runtime._settings = dict(self.settings, WORKERS=1, APNS_WORKERS=1,
                                  STALL_TIMEOUT=70, DELIVERY_TIMEOUT=60)
-        runtime._amqp_tls_options = {}
+        runtime._amqp_tls_options = amqp_tls_options(runtime._settings)
         runtime._stop, runtime._conn = threading.Event(), None
         runtime._last_progress = time.monotonic()
 
