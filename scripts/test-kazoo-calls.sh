@@ -188,6 +188,19 @@ validate_stages() {
     fi
 }
 
+ensure_sipp_version_tag() {
+    local version_tag="refs/tags/v${SIPP_VERSION}"
+    # SIPp generates version.h with git describe. A commit-only shallow fetch
+    # builds the right source but advertises only its hash, failing consumers'
+    # release/feature checks. Never trust a release tag without the commit pin.
+    if ! git -C "$SIPP_SOURCE" show-ref --verify --quiet "$version_tag"; then
+        git -C "$SIPP_SOURCE" fetch -q --depth 1 origin "$version_tag:$version_tag" ||
+            die 'Could not fetch pinned SIPp release tag'
+    fi
+    [[ $(git -C "$SIPP_SOURCE" rev-parse "${version_tag}^{commit}") == "$SIPP_COMMIT" ]] ||
+        die 'SIPp release tag does not match pinned commit'
+}
+
 ensure_sipp() {
     local version_output=
     if ! command -v tcpdump >/dev/null 2>&1; then
@@ -212,6 +225,7 @@ ensure_sipp() {
         git -C "$SIPP_SOURCE" checkout -q --detach FETCH_HEAD
     fi
     [[ $(git -C "$SIPP_SOURCE" rev-parse HEAD) == "$SIPP_COMMIT" ]] || die 'Existing SIPp source is not the pinned commit'
+    ensure_sipp_version_tag
     cmake -S "$SIPP_SOURCE" -B "$SIPP_SOURCE/build" -DUSE_SSL=ON -DUSE_PCAP=ON \
         -DUSE_SCTP=OFF -DUSE_GSL=OFF -DCMAKE_BUILD_TYPE=Release >/dev/null
     cmake --build "$SIPP_SOURCE/build" --parallel 2 >/dev/null
@@ -781,8 +795,8 @@ record_stage() {
 run_functional() {
     local label=functional caller_stats cores_before since
     log 'Functional: proving queue wait before endpoint availability'
-    STATUS_AGENT_MAX=1
-    agent_status logout 1 1
+    STATUS_AGENT_MAX=${STATE[ACCEPTANCE_AGENT_COUNT]}
+    agent_status logout 1 "$STATUS_AGENT_MAX"
     negative_registration_test "$label"
     cores_before=$(core_count); since=$(date +%s); capture_log_baseline "$label"; start_monitor "$label"; start_rtp_capture "$label"
     register_caller "$label" "$CALLER_PORT"
