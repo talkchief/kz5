@@ -492,6 +492,15 @@ reject_secret_symlink() {
     [[ ! -e $file || -f $file ]] || die "Cookie path is not a regular file: ${file}"
 }
 
+validate_config_directory() {
+    local directory=$1
+    [[ ! -L $directory ]] || die "Refusing a symlinked configuration directory: ${directory}"
+    [[ ! -e $directory || -d $directory ]] || die "Configuration path is not a directory: ${directory}"
+    if [[ -e $directory ]]; then
+        [[ $(stat -c '%u' "$directory") == 0 ]] || die "Configuration directory must be root-owned: ${directory}"
+    fi
+}
+
 resolve_kazoo_cookie() {
     local candidate installed_cookie='' stored_cookie='' selected_cookie=''
     local installed_conflict=false needs_rotation=false
@@ -2117,13 +2126,13 @@ configure_kazoo() {
     fi
     sync_git https://github.com/2600hz/kazoo-configs-core.git \
         "$KAZOO_BUILD_ROOT/kazoo-configs-core" "$KAZOO_CORE_CONFIG_REF"
-    run mkdir -p "$KAZOO_CONFIG_DIR/core" /var/log/kazoo /var/lib/kazoo "$KAZOO_ROOT/var/lib/ra"
     # A preceding data-only install may create this shared parent under umask
     # 077. Services need traversal; secret files retain their separate 0600/
     # 0640 permissions. Never recursively relax permissions on its contents.
-    reject_secret_symlink "$KAZOO_CONFIG_DIR"
-    reject_secret_symlink "$KAZOO_CONFIG_DIR/core"
+    validate_config_directory "$KAZOO_CONFIG_DIR"
+    validate_config_directory "$KAZOO_CONFIG_DIR/core"
     run install -d -o root -g root -m 0755 "$KAZOO_CONFIG_DIR" "$KAZOO_CONFIG_DIR/core"
+    run mkdir -p /var/log/kazoo /var/lib/kazoo "$KAZOO_ROOT/var/lib/ra"
     write_file 0640 "$KAZOO_CONFIG_DIR/core/config.ini" <<EOF
 [amqp]
 uri = ${KAZOO_AMQP_URI}

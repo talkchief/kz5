@@ -16,6 +16,7 @@ try {
   assert.equal(native([...defaults,...configured]).stdout,'{ok,{127,0,0,1}}','pre-fix control');
   const source=fs.readFileSync(root+'/scripts/install-kazoo5.sh','utf8');
   const setup=source.match(/^configure_kazoo\(\) \{[\s\S]*?^\}/m)[0];
+  const validation=source.match(/^validate_config_directory\(\) \{[\s\S]*?^\}/m)[0];
   fs.mkdirSync(tmp+'/config',{mode:0o700}); fs.writeFileSync(tmp+'/config/deployment.env','fixture-only',{mode:0o600});
   const script=`set -euo pipefail
 KAZOO_HOSTNAME=fixture.invalid
@@ -31,7 +32,8 @@ KAZOO_COUCHDB_PASSWORD=fixture
 KAZOO_COOKIE=fixture
 getent() { return 0; }
 sync_git() { :; }
-reject_secret_symlink() { [[ ! -L "$1" ]]; }
+die() { echo "$*" >&2; exit 1; }
+${validation}
 run() { if [[ "$1 $2" == 'install -d' ]]; then "$@"; else :; fi; }
 write_file() { /usr/bin/cat >/dev/null; }
 warn() { :; }
@@ -42,5 +44,15 @@ configure_kazoo
   assert.equal(fs.statSync(tmp+'/config').mode&0o777,0o755);
   assert.equal(fs.statSync(tmp+'/config/core').mode&0o777,0o755);
   assert.equal(fs.statSync(tmp+'/config/deployment.env').mode&0o777,0o600);
-  console.log('PASS native OTP private-address precedence for both launchers, pre-fix control, umask-077 config traversal and unchanged secret mode.');
+  fs.renameSync(tmp+'/config/core',tmp+'/saved-core');
+  fs.symlinkSync(tmp+'/saved-core',tmp+'/config/core');
+  const linked=cp.spawnSync('/usr/bin/bash',['-c',script],{encoding:'utf8'});
+  assert.notEqual(linked.status,0); assert.match(linked.stderr,/symlinked configuration directory/);
+  fs.unlinkSync(tmp+'/config/core'); fs.writeFileSync(tmp+'/config/core','not a directory');
+  const regular=cp.spawnSync('/usr/bin/bash',['-c',script],{encoding:'utf8'});
+  assert.notEqual(regular.status,0); assert.match(regular.stderr,/not a directory/);
+  fs.unlinkSync(tmp+'/config/core'); fs.mkdirSync(tmp+'/config/core'); fs.chownSync(tmp+'/config/core',65534,65534);
+  const unowned=cp.spawnSync('/usr/bin/bash',['-c',script],{encoding:'utf8'});
+  assert.notEqual(unowned.status,0); assert.match(unowned.stderr,/must be root-owned/);
+  console.log('PASS native OTP private-address precedence, pre-fix control, real config-directory validator, umask-077 traversal, unchanged secret mode, symlink/file/non-root directory rejection.');
 } finally {fs.rmSync(tmp,{recursive:true,force:true});}
