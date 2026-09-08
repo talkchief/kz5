@@ -9,9 +9,12 @@ browser20021 pass; counter0 and inactive top line in both apps, no underflows.
 The paused compatibility diagnostic and offline tests are committed `8decc5f`
 and synced to .44. Untracked team design is preserved root-only at
 `/root/kz5-handoff/preserved-untracked/dashboard_caller_sidecar_design.md`, not
-silently included in Git. Runtime secrets/TLS/snapshots are already on .44;
-GitHub write credentials need secure provisioning there before future pushes
-without the original host (`/root/key.key` is absent on .44).
+silently included in Git. Runtime secrets/TLS/snapshots are already on .44.
+GitHub handover is now resolved: exact-repository credential helper `0bdb1c8`,
+root0600 `/root/.config/kz5/github.token`, eleven regression groups and actual
+.44 authenticated push dry-run6aa3fc pass. Mixed `/root/key.key` remains absent;
+only its selected GitHub credential was transferred. No dependency on the old
+host's askpass helper remains. See `doc/dev44_git_handoff.md`.
 Talkchief is now also visible in the main account selector as **Talkchief
 (Development copy)**. DEV-COMPANY-01 has actual browser/API acceptance for15
 users,82 devices,4 queues and89 callflows. Calling and copied user/device logins
@@ -27,6 +30,13 @@ helper/tests are already in Git; generated-view restoration is verified. Do not
 interpret equal final hashes as write-free maintenance. Exact production Kazoo4
 application host/version is still needed; production remains read-only and the
 shared-writable-database recommendation remains NO-GO.
+
+Current release-gate reconciliation: independent normal .44 verifier
+66591/18787a passes ALL in1m40.208s with293.1MiB peak, after the HTTPS/UI/company
+changes. No deployment/restart occurred in this check. Older task rows claiming
+UI publication/build/reboot still pending have been corrected without closing
+unproved rolling-upgrade, remote-broker, recovery or load gates. See
+`doc/release_gate_reconciliation_20260908.md` for the remaining topology matrix.
 
 **Primary Kazoo5 development host: `10.1.0.44`**, designated by the user on
 September8. Keep its installed stack and `/opt/kz5` checkout for future work.

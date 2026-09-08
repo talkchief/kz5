@@ -50,13 +50,27 @@ Offline regression:
 sudo node /opt/kz5/scripts/test-kz5-git-credential.cjs
 ```
 
-Ten groups cover exact scope, rejected requests, CLI failure redaction,
+Eleven groups cover exact scope, rejected requests, CLI failure redaction,
 exclusive/idempotent provisioning, file modes, symlinks/hard links, parent
-permissions, ownership and malformed input. Tests use synthetic credentials
+permissions, ownership, modern Git challenge metadata and malformed input. Tests use synthetic credentials
 in a newly allocated protected directory, never the real token.
 
 ## Acceptance record
 
-Source regression258c16 passes all ten groups. Deployment and authenticated
-dry-run evidence will be recorded here after completion. No Gemini, SSH,
-production CouchDB, FCM or APNs credential is included in this handover.
+Source regression258c16 passed the first ten groups. The first real .44 Git
+check810c13 refused authentication without any remote ref change: Git2.52 sends
+repeated `capability[]` and `wwwauth[]` fields. A field-name-only probe5716a4
+confirmed that all four authority fields match and only this metadata caused
+the refusal. Source correction `0bdb1c8` ignores these bounded metadata arrays
+without allowing duplicate/changed authority fields or new authentication
+modes. All eleven groups pass08f6db.
+
+Only the uniquely selected GitHub credential was sent over pinned-host SSH
+stdin to .44's provisioner; private readbackc2d432 passed without secret output.
+The mixed `/root/key.key` remains absent on .44. Repository-local configuration
+is installed as above. Actual .44 authenticated Git push dry-run6aa3fc passed
+in694ms (`Everything up-to-date`), with no remote ref change. The main dev host
+no longer needs the old server's askpass helper or credential file for pushes.
+No Gemini, SSH, production CouchDB, FCM or APNs credential was included in this
+Git handover. Provider/TLS runtime secrets previously installed on .44 are
+separate, remain outside Git, and were not modified.
