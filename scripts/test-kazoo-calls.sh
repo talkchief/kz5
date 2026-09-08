@@ -241,7 +241,7 @@ validate_scenarios() {
     input=$scratch/input.csv
     printf 'SEQUENTIAL\ndummy;[authentication username=dummy password=dummy];example.invalid;5099;600\n' > "$input"
     chmod 600 "$input"
-    for scenario in register.xml caller-to-queue.xml agent-answer.xml; do
+    for scenario in register.xml register-rejected.xml caller-to-queue.xml agent-answer.xml; do
         timeout 5 sipp -ci 127.0.0.1 127.0.0.1:9 -sf "$SCENARIO_DIR/$scenario" -inf "$input" \
             -i 127.0.0.1 -p 5099 -mi 127.0.0.1 -mp 45000 -m 0 -nostdin \
             >"$scratch/$scenario.out" 2>&1 || die "SIPp rejected scenario $scenario"
@@ -460,14 +460,15 @@ negative_registration_test() {
         "$(auth_keyword "$username" "$bad_secret")" "${STATE[ACCEPTANCE_REALM]}" \
         "$NEGATIVE_REGISTER_PORT" 600 > "$csv"
     chmod 600 "$csv"
-    if sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
-        -sf "$SCENARIO_DIR/register.xml" -inf "$csv" -i "$LOCAL_IP" -p "$NEGATIVE_REGISTER_PORT" \
+    if ! sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
+        -sf "$SCENARIO_DIR/register-rejected.xml" -inf "$csv" -i "$LOCAL_IP" -p "$NEGATIVE_REGISTER_PORT" \
         -m 1 -l 1 -r 1 -rp 1000 -nostdin -timeout 30s -timeout_error \
         -trace_stat -fd 1s -stf "$stats" >"$output" 2>&1; then
         rm -f -- "$csv"
-        die 'Wrong-credential REGISTER unexpectedly succeeded'
+        die 'Wrong-credential REGISTER did not produce a verified authentication rejection'
     fi
     rm -f -- "$csv"
+    assert_stats "$label authentication rejection" "$stats" 1
     locations=$(kamcmd ul.lookup location "$username@${STATE[ACCEPTANCE_REALM]}" 2>/dev/null || true)
     [[ $locations != *":$NEGATIVE_REGISTER_PORT"* ]] || die 'Wrong-credential REGISTER created a location binding'
     log 'Negative authentication PASS: wrong credential rejected with no location binding'

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<scenario name="Kazoo wrong-password registration rejection">
+  <send retrans="500" start_txn="register1">
+    <![CDATA[
+      REGISTER sip:[field2] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      Max-Forwards: 70
+      From: <sip:[field0]@[field2]>;tag=[pid]reg[call_number]
+      To: <sip:[field0]@[field2]>
+      Call-ID: [call_id]
+      CSeq: 1 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[field3]>;transport=[transport];expires=[field4]
+      Expires: [field4]
+      Content-Length: 0
+    ]]>
+  </send>
+  <recv response="100" optional="true" response_txn="register1"/>
+  <recv response="401" auth="true" optional="true" response_txn="register1" next="authenticate"/>
+  <recv response="407" auth="true" response_txn="register1"/>
+  <label id="authenticate"/>
+  <send retrans="500" start_txn="register2">
+    <![CDATA[
+      REGISTER sip:[field2] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      Max-Forwards: 70
+      From: <sip:[field0]@[field2]>;tag=[pid]reg[call_number]
+      To: <sip:[field0]@[field2]>
+      Call-ID: [call_id]
+      CSeq: 2 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[field3]>;transport=[transport];expires=[field4]
+      [field1]
+      Expires: [field4]
+      Content-Length: 0
+    ]]>
+  </send>
+  <!-- Rejection is the expected successful test outcome. Do not use the
+       positive scenario's unexpected-response handler: it sends a spurious
+       BYE for REGISTER, which never established a dialog. A timeout, 200 or
+       server failure must fail this scenario, not count as auth rejection. -->
+  <recv response="100" optional="true" response_txn="register2"/>
+  <recv response="401" optional="true" response_txn="register2" next="rejected"/>
+  <recv response="407" optional="true" response_txn="register2" next="rejected"/>
+  <recv response="403" response_txn="register2"/>
+  <label id="rejected"/>
+</scenario>
