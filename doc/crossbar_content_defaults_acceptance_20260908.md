@@ -1,5 +1,21 @@
 # Crossbar collection content types and optional app overrides
 
+## Current job: normal installer retry is active
+
+Source `38cbb03` is on main `/opt/kz5`. Unit
+`kz5-crossbar-content-localbuild-20260908.service`, observer98460, PID289461
+is verified active (`921c45`, `3ff30e`). Log:
+`/root/kz5-acceptance/crossbar-content-localbuild-20260908.log`.
+Same normal apps/eCallMgr command, missing-HOME environment and resource bounds
+as the first run. Do not restart it on observer timeouts, and do not sync new
+Git revisions into the compiling checkout. The latest documentation may be
+pushed separately; sync it only once this unit is terminal.
+
+After success: establish a fresh backend log baseline; run the authenticated
+company browser check; require no fresh file/journal errors; independently verify
+all nine services, then run the30+5 load gate with browser activity included.
+No deployment/browser/capacity pass is claimed for this active retry.
+
 ## Findings and source fix
 
 The combined browser/call acceptance produced seven `undef` diagnostics for

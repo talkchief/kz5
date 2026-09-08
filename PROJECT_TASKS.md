@@ -2,7 +2,7 @@
 
 ## Immediate operator follow-up — September8
 
-- **CB-CONTENT-01 SOURCE FIX7344fa1 / FIRST DEPLOY FAILED51560:** explicit default JSON callbacks
+- **CB-CONTENT-01 SOURCE FIX / RETRY98460 RUNNING:** explicit default JSON callbacks
   for apps-store collection/item, voicemail collection/item and directory
   collection; optional absent apps-store overrides preserve inherited permissions
   without error logging or GET-time writes. Real datastore errors still log and
@@ -12,8 +12,11 @@
   `7a0528`. Tracked `crossbar-optional-content-defaults.patch` is applied by the
   normal installer; no separate Crossbar commit. Normal main apps/eCallMgr
   deployment failed before restart in `build-dev-release`: named builder node
-  requires missing HOME. Unit is terminal; a local/non-distributed release
-  builder correction is being validated before retry. Deploy/recheck remains required. Details:
+  requires missing HOME. That unit is terminal. Source38cbb03 removes unnecessary
+  distribution; real relx/no-HOME regression passes483f67. Normal retry98460 in
+  `kz5-crossbar-content-localbuild-20260908` is active at PID289461. Do not sync
+  revisions into its checkout or launch another installer while it runs.
+  Deploy/recheck remains required. Details:
   `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
 - **LOAD-01 TERMINAL10423 / LOG GATE OPEN:** 30+5 calls completed with35/0

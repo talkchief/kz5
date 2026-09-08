@@ -1,9 +1,12 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Crossbar source fix7344fa1 is pushed; first normal deployment failed before restart.**
-Unit `kz5-crossbar-content-deploy-20260908`, session51560 is terminal exit2.
-The release builder unnecessarily started distribution, requiring missing HOME.
-A focused source/test correction is being validated before the normal retry.
+**Current deployment: retry98460 is running on .44 at source38cbb03.**
+Unit `kz5-crossbar-content-localbuild-20260908`, PID289461; protected log:
+`/root/kz5-acceptance/crossbar-content-localbuild-20260908.log`. Do not start a
+duplicate or sync main sources while compiling. Previous session51560 is
+terminal exit2 before restart. The release builder unnecessarily started
+distribution, requiring missing HOME. Source38cbb03 removes that dependency;
+real relx assembly without HOME/non-distributed checks pass483f67.
 Nine production-callback regressions and pinned installer patch replay pass.
 Deployment, combined browser log check and renewed capacity acceptance remain
 open. Both existing apps/eCallMgr processes are active. Full evidence,
