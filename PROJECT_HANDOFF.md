@@ -1,5 +1,18 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Main-host single-call SIP/RTP gate now passes `91284/2464e2`.** Source fixes
+`5167a32` restore pinned SIPp release metadata and isolate one fixture agent;
+`ae87595` requires an actual REGISTER rejection and avoids the negative test's
+spurious BYE. Actual loopback rejection regressions and live functional rerun
+pass. Caller/agent each 1 success / 0 failures, bidirectional RTP, hangup/ready,
+zero fresh log errors or core dumps; zero calls after cleanup. Source is pushed
+and present in `.44:/opt/kz5`. See `doc/main44_call_acceptance_20260908.md`.
+The next staged 1/5/10/20/30 plus five queued callers run is **pending**, unit
+`kz5-capacity-stages-20260908`, observer `11093`, protected log
+`/root/kz5-acceptance/capacity-stages-20260908.log`. Poll this run rather than
+launching another; the capacity gate is not yet passed. This supersedes the
+unfinished SIPp/functional note below, not the unrelated release gates.
+
 ## Latest source-retention and loading-bar recheck — September 8
 
 The operator's requested source fix is committed in `2a593ee`, in

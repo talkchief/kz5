@@ -2,6 +2,16 @@
 
 ## Immediate operator follow-up — September8
 
+- **CALL-MAIN44-01 FUNCTIONAL PASS / LOAD-01 RUNNING:** `.44` actual functional
+  SIP/RTP run `91284/2464e2` passes queue wait, answer/bridge, RTP, hangup/ready
+  and clean logs/core gate. Source fixes `5167a32` and `ae87595` are pushed and
+  synced: exact pinned SIPp tag, all-fixture logout isolation, explicit negative
+  REGISTER outcome without spurious BYE. Offline real-SIPp rejection cases pass.
+  Zero calls after cleanup. The staged capacity job is pending (unit
+  `kz5-capacity-stages-20260908`, session `11093`); do not claim 30-call capacity
+  until its simultaneous hold/drain/RTP/log evidence passes. Protected paths
+  and first failed run are in `doc/main44_call_acceptance_20260908.md`.
+
 - **DEV-SOURCE-01 / UI-PROGRESS-01 REVERIFIED:** main dev `/opt/kz5` and GitHub
   master match `557505a` before this documentation checkpoint (`383cbf`). Actual
   HTTPS browser `94388/725a1f` passes Talkchief selection, SmartPBX/ACDC and
