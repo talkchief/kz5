@@ -2,16 +2,20 @@
 
 ## Immediate operator follow-up — September8
 
-- **UI-01 native storage API installer gap — source fix, deployment pending:**
+- **UI-01 native storage API installer gap — DEPLOYED / scoped PASS:**
   Main readback f0eb1c confirms `cb_storage` absent from both effective autoload
   and running bindings. The normal API setup now registers it, verifies exact
   membership and preservation of existing modules, and leaves account/provider
   plans untouched. Verify-only checks membership without repair; authenticated
   verification uses `/storage/plans`, not a fabricated account plan. Baseline
   ad354e fails the missing installer wiring; candidate0e35e6 passes14 storage
-  registration checks and8 adjacent entitlement checks. Native deployment/API
-  readback remains pending. Missing optional account plans may still yield404;
-  this must not be misreported as elimination of every storage404.
+  registration checks and8 adjacent entitlement checks. Source10455c5 pushed
+  and synced; scoped installer132512 exits0 in5.854s. HTTPS6c006e confirms
+  authenticated plan collection200/empty, anonymous401 and genuine missing
+  account plan404. Browser7e1624 confirms that404 settles the selector, shows
+  unavailable and leaves no active indicator, with zero account writes.
+  No telephony restart or plan/provider provisioning. FullALL was not rerun;
+  this is scoped module/API/browser proof, not every external-storage workflow.
 
 - **P0-CALLBACK-CONFIRM-01 DEPLOYED — returned prompt cut off by valid
   short timeout:** confirmation_timeout3 began before the4.331s English

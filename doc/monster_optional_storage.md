@@ -51,9 +51,34 @@ credentials or imported company documents are edited.
 
 Focused test `node scripts/test-storage-installer.cjs`: baseline ad354e fails
 the missing installer wiring; candidate0e35e6 passes14 registration/preservation
-cases. The adjacent entitlement verifier also passes8 cases. Native deployment
-and authenticated collection readback are pending; the earlier UI-only browser
-receipt is not evidence of backend registration.
+cases. The adjacent entitlement verifier also passes8 cases. Final source/wiring
+check a4c28f passes the same14+8 cases after adding the collection read.
+
+Source10455c5 is pushed/synced and deployed on main through the exact installer
+functions `configure_kazoo_storage_module` and `verify_kazoo_storage_module`.
+Unit `kz5-storage-api-main44-20260908`, observer6730/132512, exits0 in5.854s.
+Readback verifies effective startup/runtime membership and preserves previously
+visible modules. There is no telephony restart or account/provider-plan write.
+
+Native certificate-validated HTTPS check6c006e:
+
+- Master login201 (an initial ad-hoc probe05ecdd failed at its login gate;
+  it had required200 rather than allowing native201).
+- Administrator `GET /v2/storage/plans`:200, successful empty collection.
+- Anonymous same request:401, error envelope.
+- Master `GET /v2/accounts/adecbb84fbe9e06902a76731914d1943/storage`:404,
+  genuine absent optional plan. No plan was created to suppress this response.
+
+The focused actual-Common-subscriber browser check was repeated because its
+backend module changed: unit `kz5-storage-api-browser-main44-20260908b`,
+observer83719/7e1624, exits0 in8.983s. Native404 completes the error callback,
+shows a visible unavailable message and leaves the global indicator inactive,
+with zero account writes. This remains a subscriber/HTTP test, not a manual
+user-click test. Initial unit `kz5-storage-api-browser-main44-20260908` exited127
+before launching the browser because a relative script path was resolved from
+systemd's working directory; the successful unit uses the absolute script path.
+All of these jobs are terminal. FullALL and external-provider write workflows
+were not rerun and are not established by this scoped correction.
 
 ## Focused verification
 
