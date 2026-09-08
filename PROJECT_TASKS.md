@@ -10,9 +10,23 @@
   tests pass; source OpenAPI regenerated. No new audio generation or schema
   fields. Normal apps/eCallMgr installer84142/09ff6a exits0 in12m6.872s on main;
   all three changed modules match running/disk BEAMs4250/ce4046. Updated `/apis`
-  deployed and HTTPS-readback verified. Real queue-edit acceptance pending; inheritance and
+  deployed and HTTPS-readback verified. Main native queue-edit case retains EN
+  through an FR edit, unanswered first attempt and connected retry; complete
+  ordered EN response verified13098/a4b1e3. Strict audio timing fails on a20ms
+  in-prompt RTP timestamp advance despite no packet sequence loss; track
+  CALLBACK-RTP-01 below, not another blind rerun. Queue restored, zero calls.
+  Inheritance and
   resumed position-worker language remain separate. See
   `doc/acdc_callback_language_snapshot.md`.
+
+- **CALLBACK-RTP-01 OPEN — focused media timing diagnosis:** retained main run
+  `/var/log/kazoo-acceptance/20260908T220213Z` has continuous received packet
+  sequence and a complete English prompt, but one20ms timestamp gap within the
+  prompt (plus80ms before speech). No tcpdump kernel drops. Native retry and
+  language retention work; uninterrupted-playout/strict timing is not accepted.
+  Inspect the media playback timestamp path using this capture before any new
+  live run. Do not weaken the strict checker or regenerate voices to hide it.
+  See `doc/acdc_callback_language_snapshot.md` for exact receipts and limits.
 
 - **UI-01 focused source fix DEPLOYED / browser PASS:** Common's storage selector
   never completed its callback on404/other failures and could crash on empty

@@ -93,7 +93,52 @@ the run directory records the edit, audio proof and restoration. Existing
 returned-audio analysis is reused; no provider requests or new audio generation.
 Focused patch/restoration, CLI guards and returned-waveform regressions pass.
 
-A real queue-edit-during-callback acceptance remains pending. Prior
+The first native attempt (`kz5-callback-language-edit-main44-20260908`,
+70556/3a0158) stopped before any queue-language write: the new helper omitted
+the JSON Accept header and CouchDB returned a valid multipart attachment body.
+Registration itself saved `en-us`; its owned callback was settled and native
+call count returned to zero. Evidence is retained in
+`/var/log/kazoo-acceptance/20260908T215630Z`. This is a helper failure, not a
+missing recording or a callback-language failure. Source958ccd7 explicitly
+requests JSON and adds a regression. Full read-only helper preflight passes
+68149/6374ec, including identity/auth/editor/saved registration/installed audio.
+The corrected live attempt is unit `kz5-callback-language-edit-main44-20260908b`,
+observer20007, with protected log
+`/root/kz5-acceptance/callback-language-edit-main44-20260908b.log`. It terminated
+with exit1 in3m55.714s (20007/e8c76b): the busy call, key6 registration,
+unanswered first attempt, retry_wait and second native bridge all passed, but
+the strict returned-audio timing check failed. The queue was conditionally
+restored from French to English; zero calls and both services active were
+independently verified17edb7. Do not rerun this scenario merely to obtain a PASS.
+
+The retained capture isolates the timing issue: zero kernel capture drops,
+continuous RTP packet sequence numbers, an80ms timestamp gap before the prompt
+and a20ms timestamp gap within it (1a2f50). An additive, committed diagnostic
+`scripts/test-fixtures/diagnose-callback-language-payload.cjs` independently
+rechecks exact SIP/dialog/digit1/agent media correlation and compares the ordered
+received payload to the complete installed English recording. It proves saved
+English language, the entire English phrase before digit1 (correlation0.999995),
+queue French during the retry, and restoration to English. No missing packet
+sequence or wrong-language prompt was found. The strict RTP-timing result stays
+failed: this language proof is not uninterrupted-playout/voice-quality approval.
+
+Replay evidence13098/a4b1e3 is retained under
+`/var/log/kazoo-acceptance/20260908T220213Z/`:
+
+- `callback-language-payload-diagnosis.json`, SHA256
+  `aa81b2fa9cf8bb0490d1d55d25192b763172921d5e169a596d12111fe338093c`.
+- `callback-language-edit.json`, SHA256
+  `362ee55e6a430ea4adb1e1a4849a3ff493b5d946c7030a387594a9c5d7afba5e`.
+- `retry-returned.pcap`, SHA256
+  `013d7fe99b2a17889f2fdfe48711cb873e4a35a8d77fe4464b54379157fc35e4`.
+
+Next focused action: explain the20ms in-prompt RTP timestamp advance in the
+media playback path; retain the strict timing failure rather than silently
+relaxing the assertion. No additional call or Gemini generation is needed to
+inspect this existing evidence.
+
+The real queue-edit case proves language retention, with the separate RTP
+timing discrepancy above still open. Prior
 five-language audio/retry results predate this correction and are not proof of
 the new queue-edit case. New-account/reseller default inheritance and language
 changes during restarted position-announcement workers remain separate review

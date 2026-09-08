@@ -8,8 +8,13 @@ unchanged and no Gemini calls occurred. Generated OpenAPI documents the saved
 language contract. Normal apps/eCallMgr installer84142/09ff6a exits0 in12m6.872s;
 all three changed modules match running/disk BEAMs4250/ce4046. `/apis` is updated
 and HTTPS-readback verified; services active and zero native calls7389d7.
-See `doc/acdc_callback_language_snapshot.md`; real queue-edit
-acceptance and broader account/reseller inheritance remain open.
+The real queue-edit retry now proves saved EN language and the complete ordered
+EN response while the queue is FR (13098/a4b1e3), followed by conditional EN
+restoration and zero calls. Its strict audio-timing run20007/e8c76b remains
+failed because of a20ms in-prompt RTP timestamp advance, with no packet sequence
+loss. Next focus is CALLBACK-RTP-01 using the retained capture, not repeated
+calls or voice generation. See `doc/acdc_callback_language_snapshot.md` for
+evidence. Broader account/reseller inheritance remains open.
 
 **UI-01 optional storage selector fixed / deployed-browser PASS.**
 Installer-owned patchf85bb21 completes failed reads, reports unavailable storage
