@@ -1,5 +1,12 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Current installer run:74822 / kz5-crossbar-content-completionfix-20260908.**
+Main sourceec2ec69, PID319018 verified active. Do not sync source or launch a
+duplicate while it builds. It includes both missing-HOME build-helper fixes.
+Protected log: `/root/kz5-acceptance/crossbar-content-completionfix-20260908.log`.
+Native SUP without HOME passes; legacy wrapper redaction passes on main.
+Post-install browser/log and30+5 capacity acceptance remain outstanding.
+
 **Retry98460 is terminal exit2 before restart, not a deployed fix.** Full release
 assembly now passes with38cbb03, but the next SUP completion generator had the
 same unnecessary named-node/HOME dependency. Its focused installer patch and

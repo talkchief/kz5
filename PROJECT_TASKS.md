@@ -2,13 +2,13 @@
 
 ## Immediate operator follow-up — September8
 
-- **SEC-LAUNCHER-01 SOURCE FIX / MAIN SYNC AFTER BUILD:** legacy
+- **SEC-LAUNCHER-01 SOURCE FIX / MAIN SYNCED AND TESTED:** legacy
   `scripts/dev/kazoo.sh` printed the Erlang cookie. Removed only that output;
   runtime child still receives its configured cookie/node/command. Actual
   wrapper regression fails before675873 and passes after124f23 using an isolated
   executable and synthetic cookie. No real secret or service is involved.
   Main systemd services use `scripts/dev-start-apps.sh`, not this legacy wrapper.
-  Sync with the next installer retry;98460 is now terminal before restart.
+  Synced with ec2ec69; actual isolated wrapper regression passes on main57cdbf.
 
 - **CB-CONTENT-01 SOURCE FIX / BOTH BUILD HELPERS FIXED:** explicit default JSON callbacks
   for apps-store collection/item, voicemail collection/item and directory
@@ -25,7 +25,10 @@
   the full release, then failed before restart in SUP completion with the same
   named-node dependency. It is terminal. The completion generator is now fixed
   via installer patch; actual no-HOME make target plus pinned patch replay pass
-  70253/f26aa0. Next: normal installer retry with both helper fixes.
+  70253/f26aa0. Third normal installer run74822 is active in
+  `kz5-crossbar-content-completionfix-20260908`, PID319018, sourceec2ec69.
+  Native installed SUP/no-HOME check passesb0f05b. No source sync or duplicate
+  installer while it runs; post-install browser/log and capacity checks pending.
   Deploy/recheck remains required. Details:
   `doc/crossbar_content_defaults_acceptance_20260908.md`.
 

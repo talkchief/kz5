@@ -1,5 +1,24 @@
 # Crossbar collection content types and optional app overrides
 
+## Current job: third normal installer run
+
+Main `/opt/kz5` is pinned to `ec2ec69` for this build. Unit
+`kz5-crossbar-content-completionfix-20260908.service`, observer74822, PID319018
+is verified active (`5fc6b3`, `3c4cb4`). Protected log:
+`/root/kz5-acceptance/crossbar-content-completionfix-20260908.log`.
+Same normal apps/eCallMgr command and2GiB/CPU200%/3600s bounds as below; no HOME
+override or skip-build. Do not sync revisions into the compiling checkout or
+start another installer until this unit is terminal. The old51560/98460 jobs
+are terminal failures, not active observers.
+
+Native installed SUP with a clean environment and no HOME successfully locates
+the running Crossbar module (`b0f05b`). Legacy release-wrapper cookie-output
+regression also passes on main (`57cdbf`); that wrapper's code is now synced,
+but systemd services use the separate dev-start scripts. SUP completion test
+logs are preserved under `/root/kz5-handoff/crossbar-content-20260908/`, with
+independent matching SHA readback57cdbf/6e4845. No service or provider call was
+made by that isolated wrapper test. Required post-install checks remain below.
+
 ## Latest job: second installer run is terminal; completion fix ready
 
 Source `38cbb03` was used by unit
