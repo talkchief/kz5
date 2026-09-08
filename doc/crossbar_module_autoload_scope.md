@@ -70,6 +70,14 @@ Use the supported CLI for the next deployment:
 bash /opt/kz5/scripts/install-kazoo5.sh kazoo-apps
 ```
 
+The guard passes all four unit-runtime test methods (3e7c8c,8.080s), including
+all six naming-mode subcases and existing TEST-BEAM/runtime-root protections.
+Source1204df6 is pushed/synced. The correctly initialized CLI deployment is now
+active as `kz5-module-scope-install-main44-20260908b`, observer71998;
+985cd3 confirms MainPID843103 and active/running. Protected log:
+`/root/kz5-acceptance/module-scope-install-main44-20260908b.log`.
+Poll this job; the first unsuffixed job is terminal and must not be resumed.
+
 Running/disk module parity is pending. Do not label the current dev server
 fixed until a correctly initialized deployment and parity complete. The earlier storage registration
 on its default scope remains valid; it did not prove custom-node behavior.

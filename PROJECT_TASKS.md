@@ -14,7 +14,10 @@
   rejected empty naming mode after compilation but before restart. Recovery
   48eee6 regenerated both service units with correct -sname; both remain active.
   New unit-writer guard refuses uninitialized mode before mutations (four
-  baseline failures838c7f). Use the supported CLI next. Native completion/parity pending;
+  baseline failures838c7f; all4 unit-runtime tests pass3e7c8c). Supported CLI
+  deployment is now active in suffixed unit `kz5-module-scope-install-main44-20260908b`,
+  observer71998, MainPID843103 confirmed985cd3, source1204df6 synced. Poll that
+  existing job; native completion/parity pending;
   concurrent writers and real split-host reboot are not proven.
   See `doc/crossbar_module_autoload_scope.md`.
 

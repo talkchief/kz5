@@ -8,8 +8,10 @@ first deployment `kz5-module-scope-install-main44-20260908` is terminal exit1
 (observer67279/33463a). It omitted preflight by calling an internal function;
 catalog validation stopped before restart. Compilation completed. Recovery
 48eee6 restored correctly initialized -sname units; apps/eCallMgr are active.
-New source guard prevents that invalid unit write. Use the supported installer
-CLI next, not the internal-function invocation. Completion and module parity
+New source guard prevents that invalid unit write; all4 unit-runtime tests
+pass3e7c8c. Supported CLI deployment is now active as suffixed unit
+`kz5-module-scope-install-main44-20260908b`, observer71998, MainPID843103
+confirmed985cd3. Source1204df6 synced. Poll this existing job. Completion and module parity
 remain pending. Do not modify live autoload
 overrides merely to test this. See `doc/crossbar_module_autoload_scope.md`.
 
