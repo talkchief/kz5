@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import socket
 import stat
 import subprocess
@@ -83,10 +84,23 @@ def normal_install(label):
     log = STATE / (label + '.log')
     descriptor = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     try:
-        result = subprocess.run(['/usr/bin/bash', str(INSTALLER), 'push-bridge'],
-                                stdout=descriptor, stderr=subprocess.STDOUT, timeout=180, check=False)
+        process = subprocess.Popen(['/usr/bin/bash', str(INSTALLER), 'push-bridge'],
+                                   stdout=descriptor, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            returncode = process.wait(timeout=180)
+        except subprocess.TimeoutExpired:
+            # Killing Bash alone strands package-manager children and blocks
+            # the restoration installer on their lock. Scope termination to
+            # this invocation's new process group, never all package managers.
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try: os.killpg(process.pid, sig)
+                except ProcessLookupError: pass
+                if sig == signal.SIGTERM:
+                    time.sleep(2)
+            process.wait(timeout=10)
+            raise
     finally: os.close(descriptor)
-    require(result.returncode == 0, 'normal_installer_failed')
+    require(returncode == 0, 'normal_installer_failed')
 
 
 def service_state():

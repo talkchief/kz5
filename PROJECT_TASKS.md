@@ -2,6 +2,24 @@
 
 ## Immediate operator follow-up — September8
 
+- **DEV-SOURCE-01 MAIN-HOST SOURCE RETENTION:** canonical development checkout
+  is `/opt/kz5` on10.1.0.44 (`kz5-dev.talkchief.io`), branch master. Independent
+  authenticated Git fetch/fast-forward to `1f30654` passed; follow-up commits
+  are synced there as well. Loading-bar, HTTPS and dialog fixes are tracked
+  with installer wiring, and ACDC remains part of kz5. See `PROJECT_HANDOFF.md`
+  and `doc/dev44_git_handoff.md` before deleting the old server.
+  Fresh browser21399/fcaa6a passes the company selector, exact15/82/4/89
+  collection counts, both apps, and inactive top loading bar with no insecure
+  requests/page errors. Actual-source lifecycle regression170acf passes.
+  All nine main services remain enabled/active (c307a2).
+- **BRIDGE-REMOTE-01 NORMAL INSTALL STILL OPEN:** attempt35086/b9d5a5 timed
+  out in package prerequisites, before any bridge restart. Original config and
+  provider bytes plus unchanged active service PID independently verified
+  (4bb283). No installer processes remain; temporary .44 broker stopped.
+  Harness timeout cleanup now covers its process group, preventing an orphan
+  package-manager child from blocking restoration. This is a harness correction,
+  not a passed remote installation. Protected receipt retained on .44; details
+  in `PROJECT_HANDOFF.md`.
 - **BRIDGE-REMOTE-01 NATIVE REMOTE TLS/CONSUMER PASS:** actual .26 client to
   isolated native .44 RabbitMQ6035/ef7ad0 passes TLS1.3, certificate negative
   cases, authenticated HTTPS exact-broker checks, registered consumer,503→200

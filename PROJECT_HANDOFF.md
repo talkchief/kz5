@@ -1,5 +1,32 @@
 # Kazoo 5 — start here / engineering handoff
 
+September8 source-retention follow-up: `/opt/kz5` on10.1.0.44 was independently
+fast-forwarded from GitHub to `1f30654`; subsequent follow-up commits must also
+be synced there. The UI progress-counter, HTTPS catalog and dialog fixes are
+source-backed, not local-only edits. ACDC remains in the parent repository.
+Fresh browser acceptance21399/fcaa6a passes account selection,15 users/82
+devices/4 queues/89 callflows, SmartPBX and ACDC, and inactive global loading
+indicator without insecure requests or page errors. Scope is private-route
+HTTPS with normal certificate verification, not a new public-network or call
+test. UI actual-source regression170acf passes against the pinned original;
+the earlier test input was already patched and correctly failed its required
+before-fix reproduction. All nine .44 main services are enabled and active.
+
+Normal remote bridge installer attempt35086/b9d5a5 did **not** pass: package
+prerequisites exceeded the180-second harness deadline, and an orphaned DNF
+process blocked the restoration installer. No bridge restart took place.
+The scoped orphan was terminated; no installer/DNF process remains. Independent
+audit4bb283 verifies byte-identical original config/provider files and the
+unchanged active, registered original bridge PID1172968. The receipt's
+`restored=false` records the failed normal-installer restoration gate, not an
+assertion that the temporary config is still active. Receipt is retained on .44
+at `/root/kz5-acceptance/bridge-service-remote/receipt.json`. The temporary broker
+is stopped again; .44 main RabbitMQ PID2355/restarts0 is unchanged. The harness
+now starts its installer in a separate process group and terminates its own
+children on timeout before restoration. Normal remote installation still needs
+a successful rerun; do not claim this source fix closes that release gate.
+All eleven offline service-harness regression tests pass5e64a2.
+
 Latest bridge gate: actual cross-host native AMQPS/HTTPS consumer6035/ef7ad0
 passes TLS trust/hostname negatives, counted retry/companion progress and
 three-attempt exhaustion/DLQ with synthetic providers only. Temporary broker

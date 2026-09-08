@@ -23,6 +23,31 @@ def original():
 
 
 class ServiceTests(unittest.TestCase):
+    def test_installer_timeout_terminates_only_owned_process_group(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(proof, 'STATE', Path(directory)), \
+                patch.object(proof.subprocess, 'Popen') as popen, \
+                patch.object(proof.os, 'killpg') as killpg, \
+                patch.object(proof.time, 'sleep'):
+            process = popen.return_value
+            process.pid = 12345
+            process.wait.side_effect = [proof.subprocess.TimeoutExpired('installer', 180), -15]
+            with self.assertRaises(proof.subprocess.TimeoutExpired): proof.normal_install('timeout')
+            self.assertTrue(popen.call_args.kwargs['start_new_session'])
+            self.assertEqual(killpg.call_args_list, [
+                unittest.mock.call(12345, proof.signal.SIGTERM),
+                unittest.mock.call(12345, proof.signal.SIGKILL)])
+            self.assertEqual(process.wait.call_count, 2)
+
+    def test_successful_installer_does_not_signal_processes(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(proof, 'STATE', Path(directory)), \
+                patch.object(proof.subprocess, 'Popen') as popen, \
+                patch.object(proof.os, 'killpg') as killpg:
+            popen.return_value.wait.return_value = 0
+            proof.normal_install('success')
+            killpg.assert_not_called()
+
     def test_config_preserves_provider_and_worker_settings(self):
         value = original(); saved = dict(value)
         with patch.object(proof.remote, 'validate_fixture'):
