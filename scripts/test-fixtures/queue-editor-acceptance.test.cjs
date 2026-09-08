@@ -32,7 +32,9 @@ function fixture() {
     }
     const io={queueSchema:{},randomId:()=>String(++serial).padStart(32,'0'),persist:()=>{},inventory:async()=>copy(Object.values(documents)),
         noCalls:async()=>{assert.equal(calls,0,'active call');},callbacks:async()=>Array(callbackCount).fill({}),
-        anonymousEditor:async()=>({status:401}),apiMissing:async(_collection,id)=>documents[id]?.pvt_deleted===true,
+        anonymousEditor:async()=>({status:401,body:{status:'error',error:'401',message:'invalid_credentials',request_id:String(++serial).padStart(32,'0')}}),
+        apiLookup:async(_collection,id)=>({status:documents[id]?.pvt_deleted?404:200,
+            body:{status:'error',error:'404',message:'bad_identifier',request_id:String(++serial).padStart(32,'0')}}),
         conditionalQueueDelete:async d=>{deletes++;save(d);},
         editor:async(method,queueId,body)=>{
             if(method==='GET')return get(queueId);
@@ -57,6 +59,12 @@ function fixture() {
             save(raw(opId,'acdc_queue_editor_operation',{owner,body_hash:bh,queue_id:qid,state:'complete',phase:'complete',remaining:[],in_flight:[],result}));
             return {status:method==='PUT'?201:200,body:{status:'success',data:copy(result)},etag:'W/automatic-not-a-revision'};
         }};
+    const editor=io.editor;
+    io.editor=async(...args)=>{
+        const response=await editor(...args);
+        if(response.status>=400)Object.assign(response.body,{request_id:String(++serial).padStart(32,'0'),error:String(response.status),message:'fixture_conflict'});
+        return response;
+    };
     return {io,receipt,documents,save,get,counts:()=>({writes,deletes}),calls:n=>{calls=n;},callbacks:n=>{callbackCount=n;}};
 }
 async function create(f) {
@@ -73,6 +81,7 @@ test('entire isolated sequence uses real raw revisions; GET/create/edit/replay/c
         'fresh_get_confirms_edit','explicit_english_language_selection_preserved','aggregate_route_cleanup','exact_cas_queue_cleanup']);
     assert(f.documents[f.receipt.route_id].pvt_deleted);assert(f.documents[f.receipt.queue_id].pvt_deleted);
     assert.equal(Object.values(f.documents).filter(d=>d.pvt_type==='acdc_queue_editor_operation').length,3);
+    assert.equal(f.receipt.http_rejections.length,5);
 });
 test('changed unrelated user revision blocks mutation and cleanup before deletion',async()=>{
     const f=fixture();await create(f);f.save({...f.documents[userId],queues:['4'.repeat(32)]});

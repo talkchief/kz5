@@ -6,6 +6,7 @@ const {spawnSync}=require('node:child_process');
 const fixtureAccount=require('./callback-fixture-account.cjs');
 const {localMediaHost}=require('./callback-gemini-reference.cjs');
 const LANGUAGES=Object.freeze(['en-us','he-il','ar-sa','fr-fr','es-es']);
+const expectedHttp=require('./queue-editor-expected-http.cjs');
 const {ACCOUNT,DATABASE,ENCODED_DATABASE,fingerprint,contentFingerprint,conditionalSaveArguments,
     assertExpectedConfiguration}=require('./callback-offer-queue.cjs');
 function selectedExtension(value) {
@@ -152,7 +153,9 @@ async function unchangedRequest(io,receipt,queueId,payload,expectedStatus,label,
     const response=await io.editor(queueId?'PATCH':'PUT',queueId,payload);
     assert(response.status===expectedStatus,'Unexpected replay/conflict status');
     if(expectedBody)assert(hash(response.body.data)===hash(expectedBody),'Replay result changed');
-    await guard(io,receipt);receipt.checks.push(label);io.persist(receipt);
+    await guard(io,receipt);
+    if(expectedStatus>=400)expectedHttp.record(receipt,response,label);
+    receipt.checks.push(label);io.persist(receipt);
 }
 async function cleanup(io,receipt) {
     if(receipt.cleaned_at)return;
@@ -176,13 +179,18 @@ async function cleanup(io,receipt) {
         remember(receipt,deleted);io.persist(receipt);assertBaseline(Object.values(after),receipt);
     }
     await guard(io,receipt);
-    assert(await io.apiMissing('queues',receipt.queue_id)&&await io.apiMissing('callflows',receipt.route_id),'Soft-deleted fixture remains API-visible');
+    for(const [collection,documentId,label] of [['queues',receipt.queue_id,'deleted_queue_absent'],['callflows',receipt.route_id,'deleted_callflow_absent']]) {
+        const response=await io.apiLookup(collection,documentId);
+        assert(response.status===404,'Soft-deleted fixture remains API-visible');
+        expectedHttp.record(receipt,response,label);io.persist(receipt);
+    }
     receipt.cleaned_at=new Date().toISOString();receipt.checks.push('exact_cas_queue_cleanup');io.persist(receipt);
 }
 async function runAcceptance(io,receipt,allLanguages=false) {
     assert(typeof allLanguages==='boolean','Explicit language acceptance mode required');
     assert(!receipt.queue_id&&receipt.intents.length===0,'Run cannot be restarted against a partial fixture');
     const anonymous=await io.anonymousEditor();assert([401,403].includes(anonymous.status),'Unauthenticated editor must be rejected');
+    expectedHttp.record(receipt,anonymous,'anonymous_rejected');
     receipt.checks.push('anonymous_rejected');io.persist(receipt);
     await guard(io,receipt);const empty=editorData(await io.editor('GET'),null);
     const initial=body({name:receipt.marker,kazoo_acceptance_fixture:receipt.marker,enter_when_empty:false,
@@ -295,7 +303,7 @@ async function runtime(action,arm,run) {
                 const r=spawnSync('/usr/local/bin/sup',conditionalSaveArguments(document),{encoding:'utf8',timeout:20000,maxBuffer:65536});
                 assert(!r.error&&r.status===0&&/^\s*\{ok,/.test(r.stdout),'Exact-revision queue deletion failed; never retry with a new revision');
             },
-            apiMissing:async(collection,documentId)=>(await request('GET',collection+'/'+documentId)).status===404};
+            apiLookup:(collection,documentId)=>request('GET',collection+'/'+documentId)};
         let receipt;
         if(action==='run'||action==='run-languages') {
             assert(!fs.existsSync(receiptFile),'Existing receipt requires explicit cleanup/recovery');await io.noCalls();

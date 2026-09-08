@@ -12,7 +12,12 @@
   Three new cases fail against the prior harnessa231fd; all13 pass1d9f70 and
   with another synthetic account5e8498. Real private flock/CLI refusal tests
   pass010d6c. Incorrect readback or ambiguous reply retains evidence, never
-  resends or deletes blindly. Native create/edit/save/reload remains to run.
+  resends or deletes blindly. Native58571/fb64fd completed all26 API/language
+  checks and cleanup, but its outer generic log gate failed on INFO401/409/404
+  negative-test envelopes; failed run retained. New exact server-request-ID
+  log correlation passes17 tests963d33 and awaits native repeat on a different
+  virgin extension. No production logging was weakened. Evidence:
+  `/var/log/kazoo-acceptance/queue-editor-main44.GUsWUsus/`.
   See `doc/queue_editor_acceptance.md`; this is acceptance tooling, not a new
   production editor behavior claim.
 

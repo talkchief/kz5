@@ -2,6 +2,24 @@
 
 ## September8: main-host language persistence acceptance tooling
 
+First native main run81ce691 completed all26 API checks and exact cleanup:
+`/var/log/kazoo-acceptance/queue-editor-main44.GUsWUsus/queue-editor-acceptance.json`.
+Its enclosing unit58571/fb64fd exited1 because the generic word-based log gate
+counted expected negative-response INFO messages (file3/journal5 before final
+file flush), not an API/language failure. Source pins and service snapshots
+matched. Inspectionfcca7f identifies exactly one anonymous401, changed-body409,
+stale-revision409 and two post-deletion404 envelopes from `api_util:error_envelope`.
+All eight operation intents are complete and resources removeda94bd1/129dc3;
+zero calls remain. The failed enclosing run is retained, not relabeled green.
+
+The harness now records each expected negative response's server request ID,
+code and bounded reason. `queue-editor-expected-http.cjs` permits only its exact
+INFO envelope line; a different request, severity, code, reason or module,
+duplicate observation, missing expected response or unrelated error remains
+visible. All17 lifecycle/log-classification cases pass963d33. No production log
+level or error handling was changed. A new run is required to exercise this
+correlation; do not manufacture request metadata in the earlier receipt.
+
 The armed live runner is now `scripts/test-acdc-queue-editor-live.sh`. It
 requires explicit `--fixture-account`, `--extension` (2090–2099), `--run-dir`
 and `--allow-fixture-writes`; ambient target/state overrides are cleared. It
