@@ -1627,6 +1627,7 @@ ensure_kazoo_sources() {
     grep -Eq '^DEPS[[:space:]]*\?=[[:space:]]*acdc' "${KAZOO_ROOT}/make/apps.mk" || \
         die 'ACDC is not declared in make/apps.mk; use the integrated project revision'
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-jwt-malformed-input.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-config-startup-redaction.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-dataplan-log-redaction.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-couch-single-delete-result.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-stacktrace-argument-redaction.patch"
@@ -2117,6 +2118,12 @@ configure_kazoo() {
     sync_git https://github.com/2600hz/kazoo-configs-core.git \
         "$KAZOO_BUILD_ROOT/kazoo-configs-core" "$KAZOO_CORE_CONFIG_REF"
     run mkdir -p "$KAZOO_CONFIG_DIR/core" /var/log/kazoo /var/lib/kazoo "$KAZOO_ROOT/var/lib/ra"
+    # A preceding data-only install may create this shared parent under umask
+    # 077. Services need traversal; secret files retain their separate 0600/
+    # 0640 permissions. Never recursively relax permissions on its contents.
+    reject_secret_symlink "$KAZOO_CONFIG_DIR"
+    reject_secret_symlink "$KAZOO_CONFIG_DIR/core"
+    run install -d -o root -g root -m 0755 "$KAZOO_CONFIG_DIR" "$KAZOO_CONFIG_DIR/core"
     write_file 0640 "$KAZOO_CONFIG_DIR/core/config.ini" <<EOF
 [amqp]
 uri = ${KAZOO_AMQP_URI}

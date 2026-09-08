@@ -52,10 +52,12 @@ case "${KAZOO_ENABLE_RELOADER:-false}" in
     *) echo 'Invalid KAZOO_ENABLE_RELOADER' >&2; exit 2 ;;
 esac
 
+# OTP uses the first value for repeated kernel options. Put the deployment
+# address before the loopback default in dev.vm.args.
 exec erl \
      "$NAME_TYPE" "$NODE_NAME" \
+     -kernel inet_dist_use_interface "$DIST_TUPLE" \
      -args_file "$ROOT/rel/dev.vm.args" \
      -config "$ROOT/rel/sys.config" \
      -lager log_root "\"$LOG_ROOT\"" \
-     -kernel inet_dist_use_interface "$DIST_TUPLE" \
      "$@"

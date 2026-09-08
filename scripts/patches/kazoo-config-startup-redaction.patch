@@ -1,0 +1,12 @@
+diff --git a/kazoo_config/src/kazoo_config_init.erl b/kazoo_config/src/kazoo_config_init.erl
+--- a/kazoo_config/src/kazoo_config_init.erl
++++ b/kazoo_config/src/kazoo_config_init.erl
+@@ -58,7 +58,7 @@ maybe_load_file([File|T]) ->
+ -spec set_env() -> 'ok'.
+ set_env() ->
+     AppEnv = load_file(),
+-    lager:notice("loaded settings : ~p", [AppEnv]),
++    lager:notice("loaded ~p configuration sections", [length(AppEnv)]),
+     set_zone(AppEnv),
+     application:set_env(?APP, 'kz_config', AppEnv).
+ 
