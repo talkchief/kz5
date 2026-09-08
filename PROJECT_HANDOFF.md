@@ -1,11 +1,14 @@
 # Kazoo 5 — start here / engineering handoff
 
-**VOICE-01 callback language snapshot source correction ready to deploy.**
+**VOICE-01 callback language snapshot source correction deployed on main.**
 Queue edits could switch admitted callers' callback language. A focused source
 regression reproduces this; corrected registration/restoration/confirmation
 passes10 language and6 returned-caller tests. Shared prerecorded assets are
 unchanged and no Gemini calls occurred. Generated OpenAPI documents the saved
-language contract. See `doc/acdc_callback_language_snapshot.md`; real queue-edit
+language contract. Normal apps/eCallMgr installer84142/09ff6a exits0 in12m6.872s;
+all three changed modules match running/disk BEAMs4250/ce4046. `/apis` is updated
+and HTTPS-readback verified; services active and zero native calls7389d7.
+See `doc/acdc_callback_language_snapshot.md`; real queue-edit
 acceptance and broader account/reseller inheritance remain open.
 
 **UI-01 optional storage selector fixed / deployed-browser PASS.**

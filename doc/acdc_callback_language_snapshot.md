@@ -54,7 +54,33 @@ Run inside the normal bounded validation environment. Tests use private
 artifacts, not the running node. Fresh OpenAPI generation passes with358 paths,
 653 operations and1653 resolved internal references (`42627/8d0841`).
 
-Deployment and a real queue-edit-during-callback acceptance are pending. Prior
+## Main-server deployment
+
+Source73cd173 was deployed on10.1.0.44 through the normal installer command
+`bash scripts/install-kazoo5.sh kazoo-apps ecallmgr`. Unit
+`kz5-callback-language-install-main44-20260908` completed successfully, exit0,
+in12m6.872s with381.5MiB peak memory (observer84142/09ff6a). Protected log:
+`/root/kz5-acceptance/callback-language-install-main44-20260908.log`, SHA256
+`698a8bdea4458d2868a34f0ecd92207b4041d555d861ff2750f1749b4ec1a862`.
+The installer verified existing media, API access, eCallMgr/FreeSWITCH connectivity
+and callback commands. It generated no voices. Both selected services are active
+and native FreeSWITCH call count is zero (7389d7).
+
+Independent read-only runtime/disk BEAM comparisons passed for all three changed
+modules (4250/ce4046), loaded from `/opt/kz5/applications/acdc/ebin/`:
+
+| Module | Runtime and disk MD5 |
+| --- | --- |
+| acdc_queue_member | c2b648fd9eb9e579d993fb0465e12521 |
+| acdc_queue_fsm | 804ed9a364017a5d2709b29128ede2e9 |
+| acdc_callback_caller | f79d2df9272b171cdfa78faa64d4aabf |
+
+The normal static-documentation installer function also completed, exit0
+(unit `kz5-callback-language-docs-main44-20260908`,80685/9e6886).
+HTTPS readback of `/apis/openapi.json` confirms `CallbackPublic.language`
+contains the new contract (27aec6). No UI rebuild was needed for this backend fix.
+
+A real queue-edit-during-callback acceptance remains pending. Prior
 five-language audio/retry results predate this correction and are not proof of
 the new queue-edit case. New-account/reseller default inheritance and language
 changes during restarted position-announcement workers remain separate review
