@@ -8,6 +8,7 @@ const MASTER = 'adecbb84fbe9e06902a76731914d1943';
 const COMPANY = 'd8520ce3f29c5b6db692289e782c92af';
 const usersOnly = process.argv.slice(2).join(' ') === '--callflows-users';
 const queueFormOnly = process.argv.slice(2).join(' ') === '--queue-create-form';
+const queueSave = process.argv.slice(2).join(' ') === '--queue-create-save --allow-fixture-writes';
 
 function privateText(file) {
     const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
@@ -33,7 +34,7 @@ function credentials() {
         const input = fs.readFileSync(0, 'utf8'); assert(input.length < 65536);
         result = JSON.parse(input);
     } else {
-        assert(process.argv.length === 2 || usersOnly || queueFormOnly);
+        assert(process.argv.length === 2 || usersOnly || queueFormOnly || queueSave);
         const auth = envFields(privateText('/etc/kazoo/installer-secrets.env'));
         const config = envFields(privateText('/etc/kazoo/deployment.env'));
         result = {account: Buffer.from(config.KAZOO_MASTER_ACCOUNT_NAME, 'base64').toString('utf8'),
@@ -118,6 +119,11 @@ function credentials() {
         await page.goto(ORIGIN + '/#/apps/acdc', {waitUntil: 'domcontentloaded'});
         assert.equal((await masterLive).status(), 200);
         await page.waitForTimeout(2000);
+        if (queueSave) {
+            phase = 'isolated-queue-browser-save';
+            await require('./test-fixtures/queue-browser-save.cjs')(page, issues);
+            return;
+        }
         if (queueFormOnly) {
             phase = 'queue-create-form';
             // Check the reported create/default-validation/storage-loading path;
