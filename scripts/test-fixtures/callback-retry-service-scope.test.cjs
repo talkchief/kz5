@@ -33,4 +33,16 @@ for (let i = 0; i < 4; i++) {
 }
 assert.throws(() => inspect(render(paused), 'true')); checks++;
 assert.throws(() => inspect(render(paused) + 'Id=kazoo-apps.service\n', true)); checks++;
-console.log('PASS ' + checks + ' paused MASTER test-phone scope checks; no services contacted or changed');
+const absent = structuredClone(paused);
+absent[4].LoadState = 'not-found';
+assert.equal(inspect(render(absent),false,true).master_test_phones_absent,true); checks++;
+assert.throws(()=>inspect(render(absent),true,false)); checks++;
+assert.throws(()=>inspect(render(paused),false,true)); checks++;
+for (const mutate of [x=>{x[4].MainPID='1';}, x=>{x[4].NRestarts='1';},
+    x=>{x[4].ActiveState='failed';}, x=>{x[4].SubState='running';},
+    x=>{x[0].LoadState='not-found';}, x=>{x[0].MainPID='0';},
+    x=>{x[4].LoadState='error';}, x=>{x.pop();}]) {
+    const value=structuredClone(absent);mutate(value);
+    assert.throws(()=>inspect(render(value),false,true));checks++;
+}
+console.log('PASS ' + checks + ' paused/absent MASTER test-phone scope checks; no services contacted or changed');

@@ -266,7 +266,7 @@ configure_acceptance_queue() {
           ready_ack_timeout:5,handoff_timeout:5}')
     updated=$(jq -c --argjson callback "$callback" '.callback=$callback' <<<"$current")
     if [[ -n ${KAZOO_CALLBACK_TEST_LANGUAGE:-} ]]; then
-        [[ $ACTION == setup-retry && $ACCEPTANCE_ACCOUNT_ID == 7807ad61761269a1ccec833dde63f621 &&
+        [[ $ACTION == setup-retry && $ACCEPTANCE_ACCOUNT_ID == "${KAZOO_CALLBACK_TEST_ACCOUNT_ID:-7807ad61761269a1ccec833dde63f621}" &&
            $FIXTURE_ACCOUNT_ID == "$ACCEPTANCE_ACCOUNT_ID" && -n $FIXTURE_ORIGINAL_QUEUE ]] ||
             fixture_die 'Explicit language requires the exact saved isolated retry fixture'
         updated=$(jq -ce --arg language "$KAZOO_CALLBACK_TEST_LANGUAGE" '
@@ -289,9 +289,8 @@ reload_local_resources() {
 fixture_sup_preflight() {
     local output beam_path resolved_path
     FIXTURE_STAGE=sup-preflight
-    # Erlang/SUP needs its ordinary execution environment. Do not invent or
-    # change HOME, expose a cookie, or run a resource reload as a health probe.
-    [[ -n ${HOME:-} ]] || fixture_die 'reason=missing-home; validation environment must preserve the configured HOME; no fixture or agent writes started'
+    # The installed SUP wrapper resolves its protected configuration without
+    # HOME. Test real connectivity; do not invent HOME or reload resources here.
     # SUP treats non-ok results from *_maintenance modules as exit 2, even
     # successful module_info replies. code:which/1 avoids that exit convention
     # while still proving the required stepswitch module is available.
@@ -333,7 +332,7 @@ verify_fixture() {
          .data.callback.outbound_caller_id.number == $cid' <<<"$response" >/dev/null || \
         fixture_die 'Acceptance queue callback configuration verification failed'
     if [[ -n ${KAZOO_CALLBACK_TEST_LANGUAGE:-} ]]; then
-        [[ $ACCEPTANCE_ACCOUNT_ID == 7807ad61761269a1ccec833dde63f621 ]] || fixture_die 'Wrong explicit language account'
+        [[ $ACCEPTANCE_ACCOUNT_ID == "${KAZOO_CALLBACK_TEST_ACCOUNT_ID:-7807ad61761269a1ccec833dde63f621}" ]] || fixture_die 'Wrong explicit language account'
         jq -e --arg language "$KAZOO_CALLBACK_TEST_LANGUAGE" '.data.announcements.language==$language
             and .data.callback.media==null and .data.callback.return_confirmation_prompt==null' <<<"$response" >/dev/null ||
             fixture_die 'Explicit built-in callback language was not persisted exactly'
@@ -540,7 +539,7 @@ cancel_original_callback() {
 
 setup_fixture() {
     local response
-    [[ -z ${KAZOO_CALLBACK_TEST_LANGUAGE:-} || $ACCEPTANCE_ACCOUNT_ID == 7807ad61761269a1ccec833dde63f621 ]] ||
+    [[ -z ${KAZOO_CALLBACK_TEST_LANGUAGE:-} || $ACCEPTANCE_ACCOUNT_ID == "${KAZOO_CALLBACK_TEST_ACCOUNT_ID:-7807ad61761269a1ccec833dde63f621}" ]] ||
         fixture_die 'Explicit language is confined to the isolated retry account before fixture writes'
     fixture_sup_preflight
     FIXTURE_STAGE=setup-scope
@@ -576,6 +575,29 @@ setup_fixture() {
         jq -e '.data.callback.max_attempts==2 and .data.callback.originate_timeout==15 and
                .data.callback.retry_delay==15' <<<"$response" >/dev/null || \
             fixture_die 'Busy-agent retry policy was not persisted exactly'
+    fi
+}
+
+verify_retry_account_identity() {
+    local response
+    node "$callback_fixture_dir/test-fixtures/callback-fixture-account.cjs" "$ACCEPTANCE_STATE_FILE" >/dev/null ||
+        fixture_die 'Selected account does not match protected isolated fixture state'
+    [[ $ACCEPTANCE_ACCOUNT_ID != "$MASTER_ACCOUNT_ID" ]] || fixture_die 'Callback acceptance cannot target the authenticated master'
+    response=$(api_request GET "accounts/$ACCEPTANCE_ACCOUNT_ID")
+    jq -e --arg id "$ACCEPTANCE_ACCOUNT_ID" --arg name "$ACCEPTANCE_ACCOUNT_NAME" \
+        --arg realm "acceptance-${ACCEPTANCE_ACCOUNT_NAME: -12}.invalid" \
+        '.data.id==$id and .data.name==$name and .data.realm==$realm' <<<"$response" >/dev/null ||
+        fixture_die 'Live acceptance account identity changed'
+    # The normal read-only provisioner verifies all users, owned devices,
+    # internal routes, queue roster and queue callflow before any fixture write.
+    KAZOO_ACCEPTANCE_STATE_FILE=$ACCEPTANCE_STATE_FILE \
+        "$callback_fixture_dir/test-kazoo-call-provision.sh" --verify-only >/dev/null ||
+        fixture_die 'Live fixture resource ownership verification failed'
+    if [[ -n $FIXTURE_ACCOUNT_ID || -n $FIXTURE_ORIGINAL_QUEUE ]]; then
+        [[ $FIXTURE_ACCOUNT_ID == "$ACCEPTANCE_ACCOUNT_ID" && -n $FIXTURE_ORIGINAL_QUEUE ]] ||
+            fixture_die 'Saved callback fixture belongs to another account or is incomplete'
+        jq -e --arg id "$ACCEPTANCE_QUEUE_ID" '.id==$id and .name=="Acceptance Queue 2000"' \
+            <<<"$FIXTURE_ORIGINAL_QUEUE" >/dev/null || fixture_die 'Saved callback queue identity changed'
     fi
 }
 
@@ -631,6 +653,10 @@ main_fixture() {
     if [[ $ACTION == evidence ]]; then callback_evidence; return; fi
     FIXTURE_STAGE=authentication
     authenticate_master
+    if [[ $ACTION == setup-retry || -n ${KAZOO_CALLBACK_TEST_ACCOUNT_ID:-} ]]; then
+        FIXTURE_STAGE=retry-account-ownership
+        verify_retry_account_identity
+    fi
     case $ACTION in
         setup|setup-retry) setup_fixture ;;
         verify) verify_fixture ;;

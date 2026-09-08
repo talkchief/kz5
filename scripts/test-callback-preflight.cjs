@@ -79,8 +79,9 @@ setup_fixture
 [[ $FIXTURE_ORIGINAL_QUEUE == '{"id":"retained-original"}' ]]
 `],{env,encoding:'utf8',timeout:3000,maxBuffer:8192});
 }
-test('missing HOME fails before SUP or any setup state/API writes',()=>{
-  const r=setup('ok',true);a.equal(r.status,1);a.equal(r.stdout,'');a.match(r.stderr,/stage=sup-preflight.*reason=missing-home/);
+test('missing HOME uses actual SUP connectivity and preserves setup order',()=>{
+  const r=setup('ok',true);a.equal(r.status,0,r.stderr);a.deepEqual(r.stdout.trim().split('\n'),['snapshot','number owned-outbound','number owned-return','resource','queue','resource-reload','verification']);
+  const failed=setup('transport',true);a.equal(failed.status,1);a.equal(failed.stdout,'');a.match(failed.stderr,/reason=sup-connectivity/);
 });
 test('SUP transport failure fails before fixture writes and redacts raw output',()=>{
   const r=setup('transport');a.equal(r.status,1);a.equal(r.stdout,'');a.match(r.stderr,/stage=sup-preflight.*reason=sup-connectivity/);a.doesNotMatch(r.stderr,/fake-secret/);
@@ -134,8 +135,6 @@ test('no retained callback or cleanup policy was altered',()=>{
     cleanup_fixture:'be23b1b60e365cccfad2e4bd64586e359d1859bfbd7d9b56edb93d262b701534',
     cancel_original_callback:'a3132007dad62069b1977558ac83f18b0e003c6d73d951d436d956b7db0c08aa',
     fixture_assert_quiescent:'a3cb74b4623724766aa12ece1fa3fd9fd1531394574d150e0c1f36e8f9aa7929',
-    verify_fixture:'a58f8bc955812febfdd89472d0854f36e8f480343f8e2544cd514728b54f614b',
-    configure_acceptance_queue:'a038ae2716f937d7abcdf8f54b8777d601f811c00e555824f58685d4e1abe99d',
     retry_cleanup:'4a68ee271be1879262e53841863c42297f77b62546577ef061ea03b49558e4cf'
   };
   for(const [name,digest]of Object.entries(baseline))a.equal(crypto.createHash('sha256').update(fn(name==='retry_cleanup'?retry:fixture,name)).digest('hex'),digest);

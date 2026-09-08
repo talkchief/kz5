@@ -22,7 +22,7 @@ for (const xml of Object.values(generated)) {
     assert(xml.includes('branch=[branch]') && xml.includes('[routes]'));
 }
 checks++;
-const account = '7807ad61761269a1ccec833dde63f621';
+const account = require('./test-fixtures/callback-fixture-account.cjs').selectedAccount();
 const entryOnly = scenarios(undefined, 'entry-only');
 assert.equal((entryOnly['callback-retry-request.xml'].match(/play_dtmf=/g) || []).length, 1);
 assert(entryOnly['callback-retry-request.xml'].includes('play_dtmf="[field5],200"'));

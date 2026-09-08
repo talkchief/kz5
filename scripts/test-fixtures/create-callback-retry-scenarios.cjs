@@ -55,7 +55,7 @@ function scenarios(root = path.join(__dirname, '..', 'sip-tests'), mode = 'confi
 }
 function modeReceipt(mode = 'confirm-current') {
     const sources = ['create-callback-retry-scenarios.cjs', 'assert-callback-registration-audio.cjs',
-        'assert-callback-retry.cjs', 'callback-retry-service-scope.cjs', 'callback-internal-scenarios.cjs',
+        'assert-callback-retry.cjs', 'callback-retry-service-scope.cjs', 'callback-internal-scenarios.cjs', 'callback-fixture-account.cjs',
         'assert-callback-unanswered.cjs', 'assert-callback-confirmation-pcap.cjs',
         '../test-acdc-callback-calls.sh', '../test-acdc-callback-retry.sh', '../test-acdc-callback-fixture.sh',
         '../sip-tests/callback-request.xml', '../sip-tests/caller-to-queue.xml'];

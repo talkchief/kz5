@@ -5,7 +5,8 @@
 set -Eeuo pipefail
 retry_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 KAZOO_CALLBACK_CALLS_LIBRARY=true source "$retry_script_dir/test-acdc-callback-calls.sh"
-readonly RETRY_ACCOUNT_ID=7807ad61761269a1ccec833dde63f621
+RETRY_ACCOUNT_ID=7807ad61761269a1ccec833dde63f621
+RETRY_ACCOUNT_EXPLICIT=false
 readonly RETRY_BUSY_PORT=15066
 readonly RETRY_BUSY_MEDIA=43020
 RETRY_REFERENCE=
@@ -14,6 +15,7 @@ RETRY_LANGUAGE=en-us
 RETRY_LANGUAGE_EXPLICIT=false
 RETRY_LANGUAGE_ARGS=()
 RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=false
+RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=false
 RETRY_BUSY_PID=
 RETRY_BUSY_CALL_ID=
 RETRY_BUSY_PROOF=
@@ -27,8 +29,10 @@ retry_usage() {
         '       test-acdc-callback-retry.sh --live --keep-fixture --confirmation-reference FILE' \
         '       [--registration-mode entry-only|confirm-current] (default: confirm-current)' \
         '       [--language en-us|he-il|fr-fr|es-es|ar-sa] (explicit owned queue language; absent preserves queue)' \
+        '       [--fixture-account ACCOUNT_ID] (must match canonical protected isolated state)' \
         '       [--transport external|internal] (default: external; internal uses isolated1001)' \
         '       [--allow-paused-master-test-phones] (only an already inactive/dead helper)' \
+        '       [--allow-absent-master-test-phones] (only a not-installed/dead helper)' \
         'Only the exact isolated local fixture is allowed. MASTER and PSTN are excluded.' \
         'Busy agent -> queued caller waits5s -> callback registration/audio proof ->' \
         'wait2s -> release busy call -> unanswered first attempt -> answered retry.' \
@@ -39,19 +43,26 @@ retry_args() {
     # Only this CLI's explicit option may authorize a fixture language write.
     # Clear inherited overrides before preflight, setup, evidence or cleanup.
     unset -v KAZOO_CALLBACK_TEST_LANGUAGE || die 'Cannot isolate callback fixture language environment'
+    unset -v KAZOO_CALLBACK_TEST_ACCOUNT_ID || die 'Cannot isolate callback fixture account environment'
     while (($#)); do
         case $1 in
             --prepare-only) CALLBACK_PREPARE=true ;;
             --live) CALLBACK_LIVE=true ;;
             --keep-fixture) KEEP_FIXTURE=true ;;
             --confirmation-reference) (($# >= 2)) || die 'Missing reference'; RETRY_REFERENCE=$2; shift ;;
+            --fixture-account)
+                (($# >= 2)) || die 'Missing fixture account'
+                [[ ${RETRY_ACCOUNT_EXPLICIT:-false} == false && $2 =~ ^[a-f0-9]{32}$ ]] || die 'Invalid or repeated fixture account'
+                RETRY_ACCOUNT_ID=$2; RETRY_ACCOUNT_EXPLICIT=true; shift ;;
             --registration-mode) (($# >= 2)) || die 'Missing registration mode'; RETRY_REGISTRATION_MODE=$2; shift ;;
             --language)
-                (($# >= 2)) && [[ $RETRY_LANGUAGE_EXPLICIT == false ]] || die 'Missing or repeated language'
+                (($# >= 2)) || die 'Missing language'
+                [[ $RETRY_LANGUAGE_EXPLICIT == false ]] || die 'Repeated language'
                 case $2 in en-us|he-il|fr-fr|es-es|ar-sa) ;; *) die 'Unsupported callback retry language' ;; esac
                 RETRY_LANGUAGE=$2; RETRY_LANGUAGE_EXPLICIT=true; RETRY_LANGUAGE_ARGS=("$2"); shift ;;
             --transport) (($# >= 2)) || die 'Missing transport'; CALLBACK_TEST_TRANSPORT=$2; shift ;;
             --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
+            --allow-absent-master-test-phones) RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=true ;;
             -h|--help) retry_usage; exit 0 ;;
             *) die 'Unsupported callback retry option' ;;
         esac
@@ -68,6 +79,7 @@ retry_args() {
     node "$retry_script_dir/test-fixtures/callback-gemini-reference.cjs" verify "$RETRY_REFERENCE" "$RETRY_LANGUAGE" \
         | jq -e --arg language "$RETRY_LANGUAGE" '.voice_family == "gemini-sulafat" and .language == $language' >/dev/null || \
         die 'Current callback acceptance requires a verified Gemini reference, not legacy audio'
+    export KAZOO_CALLBACK_TEST_ACCOUNT_ID=${RETRY_ACCOUNT_ID:-7807ad61761269a1ccec833dde63f621}
 }
 
 retry_snapshot() {
@@ -341,7 +353,7 @@ retry_run() {
     before=$(systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p LoadState -p ActiveState -p SubState -p MainPID -p NRestarts)
     printf '%s\n' "$before" > "$RUN_DIR/retry-service-before.txt"
     node "$retry_script_dir/test-fixtures/callback-retry-service-scope.cjs" "$RUN_DIR/retry-service-before.txt" \
-        "$RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES" > "$RUN_DIR/retry-service-scope.json" || die 'Required service state failed strict scope validation'
+        "$RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES" "$RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES" > "$RUN_DIR/retry-service-scope.json" || die 'Required service state failed strict scope validation'
     if [[ $RETRY_LANGUAGE_EXPLICIT == true ]]; then
         KAZOO_CALLBACK_TEST_LANGUAGE=$RETRY_LANGUAGE callback_fixture setup-retry
         KAZOO_CALLBACK_TEST_LANGUAGE=$RETRY_LANGUAGE callback_fixture verify
@@ -429,11 +441,13 @@ main_retry() {
     INSTALL_DEPS=false
     load_state; validate_state; resolve_local_ip
     [[ ${STATE[ACCEPTANCE_ACCOUNT_ID]} == "$RETRY_ACCOUNT_ID" && $LOCAL_IP == 127.0.0.20 ]] || die 'Wrong account or non-isolated local endpoint'
+    node "$retry_script_dir/test-fixtures/callback-fixture-account.cjs" "$STATE_FILE" || die 'Protected callback fixture identity refused'
     ensure_sipp
     for file in create-callback-retry-scenarios.cjs assert-callback-retry.cjs assert-callback-registration-audio.cjs; do
         node --check "$retry_script_dir/test-fixtures/$file"
     done
     if [[ $CALLBACK_PREPARE == true ]]; then log 'Retry sources and isolated state validated; no API writes or SIP traffic'; return; fi
+    node "$retry_script_dir/test-fixtures/callback-fixture-account.cjs" --ensure-lock || die 'Cannot prepare protected shared acceptance lock'
     [[ -f /etc/kazoo/monitor-acceptance.lock && ! -L /etc/kazoo/monitor-acceptance.lock ]] || die 'Missing shared acceptance lock'
     exec 9<>/etc/kazoo/monitor-acceptance.lock
     flock -n 9 || die 'Another acceptance task owns the shared lock'

@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const {modeReceipt, expectedDigits} = require('./create-callback-retry-scenarios.cjs');
 const media = require('./assert-callback-confirmation-pcap.cjs');
-const ACCOUNT = '7807ad61761269a1ccec833dde63f621';
+const ACCOUNT = require('./callback-fixture-account.cjs').selectedAccount();
 const GREGORIAN_UNIX_OFFSET = 62167219200;
 const id = value => typeof value === 'string' && /^[A-Za-z0-9@._:-]{1,128}$/.test(value);
 function lifecycle({registered, first, backoff, bridged, busy, audio, release}, transport = 'external') {
@@ -112,7 +112,8 @@ function inspect(directory, mode = 'confirm-current', transport = 'external', la
     const json = name => JSON.parse(safeRead(directory, name, 128 * 1024));
     const serviceScope = json('retry-service-scope.json');
     assert.deepEqual(serviceScope, require('./callback-retry-service-scope.cjs').inspect(
-        safeRead(directory, 'retry-service-before.txt', 8192).toString(), serviceScope.allow_paused_master_test_phones),
+        safeRead(directory, 'retry-service-before.txt', 8192).toString(), serviceScope.allow_paused_master_test_phones,
+        serviceScope.allow_absent_master_test_phones === undefined ? false : serviceScope.allow_absent_master_test_phones),
         'Service scope receipt differs from the actual initial snapshot');
     const evidence = {registered: json('callback-registration-evidence.json'), first: json('retry-first-attempt.json'),
         backoff: json('retry-backoff-evidence.json'), bridged: json('retry-bridge-evidence.json'),

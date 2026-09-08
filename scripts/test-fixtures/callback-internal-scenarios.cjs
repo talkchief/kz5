@@ -4,7 +4,7 @@
 const fs = require('node:fs'), path = require('node:path'), cp = require('node:child_process');
 const assert = require('node:assert/strict');
 const {baseState} = require('../test-channel-monitor-live.cjs');
-const ACCOUNT = '7807ad61761269a1ccec833dde63f621';
+const fixtureAccount = require('./callback-fixture-account.cjs');
 function target(transport = 'external') {
     assert(['external', 'internal'].includes(transport), 'Unsupported callback test transport');
     return transport === 'internal' ? 'acceptance1001' : '\\+12025550101';
@@ -42,7 +42,7 @@ function registrationAbsent(result) {
 function preflight(file) {
     assert.equal(file, '/etc/kazoo/acceptance-secrets.env', 'Only canonical isolated state allowed');
     const s = baseState(privateFile(file));
-    assert.equal(s.ACCEPTANCE_ACCOUNT_ID, ACCOUNT);
+    fixtureAccount.validateState(s);
     assert.equal(s.ACCEPTANCE_CALLER_SIP_USERNAME, 'acceptance1001');
     const result = cp.spawnSync('kamcmd', ['ul.lookup', 'location', s.ACCEPTANCE_CALLER_SIP_USERNAME+'@'+s.ACCEPTANCE_REALM],
         {encoding:'utf8',timeout:5000,maxBuffer:65536});

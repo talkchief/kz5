@@ -2,16 +2,17 @@
 
 ## Immediate operator follow-up — September8
 
-- **CALLBACK-MAIN44-01 OPEN — portable acceptance fixture:** the retained retry
-  harness, explicit-language setup and internal endpoint preflight still pin
+- **CALLBACK-MAIN44-01 SOURCE FIX / NATIVE ACCEPTANCE OPEN:** the retained retry
+  harness, explicit-language setup and internal endpoint preflight previously pinned
   the old development tenant `7807ad61761269a1ccec833dde63f621` in
   `scripts/test-acdc-callback-retry.sh`, `scripts/test-acdc-callback-fixture.sh`
-  and `scripts/test-fixtures/callback-internal-scenarios.cjs`. Do not reuse that
-  identity or remove ownership checks to run on the main host. Add an explicit,
-  protected-state-bound development fixture selection with remote account,
-  queue, caller/device and saved-configuration ownership verification; reject
-  master/imported/foreign tenants and preexisting contacts. Cover old/new
-  fixtures and refusals before main-host EN/HE/FR/ES/AR retry/audio acceptance.
+  and `scripts/test-fixtures/callback-internal-scenarios.cjs`. New explicit
+  `--fixture-account` binds protected state, live account/resource ownership,
+  saved restoration identity and final evidence. Old/new fixtures, refusals,
+  preserved locks,25 SUP preflight and38 absent/paused-helper tests pass.
+  Native EN/HE/FR/ES/AR retry/audio acceptance remains required. The periodic
+  offer/position harness has its own remaining portability work. Details:
+  `doc/main44_callback_acceptance_20260908.md`.
   Preserve prior five-language proof as old-host evidence, not a main-host pass.
   This is test portability, not evidence that the deployed callback API fails.
 
