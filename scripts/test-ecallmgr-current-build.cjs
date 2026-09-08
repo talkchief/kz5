@@ -31,6 +31,7 @@ kazoo_build_snapshot(){ printf 'snapshot-called\\n' >&2; printf '%s\\n' "\${SNAP
 install_kazoo_systemd_units(){ printf 'units\\n'; }
 install_sup_cli(){ :; }
 service_enable_restart(){ printf 'service\\n'; }
+wait_kazoo_datastore_ready(){ printf 'datastore-ready %s\\n' "$1"; }
 configure_ecallmgr_dialplan_applications(){ :; }
 configure_ecallmgr_callback_cleanup(){ :; }
 configure_ecallmgr_event_stream_framing(){ :; }

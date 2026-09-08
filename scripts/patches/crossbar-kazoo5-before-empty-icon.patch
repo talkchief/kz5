@@ -717,7 +717,7 @@ new file mode 100644
 +-module(kazoo_monster_catalog).
 +-export([init_app/3]).
 +-ifdef(TEST).
-+-export([create_only/4, read_regular/2, read_regular/3, master_db/1, images/2]).
++-export([create_only/4, read_regular/2, read_regular/3, master_db/1]).
 +-endif.
 +-include_lib("kernel/include/file.hrl").
 +
@@ -785,7 +785,7 @@ new file mode 100644
 +images(Path,Meta) ->
 +    Icon=kz_json:get_value(<<"icon">>,Meta), Shots=kz_json:get_value(<<"screenshots">>,Meta,[]),
 +    true=is_list(Shots) andalso length(Shots)=<10,
-+    Specs=case Icon of undefined -> []; <<>> -> []; _ -> [{Icon,"icon"}] end ++ [{I,"screenshots"} || I<-Shots],
++    Specs=case Icon of undefined -> []; _ -> [{Icon,"icon"}] end ++ [{I,"screenshots"} || I<-Shots],
 +    true=length(Specs)=:=length(lists:usort([I || {I,_}<-Specs])),
 +    Values=[begin
 +        true=is_binary(Name) andalso byte_size(Name)>0 andalso byte_size(Name)=<192,

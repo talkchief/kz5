@@ -159,6 +159,22 @@ function technicalQa(metrics) {
   check(metrics.rms > 100 && metrics.silence_fraction < 0.98, 'AUDIO_SILENT_OR_TOO_QUIET');
   return metrics;
 }
+// A synchronous release-plan call may reuse only derived PCM, never validation
+// results. Keep this state private: callers cannot supply a cache or seed it.
+const REPLAY_CACHE_BYTES = 32 * 1024 * 1024, REPLAY_CACHE_ENTRIES = 1024;
+let activeReplayCache = null;
+function withResamplingReplayCache(run) {
+  check(typeof run === 'function' && activeReplayCache === null, 'INVALID_REPLAY_CACHE_SCOPE');
+  const state = {bytes: 0, entries: new Map()};
+  activeReplayCache = state;
+  try {
+    const result = run();
+    check(!result || typeof result.then !== 'function', 'ASYNC_REPLAY_CACHE_SCOPE');
+    return result;
+  } finally {
+    state.entries.clear(); state.bytes = 0; activeReplayCache = null;
+  }
+}
 function resamplingScope() { return {deadline: Date.now() + 45000, checked: false, cache: new Map()}; }
 function pcmPayload(wav) {
   // Only called on bytes already accepted by inspectWave in this operation.
@@ -186,11 +202,30 @@ function resampleMaster(master, scope = resamplingScope()) {
     check(/^(?:\/usr\/bin\/)?sox:\s+SoX v14\.4\.2$/.test(version), 'SOX_VERSION_MISMATCH');
     scope.checked = true;
   }
-  const known = scope.cache.get(measured.sha256);
-  if (known) return known;
+  // Every caller still reads its real files and measures the actual master;
+  // validators still compare this result with the actual saved telephony PCM.
+  // Existing per-verification deadlines and SoX version checks remain intact.
+  const shared = activeReplayCache, key = digest(RESAMPLING) + ':' + measured.sha256;
+  const known = shared ? shared.entries.get(key) : scope.cache.get(measured.sha256);
+  if (known) {
+    if (!shared) return known;
+    shared.entries.delete(key); shared.entries.set(key, known);
+    return Buffer.from(known); // Never expose the private cached bytes.
+  }
   const raw = sox([...RESAMPLING.argv], master, scope, MAX_DURATION_SECONDS * 8000 * 2 + 4096);
   check(raw.length > 0 && raw.length % 2 === 0 && raw.length <= MAX_DURATION_SECONDS * 8000 * 2,
     'INVALID_REPLAY_PCM');
+  if (shared) {
+    if (raw.length <= REPLAY_CACHE_BYTES) {
+      while (shared.entries.size && (shared.bytes + raw.length > REPLAY_CACHE_BYTES
+          || shared.entries.size >= REPLAY_CACHE_ENTRIES)) {
+        const oldest = shared.entries.keys().next().value;
+        shared.bytes -= shared.entries.get(oldest).length; shared.entries.delete(oldest);
+      }
+      shared.entries.set(key, Buffer.from(raw)); shared.bytes += raw.length;
+    }
+    return raw;
+  }
   // Private per-verification cache only; never trust a persisted derived hash.
   // Bound retained PCM to at most16 ten-second clips (2.56MB).
   if (scope.cache.size === 16) scope.cache.delete(scope.cache.keys().next().value);
@@ -391,7 +426,7 @@ function main(argv) {
 module.exports = Object.freeze({OWNER, MODEL, VOICE, CATALOG_HASH, LOCALE_HASHES, MAX_ATTEMPTS, HARD_MAX_ATTEMPTS, RESAMPLING,
   DEFAULT_SYNTHESIS_RECIPE, CONCISE_SYNTHESIS_RECIPE, SYNTHESIS_RECIPES,
   MAX_DURATION_SECONDS, PackError, digest, contexts, plan, pendingApproval, createManifest,
-  fileName, requestBody, inspectWave, technicalQa, resampleMaster, verifyEntry, validateManifest, readManifest,
+  fileName, requestBody, inspectWave, technicalQa, resampleMaster, withResamplingReplayCache, verifyEntry, validateManifest, readManifest,
   assetSetHash, requireAuthoringApproval, verifyPack, main});
 if (require.main === module) {
   try { main(process.argv.slice(2)); }

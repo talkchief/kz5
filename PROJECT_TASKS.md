@@ -1,6 +1,131 @@
 # Kazoo 5 project task register
 
-## Current focused release checkpoint — 2026-09-07 21:41 UTC
+## Current focused release checkpoint — 2026-09-08
+
+- **Final focused checks PASS:** `90006/cb79bd` reran15 replay-cache cases,
+  26 readiness cases, current-build ordering/failure checks,32 finalization
+  cases, actual deployed queue-editor language verification, and main-SH
+  `--verify-only push-bridge`. Bridge source/dependency lock, protected config
+  and actual broker-consumer readiness pass; no real mobile delivery claimed.
+  Apps (including kazoo-applications alias), eCallMgr, bridge and nginx are
+  loaded/active with restart counters0 (`de94d7`).
+
+- **Normal Monster UI installer PASS:** `44420/6ef89a` exited0 after the
+  stateless catalog helper fix was production-compiled and deployed with exact
+  loaded MD5 verification. All ten catalog entries preserved and verified,
+  served index/main/config match the owned artifact, same-origin Crossbar JSON
+  proxy passes, nginx enabled/active, deployment settings saved normally.
+  Recoverable old BEAMs: `/root/kazoo-catalog-deploy.Q6EBiJ`; new BEAM SHA256
+  `79528cf9362e9742c74b62bb079f091e5372fa316da59400258c066e2db19a95`.
+  Crossbar aggregate/source transitions preserve this fix on later builds.
+  Twelve catalog tests, all87 transition cases and installer smoke checks
+  passed in `24414` before deployment; evidence
+  `/tmp/kazoo-source-transition-tests.BhqEPa`. The first transition test run
+  passed the cases but failed its stale81-case total; corrected to87 and rerun.
+  This closes the UI catalog blocker, not full stack/fresh-server acceptance.
+
+- **New-build callback retry PASS:** `1297/784164`, evidence
+  `/var/log/kazoo-acceptance/20260907T232852Z`: busy-agent call, five-second
+  wait, key6, full recorded Gemini confirmation before BYE, two-second wait,
+  agent release, unanswered first return, durable retry_wait, then second
+  return accepted with key1 and reciprocal native bridge. Runtime/log and
+  teardown gates pass. Isolated internal1001 fixture retained intentionally;
+  this is not physical operator1000 or complete fixture cleanup acceptance.
+- **eCallMgr cold start PASS:** `34255/656bb8` restarted with zero channels,
+  passed the actual bounded datastore-readiness gate and complete eCallMgr
+  verification. PID1036743, active/enabled, restart count0. Apps cold startup
+  and an uninterrupted apps/eCallMgr installer run remain open.
+- **Deployed language selector PASS:** `59484/322097` authenticates against
+  the actual unified new-queue editor API, verifies the exact published
+  capability bytes and210 media entries, extracts the ACDC AMD module from
+  deployed `js/main.js`, and confirms all five choices enabled. No queue writes
+  or provider requests. This is deployed-function/API proof, not an interactive
+  browser or native-speaker listening approval. The first probe failed because
+  it incorrectly expected an unbundled app.js; the deployed bundle is valid.
+- **UI deployment succeeded; installer catalog blocker being fixed:** initial
+  npm resolution OOM was confirmed in systemd journal. Bounded npm heap and
+  download concurrency allowed retry `73828/bc2596` to build and deploy the UI
+  and `/apis` (358paths/653operations). Installation then stopped because CSV
+  Onboarding has a valid empty icon string. The focused catalog fix treats
+  that string as no icon; screenshot/security checks remain. Twelve isolated
+  catalog tests and production compilation pass; transition suite and normal
+  UI installer subsequently passed as recorded above.
+- **Offline installer fixes:** complete real-DSP synthetic voice-pack check
+  passes15groups/4926assertions; cached input bytes match the prior native
+  proof. Legacy capability migration32cases, cache15cases, readiness26cases,
+  and main installer smoke checks pass (`98366`, `40048/5990dc`). No persistent
+  validation cache and no runtime Gemini generation introduced.
+
+### Earlier checkpoints (superseded where explicitly updated above)
+
+- **All-five live position/offer audio PASS:** English71221/06d203 and
+  remaining-locale batch75174/44d3e7 both exit0. HE/FR/ES/AR first offers arrived
+  at30.049/30.051/30.065/30.046seconds; their second offers at60seconds plus
+  the same offsets. Complete position-one phrases started at45/75seconds plus
+  those offsets. Every run passed negotiated PCMU correlation, entry/extra-audio
+  checks,86second normal teardown, runtime/log checks and conditional cleanup
+  with no agent changes. Evidence directories under `/var/log/kazoo-acceptance/`:
+  `20260907T231909Z`(EN), `20260907T232112Z`(HE), `20260907T232304Z`(FR),
+  `20260907T232456Z`(ES), `20260907T232647Z`(AR). This proves position-one and
+  offer-six, not all numeric audio, native listening, live wait-time, or every
+  callback response. Post-build key6/retry test1297 is now running.
+
+- **Actual five-language runtime proof and publication:** `95443/8dee1a`
+  passed all796 documents,1592 mappings,95 position playlists,10 callback
+  preparations and80 wait cases against eleven pinned loaded production modules.
+  Receipt `/root/kazoo-prerecorded-release.F8qJut/runtime-receipt.json`, SHA256
+  `f0f59a60be6fb8607ff15f146e35fbdf4c2dbe51aaed2e17eee4453cfe3f7db0`.
+  Initial evidence location was rejected because `/var/lib/kazoo` is service-owned;
+  moved the task-owned directory under protected `/root` before proof.
+  Publication `71766/1727f7` then migrated the exact inspected all-negative legacy
+  web-root setting to `/etc/kazoo/acdc/language-capabilities.json`, SHA256
+  `198866b70bc0805b32ae8eab385355a172931e114939960c59ea1c69d1290221`.
+  All five languages are selection-ready; native listening/full readiness remain
+  false. Real receipt and installer ownership marker are retained. This was an
+  explicit post-build continuation, not a successful uninterrupted installer run.
+- **Startup readiness and timing fixes:**26 isolated readiness cases and actual
+  read-only checks on both apps/eCallMgr pass (`8d2cfd`, `659e2b`). Cold startup
+  remains to test. Private32MiB conversion replay reuse within one release-plan
+  call passes15 isolated cases (`1e41d2`), preserving source reads, byte/QA checks,
+  per-scope deadlines and exact telephony comparisons. Current-build and16
+  finalizer fixtures pass `8bd940`. Real complete-pack timing/byte parity and
+  full installer acceptance remain open; no persisted validation cache is used.
+- **Installed references and English live audio pass:**12519/e2951a prepared
+  all-five references from actual installed attachments, provider requests0.
+  `/root/kazoo-prerecorded-reference.PvNvXj/index.json`, SHA256
+  `588d9e5ab556ee1cc7968d6d646f0e21d2fa55c5257c307dc69dab95acd2f78a`.
+  Cached full input equals the pre-cache successful native proof exactly
+  (`de3c3d`). English live71221/06d203 passed offer30.042/60.042 and full
+  position-one45.042/75.042seconds, exact negotiated audio, no early/extra offer,
+  normal teardown, runtime/log gates and conditional cleanup. Evidence:
+  `/var/log/kazoo-acceptance/20260907T231909Z`. Native listening/wait-time and
+  callback registration/retry are separate, still-open acceptance gates.
+- **Next:** finish callback retry1297, matching UI deployment, legacy-path
+  migration regression and cold-start checks. Full normal installer still open.
+
+- **Actual new build deployed, finalization still pending (22:55 UTC):**
+  source `dd39d90` is pushed. Normal installer `5f658d/session54282` passed
+  complete audio import/readback, one forced core traversal, all applications,
+  release assembly and production-BEAM checks. Apps restarted asPID944670 and
+  all configured apps passed startup checks. The outer resource guard reached
+  its30minute runtime limit at22:49:13 during cardinal mapping verification
+  (journal confirms `timeout`,245MiB peak,14min49.916s CPU). A collected unit's
+  later default `Result=success` is not evidence of installer success.
+  No full installer acceptance is claimed.
+- **Bounded continuation:** all586 cardinal/intro documents and1172 mappings
+  independently pass on the new apps node, missing0 (`9e200f/7263e9`); the
+ 210fixed/420mapping check passed before the deadline. The eleven actual
+  production BEAM pins and real probe arguments are saved privately under
+  `/root/kazoo-prerecorded-release.F8qJut`; subsequent runtime proof and
+  capability publication are recorded above.
+- **eCallMgr activated and verified:** PID960600, enabled/active; production
+  BEAM, node/application, callback cleanup, framing, FreeSWITCH connection and
+  native atomic-intercept gates pass (`77dbc2/c006ca`). First configuration
+  attempt after the installer's fixed5second delay failed while datastore ETS
+  was unavailable (`784267/6011ed`, server=>ok). Bounded native connection wait
+  then returnedok (`cd5b3e/87507b`), and configuration succeeded. Replace the
+  fixed sleep with an actual bounded datastore-readiness gate before claiming
+  reliable cold-start deployment.
 
 - **Pre-deployment verifier and live-audio harness fixes:** build-order fix
   `36876c3` is pushed. The following normal installer attempt

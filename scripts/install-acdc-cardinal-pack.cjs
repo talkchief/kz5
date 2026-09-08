@@ -252,12 +252,12 @@ function source(locale) {
 function releasePlans(open = openPlan, readHeader = checkedHeader, selectedResolution = {}) {
   const resolution = resolutionOptions(selectedResolution);
   const {supplementalDirectory, aliasFile, aliasSha256, ...trials} = resolution;
-  return LOCALES.map(locale => ({locale, plan: open({...source(locale),
+  return pack.withResamplingReplayCache(() => LOCALES.map(locale => ({locale, plan: open({...source(locale),
     ...(locale === 'en-us' ? {} : locale === 'es-es' ? resolution : trials)}),
     header: () => readHeader(locale === 'en-us'
       ? path.join(__dirname, '../applications/acdc/src/acdc_cardinal_map.hrl')
       : path.join(__dirname, '../applications/acdc/src/cardinal_maps', `acdc_cardinal_${locale}.hrl`),
-    locale === 'en-us' ? 65536 : 256 * 1024)}));
+    locale === 'en-us' ? 65536 : 256 * 1024)})));
 }
 
 function options(args) {

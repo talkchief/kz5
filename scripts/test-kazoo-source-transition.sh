@@ -22,6 +22,8 @@ transition_fixture_inputs=(
     "$transition_fixture_patches/crossbar-kazoo5-integration.patch"
     "$transition_fixture_patches/crossbar-kazoo5-before-frame.patch"
     "$transition_fixture_patches/crossbar-blackhole-frame-schema.patch"
+    "$transition_fixture_patches/crossbar-kazoo5-before-empty-icon.patch"
+    "$transition_fixture_patches/crossbar-empty-icon.patch"
     "$transition_fixture_patches/blackhole-binding-cleanup.patch"
     "$transition_fixture_patches/blackhole-pre-queue-live-integration.patch"
     "$transition_fixture_patches/blackhole-queue-live.patch"
@@ -195,6 +197,10 @@ new_case() {
             [[ $app == blackhole ]] || fail 'pre-queue state is Blackhole only'
             git -C "$source_dir" apply "$script_dir/patches/blackhole-pre-queue-live-integration.patch"
             ;;
+        pre-icon)
+            [[ $app == crossbar ]] || fail 'pre-icon state is Crossbar only'
+            git -C "$source_dir" apply "$script_dir/patches/crossbar-kazoo5-before-empty-icon.patch"
+            ;;
         *) fail "unknown fixture state: $state" ;;
     esac
     configured_root="$root"
@@ -322,6 +328,35 @@ for app in blackhole crossbar ecallmgr; do
         new_case "$state" "$state"
         expect_success "$state"
     done
+
+    if [[ $app == crossbar ]]; then
+        new_case pre-icon pre-icon
+        expect_success pre-icon
+
+        new_case edited-catalog pre-icon
+        replace_once "$source_dir/src/kazoo_monster_catalog.erl" \
+            'Specs=case Icon of undefined -> [];' 'Specs=case Icon of undefined -> [operator_edit];'
+        expect_rejection edited-catalog
+
+        new_case partial-icon-delta pre-icon
+        replace_once "$source_dir/src/kazoo_monster_catalog.erl" \
+            '-export([create_only/4, read_regular/2, read_regular/3, master_db/1]).' \
+            '-export([create_only/4, read_regular/2, read_regular/3, master_db/1, images/2]).'
+        expect_rejection partial-icon-delta
+
+        new_case missing-icon-delta pre-icon
+        mv -- "$script_dir/patches/crossbar-empty-icon.patch" "$work/withheld-icon.patch"
+        expect_rejection missing-icon-delta
+
+        new_case wrong-icon-delta pre-icon
+        replace_once "$script_dir/patches/crossbar-empty-icon.patch" '<<>> -> [];' '<<>> -> [wrong];'
+        expect_rejection wrong-icon-delta
+
+        new_case out-of-scope-icon-delta pre-icon
+        printf '\ndiff --git a/src/fixture-out-of-scope b/src/fixture-out-of-scope\nnew file mode 100644\n--- /dev/null\n+++ b/src/fixture-out-of-scope\n@@ -0,0 +1 @@\n+unexpected mutation\n' \
+            >>"$script_dir/patches/crossbar-empty-icon.patch"
+        expect_rejection out-of-scope-icon-delta
+    fi
 
     # expect_rejection calls invoke_helper conditionally; invoke_helper also
     # calls the actual helper conditionally. Safety must not depend on errexit.
@@ -532,6 +567,6 @@ replace_once "$script_dir/patches/blackhole-pre-queue-live-integration.patch" \
     '+    lager:debug("fixture-inconsistent-pre-queue-baseline"),'
 expect_rejection wrong-pre-queue-baseline
 
-[[ $transition_fixture_count == 81 ]] || fail "unexpected case count: $transition_fixture_count"
+[[ $transition_fixture_count == 87 ]] || fail "unexpected case count: $transition_fixture_count"
 printf 'PASS all %s bounded source-transition cases (no builds, services or network)\n' "$transition_fixture_count" \
     | tee -a "$transition_fixture_output/results.log"

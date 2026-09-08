@@ -1,10 +1,82 @@
 # Kazoo 5 — start here / engineering handoff
 
-Last updated: **2026-09-07**. This is the navigation and current-state guide;
+Last updated: **2026-09-08**. This is the navigation and current-state guide;
 `PROJECT_TASKS.md` is the detailed requirement/acceptance register. Neither this
 file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
+
+Final focused verification `90006/cb79bd` PASS: cache15, readiness26,
+current-build checks, finalization32, actual deployed editor-language functions,
+and main-SH `--verify-only push-bridge`. Provider delivery remains unverified.
+`kazoo-applications.service` correctly resolves to the active kazoo-apps unit;
+apps/eCallMgr/bridge/nginx are active with restart counters0.
+
+Normal Monster UI installation now PASS `44420/6ef89a` (exit0), including all
+ten preserved catalog registrations, served owned artifacts, Crossbar proxy,
+nginx enabled/active and normal config persistence. Empty-icon helper deployed
+after12 catalog tests,87 transition cases and installer smoke checks passed.
+Old BEAMs retained in `/root/kazoo-catalog-deploy.Q6EBiJ`; new BEAM SHA256
+`79528cf9362e9742c74b62bb079f091e5372fa316da59400258c066e2db19a95`.
+Future builds reproduce it from the Crossbar aggregate and exact prior-state
+transition patches. Next main gate is uninterrupted apps/eCallMgr installation
+using the tested readiness/media-replay fixes. No full-stack acceptance yet.
+
+Latest continuation: callback retry `1297/784164` PASS on the new build
+(`/var/log/kazoo-acceptance/20260907T232852Z`): key6, complete confirmation,
+missed first return, persisted retry and accepted second return/native bridge.
+Uses internal1001; fixture retained. eCallMgr cold restart `34255/656bb8` PASS
+with actual datastore readiness, PID1036743. Deployed unified editor/API plus
+bundled ACDC language functions pass `59484/322097`: all five enabled,210media,
+no queue writes/provider requests. Native listening remains unapproved.
+
+UI and `/apis` deployed in `73828/bc2596`, but the overall UI installation
+failed at CSV Onboarding catalog registration because its icon is an empty
+string. Focused source fix and12 catalog tests/production compilation pass;
+source-transition tests and deployment/retry subsequently passed above. First npm attempt OOMed;
+bounded192MiB npm heap and download concurrency fixed the retry. No complete
+one-shot stack installer acceptance is claimed. See latest task-register entry.
+
+### Prior working snapshots
+
+At23:29UTC all five actual position-one/offer-six calls pass:71221/06d203(EN)
+and75174/44d3e7(HE/FR/ES/AR), including exact audio/timing, runtime/log gates
+and conditional cleanup. No agent assignments changed. See
+`doc/prerecorded_release_finalization_20260907.md` for all five evidence paths.
+Key6/full-confirmation/missed-first-attempt retry1297 is now running on this
+new build; do not treat its prior-runtime pass as the new result.
+
+At23:17UTC the actual five-language native function proof passed
+`95443/8dee1a` (796documents/1592maps,95position/10callback/80waitcases).
+Protected receipt `/root/kazoo-prerecorded-release.F8qJut/runtime-receipt.json`
+SHA256`f0f59a60be6fb8607ff15f146e35fbdf4c2dbe51aaed2e17eee4453cfe3f7db0`.
+Actual publisher`71766/1727f7` sets all five selections ready under
+`/etc/kazoo/acdc/language-capabilities.json`, retaining full/native/listeningfalse.
+The prior explicit web-root path was inspected as an all-negative legacy artifact
+and migrated; oldfile remains. Marker/proof retained, no false build flag used.
+Main-SH legacy-path migration still needs the matching regression/code change.
+Startup readiness26fixtures and both actual node reads pass; cold start remains.
+The small private conversion cache passes15fixtures. Real pack/reference
+run12519/e2951a passes and its complete input equals the prior uncached proof
+exactly (`de3c3d`). Reference index `/root/kazoo-prerecorded-reference.PvNvXj/index.json`
+SHA256`588d9e5ab556ee1cc7968d6d646f0e21d2fa55c5257c307dc69dab95acd2f78a`.
+English live71221/06d203 passed complete position-one and30/60second offers,
+runtime/log gates and conditional cleanup. Evidence
+`/var/log/kazoo-acceptance/20260907T231909Z`. Other four locales also passed75174.
+Next: callbackretry, UI deployment, cold start and complete
+main-SH run. Dashboards stay postponed.
+
+Runtime has advanced: pushed `dd39d90` fully compiled and release-assembled in
+normal run `5f658d/session54282`. AppsPID944670 is running the new build;
+the outer30minute guard timed out during mapping checks, so that installer run
+did not complete. Independent mapping continuation `9e200f/7263e9` passed all
+586cardinal/intro documents and1172maps (fixed210/420passed in the installer).
+Actual eleven-BEAM manifest and real probe options are private under
+`/root/kazoo-prerecorded-release.F8qJut`; proof/publication now passed as above.
+eCallMgrPID960600 is also activated and its full checks including native
+kz_intercept pass `77dbc2/c006ca`. Its initial5second-wait configuration call
+raced datastore startup; the new readiness gate passes its offline fixtures
+and actual warm-node checks. No calls were performed in these activations.
 
 Most recent verified code fixes: `36876c3` is pushed; direct application build
 ordering passes. Second run `dc71ad/session30156` was stopped during media

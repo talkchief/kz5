@@ -15,6 +15,10 @@ fail() {
 }
 
 bash -n "$INSTALLER"
+grep -Fq 'NODE_OPTIONS=--max-old-space-size=192 npm_config_maxsockets=2 npm_config_jobs=1' "$INSTALLER" || \
+    fail 'Monster UI dependency installation must bound npm heap and download concurrency'
+grep -Fq 'npm ci --ignore-scripts --no-audit --no-fund' "$INSTALLER" || \
+    fail 'Monster UI dependency installation must preserve locked, script-free npm ci'
 output=$($INSTALLER --list)
 grep -Fxq couchdb <<<"$output" || fail 'component list omits couchdb'
 grep -Fxq kamailio <<<"$output" || fail 'component list omits kamailio'

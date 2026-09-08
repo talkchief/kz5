@@ -1646,6 +1646,7 @@ apply_kazoo_integration_patch() (
     local transition_source transition_relative transition_path
     local transition_state transition_stage transition_intercept='' transition_cleanup=''
     local transition_pre_queue='' transition_queue_live=''
+    local transition_pre_catalog='' transition_catalog=''
     local transition_apply=()
     local transition_files=() transition_old_files=() transition_delta_files=()
     local transition_created_files=()
@@ -1667,6 +1668,8 @@ apply_kazoo_integration_patch() (
             transition_new=crossbar-kazoo5-integration.patch
             transition_old=crossbar-kazoo5-before-frame.patch
             transition_delta=crossbar-blackhole-frame-schema.patch
+            transition_pre_catalog=crossbar-kazoo5-before-empty-icon.patch
+            transition_catalog=crossbar-empty-icon.patch
             transition_files=(priv/couchdb/schemas/queue_update.json priv/couchdb/schemas/queues.json
                 src/api_util.erl src/crossbar_auth.erl src/modules/cb_channels.erl src/modules/cb_devices.erl
                 priv/couchdb/schemas/channel_monitoring.json src/cb_channel_monitor.erl
@@ -1720,6 +1723,8 @@ apply_kazoo_integration_patch() (
     [[ ! $transition_cleanup ]] || transition_cleanup="$SCRIPT_DIR/patches/$transition_cleanup"
     [[ ! $transition_pre_queue ]] || transition_pre_queue="$SCRIPT_DIR/patches/$transition_pre_queue"
     [[ ! $transition_queue_live ]] || transition_queue_live="$SCRIPT_DIR/patches/$transition_queue_live"
+    [[ ! $transition_pre_catalog ]] || transition_pre_catalog="$SCRIPT_DIR/patches/$transition_pre_catalog"
+    [[ ! $transition_catalog ]] || transition_catalog="$SCRIPT_DIR/patches/$transition_catalog"
     if [[ $DRY_RUN == true ]]; then
         transition_safe_file "$transition_new"
         transition_safe_file "$transition_old"
@@ -1728,6 +1733,8 @@ apply_kazoo_integration_patch() (
         [[ ! $transition_cleanup ]] || transition_safe_file "$transition_cleanup"
         [[ ! $transition_pre_queue ]] || transition_safe_file "$transition_pre_queue"
         [[ ! $transition_queue_live ]] || transition_safe_file "$transition_queue_live"
+        [[ ! $transition_pre_catalog ]] || transition_safe_file "$transition_pre_catalog"
+        [[ ! $transition_catalog ]] || transition_safe_file "$transition_catalog"
         log "Would ensure $transition_app integration with private preflight; source state and preflight are unverified"
         return 0
     fi
@@ -1781,6 +1788,10 @@ apply_kazoo_integration_patch() (
     if [[ $transition_intercept ]]; then
         transition_check_inventory "$transition_intercept" kazoo_intercept.h kazoo_dptools.c mod_kazoo.h mod_kazoo.c
     fi
+    if [[ $transition_catalog ]]; then
+        transition_check_inventory "$transition_pre_catalog" "${transition_files[@]}"
+        transition_check_inventory "$transition_catalog" src/kazoo_monster_catalog.erl
+    fi
     # Only explicitly added files may be absent before their reviewed transition.
     transition_check_sources() {
         local transition_check_file transition_check_path transition_check_created transition_may_be_absent
@@ -1810,6 +1821,10 @@ apply_kazoo_integration_patch() (
         # Queue-live overlaps the frame and cleanup files. Classify and apply
         # older steps in private copies, proving the complete pre-queue baseline
         # before trying the queue-live delta. Never infer independent deltas here.
+        transition_state=previous
+    elif [[ $transition_app == crossbar ]]; then
+        # Prove either complete historical baseline privately before applying
+        # the empty-icon delta; an unknown/partial catalog is never overwritten.
         transition_state=previous
     elif [[ $transition_app == mod_kazoo ]]; then
         # Namespace and atomic interception touch disjoint file sets. Existing
@@ -1880,6 +1895,10 @@ apply_kazoo_integration_patch() (
         sha256sum "$transition_intercept" >>"$transition_stage/patch-pins.sha256" ||
             die 'Cannot retain intercept patch hash'
     fi
+    if [[ $transition_catalog ]]; then
+        sha256sum "$transition_pre_catalog" "$transition_catalog" >>"$transition_stage/patch-pins.sha256" ||
+            die 'Cannot retain catalog transition patch hashes'
+    fi
     if [[ $transition_app == blackhole && $transition_state == previous ]]; then
         if ! git -C "$transition_stage/desired" apply --reverse --check "$transition_pre_queue" 2>/dev/null; then
             for transition_path in "$transition_delta" "$transition_cleanup"; do
@@ -1899,6 +1918,23 @@ apply_kazoo_integration_patch() (
         git -C "$transition_stage/desired" apply "$transition_queue_live" ||
             die 'Cannot apply queue-live transition to private source copies'
         transition_apply+=("$transition_queue_live")
+    elif [[ $transition_app == crossbar && $transition_state == previous ]]; then
+        if ! git -C "$transition_stage/desired" apply --reverse --check "$transition_pre_catalog" 2>/dev/null; then
+            git -C "$transition_stage/desired" apply --reverse --check "$transition_old" ||
+                die 'Previous Crossbar source is not a complete reviewed integration'
+            git -C "$transition_stage/desired" apply --check "$transition_delta" ||
+                die 'Previous Crossbar frame transition does not apply'
+            git -C "$transition_stage/desired" apply "$transition_delta" ||
+                die 'Cannot normalize previous Crossbar source privately'
+            transition_apply+=("$transition_delta")
+        fi
+        git -C "$transition_stage/desired" apply --reverse --check "$transition_pre_catalog" ||
+            die 'Previous Crossbar source is not the complete pre-icon integration'
+        git -C "$transition_stage/desired" apply --check "$transition_catalog" ||
+            die 'Catalog empty-icon transition does not apply'
+        git -C "$transition_stage/desired" apply "$transition_catalog" ||
+            die 'Cannot apply catalog empty-icon transition privately'
+        transition_apply+=("$transition_catalog")
     else
         git -C "$transition_stage/desired" apply --check "${transition_apply[@]}" ||
             die 'Integration patch cannot apply to private source copies'
@@ -2583,13 +2619,13 @@ finalize_acdc_prerecorded_capabilities() (
         [[ $account =~ ^[0-9a-f]{32}$ ]] || die 'Invalid prerecorded proof account'
     fi
     node - "$mode" "$SCRIPT_DIR" "$KAZOO_ROOT" "$KAZOO_CONFIG_DIR" "$KAZOO_HOSTNAME" \
-        "$account" "${KAZOO_BUILD_SNAPSHOT_THIS_RUN:-}" "$(acdc_cardinal_index_pin)" <<'JS'
+        "$account" "${KAZOO_BUILD_SNAPSHOT_THIS_RUN:-}" "$(acdc_cardinal_index_pin)" "$MONSTER_UI_WEB_ROOT" <<'JS'
 // ACDC_PRERECORDED_FINALIZATION_BEGIN
 'use strict';
 try {
     const fs = require('node:fs'), path = require('node:path'), cp = require('node:child_process');
     const assert = require('node:assert/strict');
-    const [mode, scripts, root, configRoot, host, account, build, indexSha] = process.argv.slice(2);
+    const [mode, scripts, root, configRoot, host, account, build, indexSha, webRoot] = process.argv.slice(2);
     const probe = require(path.join(scripts, 'probe-acdc-prerecorded-runtime.cjs'));
     const publisher = require(path.join(scripts, 'publish-acdc-prerecorded-capabilities.cjs'));
     const {assertLanguageCapabilities} = require(path.join(scripts, 'validate-acdc-language-capabilities.cjs'));
@@ -2605,9 +2641,8 @@ try {
     const configured = readConfig(), fallback = path.join(configRoot, 'acdc', 'language-capabilities.json');
     const matched = configured.match(/^<<"(\/[^"\\\r\n]+)">>$/);
     assert(configured === 'undefined' || matched, 'Unsupported explicit capability path');
-    const target = matched ? matched[1] : fallback;
-    assert(probe.absolute(target), 'Noncanonical capability path');
-    assert(target !== fallback || /^\/[A-Za-z0-9_./-]+$/.test(target), 'Unsafe default capability path');
+    const configuredTarget = matched ? matched[1] : fallback;
+    assert(probe.absolute(configuredTarget) && probe.absolute(webRoot), 'Noncanonical capability path');
     const pin = (file, limit = 131072) => {
         probe.protectedParents(path.dirname(file));
         const st = fs.lstatSync(file);
@@ -2616,6 +2651,26 @@ try {
         const h = cp.spawnSync('/usr/bin/sha256sum', [file], {encoding: 'utf8', timeout: 10000, maxBuffer: 4096});
         assert(!h.error && h.status === 0 && probe.validSha(h.stdout.slice(0, 64)), 'Cannot pin installer input');
         const sha256 = h.stdout.slice(0, 64); return {sha256, bytes: probe.readPinned(file, sha256, limit)};
+    };
+    // Only the current configured web root's exact old installer artifact may
+    // migrate. Validation requires all five locales and every legacy flag false.
+    // Never overwrite this file: publish under the apps configuration root and
+    // switch the effective path only after measured proof and final repins.
+    const legacyPath = path.join(webRoot, 'apps', 'acdc', 'language-capabilities.json');
+    const legacyInput = configuredTarget === legacyPath && legacyPath !== fallback && fs.existsSync(legacyPath)
+        ? pin(legacyPath) : null;
+    const legacy = legacyInput ? assertLanguageCapabilities(JSON.parse(legacyInput.bytes)) : null;
+    const migrateLegacy = Boolean(legacy && legacy.schema_version === 1 && legacy.backend_mode === 'legacy');
+    const target = migrateLegacy ? fallback : configuredTarget;
+    assert(probe.absolute(target), 'Noncanonical capability path');
+    assert(target !== fallback || /^\/[A-Za-z0-9_./-]+$/.test(target), 'Unsafe default capability path');
+    const assertPublicationInputs = () => {
+        assert(readConfig() === configured, 'Capability configuration changed during proof/publication');
+        if (migrateLegacy) {
+            const current = pin(legacyPath);
+            assert(current.sha256 === legacyInput.sha256 && current.bytes.equals(legacyInput.bytes),
+                'Legacy capability changed during proof/publication');
+        }
     };
     const markerPath = digest => target + '.installer-' + digest + '.json';
     const existing = target === fallback && fs.existsSync(target) ? pin(target) : null;
@@ -2632,7 +2687,10 @@ try {
     }
     // Explicit operator paths and reviewed/non-installer artifacts are never
     // automatically replaced, even when the generic publisher could accept them.
-    if (target !== fallback || native || old && !initial && !owned) {
+    if (migrateLegacy && mode === '--check') {
+        console.log('UNAVAILABLE prerecorded selection capability: configured legacy installer artifact is all-negative; install is required to migrate after runtime proof');
+        process.exitCode = 1;
+    } else if (target !== fallback || native || old && !initial && !owned) {
         console.log('SKIP automatic voice capability publication/check: preserved custom or reviewed artifact; no five-language selection claim');
     } else if (mode === '--check') {
         assert(owned, 'No installer-owned runtime capability proof');
@@ -2681,13 +2739,14 @@ try {
             '--model-trial-index-sha256', indexSha, '--alias-file', path.join(scripts, 'acdc-cardinal-reuse-es-20260907.json'),
             '--alias-sha256', 'f1338ba60bbb360a91491fcf3be0d161ca25ff267a2f7ec32c2faacc49ca1b6d', '--output', receipt]);
         const result = probe.execute(options);
-        assert(readConfig() === configured, 'Capability configuration changed during proof');
+        assertPublicationInputs();
         const published = publisher.publish({account, receipt, 'receipt-sha256': result.sha256,
             output: target, 'previous-sha256': existing ? existing.sha256 : 'absent'});
         probe.createEvidence(markerPath(published.sha256), Buffer.from(JSON.stringify({
             owner: 'kazoo5-acdc-prerecorded-finalization', capability_sha256: published.sha256,
             receipt, receipt_sha256: result.sha256}) + '\n'));
-        if (configured === 'undefined') {
+        if (configured === 'undefined' || migrateLegacy) {
+            assertPublicationInputs();
             run(['kapps_config', 'set_default', '<<"acdc.queues">>', '<<"editor_language_capabilities_path">>', '<<"' + target + '">>']);
             assert(readConfig() === '<<"' + target + '">>', 'Capability path publication unconfirmed');
         }
@@ -2709,7 +2768,7 @@ install_kazoo_apps() {
     install_sup_cli
     service_enable_restart kazoo-apps.service
     if [[ $DRY_RUN != true ]]; then
-        sleep 5
+        wait_kazoo_datastore_ready kazoo_apps
         persist_kazoo_apps_config
         ensure_master_account
         configure_kazoo_api_modules
@@ -3199,7 +3258,7 @@ install_ecallmgr() {
     install_sup_cli
     service_enable_restart kazoo-ecallmgr.service
     if [[ $DRY_RUN != true ]]; then
-        sleep 5
+        wait_kazoo_datastore_ready ecallmgr
         configure_ecallmgr_dialplan_applications
         configure_ecallmgr_callback_cleanup
         configure_ecallmgr_event_stream_framing
@@ -3221,6 +3280,52 @@ verify_erlang_node() {
     grep -F "${KAZOO_ERLANG_DIST_IP}:${distribution_port}" <<<"$listener" >/dev/null || \
         die "${node_prefix} does not listen on configured Erlang distribution address ${KAZOO_ERLANG_DIST_IP}:${distribution_port}"
     log "PASS EPMD node registered: ${node_prefix} on ${KAZOO_ERLANG_DIST_IP}:${distribution_port}"
+}
+
+wait_kazoo_datastore_ready() {
+    local node_prefix=${1:-} erl_call_bin output rpc deadline remaining rpc_timeout
+    case $node_prefix in
+        kazoo_apps|ecallmgr) ;;
+        *) die 'Unsupported Kazoo datastore readiness node'; return 1 ;;
+    esac
+    [[ ${KAZOO_HOSTNAME:-} =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ && ${#KAZOO_HOSTNAME} -le 253 ]] || \
+        { die 'Invalid Kazoo hostname for datastore readiness'; return 1; }
+    case ${KAZOO_NODE_NAME_TYPE:-} in
+        -name|-sname) ;;
+        *) die 'Invalid Erlang naming mode for datastore readiness'; return 1 ;;
+    esac
+    [[ ${KAZOO_START_TIMEOUT:-} =~ ^[1-9][0-9]{0,8}$ ]] || \
+        { die 'Invalid Kazoo datastore readiness timeout'; return 1; }
+    if [[ $DRY_RUN == true ]]; then
+        log "Would wait for read-only local datastore readiness on ${node_prefix}"
+        return 0
+    fi
+    verify_cookie_copy "$KAZOO_RUNTIME_COOKIE_FILE" kazoo
+    erl_call_bin=$(find_erl_call) || { die 'erl_call was not installed with Erlang'; return 1; }
+    # get_server can return the result of logging (ok) while its ETS table is
+    # absent. Accept only a real driver/server pair and a successful read-only
+    # server_info response. Never return connection records or exception text.
+    rpc='try case kz_dataconnections:get_server(<<"local">>) of {Driver, Server} when is_atom(Driver) -> case Driver:server_info(Server) of {ok, _} -> ready; _ -> not_ready end; _ -> not_ready end catch _:_ -> not_ready end.'
+    deadline=$((SECONDS + KAZOO_START_TIMEOUT))
+    while ((SECONDS < deadline)); do
+        remaining=$((deadline - SECONDS))
+        ((remaining > 0)) || break
+        rpc_timeout=$remaining
+        ((rpc_timeout <= 10)) || rpc_timeout=10
+        if output=$(printf '%s\n' "$rpc" | timeout --signal=KILL "$rpc_timeout" \
+            runuser --user kazoo -- "$erl_call_bin" \
+            "$KAZOO_NODE_NAME_TYPE" "${node_prefix}@${KAZOO_HOSTNAME}" -e 2>/dev/null); then
+            if [[ $output == '{ok, ready}' && $SECONDS -lt $deadline ]]; then
+                log "PASS read-only local datastore ready on ${node_prefix}"
+                return 0
+            fi
+        fi
+        remaining=$((deadline - SECONDS))
+        ((remaining > 0)) || break
+        if ((remaining > 2)); then sleep 2; else sleep "$remaining"; fi
+    done
+    die "Kazoo local datastore did not become ready on ${node_prefix}; no startup configuration was attempted"
+    return 1
 }
 
 find_erl_call() {
@@ -5435,9 +5540,14 @@ install_monster_ui() {
             [[ $(sha256sum package-lock.json | awk '{print $1}') == "$build_lock_sha" ]] || die 'Dependency lock changed before npm ci'
             # No unpinned root preinstall resolver; run only the explicitly
             # required, pinned native Sass/RE2 lifecycles after a consistent ci.
-            npm ci --ignore-scripts --no-audit --no-fund
+            # npm otherwise sizes V8 against host RAM and can exhaust a smaller
+            # build cgroup before GC. Bound dependency resolution/downloads too,
+            # not only the later production minifier workers.
+            NODE_OPTIONS=--max-old-space-size=192 npm_config_maxsockets=2 npm_config_jobs=1 \
+                npm ci --ignore-scripts --no-audit --no-fund
             node "$SCRIPT_DIR/verify-monster-build-dependencies.cjs" "$source_dir"
-            npm_config_jobs=1 MAKEFLAGS=-j1 npm rebuild node-sass re2
+            NODE_OPTIONS=--max-old-space-size=192 npm_config_maxsockets=2 \
+                npm_config_jobs=1 MAKEFLAGS=-j1 npm rebuild node-sass re2
             node -e 'require("node-sass").renderSync({data:".fixture { color: red; }"}); if (!new (require("re2"))("^fixture$").test("fixture")) process.exit(1)'
             [[ $(sha256sum package-lock.json | awk '{print $1}') == "$build_lock_sha" ]] || die 'Dependency lock changed during npm ci'
             node "$SCRIPT_DIR/build-monster-production.cjs" "$source_dir"
