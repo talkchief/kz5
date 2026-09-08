@@ -4,20 +4,25 @@ Last updated: **2026-09-08**. This is the navigation and current-state guide;
 `PROJECT_TASKS.md` is the detailed requirement/acceptance register. Neither this
 file nor a green unit test means the platform is production-ready.
 
-**Forwarded-call confirmation complete on the development server:** EN/HE/AR/ES/FR
-account preference/API, all four selectors, MonsterUI and immutable Gemini media
-are installed. Normal apps/eCallMgr/MonsterUI installation passed64656/94b843;
-the source freeze is released. Seven focused Erlang groups, asset/UI/API,
-installer suites and deterministic OpenAPI validation pass. Twenty live API/call
-checks passed, plus seven deployed browser checks76280/888524 exit0. Preferences
-are restored, tagged users deleted and channels0. The user can test **Callflows
-→ Account Settings → Misc → Forwarded-call confirmation** after a hard refresh.
-Updated account GET/PATCH/POST, five codes, reset and JavaScript example are live
-at `https://kz5.talkchief.io/apis/`; served specification matches the validated
-file. Feature branch: `feat/account-forward-confirmation-languages`, isolated
-worktree `/opt/kz5-fwd-review`; the user will merge it. Physical cellphone/PSTN
-and formal native-language certification are not claimed. See
-[acceptance and developer handoff](doc/call_forward_confirmation_acceptance.md).
+**Forwarded-call confirmation complete, including the UI follow-up:** EN/HE/AR/ES/FR
+account preference/API, four selectors, immutable Gemini media and MonsterUI are
+installed. Normal full installation passed64656/94b843; corrected UI deployment
+passed92313/fb92d5. The user can hard-refresh and test **Callflows → Account
+Settings → Misc → Forwarded-call confirmation**. The section header and field
+label are visible, options align left, and Update saves a changed language,
+keeps the form open and confirms success. An untouched dropdown preserves a
+newer API value. Both save buttons, reset and missing-locale fallback pass.
+
+Seven Erlang groups and asset/API/installer suites pass; 20 live API/call checks,
+seven initial browser checks and ten follow-up browser checks97471/06800e pass.
+Full fixture account settings are restored, tagged users deleted, channels0.
+OpenAPI account GET/PATCH/POST, all five codes, reset and frontend sample are live
+at `https://kz5.talkchief.io/apis/`. Branch:
+`feat/account-forward-confirmation-languages`, isolated worktree
+`/opt/kz5-fwd-review`; the user will merge it. Preserve the other team's staged
+fresh-server/TLS work and the feature source in the running shared workspace.
+Physical cellphone/PSTN and native-speaker certification are not claimed.
+[Acceptance and developer handoff](doc/call_forward_confirmation_acceptance.md).
 
 ## Latest working snapshot — read before resuming
 

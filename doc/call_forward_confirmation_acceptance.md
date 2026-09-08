@@ -32,7 +32,9 @@ readiness 503. Stored/read data never contains the reset null.
 MonsterUI: Callflows → Account Settings → Misc → Forwarded-call confirmation.
 The dedicated Save language button sends this preference through PATCH, with
 the standard MonsterUI request metadata.
-Ordinary Account Save omits the field, avoiding a stale-form overwrite. The
+The main Update button saves a changed language together with the other account
+fields in the existing account POST, keeps the form open and confirms success.
+An unchanged selection is omitted to preserve a newer value from another client. The
 compiled bundle and the read-only `/apis/` developer catalog ship through the
 normal installer. The OpenAPI account PATCH includes five examples, reset and
 a custom-frontend JavaScript example.
@@ -197,3 +199,35 @@ Live documentation: <https://kz5.talkchief.io/apis/>. Downloadable specification
 <https://kz5.talkchief.io/apis/openapi.json>. See account GET/PATCH/POST and
 `ForwardedCallConfirmation`. PATCH examples cover all five locale codes and
 null reset; the JavaScript example is suitable for the other frontend.
+
+## UI follow-up: labels, alignment and Update
+
+The user reported missing dropdown/section labels, right-aligned language text,
+and the main Update button closing without applying a newly selected language.
+The final control has a semantic section heading, an associated visible label,
+left-aligned 320 px selector and native language labels. Its title/label/status
+strings have English fallbacks when a locale entry is absent. The default option
+is short enough to display in full.
+
+Both Save language and Update work. Save language retains the scoped PATCH.
+Update includes the preference only when the dropdown changed, saves account
+fields through one POST, refreshes the saved preference and stays on the form
+with confirmation. If another frontend changed the preference and this dropdown
+was untouched, Update omits the field and displays the newer server value.
+Errors preserve the pending selection; duplicate saves and stale-account
+callbacks remain guarded.
+
+Actual formatter/handler regression tests passed b649a8. The first header
+revision exposed an incorrect global `self` reference in the formatter during
+browser acceptance; it was corrected to the app instance and covered directly.
+The corrected normal MonsterUI-only installer92313/fb92d5 exited 0 with owned
+bundle, catalog, HTTPS and final deployment verification. No backend code or
+recording changed for this follow-up.
+
+Deployed browser97471/06800e exited 0 with ten checks: header, associated label,
+computed left alignment/320 px width; Update save, visible form and reopened
+persistence for all five languages and reset; dedicated PATCH save; preservation
+of a newer API preference; and visible labels with locale entries deliberately
+absent. The inspected image `confirmation-settings-updated.png` shows Arabic
+aligned left. Final readback d7d5c3 confirms the full test account settings were
+restored, no browser errors/unexpected writes, zero channels and active services.

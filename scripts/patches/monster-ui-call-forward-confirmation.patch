@@ -1,7 +1,7 @@
 diff --git a/app.js b/app.js
 --- a/app.js
 +++ b/app.js
-@@ -717,6 +717,73 @@
+@@ -717,6 +717,124 @@
  				container.empty().append(template);
  
  				self.bindAccountSettingsEvents(template, accountSettingsData, widgetBlacklist);
@@ -9,6 +9,21 @@ diff --git a/app.js b/app.js
 +			});
 +		},
 +
++
++		getForwardedCallConfirmationStrings: function() {
++			return _.defaults({}, _.get(this.i18n.active(), 'callflows.accountSettings.forwardConfirmation', {}), {
++				title: 'Forwarded-call confirmation',
++				help: 'Choose the language recipients hear before pressing 1 to accept a forwarded call.',
++				language: 'Confirmation language',
++				current: 'Default (existing prompt)',
++				save: 'Save language',
++				saving: 'Saving…',
++				saved: 'Saved. New forwarded calls will use this choice.',
++				accountSaved: 'Account settings saved.',
++				updateFailed: 'Could not confirm the update. Your changes remain on this screen.',
++				failed: 'Could not confirm the saved language. Reload Account Settings before trying again.'
++			});
++		},
 +
 +		bindForwardedCallConfirmation: function(template, data) {
 +			var self = this,
@@ -19,12 +34,43 @@ diff --git a/app.js b/app.js
 +				accountSave = template.find('.account-settings-update'),
 +				accountId = data.account.id,
 +				current = _.get(data.account, 'call_forward_confirmation.language', ''),
-+				strings = self.i18n.active().callflows.accountSettings.forwardConfirmation,
-+				busy = false;
++				strings = self.getForwardedCallConfirmationStrings(),
++				languages = ['', 'en-us', 'he-il', 'ar-sa', 'es-es', 'fr-fr'],
++				busy = false,
++				wasDisabled,
++				pendingAccountLanguage;
 +
 +			if (!monster.util.isAdmin() && !monster.util.isSuperDuper()) {
 +				section.remove();
 +				return;
++			}
++			function active() {
++				return self.accountId === accountId && template.closest('html').length > 0;
++			}
++			function start() {
++				busy = true;
++				wasDisabled = accountSave.prop('disabled');
++				select.prop('disabled', true);
++				save.prop('disabled', true);
++				accountSave.prop('disabled', true);
++				status.text(strings.saving);
++			}
++			function finish(message) {
++				busy = false;
++				if (!active()) { return; }
++				select.prop('disabled', false);
++				save.prop('disabled', select.val() === current);
++				accountSave.prop('disabled', wasDisabled);
++				status.text(message);
++			}
++			function updatePreference(returned) {
++				current = returned;
++				select.val(current);
++				if (current) {
++					data.account.call_forward_confirmation = { language: current };
++				} else {
++					delete data.account.call_forward_confirmation;
++				}
 +			}
 +			select.val(current);
 +			save.prop('disabled', true);
@@ -32,29 +78,39 @@ diff --git a/app.js b/app.js
 +				status.text('');
 +				save.prop('disabled', busy || select.val() === current);
 +			});
++			template.data('forwardConfirmation', {
++				prepareUpdate: function(newData) {
++					var selected = select.val();
++					if (busy || !active() || !_.includes(languages, selected)) { return false; }
++					// Only a changed selection may replace a newer preference from another client.
++					delete newData.call_forward_confirmation;
++					pendingAccountLanguage = selected !== current ? selected : undefined;
++					if (pendingAccountLanguage !== undefined) {
++						newData.call_forward_confirmation = { language: selected || null };
++					}
++					start();
++					return true;
++				},
++				updateSucceeded: function(response) {
++					if (!active()) { busy = false; return; }
++					var returned = _.get(response, 'data.call_forward_confirmation.language', '');
++					if (!response.data || !_.includes(languages, returned) ||
++						(pendingAccountLanguage !== undefined && returned !== pendingAccountLanguage)) {
++						finish(strings.updateFailed);
++						return;
++					}
++					data.account = response.data;
++					updatePreference(returned);
++					finish(strings.accountSaved);
++				},
++				updateFailed: function() { finish(strings.updateFailed); }
++			});
 +			save.on('click', function() {
-+				var selected = select.val(),
-+				wasDisabled = accountSave.prop('disabled');
-+				if (busy || self.accountId !== accountId || selected === current ||
-+					!_.includes(['', 'en-us', 'he-il', 'ar-sa', 'es-es', 'fr-fr'], selected)) {
++				var selected = select.val();
++				if (busy || !active() || selected === current || !_.includes(languages, selected)) {
 +					return;
 +				}
-+				busy = true;
-+				select.prop('disabled', true);
-+				save.prop('disabled', true);
-+				accountSave.prop('disabled', true);
-+				status.text(strings.saving);
-+				function active() {
-+					return self.accountId === accountId && template.closest('html').length > 0;
-+				}
-+				function finish(message) {
-+					busy = false;
-+					if (!active()) { return; }
-+					select.prop('disabled', false);
-+					save.prop('disabled', select.val() === current);
-+					accountSave.prop('disabled', wasDisabled);
-+					status.text(message);
-+				}
++				start();
 +				self.callApi({
 +					resource: 'account.patch',
 +					data: { accountId: accountId, data: { call_forward_confirmation: { language: selected || null } } },
@@ -62,12 +118,7 @@ diff --git a/app.js b/app.js
 +						if (!active()) { busy = false; return; }
 +						var returned = _.get(response, 'data.call_forward_confirmation.language', '');
 +						if (returned !== selected) { finish(strings.failed); return; }
-+						current = returned;
-+						if (current) {
-+							data.account.call_forward_confirmation = { language: current };
-+						} else {
-+							delete data.account.call_forward_confirmation;
-+						}
++						updatePreference(returned);
 +						finish(strings.saved);
 +					},
 +					error: function() { finish(strings.failed); }
@@ -75,16 +126,55 @@ diff --git a/app.js b/app.js
  			});
  		},
  
-@@ -942,6 +1009,9 @@
+@@ -753,6 +871,7 @@
+ 					.value();
+ 
+ 			return _.merge({
++				forwardConfirmation: this.getForwardedCallConfirmationStrings(),
+ 				hasExternalCallerId: monster.util.getCapability('caller_id.external_numbers').isEnabled,
+ 				numberList: _.keys(data.numberList),
+ 				extra: {
+@@ -908,7 +1027,8 @@
+ 
+ 				// Collect data
+ 				var formData = monster.ui.getFormData('account_settings_form'),
+-					newData = _.merge({}, data.account, formData);
++					newData = _.merge({}, data.account, formData),
++					confirmation = template.data('forwardConfirmation');
+ 
+ 				// Format data
+ 				if (_.has(newData.caller_id, 'asserted')) {
+@@ -942,6 +1062,12 @@
  
  				newData.blacklists = widgetBlacklist.getSelectedItems();
  
-+				// Saved through its own PATCH; omission preserves the latest server value.
-+				delete newData.call_forward_confirmation;
++				if (confirmation) {
++					if (!confirmation.prepareUpdate(newData)) { return; }
++				} else {
++					delete newData.call_forward_confirmation;
++				}
 +
  				delete newData.extra;
  
  				self.callApi({
+@@ -950,8 +1076,15 @@
+ 						accountId: newData.id,
+ 						data: newData
+ 					},
+-					success: function(data, status) {
+-						self.render();
++					success: function(response) {
++						if (confirmation) {
++							confirmation.updateSucceeded(response);
++						} else {
++							self.render();
++						}
++					},
++					error: function() {
++						confirmation && confirmation.updateFailed();
+ 					}
+ 				});
+ 			});
 diff --git a/views/accountSettings.html b/views/accountSettings.html
 --- a/views/accountSettings.html
 +++ b/views/accountSettings.html
@@ -92,20 +182,20 @@ diff --git a/views/accountSettings.html b/views/accountSettings.html
  				</div>
  
  				<div class="tab-pane" id="account_settings_misc">
-+					<div class="settings-section forward-confirmation-settings">
-+						<div class="section-title">{{ i18n.callflows.accountSettings.forwardConfirmation.title }}</div>
++					<div class="settings-section forward-confirmation-settings" role="group" aria-labelledby="forward_confirmation_title">
++						<h3 id="forward_confirmation_title" class="section-title">{{ forwardConfirmation.title }}</h3>
 +						<div class="section-content">
-+							<p>{{ i18n.callflows.accountSettings.forwardConfirmation.help }}</p>
-+							<label for="forward_confirmation_language">{{ i18n.callflows.accountSettings.forwardConfirmation.language }}</label>
-+							<select id="forward_confirmation_language" class="forward-confirmation-language">
-+								<option value="">{{ i18n.callflows.accountSettings.forwardConfirmation.current }}</option>
++							<p id="forward_confirmation_help">{{ forwardConfirmation.help }}</p>
++							<label class="forward-confirmation-label" for="forward_confirmation_language">{{ forwardConfirmation.language }}</label>
++							<select id="forward_confirmation_language" class="forward-confirmation-language" dir="ltr" aria-describedby="forward_confirmation_help">
++								<option value="">{{ forwardConfirmation.current }}</option>
 +								<option value="en-us">English</option>
-+								<option value="he-il" dir="rtl">עברית</option>
-+								<option value="ar-sa" dir="rtl">العربية</option>
++								<option value="he-il" lang="he">עברית</option>
++								<option value="ar-sa" lang="ar">العربية</option>
 +								<option value="es-es">Español</option>
 +								<option value="fr-fr">Français</option>
 +							</select>
-+							<button type="button" class="monster-button-primary forward-confirmation-save" disabled>{{ i18n.callflows.accountSettings.forwardConfirmation.save }}</button>
++							<button type="button" class="monster-button-primary forward-confirmation-save" disabled>{{ forwardConfirmation.save }}</button>
 +							<p class="forward-confirmation-status" role="status" aria-live="polite"></p>
 +						</div>
 +					</div>
@@ -115,18 +205,20 @@ diff --git a/views/accountSettings.html b/views/accountSettings.html
 diff --git a/i18n/en-US.json b/i18n/en-US.json
 --- a/i18n/en-US.json
 +++ b/i18n/en-US.json
-@@ -950,6 +950,16 @@
+@@ -950,6 +950,18 @@
  		"__comment": "UI-1493: Adding accountSettings to advanced callflows app",
  		"__version": "3.22",
  		"accountSettings": {
 +			"forwardConfirmation": {
 +				"title": "Forwarded-call confirmation",
-+				"help": "Choose the message language heard by a forwarded recipient before pressing 1 to accept. This choice applies to this account and keeps the existing confirmation requirement.",
++				"help": "Choose the language recipients hear before pressing 1 to accept a forwarded call.",
 +				"language": "Confirmation language",
-+				"current": "Current behavior (restore existing prompt)",
++				"current": "Default (existing prompt)",
 +				"save": "Save language",
 +				"saving": "Saving…",
 +				"saved": "Saved. New forwarded calls will use this choice.",
++				"accountSaved": "Account settings saved.",
++				"updateFailed": "Could not confirm the update. Your changes remain on this screen.",
 +				"failed": "Could not confirm the saved language. Reload Account Settings before trying again."
 +			},
  			"title": "Account Settings",
@@ -135,7 +227,7 @@ diff --git a/i18n/en-US.json b/i18n/en-US.json
 diff --git a/i18n/de-DE.json b/i18n/de-DE.json
 --- a/i18n/de-DE.json
 +++ b/i18n/de-DE.json
-@@ -318,6 +318,16 @@
+@@ -318,6 +318,18 @@
  			"closed_groups": "Geschlossene Gruppen"
  		},
  		"accountSettings": {
@@ -143,12 +235,52 @@ diff --git a/i18n/de-DE.json b/i18n/de-DE.json
 +				"title": "Bestätigung weitergeleiteter Anrufe",
 +				"help": "Wählen Sie die Sprache der Ansage, die der Empfänger vor dem Drücken der 1 hört. Die Auswahl gilt für dieses Konto. Die bestehende Bestätigungspflicht bleibt erhalten.",
 +				"language": "Sprache der Bestätigung",
-+				"current": "Bisheriges Verhalten (bestehende Ansage wiederherstellen)",
++				"current": "Standard (bestehende Ansage)",
 +				"save": "Sprache speichern",
 +				"saving": "Wird gespeichert…",
 +				"saved": "Gespeichert. Neue weitergeleitete Anrufe verwenden diese Auswahl.",
++				"accountSaved": "Kontoeinstellungen gespeichert.",
++				"updateFailed": "Das Speichern konnte nicht bestätigt werden. Ihre Änderungen bleiben auf dieser Seite.",
 +				"failed": "Das Speichern konnte nicht bestätigt werden. Laden Sie die Kontoeinstellungen neu, bevor Sie es erneut versuchen."
 +			},
  			"callerId": {
  				"titleEmergency": "Anrufer-ID des Accounts für Notfälle",
  				"titleOutbound": "Ausgehender-Anrufer-ID des Accounts",
+diff --git a/style/app.scss b/style/app.scss
+--- a/style/app.scss
++++ b/style/app.scss
+@@ -1749,3 +1749,34 @@
+ 	cursor: not-allowed;
+ 	pointer-events: none;
+ }
++
++#callflow_container .forward-confirmation-settings .section-title {
++	border-bottom: 1px solid #c8c8d8;
++	margin-top: 0;
++	padding-bottom: 12px;
++}
++
++#callflow_container .forward-confirmation-label {
++	display: block;
++	font-weight: 600;
++	margin: 16px 0 8px;
++	text-align: left;
++}
++
++#callflow_container .forward-confirmation-language {
++	direction: ltr;
++	width: 320px;
++	max-width: 100%;
++	text-align: left;
++	text-align-last: left;
++	margin-right: 12px;
++}
++
++#callflow_container .forward-confirmation-language option {
++	direction: ltr;
++	text-align: left;
++}
++
++#callflow_container .forward-confirmation-status {
++	margin-top: 12px;
++}

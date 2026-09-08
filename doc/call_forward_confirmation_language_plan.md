@@ -178,7 +178,11 @@ would not survive rebuilds.
 Use an isolated PATCH/save action for the new preference and refresh account
 state after success. Check the existing full-account Save flow for stale data
 so it cannot overwrite the new choice. Preserve pending form edits, account
-switching, restricted-user visibility, error handling, and RTL labels. Deploy
+switching, restricted-user visibility, error handling, and native Hebrew/Arabic
+labels. The implemented follow-up also supports the main Update button: include
+a changed language in the account POST, omit an unchanged selection, retain the
+form on success, and show visible fallback section/field labels with left-aligned
+options as requested by the user. Deploy
 the selector only after backend and all five media choices pass readiness.
 
 ## Audio plan
