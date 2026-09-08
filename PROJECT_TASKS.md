@@ -2,6 +2,15 @@
 
 ## Immediate operator follow-up — September8
 
+- **DEV44-BROWSER-TOOLS-01 ACTIVE:** retain reproducible acceptance tooling on
+  the replacement main host, not the original server's temporary directories.
+  New optional Rocky9/x64 setup locks private Node22.23.2/Playwright1.62.1 and
+  its headless browser, disables npm lifecycle scripts, leaves global Node and
+  Kazoo services unchanged, smoke-tests before activation, and provides a
+  tracked local company-browser launcher. Bash syntax, ShellCheck and JS syntax
+  pass; main installation and browser acceptance still pending. Guidance:
+  `doc/main44_browser_tools.md`. Actual browser Save remains a separate open gate.
+
 - **EDITOR-MAIN44-LANGUAGE-01 NATIVE MASTER-ADMIN API PASS:** port the armed
   unified-editor acceptance to the main host's protected fixture and locally
   assigned CouchDB address. New wrapper requires explicit account, virgin

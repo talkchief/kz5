@@ -1,6 +1,12 @@
 # Kazoo 4/5 shared CouchDB assessment — findings in progress
 
 Task: `COMPAT-01`. Date: September8,2026. This is **not a coexistence approval**.
+Operator has now identified the production Kazoo version as **4.3.124**.
+The exact deployed source/build and an isolated4.3.124 regression run against
+the changed copy remain unverified. This also means a full replacement upgrade
+has not yet passed acceptance: selected Kazoo5 operations succeeding is not
+proof of all production workflows, and rollback requires a verified pre-upgrade
+database backup/restore plan rather than simply restarting version4 binaries.
 Source node: production `10.1.0.10` (CouchDB3.3.2). Destination: protected,
 isolated development storage on `10.1.0.44`; its installed CouchDB is3.5.2.
 Only company `d8520ce3f29c5b6db692289e782c92af` is authorized for copying.
@@ -39,8 +45,8 @@ definition changes from engine-version differences:
 The two removed endpoints prove that the refreshed database does not preserve
 the complete captured view API. They returned200 even though this sample had no
 matching rows;404 is a different contract. Whether the **currently deployed
-production Kazoo4 code** still calls these paths requires its exact source/runtime
-version, requested from the operator. Equal rows for devices/callflows prove only
+production Kazoo4.3.124 code** still calls these paths requires its exact deployed
+source/runtime contract to be checked. Equal rows for devices/callflows prove only
 these queries on this sample, not all keys, edge cases or production4 behavior.
 
 Current decision: **NO-GO for attaching Kazoo5 to writable production CouchDB
