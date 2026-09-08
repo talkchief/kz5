@@ -153,6 +153,16 @@ No global timestamp workaround, FreeSWITCH patch/rebuild, new call or voice
 generation was performed for this investigation. Audible playout quality and
 the strict timing failure remain distinct from the verified language result.
 
+Further pinned-capture inspection `fd4f72` places the20ms timestamp advance
+at1.82s within the4.331s recording. The adjacent20ms source windows have
+decoded16-bit peaks48/96 and RMS22.40/56.31: a very quiet section, not missing
+payload. Packet sequence advances1, arrival spacing19.989ms and RTP marker=true.
+The80ms gap is exactly at prompt start. These measurements narrow the symptom;
+they do not certify perceptual quality or reclassify the strict failed run.
+No global RTP workaround is justified solely to make this assertion pass.
+The separate, reproduced short confirmation-deadline defect is tracked in
+`doc/callback_confirmation_deadline.md` and takes priority over that workaround.
+
 ## Resumed announcement-worker consistency correction
 
 A second source defect was reproduced: after an EN admission, serializing the

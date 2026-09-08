@@ -2,6 +2,15 @@
 
 ## Immediate operator follow-up — September8
 
+- **P0-CALLBACK-CONFIRM-01 SOURCE FIXED — returned prompt cut off by valid
+  short timeout:** confirmation_timeout3 began before the4.331s English
+  instruction completed. Actual worker regression77012/66fe74 fails before;
+  final14542/a37868 passes all7 caller tests. A separate30s playback watchdog
+  now precedes the configured response window, bound to exact call/noop;
+  early digit1 works and duplicate/stale events cannot extend or resurrect it.
+  OpenAPI regenerated. Normal apps deployment and one scoped native short-window
+  acceptance remain pending. See `doc/callback_confirmation_deadline.md`.
+
 - **VOICE-01 locale spelling UI DEPLOYED:** existing `HE_IL`/`HE-IL`
   queues were selected and adopted as English despite backend Hebrew playback.
   Baseline a9f2bc reproduces it. The dropdown now canonicalizes supported

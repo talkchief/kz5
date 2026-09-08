@@ -2352,7 +2352,7 @@
     },
     {
       "file": "applications/acdc/src/acdc_callback_caller.erl",
-      "sha256": "b84130174125097e0fd7230c81d8cfeeb9ee2e30ecb27cd62304a22ccb4cff89"
+      "sha256": "30ed80b985b06b1909ae542a740939dc6ca0dfb364db270158e95dc157d62863"
     },
     {
       "file": "applications/acdc/src/acdc_callback_internal.erl",
@@ -2956,7 +2956,7 @@
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "b29694a6db22e7e8df1c53610b1b70b866188a460f64e0de3d3c6c34eecc9d7f"
+      "sha256": "dc705ab0086ce1781d9c03737ced063d6771da62b257bd6d47ea03f1e9a3d617"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",

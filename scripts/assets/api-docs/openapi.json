@@ -35675,7 +35675,7 @@
               },
               "confirmation_timeout": {
                 "default": 10,
-                "description": "Seconds allowed for the returned caller to press DTMF 1",
+                "description": "Seconds allowed for the returned caller to press DTMF 1 after the confirmation recording finishes (3–30, default 10). Digit 1 may also interrupt playback. The response window begins once on the exact call-bound playback completion; duplicate or unrelated events cannot extend it. Playback has a separate 30-second watchdog: missing completion or playback failure ends this attempt through the normal cleanup/retry policy, without connecting an agent. Installation and calls use prerecorded media, never runtime voice generation.",
                 "maximum": 30,
                 "minimum": 3,
                 "type": "integer"
@@ -48523,7 +48523,7 @@
               },
               "confirmation_timeout": {
                 "default": 10,
-                "description": "Seconds allowed for the returned caller to press DTMF 1",
+                "description": "Seconds allowed for the returned caller to press DTMF 1 after the confirmation recording finishes (3–30, default 10). Digit 1 may also interrupt playback. The response window begins once on the exact call-bound playback completion; duplicate or unrelated events cannot extend it. Playback has a separate 30-second watchdog: missing completion or playback failure ends this attempt through the normal cleanup/retry policy, without connecting an agent. Installation and calls use prerecorded media, never runtime voice generation.",
                 "maximum": 30,
                 "minimum": 3,
                 "type": "integer"
@@ -51895,7 +51895,7 @@
                   },
                   "confirmation_timeout": {
                     "default": 10,
-                    "description": "Seconds allowed for the returned caller to press DTMF 1",
+                    "description": "Seconds allowed for the returned caller to press DTMF 1 after the confirmation recording finishes (3–30, default 10). Digit 1 may also interrupt playback. The response window begins once on the exact call-bound playback completion; duplicate or unrelated events cannot extend it. Playback has a separate 30-second watchdog: missing completion or playback failure ends this attempt through the normal cleanup/retry policy, without connecting an agent. Installation and calls use prerecorded media, never runtime voice generation.",
                     "maximum": 30,
                     "minimum": 3,
                     "type": "integer"
@@ -52414,7 +52414,7 @@
               },
               "confirmation_timeout": {
                 "default": 10,
-                "description": "Seconds allowed for the returned caller to press DTMF 1",
+                "description": "Seconds allowed for the returned caller to press DTMF 1 after the confirmation recording finishes (3–30, default 10). Digit 1 may also interrupt playback. The response window begins once on the exact call-bound playback completion; duplicate or unrelated events cannot extend it. Playback has a separate 30-second watchdog: missing completion or playback failure ends this attempt through the normal cleanup/retry policy, without connecting an agent. Installation and calls use prerecorded media, never runtime voice generation.",
                 "maximum": 30,
                 "minimum": 3,
                 "type": "integer"
@@ -52828,7 +52828,7 @@
               },
               "confirmation_timeout": {
                 "default": 10,
-                "description": "Seconds allowed for the returned caller to press DTMF 1",
+                "description": "Seconds allowed for the returned caller to press DTMF 1 after the confirmation recording finishes (3–30, default 10). Digit 1 may also interrupt playback. The response window begins once on the exact call-bound playback completion; duplicate or unrelated events cannot extend it. Playback has a separate 30-second watchdog: missing completion or playback failure ends this attempt through the normal cleanup/retry policy, without connecting an agent. Installation and calls use prerecorded media, never runtime voice generation.",
                 "maximum": 30,
                 "minimum": 3,
                 "type": "integer"

@@ -12,7 +12,8 @@
 -ifdef(TEST).
 -export([confirmation_event/3, failure_message/4, owner_loss_action/1
         ,confirmation_prompt/2, ready_message/5, settlement/3, valid_start/5
-        ,ready_correlation_probe/0, returned_call_probe/5, reservation_call/2]).
+        ,ready_correlation_probe/0, returned_call_probe/5, reservation_call/2
+        ,confirmation_test_state/2, confirmation_test_info/1]).
 -endif.
 
 -include("acdc.hrl").
@@ -28,6 +29,7 @@
                     ]).
 -define(DEFAULT_CONFIRM_PROMPT, <<"acdc-callback-returned-confirmation">>).
 -define(DEFAULT_CONFIRM_TIMEOUT, 10).
+-define(CONFIRM_PLAYBACK_TIMEOUT, 30000).
 -define(DEFAULT_HANDOFF_TIMEOUT, 5).
 -define(DEFAULT_READY_ACK_TIMEOUT, 5).
 -define(CLEANUP_TIMEOUT, 5000).
@@ -52,6 +54,8 @@
                ,returned_call = 'undefined' :: kapps_call:call() | 'undefined'
                ,stage = 'starting' :: atom()
                ,timer = 'undefined' :: reference() | 'undefined'
+               ,confirmation_noop = 'undefined' :: kz_term:api_binary()
+               ,confirmation_timeout_ms = 'undefined' :: non_neg_integer() | 'undefined'
                ,executed = 'false' :: boolean()
                ,offnet_settled = 'false' :: boolean()
                ,answered = 'false' :: boolean()
@@ -331,6 +335,20 @@ handle_exact_event(<<"CHANNEL_ANSWER">>, _JObj, State) ->
 handle_exact_event(<<"DTMF">>, JObj, #state{stage='confirming'}=State) ->
     handle_confirmation_action(confirmation_event('confirming', <<"DTMF">>
                                                   ,kz_call_event:dtmf_digit(JObj)), State);
+handle_exact_event(<<"CHANNEL_EXECUTE_COMPLETE">>, JObj
+                  ,#state{stage='confirming', confirmation_noop=NoopId
+                          ,confirmation_timeout_ms=Timeout}=State)
+  when is_binary(NoopId), byte_size(NoopId) > 0 ->
+    case {kz_json:get_value(<<"Application-Name">>, JObj)
+         ,kz_json:get_value(<<"Application-Response">>, JObj)} of
+        {<<"noop">>, NoopId} ->
+            %% The queued noop follows this exact prompt. Start the response
+            %% window only once; duplicates and unrelated completions cannot
+            %% reset it. handle_returned_event already checked the call ID.
+            {'noreply', set_timer(Timeout, 'confirming'
+                                 ,State#state{confirmation_noop='undefined'})};
+        _ -> {'noreply', State}
+    end;
 handle_exact_event(Event, _JObj, #state{stage=Stage}=State)
   when Event =:= <<"CHANNEL_EXECUTE_ERROR">>; Event =:= <<"CHANNEL_BRIDGE">> ->
     handle_confirmation_action(confirmation_event(Stage, Event, 'undefined'), State);
@@ -347,7 +365,8 @@ handle_confirmation_action('confirmed', State) -> confirmed(State);
 handle_confirmation_action({'cleanup', Cause}, State) -> begin_cleanup(Cause, State);
 handle_confirmation_action('ignore', State) -> {'noreply', State}.
 
-begin_confirmation(#state{stage='confirming'}=State) ->
+begin_confirmation(#state{stage=Stage}=State)
+  when Stage =:= 'confirming'; Stage =:= 'waiting_handoff'; Stage =:= 'cleaning' ->
     {'noreply', State};
 begin_confirmation(#state{returned_call='undefined'}=State) ->
     {'noreply', State};
@@ -357,8 +376,15 @@ begin_confirmation(#state{returned_call=Call, queue_doc=QueueDoc}=State) ->
     case {confirmation_prompt(QueueDoc, Call), bounded(Timeout, 3, 30)} of
         {{'ok', Prompt}, 'true'} ->
             try kapps_call_command:play(Prompt, Call) of
-                _NoopId -> {'noreply', set_timer(Timeout * 1000, 'confirming'
-                                                ,State#state{stage='confirming'})}
+                NoopId when is_binary(NoopId), byte_size(NoopId) > 0 ->
+                    %% A valid short response timeout must not cut off a
+                    %% longer localized recording. Missing media completion
+                    %% remains bounded independently; DTMF 1 may interrupt it.
+                    {'noreply', set_timer(?CONFIRM_PLAYBACK_TIMEOUT, 'confirming'
+                                         ,State#state{stage='confirming'
+                                                      ,confirmation_noop=NoopId
+                                                      ,confirmation_timeout_ms=Timeout * 1000})};
+                _ -> begin_cleanup('media_failed', State)
             catch
                 _:_ -> begin_cleanup('media_failed', State)
             end;
@@ -453,6 +479,9 @@ handle_stage_timeout(#state{stage='waiting_handoff'}=State) ->
     begin_cleanup('handoff_timeout', State);
 handle_stage_timeout(#state{stage='awaiting_answer'}=State) ->
     begin_cleanup('no_answer', State);
+handle_stage_timeout(#state{stage='confirming', confirmation_noop=NoopId}=State)
+  when is_binary(NoopId) ->
+    begin_cleanup('media_failed', State);
 handle_stage_timeout(#state{stage='confirming'}=State) ->
     begin_cleanup('confirmation_timeout', State);
 handle_stage_timeout(#state{stage='awaiting_ready_ack'}=State) ->
@@ -611,6 +640,17 @@ matches(Value, Regex) when is_binary(Value), byte_size(Value) =< 512 ->
 matches(_, _) -> 'false'.
 
 -ifdef(TEST).
+-spec confirmation_test_state(kz_json:object(), kapps_call:call()) -> state().
+confirmation_test_state(Queue, Call) ->
+    #state{owner=self(), queue_doc=Queue, returned_call=Call,
+           caller_call_id=kapps_call:call_id(Call), stage='awaiting_answer',
+           executed='true', offnet_settled='true', callback_id= <<"confirmation-test">>,
+           lease_token= <<"confirmation-token">>}.
+
+-spec confirmation_test_info(state()) -> map().
+confirmation_test_info(#state{stage=Stage, timer=Timer, pending_cause=Cause}) ->
+    #{stage => Stage, timer => Timer, cause => Cause}.
+
 -spec returned_call_probe(kz_json:object(), kz_term:ne_binary(), kz_term:ne_binary(),
                           kz_term:ne_binary(), kapps_call:call()) -> kapps_call:call().
 returned_call_probe(JObj, ControlQueue, AccountId, CallId, OriginalCall) ->

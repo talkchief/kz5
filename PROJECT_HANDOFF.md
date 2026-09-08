@@ -1,5 +1,14 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Priority: P0-CALLBACK-CONFIRM-01 source corrected, deployment pending.**
+A legal three-second returned-caller response timer began before its4.331s
+English recording finished. Source now separates the bounded playback phase
+from the response window and correlates completion exactly; early confirmation
+is retained, stale/duplicate events cannot restart it. Actual worker baseline
+77012 fails; final14542/a37868 passes all7 caller tests. OpenAPI regenerated.
+Deploy normally (record layout changed; no hot load), then one native short-window
+case, not repeated unrelated suites. See `doc/callback_confirmation_deadline.md`.
+
 **VOICE-01 queue locale spelling UI correction deployed.** Backend
 `HE_IL`/`HE-IL` was displayed and saved as English by the editor. Source now
 canonicalizes the five supported locales and preserves unready settings.

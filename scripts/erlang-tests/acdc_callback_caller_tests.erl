@@ -10,6 +10,100 @@
 -define(CALLER_CALL_ID, <<"33333333333333333333333333333333">>).
 -define(TOKEN, <<"44444444444444444444444444444444">>).
 
+confirmation_deadline_starts_after_correlated_prompt_test_() ->
+    {timeout, 30, fun confirmation_deadline_starts_after_correlated_prompt/0}.
+
+confirmation_deadline_starts_after_correlated_prompt() ->
+    meck:new(acdc_gemini_prompts, [no_link]),
+    meck:new(kapps_call_command, [no_link]),
+    put(confirmation_test_timers, []),
+    try
+        meck:expect(acdc_gemini_prompts, selection, fun(_, _) -> absent end),
+        meck:expect(acdc_gemini_prompts, builtin, fun(_, _) -> {ok, <<"/installed/prompt.wav">>} end),
+        meck:expect(kapps_call_command, play, fun(_, _) -> <<"prompt-completion">> end),
+        meck:expect(kapps_call_command, hangup, fun(_) -> ok end),
+        Queue = kz_json:set_value([<<"callback">>, <<"confirmation_timeout">>], 3, queue()),
+        Call = kapps_call:set_language(<<"en-us">>, kapps_call:set_call_id(?CALLER_CALL_ID, kapps_call:new())),
+        Initial = acdc_callback_caller:confirmation_test_state(Queue, Call),
+        Playing = confirmation_event_state(<<"CHANNEL_ANSWER">>, [], Initial),
+        PlaybackTimer = confirmation_timer(Playing),
+        %% The installed EN prompt is longer than the legal three-second
+        %% response timeout. Playback must have its own bounded watchdog.
+        ?assert(erlang:read_timer(PlaybackTimer) > 3000),
+        WrongCall = confirmation_event_state(<<"CHANNEL_EXECUTE_COMPLETE">>,
+            [{<<"Call-ID">>, <<"foreign-call">>}, {<<"Application-Name">>, <<"noop">>},
+             {<<"Application-Response">>, <<"prompt-completion">>}], Playing),
+        ?assertEqual(Playing, WrongCall),
+        WrongNoop = confirmation_event_state(<<"CHANNEL_EXECUTE_COMPLETE">>,
+            [{<<"Application-Name">>, <<"noop">>}, {<<"Application-Response">>, <<"foreign-noop">>}], Playing),
+        ?assertEqual(Playing, WrongNoop),
+        PlayEvent = confirmation_event_state(<<"CHANNEL_EXECUTE_COMPLETE">>,
+            [{<<"Application-Name">>, <<"play">>}, {<<"Application-Response">>, <<"prompt-completion">>}], Playing),
+        ?assertEqual(Playing, PlayEvent),
+        Completion = [{<<"Application-Name">>, <<"noop">>}, {<<"Application-Response">>, <<"prompt-completion">>}],
+        Waiting = confirmation_event_state(<<"CHANNEL_EXECUTE_COMPLETE">>, Completion, Playing),
+        ResponseTimer = confirmation_timer(Waiting),
+        ?assertNotEqual(PlaybackTimer, ResponseTimer),
+        ?assertEqual(false, erlang:read_timer(PlaybackTimer)),
+        ?assert(erlang:read_timer(ResponseTimer) =< 3000),
+        ?assert(erlang:read_timer(ResponseTimer) > 0),
+        ?assertEqual(Waiting, confirmation_event_state(<<"CHANNEL_EXECUTE_COMPLETE">>, Completion, Waiting)),
+        ?assertEqual({noreply, Waiting}, acdc_callback_caller:handle_info({timeout, PlaybackTimer, confirming}, Waiting)),
+        ?assertEqual(Waiting, confirmation_event_state(<<"CHANNEL_ANSWER">>, [], Waiting)),
+        Confirmed = confirmation_event_state(<<"DTMF">>, [{<<"DTMF-Digit">>, <<"1">>}], Waiting),
+        ?assertEqual(waiting_handoff, maps:get(stage, acdc_callback_caller:confirmation_test_info(Confirmed))),
+        receive {acdc_callback_caller_confirmed, <<"confirmation-test">>, <<"confirmation-token">>, Call} -> ok
+        after 0 -> ?assert(false)
+        end,
+        ?assertEqual(Confirmed, confirmation_event_state(<<"CHANNEL_EXECUTE_COMPLETE">>, Completion, Confirmed)),
+        ?assertEqual(Confirmed, confirmation_event_state(<<"CHANNEL_ANSWER">>, [], Confirmed)),
+        %% Confirmation during the recording still works and cancels the
+        %% playback watchdog; a late noop must not replace the handoff timer.
+        Playing2 = confirmation_event_state(<<"CHANNEL_ANSWER">>, [], Initial),
+        Early = confirmation_event_state(<<"DTMF">>, [{<<"DTMF-Digit">>, <<"1">>}], Playing2),
+        ?assertEqual(false, erlang:read_timer(confirmation_timer(Playing2))),
+        ?assertEqual(waiting_handoff, maps:get(stage, acdc_callback_caller:confirmation_test_info(Early))),
+        ?assertEqual(Early, confirmation_event_state(<<"CHANNEL_EXECUTE_COMPLETE">>, Completion, Early)),
+        receive {acdc_callback_caller_confirmed, <<"confirmation-test">>, <<"confirmation-token">>, Call} -> ok
+        after 0 -> ?assert(false)
+        end,
+        Playing3 = confirmation_event_state(<<"CHANNEL_ANSWER">>, [], Initial),
+        Ref3 = confirmation_timer(Playing3),
+        _ = erlang:cancel_timer(Ref3),
+        {noreply, Cleaning} = acdc_callback_caller:handle_info({timeout, Ref3, confirming}, Playing3),
+        put(confirmation_test_timers, [confirmation_timer(Cleaning) | get(confirmation_test_timers)]),
+        ?assertEqual(media_failed, maps:get(cause, acdc_callback_caller:confirmation_test_info(Cleaning))),
+        ?assertEqual(cleaning, maps:get(stage, acdc_callback_caller:confirmation_test_info(Cleaning))),
+        ?assertEqual(Cleaning, confirmation_event_state(<<"CHANNEL_EXECUTE_COMPLETE">>, Completion, Cleaning)),
+        ?assertEqual(Cleaning, confirmation_event_state(<<"CHANNEL_ANSWER">>, [], Cleaning)),
+        Playing4 = confirmation_event_state(<<"CHANNEL_ANSWER">>, [], Initial),
+        Waiting4 = confirmation_event_state(<<"CHANNEL_EXECUTE_COMPLETE">>, Completion, Playing4),
+        Ref4 = confirmation_timer(Waiting4),
+        _ = erlang:cancel_timer(Ref4),
+        {noreply, Expired} = acdc_callback_caller:handle_info({timeout, Ref4, confirming}, Waiting4),
+        put(confirmation_test_timers, [confirmation_timer(Expired) | get(confirmation_test_timers)]),
+        ?assertEqual(confirmation_timeout, maps:get(cause, acdc_callback_caller:confirmation_test_info(Expired))),
+        ?assertEqual(Expired, confirmation_event_state(<<"DTMF">>, [{<<"DTMF-Digit">>, <<"1">>}], Expired)),
+        ?assertEqual(Expired, confirmation_event_state(<<"CHANNEL_EXECUTE_COMPLETE">>, Completion, Expired)),
+        meck:expect(kapps_call_command, play, fun(_, _) -> undefined end),
+        InvalidPlay = confirmation_event_state(<<"CHANNEL_ANSWER">>, [], Initial),
+        ?assertEqual(media_failed, maps:get(cause, acdc_callback_caller:confirmation_test_info(InvalidPlay)))
+    after
+        lists:foreach(fun erlang:cancel_timer/1, erase(confirmation_test_timers)),
+        meck:unload(kapps_call_command), meck:unload(acdc_gemini_prompts)
+    end.
+
+confirmation_event_state(Name, Fields, State) ->
+    Event = kz_json:from_list([{<<"Event-Category">>, <<"call_event">>}, {<<"Event-Name">>, Name}
+                              | Fields ++ case proplists:is_defined(<<"Call-ID">>, Fields) of
+                                              true -> []; false -> [{<<"Call-ID">>, ?CALLER_CALL_ID}]
+                                          end]),
+    {noreply, Next} = acdc_callback_caller:handle_cast({call_event, Event}, State),
+    put(confirmation_test_timers, lists:usort([confirmation_timer(Next) | get(confirmation_test_timers)])),
+    Next.
+
+confirmation_timer(State) -> maps:get(timer, acdc_callback_caller:confirmation_test_info(State)).
+
 cleanup_disposition_requires_positive_proof_test() ->
     ?assertEqual(settled, acdc_callback_caller:settlement(false, failed, false)),
     ?assertEqual(settled, acdc_callback_caller:settlement(false, success, true)),
