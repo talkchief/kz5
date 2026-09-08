@@ -186,3 +186,21 @@ Combined guarded regression 79188/59b65a passes heap selection, Node.js/RabbitMQ
 first-install cases, both 41-group catalog migrations, modular and read-only
 installer suites. Fresh apps/media/SIP/bridge roles and absent-catalog creation
 remain distinct work; this is not a full fresh-stack or production certification.
+
+### Configuration-directory validator correction
+
+Rerun24127/149554 exited1 before compilation/startup with `Cookie path is not a
+regular file: /etc/kazoo`. Our traversal fix accidentally reused a cookie-file
+validator that rejects directories; its first fixture stub only rejected links
+and missed this. The correction uses a real directory-specific validator before
+creating/chmodding directories and rejects symlinks, regular files and existing
+non-root-owned directories. The regression now extracts the real validator and
+passes positive umask077 traversal plus those negative cases (70666/a6a153).
+Secret file permissions remain unchanged. .44 apps were stopped before this
+attempt and are not yet accepted as running. No original-host service changed.
+
+Correction pushed as `b6d8bae`, fast-forwarded via an incremental Git bundle.
+Normal apps/eCallMgr rerun88880 uses unit
+`kz5-fresh-apps-directories-20260908.service`, explicit `User=root`, 2GiB/CPU200%
+bounded build. Local smoke/cookie/deployment/bootstrap suites also pass
+18721/55c0e1. No private credential was placed in a Git remote or bundle.

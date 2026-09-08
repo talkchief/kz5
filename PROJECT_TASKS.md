@@ -13,7 +13,10 @@
   Fresh apps audio prerequisite fixed (`5ee63e1`), full inventory verified;
   MIME dependency-order failure fixed (`1cca106`), full fresh compilation passed.
   First startup exposed config-parent traversal and Erlang option precedence;
-  both fixed and regression-tested (`ee7877c`). Apps/eCallMgr rerun24127 is active.
+  corrected in `ee7877c`. Rerun24127 exposed a directory/file validation mix-up
+  before compilation; corrected with the real directory validator and negative
+  symlink/file/non-root-directory regression checks (70666/a6a153), pushed
+  `b6d8bae`. Normal apps/eCallMgr rerun88880 is active; startup is not yet accepted.
   Accepting apps/eCallMgr/media/SIP remains P0. The user confirms HTTPS
   login works; the new server uses verified private-network TLS for that host.
 - [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).
@@ -30,7 +33,7 @@ Implementation and source/offline checks are complete for all five languages.
 The five packaged recordings each completed internal extension1000 press-1
 confirmation; the user identified EN/HE/AR. Normal development installation,
 20 live API/call checks and ten final deployed browser checks pass. UI and `/apis/`
-are ready. Branch: `feat/account-forward-confirmation-languages`; user will merge. See [implementation evidence](doc/call_forward_confirmation_acceptance.md).
+are ready. Branch: `feat/account-forward-confirmation-languages`; merged into master at `2b07609` and pushed. See [implementation evidence](doc/call_forward_confirmation_acceptance.md).
 Detailed design, API/reset, risks and acceptance:
 [forwarded-call confirmation plan](doc/call_forward_confirmation_language_plan.md).
 
