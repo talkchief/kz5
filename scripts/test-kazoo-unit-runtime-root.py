@@ -91,6 +91,25 @@ write_file(){ printf '\\036%s\\037' "$2"; command cat; }
                 self.assertIn("Environment=KAZOO_ROOT=" + str(self.runtime) + "\n", unit)
                 self.assertIn("source " + str(self.checkout / "scripts/install-kazoo5.sh"), unit)
 
+    def test_uninitialized_naming_mode_refuses_all_host_mutation(self):
+        generator = re.findall(r"^install_kazoo_systemd_units\(\) \{[\s\S]*?^\}", self.source, re.M)[0]
+        stubs = """set -euo pipefail
+die(){ exit 77; }
+getent(){ return 1; }
+run(){ exit 88; }
+"""
+        for mode in [None, "", "name", "-name extra", "-name", "-sname"]:
+            with self.subTest(mode=mode):
+                env = {**self.env, "KAZOO_HOSTNAME": "fixture.invalid", "DRY_RUN": "false"}
+                if mode is not None:
+                    env["KAZOO_NODE_NAME_TYPE"] = mode
+                result = subprocess.run(["bash", "--noprofile", "--norc", "-s"], env=env,
+                                        text=True, capture_output=True, timeout=5,
+                                        input=stubs + generator + "\ninstall_kazoo_systemd_units\n")
+                # 88 is a controlled first-mutation sentinel, not a host write.
+                self.assertEqual(result.returncode, 88 if mode in ["-name", "-sname"] else 77,
+                                 result.stderr)
+
     def test_test_beam_in_runtime_is_rejected_even_when_installer_tree_is_clean(self):
         self.compile(self.checkout)
         self.compile(self.runtime, test=True)

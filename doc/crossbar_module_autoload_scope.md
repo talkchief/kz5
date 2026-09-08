@@ -48,13 +48,30 @@ bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 512 \
   --runtime-sec 180 -- /bin/bash /opt/kz5/scripts/test-crossbar-module-scope.sh
 ```
 
-Source4fe0dbd is pushed/synced. Normal `install_kazoo_apps` deployment is active:
-unit `kz5-module-scope-install-main44-20260908`, observer session67279. Readback
-7a2b91 confirms MainPID813674 and active/running, not completion. The protected
-log is `/root/kz5-acceptance/module-scope-install-main44-20260908.log`. Preflight
-a5a4af confirmed zero calls. Poll this existing job; do not start another build.
+Source4fe0dbd is pushed/synced. First deployment unit
+`kz5-module-scope-install-main44-20260908`, observer67279/33463a, is **terminal**:
+exit1 after5m51.882s. Compilation and production-BEAM checks completed, but the
+invocation incorrectly called internal `install_kazoo_apps` without `preflight`.
+This left `KAZOO_NODE_NAME_TYPE` empty; catalog receiver validation rejected it
+before the apps restart. This was an invocation error, not a successful normal
+CLI installation. Its log is
+`/root/kz5-acceptance/module-scope-install-main44-20260908.log`.
+
+Recovery48eee6 ran proper argument parsing/preflight and regenerated both
+service definitions with `KAZOO_NODE_NAME_TYPE=-sname`; apps/eCallMgr remain
+active. Do not leave the invalid intermediate unit files on disk or repeat that
+internal-function invocation. A new guard in `install_kazoo_systemd_units`
+rejects unset, empty or invalid naming mode **before any host mutation**.
+Baseline838c7f reaches the controlled mutation sentinel in four invalid-mode
+cases; the guard is covered by `scripts/test-kazoo-unit-runtime-root.py`.
+Use the supported CLI for the next deployment:
+
+```sh
+bash /opt/kz5/scripts/install-kazoo5.sh kazoo-apps
+```
+
 Running/disk module parity is pending. Do not label the current dev server
-fixed until deployment and parity complete. The earlier storage registration
+fixed until a correctly initialized deployment and parity complete. The earlier storage registration
 on its default scope remains valid; it did not prove custom-node behavior.
 Concurrent writers changing the same module list, live zone/node failure and
 reboot acceptance on separately configured hosts remain separate release gates.

@@ -2486,6 +2486,10 @@ EOF
 
 install_kazoo_systemd_units() {
     local fqdn
+    case ${KAZOO_NODE_NAME_TYPE:-} in
+        -name|-sname) ;;
+        *) die 'Run installer preflight before writing Kazoo service units; Erlang naming mode is not initialized' ;;
+    esac
     fqdn=$KAZOO_HOSTNAME
     if ! getent group kazoo >/dev/null; then
         run groupadd --system kazoo
