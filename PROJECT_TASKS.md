@@ -10,7 +10,11 @@
   `--fixture-account` binds protected state, live account/resource ownership,
   saved restoration identity and final evidence. Old/new fixtures, refusals,
   preserved locks,25 SUP preflight and38 absent/paused-helper tests pass.
-  Native EN/HE/FR/ES/AR retry/audio acceptance remains required. The periodic
+  Main-host EN retry/audio passes20300/8ddb7e: single key6,complete confirmation,
+  unanswered first attempt,durable retry,second bridge,clean logs and0 calls.
+  HE/FR/ES/AR sequential batch54480 is active (unit
+  kz5-callback-main44-locales-20260908,PID442628 verifiedb54b1a); not yet passed.
+  The periodic
   offer/position harness has its own remaining portability work. Details:
   `doc/main44_callback_acceptance_20260908.md`.
   Preserve prior five-language proof as old-host evidence, not a main-host pass.

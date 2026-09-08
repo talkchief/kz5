@@ -3,12 +3,34 @@
 ## Current native run
 
 Main sourcefeebbd5; EN unit `kz5-callback-main44-en-20260908`, observer20300,
-verified active/MainPID417369 (`4f6d6d`). Protected log
+**terminal exit0/PASS (`8ddb7e`)**,3m59.914s,CPU1m34.683s,peak91MiB. Protected log
 `/root/kz5-acceptance/callback-main44-en-20260908.log`. Bounds512MiB memory,
 zero swap,200% CPU,512 tasks,900-second outer deadline. Uses internal transport,
 entry-only registration, explicit absent-master-test-phone allowance and
 owned account8310dc3170a18de37f205d0da172df65. The prepare-only check passed
-16453/61bea0. Native callback outcome is not yet known.
+16453/61bea0. Protected result `/var/log/kazoo-acceptance/20260908T191139Z`.
+Independent summary/receipt readback65c9a6 verifies:
+
+- Exactly one observed registration digit6 and complete matching installed EN
+  success audio before BYE; recorded reference SHA
+  `471631c6421173a3ec63f216914d4c64cfe2d48c2f0546e4f02c5aa0a925f79b`.
+- Busy-call release after the two-second post-confirmation wait, deliberately
+  unanswered first attempt, durable retry_wait and second reciprocal native
+  bridge, with phase-scoped SIP/RTP proof.
+- Two successful caller and agent conversations each,zero failures; zero fresh
+  journal/file error matches and new cores. Sampled host peak CPU18%, minimum
+  available memory20733724KiB. No service restart during the test.
+- Zero calls after cleanup (`52ee15`), unit inactive/PID0. Fixture resources and
+  saved original configuration intentionally retained; not full fixture removal.
+
+The remaining HE/FR/ES/AR batch is **running**, not yet passed:
+unit `kz5-callback-main44-locales-20260908`, observer54480, active/MainPID442628
+verifiedb54b1a. Protected log
+`/root/kz5-acceptance/callback-main44-locales-20260908.log`. Sequential locale
+order HE,FR,ES,AR; same explicit account,internal transport,entry-only and
+absent-helper flags. Each reference is from the table below. Outer bound2400s,
+memory512MiB,swap0,CPU200%,Tasks512; the batch stops on any nonzero test result.
+Do not infer completion from a tool observation timeout or start another batch.
 
 All five installed confirmation references passed55230/038efd, with zero
 database writes or Gemini calls. Protected directories under
@@ -94,7 +116,7 @@ accept the second attempt and prove reciprocal native bridge/SIP/RTP.
 Keep the original saved queue snapshot and exact current-callback cleanup;
 never rewrite unresolved historical callbacks just to pass a test.
 
-**Native main-host callback result is not yet proven.** Source regressions do
+**Main-host EN passes; four languages remain under test.** Source regressions do
 not replace five-language registration, retry, waveform and clean-log checks.
 The previous five-language old-host evidence remains archived as documented in
 `focused_acceptance_20260908.md`.

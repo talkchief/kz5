@@ -1,14 +1,20 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Current callback acceptance:** main-host EN retry unit
-`kz5-callback-main44-en-20260908`, observer20300, sourcefeebbd5; verified
-active/MainPID417369 (`4f6d6d`). Do not duplicate or restart on an observer
-timeout. Protected log `/root/kz5-acceptance/callback-main44-en-20260908.log`.
+**Current callback acceptance:** EN main-host retry PASSED20300/8ddb7e,
+terminal exit0 in3m59.914s. Evidence65c9a6: exact single digit6, complete installed
+confirmation audio, unanswered first attempt, durable retry, second native
+bridge,2/0 caller and2/0 agent counts,zero journal/file errors and new cores.
+Cleanup left zero calls; fixture resources intentionally retained.
+HE/FR/ES/AR are now running sequentially in
+`kz5-callback-main44-locales-20260908`, observer54480; active/MainPID442628
+verifiedb54b1a. Do not duplicate or restart on observer timeout. Current phase HE.
+Protected batch log `/root/kz5-acceptance/callback-main44-locales-20260908.log`;
+EN log `/root/kz5-acceptance/callback-main44-en-20260908.log`.
 All five installed Gemini confirmation references pass038efd; prepare-only
 main fixture8310dc3170a18de37f205d0da172df65 passes61bea0. No Gemini generation.
 New explicit fixture ownership, local-reference addressing, no-HOME SUP and
-optional absent test-phone helper fixes are pushed/synced. Native call outcome
-still unproven; details and reference paths in
+optional absent test-phone helper fixes are pushed/synced. The remaining four
+native language outcomes are unproven; details and reference paths in
 `doc/main44_callback_acceptance_20260908.md`.
 
 **Normal installer74822 and independent ALL64780 passed; no installer remains active.**
