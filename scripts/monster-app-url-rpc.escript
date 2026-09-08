@@ -8,7 +8,13 @@
 
 main(["--https"|Args]) ->
     true = erlang:get(migration_https) =:= undefined,
+    true = erlang:get(migration_dev44) =:= undefined,
     put(migration_https, true),
+    main(Args);
+main(["--dev44-https"|Args]) ->
+    true = erlang:get(migration_https) =:= undefined,
+    true = erlang:get(migration_dev44) =:= undefined,
+    put(migration_dev44, true),
     main(Args);
 main(["--self-test"]) ->
     add_json_path(),
@@ -71,6 +77,22 @@ read_request() ->
     jiffy:decode(Input).
 
 apps() ->
+    case erlang:get(migration_dev44) of
+        true -> dev44_apps();
+        _ -> original_apps()
+    end.
+dev44_apps() ->
+    [{<<"accounts">>,<<"78389fb3531dd31f806ac8a75706403f">>}
+    ,{<<"acdc">>,<<"fc605bdd4f3a1d3f991167a33ccc3edc">>}
+    ,{<<"callflows">>,<<"fbe22bedfb85b06c87518a8b482d173d">>}
+    ,{<<"csv-onboarding">>,<<"2feaf1eb7499e65fc67cb5ef7d135531">>}
+    ,{<<"fax">>,<<"8026304a07764dfd658183553ceb09fe">>}
+    ,{<<"numbers">>,<<"671b7ce2e29d98b76dd0fd25180d2224">>}
+    ,{<<"pbxs">>,<<"de9e49486d1ae027408c746c47df23b8">>}
+    ,{<<"voicemails">>,<<"cfd2baf6a3508e13edfd80cfa1c4e45f">>}
+    ,{<<"voip">>,<<"a5d3dc761b02fa75e76a365b89bbd112">>}
+    ,{<<"webhooks">>,<<"8ccc14f3d5d92c83ab252a30c3180f2e">>}].
+original_apps() ->
     [{<<"accounts">>,<<"6fd9207e022cedcc3b1c9493b1bf7b20">>}
     ,{<<"acdc">>,<<"9ed4c13921516bb1d2afb9f1874290a3">>}
     ,{<<"callflows">>,<<"f607173df478e2654a7aa28b219c1a72">>}
@@ -81,16 +103,26 @@ apps() ->
     ,{<<"voicemails">>,<<"f61021d214b6e7e8d3a41429133ea99b">>}
     ,{<<"voip">>,<<"f9a82ad18cf17c9a73b836ff0feba33f">>}
     ,{<<"webhooks">>,<<"b94a5cff43467f9e0755aa2f7e9d560e">>}].
-db() -> <<"account%2F30%2F2a%2Fe5a70c403124f764cbc54229cfcd">>.
-account() -> <<"302ae5a70c403124f764cbc54229cfcd">>.
+db() ->
+    case erlang:get(migration_dev44) of
+        true -> <<"account%2Fad%2Fec%2Fbb84fbe9e06902a76731914d1943">>;
+        _ -> <<"account%2F30%2F2a%2Fe5a70c403124f764cbc54229cfcd">>
+    end.
+account() ->
+    case erlang:get(migration_dev44) of
+        true -> <<"adecbb84fbe9e06902a76731914d1943">>;
+        _ -> <<"302ae5a70c403124f764cbc54229cfcd">>
+    end.
 from_url() ->
-    case erlang:get(migration_https) of
-        true -> <<"http://kz5.talkchief.io/v2/">>;
+    case {erlang:get(migration_dev44),erlang:get(migration_https)} of
+        {true,_} -> <<"http://10.1.0.44/v2/">>;
+        {_,true} -> <<"http://kz5.talkchief.io/v2/">>;
         _ -> <<"http://91.99.188.145:8000/v2/">>
     end.
 to_url() ->
-    case erlang:get(migration_https) of
-        true -> <<"https://kz5.talkchief.io/v2/">>;
+    case {erlang:get(migration_dev44),erlang:get(migration_https)} of
+        {true,_} -> <<"https://kz5-dev.talkchief.io/v2/">>;
+        {_,true} -> <<"https://kz5.talkchief.io/v2/">>;
         _ -> <<"http://kz5.talkchief.io/v2/">>
     end.
 get(Key, {Props}) -> proplists:get_value(Key, Props).

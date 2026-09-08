@@ -4,18 +4,25 @@
 // Exact, operator-reviewed one-time catalog migration. Never discovers owners.
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const crypto = require('node:crypto'), {spawnSync} = require('node:child_process');
-const ACCOUNT = '302ae5a70c403124f764cbc54229cfcd';
-const DATABASE = 'account%2F30%2F2a%2Fe5a70c403124f764cbc54229cfcd';
+const DEV44 = process.argv.slice(2).includes('--dev44-https');
+const ACCOUNT = DEV44 ? 'adecbb84fbe9e06902a76731914d1943' : '302ae5a70c403124f764cbc54229cfcd';
+const DATABASE = DEV44 ? 'account%2Fad%2Fec%2Fbb84fbe9e06902a76731914d1943' : 'account%2F30%2F2a%2Fe5a70c403124f764cbc54229cfcd';
 const HTTPS = process.argv.slice(2).includes('--https');
-const SOURCE = HTTPS ? 'http://kz5.talkchief.io/v2/' : 'http://91.99.188.145:8000/v2/';
-const TARGET = HTTPS ? 'https://kz5.talkchief.io/v2/' : 'http://kz5.talkchief.io/v2/';
-const APPS = Object.freeze([
+const SOURCE = DEV44 ? 'http://10.1.0.44/v2/' : HTTPS ? 'http://kz5.talkchief.io/v2/' : 'http://91.99.188.145:8000/v2/';
+const TARGET = DEV44 ? 'https://kz5-dev.talkchief.io/v2/' : HTTPS ? 'https://kz5.talkchief.io/v2/' : 'http://kz5.talkchief.io/v2/';
+const APPS = Object.freeze((DEV44 ? [
+    ['accounts','78389fb3531dd31f806ac8a75706403f'],['acdc','fc605bdd4f3a1d3f991167a33ccc3edc'],
+    ['callflows','fbe22bedfb85b06c87518a8b482d173d'],['csv-onboarding','2feaf1eb7499e65fc67cb5ef7d135531'],
+    ['fax','8026304a07764dfd658183553ceb09fe'],['numbers','671b7ce2e29d98b76dd0fd25180d2224'],
+    ['pbxs','de9e49486d1ae027408c746c47df23b8'],['voicemails','cfd2baf6a3508e13edfd80cfa1c4e45f'],
+    ['voip','a5d3dc761b02fa75e76a365b89bbd112'],['webhooks','8ccc14f3d5d92c83ab252a30c3180f2e']
+] : [
     ['accounts','6fd9207e022cedcc3b1c9493b1bf7b20'],['acdc','9ed4c13921516bb1d2afb9f1874290a3'],
     ['callflows','f607173df478e2654a7aa28b219c1a72'],['csv-onboarding','747e264204ec61bae44a47fe8bc24532'],
     ['fax','1468daf86a7ec165af980daaf908bfdd'],['numbers','f3248fe1214da79cb5d089614bf22651'],
     ['pbxs','ee30412619e9e4d922c99467db8a5268'],['voicemails','f61021d214b6e7e8d3a41429133ea99b'],
     ['voip','f9a82ad18cf17c9a73b836ff0feba33f'],['webhooks','b94a5cff43467f9e0755aa2f7e9d560e']
-].map(Object.freeze));
+]).map(Object.freeze));
 const REVISION = /^[1-9][0-9]*-[a-f0-9]+$/, HASH = /^[a-f0-9]{64}$/;
 const MAX_DOCUMENT = 1024*1024, MAX_RECEIPT = 16*1024*1024;
 class MigrationError extends Error { constructor(code) { super(code); this.code=code; } }
@@ -180,7 +187,7 @@ function rpcStorage({node,cookieFile},spawn=spawnSync) {
     protectedFile(cookieFile,256); // Validate privately; never print or pass contents.
     const bridge=path.join(__dirname,'monster-app-url-rpc.escript');
     function request(input) {
-        const result=spawn('/usr/bin/escript',[bridge,...(HTTPS?['--https']:[]),'--node',node,'--cookie-file',cookieFile],{
+        const result=spawn('/usr/bin/escript',[bridge,...(DEV44?['--dev44-https']:HTTPS?['--https']:[]),'--node',node,'--cookie-file',cookieFile],{
             input:JSON.stringify(input)+'\n',encoding:'utf8',timeout:15000,maxBuffer:2*MAX_DOCUMENT,
             env:{...process.env,ERL_CRASH_DUMP:'/dev/null',ERL_FLAGS:'',ERL_AFLAGS:'',ERL_ZFLAGS:''}});
         let response;try{response=JSON.parse(result.stdout);}catch{throw new MigrationError('bridge_unconfirmed');}
@@ -192,9 +199,10 @@ function rpcStorage({node,cookieFile},spawn=spawnSync) {
 }
 function main(args) {
     if(args.length===0 || args.includes('--help')) {
-        console.log('Usage: migrate-monster-app-api-url.cjs [--https] --plan|--apply --receipt-dir NEW_OR_EXISTING_PRIVATE_DIR [--node kazoo_apps@LOCAL_HOST] [--cookie-file /etc/kazoo/.erlang.cookie]');return;
+        console.log('Usage: migrate-monster-app-api-url.cjs [--https|--dev44-https] --plan|--apply --receipt-dir NEW_OR_EXISTING_PRIVATE_DIR [--node kazoo_apps@LOCAL_HOST] [--cookie-file /etc/kazoo/.erlang.cookie]');return;
     }
     check(process.getuid()===0,'root_required');
+    check(!(HTTPS && DEV44),'choose_one_profile');
     let mode, directory;const options={node:'kazoo_apps@'+os.hostname(),cookieFile:'/etc/kazoo/.erlang.cookie'};
     for(let i=0;i<args.length;i++) {
         const arg=args[i];
@@ -203,6 +211,7 @@ function main(args) {
         else if(arg==='--node') options.node=args[++i];
         else if(arg==='--cookie-file') options.cookieFile=args[++i];
         else if(arg==='--https') check(args.filter(value=>value==='--https').length===1,'duplicate_https_mode');
+        else if(arg==='--dev44-https') check(args.filter(value=>value==='--dev44-https').length===1,'duplicate_dev44_mode');
         else throw new MigrationError('unknown_argument');
     }
     check(mode && directory,'mode_and_receipt_required');

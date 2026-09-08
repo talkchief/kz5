@@ -6,8 +6,10 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('nod
 const {spawnSync}=require('node:child_process');
 const m=require('./migrate-monster-app-api-url.cjs');
 const httpsMode=process.argv.slice(2).includes('--https');
-assert.equal(m.SOURCE,httpsMode?'http://kz5.talkchief.io/v2/':'http://91.99.188.145:8000/v2/');
-assert.equal(m.TARGET,httpsMode?'https://kz5.talkchief.io/v2/':'http://kz5.talkchief.io/v2/');
+const dev44Mode=process.argv.slice(2).includes('--dev44-https');
+assert.equal(m.SOURCE,dev44Mode?'http://10.1.0.44/v2/':httpsMode?'http://kz5.talkchief.io/v2/':'http://91.99.188.145:8000/v2/');
+assert.equal(m.TARGET,dev44Mode?'https://kz5-dev.talkchief.io/v2/':httpsMode?'https://kz5.talkchief.io/v2/':'http://kz5.talkchief.io/v2/');
+assert.equal(m.ACCOUNT,dev44Mode?'adecbb84fbe9e06902a76731914d1943':'302ae5a70c403124f764cbc54229cfcd');
 const clone=value=>JSON.parse(JSON.stringify(value));
 let groups=0;
 function fixture() {
@@ -138,13 +140,14 @@ try {
         });
         rpc.save(m.APPS[0][1],'2-abcdef','b'.repeat(64));
         assert.equal(seen[0].args.includes('--https'),httpsMode);
+        assert.equal(seen[0].args.includes('--dev44-https'),dev44Mode);
         assert(!seen[0].args.some(s=>s.includes('2-abcdef')||s.includes('not-an-actual-cookie')||s.includes('b'.repeat(64))));
         assert.deepEqual(JSON.parse(seen[0].input),{action:'save',id:m.APPS[0][1],expected_revision:'2-abcdef',expected_sha256:'b'.repeat(64)});
         const broken=m.rpcStorage({node:'kazoo_apps@'+os.hostname(),cookieFile:privateDummy},()=>({status:1,stdout:'PRIVATE-RESPONSE',stderr:'SECRET'}));
         throwsCode(()=>broken.read(m.APPS[0][1]),'bridge_unconfirmed');groups++;
     }
     // Escript compiles with warnings_as_errors and tests real pure guard code.
-    const bridge=spawnSync('/usr/bin/escript',[path.join(__dirname,'monster-app-url-rpc.escript'),...(httpsMode?['--https']:[]),'--self-test'],
+    const bridge=spawnSync('/usr/bin/escript',[path.join(__dirname,'monster-app-url-rpc.escript'),...(dev44Mode?['--dev44-https']:httpsMode?['--https']:[]),'--self-test'],
         {encoding:'utf8',timeout:15000,env:{...process.env,LANG:'C',LC_ALL:'C',ERL_CRASH_DUMP:'/dev/null',ERL_FLAGS:'',ERL_AFLAGS:'',ERL_ZFLAGS:''}});
     assert.equal(bridge.status,0,bridge.stderr);assert.match(bridge.stdout,/PASS bridge pure guards/);groups++;
     assert.deepEqual(JSON.parse(bridge.stdout.split('\n')[0]),{unicode:'éא'});groups++;
