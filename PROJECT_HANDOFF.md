@@ -8,7 +8,21 @@ source `30daaab` passed; checkout was fast-forwarded to `b393f62` with a clean
 tracked worktree before the successful reboot. Subsequent documentation commits
 are synced after publishing. Do not confuse this host with the original
 `kz5-testing`/`10.1.0.26` development site or production CouchDB `10.1.0.10`.
-No DNS/TLS hostname migration to .44 has been requested or performed.
+The original hostname was not migrated. The user subsequently approved separate
+`kz5-dev.talkchief.io` HTTPS on .44; DNS already points to46.225.31.248.
+Normal UI TLS installation50206/267490 passes and persists HTTPS/WSS settings.
+Initial root-systemd SUP failure without HOME is fixed in pushed `f2e6f4a`,
+deployed through the installer wrapper and tested with a genuinely empty
+environment. Ten old HTTP app catalog URLs have been migrated with exact CAS
+receipts (`9861f4b`); browser login, HTTPS/WSS, `/apis/` and ACDC live200 now pass.
+Login uses account name `KazooMaster`, not realm `master.dev-testing`.
+Separate delayed-dialog resize fix `c7ecf0a` is committed/pushed; normal UI
+deployment25232/ec4d2b passes, with all nine main services active. Postdeployment
+Chromium90351/a3c1e3 passes login/retry, HTTPS/WSS, `/apis/`, ACDC live200 and
+resize-after-dialog-close without insecure requests or page exceptions. The
+master account's zero-queue empty state renders without a spinner. Public-IP
+certificate coverage is not provided by the wildcard DNS certificate.
+See [dev44 HTTPS acceptance](doc/dev44_https_acceptance_20260908.md).
 
 Active after completed installer finalization: `COMPAT-01`, read-only snapshot of
 company `d8520ce3f29c5b6db692289e782c92af` from production CouchDB `10.1.0.10`
@@ -108,9 +122,11 @@ and include explicit NO-GO deployment/recovery boundaries. Main deployment of
 this narrow delta has not been performed as part of the isolated assessment.
 
 Latest continuation: [fresh-host/TLS acceptance](doc/fresh_host_tls_acceptance_20260908.md).
-Physical mobile delivery testing was waived by the user. HTTPS is deployed and
-browser transport checks pass. Fresh data services and separate UI on 10.1.0.44
-pass installation and verification. The user confirms HTTPS login works.
+Physical mobile delivery testing was waived by the user. These earlier HTTPS
+and browser transport checks concern the original `kz5.talkchief.io`, where the
+user confirmed HTTPS login. Fresh data services and separate UI on10.1.0.44
+passed installation/verification over HTTP, not HTTPS. See the latest separate
+development-hostname TLS continuation above; do not conflate the two hosts.
 Fresh bridge installation and independent verification also pass. Fresh apps
 audio and MIME prerequisites are fixed; full compilation passed, but initial
 startup exposed config traversal/private-binding defects. Both are fixed in

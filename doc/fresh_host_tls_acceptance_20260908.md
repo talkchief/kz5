@@ -5,6 +5,11 @@ The initial isolated checkout excluded the other team's uncommitted FWD work.
 Their completed branch through `52c8d85` is now merged (`2b07609`) and pushed to
 master with our installer fixes; fresh-server continuation uses that integration.
 
+Later `.44` HTTPS deployment and corrected login/account-name guidance are in
+[the dedicated development-host HTTPS report](dev44_https_acceptance_20260908.md).
+The original-host HTTPS proof below must not be read as earlier TLS acceptance
+for `.44`, whose page initially used HTTP.
+
 ## Operator decisions
 
 - `10.1.0.44` is designated the **main Kazoo5 development server**. Preserve its

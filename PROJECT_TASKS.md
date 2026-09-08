@@ -11,6 +11,48 @@
 - Existing public hostname/DNS/TLS remains on the original host; migration of
   that public endpoint is a separate decision, not implied by retaining .44.
 
+### New development hostname HTTPS — September8 continuation
+
+- Operator approved `kz5-dev.talkchief.io` for .44 after reporting that HTTPS
+  by public IP failed. Existing DNS resolves to `46.225.31.248`; the supplied
+  wildcard certificate covers the hostname, not the IP literal. No DNS changes.
+- Initial inspection confirmed .44 had only port80. Prior HTTPS acceptance
+  concerned the original `kz5.talkchief.io`, not this new host. The earlier
+  wording suggesting private-network TLS on .44 was incorrect.
+- Normal UI TLS installation now passes50206/267490 with HTTPS API and WSS,
+  redirect308, trusted certificate, preserved catalog/assets/language readiness,
+  and persisted root-only deployment settings. nginx alone was restarted.
+- First attempt53694/f9ca92 exposed SUP failure without HOME in a root systemd
+  environment. Fixed in installer-generated wrapper `f2e6f4a`: resolve the
+  invoking user's real NSS home only when absent/empty; preserve explicit HOME.
+  Fifteen argument tests, four home/NSS cases and bootstrap tests pass1872cb.
+  Actual empty-environment SUP readback passesebbe3f. Fix pushed and synced .44.
+- Browser55182/108dd9 passes wrong-account401/error/retry, correct login,
+  HTTPS API/WSS, `/apis/`, and ACDC live queue200 without insecure requests.
+  Exact login account name is `KazooMaster`, not realm `master.dev-testing`;
+  earlier credential response was corrected. Password unchanged.
+- Existing ten catalog URLs still used HTTP after create-only installation.
+  Browser reproduced mixed-content requests; `9861f4b` adds exact reviewed
+  `.44` migration profile. All41 regression groups pass per profile (three
+  profiles). Actual24378 migrated/verified ten entries with private recovery
+  receipt; other app fields preserved. Reload old browser metadata.
+- Separate delayed dialog-resize exception reproduced74294/de43b6. Fix
+  `c7ecf0a` cancels pending debounce and ignores destroyed dialog instances;
+  actual-source before/after and12 pinned-framework wiring groups pass, plus
+  11 preservation groups. Normal installer25232/ec4d2b passes (85.5s,
+  848.2MiB peak); all nine main services remain active. Postdeployment browser
+  90351/a3c1e3 passes login/retry, HTTPS/WSS, `/apis/`, ACDC live200 and delayed
+  resize-after-close with zero insecure requests/page exceptions. The master
+  account has zero queues and correctly shows its empty state without a spinner;
+  the probe was corrected to assert that API-backed state, not a search box.
+- The user reached the public hostname and supplied browser errors. Direct
+  public connections from the original dev host time out for80/443 despite
+  ACCEPT host rules; our automated browser uses private routing with normal
+  certificate validation. Do not claim independent public-ingress verification.
+- `VM38 reportAllChanges/startTime` is not yet attributed to a shipped source
+  file or reproduced in clean-browser tests. Track separately if it recurs.
+- Full commands/evidence: [dev44 HTTPS acceptance](doc/dev44_https_acceptance_20260908.md).
+
 ## Active — Kazoo 4/5 CouchDB coexistence assessment
 
 | ID | Status | Requirement / acceptance |
@@ -113,7 +155,8 @@ normal module compilation receives the required tracked patch.
   recurrence (a833e2). Post-reboot ALL76710/8722b4 and actual browser login/
   API/socket30795/7b71ff **PASS**. No installer job remains.
   The user confirms HTTPS
-  login works; the new server uses verified private-network TLS for that host.
+  login works on the original hostname. At this earlier checkpoint .44's own
+  page was HTTP-only; see the new development-hostname HTTPS continuation above.
 - [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).
 - FWD branch through `52c8d85` merged into master; no local redeployment performed.
 
