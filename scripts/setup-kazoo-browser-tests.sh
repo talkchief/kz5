@@ -48,9 +48,11 @@ if ((${#missing[@]})); then dnf -y install "${missing[@]}"; fi
 stage=$(mktemp -d "$base/release.XXXXXXXX")
 trap 'echo "Browser setup failed; previous current unchanged, staging evidence retained: ${stage:-none}" >&2' ERR
 install -m 0600 "$script_dir/browser-tests/package.json" "$script_dir/browser-tests/package-lock.json" "$stage/"
+install -m 0600 /dev/null "$stage/npm-user.conf"
+install -m 0600 /dev/null "$stage/npm-global.conf"
 # Never run package lifecycle scripts or the node wrapper's secondary download.
 # Empty npm user/global config prevents accidental reuse of root credentials.
-env -i PATH=/usr/bin:/bin NPM_CONFIG_USERCONFIG=/dev/null NPM_CONFIG_GLOBALCONFIG=/dev/null \
+env -i PATH=/usr/bin:/bin NPM_CONFIG_USERCONFIG="$stage/npm-user.conf" NPM_CONFIG_GLOBALCONFIG="$stage/npm-global.conf" \
     npm ci --prefix "$stage" --cache "$base/npm-cache" --ignore-scripts --omit=optional \
     --no-audit --no-fund --strict-ssl=true --registry=https://registry.npmjs.org
 env -i PATH=/usr/bin:/bin PLAYWRIGHT_BROWSERS_PATH="$stage/browsers" \
