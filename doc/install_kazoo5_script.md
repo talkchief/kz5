@@ -570,6 +570,7 @@ sudo ./scripts/test-install-kazoo5-deployment.sh
 node scripts/test-format-json-permissions.cjs
 node scripts/test-kazoo-private-runtime.cjs
 node scripts/test-kazoo-sip-config-permissions.cjs
+node scripts/test-freeswitch-sound-permissions.cjs
 node scripts/test-install-kazoo5-generator-order.cjs
 bash scripts/test-nodejs-clean-install.sh
 bash scripts/test-rabbitmq-plugin-permissions.sh

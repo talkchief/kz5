@@ -33,7 +33,7 @@ grep -Fq '"$KAZOO_SOUNDS_REF"' <<<"$source_preparation" || fail 'official prompt
 output=$(install_freeswitch_sounds)
 grep -Fq 'rsync -a --ignore-existing' <<<"$output" || fail 'FreeSWITCH sound installation would overwrite existing files'
 output=$(KAZOO_COUCHDB_HOST=database.example.invalid KAZOO_COUCHDB_PORT=15984 install_acdc_language_packs)
-grep -Fq '165 checked-in Gemini EN/AR/HE/ES/FR fixed/callback-digit assets into configured CouchDB database.example.invalid:15984' <<<"$output" || \
+grep -Fq '210 checked-in Gemini EN/AR/HE/ES/FR fixed/callback-digit assets into configured CouchDB database.example.invalid:15984' <<<"$output" || \
     fail 'language pack installation lost its standalone CouchDB endpoint'
 grep -Fq 'requires no provider key, generation call, eSpeak, or local FreeSWITCH; it does not publish runtime or full-position readiness' <<<"$output" || \
     fail 'media installation incorrectly implies local FS or runtime readiness'

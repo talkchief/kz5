@@ -4282,12 +4282,12 @@ install_freeswitch_sounds() {
     local manifest=/usr/local/share/kazoo5-installer/freeswitch-sounds.manifest locale
     prepare_kazoo_sounds
     for locale in en/us es/es fr/fr; do
-        run mkdir -p "/usr/share/kazoo-freeswitch/sounds/$locale"
-        run rsync -a --ignore-existing "$KAZOO_BUILD_ROOT/kazoo-sounds/freeswitch/$locale/" \
+        run install -d -m 0755 "/usr/share/kazoo-freeswitch/sounds/${locale%/*}" "/usr/share/kazoo-freeswitch/sounds/$locale"
+        run rsync -a --ignore-existing --chmod=D755,F644 "$KAZOO_BUILD_ROOT/kazoo-sounds/freeswitch/$locale/" \
             "/usr/share/kazoo-freeswitch/sounds/$locale/"
     done
     run mkdir -p /usr/share/kazoo-freeswitch/sounds/music
-    run rsync -a --ignore-existing "$KAZOO_BUILD_ROOT/kazoo-sounds/freeswitch/music/" \
+    run rsync -a --ignore-existing --chmod=D755,F644 "$KAZOO_BUILD_ROOT/kazoo-sounds/freeswitch/music/" \
         /usr/share/kazoo-freeswitch/sounds/music/
     if [[ $DRY_RUN != true ]]; then
         (cd "$KAZOO_BUILD_ROOT/kazoo-sounds/freeswitch" && find en/us es/es fr/fr music -type f -name '*.wav' -print) | \
@@ -4305,6 +4305,16 @@ verify_freeswitch_sounds() {
         [[ -s /usr/share/kazoo-freeswitch/sounds/$file ]] || die "Missing FreeSWITCH sound: ${file}"
         count=$((count + 1))
     done < "$manifest"
+    runuser --user freeswitch -- python3 -B -I -c '
+import pathlib, sys
+try:
+    for name in pathlib.Path(sys.argv[1]).read_text().splitlines():
+        with (pathlib.Path("/usr/share/kazoo-freeswitch/sounds") / name).open("rb") as audio:
+            if not audio.read(1):
+                raise OSError("empty audio")
+except OSError:
+    raise SystemExit("FreeSWITCH service user cannot read a required sound")
+' "$manifest" || die 'FreeSWITCH sounds are not readable by the service user'
     log "PASS ${count} FreeSWITCH speech and hold-music files"
 }
 
