@@ -52,6 +52,7 @@ agents 1002-1031, and ACDC queue 2000.
 
 Options:
   --verify-only          Read-only validation of saved tenant resources
+  --verify-capacity      Also require the long wait policy for the capacity test
   --agent-count COUNT    Provision 1-30 agents (new tenants default to 30)
   --agent-status ACTION  Set acceptance agents to login, logout, or verify
   --agent-range START:END  Limit --agent-status to an indexed agent range
@@ -67,6 +68,7 @@ parse_acceptance_arguments() {
     while (($#)); do
         case $1 in
             --verify-only) mode=verify ;;
+            --verify-capacity) mode=capacity-verify ;;
             --agent-status)
                 (($# >= 2)) || die '--agent-status requires login, logout, or verify'
                 status_action=$2
@@ -435,9 +437,6 @@ verify_acceptance_resources() {
         '.data.numbers == [$number] and .data.flow.module == "user" and .data.flow.data.id == $id' \
         <<<"$response" >/dev/null || die 'Acceptance caller callflow verification failed'
 
-    # Agent status operations call this verifier before changing state, hence
-    # the call harness rejects stale short-wait fixtures before any SIP calls.
-    verify_acceptance_queue_wait
     response=$(acceptance_api GET "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID/roster")
     for ((agent_index = 1; agent_index <= ACCEPTANCE_AGENT_COUNT; agent_index++)); do
         extension=$((ACCEPTANCE_FIRST_AGENT_EXTENSION + agent_index - 1))
@@ -543,6 +542,7 @@ main_acceptance() {
     if [[ $mode == provision ]]; then
         ensure_acceptance_account
         provision_acceptance_resources
+        verify_acceptance_queue_wait
         verify_acceptance_resources
         # Exercise both transitions, then leave every agent ready for the SIP
         # registration/call harness.
@@ -561,6 +561,9 @@ main_acceptance() {
         fi
     else
         verify_acceptance_resources
+        # Ordinary callback/status fixtures may deliberately use shorter waits.
+        # Enforce the load-test policy only for this explicit read-only mode.
+        [[ $mode != capacity-verify ]] || verify_acceptance_queue_wait
         log 'PASS acceptance provisioning state is reusable; status was not changed'
     fi
     log "Acceptance tenant is ready; protected SIP test data remains in ${ACCEPTANCE_STATE_FILE}"

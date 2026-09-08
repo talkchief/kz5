@@ -18,7 +18,7 @@ kill() { trace "kill $*"; return 0; }
 wait() { trace "wait $*"; return 0; }
 best_effort_clear_acceptance_calls() { trace 'clear-owned-calls'; }
 best_effort_deregister_agents() { trace "deregister-owned-agents $*"; }
-best_effort_deregister_caller() { trace "deregister-owned-caller $*"; }
+best_effort_deregister_caller() { trace "deregister-owned-caller $*"; trace "deregister-source \${LOCAL_IP:-unset}"; }
 agent_status() { trace "agent-status $*"; }
 warn() { trace "warning $*"; }
 find() { trace "find $*"; }
@@ -41,6 +41,8 @@ exit "$INITIAL_RESULT"
             CALLBACK_CLEANING: String(options.cleaning || false), CALLBACK_LIVE: String(options.live !== false),
             RUN_DIR: options.runDir === undefined ? '/private/fixture-run' : options.runDir,
             AGENTS_REGISTERED: '2', CALLER_REGISTERED: 'true', STATUS_AGENT_MAX: '2',
+            CALLBACK_TEST_TRANSPORT: options.transport || 'external',
+            CARRIER_IP: '127.0.0.30', CARRIER_PORT: '16060',
             FIXTURE_CREATED: String(options.fixture !== false), KEEP_FIXTURE: String(options.keep || false),
             CALLBACK_ORIGINAL_CALL_ID: options.callId === undefined ? callId : options.callId}});
     assert.equal(result.signal, null, 'Private shell unexpectedly signalled or timed out');
@@ -66,6 +68,15 @@ test('Cancellation failure changes successful exit to1 and retains resources for
     assert(item.actions.includes('fixture cancel-original ' + callId));
     assert(!item.actions.includes('fixture cleanup'));
     assert(item.actions.some(action => action.includes('unresolved settlement')));
+});
+test('Internal cleanup deregisters only its explicit carrier contact and preserves exit failures', () => {
+    for (const options of [{}, {initial: 42}, {cancel: 7}, {cleanup: 9}]) {
+        const item = run({transport: 'internal', ...options});
+        assert.equal(item.status, options.initial || (options.cancel || options.cleanup ? 1 : 0), item.stderr);
+        assert(item.actions.includes('deregister-owned-caller 16060 callback-cleanup-caller'));
+        assert(item.actions.includes('deregister-source 127.0.0.30'));
+        assert(!item.actions.includes('deregister-owned-caller 15064 callback-cleanup-caller'));
+    }
 });
 test('Owned fixture cleanup failure changes successful exit to1 instead of warning-only success', () => {
     const item = run({cleanup: 9}); assert.equal(item.status, 1);

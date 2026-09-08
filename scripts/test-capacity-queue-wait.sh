@@ -28,4 +28,20 @@ for wrong in id name; do
         '{data:{id:$id,name:"Acceptance Queue 2000",connection_timeout:600}} | .data[$wrong]="other"')
     if (verify_acceptance_queue_wait) 2>/dev/null; then die "Accepted wrong $wrong"; fi
 done
+# Exercise the actual provisioner dispatch with all external operations stubbed:
+# capacity policy must not leak into ordinary callback/status verification.
+eval "$(sed -n '/^main_acceptance() {/,/^}/p' "$source_path")"
+for operation in parse_acceptance_arguments load_acceptance_state resolve_requested_agent_count \
+    initialize_acceptance_state expand_acceptance_agents validate_acceptance_state \
+    resolve_agent_range preflight_acceptance_runtime authenticate_master ensure_acceptance_account \
+    provision_acceptance_resources verify_acceptance_resources set_all_agent_statuses \
+    verify_acdc_runtime log; do eval "$operation() { :; }"; done
+command() { [[ $1 == -v ]]; }
+verify_acceptance_queue_wait() { checks=$((checks + 1)); }
+ACCEPTANCE_AGENT_COUNT=30 ACCEPTANCE_STATE_FILE=/fixture status_action=login
+for mode in provision capacity-verify verify status; do
+    checks=0
+    main_acceptance
+    case $mode in provision|capacity-verify) [[ $checks == 1 ]] ;; *) [[ $checks == 0 ]] ;; esac
+done
 printf 'PASS capacity queue wait budget, typed policy, identity and read-only preflight; no API calls\n'

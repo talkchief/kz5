@@ -929,6 +929,10 @@ main() {
         return 0
     fi
     [[ $LIVE == true ]] || die 'Live SIP traffic is gated; rerun with --live after the ALL deployment is healthy'
+    if [[ $MODE == stress || $MODE == all ]]; then
+        [[ -x $STATE_HELPER ]] || die "State helper is not executable: $STATE_HELPER"
+        KAZOO_ACCEPTANCE_STATE_FILE=$STATE_FILE "$STATE_HELPER" --verify-capacity >/dev/null
+    fi
     create_run_dir
     trap cleanup EXIT INT TERM
     if [[ $MODE == registration-probe ]]; then
