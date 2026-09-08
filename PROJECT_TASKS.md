@@ -11,7 +11,10 @@
   including all five locales and inherited HE_IL normalization. No new audio
   or account defaults. Source18eef3e pushed/synced; normal kazoo-apps deployment
   running as `kz5-announcement-language-install-main44-20260908` (observer35217).
-  Terminal result and runtime parity pending; do not restart the live job. See
+  Terminal result and runtime parity pending; do not restart the live job.
+  Matching static `/apis` publication completed successfully on main at
+  22:25:26 UTC; HTTPS readback confirms the admitted-language contract.
+  See
   `doc/acdc_callback_language_snapshot.md`.
 
 - **VOICE-01 callback language snapshot DEPLOYED:** queue edits could

@@ -10,7 +10,11 @@ is updated. Source18eef3e pushed/synced; normal kazoo-apps deployment is running
 as `kz5-announcement-language-install-main44-20260908`, observer35217. Its log is
 `/root/kz5-acceptance/announcement-language-install-main44-20260908.log`.
 Wait for this exact job's terminal result and then verify runtime parity; no
-duplicate install. Deployment completion remains pending. See
+duplicate install. Deployment completion remains pending. The separate static
+documentation unit `kz5-announcement-language-docs-main44-20260908` completed
+successfully at 22:25:26 UTC; HTTPS `/apis/openapi.json` readback confirms the
+queue-language contract. Do not confuse that with application deployment.
+See
 `doc/acdc_callback_language_snapshot.md`.
 
 **VOICE-01 callback language snapshot source correction deployed on main.**

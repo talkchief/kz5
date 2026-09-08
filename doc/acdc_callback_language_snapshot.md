@@ -183,6 +183,14 @@ and runtime-parity verification remain pending;
 account/reseller default resolution and actual worker-failure lifecycle
 acceptance remain separate from these deterministic language checks.
 
+The separate static documentation publication unit
+`kz5-announcement-language-docs-main44-20260908` completed successfully at
+22:25:26 UTC on September 8. Journal verification3382da and HTTPS readbackeeee73
+confirm the queue-schema language description at `/apis/openapi.json`. This
+does not establish application deployment completion. The readback used the
+private main-server address with certificate validation, not a public-routing
+test.
+
 The real queue-edit case proves language retention, with the separate RTP
 timing discrepancy above still open. Prior
 five-language audio/retry results predate this correction and are not proof of
