@@ -9,7 +9,13 @@ main(["self-test"]) ->
     error = hook_status({'EXIT', {private_fixture, []}}),
     error = hook_status({badrpc, timeout}),
     unknown = hook_status({unrecognized, <<"private fixture">>}),
-    io:format("hook_return_shape_tests=6 passed=true~n");
+    true = number_view_return_ok(ok),
+    true = number_view_return_ok(no_return),
+    false = number_view_return_ok({badrpc, timeout}),
+    false = number_view_return_ok({error, conflict}),
+    false = number_view_return_ok(true),
+    false = number_view_return_ok({ok, private_fixture}),
+    io:format("hook_return_shape_tests=6 number_view_return_tests=6 passed=true~n");
 main(Args) ->
     try
         put(stage, namespace),
@@ -42,6 +48,42 @@ run(["status"], Node) ->
     io:format("otp=~p~n", [rpc:call(Node, erlang, system_info, [otp_release], 15000)]);
 run(["api-modules"], Node) ->
     print_api_modules(Node);
+run(["audit-refresh-writes"], Node) ->
+    %% MUTATING diagnostic, restricted to the existing isolated working copy.
+    %% Decompose the native refresh, restoring the generated number-service
+    %% view in an after block even when inspection fails. No raw documents,
+    %% caller data, credentials or revision hashes are printed.
+    AccountId = <<"d8520ce3f29c5b6db692289e782c92af">>,
+    AccountDb = <<"account%2Fd8%2F52%2F0ce3f29c5b6db692289e782c92af">>,
+    ViewId = <<"_design/numbers">>,
+    account = rpc:call(Node, kz_datamgr, db_classification, [AccountDb], 15000),
+    Before = read_document(Node, AccountDb, ViewId),
+    AggregateBefore = read_document(Node, <<"accounts">>, AccountId),
+    true = has_reconcile_view(Node, Before),
+    try
+        Updated = rpc:call(Node, kz_datamgr, refresh_views, [AccountDb], 120000),
+        true = is_boolean(Updated),
+        Static = read_document(Node, AccountDb, ViewId),
+        io:format("static_phase_reconcile_present=~p~n", [has_reconcile_view(Node, Static)]),
+        print_document_delta(Node, static_phase, Before, Static)
+    after
+        %% This is the same responder as maintenance.refresh.account.*.
+        %% Do not let an unexpected result silently count as recovery.
+        RestoreResult = rpc:call(Node, kazoo_numbers_maintenance,
+                                  update_number_services_view, [AccountId], 120000),
+        %% The unchanged branch returns no_return; the updating branch ends
+        %% in io:format/2 and returns ok despite its narrower source spec.
+        %% Neither result establishes success without the readback below.
+        true = number_view_return_ok(RestoreResult)
+    end,
+    Final = read_document(Node, AccountDb, ViewId),
+    true = has_reconcile_view(Node, Final),
+    true = same_document_content(Node, Before, Final),
+    print_document_delta(Node, restored_number_view, Before, Final),
+    ok = rpc:call(Node, kapps_maintenance, ensure_aggregate_account, [AccountId], 120000),
+    AggregateAfter = read_document(Node, <<"accounts">>, AccountId),
+    print_document_delta(Node, aggregate_account, AggregateBefore, AggregateAfter),
+    io:format("refresh_write_audit_completed=true generated_view_restored=true~n");
 run(["verify-media-fix"], Node) ->
     Path = "/var/lib/kazoo-compat-runtime/apps/overrides/kazoo_media_maintenance.beam",
     Path = rpc:call(Node, code, which, [kazoo_media_maintenance], 15000),
@@ -127,6 +169,35 @@ run(["refresh-account"], Node) ->
 run(_, _) -> halt(2).
 
 api_modules() -> [cb_queues, cb_agents, cb_acdc_call_stats, cb_external_numbers, cb_members].
+
+number_view_return_ok(ok) -> true;
+number_view_return_ok(no_return) -> true;
+number_view_return_ok(_) -> false.
+
+read_document(Node, Db, Id) ->
+    {ok, Doc} = rpc:call(Node, kz_datamgr, open_doc, [Db, Id], 15000),
+    Doc.
+
+has_reconcile_view(Node, Doc) ->
+    Map = rpc:call(Node, kz_json, get_ne_binary_value,
+                   [[<<"views">>, <<"reconcile_services">>, <<"map">>], Doc], 15000),
+    Reduce = rpc:call(Node, kz_json, get_ne_binary_value,
+                      [[<<"views">>, <<"reconcile_services">>, <<"reduce">>], Doc], 15000),
+    is_binary(Map) andalso is_binary(Reduce).
+
+same_document_content(Node, Before, After) ->
+    CleanBefore = rpc:call(Node, kz_doc, delete_revision, [Before], 15000),
+    CleanAfter = rpc:call(Node, kz_doc, delete_revision, [After], 15000),
+    Equal = rpc:call(Node, kz_json, are_equal, [CleanBefore, CleanAfter], 15000),
+    true = is_boolean(Equal),
+    Equal.
+
+print_document_delta(Node, Phase, Before, After) ->
+    RevBefore = rpc:call(Node, kz_doc, revision, [Before], 15000),
+    RevAfter = rpc:call(Node, kz_doc, revision, [After], 15000),
+    true = is_binary(RevBefore) andalso is_binary(RevAfter),
+    io:format("phase=~p content_unchanged=~p revision_changed=~p~n",
+              [Phase, same_document_content(Node, Before, After), RevBefore =/= RevAfter]).
 
 hook_status(ok) -> ok;
 hook_status(no_return) -> no_return;
