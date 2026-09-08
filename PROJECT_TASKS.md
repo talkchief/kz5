@@ -2,6 +2,15 @@
 
 ## Immediate operator follow-up — September8
 
+- **DEV-SOURCE-01 / UI-PROGRESS-01 REVERIFIED:** main dev `/opt/kz5` and GitHub
+  master match `557505a` before this documentation checkpoint (`383cbf`). Actual
+  HTTPS browser `94388/725a1f` passes Talkchief selection, SmartPBX/ACDC and
+  inactive top blue line with no captured insecure requests or page errors.
+  Before/after source regression `76e569` passes, including installer wiring.
+  All nine main services active; ACDC remains ordinary kz5 source. See the
+  latest section of `PROJECT_HANDOFF.md` for evidence and separate unfinished
+  SIPp/call-validation work; this does not close the load gate.
+
 - **BRIDGE-REMOTE-03 IN-FLIGHT FAIL-STOP CONTAINMENT PASS:**42712/afe573 uses
   native consumer/settlements and a real loopback HTTP acceptance with response
   held. Only the verified child's AMQP connection is closed. Exit 78 in3.532s,

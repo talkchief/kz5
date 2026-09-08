@@ -1,5 +1,34 @@
 # Kazoo 5 — start here / engineering handoff
 
+## Latest source-retention and loading-bar recheck — September 8
+
+The operator's requested source fix is committed in `2a593ee`, in
+`scripts/patches/monster-ui-request-indicator-lifecycle.patch`, and applied by
+`scripts/install-kazoo5.sh` during Monster UI installation. It prevents negative
+request counters and stale indicator timers; it is not a browser-only workaround.
+Recheck `76e569` reproduces the original failure and passes the patched lifecycle
+and installer-wiring regressions. Actual HTTPS browser check `94388/725a1f`
+passes SmartPBX, ACDC, inactive top progress, and the Talkchief account picker
+(15 users, 82 devices, 4 queues, 89 callflows), with no captured insecure requests
+or page errors. This uses private routing with certificate verification, not an
+independent public-network test or calling acceptance.
+
+Readback `383cbf` confirms main dev `10.1.0.44:/opt/kz5` and GitHub master both
+at `557505a` before this documentation checkpoint. The main checkout is clean,
+ACDC is tracked in kz5 without nested Git metadata, and its protected Git
+credential is present mode0600. All nine services are active (`d551db`). Future
+work starts there; see `doc/dev44_git_handoff.md` for independent Git access.
+This documentation checkpoint must also be pushed and fast-forwarded there.
+
+Separate unfinished call validation must not be confused with this UI pass:
+the SIPp preparation unit is now inactive after reporting `SIPp feature
+verification failed` (`383cbf`). Inspect its protected log at
+`/root/kz5-acceptance/sipp-tools-20260908.log` on .44 before retrying. The new
+dedicated 30-agent acceptance fixture remains provisioned; no functional or
+30-concurrent-call pass is claimed. The original host's untracked
+`scripts/test-functional-agent-isolation.sh` is unfinished work, not a deployed
+fix. Preserve it separately before removing that host.
+
 **In-flight uncertainty containment now has native broker/HTTP evidence:
 42712/afe573 passes.** A separate child ran the production consumer/settlement/
 fail-stop code against the isolated remote TLS broker, with only constructor
