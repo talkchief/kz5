@@ -1,9 +1,43 @@
-# Kazoo 4/5 CouchDB coexistence — queued validation
+# Kazoo 4/5 CouchDB coexistence — active validation
 
 Requested September8,2026. Task `COMPAT-01` in `PROJECT_TASKS.md`.
-Run **after the current installer/reboot finalization**, not concurrently with
-the in-progress fresh ALL installer. No production connection or copy has yet
-been performed for this task.
+Installer/reboot finalization passed; assessment is now active. Read-only
+production metadata inventory passed September8 (475ad5). Production node
+`cdb11.talkchief.io` runs CouchDB3.3.2. Seven exact account-owned databases exist:
+`account/d8/52/0ce3f29c5b6db692289e782c92af` and its monthly databases
+`-202604`, `-202605`, `-202606`, `-202607`, `-202608`, `-202609`.
+No customer documents have been copied at this preparation checkpoint.
+
+## Reusable snapshot tools
+
+- `scripts/export-company-couchdb.py`: Python2.7/3 source-node helper, GET-only
+  against fixed loopback5984, redirects/proxies disabled. Credentials arrive
+  through stdin, never argv. An explicit allowlist is validated against the
+  exact account's canonical account/MODB names before any HTTP request. It does
+  not use replication and cannot write source checkpoints. Requests are
+  sequential and throttled to at most25/second, response/page sizes bounded.
+- `scripts/receive-company-couchdb.py`: destination-only private file receiver;
+  validates account/database identity, counts, record ordering and stream SHA256.
+  Exclusive mode0600 files in an owned mode0700 directory outside Git. Interrupted
+  or invalid copies remain `.partial`; only complete verified copies become
+  `.ndjson`. This helper does not connect to CouchDB or restore into running apps.
+- Offline tests: `python3 -B scripts/test-export-company-couchdb.py` (12) and
+  `python3 -B scripts/test-receive-company-couchdb.py` (6), passedff6226.
+  Include foreign/global DB rejection, GET-only transport, conflict/deletion/
+  design/attachment preservation, moving source, truncation, tamper, private
+  modes and non-overwriting repeats. Live export/restore acceptance remains next.
+
+The stream preserves current leaf revisions, known revision ancestry and
+attachment bytes, plus database/security metadata before/after. It does not
+copy `_local` checkpoint documents or historical revision bodies and is not a
+physical CouchDB backup. `_changes` with `style=all_docs` identifies leaf
+revisions; exact-revision GETs request `revs=true&attachments=true`.
+See [CouchDB changes API](https://docs.couchdb.org/en/stable/api/database/changes.html)
+and [document API](https://docs.couchdb.org/en/stable/api/document/common.html).
+Per-database update/purge sequences and security are compared before/after;
+changing databases are explicitly labeled non-stable, not falsely certified
+as an atomic multi-database snapshot. Compacted/missing revisions fail the
+export rather than silently producing an incomplete successful backup.
 
 ## Question and authorized scope
 

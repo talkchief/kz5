@@ -10,10 +10,14 @@ are synced after publishing. Do not confuse this host with the original
 `kz5-testing`/`10.1.0.26` development site or production CouchDB `10.1.0.10`.
 No DNS/TLS hostname migration to .44 has been requested or performed.
 
-Queued next after current finalization: `COMPAT-01`, read-only snapshot of
+Active after completed installer finalization: `COMPAT-01`, read-only snapshot of
 company `d8520ce3f29c5b6db692289e782c92af` from production CouchDB `10.1.0.10`
 into isolated development storage, then assess Kazoo5 writes/migrations against
-Kazoo4 compatibility. No production access/copy performed yet. See
+Kazoo4 compatibility. Read-only production metadata inventory475ad5 confirmed
+CouchDB3.3.2 and seven exact company databases (account + April–September2026
+MODBs). No customer documents copied at this preparation checkpoint. Reusable
+GET-only exporter/private receiver and18 offline safety tests passff6226;
+live protected export and isolated restore are next. See
 [assessment plan](doc/kazoo4_kazoo5_couchdb_coexistence_plan.md); never point the
 development apps at production dependencies or put credentials/backups in Git.
 
