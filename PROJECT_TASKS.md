@@ -1,5 +1,15 @@
 # Kazoo 5 project task register
 
+## Primary development host — September8 operator decision
+
+- `10.1.0.44` is now the main Kazoo5 development server. Retain the stack and
+  Git checkout at `/opt/kz5`; use canonical kz5 `master`, including tracked ACDC.
+- Finish live ALL48019 and reboot acceptance before updating its source.
+  Then fast-forward it to the latest pushed master and verify clean tracked
+  state/source identity. Do not erase installed data or copy secrets into Git.
+- Existing public hostname/DNS/TLS remains on the original host; migration of
+  that public endpoint is a separate decision, not implied by retaining .44.
+
 ## Queued after current finalization — Kazoo 4/5 CouchDB coexistence assessment
 
 | ID | Status | Requirement / acceptance |

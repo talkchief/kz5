@@ -7,6 +7,11 @@ master with our installer fixes; fresh-server continuation uses that integration
 
 ## Operator decisions
 
+- `10.1.0.44` is designated the **main Kazoo5 development server**. Preserve its
+  installed services/data and canonical `/opt/kz5` master checkout for future
+  work. Update to latest pushed master after the live installer completes;
+  do not change source during the build. The original public DNS/TLS endpoint
+  has not been migrated to .44 by this designation.
 - Physical Android FCM / iPhone APNs delivery testing: **WAIVED / closed by
   user**, not a measured delivery pass. No real-device notification was sent.
   Existing bridge installer and isolated broker/consumer proofs retain their

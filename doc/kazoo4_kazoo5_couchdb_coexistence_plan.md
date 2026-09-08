@@ -17,7 +17,15 @@ without changing shared CouchDB state in ways that break Kazoo4?
   Do not copy their values into repository files, process arguments, reports or
   tool output. Load them through protected input when execution begins.
 - Destination: development only, with an isolated restore and no production
-  AMQP/CouchDB routing. Choose the instance/namespace after checking for collisions.
+  AMQP/CouchDB routing, on the designated main development server `10.1.0.44`.
+  Choose the instance/namespace after checking for collisions.
+
+**Explicit operator limit:** copy only this company's data as a use case.
+No full-cluster/database-server backup, no other company's records, and no full
+shared/global database copy. If relevant records live in a shared database,
+export only records whose ownership can be proven to match this exact account;
+otherwise stop that portion and report the missing scope. Metadata needed to
+interpret the snapshot must not turn into a bulk copy of unrelated data.
 
 ## Ordered procedure
 

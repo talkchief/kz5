@@ -1,5 +1,14 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Primary Kazoo5 development host: `10.1.0.44`**, designated by the user on
+September8. Keep its installed stack and `/opt/kz5` checkout for future work.
+Canonical Git remote remains `https://github.com/talkchief/kz5.git`, branch
+`master`; ACDC remains tracked directly in kz5. The current normal ALL installer
+is using source `30daaab`; fast-forward to the latest pushed master only after
+that live installer finishes. Do not confuse this host with the original
+`kz5-testing`/`10.1.0.26` development site or production CouchDB `10.1.0.10`.
+No DNS/TLS hostname migration to .44 has been requested or performed.
+
 Queued next after current finalization: `COMPAT-01`, read-only snapshot of
 company `d8520ce3f29c5b6db692289e782c92af` from production CouchDB `10.1.0.10`
 into isolated development storage, then assess Kazoo5 writes/migrations against
