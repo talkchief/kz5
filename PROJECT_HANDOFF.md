@@ -1,13 +1,17 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Priority: P0-CALLBACK-CONFIRM-01 source corrected, deployment pending.**
+**Priority: P0-CALLBACK-CONFIRM-01 source corrected, deployment running.**
 A legal three-second returned-caller response timer began before its4.331s
 English recording finished. Source now separates the bounded playback phase
 from the response window and correlates completion exactly; early confirmation
 is retained, stale/duplicate events cannot restart it. Actual worker baseline
 77012 fails; final14542/a37868 passes all7 caller tests. OpenAPI regenerated.
-Deploy normally (record layout changed; no hot load), then one native short-window
-case, not repeated unrelated suites. See `doc/callback_confirmation_deadline.md`.
+Source f593ab0 pushed/synced; normal apps job
+`kz5-callback-confirmation-deadline-main44-20260908` is active, observer68345,
+PID741452. Observe this job; no hot load, duplicate install or source sync during
+the build. Then runtime parity, publish `/apis`, and one native short-window
+case: the existing retry fixture uses15 seconds, not3. See
+`doc/callback_confirmation_deadline.md` for the log and remaining acceptance.
 
 **VOICE-01 queue locale spelling UI correction deployed.** Backend
 `HE_IL`/`HE-IL` was displayed and saved as English by the editor. Source now

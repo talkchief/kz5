@@ -8,8 +8,12 @@
   final14542/a37868 passes all7 caller tests. A separate30s playback watchdog
   now precedes the configured response window, bound to exact call/noop;
   early digit1 works and duplicate/stale events cannot extend or resurrect it.
-  OpenAPI regenerated. Normal apps deployment and one scoped native short-window
-  acceptance remain pending. See `doc/callback_confirmation_deadline.md`.
+  OpenAPI regenerated. Source f593ab0 pushed/synced; normal apps deployment
+  `kz5-callback-confirmation-deadline-main44-20260908` is active (observer68345,
+  PID741452). Observe this job, no duplicate install or source sync mid-build.
+  Terminal/parity, `/apis` publication and one scoped native short-window case
+  remain pending. Ordinary retry fixtures use15 seconds and cannot prove the
+  minimum3-second case. See `doc/callback_confirmation_deadline.md`.
 
 - **VOICE-01 locale spelling UI DEPLOYED:** existing `HE_IL`/`HE-IL`
   queues were selected and adopted as English despite backend Hebrew playback.
