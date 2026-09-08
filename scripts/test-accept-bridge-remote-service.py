@@ -86,7 +86,47 @@ class ServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             proof.matching_connection([self.connection(), self.connection()], 1234, self.sockets())
 
-    def run_fixture(self, fault=None):
+    def test_idle_broker_outage_and_stable_same_process_recovery(self):
+        result, states, verify = self.outage_fixture()
+        self.assertTrue(result['same_process'])
+        self.assertEqual(result['stable_consumer_samples'], 6)
+        self.assertEqual(verify.call_count, 6)
+        self.assertEqual(states, ['awaiting_broker_outage', 'broker_outage_observed'])
+        self.assertFalse(result['provider_dispatch_recovery_tested'])
+
+    def outage_fixture(self, fault=None):
+        clock = [0]
+        receipt = {'service_evidence': {'pid': 1234}}
+        states = []
+        props = {'MainPID': '1234', 'ActiveState': 'active', 'SubState': 'running',
+                 'StatusText': 'AMQP consumer disconnected'}
+        if fault == 'no-outage': props['StatusText'] = 'AMQP consumer registered; mobile delivery not verified'
+        if fault == 'process-exit': props['ActiveState'] = 'failed'
+        with patch.object(proof.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(proof.time, 'sleep', side_effect=lambda n: clock.__setitem__(0, clock[0]+n)), \
+                patch.object(proof, 'service_properties', return_value=props), \
+                patch.object(proof, 'save', side_effect=lambda r: states.append(r['phase'])), \
+                patch.object(proof, 'verify_remote', return_value={'pid': 1234}) as verify:
+            if fault == 'no-recovery': verify.side_effect = ValueError('not ready')
+            if fault == 'restarted': verify.return_value = {'pid': 5678}
+            if fault == 'unstable': verify.side_effect = [{'pid': 1234}, ValueError('duplicate consumer')]
+            result = proof.verify_outage_recovery({}, receipt)
+        return result, states, verify
+
+    def test_outage_is_required_not_inferred_from_a_healthy_service(self):
+        with self.assertRaisesRegex(ValueError, 'broker_outage_not_observed'): self.outage_fixture('no-outage')
+
+    def test_process_exit_does_not_pass_idle_reconnect(self):
+        with self.assertRaisesRegex(ValueError, 'service_did_not_survive'): self.outage_fixture('process-exit')
+
+    def test_missing_recovery_and_restarted_process_do_not_pass(self):
+        for fault in ['no-recovery', 'restarted']:
+            with self.assertRaisesRegex(ValueError, 'broker_recovery_not_verified'): self.outage_fixture(fault)
+
+    def test_transient_recovery_or_duplicate_consumer_does_not_pass(self):
+        with self.assertRaises(ValueError): self.outage_fixture('unstable')
+
+    def run_fixture(self, fault=None, outage=False):
         with tempfile.TemporaryDirectory(prefix='bridge-service-test.', dir='/root') as directory, ExitStack() as stack:
             base = Path(directory); state = base/'state'; config = base/'config.json'
             fixture_file = base/'fixture.json'; provider = base/'provider.json'
@@ -107,12 +147,15 @@ class ServiceTests(unittest.TestCase):
             installer = stack.enter_context(patch.object(proof, 'normal_install'))
             stack.enter_context(patch.object(proof, 'service_state', return_value=4321))
             verify = stack.enter_context(patch.object(proof, 'verify_remote', return_value={'pid': 1234}))
+            recovery = stack.enter_context(patch.object(proof, 'verify_outage_recovery', return_value={'same_process': True}))
             stack.enter_context(patch.object(proof.socket, 'gethostname', return_value='kz5-testing'))
-            stack.enter_context(patch.object(proof.sys, 'argv', ['proof', '--run-development-service-proof']))
+            stack.enter_context(patch.object(proof.sys, 'argv', ['proof', '--run-development-service-proof']
+                                            + (['--broker-outage'] if outage else [])))
             stack.enter_context(patch('builtins.print'))
             if fault == 'close': connection.close.side_effect = RuntimeError('synthetic close failure')
             if fault == 'verify': verify.side_effect = RuntimeError('synthetic verification failure')
             if fault == 'install': installer.side_effect = [RuntimeError('synthetic install failure'), None]
+            if fault == 'outage': recovery.side_effect = ValueError('synthetic recovery failure')
             if fault:
                 with self.assertRaises(ValueError): proof.main()
             else: proof.main()
@@ -124,11 +167,14 @@ class ServiceTests(unittest.TestCase):
             self.assertEqual(receipt['complete'], fault is None)
             self.assertEqual(receipt['pushes_published'], 0)
             self.assertEqual(receipt['provider_calls_requested'], 0)
+            self.assertEqual(bool(receipt.get('broker_recovery_verified')), outage and fault is None)
 
     def test_full_orchestration_restores_after_success(self): self.run_fixture()
     def test_failed_install_restores(self): self.run_fixture('install')
     def test_failed_verification_restores(self): self.run_fixture('verify')
     def test_failed_probe_close_still_restores_but_not_passes(self): self.run_fixture('close')
+    def test_outage_success_restores_original_service(self): self.run_fixture(outage=True)
+    def test_outage_failure_restores_but_does_not_pass(self): self.run_fixture('outage', outage=True)
 
     def test_changed_config_refuses_overwrite(self):
         with tempfile.TemporaryDirectory(prefix='bridge-service-test.', dir='/root') as directory:

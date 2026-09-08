@@ -46,7 +46,7 @@ original apps server. The main dev stack is now intentionally self-contained.
 | Apps with remote CouchDB/HAProxy and RabbitMQ | Normal selected-role install on a distinct clean host; authenticated remote dependencies; no unintended local services; restart/reboot; native API and queue readiness |
 | eCallMgr separated from apps and media | Shared reviewed cookie/broker configuration, real node discovery/event framing, inbound/callback/supervision call paths and reconnect after peer interruption |
 | Media and Kamailio separated | Normal per-role installs, real registrar/dispatcher/proxy signaling, RTP in both directions, exact remote AMQP consumption and restart/reboot behavior |
-| Bridge with remote TLS broker | Native cross-host CA/hostname/AMQP/HTTPS and counted retry pass6035/ef7ad0. Normal main-SH installed-service deployment and original-config restoration also pass65096/3e586e, including service PID/socket/consumer correlation. Fresh-host remote topology, reboot and outage/reconnect without duplicate dispatch still require validation. |
+| Bridge with remote TLS broker | Native cross-host CA/hostname/AMQP/HTTPS and counted retry pass6035/ef7ad0. Normal main-SH service deployment/restoration pass65096/3e586e. Actual isolated broker stop/start with same-process TLS reconnect and six single-consumer samples passes53408/858b7f (idle queue only). Fresh-host remote topology, reboot, pending work and in-flight provider/duplicate recovery still require validation. |
 | Upgrade with live distributed state | Matching multi-module rollout, admission/drain, preservation of membership/pause/callback ownership, rollback and absence of duplicate bridges |
 
 Use isolated development hosts/topologies and explicit test accounts. Do not

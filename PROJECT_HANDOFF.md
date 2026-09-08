@@ -1,5 +1,21 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Latest bridge gate: installed-service idle broker outage/recovery passes
+53408/858b7f.** Only the isolated `.44` broker was stopped and started (PID
+58463 -> 0 -> 58729); main RabbitMQ PID 2355/restarts 0 was unchanged. The `.26`
+bridge remained PID 2437369, reported disconnected for at least five seconds,
+and recovered TLS 1.3 with one consumer across six checks. No messages/provider
+calls occurred, so this is not in-flight dispatch/duplicate recovery acceptance.
+Normal SH restoration passed, original config/provider bytes preserved, local
+consumer PID 2439533 active. Test broker is stopped again; all nine main `.44`
+services active. The expected AMQPStorm socket-close warning/traceback was
+reviewed: the deliberate broker stop caused it, followed by five-second
+retries and a new `consumer_started` in the same process, not a process crash.
+18 harness regression tests pass `e08181`. Receipt retained on the main host:
+`/root/kz5-acceptance/bridge-service-remote/outage-receipt.json`, SHA256
+`0df7d13a5e92162992f2d0ee6d78d683de930b5e9817e5547e0dcf9b7f342576`.
+See the remote TLS acceptance report for controlled replay and remaining gates.
+
 Main development host also passes the ordinary selected `push-bridge` install
 at source `2b2043c` (14352/30a1d9), including locked dependencies, protected
 configuration, systemd activation/consumer readiness and unchanged CRB repo
@@ -46,8 +62,9 @@ passes TLS trust/hostname negatives, counted retry/companion progress and
 three-attempt exhaustion/DLQ with synthetic providers only. Temporary broker
 on .44 is stopped, main RabbitMQ PID2355/restarts0 and all nine services remain
 unchanged. Code/receipts retained on the main dev host. Normal installed-service
-remote-broker deployment now passes the separate acceptance above; outage and
-duplicate-dispatch recovery remain open. See `doc/push_bridge_remote_tls_acceptance_20260908.md` and
+remote-broker deployment and idle outage recovery now pass the separate
+acceptances above; pending-work/in-flight duplicate recovery remains open.
+See `doc/push_bridge_remote_tls_acceptance_20260908.md` and
 BRIDGE-REMOTE-01 before reusing its fixed, short-lived test fixture.
 
 **Latest operator follow-up:** original server will be deleted; keep current

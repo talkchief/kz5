@@ -103,11 +103,15 @@ def normal_install(label):
     require(returncode == 0, 'normal_installer_failed')
 
 
-def service_state():
+def service_properties():
     result = subprocess.run(['systemctl', 'show', 'kazoo-push-bridge.service', '-p', 'MainPID',
                              '-p', 'ActiveState', '-p', 'SubState', '-p', 'StatusText'],
                             capture_output=True, text=True, timeout=10, check=True)
-    value = dict(line.split('=', 1) for line in result.stdout.splitlines())
+    return dict(line.split('=', 1) for line in result.stdout.splitlines())
+
+
+def service_state():
+    value = service_properties()
     require(value.get('ActiveState') == 'active' and value.get('SubState') == 'running'
             and value.get('StatusText') == 'AMQP consumer registered; mobile delivery not verified'
             and value.get('MainPID', '').isdigit() and int(value['MainPID']) > 1, 'service_not_ready')
@@ -158,6 +162,51 @@ def verify_remote(settings):
     return {'pid': pid, 'tls_protocol': connection['ssl_protocol'], 'consumer_count': 1}
 
 
+def verify_outage_recovery(settings, receipt):
+    """Observe an externally controlled restart of the fixed isolated broker.
+
+    The operator stops ONLY kz5-bridge-remote-proof.service on .44 after the
+    awaiting_broker_outage phase, and starts it after broker_outage_observed.
+    No SSH credentials or general-purpose remote command are accepted here.
+    This proves idle reconnect, not recovery of uncertain provider dispatches.
+    """
+    import requests
+    expected_pid = receipt['service_evidence']['pid']
+    deadline = time.monotonic() + 120
+    disconnected_since = None
+    receipt['phase'] = 'awaiting_broker_outage'; save(receipt)
+    while True:
+        value = service_properties()
+        require(value.get('MainPID') == str(expected_pid)
+                and value.get('ActiveState') == 'active' and value.get('SubState') == 'running',
+                'service_did_not_survive_idle_outage')
+        if value.get('StatusText') == 'AMQP consumer disconnected':
+            if disconnected_since is None: disconnected_since = time.monotonic()
+            if time.monotonic() - disconnected_since >= 5: break
+        else:
+            disconnected_since = None
+        require(time.monotonic() < deadline, 'broker_outage_not_observed')
+        time.sleep(1)
+    receipt['phase'] = 'broker_outage_observed'; save(receipt)
+    deadline = time.monotonic() + 120
+    recovered = None
+    while time.monotonic() < deadline:
+        try:
+            recovered = verify_remote(settings)
+            require(recovered['pid'] == expected_pid, 'service_restarted_instead_of_reconnecting')
+            break
+        except (ValueError, requests.RequestException):
+            time.sleep(1)
+    require(recovered is not None and recovered['pid'] == expected_pid, 'broker_recovery_not_verified')
+    # Recheck over time: a transient first consumer registration is not enough.
+    for _ in range(5):
+        time.sleep(2)
+        recovered = verify_remote(settings)
+        require(recovered['pid'] == expected_pid, 'service_restarted_during_stability_check')
+    return {**recovered, 'same_process': True, 'disconnected_seconds_at_least': 5,
+            'stable_consumer_samples': 6, 'provider_dispatch_recovery_tested': False}
+
+
 def restore(receipt):
     original = protected_read(STATE/'original.json', 32768)
     candidate = protected_read(STATE/'candidate.json', 32768)
@@ -181,7 +230,8 @@ def main():
         receipt = json.loads(protected_read(STATE/'receipt.json', 32768), object_pairs_hook=unique_object)
         require(receipt.get('owner') == 'kz5-bridge-remote-service-v1', 'wrong_receipt')
         restore(receipt); print('PASS original bridge configuration and service restored'); return
-    require(sys.argv[1:] == ['--run-development-service-proof'], 'explicit_action_required')
+    outage_required = sys.argv[1:] == ['--run-development-service-proof', '--broker-outage']
+    require(outage_required or sys.argv[1:] == ['--run-development-service-proof'], 'explicit_action_required')
     require(not STATE.exists() and not STATE.is_symlink() and not CA.exists() and not CA.is_symlink(),
             'existing_proof_state_refused')
     original_config = load_configuration()
@@ -199,7 +249,7 @@ def main():
                'original_mode': stat.S_IMODE(info.st_mode), 'original_gid': info.st_gid,
                'provider_sha256': {original_config[key]: digest(Path(original_config[key]).read_bytes())
                                   for key in CREDENTIAL_KEYS if original_config.get(key)},
-               'provider_calls_requested': 0, 'pushes_published': 0,
+               'provider_calls_requested': 0, 'pushes_published': 0, 'broker_outage_required': outage_required,
                'queue': changed[PREFIX+'QUEUE'], 'exchange': changed[PREFIX+'EXCHANGE']}
     save(receipt)
     settings = {key[len(PREFIX):]: value for key, value in changed.items()}
@@ -228,6 +278,10 @@ def main():
                 if time.monotonic() >= deadline: raise
                 time.sleep(1)
         receipt['remote_service_verified'] = True; save(receipt)
+        if outage_required:
+            connection.close(); connection = None
+            receipt['broker_recovery_evidence'] = verify_outage_recovery(settings, receipt)
+            receipt['broker_recovery_verified'] = True; save(receipt)
     except Exception:
         receipt['failed_phase'] = receipt['phase']; save(receipt)
     finally:
@@ -238,10 +292,12 @@ def main():
         finally:
             if activated: restore(receipt)
         receipt['complete'] = bool(receipt.get('remote_service_verified') and receipt['restored']
-                                   and not receipt.get('probe_connection_close_uncertain'))
+                                   and not receipt.get('probe_connection_close_uncertain')
+                                   and (not outage_required or receipt.get('broker_recovery_verified')))
         save(receipt)
         print(json.dumps({'receipt': str(STATE/'receipt.json'), 'complete': receipt['complete'],
-                          'restored': receipt['restored'], 'remote_service_verified': receipt.get('remote_service_verified', False)}))
+                          'restored': receipt['restored'], 'remote_service_verified': receipt.get('remote_service_verified', False),
+                          'broker_recovery_verified': receipt.get('broker_recovery_verified', False)}))
     require(receipt['complete'], 'remote_service_proof_incomplete')
 
 

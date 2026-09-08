@@ -2,6 +2,17 @@
 
 ## Immediate operator follow-up — September8
 
+- **BRIDGE-REMOTE-02 IDLE BROKER OUTAGE / SAME-PROCESS RECOVERY PASS:** actual
+  installed bridge `53408/858b7f` survives stop/start of only the isolated `.44`
+  broker. Bridge PID 2437369 stays constant, disconnected status persists at
+  least five seconds, then TLS 1.3/one consumer passes six stability samples.
+  Normal SH restores original config/provider bytes and active local consumer.
+  No messages were published: provider-in-flight loss, duplicates, queued work
+  and node failover remain open. Eighteen regression tests pass `e08181`.
+  Protected receipt and SHA independently copied/verified on `.44` (`41de81`),
+  test broker stopped, all nine main services active (`b419b5`). Main broker
+  PID 2355/restarts 0 unchanged. Controlled test instructions and expected
+  socket-close warning analysis are in the remote TLS acceptance report.
 - **DEV-SOURCE-01 MAIN-HOST SOURCE RETENTION:** canonical development checkout
   is `/opt/kz5` on10.1.0.44 (`kz5-dev.talkchief.io`), branch master. Independent
   authenticated Git fetch/fast-forward to `1f30654` passed; follow-up commits
@@ -21,8 +32,9 @@
   regression suites pass35756/edd5be. Protected passing/previous failed receipts
   are on .44 under `/root/kz5-acceptance/bridge-service-remote/`. The previous
   timeout/orphan correction is retained, not hidden. Temporary broker stopped;
-  main RabbitMQ PID2355/restarts0 and all nine services unchanged. Outage and
-  duplicate-dispatch recovery remain open; details in `PROJECT_HANDOFF.md`.
+  main RabbitMQ PID2355/restarts0 and all nine services unchanged. Idle outage
+  recovery now passes BRIDGE-REMOTE-02; in-flight duplicate-dispatch recovery
+  remains open; details in `PROJECT_HANDOFF.md`.
   Main .44 normal bridge redeployment at `2b2043c` also passes14352/30a1d9,
   with current source/dependencies, registered service and unchanged CRB mtime.
 - **BRIDGE-REMOTE-01 NATIVE REMOTE TLS/CONSUMER PASS:** actual .26 client to
@@ -33,7 +45,8 @@
   pins stable; passing run's empty UUID resources removed. Temporary broker
   stoppedab490b; main RabbitPID2355/restarts0 and all nine services unchanged.
   Receipts preserved on .44 under `/root/kz5-acceptance/bridge-remote-tls/`.
-  Normal installed-service remote topology now passes65096; outage/reconnect remains open;
+  Normal installed-service remote topology now passes65096; idle reconnect
+  passes BRIDGE-REMOTE-02, while in-flight recovery remains open;
   this runtime acceptance does not close all INST-13 gates. Details and failed
   setup/identity/cleanup attempts: `doc/push_bridge_remote_tls_acceptance_20260908.md`.
 - **REL-GATES-01 CURRENT VERIFIER PASS / TRACKER RECONCILED:** independent

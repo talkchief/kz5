@@ -1,5 +1,73 @@
 # Mobile bridge: actual cross-server TLS consumer acceptance
 
+## Installed-service idle broker outage recovery
+
+**PASS 53408/858b7f:** the real installed `.26` bridge survived an actual stop
+and start of the isolated `.44` RabbitMQ process. The broker PID changed from
+58463 to 0/inactive (`af536f`), then 58729 (`53835e`). Main RabbitMQ stayed
+PID 2355 with zero automatic restarts. Bridge PID 2437369 remained unchanged
+through the outage. Its disconnected status was observed for at least five
+seconds, followed by TLS 1.3 socket/connection/consumer correlation and exactly
+one consumer across six samples over at least ten seconds.
+The queue was empty throughout; no mobile messages or provider requests were
+made. This proves idle transport recovery, **not** recovery of pending/provider
+in-flight work, duplicate prevention, provider availability or node failover.
+
+The normal SH installed the temporary remote configuration and restored the
+original local configuration after testing. Original config bytes and provider
+file hashes match; restored service PID 2439533 is active/registered. Final
+cleanup `b419b5` stops only the temporary broker and verifies all nine main `.44`
+services remain active. Its test listener ports are absent (`41de81`).
+
+The AMQPStorm warning with an `OSError: connection closed by server` traceback
+was inspected (`d9bc73`). It occurred at the deliberate broker stop; subsequent
+five-second reconnect attempts ended with `consumer_started` in the same
+process. It is expected evidence of the forced disconnect, not an unhandled
+process crash. No runtime code change was needed for this idle recovery case.
+
+Receipt on the main development host:
+`/root/kz5-acceptance/bridge-service-remote/outage-receipt.json`, SHA256
+`0df7d13a5e92162992f2d0ee6d78d683de930b5e9817e5547e0dcf9b7f342576`.
+It was copied and independently matched (`41de81`). Local latest receipt,
+protected config backups and logs are under
+`/var/log/kazoo-acceptance/bridge-service-remote/`. Previous successful install
+state and test CA were moved intact into
+`/var/log/kazoo-acceptance/bridge-service-remote-install-20260908/` before this
+new run. The main host retains both separate receipts. No backups were deleted.
+
+### Controlled replay, not an unattended general-purpose test
+
+The source runner remains fixed to the original development client `.26` and
+isolated broker `.44`, and refuses existing proof state. Do not repoint it at
+production or delete existing state to force a rerun. Review and archive exact
+completed state/config/CA first; verify the current config matches the saved
+original and no installer process remains. Start the existing owned test broker
+and check its short-lived test certificate before beginning.
+
+Run the guarded acceptance on `.26` using the installed bridge Python:
+
+```sh
+bash /opt/kz5/scripts/run-kazoo-validation.sh \
+  --memory-mib 384 --reserve-mib 512 --runtime-sec 900 -- \
+  /usr/local/lib/kazoo-push-bridge/current/venv/bin/python -B -I \
+  /opt/kz5/scripts/accept-bridge-remote-service.py \
+  --run-development-service-proof --broker-outage
+```
+
+Observe the protected receipt phase without printing config backups. Only
+after `awaiting_broker_outage`, run `systemctl stop kz5-bridge-remote-proof.service`
+on `.44` and verify it is inactive/PID 0. Only after `broker_outage_observed`,
+start that exact test unit again. Each observation/recovery window is bounded
+to 120 seconds. The runner requires same-process survival and stable single
+consumer recovery; it restores through the normal installer on success/failure.
+After final restoration, stop the test broker again. An outer interruption
+requires inspection and explicit `--restore-only` before further tests.
+
+18 offline tests cover positive recovery, missing outage, missing recovery,
+process replacement/exit, unstable consumer verification, and restoration on
+failure (`e08181`). No SSH credentials or generic remote commands are accepted
+by the runner. Actual broker stop/start is an explicit operator action.
+
 ## Subsequent normal installed-service acceptance
 
 **PASS65096/3e586e:** the ordinary `install-kazoo5.sh push-bridge` installed
@@ -51,7 +119,8 @@ ambiguous, failed query/enable and dry-run states plus installer wiring.
 This and the main installer and bridge rollback/selection suites pass35756/edd5be.
 The temporary broker is stopped again; main .44 RabbitMQ PID2355/restarts0 and
 all nine main services remain unchanged9b6706. Fresh-host remote/reboot,
-outage/reconnect and duplicate-dispatch recovery gates remain open.
+pending-work/in-flight recovery and duplicate-dispatch gates remain open.
+The subsequent idle-outage acceptance above adds only that specific coverage.
 
 ## Result and scope
 
