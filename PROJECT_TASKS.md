@@ -16,13 +16,13 @@
   and no HTTP/page errors in both SmartPBX and ACDC after15 seconds per app.
   Correct/incorrect login recovery, HTTPS/WSS, `/apis/`, ACDC live200 and dialog
   close also pass. All nine main services active; no telephone/DB restart.
-- **DEV-COMPANY-01 ACTIVE:** operator expects Talkchief visible in the main
-  `kz5-dev` account selector. The requested company snapshot exists only in the
-  isolated compatibility lab, so it is not currently visible in the main UI.
-  Prepare a separate development-visible test copy from the protected snapshot;
-  check account/realm/tree collisions and production-facing configuration before
-  import. Preserve the original lab baseline and never connect to production
-  services or activate copied production outbound/push/webhook behavior blindly.
+- **DEV-COMPANY-01 VISIBLE / INSPECTION BROWSER PASS:** operator expects Talkchief
+  in the main `kz5-dev` account selector. It is now available as **Talkchief
+  (Development copy)** under KazooMaster; account ID remains the supplied company
+  ID. Calling and copied user/device logins are intentionally disabled pending
+  separate development-phone setup and review of external callflow behavior.
+  Original snapshots and lab baseline remain unchanged; no production services
+  or copied production outbound/push/webhook behavior were activated.
   `prepare-dev-company-copy.py` now implements a fixed-host/account two-phase
   copy: GET-only preparation in the existing lab, explicit application on .44's
   main datastore, exact-plan ownership, no overwrite, protected receipts and
@@ -30,7 +30,14 @@
   credentials replaced, device push/provisioning removed, realm changed to
   `talkchief-dev44.invalid`, parent set to development master. Source baseline
   remains untouched. Eleven offline transformation/scope/recovery tests pass
-  a72ee4. Real plan/copy and main account-picker/SmartPBX/ACDC checks remain open.
+  a72ee4. Actual preparation98211/866b95 and copy20867/d08bff pass:1,757 documents
+  verified,56 excluded designs/runtime/catalog records; native scoped account
+  refresh45388 passes. Whole lab source hash unchangedd54b2d. Browser81140/36603d
+  selects the visible account and loads both apps/four queue cards without errors
+  or top-line animation. Reusable tracked browser test90232/e44a28 additionally
+  verifies exact API counts:15 users,82 devices,4 queues,89 callflows. This is
+  inspection acceptance, not live-call or shared writable CouchDB approval.
+  Full guidance: `doc/dev44_company_visible_copy_20260908.md`.
 - **HOST-HANDOFF-01 SOURCE CHECKPOINT PRESERVED:** original development server will be deleted.
   Canonical checkout and installed stack must remain on10.1.0.44 at `/opt/kz5`,
   latest pushed master. Preserve outstanding source work and durable guidance on

@@ -1,0 +1,110 @@
+'use strict';
+// Fixed development-host acceptance; no call, SIP registration or queue login.
+// On .44 read protected installer settings. Remote test runners may supply the
+// same {account,username,password} on stdin; never on argv or in tracked files.
+const fs = require('node:fs'), assert = require('node:assert/strict');
+const ORIGIN = 'https://kz5-dev.talkchief.io';
+const MASTER = 'adecbb84fbe9e06902a76731914d1943';
+const COMPANY = 'd8520ce3f29c5b6db692289e782c92af';
+
+function privateText(file) {
+    const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+    try {
+        const s = fs.fstatSync(fd);
+        assert(s.isFile() && s.uid === 0 && s.nlink === 1 && !(s.mode & 0o077) && s.size < 65536);
+        return fs.readFileSync(fd, 'utf8');
+    } finally {fs.closeSync(fd);}
+}
+function envFields(text) {
+    const result = {};
+    for (const line of text.split('\n')) {
+        if (!line || line.startsWith('#')) continue;
+        const i = line.indexOf('='); assert(i > 0);
+        const key = line.slice(0, i); assert(!Object.hasOwn(result, key));
+        result[key] = line.slice(i + 1);
+    }
+    return result;
+}
+function credentials() {
+    let result;
+    if (process.argv.slice(2).join(' ') === '--credentials-stdin') {
+        const input = fs.readFileSync(0, 'utf8'); assert(input.length < 65536);
+        result = JSON.parse(input);
+    } else {
+        assert(process.argv.length === 2);
+        const auth = envFields(privateText('/etc/kazoo/installer-secrets.env'));
+        const config = envFields(privateText('/etc/kazoo/deployment.env'));
+        result = {account: Buffer.from(config.KAZOO_MASTER_ACCOUNT_NAME, 'base64').toString('utf8'),
+            username: auth.KAZOO_MASTER_ADMIN_USER, password: auth.KAZOO_MASTER_ADMIN_PASSWORD};
+    }
+    assert(result.account === 'KazooMaster' && result.username === 'admin'
+        && typeof result.password === 'string' && result.password.length > 0);
+    return result;
+}
+
+(async () => {
+    const auth = credentials();
+    const {chromium} = require(process.env.KZ5_PLAYWRIGHT_ROOT || 'playwright');
+    const browser = await chromium.launch({headless: true,
+        ...(process.env.KZ5_BROWSER_EXECUTABLE ? {executablePath: process.env.KZ5_BROWSER_EXECUTABLE} : {}),
+        args: ['--no-sandbox', '--disable-dev-shm-usage', '--host-resolver-rules=MAP kz5-dev.talkchief.io 10.1.0.44']});
+    let phase = 'login';
+    try {
+        const page = await browser.newPage(), issues = [];
+        page.on('pageerror', () => issues.push('javascript-exception'));
+        page.on('response', r => {if (r.status() >= 400 && r.url().startsWith(ORIGIN)) issues.push('http-' + r.status());});
+        page.on('requestfailed', r => {if (r.url().startsWith(ORIGIN)) issues.push(r.failure().errorText);});
+        page.on('request', r => {if (r.url().startsWith('http:')) issues.push('insecure-request');});
+        assert.equal((await page.goto(ORIGIN, {waitUntil: 'networkidle', timeout: 45000})).status(), 200);
+        await page.locator('#login').fill(auth.username);
+        await page.locator('#password').fill(auth.password);
+        await page.locator('#account_name').fill(auth.account);
+        await page.locator('button.login').click();
+        await page.waitForFunction(id => window.monster && monster.apps.auth.accountId === id, MASTER, {timeout: 30000});
+        await page.waitForTimeout(5000);
+        phase = 'master-acdc';
+        const masterLive = page.waitForResponse(r => new URL(r.url()).pathname === '/v2/accounts/' + MASTER + '/queues/live');
+        await page.goto(ORIGIN + '/#/apps/acdc', {waitUntil: 'domcontentloaded'});
+        assert.equal((await masterLive).status(), 200);
+        await page.waitForTimeout(2000);
+        phase = 'account-selector';
+        await page.locator('#main_topbar_account_toggle_link').click();
+        const row = page.locator('.account-list-element[data-id="' + COMPANY + '"]');
+        await row.waitFor({state: 'visible', timeout: 15000});
+        assert.equal((await row.locator('.account-name').innerText()).trim(), 'Talkchief (Development copy)');
+        const companyLive = page.waitForResponse(r => new URL(r.url()).pathname === '/v2/accounts/' + COMPANY + '/queues/live');
+        await row.locator('.account-name').click();
+        await page.waitForFunction(id => monster.apps.auth.currentAccount.id === id, COMPANY, {timeout: 20000});
+        const live = await companyLive;
+        assert.equal(live.status(), 200); assert.equal((await live.json()).data.queues.length, 4);
+        await page.waitForTimeout(3000);
+        phase = 'company-collections';
+        const counts = await page.evaluate(async id => {
+            const token = monster.apps.acdc.getAuthToken(), counts = {};
+            for (const resource of ['users', 'devices', 'queues', 'callflows']) {
+                const r = await fetch('/v2/accounts/' + id + '/' + resource + '?paginate=false', {headers: {'X-Auth-Token': token}});
+                const body = await r.json();
+                if (r.status !== 200 || body.status !== 'success' || !Array.isArray(body.data)) throw Error('Collection failed');
+                counts[resource] = body.data.length;
+            }
+            return counts;
+        }, COMPANY);
+        assert.deepEqual(counts, {users: 15, devices: 82, queues: 4, callflows: 89});
+        for (const app of ['voip', 'acdc']) {
+            phase = 'company-' + app;
+            await page.goto(ORIGIN + '/#/apps/' + app, {waitUntil: 'domcontentloaded'});
+            await page.waitForTimeout(10000);
+            assert.equal(await page.evaluate(() => monster.apps.auth.currentAccount.id), COMPANY);
+            assert.equal(await page.evaluate(() => monster.apps.core.request.counter), 0);
+            assert.equal(await page.locator('.progress-indicator.active').count(), 0);
+            if (app === 'acdc') assert.equal(await page.locator('.acdc-live-queue-card:visible').count(), 4);
+            assert.deepEqual(issues, []);
+        }
+        console.log(JSON.stringify({status: 'PASS', account_picker: true, collections: counts,
+            smartpbx: true, acdc_queue_cards: 4, inactive_global_indicator: true,
+            scope: 'private-route HTTPS browser with certificate verification; inspection copy only, no calls'}));
+    } catch (error) {
+        console.error('Development company browser check failed at ' + phase + '; credentials and customer data withheld.');
+        process.exitCode = 1;
+    } finally {await browser.close();}
+})().catch(() => {console.error('Development browser setup failed; private inputs withheld.'); process.exitCode = 1;});

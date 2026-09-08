@@ -12,9 +12,13 @@ and synced to .44. Untracked team design is preserved root-only at
 silently included in Git. Runtime secrets/TLS/snapshots are already on .44;
 GitHub write credentials need secure provisioning there before future pushes
 without the original host (`/root/key.key` is absent on .44).
-Talkchief currently exists
-only in the isolated compatibility lab; DEV-COMPANY-01 tracks preparing a safe,
-main-UI-visible test copy. Do not report it as already present in the main UI.
+Talkchief is now also visible in the main account selector as **Talkchief
+(Development copy)**. DEV-COMPANY-01 has actual browser/API acceptance for15
+users,82 devices,4 queues and89 callflows. Calling and copied user/device logins
+remain disabled intentionally; do not bulk-enable production-derived settings.
+Original lab source and baselines are unchanged. See
+`doc/dev44_company_visible_copy_20260908.md` for transformations, private receipts,
+reusable browser acceptance and next-step boundaries.
 
 **Primary Kazoo5 development host: `10.1.0.44`**, designated by the user on
 September8. Keep its installed stack and `/opt/kz5` checkout for future work.
