@@ -1,5 +1,20 @@
 # Kazoo 5 project task register
 
+## Fresh-server and TLS continuation — 2026-09-08
+
+- Physical FCM/APNs testing: **WAIVED / closed by user**, not a delivery pass.
+- Matching TLS key: **DONE**. HTTPS UI and `/apis/`, HTTP redirect, browser WSS
+  upgrade and ten existing catalog HTTP-to-HTTPS migrations pass.
+- Fresh 10.1.0.44: CouchDB/RabbitMQ/HAProxy install and independent verification
+  **PASS**. Source fixes cover root-umask RabbitMQ plugin permissions, Node.js
+  first-install selection and bounded UI build heap. Separate UI install and
+  independent verification **PASS**, including pinned remote catalog access.
+  Fresh apps installation failed its immutable cardinal source prerequisite;
+  fixing this and accepting the remaining roles is P0. The user confirms HTTPS
+  login works; the new server uses verified private-network TLS for that host.
+- [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).
+- FWD branch through `52c8d85` merged into master; no local redeployment performed.
+
 ## New task — account language for forwarded-call confirmation — 2026-09-08
 
 User requested assessment/planning first for the “press 1 to accept” audio heard

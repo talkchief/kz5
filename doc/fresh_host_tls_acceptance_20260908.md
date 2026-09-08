@@ -119,6 +119,14 @@ it points clients to the existing HTTPS API/WSS host.
 Public TCP443 from .44 to 91.99.188.145 still times out; direct private TLS works.
 Neither local nftables nor firewalld shows an active filtering policy. External
 reachability was asked of the user; no public firewall was changed or bypassed.
+The user subsequently confirmed successful HTTPS login from their browser.
+
+### Fresh apps attempt — FAILED prerequisite, P0
+
+Session14757/4d3ba1 exited1 before the apps build: the checked-in five-language
+cardinal adapter rejected its source plan. Apps/media/SIP/bridge services are not
+yet installed on .44. Fix the source prerequisite and rerun the normal options;
+do not treat the existing-host ALL pass as fresh-server acceptance.
 
 Combined guarded regression 79188/59b65a passes heap selection, Node.js/RabbitMQ
 first-install cases, both 41-group catalog migrations, modular and read-only

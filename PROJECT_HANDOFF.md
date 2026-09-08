@@ -1,5 +1,12 @@
 # Kazoo 5 — start here / engineering handoff
 
+Latest continuation: [fresh-host/TLS acceptance](doc/fresh_host_tls_acceptance_20260908.md).
+Physical mobile delivery testing was waived by the user. HTTPS is deployed and
+browser transport checks pass. Fresh data services and separate UI on 10.1.0.44
+pass installation and verification. The user confirms HTTPS login works.
+Fresh apps failed the immutable cardinal source prerequisite; this is the P0
+installer continuation. This is not full fresh-stack certification.
+
 Last updated: **2026-09-08**. This is the navigation and current-state guide;
 `PROJECT_TASKS.md` is the detailed requirement/acceptance register. Neither this
 file nor a green unit test means the platform is production-ready.
@@ -19,8 +26,9 @@ Full fixture account settings are restored, tagged users deleted, channels0.
 OpenAPI account GET/PATCH/POST, all five codes, reset and frontend sample are live
 at `https://kz5.talkchief.io/apis/`. Branch:
 `feat/account-forward-confirmation-languages`, isolated worktree
-`/opt/kz5-fwd-review`; the user will merge it. Preserve the other team's staged
-fresh-server/TLS work and the feature source in the running shared workspace.
+`/opt/kz5-fwd-review`; latest pushed and remote-verified commit `52c8d85`
+includes the UI follow-up and release handoff. Merged into master as requested,
+together with the focused fresh-server/TLS fixes; no current-host redeployment.
 Authoring credential: protected `/root/key.key`, the same file used for ACDC WAV
 generation; use the Gemini-specific reader in `generate-acdc-gemini-samples.cjs`.
 Keep only this location in the handoff, never the key value. All five recordings
