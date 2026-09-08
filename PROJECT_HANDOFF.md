@@ -17,10 +17,38 @@ Kazoo4 compatibility. Read-only production metadata inventory475ad5 confirmed
 CouchDB3.3.2 and seven exact company databases (account + April–September2026
 MODBs). Account export26720/e97565 passes with1,847 leaf revisions and unchanged
 source metadata; private verified file on .44 is
-`/var/lib/kazoo-compat/snapshots/company-b05rg4rz.ndjson`. No restore/migration
-performed. Reusable GET-only exporter/private receiver and19 offline safety
-tests passfcdbd3, including the live-discovered canonical design-route fix.
-Six monthly copies and isolated restore are next. See
+`/var/lib/kazoo-compat/snapshots/company-b05rg4rz.ndjson`. Six monthly copies
+55565/c9e79e are also complete:27,762 revisions, all unchanged per database,
+`company-6ubui72f.ndjson` in the same directory. Total29,609 revisions. Both
+snapshot files root-only/read-only0400; SHA256s in the assessment plan.
+**No source-copy process remains; the local validation lock is released.**
+
+All seven isolated baseline/working restores pass: account79427/a9ee43 and
+19538/fab27e; monthly5405/120ead. Native lab units are
+`kazoo-compat-couchdb`, `kazoo-compat-broker`, `kazoo-compat-apps`, separate
+`kazoo-compat` user/storage/cookies and shared private loopback-only network
+namespace, not enabled at boot. Runtime `/var/lib/kazoo-compat-runtime`;
+main .44 stack and original site untouched. Lab setup/restore/inspection/RPC
+helpers and42 offline tests now live in `scripts/` (see plan). Do not rerun
+creation helpers against existing lab; do not restore over existing DBs.
+
+Native account refresh35650/7e39fb and comparison18164/b6feda:38 changed design
+docs,8 added,0 existing non-design changes. Shared synthetic lab `accounts`,
+`services`, `system_config` each gained a doc. Real query comparison16978/039f93
+shows two removed views now404 (`trunkstore/lookup_user_flags`,
+`vmboxes/legacy_msg_by_timestamp`); users.features changes, queues.strategy
+addition; sample devices/callflows rows unchanged. **Interim NO-GO for shared
+production writable DBs**, not a completed compatibility test suite.
+
+Monthly restore exposed lab index-worker/OOM limits; helpers now bound JS8/soft4,
+background indexing1/incremental0, serial design replay, CouchDB4GiB cap. Two
+interrupted monthly baseline sets remain preserved: do NOT use them. Accepted
+monthly baselines use `baseline-verified-account/`; account baseline uses
+`baseline-account/`; working names remain canonical `account/`.
+Only lab broker/apps restarted after completed imports (65bd11); all9main
+services active. Next: recheck native lab readiness, API/edit and broader/MODB
+migrations. Exact production Kazoo4 app host/version requested asynchronously;
+unknowns and engine3.3.2→3.5.2 limits remain explicit. See
 [assessment plan](doc/kazoo4_kazoo5_couchdb_coexistence_plan.md); never point the
 development apps at production dependencies or put credentials/backups in Git.
 

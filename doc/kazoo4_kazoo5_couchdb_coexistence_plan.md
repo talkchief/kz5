@@ -11,8 +11,27 @@ live documents +42 tombstones in the inventory; database update/purge/security
 metadata unchanged during the export. Snapshot is protected on .44 at
 `/var/lib/kazoo-compat/snapshots/company-b05rg4rz.ndjson`, SHA256
 `4d2267c62c7a6f280892d4b98c3abdce45bad75596a13909d14ec95b52d004c4`.
-No database restore or Kazoo5 migration has run yet. Six monthly exports remain
-next; no unrelated/global company data was copied.
+Monthly-only export55565/c9e79e completed:27,762 leaf revisions across all six
+explicitly allowed monthly databases, with unchanged per-database metadata.
+Protected .44 snapshot: `/var/lib/kazoo-compat/snapshots/company-6ubui72f.ndjson`,
+SHA256 `d265534c587758706a9b4a125147cc3c858c146175ecd5d72a7766c23e0ee9b4`.
+Together the two files contain29,609 leaf revisions. They are retained root-only,
+read-only mode0400. No unrelated/global production data was copied.
+
+All seven databases now have verified isolated baseline and working restores.
+Account restore receipts79427/a9ee43,19538/fab27e; monthly baseline+working
+5405/120ead (terminal success1m8.444s). Exact source document/deletion counts
+and every imported revision are checked. Monthly baseline prefix is
+`baseline-verified-account/`; account baseline uses `baseline-account/`.
+Older interrupted monthly baseline prefixes `baseline-account/` and
+`baseline-retry1-account/` are preserved but must not be used as accepted
+monthly baselines. Working names are canonical `account/` for native Kazoo.
+
+Native account refresh and real view queries already demonstrate contract
+changes, including two removed views. See the evidence-backed interim
+**NO-GO for shared production writable databases** in
+[coexistence findings](kazoo4_kazoo5_couchdb_findings.md). More migration/API tests
+and the actual production Kazoo4 version/code contract remain open.
 
 ## Reusable snapshot tools
 
@@ -32,7 +51,28 @@ next; no unrelated/global company data was copied.
   Include foreign/global DB rejection, GET-only transport, conflict/deletion/
   design/attachment preservation, moving source, truncation, tamper, private
   modes and non-overwriting repeats. Source Python2.7.5 live account export
-  passes26720/e97565; isolated restore acceptance remains next.
+  passes26720/e97565; completed monthly export/isolated restores are recorded above.
+- `prepare-company-compat-lab.py`, `prepare-company-compat-apps.py`: explicit
+  .44-only helpers create a separate unprivileged user, storage, credentials and
+  loopback-only network namespace. They refuse existing installations and do
+  not enable units at boot or change main stack units. The actual lab discovered
+  hostname-selector, netlink and index-worker resource issues; fixes are in these
+  helpers/tests. Do not rerun creation flags against the already-created lab.
+- `restore-company-compat.py`: validate the entire stream/digest before writes;
+  allow only the lab service's separate network namespace and loopback25984,
+  never arbitrary endpoints. Refuse existing DBs. Preserve revisions using
+  `new_edits=false`, verify `_revs_diff`, compare stable-source counts, and replay
+  design docs serially. Optional baseline tags retain failed copies without
+  overwriting them. No deletion or source write path exists.
+- `company-compat-rpc.escript`: fixed lab node, fixed authorized account; only
+  status and native account-refresh actions. Reads its generated lab cookie
+  from a protected file, never argv. Namespace checks precede distribution.
+- `inspect-company-compat.py` and `query-company-compat-views.py`: private
+  before/after evidence and real query comparison with sanitized public summaries.
+  Never print raw captured account/API rows. All helpers live in `scripts/`;
+  `test-company-compat-*`, `test-restore-company-compat.py`,
+  `test-inspect-company-compat.py`, `test-query-company-compat-views.py` cover
+  their boundaries alongside exporter/receiver tests (42 Python cases total).
 
 The first source attempts safely refused CouchDB's canonical-design-route
 redirect. Only three1,021-byte metadata `.partial` files were left privately on
