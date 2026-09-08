@@ -557,10 +557,30 @@ wait_agents_checked() {
 }
 
 stop_waiting_agents_checked() {
-    local label=$1 pid
-    # All caller BYEs have completed. SIGUSR1 asks SIPp to stop accepting a
-    # second call on agents that were not selected for queued-member drain,
-    # while processes that handled two calls have already exited normally.
+    local label=$1 expected=$2 pid index current successful failed drained
+    local deadline=$((SECONDS + 30))
+    # Caller completion can precede the agent's final timewait. In pinned SIPp,
+    # reaching -m sets quitting=1; SIGUSR1 adds 10 and thus force-aborts that
+    # final pause. Require all agent completions before signaling idle listeners.
+    while :; do
+        drained=true
+        if read -r successful failed < <(agent_stats_totals "$label" "${#AGENT_PIDS[@]}" 2>/dev/null); then
+            ((failed == 0)) || die "$label agent failed before shutdown"
+            ((successful <= expected)) || die "$label agent completion count exceeded expected calls"
+            ((successful == expected)) || drained=false
+        else
+            drained=false
+        fi
+        for ((index=1; index<=${#AGENT_PIDS[@]}; index++)); do
+            current=$(stat_value "$RUN_DIR/$label-agent-$index-stats.csv" CurrentCall 2>/dev/null || printf unknown)
+            [[ $current == 0 ]] || drained=false
+        done
+        [[ $drained == true ]] && break
+        ((SECONDS < deadline)) || die "$label agents did not finish teardown before shutdown"
+        sleep 1
+    done
+    # Only remaining idle listeners need a soft exit; agents reaching their
+    # call limit are already complete. Preserve real child failure statuses.
     for pid in "${AGENT_PIDS[@]}"; do
         if kill -0 "$pid" 2>/dev/null; then
             kill -USR1 "$pid" 2>/dev/null || true
@@ -871,7 +891,7 @@ run_stress_stage() {
     fi
     wait_checked "$label caller" "$MAIN_CALLER_PID"
     if ((excess > 0)); then
-        stop_waiting_agents_checked "$label"
+        stop_waiting_agents_checked "$label" "$expected"
     else
         wait_agents_checked "$label"
     fi
