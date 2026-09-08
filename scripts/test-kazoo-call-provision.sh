@@ -16,6 +16,7 @@ readonly ACCEPTANCE_MAX_AGENT_COUNT=30
 readonly ACCEPTANCE_CALLER_EXTENSION_EXPECTED=1001
 readonly ACCEPTANCE_FIRST_AGENT_EXTENSION=1002
 readonly ACCEPTANCE_QUEUE_EXTENSION_EXPECTED=2000
+readonly ACCEPTANCE_QUEUE_WAIT_SECONDS=600
 
 mode=provision
 status_action=
@@ -383,8 +384,11 @@ provision_acceptance_resources() {
         queue_agents+="\"${user_id}\""
     done
 
-    body=$(printf '{"data":{"name":"Acceptance Queue 2000","strategy":"round_robin","connection_timeout":120,"agent_ring_timeout":20,"agent_wrapup_time":0,"enter_when_empty":true,"max_queue_size":100,"ring_simultaneously":%s,"record_caller":false}}' \
-        "$ACCEPTANCE_AGENT_COUNT")
+    # Excess load callers wait for the six-minute main conversations to finish.
+    # The ordinary two-minute queue policy would deliberately time them out
+    # before the capacity hold/drain assertions can complete.
+    body=$(printf '{"data":{"name":"Acceptance Queue 2000","strategy":"round_robin","connection_timeout":%s,"agent_ring_timeout":20,"agent_wrapup_time":0,"enter_when_empty":true,"max_queue_size":100,"ring_simultaneously":%s,"record_caller":false}}' \
+        "$ACCEPTANCE_QUEUE_WAIT_SECONDS" "$ACCEPTANCE_AGENT_COUNT")
     upsert_resource queues ACCEPTANCE_QUEUE_ID name 'Acceptance Queue 2000' "$body"
     acceptance_api POST "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID/roster" \
         "{\"data\":[${queue_agents}]}" >/dev/null
@@ -406,6 +410,16 @@ provision_acceptance_resources() {
     upsert_resource callflows ACCEPTANCE_QUEUE_CALLFLOW_ID name 'Acceptance Queue 2000' "$body"
 }
 
+verify_acceptance_queue_wait() {
+    local response
+    response=$(acceptance_api GET "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID")
+    jq -e --arg id "$ACCEPTANCE_QUEUE_ID" --argjson minimum "$ACCEPTANCE_QUEUE_WAIT_SECONDS" '
+        .data.id == $id and .data.name == "Acceptance Queue 2000"
+        and (.data.connection_timeout | type == "number")
+        and .data.connection_timeout >= $minimum' <<<"$response" >/dev/null ||
+        die 'Acceptance queue wait is too short or identity changed; converge the owned fixture with test-kazoo-call-provision.sh before live calls'
+}
+
 verify_acceptance_resources() {
     local response agent_index extension id_key user_id device_id callflow_id
     response=$(acceptance_api GET "accounts/$ACCEPTANCE_ACCOUNT_ID")
@@ -421,6 +435,9 @@ verify_acceptance_resources() {
         '.data.numbers == [$number] and .data.flow.module == "user" and .data.flow.data.id == $id' \
         <<<"$response" >/dev/null || die 'Acceptance caller callflow verification failed'
 
+    # Agent status operations call this verifier before changing state, hence
+    # the call harness rejects stale short-wait fixtures before any SIP calls.
+    verify_acceptance_queue_wait
     response=$(acceptance_api GET "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID/roster")
     for ((agent_index = 1; agent_index <= ACCEPTANCE_AGENT_COUNT; agent_index++)); do
         extension=$((ACCEPTANCE_FIRST_AGENT_EXTENSION + agent_index - 1))
