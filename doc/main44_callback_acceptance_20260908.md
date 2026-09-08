@@ -23,14 +23,29 @@ Independent summary/receipt readback65c9a6 verifies:
 - Zero calls after cleanup (`52ee15`), unit inactive/PID0. Fixture resources and
   saved original configuration intentionally retained; not full fixture removal.
 
-The remaining HE/FR/ES/AR batch is **running**, not yet passed:
-unit `kz5-callback-main44-locales-20260908`, observer54480, active/MainPID442628
-verifiedb54b1a. Protected log
+The HE/FR/ES/AR batch **PASSED**: unit
+`kz5-callback-main44-locales-20260908`, observer54480, subsequently verified
+terminal success/inactive/MainPID0 (449b40). Protected log
 `/root/kz5-acceptance/callback-main44-locales-20260908.log`. Sequential locale
 order HE,FR,ES,AR; same explicit account,internal transport,entry-only and
 absent-helper flags. Each reference is from the table below. Outer bound2400s,
 memory512MiB,swap0,CPU200%,Tasks512; the batch stops on any nonzero test result.
-Do not infer completion from a tool observation timeout or start another batch.
+Independent receipt and summary readback1c8f56/ba1160 verifies all four results:
+
+| Language | Result directory under `/var/log/kazoo-acceptance/` | Peak sampled CPU | Minimum available memory KiB |
+| --- | --- | --- | --- |
+| HE | 20260908T191624Z | 17% | 20726828 |
+| FR | 20260908T192023Z | 17% | 20720072 |
+| ES | 20260908T192424Z | 17% | 20719372 |
+| AR | 20260908T192823Z | 20% | 20405596 |
+
+Each has exact observed registration digit6, complete prerecorded confirmation,
+two callback attempts, durable retry_wait, successful second native bridge,
+2/0 caller and2/0 agent success/failure counts,0/0 journal/file error matches and
+zero new cores. Zero remaining calls118998 and all30 fixture agents logged out
+ba1160 were verified independently with no status repair writes. Resources are
+intentionally retained; this is not full fixture deletion, failure injection,
+long soak, native-speaker approval or general production certification.
 
 All five installed confirmation references passed55230/038efd, with zero
 database writes or Gemini calls. Protected directories under
@@ -45,8 +60,9 @@ database writes or Gemini calls. Protected directories under
 | ES | gemini-reference.main44-es-es.jVuDIczo |
 | AR | gemini-reference.main44-ar-sa.aCEHmxp4 |
 
-This is installed-byte/revision verification, not yet five-language call/audio
-acceptance. The earlier failed empty reference directories remain for diagnosis.
+The references alone prove installed-byte/revision verification; their separate
+five-language native callback retry/audio tests now pass above. Earlier failed
+empty reference directories remain for diagnosis.
 
 ## Source portability fixes
 
@@ -85,8 +101,8 @@ and38 helper-service cases pass (`4a8cf5`, `1a51cc`). The same88 lifecycle tests
 also pass with an explicitly different synthetic account. Bash/ShellCheck and
 whitespace checks pass. The first new test invocation had a template-string
 escaping error (`14ec64`), corrected before these results; it was not a runtime
-failure. The older periodic-offer/position harness remains separately pinned
-and is not implicitly covered by this retry portability change.
+failure. Periodic-offer/position harness portability was subsequently added in
+08e02ce; its main-host timing/audio gate is separate from these retry results.
 
 ## Native execution scope
 
@@ -116,8 +132,9 @@ accept the second attempt and prove reciprocal native bridge/SIP/RTP.
 Keep the original saved queue snapshot and exact current-callback cleanup;
 never rewrite unresolved historical callbacks just to pass a test.
 
-**Main-host EN passes; four languages remain under test.** Source regressions do
-not replace five-language registration, retry, waveform and clean-log checks.
+**All five main-host retry languages pass.** Source regressions do not replace
+native registration, retry, waveform and clean-log checks; those checks were
+run separately as recorded above. Periodic offer/position tests remain separate.
 The previous five-language old-host evidence remains archived as documented in
 `focused_acceptance_20260908.md`.
 

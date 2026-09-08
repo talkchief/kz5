@@ -1,21 +1,45 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Current callback acceptance:** EN main-host retry PASSED20300/8ddb7e,
-terminal exit0 in3m59.914s. Evidence65c9a6: exact single digit6, complete installed
-confirmation audio, unanswered first attempt, durable retry, second native
-bridge,2/0 caller and2/0 agent counts,zero journal/file errors and new cores.
-Cleanup left zero calls; fixture resources intentionally retained.
-HE/FR/ES/AR are now running sequentially in
-`kz5-callback-main44-locales-20260908`, observer54480; active/MainPID442628
-verifiedb54b1a. Do not duplicate or restart on observer timeout. Current phase HE.
+**Main development location:** `10.1.0.44:/opt/kz5` (kz5-dev). Start future
+work here, not on the original server scheduled for deletion. Git master and
+origin/master matched08e02ce before this documentation update (c7e99a), with no
+tracked dirt; ACDC's FSM is tracked by kz5 and has no nested `.git` metadata.
+The thin blue top-bar fix is tracked in source/installer commit2a593ee. Fresh
+actual-handler regression c69394 and certificate-verified HTTPS browser e6ab3c
+pass: SmartPBX, four ACDC queue cards, inactive global indicator and Talkchief
+picker visibility (15 users,82 devices,4 queues,89 callflows). Browser proof is
+private-route HTTPS, not a new public-route connectivity claim. Imported
+Talkchief remains an inspection-only development copy; external calling is not
+enabled. See `doc/dev44_https_acceptance_20260908.md` and `PROJECT_TASKS.md`.
+
+**Current callback acceptance: all five main-host languages PASS.**
+EN retry PASSED20300/8ddb7e; HE/FR/ES/AR batch
+`kz5-callback-main44-locales-20260908` is terminal success/inactive/PID0
+(449b40), not running. Independent receipts1c8f56/ba1160 confirm each language:
+exact single digit6, complete installed confirmation audio, unanswered first
+attempt, durable retry and second native bridge;2/0 caller and2/0 agent counts,
+zero journal/file error matches and new cores. Cleanup left zero calls118998
+and all30 fixture agents logged outba1160, without status repair writes.
+Fixture resources intentionally retained; not full fixture removal or HA proof.
 Protected batch log `/root/kz5-acceptance/callback-main44-locales-20260908.log`;
 EN log `/root/kz5-acceptance/callback-main44-en-20260908.log`.
 All five installed Gemini confirmation references pass038efd; prepare-only
 main fixture8310dc3170a18de37f205d0da172df65 passes61bea0. No Gemini generation.
 New explicit fixture ownership, local-reference addressing, no-HOME SUP and
-optional absent test-phone helper fixes are pushed/synced. The remaining four
-native language outcomes are unproven; details and reference paths in
+optional absent test-phone helper fixes are pushed/synced. Periodic offer and
+position-one acceptance remains a separate main-host gate; result/reference paths in
 `doc/main44_callback_acceptance_20260908.md`.
+
+**Periodic announcement references now prepared natively:** exact CLI
+`prepare-installed` passed10b220 with zero provider calls and no runtime-probe
+execution. Protected index
+`/root/kazoo-prerecorded-reference.main44-cli.crP0f4Ny/index.json`, SHA256
+`62ba5a55668dd60a52a8f3470ffa2dc09fe314ac4e7a138228e66877172d887b`.
+This is reference preparation, not main-host periodic call acceptance. The
+preparation unit is terminal; do not poll old98305 as a live job. All native
+retry/preparation jobs recorded above have ended. Next: isolated periodic
+offer30/60s and full position-one45/75s call/audio checks, one locale at a time;
+see `doc/acdc_five_language_live_audio_acceptance.md`.
 
 **Normal installer74822 and independent ALL64780 passed; no installer remains active.**
 Sourceec2ec69 build took12m3s, apps/eCallMgr restarted and selected roles verified.
@@ -38,9 +62,10 @@ with no status repair writes. Protected log
 `/root/kz5-acceptance/capacity-contentfix-20260908.log` and result root
 `/var/log/kazoo-acceptance/main44-capacity-contentfix-20260908`.
 This proves bounded30-call concurrency at2 starts/sec, not30/80CPS, long soak,
-failover or complete production readiness. Next priority: safely port the old
-tenant-pinned callback acceptance to main-host owned fixtures; see
-CALLBACK-MAIN44-01 in `PROJECT_TASKS.md`. No capacity job remains active.
+failover or complete production readiness. Main-host callback retry portability
+and all-five acceptance subsequently passed above; periodic announcement timing
+remains open in VOICE-MAIN44-SCHEDULE-01 in `PROJECT_TASKS.md`.
+No capacity job remains active.
 Full paths/evidence in `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
 **Historical retry98460 is terminal exit2 before restart.** Full release

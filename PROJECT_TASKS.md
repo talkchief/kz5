@@ -13,8 +13,14 @@
   tests1596ad,metadata trust-chain tests and existing33ownership/52audio/10reference
   cases pass8c37ce. Native main-host30/60s callback offers and45/75s full
   position-one audio remain required. See doc/acdc_five_language_live_audio_acceptance.md.
+  Actual installed-reference CLI subsequently passes10b220; all-five index
+  `/root/kazoo-prerecorded-reference.main44-cli.crP0f4Ny/index.json`, SHA256
+  `62ba5a55668dd60a52a8f3470ffa2dc09fe314ac4e7a138228e66877172d887b`.
+  No provider call, new runtime probe, DB write or live call during preparation.
+  Preparation is terminal, not running. Earlier empty-dir invocation failed
+  safely; protected evidence retained, not counted as a pass.
 
-- **CALLBACK-MAIN44-01 SOURCE FIX / NATIVE ACCEPTANCE OPEN:** the retained retry
+- **CALLBACK-MAIN44-01 SOURCE FIX / FIVE-LANGUAGE RETRY PASS:** the retained retry
   harness, explicit-language setup and internal endpoint preflight previously pinned
   the old development tenant `7807ad61761269a1ccec833dde63f621` in
   `scripts/test-acdc-callback-retry.sh`, `scripts/test-acdc-callback-fixture.sh`
@@ -24,10 +30,12 @@
   preserved locks,25 SUP preflight and38 absent/paused-helper tests pass.
   Main-host EN retry/audio passes20300/8ddb7e: single key6,complete confirmation,
   unanswered first attempt,durable retry,second bridge,clean logs and0 calls.
-  HE/FR/ES/AR sequential batch54480 is active (unit
-  kz5-callback-main44-locales-20260908,PID442628 verifiedb54b1a); not yet passed.
-  The periodic
-  offer/position harness has its own remaining portability work. Details:
+  HE/FR/ES/AR sequential batch54480 is terminal success/inactive/PID0 (449b40).
+  Independent receipts1c8f56/ba1160 confirm each locale, key6, two attempts,
+  durable retry,2/0 caller and2/0 agent counts,0/0 log errors and0 new cores.
+  Zero calls118998; all30 fixture agents logged outba1160 with no repair writes.
+  Fixture resources intentionally retained: not full deletion or production/HA
+  acceptance. The periodic offer/position harness has a separate native gate. Details:
   `doc/main44_callback_acceptance_20260908.md`.
   Preserve prior five-language proof as old-host evidence, not a main-host pass.
   This is test portability, not evidence that the deployed callback API fails.

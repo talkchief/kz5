@@ -55,6 +55,18 @@ It does not execute the runtime probe, publish capability or call Gemini.
 Changed/unowned proof is rejected; do not substitute a new hash to excuse a
 mismatch between current sources and the measured runtime proof.
 
+Main-host preparation on September8: the actual CLI passed10b220 under a
+512MiB/no-swap,100% CPU,128-task,600-second bounded unit. Index
+`/root/kazoo-prerecorded-reference.main44-cli.crP0f4Ny/index.json` has SHA256
+`62ba5a55668dd60a52a8f3470ffa2dc09fe314ac4e7a138228e66877172d887b`, five locales,
+zero provider requests and `runtime_probe_executed:false`; retained runtime
+receipt SHA256 `13916b3bb3fff756d5a6a908f28f95c36c3882aed607ec7cdff60b651fe87700`.
+An earlier invocation failed safely before reference files; a direct helper
+preparation and this independent CLI preparation produce the same index hash.
+Keep the failed log `/root/kz5-acceptance/callback-main44-prerecorded-reference-20260908.log`.
+No periodic call test is implied by reference preparation. The prepared index
+uses only saved assets and local installed media, not the old development host.
+
 Create an empty protected0700 reference directory, then run under the shared
 validation guard:
 

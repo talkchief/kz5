@@ -140,6 +140,16 @@ remain active. Postdeployment Chromium20021/2b3a50 verifies both apps after
 elements, no page errors or failed HTTP requests. Earlier HTTPS/WSS/login/retry,
 API docs, ACDC live and dialog-close assertions pass in the same run.
 
+Latest retention/retest: main `/opt/kz5` and origin/master both08e02ce before
+the documentation update; no tracked changes and no nested ACDC Git metadata
+(c7e99a). Actual source-handler regression repeated with pinned upstream
+7ef735eada6fd0e2b96c06f32c0bb868867f7d18 passes c69394. The first invocation
+omitted its mandatory baseline-file argument and was rejected before testing;
+that invocation is not a test pass. Independent browser e6ab3c again passes
+certificate-verified private HTTPS, Talkchief picker (15 users,82 devices,
+4 queues,89 callflows), SmartPBX and four ACDC cards, with inactive global
+loading line. No production account, calling behavior or password was changed.
+
 ### Protected deployment records
 
 On .44, retain `/root/kz5-acceptance/https-dev-install.log` (failed first attempt),
