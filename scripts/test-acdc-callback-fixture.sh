@@ -352,7 +352,7 @@ callback_evidence() {
         'if (.rows | length) > 1000 then error("callback evidence limit exceeded") else
          [.rows[].doc | select(.pvt_type == "acdc_callback" and .pvt_deleted != true and
                               .pvt_account_id == $account and .queue_id == $queue) |
-          {id:._id,status,original_call_id,enqueued_at,enqueue_sequence,attempts,
+          {id:._id,status,original_call_id,enqueued_at,enqueue_sequence,attempts,language,
            account_id:.pvt_account_id,queue_id,number,max_attempts,retry_delay,next_attempt_at,last_cause,
            caller_call_id:.pvt_caller_call_id,agent_call_id:.pvt_agent_call_id,
            selected_agents:.pvt_selected_agents,reconciliation_required,

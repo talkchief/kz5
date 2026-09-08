@@ -80,6 +80,19 @@ The normal static-documentation installer function also completed, exit0
 HTTPS readback of `/apis/openapi.json` confirms `CallbackPublic.language`
 contains the new contract (27aec6). No UI rebuild was needed for this backend fix.
 
+A focused native mode is implemented in `scripts/test-acdc-callback-retry.sh`:
+`--edit-pending-language`, restricted to the main isolated fixture, explicit
+`--language en-us`, internal transport and entry-only registration. It keeps
+the normal busy-agent/unanswered/retry sequence, uses the unified editor API
+to switch only the pending callback's queue to French, checks saved English
+language and the complete installed English returned-confirmation waveform,
+then conditionally restores English using the exact post-edit queue revision.
+It never changes roster or routing. Uncertain writes or intervening edits are
+retained for review, not blindly retried or overwritten. A private receipt in
+the run directory records the edit, audio proof and restoration. Existing
+returned-audio analysis is reused; no provider requests or new audio generation.
+Focused patch/restoration, CLI guards and returned-waveform regressions pass.
+
 A real queue-edit-during-callback acceptance remains pending. Prior
 five-language audio/retry results predate this correction and are not proof of
 the new queue-edit case. New-account/reseller default inheritance and language

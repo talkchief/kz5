@@ -44,7 +44,8 @@ const argsFunction=extract('test-acdc-callback-retry.sh','retry_args');
 function argsRun(options,verifiedLanguage='en-us',ambientLanguage='ar-sa'){
     const script=`set -Eeuo pipefail
 CALLBACK_PREPARE=false CALLBACK_LIVE=false KEEP_FIXTURE=false RETRY_REFERENCE='' RETRY_REGISTRATION_MODE=confirm-current
-CALLBACK_TEST_TRANSPORT=external RETRY_LANGUAGE=en-us RETRY_LANGUAGE_EXPLICIT=false RETRY_LANGUAGE_ARGS=()
+CALLBACK_TEST_TRANSPORT=external RETRY_LANGUAGE=en-us RETRY_LANGUAGE_EXPLICIT=false RETRY_LANGUAGE_ARGS=() RETRY_EDIT_PENDING_LANGUAGE=false
+RETRY_ACCOUNT_ID=7807ad61761269a1ccec833dde63f621 RETRY_ACCOUNT_EXPLICIT=false
 retry_script_dir=/synthetic
 export KAZOO_CALLBACK_TEST_LANGUAGE=${shellQuote(ambientLanguage)}
 die(){ exit 65; }; validate_protected_file(){ :; }; node(){ printf '%s\\n' ${shellQuote(JSON.stringify({voice_family:'gemini-sulafat',language:verifiedLanguage}))}; }
@@ -62,6 +63,11 @@ for(const ambient of ['he-il','ar-sa','invalid-ambient']){
 for(const locale of locals){const r=argsRun(['--language',locale],locale);assert.equal(r.status,0,r.stderr);assert.equal(r.stdout.trim(),locale+' true');}
 for(const options of [['--language'],['--language','xx-xx'],['--language','he-il','--language','fr-fr']])assert.equal(argsRun(options).status,65);
 assert.equal(argsRun(['--language','he-il'],'en-us').status,65);groups++;
+assert.equal(argsRun(['--edit-pending-language']).status,65);
+assert.equal(argsRun(['--fixture-account','8310dc3170a18de37f205d0da172df65','--language','en-us',
+    '--transport','internal','--registration-mode','entry-only','--edit-pending-language']).status,0);
+assert.equal(argsRun(['--fixture-account','8310dc3170a18de37f205d0da172df65','--language','en-us',
+    '--transport','internal','--registration-mode','entry-only','--edit-pending-language','--edit-pending-language']).status,65);groups++;
 const configure=extract('test-acdc-callback-fixture.sh','configure_acceptance_queue');
 const parse=extract('test-acdc-callback-fixture.sh','parse_fixture_args');
 const A='7807ad61761269a1ccec833dde63f621',queue={id:'a'.repeat(32),name:'Acceptance Queue 2000',agents:['b'.repeat(32)],

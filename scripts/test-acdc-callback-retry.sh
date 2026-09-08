@@ -14,6 +14,7 @@ RETRY_REGISTRATION_MODE=confirm-current
 RETRY_LANGUAGE=en-us
 RETRY_LANGUAGE_EXPLICIT=false
 RETRY_LANGUAGE_ARGS=()
+RETRY_EDIT_PENDING_LANGUAGE=false
 RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=false
 RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=false
 RETRY_BUSY_PID=
@@ -29,6 +30,7 @@ retry_usage() {
         '       test-acdc-callback-retry.sh --live --keep-fixture --confirmation-reference FILE' \
         '       [--registration-mode entry-only|confirm-current] (default: confirm-current)' \
         '       [--language en-us|he-il|fr-fr|es-es|ar-sa] (explicit owned queue language; absent preserves queue)' \
+        '       [--edit-pending-language] (main isolated fixture only; EN admission then FR queue edit and conditional restore)' \
         '       [--fixture-account ACCOUNT_ID] (must match canonical protected isolated state)' \
         '       [--transport external|internal] (default: external; internal uses isolated1001)' \
         '       [--allow-paused-master-test-phones] (only an already inactive/dead helper)' \
@@ -61,6 +63,7 @@ retry_args() {
                 case $2 in en-us|he-il|fr-fr|es-es|ar-sa) ;; *) die 'Unsupported callback retry language' ;; esac
                 RETRY_LANGUAGE=$2; RETRY_LANGUAGE_EXPLICIT=true; RETRY_LANGUAGE_ARGS=("$2"); shift ;;
             --transport) (($# >= 2)) || die 'Missing transport'; CALLBACK_TEST_TRANSPORT=$2; shift ;;
+            --edit-pending-language) [[ $RETRY_EDIT_PENDING_LANGUAGE == false ]] || die 'Repeated pending-language mode'; RETRY_EDIT_PENDING_LANGUAGE=true ;;
             --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
             --allow-absent-master-test-phones) RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=true ;;
             -h|--help) retry_usage; exit 0 ;;
@@ -70,6 +73,11 @@ retry_args() {
     done
     [[ $RETRY_REGISTRATION_MODE == entry-only || $RETRY_REGISTRATION_MODE == confirm-current ]] || die 'Invalid registration mode'
     [[ $CALLBACK_TEST_TRANSPORT == external || $CALLBACK_TEST_TRANSPORT == internal ]] || die 'Invalid transport'
+    if [[ $RETRY_EDIT_PENDING_LANGUAGE == true ]]; then
+        [[ $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 && $RETRY_LANGUAGE_EXPLICIT == true &&
+           $RETRY_LANGUAGE == en-us && $CALLBACK_TEST_TRANSPORT == internal && $RETRY_REGISTRATION_MODE == entry-only ]] ||
+            die 'Pending-language case requires main isolated fixture, explicit EN, internal transport and entry-only'
+    fi
     if [[ $CALLBACK_TEST_TRANSPORT == internal ]]; then CALLBACK_NUMBER=1001; CARRIER_IP=127.0.0.20; fi
     [[ $CALLBACK_PREPARE != "$CALLBACK_LIVE" ]] || die 'Choose exactly prepare-only or live'
     [[ $CALLBACK_LIVE != true || $KEEP_FIXTURE == true ]] || die 'Historical fixture is retained: --keep-fixture is mandatory'
@@ -332,6 +340,12 @@ retry_cleanup() {
         warn 'Exact busy-call cleanup unavailable; retained fixture and proof'
         ((status != 0)) || status=1
     fi
+    if [[ $RETRY_EDIT_PENDING_LANGUAGE == true && -f $RUN_DIR/callback-language-edit.json ]]; then
+        node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" restore "$RUN_DIR" || {
+            warn 'Conditional queue language restoration failed; retained private receipt, no forced overwrite'
+            status=1
+        }
+    fi
     # This existing helper cancels/settles ONLY the current original callback.
     # Historical unknown tickets/resources remain untouched in keep mode.
     (exit "$status") || callback_cleanup
@@ -396,6 +410,9 @@ retry_run() {
     retry_wait_checked 'retry original registration/menu' "$CALLBACK_ORIGINAL_PID"
     assert_stats 'retry original registration/menu' "$RUN_DIR/callback-original-stats.csv" 1
     wait_callback_registered || die 'Busy-agent callback did not remain queued with zero attempts'
+    if [[ $RETRY_EDIT_PENDING_LANGUAGE == true ]]; then
+        node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" edit "$RUN_DIR" || die 'Pending callback language edit failed'
+    fi
     retry_stop_capture
     node "$retry_script_dir/test-fixtures/assert-callback-registration-audio.cjs" \
         "$RUN_DIR/retry-original.pcap" "$RETRY_REFERENCE" "$CALLBACK_ORIGINAL_CALL_ID" "$LOCAL_IP" "$CALLER_PORT" "$CALLBACK_ORIGINAL_MEDIA_PORT" "$RETRY_REGISTRATION_MODE" \
@@ -425,6 +442,9 @@ retry_run() {
     retry_stop_capture
     stop_monitor
     node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" "$CALLBACK_TEST_TRANSPORT" "${RETRY_LANGUAGE_ARGS[@]}" || die 'Strict unanswered/retry packet, media or timing gate failed'
+    if [[ $RETRY_EDIT_PENDING_LANGUAGE == true ]]; then
+        node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" verify "$RUN_DIR" || die 'Returned callback did not prove admitted-language audio after queue edit'
+    fi
     agent_status verify 1 1
     wait_agent_ready 1 || die 'Agent did not return ready after retry'
     systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p LoadState -p ActiveState -p SubState -p MainPID -p NRestarts \
