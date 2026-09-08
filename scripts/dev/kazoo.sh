@@ -41,7 +41,7 @@ NODE_NAME=${NODE_NAME:-"$KAZOO_NODE"}
 echo "Node name: $NODE_NAME"
 
 COOKIE=${COOKIE:-"change_me"}
-echo "Cookie: $COOKIE"
+# The release needs the cookie, but terminal/session logs must not receive it.
 
 CMD=$1
 if [ "$CMD" = "" ]; then

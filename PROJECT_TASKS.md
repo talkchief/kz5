@@ -2,6 +2,14 @@
 
 ## Immediate operator follow-up — September8
 
+- **SEC-LAUNCHER-01 SOURCE FIX / MAIN SYNC AFTER BUILD:** legacy
+  `scripts/dev/kazoo.sh` printed the Erlang cookie. Removed only that output;
+  runtime child still receives its configured cookie/node/command. Actual
+  wrapper regression fails before675873 and passes after124f23 using an isolated
+  executable and synthetic cookie. No real secret or service is involved.
+  Main systemd services use `scripts/dev-start-apps.sh`, not this legacy wrapper.
+  Do not change the compiling main checkout until retry98460 is terminal.
+
 - **CB-CONTENT-01 SOURCE FIX / RETRY98460 RUNNING:** explicit default JSON callbacks
   for apps-store collection/item, voicemail collection/item and directory
   collection; optional absent apps-store overrides preserve inherited permissions
