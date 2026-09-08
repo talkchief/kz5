@@ -2,9 +2,17 @@
 
 **Latest operator follow-up:** original server will be deleted; keep current
 source and remaining work at `/opt/kz5` on10.1.0.44. Thin top loading line is a
-separate reproduced bug: global counter underflows to-1 in SmartPBX and ACDC;
+separate reproduced bug, now fixed: global counter underflowed to-1 in SmartPBX and ACDC;
 previous browser checks covered only the in-app spinner. See UI-PROGRESS-01 in
-`PROJECT_TASKS.md` for source fix and deployment gate. Talkchief currently exists
+`PROJECT_TASKS.md`: source fix `2a593ee`, .44 normal installer81343 and actual
+browser20021 pass; counter0 and inactive top line in both apps, no underflows.
+The paused compatibility diagnostic and offline tests are committed `8decc5f`
+and synced to .44. Untracked team design is preserved root-only at
+`/root/kz5-handoff/preserved-untracked/dashboard_caller_sidecar_design.md`, not
+silently included in Git. Runtime secrets/TLS/snapshots are already on .44;
+GitHub write credentials need secure provisioning there before future pushes
+without the original host (`/root/key.key` is absent on .44).
+Talkchief currently exists
 only in the isolated compatibility lab; DEV-COMPANY-01 tracks preparing a safe,
 main-UI-visible test copy. Do not report it as already present in the main UI.
 

@@ -112,6 +112,36 @@ or claim that it was repaired by the catalog migration.
 
 ## Private evidence and recovery
 
+### Subsequent top blue progress-line correction
+
+The operator clarified that the thin top blue line, not the in-app spinner,
+remained animated in SmartPBX and ACDC. Browser77543 and28271 confirmed
+`monster.apps.core.request.counter=-1` while `.progress-indicator.active` stayed
+present. Earlier acceptance did not inspect that separate global indicator and
+must not be cited as proof that the top line stopped.
+
+Source fix `2a593ee` adds
+`scripts/patches/monster-ui-request-indicator-lifecycle.patch` to the normal
+installer and build fingerprint. An unmatched completion can occur around the
+core's subscription boundary. Counters now cannot decrement below zero; a new
+request recovers any older negative state; only positive work counts activate
+the indicator; draining work cancels a pending show timer. This preserves normal
+overlap and background-request behavior rather than hiding the progress bar.
+
+`scripts/test-monster-request-indicator-lifecycle.cjs` executes the actual
+handlers with controlled timers, reproduces the old stuck-line failure and
+checks unmatched/duplicate completion, overlapping work, background bypass,
+fast completion, replacement requests, and recovery from existing underflow.
+Twelve installer wiring and eleven preservation groups also pass15196/f35d93.
+Normal installer81343/73a371 on .44 completes in86 seconds,849MiB peak; private
+log `/root/kz5-acceptance/progress-https-install.log`. All nine main services
+remain active. Postdeployment Chromium20021/2b3a50 verifies both apps after
+15 seconds: counter0, inactive top indicator, no underflows, no in-app loading
+elements, no page errors or failed HTTP requests. Earlier HTTPS/WSS/login/retry,
+API docs, ACDC live and dialog-close assertions pass in the same run.
+
+### Protected deployment records
+
 On .44, retain `/root/kz5-acceptance/https-dev-install.log` (failed first attempt),
 `https-dev-retry.log` (successful retry), `dialog-https-install.log` (successful
 source-patch rebuild), `monster-ui.before-https.conf`,

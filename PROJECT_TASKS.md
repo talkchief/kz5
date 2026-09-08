@@ -2,15 +2,20 @@
 
 ## Immediate operator follow-up — September8
 
-- **UI-PROGRESS-01 ACTIVE:** the thin blue global loading line remains active
+- **UI-PROGRESS-01 FIXED / DEPLOYED / BROWSER PASS:** the thin blue global loading line remained active
   in SmartPBX and ACDC even after their content loads. Actual browser77543 and
   28271 reproduce `core.request.counter=-1` and `.progress-indicator.active`.
   Earlier spinner acceptance inspected in-app loading elements only and did
   not cover this global indicator. Source patch prevents counter underflow,
   rejects negative counts as active work, and clears the pending start timer
   when requests drain. Actual-handler regression reproduces the old failure;
-  fixed lifecycle tests pass303420. Normal source installer deployment and
-  browser checks of the top line in both apps remain required.
+  fixed lifecycle tests pass303420. Source/installer fix `2a593ee` is pushed.
+  All12 wiring and11 preservation groups pass15196/f35d93. Normal UI installer
+  on .44 passes81343/73a371 (86s,849MiB peak). Postdeployment browser20021/2b3a50
+  verifies counter0, inactive top indicator, no underflows, no in-app loaders
+  and no HTTP/page errors in both SmartPBX and ACDC after15 seconds per app.
+  Correct/incorrect login recovery, HTTPS/WSS, `/apis/`, ACDC live200 and dialog
+  close also pass. All nine main services active; no telephone/DB restart.
 - **DEV-COMPANY-01 ACTIVE:** operator expects Talkchief visible in the main
   `kz5-dev` account selector. The requested company snapshot exists only in the
   isolated compatibility lab, so it is not currently visible in the main UI.
@@ -18,10 +23,20 @@
   check account/realm/tree collisions and production-facing configuration before
   import. Preserve the original lab baseline and never connect to production
   services or activate copied production outbound/push/webhook behavior blindly.
-- **HOST-HANDOFF-01 REQUIRED:** original development server will be deleted.
+- **HOST-HANDOFF-01 SOURCE CHECKPOINT PRESERVED:** original development server will be deleted.
   Canonical checkout and installed stack must remain on10.1.0.44 at `/opt/kz5`,
   latest pushed master. Preserve outstanding source work and durable guidance on
   that host; do not leave required changes solely in original-host `/tmp` files.
+  `8decc5f` is pushed and synced with clean tracked status on .44; ACDC has no
+  nested Git metadata. Paused diagnostic source/tests are committed, not left
+  as an original-host-only diff. Unrelated untracked team design was copied,
+  without committing it, to .44
+  `/root/kz5-handoff/preserved-untracked/dashboard_caller_sidecar_design.md`;
+  SHA256 matches `ec0170466fd1f0235112f91eb0c03487594c8e4fb3769fb4023ffd35fb46bfe4`.
+  Main runtime secrets, TLS files and company snapshots already reside on .44.
+  `/root/key.key` is not present there: future GitHub write credentials must be
+  provisioned securely if the original host is removed. Do not copy mixed
+  provider/production secrets indiscriminately into the repo or handoff.
 - Compatibility refresh-write diagnostic is paused for these operator issues.
   Its source and offline RPC fixture tests pass94834/382d12; native execution
   is not yet performed. No additional lab/production writes occurred.
