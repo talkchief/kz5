@@ -10,6 +10,10 @@ const importer=require('../import-acdc-gemini-voices.cjs');
 const ACCOUNT='8310dc3170a18de37f205d0da172df65';
 let stage='arguments';
 const hash=v=>crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
+function installedMediaHeaders(user,password){
+    assert(typeof user==='string'&&user&&!user.includes(':')&&typeof password==='string'&&password);
+    return {accept:'application/json',authorization:'Basic '+Buffer.from(user+':'+password).toString('base64')};
+}
 function privateRead(file){
     const fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
     try{const s=fs.fstatSync(fd);assert(s.isFile()&&s.uid===0&&(s.mode&511)===384&&s.nlink===1&&s.size<67108864);return fs.readFileSync(fd);}
@@ -77,7 +81,7 @@ async function runtime(action,run){
         const host=media.localMediaHost(deployment.KAZOO_COUCHDB_HOST),port=Number(deployment.KAZOO_COUCHDB_PORT||5984);
         assert(Number.isInteger(port)&&port>0&&port<65536);
         const r=await fetch('http://'+host+':'+port+'/system_media/'+encodeURIComponent(asset.id)+'?attachments=true',{
-            headers:{Authorization:'Basic '+Buffer.from(deployment.KAZOO_COUCHDB_USER+':'+deployment.KAZOO_COUCHDB_PASSWORD).toString('base64')},redirect:'error',signal:AbortSignal.timeout(15000)});
+            headers:installedMediaHeaders(deployment.KAZOO_COUCHDB_USER,deployment.KAZOO_COUCHDB_PASSWORD),redirect:'error',signal:AbortSignal.timeout(15000)});
         assert(r.ok);const doc=await r.json();importer.verifyDocument(asset,doc);
         if(action==='preflight'){
             media.ulaw(asset.bytes);
@@ -112,7 +116,7 @@ async function runtime(action,run){
     }
     console.log(JSON.stringify({action,state:receipt.state,verified:receipt.verified===true,account_writes:'isolated queue language only',gemini_requests:0}));
 }
-module.exports={patchBody,restoredGuard};
+module.exports={patchBody,restoredGuard,installedMediaHeaders};
 if(require.main===module)runtime(...process.argv.slice(2)).catch(error=>{
     const location=(error.stack||'').split('\n').slice(1).map(l=>l.match(/\/opt\/kz5\/scripts\/[A-Za-z0-9_./-]+:\d+:\d+/)?.[0]).find(Boolean)||'unavailable';
     console.error('Callback language case failed at '+stage+' ('+location+'); inspect protected receipt, no blind retry or overwrite.');process.exitCode=1;

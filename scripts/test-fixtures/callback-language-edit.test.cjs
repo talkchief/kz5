@@ -1,6 +1,8 @@
 'use strict';
 const assert=require('node:assert/strict');
-const {patchBody,restoredGuard}=require('./callback-language-edit.cjs');
+const {patchBody,restoredGuard,installedMediaHeaders}=require('./callback-language-edit.cjs');
+assert.equal(installedMediaHeaders('fixture','synthetic').accept,'application/json');
+assert.throws(()=>installedMediaHeaders('bad:user','synthetic'));
 const editor={queue:{id:'a'.repeat(32),name:'Acceptance Queue 2000',announcements:{language:'en-us',interval:30}},roster:['b'.repeat(32)],revisions:{queue:'1-'+'c'.repeat(32)}};
 const copy=v=>JSON.parse(JSON.stringify(v));
 const original=copy(editor),body=patchBody(editor,'fr-fr',editor.revisions.queue);
