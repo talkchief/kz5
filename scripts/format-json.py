@@ -23,6 +23,9 @@ for fn in sys.argv[1:]:
 
         with open(fn2, 'w') as fd2:
             written = fd2.write(data2 + '\n')
+            # Formatting must not replace a public runtime asset with a
+            # root-only file when the build inherits umask 077.
+            os.fchmod(fd2.fileno(), os.fstat(fd.fileno()).st_mode & 0o777)
             fd2.close()
 
         fd.close()

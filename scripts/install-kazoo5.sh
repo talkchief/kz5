@@ -2253,7 +2253,7 @@ prepare_kazoo_runtime_artifact_permissions() {
     # definitions, not deployment configuration, logs, keys, or credential files.
     find "$runtime_root/core" "$runtime_root/applications" "$runtime_root/deps" -type f \
         \( -path '*/ebin/*.beam' -o -path '*/ebin/*.app' \
-           -o -path '*/priv/couchdb/views/*.json' -o -path '*/priv/couchdb/schemas/*.json' \) \
+           -o -path '*/priv/couchdb/*.json' -o -path '*/priv/defaults/*.json' \) \
         -exec chmod 0644 -- {} +
 }
 
@@ -2924,6 +2924,7 @@ install_kazoo_apps() {
     if [[ $DRY_RUN != true ]]; then
         wait_kazoo_datastore_ready kazoo_apps
         persist_kazoo_apps_config
+        wait_kazoo_bootstrap_ready
         ensure_master_account
         configure_kazoo_api_modules
     fi

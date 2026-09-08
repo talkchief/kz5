@@ -22,11 +22,14 @@ cleanup() {
         "$fixture_root/core/normal/priv/couchdb/views/public.json" \
         "$fixture_root/core/normal/priv/couchdb/views/linked.json" \
         "$fixture_root/core/normal/priv/couchdb/schemas/public.json" \
+        "$fixture_root/core/normal/priv/couchdb/account.json" \
+        "$fixture_root/core/normal/priv/defaults/system.json" \
         "$fixture_root/core/normal/priv/private-config.json" \
         "$fixture_dir/outside/private.json" \
         "$fixture_root/core/linked" "$fixture_dir/outside/ebin/beam_build_marker.beam"
     rmdir -- "$fixture_root/core/normal/priv/couchdb/views" \
         "$fixture_root/core/normal/priv/couchdb/schemas" \
+        "$fixture_root/core/normal/priv/defaults" \
         "$fixture_root/core/normal/priv/couchdb" "$fixture_root/core/normal/priv"
     rmdir -- "$fixture_root/core/normal/ebin" "$fixture_root/core/normal" \
         "$fixture_root/applications/testing/ebin" "$fixture_root/applications/testing" \
@@ -37,7 +40,8 @@ cleanup() {
 trap cleanup EXIT
 mkdir -p "$fixture_root/core/normal/ebin" "$fixture_root/applications/testing/ebin" \
     "$fixture_root/deps/valued/ebin" "$fixture_dir/outside/ebin" \
-    "$fixture_root/core/normal/priv/couchdb/views" "$fixture_root/core/normal/priv/couchdb/schemas"
+    "$fixture_root/core/normal/priv/couchdb/views" "$fixture_root/core/normal/priv/couchdb/schemas" \
+    "$fixture_root/core/normal/priv/defaults"
 erlc -o "$fixture_root/core/normal/ebin" "$script_dir/test-fixtures/beam_build_marker.erl"
 normal_hash=$(sha256sum "$fixture_root/core/normal/ebin/beam_build_marker.beam")
 [[ -z $(kazoo_test_compiled_beams) ]] || fail 'ordinary production module marked as TEST'
@@ -47,6 +51,7 @@ verify_kazoo_production_beams
 # the unprivileged runtime, without relaxing private config or symlink targets.
 for artifact in core/normal/ebin/normal.app \
     core/normal/priv/couchdb/views/public.json core/normal/priv/couchdb/schemas/public.json \
+    core/normal/priv/couchdb/account.json core/normal/priv/defaults/system.json \
     core/normal/priv/private-config.json; do
     install -m 0600 "$script_dir/test-fixtures/beam_build_marker.erl" "$fixture_root/$artifact"
 done
@@ -55,7 +60,8 @@ ln -s "$fixture_dir/outside/private.json" "$fixture_root/core/normal/priv/couchd
 chmod 0600 "$fixture_root/core/normal/ebin/beam_build_marker.beam"
 prepare_kazoo_runtime_artifact_permissions
 for artifact in core/normal/ebin/normal.app core/normal/ebin/beam_build_marker.beam \
-    core/normal/priv/couchdb/views/public.json core/normal/priv/couchdb/schemas/public.json; do
+    core/normal/priv/couchdb/views/public.json core/normal/priv/couchdb/schemas/public.json \
+    core/normal/priv/couchdb/account.json core/normal/priv/defaults/system.json; do
     [[ $(stat -c '%a' "$fixture_root/$artifact") == 644 ]] || fail 'public runtime artifact is unreadable'
 done
 [[ $(stat -c '%a' "$fixture_root/core/normal/priv/private-config.json") == 600 ]] || fail 'private config permissions changed'
