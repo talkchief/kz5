@@ -6,6 +6,22 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+**Standalone UI catalog gap implemented and locally integrated:** the installer
+now requires explicit pinned remote catalog authority when local apps/SUP are
+absent, instead of silently skipping registration. Local ALL is unchanged.
+The fixed receiver is installed on the dev apps node.19 transport tests,
+installer routing/smoke/modular/read-only/persistence suites pass; actual local
+receiver proof18673/066c23 and pinned loopback SSH16602/47fb93 pass. The latter
+exercises real installer remote routing, ten preserved apps and twenty verifies,
+plus wrong host-key/master/source-version rejection. No app service restarts,
+catalog overwrite, production SSH changes or provider sends. Temporary daemon
+and keys are removed. Receiver source/install hash is
+`faa59f49c0ec2072537e241eba6a32dd48ffae3a0d71cf555b7d186072d326b3`.
+See `doc/monster_ui_remote_catalog.md`; a genuinely separate clean server and
+absent-catalog creation remain unaccepted. Test-phone tokens and a clean Rocky9
+SSH target were requested asynchronously; no response yet. Do not invent these
+or reuse production bridge credentials for this workflow.
+
 **FULL APPS/ECALLMGR INSTALLER PASS:** session48353, terminal `f4275e`,
 exit0 at approximately06:52UTC September8 from pushed `981f317`.
 Normal `install-kazoo5.sh kazoo-apps ecallmgr` completed compilation, release
@@ -48,8 +64,8 @@ proof remains incomplete: HE50498/53cce7 failed coverage, and diagnostic79134/
 7eacd4 found160 missing RTP samples inside its matched phrase, correlation
 0.999992. Do not misreport that as a full waveform pass. The original callback
 pass is unchanged. No need to rerun live calls to publish this checkpoint.
-Private standalone catalog implementation is not integrated/tested:
-`/opt/kz5-remote-catalog-implementation.dCYuYn/HANDOFF.md`.
+The former private standalone catalog proposal is now integrated and tested to
+the scope in the newest snapshot above. Its original private handoff is stale.
 
 Current acceptance details/commands: `doc/focused_acceptance_20260908.md`.
 Registered-consumer real broker proof83390/9d4620 PASS; exact counters,
@@ -79,7 +95,7 @@ No real push notifications or production changes have been made.
 - Real Android/iPhone delivery requires test-device tokens plus the APNs topic
   and environment; registered-consumer/broker tests are not phone-delivery proof.
 - Fresh-server and split-host installation remain unaccepted. The standalone UI
-  catalog proposal is private and not part of the released installer.
+  catalog transport is implemented and loopback-tested, not second-host-tested.
 - Complete returned-call waveform coverage/native voice review, HTTPS/WSS and
   production load/failure/recovery acceptance remain open. Do not label this
   release 100% production-ready.

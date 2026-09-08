@@ -2,6 +2,23 @@
 
 ## Current focused release checkpoint — 2026-09-08
 
+- **Standalone UI catalog transport implemented:** fixed-command pinned SSH
+  to the existing create-only SUP importer; missing/partial standalone authority
+  fails preflight, local ALL remains local, and explicit `false` is assets-only.
+  Apps-role installation deploys the receiver without creating SSH trust/users
+  or sudoers.19 transport tests plus actual installer routing/smoke/modular/
+  read-only/persistence suites pass. Actual receiver readiness/wrong-master/
+  preserved-ACDC/readback passes18673/066c23. Real loopback SSH with installer
+  remote routing passes16602/47fb93: ten preserved apps, twenty verifies,
+  wrong host-key/master/source-version rejection, no retained pending stages.
+  Temporary SSH daemon/config/test keys removed; app PIDs unchanged. Receiver
+  reinstall/source-hash verification passesa9e7ef. Genuine second-host and
+  absent-catalog creation remain pending; see `doc/monster_ui_remote_catalog.md`.
+- **External acceptance inputs requested:** designated Android/iPhone test
+  tokens with APNs topic/environment, and a clean Rocky9 development SSH target.
+  No response yet; do not send test notifications to production users or use
+  production bridge SSH credentials for catalog/server acceptance.
+
 - **Full normal apps/eCallMgr installer PASS:** pushed981f317, session48353,
   terminal `f4275e`, exit0 at~06:52UTC September8. Compilation, release,
   apps/eCallMgr restarts, runtime/API/SUP readiness,796 prerecorded documents
@@ -35,8 +52,8 @@ commands and exact scope: `doc/focused_acceptance_20260908.md`.
   despite0.999992 correlation. Do not label full returned-phrase coverage proved
   or substitute the untested phrase-only private relaxation (it cannot fix an
   inside-phrase gap). Original call evidence is unchanged. Standalone catalog
-  automation draft remains PRIVATE/unreviewed/unintegrated at
-  `/opt/kz5-remote-catalog-implementation.dCYuYn/HANDOFF.md`; no remote effects.
+  automation has since been integrated and tested to the newest scope above;
+  its earlier private handoff is no longer current.
 
 - **Bridge registered-consumer acceptance PASS:**83390/9d4620 exercises the
   actual runtime against UUID-isolated local broker resources. Counts0→1

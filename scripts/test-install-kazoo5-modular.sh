@@ -40,7 +40,7 @@ host_override_output=$(KAZOO_AMQP_URI='amqps://kazoo:secret@old.example.net:5671
 grep -Fq 'AMQP mq.example.net:5672' <<<"$host_override_output" || \
     fail '--amqp-host did not clear and rebuild an inherited AMQP URI'
 
-monster_output=$(MONSTER_UI_APPS_LIST=accounts run_dry monster-ui 2>&1)
+monster_output=$(MONSTER_UI_REGISTER_APPS=false MONSTER_UI_APPS_LIST=accounts run_dry monster-ui 2>&1)
 grep -Fq 'existing checkouts and unselected apps remain untouched' <<<"$monster_output" || \
     fail 'custom Monster UI bundle lacks fresh-stage preservation'
 if grep -Fq 'github.com/2600hz/monster-ui-callflows.git' <<<"$monster_output"; then
@@ -50,7 +50,7 @@ if grep -Fq 'Would apply the Callflows production-CSS compatibility patch' <<<"$
     fail 'custom Monster UI bundle tried to patch unselected Callflows source'
 fi
 
-acdc_output=$(MONSTER_UI_APPS_LIST=acdc run_dry monster-ui 2>&1)
+acdc_output=$(MONSTER_UI_REGISTER_APPS=false MONSTER_UI_APPS_LIST=acdc run_dry monster-ui 2>&1)
 grep -Fq 'Bundled Monster UI ACDC Call Center app: local-sha256:' <<<"$acdc_output" || \
     fail 'ACDC source is not included with a content fingerprint'
 if grep -Fq 'github.com/2600hz/monster-ui-acdc.git' <<<"$acdc_output"; then

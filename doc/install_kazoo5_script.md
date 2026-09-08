@@ -11,8 +11,11 @@ This repository checkpoint is not a production-ready certification. Consult
 [the current acceptance status](kazoo5_acceptance_status.md) before deploying:
 some packaged source fixes have passed isolated tests but still await broader
 acceptance. Prerecorded queue voices for EN, HE, FR, ES and AR are deployed on
-the development host; all-five position-one/offer-six live calls and an English
-callback retry pass. Native-speaker listening, complete-stack/fresh-host and
+the development host; all-five position-one/offer-six live calls and
+five-language callback registration/retry tests pass. Normal apps/eCallMgr
+installation and independent `--verify-only ALL` passed on September 8; see
+[the focused acceptance record](focused_acceptance_20260908.md).
+Native-speaker listening, fresh/split-host and
 real mobile-device acceptance are not implied. See the
 [current handoff](../PROJECT_HANDOFF.md) and
 [voice/UI deployment evidence](prerecorded_release_finalization_20260907.md).
@@ -136,7 +139,7 @@ supports Rocky Linux 9 on x86_64.
 
 The defaults are the selected Kazoo 5 integration set. Native service checks
 and API tests are distinct from answered SIP/RTP and capacity acceptance;
-passing the former does not establish production readiness. Core, Crossbar, eCallMgr, ACDC,
+passing the former does not establish production readiness. Core, Crossbar, eCallMgr,
 media/configuration sources, and frontend apps use immutable commit hashes
 inside the script; the remaining Kazoo applications follow the project's
 source manifest. A fresh clone's ignored source trees are fetched before
@@ -152,7 +155,7 @@ patches and generated-source build steps run.
 | Kamailio | `6.1.4` | Official Kamailio RPM plus official `kamailio-kazoo` module |
 | Monster UI | source tag `5.5.13` | Upstream package metadata still displays `4.3.0`; this is separate from the Kazoo backend version |
 | HTMLDOC | `1.9.23` | Pinned source build for Kazoo fax document conversion |
-| ACDC | pinned `kazoo-community/kazoo-acdc` revision | Integrated, compiled, started; queue/agent APIs and 15 upstream unit tests checked |
+| ACDC | source tracked directly in kz5 | Built from `applications/acdc`; current API/callback evidence is in the focused acceptance record |
 
 The Kazoo backend is built from the Kazoo 5 source tree. Its development
 build metadata currently reports `master.0`, not a numbered stable release.
@@ -179,6 +182,9 @@ without moving the whole compatibility set is not considered an upgrade.
 | `freeswitch` | `kazoo-freeswitch.service` | version, CLI, Sofia SIP profile, process stability, `mod_kazoo`, SpanDSP, ecallmgr link when local |
 | `kamailio` | `kazoo-kamailio.service` | config, SIP OPTIONS, RPC, established AMQP transport, queue when RabbitMQ is local, SQLite, dispatcher, SBC ACL |
 | `monster-ui` | `nginx.service` | production files, app metadata/catalog, API JSON, HTTP or verified HTTPS response |
+| `push-bridge` | `kazoo-push-bridge.service` | tracked release, locked dependencies, protected credentials and registered AMQP consumer; real-phone delivery is separate |
+
+`kazoo-applications.service` is an alias of `kazoo-apps.service`.
 
 The stock `freeswitch.service` and `kamailio.service` units are disabled when
 their Kazoo wrappers are installed.
@@ -214,8 +220,10 @@ silently treats as different comparison types.
 The public pinned module also does not provide the private `kz_deliver_event`
 or `kz_intercept` dialplan applications selected by newer eCallMgr source.
 The installer configures eCallMgr to use FreeSWITCH's supported built-in
-`event` and `intercept` applications—the behavior used before those
-optimizations were added—and verifies both exact nested settings after startup.
+`event` application and supplies the required native `kz_intercept` compatibility
+implementation. It verifies the configured applications and native module
+inventory through eCallMgr after startup; inventory is not a live supervision
+call test.
 The same public module is missing the `kz_originate` and
 `kz_originate_cancel` APIs required by the pinned eCallMgr. A build-time
 compatibility patch supplies those APIs, preserves quoted channel-variable
@@ -334,9 +342,15 @@ sudo KAZOO_PUBLIC_IP=10.20.0.14 \
   ./scripts/install-kazoo5.sh kamailio
 
 # ui1.example.net
+# Provision explicit SSH authority on apps1 first; see the remote-catalog guide.
 sudo KAZOO_API_URL=http://ui1.example.net/v2/ \
   KAZOO_API_UPSTREAM=http://apps1.example.net:8000/v2/ \
   KAZOO_WEBSOCKET_UPSTREAM=http://apps1.example.net:5555/websocket \
+  MONSTER_UI_CATALOG_SSH_HOST=apps1.example.net \
+  MONSTER_UI_CATALOG_SSH_USER=catalog-installer \
+  MONSTER_UI_CATALOG_IDENTITY_FILE=/root/catalog-ssh/identity \
+  MONSTER_UI_CATALOG_KNOWN_HOSTS_FILE=/root/catalog-ssh/known_hosts \
+  MONSTER_UI_CATALOG_MASTER_ID=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   ./scripts/install-kazoo5.sh monster-ui
 ```
 
@@ -346,8 +360,14 @@ link and the Sofia SIP profile that eCallMgr loads dynamically. When a link is
 present, or when a local eCallMgr is installed, both the link and Sofia profile
 are checked strictly. Set `KAZOO_REQUIRE_MEDIA_CONNECTION=true` for the final
 distributed end-to-end gate.
-Likewise, a standalone Kamailio or Monster UI node delegates cluster-wide ACL
-or app-catalog changes when no local Kazoo applications node is available.
+A standalone Kamailio node still requires cluster-wide SBC ACL configuration
+on its remote eCallMgr. Standalone Monster UI requires an explicit pinned SSH
+catalog authority when local apps/SUP are absent; it no longer silently skips
+catalog registration. Replace the example master ID with the target cluster's
+configured master. See [the remote-catalog contract](monster_ui_remote_catalog.md)
+for protected credentials, fixed-command authority and the remaining split-host
+acceptance gate. `MONSTER_UI_REGISTER_APPS=false` means assets-only, not a
+completed catalog deployment.
 
 Open only the needed private-network ports between roles: CouchDB `5984`,
 RabbitMQ `5672`, Crossbar `8000`, Erlang distribution `4369` plus the configured
@@ -391,17 +411,19 @@ installer retries this read-only RPC within `KAZOO_START_TIMEOUT` and refuses
 success on an old/missing function, failed RPC or any response other than exact
 `ready`. It does not delete retained data or restart a worker as a repair.
 This is a local readiness sample, not ongoing broker health, cluster failover,
-call-capacity or backup acceptance. Source tests pass; live deployment remains
-gated by [the retained-stats upgrade procedure](dashboard_caller_identity_upgrade.md).
+call-capacity or backup acceptance. Current same-host stats readiness passed in
+the September 8 installer check. Future retained-data migrations still follow
+[the retained-stats upgrade procedure](dashboard_caller_identity_upgrade.md).
 
-The staged callback integration adds durable queue-position metadata, a
+The deployed callback integration includes durable queue-position metadata, a
 correlated caller pause/register/resume/abandon menu, bounded returned-caller
 DTMF-1 confirmation, account-owned authority/caller-ID checks, normal
 stepswitch routing, callback visibility/cancellation APIs, and fail-closed
 multi-node recovery. It defaults off. The isolated suites and production build
-pass, but the aggregate runtime has not yet passed the complete live callback
-and restart-recovery gates, so this documentation does not mark it production
-validated.
+pass, and live registration/confirmation/missed-first-attempt retry tests pass
+in EN/HE/FR/ES/AR. Separate returned-call full-waveform/native-listening,
+restart-recovery and production gates remain open; see the focused acceptance
+record. This documentation does not mark it production validated.
 
 When a queue has a top-level `announce` media ID or URI, ACDC now interrupts
 the caller's hold media, plays that announcement once, and waits asynchronously

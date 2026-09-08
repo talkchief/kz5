@@ -44,6 +44,8 @@ readonly KAZOO_PERSISTED_KEYS=(
     KAMAILIO_CONFIG_REF KAMAILIO_CHILDREN KAMAILIO_TCP_CHILDREN
     KAMAILIO_AMQP_CONSUMERS KAMAILIO_AMQP_WORKERS MONSTER_UI_REF
     MONSTER_UI_NODE_MAJOR MONSTER_UI_WEB_ROOT MONSTER_UI_REGISTER_APPS MONSTER_UI_LOCK_SHA256
+    MONSTER_UI_CATALOG_SSH_HOST MONSTER_UI_CATALOG_SSH_USER MONSTER_UI_CATALOG_SSH_PORT
+    MONSTER_UI_CATALOG_IDENTITY_FILE MONSTER_UI_CATALOG_KNOWN_HOSTS_FILE MONSTER_UI_CATALOG_MASTER_ID
     MONSTER_UI_WEBSOCKET_URL MONSTER_UI_REMOTE_BRANDING MONSTER_UI_BRAINTREE
     MONSTER_UI_APPS_LIST MONSTER_UI_ACCOUNTS_REF MONSTER_UI_CALLFLOWS_REF
     MONSTER_UI_CSV_ONBOARDING_REF MONSTER_UI_FAX_REF MONSTER_UI_NUMBERS_REF
@@ -185,6 +187,14 @@ MONSTER_UI_NODE_MAJOR=${MONSTER_UI_NODE_MAJOR:-18}
 MONSTER_UI_LOCK_SHA256=${MONSTER_UI_LOCK_SHA256:-da59e0891ebb949b5acdb81663463fcc09362ce7f956f9ed50beeafe7ecd6222}
 MONSTER_UI_WEB_ROOT=${MONSTER_UI_WEB_ROOT:-/var/www/html/monster-ui}
 MONSTER_UI_REGISTER_APPS=${MONSTER_UI_REGISTER_APPS:-auto}
+MONSTER_UI_CATALOG_SSH_HOST=${MONSTER_UI_CATALOG_SSH_HOST:-}
+MONSTER_UI_CATALOG_SSH_USER=${MONSTER_UI_CATALOG_SSH_USER:-}
+MONSTER_UI_CATALOG_SSH_PORT=${MONSTER_UI_CATALOG_SSH_PORT:-22}
+MONSTER_UI_CATALOG_IDENTITY_FILE=${MONSTER_UI_CATALOG_IDENTITY_FILE:-}
+MONSTER_UI_CATALOG_KNOWN_HOSTS_FILE=${MONSTER_UI_CATALOG_KNOWN_HOSTS_FILE:-}
+MONSTER_UI_CATALOG_MASTER_ID=${MONSTER_UI_CATALOG_MASTER_ID:-}
+# Invocation-local resolution, never an inherited authority selection.
+MONSTER_CATALOG_MODE=''
 MONSTER_UI_WEBSOCKET_URL=${MONSTER_UI_WEBSOCKET_URL:-auto}
 MONSTER_UI_REMOTE_BRANDING=${MONSTER_UI_REMOTE_BRANDING:-auto}
 MONSTER_UI_BRAINTREE=${MONSTER_UI_BRAINTREE:-auto}
@@ -255,7 +265,10 @@ Configuration is supplied through environment variables. Useful overrides:
   KAZOO_MAKE_JOBS, KAZOO_MIN_BUILD_FREE_MB, COUCHDB_VERSION, ERLANG_VERSION,
   FREESWITCH_VERSION,
   KAMAILIO_VERSION, KAMAILIO_CONFIG_REF, KAMAILIO_CHILDREN,
-  MONSTER_UI_REF, MONSTER_UI_APPS_LIST, MONSTER_UI_REGISTER_APPS.
+  MONSTER_UI_REF, MONSTER_UI_APPS_LIST, MONSTER_UI_REGISTER_APPS,
+  MONSTER_UI_CATALOG_SSH_HOST, MONSTER_UI_CATALOG_SSH_USER, MONSTER_UI_CATALOG_SSH_PORT,
+  MONSTER_UI_CATALOG_IDENTITY_FILE, MONSTER_UI_CATALOG_KNOWN_HOSTS_FILE,
+  MONSTER_UI_CATALOG_MASTER_ID (standalone UI: explicit pinned apps-node authority).
 
 Examples:
   sudo ./${SCRIPT_NAME} couchdb rabbitmq
@@ -1086,6 +1099,7 @@ preflight() {
     [[ $MONSTER_UI_REGISTER_APPS == auto || $MONSTER_UI_REGISTER_APPS == true || \
        $MONSTER_UI_REGISTER_APPS == false ]] || \
         die 'MONSTER_UI_REGISTER_APPS must be auto, true, or false'
+    monster_catalog_preflight
     [[ $MONSTER_UI_NODE_MAJOR == 18 ]] || \
         die 'Monster UI 5.5.13 requires the tested Node.js 18 build toolchain'
     [[ $MONSTER_UI_LOCK_SHA256 =~ ^[a-f0-9]{64}$ ]] || \
@@ -2846,6 +2860,7 @@ install_kazoo_apps() {
     build_kazoo
     install_kazoo_systemd_units
     install_sup_cli
+    install_monster_catalog_receiver
     service_enable_restart kazoo-apps.service
     if [[ $DRY_RUN != true ]]; then
         wait_kazoo_datastore_ready kazoo_apps
@@ -5199,13 +5214,69 @@ monster_registration_available() {
     command -v sup >/dev/null && systemctl is-active --quiet kazoo-apps.service 2>/dev/null
 }
 
+monster_catalog_preflight() {
+    [[ ${SELECTED[monster-ui]:-} ]] || return 0
+    local value path owner mode
+    if [[ $MONSTER_UI_REGISTER_APPS == false ]]; then
+        MONSTER_CATALOG_MODE=disabled
+        return 0
+    fi
+    value="${MONSTER_UI_CATALOG_SSH_HOST}${MONSTER_UI_CATALOG_SSH_USER}${MONSTER_UI_CATALOG_IDENTITY_FILE}${MONSTER_UI_CATALOG_KNOWN_HOSTS_FILE}${MONSTER_UI_CATALOG_MASTER_ID}"
+    if [[ -n $value || $MONSTER_UI_CATALOG_SSH_PORT != 22 ]]; then
+        MONSTER_CATALOG_MODE=remote
+        [[ $MONSTER_UI_CATALOG_SSH_HOST =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ && \
+           $MONSTER_UI_CATALOG_SSH_USER =~ ^[a-z_][a-z0-9_-]{0,31}$ && \
+           $MONSTER_UI_CATALOG_MASTER_ID =~ ^[0-9a-f]{32}$ ]] || \
+            die 'Remote catalog requires explicit SSH host/user and expected 32-hex master ID; no authority is inferred from API URLs'
+        validate_port MONSTER_UI_CATALOG_SSH_PORT "$MONSTER_UI_CATALOG_SSH_PORT"
+        for path in "$MONSTER_UI_CATALOG_IDENTITY_FILE" "$MONSTER_UI_CATALOG_KNOWN_HOSTS_FILE"; do
+            [[ $path =~ ^/[a-zA-Z0-9_./-]+$ && -f $path && ! -L $path ]] || \
+                die 'Remote catalog requires explicit protected identity and pinned known-hosts files'
+            read -r owner mode < <(stat -c '%u %a' "$path")
+            [[ $owner == 0 && $mode == 600 ]] || die 'Remote catalog authority files must be root-owned mode 0600'
+        done
+    elif [[ ${SELECTED[kazoo-apps]:-} ]] || monster_registration_available; then
+        MONSTER_CATALOG_MODE=local
+    else
+        die 'Standalone Monster UI requires explicit remote catalog authority; use MONSTER_UI_REGISTER_APPS=false only for a deliberate assets-only deployment'
+    fi
+}
+
+monster_catalog_remote() {
+    local action=$1 source_hash
+    shift
+    [[ $MONSTER_CATALOG_MODE == remote ]] || die 'Remote catalog authority was not preflighted'
+    if [[ $DRY_RUN == true ]]; then
+        log "Would perform pinned remote catalog ${action}; no SSH or catalog changes in dry run"
+        return 0
+    fi
+    source_hash=$(sha256sum "$SCRIPT_DIR/monster-catalog-transport.py" | awk '{print $1}')
+    python3 -B -I "$SCRIPT_DIR/monster-catalog-transport.py" "$action" \
+        "$MONSTER_UI_CATALOG_SSH_HOST" "$MONSTER_UI_CATALOG_SSH_USER" "$MONSTER_UI_CATALOG_SSH_PORT" \
+        "$MONSTER_UI_CATALOG_IDENTITY_FILE" "$MONSTER_UI_CATALOG_KNOWN_HOSTS_FILE" \
+        "$MONSTER_UI_CATALOG_MASTER_ID" "$source_hash" "$@" || \
+        die 'Remote catalog was not verified; no automatic retry, overwrite or rollback. Review the exact apps-node target before rerunning'
+}
+
+install_monster_catalog_receiver() {
+    # Fixed receiver, no SSH server/identity/authorized-keys/sudoers provisioning.
+    dnf_install sudo
+    run python3 -B -I "$SCRIPT_DIR/monster-catalog-transport.py" --install-receiver \
+        "$KAZOO_ROOT" "$KAZOO_CONFIG_DIR/core/config.ini" "$KAZOO_HOSTNAME" "$KAZOO_NODE_NAME_TYPE"
+}
+
 verify_monster_app_registration() {
     local registered app account_id account_db
-    if ! monster_registration_available; then
-        [[ $MONSTER_UI_REGISTER_APPS != true ]] || \
-            die 'MONSTER_UI_REGISTER_APPS=true requires SUP and a running local kazoo-apps.service'
-        log 'Monster UI app catalog registration is delegated to a Kazoo applications node'
+    if [[ $MONSTER_CATALOG_MODE == remote ]]; then
+        monster_catalog_remote --verify "$MONSTER_UI_WEB_ROOT" "$KAZOO_API_URL" "$MONSTER_UI_APPS_LIST"
         return 0
+    fi
+    if [[ $MONSTER_CATALOG_MODE == disabled || $MONSTER_UI_REGISTER_APPS == false ]]; then
+        log 'Catalog registration explicitly disabled: assets-only scope, cluster catalog integration not verified'
+        return 0
+    fi
+    if ! monster_registration_available; then
+        die 'Local Monster UI catalog verification requires SUP and an active kazoo-apps.service'
     fi
     [[ $MONSTER_UI_REGISTER_APPS != false ]] || return 0
     account_id=$(configured_master_account_id) || die 'Cannot verify app catalog without a configured master account'
@@ -5226,11 +5297,17 @@ verify_monster_app_registration() {
 register_monster_apps() {
     local output app
     [[ $DRY_RUN != true ]] || return 0
-    if ! monster_registration_available; then
-        [[ $MONSTER_UI_REGISTER_APPS != true ]] || \
-            die 'MONSTER_UI_REGISTER_APPS=true requires SUP and a running local kazoo-apps.service'
-        log 'No local Kazoo applications node; skipping cluster-wide Monster UI app registration'
+    if [[ $MONSTER_CATALOG_MODE == remote ]]; then
+        monster_catalog_remote --install "$MONSTER_UI_WEB_ROOT" "$KAZOO_API_URL" "$MONSTER_UI_APPS_LIST"
+        verify_monster_app_registration
         return 0
+    fi
+    if [[ $MONSTER_CATALOG_MODE == disabled || $MONSTER_UI_REGISTER_APPS == false ]]; then
+        log 'Catalog registration explicitly disabled: assets-only scope, no cluster catalog changes'
+        return 0
+    fi
+    if ! monster_registration_available; then
+        die 'Local Monster UI catalog registration requires SUP and an active kazoo-apps.service'
     fi
     [[ $MONSTER_UI_REGISTER_APPS != false ]] || {
         log 'Monster UI app registration disabled by MONSTER_UI_REGISTER_APPS=false'
@@ -5588,6 +5665,12 @@ install_monster_ui() {
     local marker=/usr/local/share/kazoo5-installer/monster-ui-build
     local expected_build installed_build='' runtime_capability_hash
     log 'Installing pinned Monster UI and selected apps with owned-asset preservation'
+    if [[ $MONSTER_CATALOG_MODE == remote ]]; then
+        dnf_install openssh-clients
+        # Read-only authority/version/master check before Node, asset staging,
+        # source sync, web-root replacement, nginx configuration, or restarts.
+        monster_catalog_remote --check
+    fi
     install_monster_nodejs
     if [[ $DRY_RUN == true ]]; then
         log 'Would create a fresh protected Monster UI source stage; existing checkouts and unselected apps remain untouched'
