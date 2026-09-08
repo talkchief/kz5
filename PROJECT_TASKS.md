@@ -9,8 +9,10 @@
   **PASS**. Source fixes cover root-umask RabbitMQ plugin permissions, Node.js
   first-install selection and bounded UI build heap. Separate UI install and
   independent verification **PASS**, including pinned remote catalog access.
-  Fresh apps installation failed its immutable cardinal source prerequisite;
-  fixing this and accepting the remaining roles is P0. The user confirms HTTPS
+  Fresh bridge installation **PASS**, isolated registered consumer; no phone send.
+  Fresh apps audio prerequisite fixed (`5ee63e1`), full inventory verified;
+  MIME dependency-order failure fixed (`1cca106`), normal apps rerun in progress.
+  Accepting apps/eCallMgr/media/SIP remains P0. The user confirms HTTPS
   login works; the new server uses verified private-network TLS for that host.
 - [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).
 - FWD branch through `52c8d85` merged into master; no local redeployment performed.

@@ -1,8 +1,9 @@
 # Fresh-host and HTTPS acceptance — September 8, 2026
 
 This supersedes the external-input requests in `focused_acceptance_20260908.md`.
-FWD-01–06 remains the other team's work; its uncommitted code is excluded from
-the isolated remote acceptance checkout.
+The initial isolated checkout excluded the other team's uncommitted FWD work.
+Their completed branch through `52c8d85` is now merged (`2b07609`) and pushed to
+master with our installer fixes; fresh-server continuation uses that integration.
 
 ## Operator decisions
 
@@ -127,6 +128,36 @@ Session14757/4d3ba1 exited1 before the apps build: the checked-in five-language
 cardinal adapter rejected its source plan. Apps/media/SIP/bridge services are not
 yet installed on .44. Fix the source prerequisite and rerun the normal options;
 do not treat the existing-host ALL pass as fresh-server acceptance.
+
+Root cause: SoX was only installed with build dependencies, after the earlier
+offline cardinal source verification needed it (`SOX_REPLAY_FAILED`). Commit
+`5ee63e1` installs it before verification and explicitly rejects package failure.
+Fresh dependency-failure/ordering and existing cardinal shell regressions pass.
+Merged forwarding audio/OpenAPI/UI tests and seven compiled Erlang groups pass
+63492/f0e08c; modular/read-only/Node/Rabbit/heap suites pass46646/948479.
+
+Fresh rerun54936, unit `kz5-fresh-apps-sox-20260908.service`, used committed
+`5ee63e1`, not local-only patches. SoX installed through the main SH. Five new
+forwarding recordings and the 210 fixed plus 584 cardinal assets imported and
+verified. It then failed at the MIME generator: that target also compiles its
+module, before the later root core target builds `lager_transform`. Commit
+`1cca106` builds dependency BEAMs before generators. The mocked ordering test
+passes with the fix and fails without it. Main-SH rerun9339 uses this commit.
+Record its final outcome before apps acceptance.
+
+### Fresh mobile bridge — PASS installation
+
+Main-SH `push-bridge`71358/87daf7 exited0: Python3.11, all hash-locked packages,
+source/unit/permissions and consumer-readiness checks pass. The normal installer
+enabled and started `kazoo-push-bridge.service` as its dedicated non-root user.
+Protected provider files were copied from the existing authorized development
+configuration, not fetched again from or written to production .28. Configuration
+uses .44's broker credentials and a new `kazoo5-fresh-mobile-acceptance`
+exchange/queue with `acceptance.only` binding, never the production queue.
+The service reports registered-consumer readiness, not phone delivery. No push
+was published and no provider send was requested. Physical delivery is waived.
+Private provisioning helper: `/tmp/kz5-remote-acceptance.mEOv1zDq/prepare-bridge.cjs`;
+remote protected configuration: `/etc/kazoo-push-bridge/`.
 
 Combined guarded regression 79188/59b65a passes heap selection, Node.js/RabbitMQ
 first-install cases, both 41-group catalog migrations, modular and read-only
