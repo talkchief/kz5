@@ -1,20 +1,36 @@
 # Crossbar collection content types and optional app overrides
 
-## Current job: normal installer retry is active
+## Latest job: second installer run is terminal; completion fix ready
 
-Source `38cbb03` is on main `/opt/kz5`. Unit
-`kz5-crossbar-content-localbuild-20260908.service`, observer98460, PID289461
-is verified active (`921c45`, `3ff30e`). Log:
+Source `38cbb03` was used by unit
+`kz5-crossbar-content-localbuild-20260908.service`, observer98460; it is now
+terminal exit2, PID0/inactive (`c6f73d`, `120609`). Log:
 `/root/kz5-acceptance/crossbar-content-localbuild-20260908.log`.
 Same normal apps/eCallMgr command, missing-HOME environment and resource bounds
-as the first run. Do not restart it on observer timeouts, and do not sync new
-Git revisions into the compiling checkout. The latest documentation may be
-pushed separately; sync it only once this unit is terminal.
+as the first run. It successfully assembled the actual full Kazoo release and
+passed production-BEAM checks. The next `make sup_completion` helper independently
+started a named node and failed on missing HOME (`76fa65`), before service
+restart. Apps/eCallMgr remained their original active PIDs2174/2175.
+
+`kazoo-sup-completion-local-build.patch` removes distribution from that local
+BEAM-inspection helper and is wired into normal core source preparation. Actual
+make target regression reproduces failure before89595/cec126 (`e2dd67` confirms
+the matching auth/HOME reason), then passes85746/463d65. Expanded regression
+70253/f26aa0 also proves pinned fresh/repeat/reverse/conflict installer replay,
+valid Bash output and maintenance/syslog_level/kapps entries. Its earlier replay
+fixture inherited BASH_ENV and emitted shell startup warnings; the final fixture
+uses an explicit clean environment and matching source executable mode.
+The second failed build's crash report is root0600 at
+`/root/kz5-acceptance/sup-completion-build-failure-20260908.dump` (`e0ecb1`).
+No call data was deleted. The installer-invoked release and completion helpers
+are now both local; the remaining named scripts found by the source scan are
+separate lint/docs/xref tools, not invoked by this deployment path.
 
 After success: establish a fresh backend log baseline; run the authenticated
 company browser check; require no fresh file/journal errors; independently verify
 all nine services, then run the30+5 load gate with browser activity included.
-No deployment/browser/capacity pass is claimed for this active retry.
+No deployment/browser/capacity pass is claimed until the next normal retry and
+its subsequent acceptance checks succeed.
 
 ## Findings and source fix
 

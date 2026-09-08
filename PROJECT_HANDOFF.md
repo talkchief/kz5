@@ -1,12 +1,11 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Current deployment: retry98460 is running on .44 at source38cbb03.**
-Unit `kz5-crossbar-content-localbuild-20260908`, PID289461; protected log:
-`/root/kz5-acceptance/crossbar-content-localbuild-20260908.log`. Do not start a
-duplicate or sync main sources while compiling. Previous session51560 is
-terminal exit2 before restart. The release builder unnecessarily started
-distribution, requiring missing HOME. Source38cbb03 removes that dependency;
-real relx assembly without HOME/non-distributed checks pass483f67.
+**Retry98460 is terminal exit2 before restart, not a deployed fix.** Full release
+assembly now passes with38cbb03, but the next SUP completion generator had the
+same unnecessary named-node/HOME dependency. Its focused installer patch and
+real make/no-HOME/pinned replay regressions now pass70253/f26aa0. Both old units
+(51560 and98460) are terminal; do not poll them as live jobs. The next normal
+retry must include the new completion patch. Existing services stayed active.
 Nine production-callback regressions and pinned installer patch replay pass.
 Deployment, combined browser log check and renewed capacity acceptance remain
 open. Both existing apps/eCallMgr processes are active. Full evidence,

@@ -1,0 +1,21 @@
+diff --git a/sup/priv/build-autocomplete.escript b/sup/priv/build-autocomplete.escript
+index 859d527a4..6c0047711 100755
+--- a/sup/priv/build-autocomplete.escript
++++ b/sup/priv/build-autocomplete.escript
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env escript
+-%%! +A0 -sname kazoo_sup_build_autocomplete
++%%! +A0
+ %% -*- coding: utf-8 -*-
+ 
+ -mode('compile').
+@@ -17,6 +17,9 @@
+ 
+ %% API
+ 
++%% Completion generation only inspects local BEAM files. It must not start
++%% distribution, read a cookie, or require HOME in an unattended installer.
++
+ main([]) ->
+     usage(),
+     halt(255);

@@ -8,9 +8,9 @@
   wrapper regression fails before675873 and passes after124f23 using an isolated
   executable and synthetic cookie. No real secret or service is involved.
   Main systemd services use `scripts/dev-start-apps.sh`, not this legacy wrapper.
-  Do not change the compiling main checkout until retry98460 is terminal.
+  Sync with the next installer retry;98460 is now terminal before restart.
 
-- **CB-CONTENT-01 SOURCE FIX / RETRY98460 RUNNING:** explicit default JSON callbacks
+- **CB-CONTENT-01 SOURCE FIX / BOTH BUILD HELPERS FIXED:** explicit default JSON callbacks
   for apps-store collection/item, voicemail collection/item and directory
   collection; optional absent apps-store overrides preserve inherited permissions
   without error logging or GET-time writes. Real datastore errors still log and
@@ -21,9 +21,11 @@
   normal installer; no separate Crossbar commit. Normal main apps/eCallMgr
   deployment failed before restart in `build-dev-release`: named builder node
   requires missing HOME. That unit is terminal. Source38cbb03 removes unnecessary
-  distribution; real relx/no-HOME regression passes483f67. Normal retry98460 in
-  `kz5-crossbar-content-localbuild-20260908` is active at PID289461. Do not sync
-  revisions into its checkout or launch another installer while it runs.
+  distribution; real relx/no-HOME regression passes483f67. Retry98460 assembled
+  the full release, then failed before restart in SUP completion with the same
+  named-node dependency. It is terminal. The completion generator is now fixed
+  via installer patch; actual no-HOME make target plus pinned patch replay pass
+  70253/f26aa0. Next: normal installer retry with both helper fixes.
   Deploy/recheck remains required. Details:
   `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
