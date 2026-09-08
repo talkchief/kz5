@@ -1,5 +1,5 @@
 #!/usr/bin/env escript
-%%! +A0 -sname kazoo_relx
+%%! +A0
 %% -*- coding: utf-8 -*-
 
 -mode('compile').
@@ -7,6 +7,11 @@
 -export([main/1]).
 
 %% API
+
+%% Release assembly is local. Starting distribution here unnecessarily reads
+%% a user's cookie/HOME and registers a fixed EPMD name, breaking unattended
+%% systemd builds and parallel isolated builders. Runtime nodes are configured
+%% separately by the generated release; this builder must remain non-distributed.
 
 main([]) ->
     print_help(1);

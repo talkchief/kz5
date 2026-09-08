@@ -1,5 +1,15 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Crossbar source fix7344fa1 is pushed; first normal deployment failed before restart.**
+Unit `kz5-crossbar-content-deploy-20260908`, session51560 is terminal exit2.
+The release builder unnecessarily started distribution, requiring missing HOME.
+A focused source/test correction is being validated before the normal retry.
+Nine production-callback regressions and pinned installer patch replay pass.
+Deployment, combined browser log check and renewed capacity acceptance remain
+open. Both existing apps/eCallMgr processes are active. Full evidence,
+command/bounds/log and public-HTTPS packet diagnosis:
+`doc/crossbar_content_defaults_acceptance_20260908.md`.
+
 **Capacity run10423 is terminal, not passed:** all35 caller and agent calls
 succeeded, the30-call hold lasted180 seconds, and RTP/agent-ready checks passed.
 The final gate found eight application log errors; investigation identifies
