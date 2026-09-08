@@ -12,14 +12,17 @@
   collection counts, both apps, and inactive top loading bar with no insecure
   requests/page errors. Actual-source lifecycle regression170acf passes.
   All nine main services remain enabled/active (c307a2).
-- **BRIDGE-REMOTE-01 NORMAL INSTALL STILL OPEN:** attempt35086/b9d5a5 timed
-  out in package prerequisites, before any bridge restart. Original config and
-  provider bytes plus unchanged active service PID independently verified
-  (4bb283). No installer processes remain; temporary .44 broker stopped.
-  Harness timeout cleanup now covers its process group, preventing an orphan
-  package-manager child from blocking restoration. This is a harness correction,
-  not a passed remote installation. Protected receipt retained on .44; details
-  in `PROJECT_HANDOFF.md`.
+- **BRIDGE-REMOTE-01 NORMAL REMOTE INSTALL / RESTORATION PASS:**65096/3e586e
+  installed through the normal main SH against the isolated remote broker;
+  actual service PID/socket correlated with TLS1.3 and exactly one consumer.
+  Normal SH restored original config/provider bytes and active local consumer.
+  No push publishes or provider requests. CRB setup is now idempotent; both
+  installs preserve rocky.repo mtime. CRB, main installer and bridge rollback
+  regression suites pass35756/edd5be. Protected passing/previous failed receipts
+  are on .44 under `/root/kz5-acceptance/bridge-service-remote/`. The previous
+  timeout/orphan correction is retained, not hidden. Temporary broker stopped;
+  main RabbitMQ PID2355/restarts0 and all nine services unchanged. Outage and
+  duplicate-dispatch recovery remain open; details in `PROJECT_HANDOFF.md`.
 - **BRIDGE-REMOTE-01 NATIVE REMOTE TLS/CONSUMER PASS:** actual .26 client to
   isolated native .44 RabbitMQ6035/ef7ad0 passes TLS1.3, certificate negative
   cases, authenticated HTTPS exact-broker checks, registered consumer,503→200
@@ -28,7 +31,7 @@
   pins stable; passing run's empty UUID resources removed. Temporary broker
   stoppedab490b; main RabbitPID2355/restarts0 and all nine services unchanged.
   Receipts preserved on .44 under `/root/kz5-acceptance/bridge-remote-tls/`.
-  Normal installed-service remote topology and outage/reconnect remain open;
+  Normal installed-service remote topology now passes65096; outage/reconnect remains open;
   this runtime acceptance does not close all INST-13 gates. Details and failed
   setup/identity/cleanup attempts: `doc/push_bridge_remote_tls_acceptance_20260908.md`.
 - **REL-GATES-01 CURRENT VERIFIER PASS / TRACKER RECONCILED:** independent

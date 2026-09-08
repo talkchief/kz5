@@ -1,5 +1,58 @@
 # Mobile bridge: actual cross-server TLS consumer acceptance
 
+## Subsequent normal installed-service acceptance
+
+**PASS65096/3e586e:** the ordinary `install-kazoo5.sh push-bridge` installed
+and restarted the real non-root systemd service on10.1.0.26 against the separate
+TLS broker on10.1.0.44. The test correlated service PID2428399 with its actual
+TCP socket, broker TLS1.3 connection and the queue's single registered consumer.
+The queue was empty; no pushes were published and no provider calls requested.
+The same main SH then restored the original local-broker configuration;
+byte-for-byte config/provider hashes and registered service PID2429632 passed.
+This is a real installed-service topology change on an existing development
+host, not a new clean-host installation or a provider-delivery test.
+
+Source runner: `scripts/accept-bridge-remote-service.py`. Its fixed host, broker,
+identity, queue/exchange UUID and configuration guards deliberately refuse blind
+reruns over retained state. The current successful receipt is retained on .44:
+`/root/kz5-acceptance/bridge-service-remote/receipt.json`, SHA256
+`c8cc5878884541f191761d57499a76e49f89b12df2e92f5646796e6198104fb6`.
+Local source receipt/config backups/logs remain in
+`/var/log/kazoo-acceptance/bridge-service-remote/`; the config backups contain
+secrets and must never be committed. Only the non-secret receipt was copied to
+the main development host. The successful test's empty UUID resources are
+retained in the stopped isolated broker, not deleted as production resources.
+
+Earlier attempt35086/b9d5a5 exceeded its180-second installer deadline while
+refreshing package metadata. The previous Bash-only timeout orphaned DNF and
+blocked restoration on its lock. That orphan was terminated; independent audit
+verified original config/provider bytes and the unchanged original service.
+The harness now terminates only its own process group on timeout before
+restoration; eleven offline regression tests pass5e64a2. The earlier receipt
+remains as `prerequisites-failed-receipt.json` on .44. Original local attempt
+state/CA was moved, not deleted, to
+`/var/log/kazoo-acceptance/bridge-service-remote-prerequisites-20260908/`.
+
+The installer also rewrote rocky.repo on every run to enable already enabled
+CRB. DNF expires metadata older than repository configuration, so this forced
+unnecessary revalidation. The new `ensure_crb_repository` reads CRB state and
+only enables it when disabled, then verifies success. Unknown/ambiguous state
+and command failures remain errors; normal DNF install/freshness/signature
+checks are unchanged. Both successful installs preserved the original
+rocky.repo timestamp. A bounded metadata-only diagnostic downloaded BaseOS and
+AppStream before its120-second deadline; it was not an installer success.
+The subsequent normal installers completed with the remaining native metadata
+checks and all service verification, without cache-only flags. This behavior
+matches [DNF configuration-age expiry](https://dnf.readthedocs.io/en/latest/conf_ref.html#main-options)
+and [config-manager's persistent enable operation](https://dnf-plugins-core.readthedocs.io/en/latest/config_manager.html).
+
+`test-crb-repository-idempotence.sh` covers enabled, disabled, malformed,
+ambiguous, failed query/enable and dry-run states plus installer wiring.
+This and the main installer and bridge rollback/selection suites pass35756/edd5be.
+The temporary broker is stopped again; main .44 RabbitMQ PID2355/restarts0 and
+all nine main services remain unchanged9b6706. Fresh-host remote/reboot,
+outage/reconnect and duplicate-dispatch recovery gates remain open.
+
 ## Result and scope
 
 **PASS ef7ad0 / session6035:** the original development host10.1.0.26 ran the
@@ -29,7 +82,8 @@ This is **not** a normal installed-service remote-broker deployment, provider
 delivery, broker restart, reconnect/failover or exactly-once acceptance. Existing
 normal bridge services were not reconfigured. The next gate is the ordinary
 `install-kazoo5.sh push-bridge` service deployment against the reviewed remote
-TLS topology, followed by independent verification and recovery tests.
+TLS topology, followed by independent verification and recovery tests. The later
+normal installed-service acceptance above closes that installation step only.
 
 ## Isolation and retained evidence
 

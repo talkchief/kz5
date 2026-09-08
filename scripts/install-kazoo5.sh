@@ -1247,10 +1247,31 @@ preflight() {
     log "Endpoints: CouchDB ${KAZOO_COUCHDB_HOST}:${KAZOO_COUCHDB_PORT}; AMQP ${KAZOO_AMQP_HOST}:${KAZOO_AMQP_PORT}; Erlang ${KAZOO_ERLANG_DIST_IP}:11500-11999; API ${KAZOO_API_URL}"
 }
 
+ensure_crb_repository() {
+    # config-manager --set-enabled always saves the repository file. Rewriting
+    # rocky.repo on every deployment expires otherwise usable metadata for its
+    # sibling BaseOS/AppStream repositories as well. Do not change enabled CRB.
+    if [[ $DRY_RUN == true ]]; then
+        run dnf config-manager --set-enabled crb
+        return
+    fi
+    local configuration enabled
+    configuration=$(dnf -q config-manager --dump crb) || die 'Cannot inspect CRB repository configuration'
+    enabled=$(awk '$1 == "enabled" && $2 == "=" {print $3}' <<<"$configuration")
+    case $enabled in
+        1) return ;;
+        0) run dnf config-manager --set-enabled crb ;;
+        *) die 'Missing or ambiguous CRB repository enabled state' ;;
+    esac
+    configuration=$(dnf -q config-manager --dump crb) || die 'Cannot verify CRB repository configuration'
+    enabled=$(awk '$1 == "enabled" && $2 == "=" {print $3}' <<<"$configuration")
+    [[ $enabled == 1 ]] || die 'CRB repository did not become enabled'
+}
+
 install_base_dependencies() {
     log 'Installing Rocky Linux repositories and base tooling'
     dnf_install dnf-plugins-core epel-release
-    run dnf config-manager --set-enabled crb
+    ensure_crb_repository
     dnf_install \
         bash-completion ca-certificates curl findutils git gzip iproute jq logrotate \
         openssl procps-ng python3 rsync tar unzip util-linux wget which zip

@@ -12,28 +12,34 @@ test. UI actual-source regression170acf passes against the pinned original;
 the earlier test input was already patched and correctly failed its required
 before-fix reproduction. All nine .44 main services are enabled and active.
 
-Normal remote bridge installer attempt35086/b9d5a5 did **not** pass: package
-prerequisites exceeded the180-second harness deadline, and an orphaned DNF
-process blocked the restoration installer. No bridge restart took place.
-The scoped orphan was terminated; no installer/DNF process remains. Independent
-audit4bb283 verifies byte-identical original config/provider files and the
-unchanged active, registered original bridge PID1172968. The receipt's
-`restored=false` records the failed normal-installer restoration gate, not an
-assertion that the temporary config is still active. Receipt is retained on .44
-at `/root/kz5-acceptance/bridge-service-remote/receipt.json`. The temporary broker
-is stopped again; .44 main RabbitMQ PID2355/restarts0 is unchanged. The harness
-now starts its installer in a separate process group and terminates its own
-children on timeout before restoration. Normal remote installation still needs
-a successful rerun; do not claim this source fix closes that release gate.
-All eleven offline service-harness regression tests pass5e64a2.
+**Normal cross-host TLS bridge installation and restoration pass65096/3e586e.**
+Actual service PID2428399 was correlated with a TLS1.3 socket and exactly one
+broker consumer, with an empty queue and no provider requests. Normal restoration
+returned the original configuration byte-for-byte, unchanged provider hashes,
+and active consumer PID2429632. Installer now avoids rewriting already enabled
+CRB, preventing unnecessary metadata expiry without disabling package/freshness
+checks. Both ordinary installs preserved rocky.repo's mtime. CRB, general
+installer and bridge selection/rollback regressions pass35756/edd5be; eleven
+service-harness tests pass5e64a2. Receipt on .44:
+`/root/kz5-acceptance/bridge-service-remote/receipt.json`, SHA256
+`c8cc5878884541f191761d57499a76e49f89b12df2e92f5646796e6198104fb6`.
+
+Earlier attempt35086/b9d5a5 timed out during package prerequisites before any
+bridge restart. Its orphaned DNF child was terminated, and audit4bb283 confirmed
+the unchanged original config/providers/service. That failed receipt remains
+beside the new passing one as `prerequisites-failed-receipt.json`; its false
+restoration flag is historical. The harness now terminates its own installer
+process group on timeout before restoration. Local protected originals from
+that attempt are archived at
+`/var/log/kazoo-acceptance/bridge-service-remote-prerequisites-20260908`.
 
 Latest bridge gate: actual cross-host native AMQPS/HTTPS consumer6035/ef7ad0
 passes TLS trust/hostname negatives, counted retry/companion progress and
 three-attempt exhaustion/DLQ with synthetic providers only. Temporary broker
 on .44 is stopped, main RabbitMQ PID2355/restarts0 and all nine services remain
 unchanged. Code/receipts retained on the main dev host. Normal installed-service
-remote-broker deployment and outage/reconnect are still open, not covered by
-this harness. See `doc/push_bridge_remote_tls_acceptance_20260908.md` and
+remote-broker deployment now passes the separate acceptance above; outage and
+duplicate-dispatch recovery remain open. See `doc/push_bridge_remote_tls_acceptance_20260908.md` and
 BRIDGE-REMOTE-01 before reusing its fixed, short-lived test fixture.
 
 **Latest operator follow-up:** original server will be deleted; keep current
