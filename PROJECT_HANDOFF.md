@@ -8,11 +8,22 @@ fresh file/journal error matches both0 (`b50240`). All nine roles pass the fresh
 activation verifier (`fe58e6`). Earlier ALL44779 retained16:50 Kamailio errors
 from the fixed SIP fixture; dev Kamailio restarted with0 calls and logs preserved.
 The mixed browser/verifier401 window is documented, not marked clean.
-Current:30+5 capacity with browser activity, without installer health probes.
-Unit `kz5-capacity-contentfix-20260908`, observer76609, source8a5329b;
-verified active/MainPID378858 (`e2b655`), not yet passed. Protected log
+**30+5 capacity with browser activity now PASS.** Unit
+`kz5-capacity-contentfix-20260908`, observer76609, source8a5329b, terminal
+exit0 (`e61e37`),11m5.940s. Independent summary6fe435:35/0 caller and35/0 agent
+success/failure counts,180s simultaneous hold,30 bidirectional RTP endpoints,
+zero journal/file error matches and new cores. Peak sampled host CPU28%, minimum
+available memory20693076KiB. Browser20147/40da16 passes SmartPBX/ACDC/Talkchief
+and inactive top bar during calls; private-route certificate-verified HTTPS.
+Cleanup confirmed zero calls, inactive unit/MainPID0. Independent readback30653
+confirms all nine services enabled/active and all30 fixture agents logged out,
+with no status repair writes. Protected log
 `/root/kz5-acceptance/capacity-contentfix-20260908.log` and result root
 `/var/log/kazoo-acceptance/main44-capacity-contentfix-20260908`.
+This proves bounded30-call concurrency at2 starts/sec, not30/80CPS, long soak,
+failover or complete production readiness. Next priority: safely port the old
+tenant-pinned callback acceptance to main-host owned fixtures; see
+CALLBACK-MAIN44-01 in `PROJECT_TASKS.md`. No capacity job remains active.
 Full paths/evidence in `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
 **Historical retry98460 is terminal exit2 before restart.** Full release
@@ -23,7 +34,7 @@ real make/no-HOME/pinned replay regressions now pass70253/f26aa0. Both old units
 retry must include the new completion patch. Existing services stayed active.
 Nine production-callback regressions and pinned installer patch replay pass.
 Deployment and combined browser log check subsequently passed as recorded above;
-renewed capacity acceptance is running. Full evidence,
+renewed capacity acceptance subsequently passed above. Full evidence,
 command/bounds/log and public-HTTPS packet diagnosis:
 `doc/crossbar_content_defaults_acceptance_20260908.md`.
 

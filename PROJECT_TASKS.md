@@ -2,6 +2,19 @@
 
 ## Immediate operator follow-up — September8
 
+- **CALLBACK-MAIN44-01 OPEN — portable acceptance fixture:** the retained retry
+  harness, explicit-language setup and internal endpoint preflight still pin
+  the old development tenant `7807ad61761269a1ccec833dde63f621` in
+  `scripts/test-acdc-callback-retry.sh`, `scripts/test-acdc-callback-fixture.sh`
+  and `scripts/test-fixtures/callback-internal-scenarios.cjs`. Do not reuse that
+  identity or remove ownership checks to run on the main host. Add an explicit,
+  protected-state-bound development fixture selection with remote account,
+  queue, caller/device and saved-configuration ownership verification; reject
+  master/imported/foreign tenants and preexisting contacts. Cover old/new
+  fixtures and refusals before main-host EN/HE/FR/ES/AR retry/audio acceptance.
+  Preserve prior five-language proof as old-host evidence, not a main-host pass.
+  This is test portability, not evidence that the deployed callback API fails.
+
 - **SEC-LAUNCHER-01 SOURCE FIX / MAIN SYNCED AND TESTED:** legacy
   `scripts/dev/kazoo.sh` printed the Erlang cookie. Removed only that output;
   runtime child still receives its configured cookie/node/command. Actual
@@ -32,15 +45,18 @@
   a separate isolated browser/log repeat passed below. ALL44779 failed retained16:50 Kamailio errors
   from the fixed negative SIP fixture. With0 calls, dev Kamailio restarted;
   read-only ALL retry64780 passesfe58e6. Isolated UI79330 passes e6baef with0
-  file/journal matchesb50240. All installers terminal. Current30+5 capacity with
-  browser activity, without overlapping unauthenticated installer probes.
-  Load acceptance remains required. Details:
+  file/journal matchesb50240. All installers terminal. Combined30+5 capacity
+  with browser activity subsequently passes76609/e61e37, without overlapping
+  unauthenticated installer probes. Broader release gates remain. Details:
   `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
-- **LOAD-01 RUNNING76609 / LOG GATE OPEN:** current source8a5329b run uses
-  unit `kz5-capacity-contentfix-20260908`, verified active/MainPID378858
-  (`e2b655`). It retains30+5 calls,180s hold, all RTP/log checks and1200s bound.
-  Browser activity will run inside this window; no installer health probes.
+- **LOAD-01 BOUNDED30+5 PASS:** source8a5329b run
+  `kz5-capacity-contentfix-20260908` is terminal exit0, observer76609/e61e37.
+  Independent summary6fe435 confirms35/0 caller and35/0 agent counts,180s hold,
+  bidirectional RTP at all30 agents,zero file/journal errors and new cores.
+  Browser20147/40da16 passes during calls. Peak sampled CPU28%, minimum available
+  memory20693076KiB; zero calls after cleanup and unit inactive/MainPID0.
+  No capacity job remains. This is not CPS, long-soak or HA certification.
   Previous terminal10423 run:30+5 calls completed with35/0
   caller and35/0 agent successes/failures,180s concurrent hold, RTP and ready
   checks passed. Final gate failed on eight application error lines during
@@ -1831,7 +1847,7 @@ verified; do not toggle global deletion settings to run a dashboard test.
 | INST-12 | DEPLOYED — forced-build/source checks retained; atomicity open | Installer forces Erlang recompilation and selected number/MIME regeneration despite restored input mtimes or future-dated artifacts; content snapshots reject changed inputs/artifacts before same-invocation ecallmgr reuse. September6 Make/erlc fixtures remain valid evidence (doc/installer_build_identity.md). Full fresh23557/5db474 and repeated ALL48019/6236b8 builds now pass, including immutable prerecorded media and native runtime checks; deployment is no longer held by the earlier voice-build gate. Concurrent mutation/crash-atomic build/deploy snapshots and broader linguistic readiness remain separate unproven requirements. |
 | SEC-01 | DEPLOYED — original and .44 HTTPS/WSS PASS; renewal open | Original-host TLS90345/4232b3 and browser72297/af0738 pass. New .44 hostname kz5-dev.talkchief.io independently deployed50206/267490; ten catalog URLs migrated with CAS receipts; real normal-TLS browser90351/a3c1e3 and subsequent20021/2b3a50 pass HTTPS API/WSS and UI. Tests route that hostname to private .44 without bypassing certificate validation; public-IP certificate validity is not claimed. Renewal lifecycle remains unverified. See doc/dev44_https_acceptance_20260908.md. |
 | SEC-02 | OPEN — operations | Network exposure, least privilege, secrets, SELinux policy, auth/tenant isolation, audit logs, backups, retention, monitoring/alerts and resource/disk limits. Do not equate active services with enterprise certification. |
-| LOAD-01 | ACTIVE — .44 1/5/10/20 PASS;30+5 rerun76609 running | Unit kz5-capacity-contentfix-20260908 at source8a5329b, active/MainPID378858 verifiede2b655,1200s bound. Crossbar source fixes deployed; isolated UI/file/journal gate passes. Previous10423 call/RTP checks passed but eight log errors made that run fail; retained as failed evidence. Current combined browser/load gate unproven. See doc/main44_call_acceptance_20260908.md. No CPS certification or old-host incident closure. |
+| LOAD-01 | BOUNDED CONCURRENCY PASS — broader load/soak open | Main .44 1/5/10/20 stages passed earlier. Source8a5329b30+5 run76609/e61e37 terminal exit0:35/0 caller and35/0 agent counts,180s simultaneous hold,bidirectional RTP30 endpoints,zero file/journal errors/cores. Browser20147/40da16 passes during load; cleanup0calls/PID0. Peak sampled host CPU28%,minimum available memory20693076KiB. Failed earlier10423 evidence retained. See doc/main44_call_acceptance_20260908.md. At2 call starts/sec, not30/80CPS, long soak, HA or old-host incident closure. |
 | HA-01 | OPEN — acceptance | Backup/restore, failure injection, multi-node ownership, distributed queues/broker/database failover, reconnect and no duplicate callbacks/bridges. |
 | REL-01 | OPEN — release | Review and credential-scan all task changes, commit source/tests/assets/docs and record exact build/test evidence. Update this register rather than marking untested features done. |
 | REL-02 | ACTIVE — reviewed master checkpoints pushed; release pending | Protected GitHub authentication is verified. Latest prior checkpoint9288a780cd034373b1bcc2fb472fa5bd751b0d02 pushed to master and independently read back73e135; earlier b190ba7 and27e7c69 are also remote. Continue explicit reviewed staging, credential-free scans, commits and verified non-force master pushes. New dirty candidates are not automatically included or accepted. Full requested release remains open. Select provider-specific credentials from protected storage without printing/committing them; never reuse the exposed chat token. |

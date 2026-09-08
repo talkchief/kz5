@@ -3,19 +3,58 @@
 ## Current capacity recheck
 
 Source8a5329b on main `/opt/kz5`; unit `kz5-capacity-contentfix-20260908`,
-observer76609, verified active/MainPID378858 (`e2b655`). Started only after
+observer76609, **terminal exit0/PASS (`e61e37`)**. Started only after
 readback `ef5f87` confirmed no capacity units and zero FreeSWITCH calls.
 Command: `bash scripts/test-kazoo-calls.sh --stress --live --no-install-deps
 --stages 30 --queued-excess 5 --run-root
 /var/log/kazoo-acceptance/main44-capacity-contentfix-20260908`.
 Protected log `/root/kz5-acceptance/capacity-contentfix-20260908.log`.
 Bounds:1536MiB memory, zero swap,200% CPU,512 tasks,1200 seconds; same180s
-simultaneous hold and full drain/RTP/log checks. Actual browser activity will
-overlap calls; installer unauthenticated health probes will not overlap.
-This run is not yet passed. The Crossbar fixes and both build-helper fixes
+simultaneous hold and full drain/RTP/log checks. Actual browser activity
+overlapped calls; installer unauthenticated health probes did not overlap.
+The Crossbar fixes and both build-helper fixes
 are deployed through the normal installer; isolated browser/file/journal
 gate already passes. Details: `crossbar_content_defaults_acceptance_20260908.md`.
 All older capacity units/results below are terminal historical evidence.
+
+Independent final readback `6fe435`:
+
+| Check | Result |
+| --- | --- |
+| Concurrent answered agent calls / total callers | 30 / 35 |
+| Continuously verified simultaneous hold | 180 seconds |
+| Caller successes / failures | 35 / 0 |
+| Agent successes / failures | 35 / 0 |
+| Bidirectional RTP agent endpoints | 30 |
+| Caller RTP packets incoming / outgoing | 632485 / 629983 |
+| Fresh journal / file error matches | 0 / 0 |
+| New core dumps | 0 |
+| Peak sampled whole-host CPU | 28% |
+| Minimum available host memory | 20693076 KiB |
+| Post-cleanup FreeSWITCH calls / unit PID | 0 / 0 |
+
+Result subdirectory `20260908T184404Z`; `summary.tsv` and
+`answered-30-rtp-counts.tsv` remain protected there. Temporary raw RTP capture
+was removed by the existing harness after all packet assertions passed.
+Native systemd observer reports success, runtime11m5.940s, CPU7m52.823s and
+peak624.4MiB for the guarded job (distinct from the host CPU/memory above).
+The original180s simultaneous hold, exact SIP counters, RTP floors, agent-ready
+checks and final clean-log/core gates were not weakened.
+
+Post-test independent readback30653 confirms all nine services enabled/active
+(`e673f4`) and all30 fixture agents logged out (`c0f0b3`). This verification
+made no queue-status writes and did not repair test cleanup silently.
+
+Real browser session20147/40da16 passed while calls were active: account picker,
+Talkchief15 users/82 devices/4 queues/89 callflows, SmartPBX,4ACDCqueuecards,
+zero active top loading indicators and no captured request/page errors.
+Readbackc65eb2 at18:47:26 showed35 answered/current caller legs and30 active
+agents. Browser routing was private HTTPS with certificate verification,
+not independent public-IP reachability or a UI call-control test.
+
+This closes the measured30-concurrent-call gate at2 starts/sec. It does not
+certify30/80 calls per second, long-term soak, cross-node failure recovery,
+supervision privacy or the remaining production release requirements.
 
 ## Scope and safety
 
