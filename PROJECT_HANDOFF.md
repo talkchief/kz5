@@ -9,8 +9,13 @@ only run checks needed to reproduce and verify a named remaining defect.
 in20.561s. Exactly one Login POST; genuine proof confirms, one aborted proof
 GET displays unavailable, Check again recovers without resending Login.
 Selected agent logs out afterward; other29 statuses and memberships unchanged.
-See `doc/queue_login_browser_acceptance.md`. Possible stale cached proof after
-explicit Logout is a source-review candidate, not a reproduced/fixed bug yet.
+See `doc/queue_login_browser_acceptance.md`. Stale cached proof after explicit
+Logout is now reproduced by an actual-source event regression and fixed in
+f820d18;27 focused tests pass. Normal Monster installer87070/c84568 exits0
+in79.425s, preserving1942 files with no removals. Actual deployed browser
+77891/5350d1 exits0 in19.819s and additionally verifies immediate post-Logout
+label invalidation. Jobs are terminal. P0-22 login-display scope is closed;
+broader authorization and live delayed-response cases remain separate gates.
 Do not rerun completed acceptance merely to generate more evidence.
 
 **Actual browser Create/Save now PASS on main.** Unit

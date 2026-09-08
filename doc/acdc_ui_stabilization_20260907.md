@@ -69,8 +69,11 @@ unavailable; Check again obtains genuine confirmation without repeating the
 Login write. The selected agent logs out afterward and the other29 statuses
 and memberships remain unchanged. See `queue_login_browser_acceptance.md` for
 the receipt and exact scope. This does not classify the older TypeError or
-prove every intermittent case. A possible stale confirmation cache after
-explicit Logout remains a focused source-review candidate to reproduce.
+prove every intermittent case. The stale confirmation cache after explicit
+Logout was subsequently reproduced by an actual-source regression and fixed
+in f820d18 (27 focused groups pass). Normal installer deployment and actual
+browser post-Logout label invalidation now pass on main; the linked acceptance
+document records the exact terminal evidence and remaining limits.
 
 ## Dashboard wording
 

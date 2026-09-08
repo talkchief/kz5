@@ -13,9 +13,12 @@
   shows unavailable and Check again recovers without a second Login POST.
   Selected agent logs out afterward; other29 statuses and memberships remain
   unchanged. Source4b4fcf3, unit72753/569476 exits0 in20.561s. Evidence and
-  limits: `doc/queue_login_browser_acceptance.md`. Explicit Logout may leave
-  the UI's cached proof visible until its30-second expiry: source-review
-  candidate only, not yet reproduced or fixed; keep within this same ticket.
+  limits: `doc/queue_login_browser_acceptance.md`. Explicit Logout's stale
+  cache is now reproduced in an actual-source event test and fixed in f820d18;
+  all27 focused groups pass. Normal Monster installer87070/c84568 exits0;
+  deployed browser77891/5350d1 passes immediate post-Logout label invalidation
+  as well as Login/recovery, with the other29 agents unchanged. Scope closed;
+  restricted principals/arbitrary network reordering are separate release gates.
 
 - **P0-26 / EDITOR-MAIN44-LANGUAGE-01 ACTUAL BROWSER SAVE PASS:** real create,
   EN/HE/AR/FR/ES saves, fresh readbacks and final reopened form succeed on main.
@@ -1388,9 +1391,10 @@ directly in kz5 and compiled from there by the installer.
 - **P0-26 deployed, acceptance incomplete:** actual queue creation returned201;
   saved settings were read back and the exact test queue was removed. Next:
   browser edit/PATCH, validation failures and uncertain-operation recovery.
-- **P0-22:** actual Login confirmation and failed verification-read recovery
-  pass on main (4b4fcf3). Preserve the working login mutation. Remaining focused
-  check: possible cached confirmation after explicit Logout; not yet reproduced.
+- **P0-22 scoped closure:** actual Login confirmation, failed verification-read
+  recovery and immediate Logout proof invalidation pass on main (f820d18;
+  27 offline groups and browser77891/5350d1). Runtime-only login preserved;
+  no other agent changed. Broader authorization/cluster cases stay separate.
 - **DASH-10 source candidate under validation, not deployed:** privacy-safe
   caller Name/Number now flows through the selected-queue collector, native
   codec, public API, UI and OpenAPI source. Null/legacy identity displays
@@ -1551,7 +1555,7 @@ See `doc/callflows_users_entitlements_fix.md` for source, deployment and replay.
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
 | P0-21 | DEPLOYED — restricted-user acceptance open | Corrected legacy module spelling with an admin-only management guard. Installer refuses old unguarded backends and preserves unrelated modules. Installer22groups66cc53/cea08b and backend7groupsbcc947/c5cf88 pass; pinned baseline fails5. Deployment209651/1e3fc6 verifies actual bytes/capability/running+effective registration and unchanged31-agent states. Actual admin policy CRUD revision probe7c9f07/47ce1f passes stale412, weak412 and current-delete200+absence. Earlier run2 policy retained after harness POST-replacement mismatch. Ordinary-user HTTP denial and restricted-dashboard matrix remain unverified. See doc/scope_management_dashboard_acceptance.md. |
-| P0-22 | SCOPED MAIN PASS — logout cache check open | Actual selected-queue Login and interrupted verification GET / Check again recovery pass on main with exactly one Login POST; selected agent logs out and other29 statuses/memberships stay unchanged. Source4b4fcf3; doc/queue_login_browser_acceptance.md records evidence and limits. Source review suggests cached confirmation can survive explicit Logout until expiry; reproduce before changing code. Restricted principals and stale-navigation cases are not covered by this run. Preserve the working runtime-only Login mutation; roster assignment is not login proof. |
+| P0-22 | CLOSED — scoped main login-display acceptance | Actual selected-queue Login, interrupted proof GET / Check again recovery and immediate post-Logout table-label invalidation pass on main with exactly one Login POST; other29 statuses/memberships unchanged. Logout stale-proof regression fails before f820d18 and27 groups pass after. Normal installer87070/c84568 and deployed browser77891/5350d1 exit0. Source and retained evidence: doc/queue_login_browser_acceptance.md. Restricted principals, arbitrary stale navigation and live delayed-response reordering remain separate release gates. Runtime-only Login preserved; roster assignment is not login proof. |
 | P0-25 | FIXES DEPLOYED — scoped browser PASS; outage acceptance open | September 7 indefinite loading traced to both unbounded GET waits and overlapping native app construction clearing ACDC translations. Bounded GET fix is deployed; installer-owned singleflight patch b02f7fe passes16 actual-loader groups including original failure reproduction. Fresh production MwsDYg bundle deployed ec9a75/9f9af6. Initial dashboard/login-dialog probe passes without page errors3ff064/eefb87; standard default and account-switch production probes pass7/10 checks e5b91d/2241b2 and45576a/e20ac1 with zero page/console/HTTP errors. All four home/switched summary/detail reconnect cases pass7/9/10/12 checks with zero errors; receipts hltOHJ,jDrUgY,hcjYc6,2rApWe. Controlled unavailable-API/late-reply browser recovery and never-settling loader behavior remain open. See doc/monster_app_load_singleflight.md. |
 | P0-26 | FIX DEPLOYED — actual create/readback PASS | September 7 repeated PUT /queues/editor400 logged editor_body_requires_exact_fields; actual Monster serializer adds unwanted ui_metadata. Local requestQueueEditor opt-out preserves strict five-field backend body, request identity and explicit retries; eight real-serializer fixture groups pass e412fe. Matching UI deployed6d7352/d9a24c. Actual form PUT created one owned empty-roster/no-extension queue with HTTP201 (7f91f3/816240); harness incorrectly expected200, but completed operation was durably captured. Recovery09a4d6/131789 verified saved settings/empty roster/no callflow, deleted exact owned queue and confirmed404; no create retry. Receipt retained. Validation failures, PATCH and uncertain receipt recovery remain open; normal owned cleanup is not conditional-delete proof. |
 | UI-01 | OPEN — storage capability404 | September 7 browser /accounts/{ACCOUNT_ID}/storage GET returns404, reproduced by root. Identify the requesting Monster component and whether storage is absent/unsupported or misconfigured. Gate optional lookup on supported capability or configure the actual feature; do not fake success or assume it causes the independent queue-editor400. Verify affected settings retain correct availability/error behavior and clean initial browser loading. |
