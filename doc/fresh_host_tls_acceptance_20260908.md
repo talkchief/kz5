@@ -387,3 +387,41 @@ and umask077. Protected log: `/root/kz5-acceptance/all-address-install.log`.
 Data services and restored HAProxy already pass, including actual effective
 systemd address gate readbacked33ff. This rerun deliberately uses the standard
 installer path, not a manual drop-in deployment or bypassed build verification.
+
+### Normal ALL rerun and second reboot — PASS
+
+Normal ALL48019/6236b8 exited0 in13m44.524s (CPU16m59.471s), source `30daaab`.
+All nine roles were processed through the main entry point under umask077,
+including full application rebuild, shared same-invocation eCallMgr build,
+installed/effective address gates, SIP/media connectivity, preserved media and
+catalog entries, UI and bridge. No provider synthesis/send occurred.
+
+After this job finished, .44's `/opt/kz5` was fast-forwarded to pushed `b393f62`;
+the intervening changes were documentation only. Readback33781/d5e267 confirmed
+master, clean tracked state, all nine services active/restarts0, calls0 and no
+pending jobs. ACDC source remains in kz5 with no nested Git metadata.
+
+Second reboot3085d9 changed boot ID to
+`c8994ec2-c85c-4121-b4c4-2685129d3d35`. Readbacka833e2 shows all nine services
+active/running, every automatic restart counter0 and no pending systemd jobs.
+The boot journal contains zero repeats of eaddrnotavail/address-assignment
+failures. Focused app/eCallMgr/FreeSWITCH/Kamailio/bridge log inspectione127d2
+found no CRASH REPORT or ERROR entries; the matching info-level401 was the
+expected unauthenticated API health probe, not a failed administrator login.
+
+Post-boot independent ALL76710/8722b4 exited0 in1m41.168s with all nine checks
+passing, including exact source/effective address gate checks, datastore/API/SUP,
+prerecorded mappings after restart, native media inventory, SIP/AMQP/JWT,
+UI/catalog and bridge consumer. Protected log:
+`/root/kz5-acceptance/postboot-verify-all.log`.
+Actual post-boot browser30795/7b71ff again passed fresh master login, UI boot,
+local API configuration, WebSocket upgrade and `/apis`, with zero captured
+browser failures. Dynamic Erlang distribution ports may swap within the allowed
+range after reboot; verification uses actual EPMD registration, not assumed
+fixed per-node ports.
+
+This closes the measured fresh installation/repeat/reboot checkpoint. It does
+not certify every distributed topology, HA/load behavior, native-language audio
+quality or physical mobile delivery. The latter is explicitly waived. The main
+development stack remains on .44; no original-site DNS/TLS migration occurred.
+Next queued task is the exact-company-only compatibility assessment COMPAT-01.

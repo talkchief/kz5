@@ -4,9 +4,10 @@
 
 - `10.1.0.44` is now the main Kazoo5 development server. Retain the stack and
   Git checkout at `/opt/kz5`; use canonical kz5 `master`, including tracked ACDC.
-- Finish live ALL48019 and reboot acceptance before updating its source.
-  Then fast-forward it to the latest pushed master and verify clean tracked
-  state/source identity. Do not erase installed data or copy secrets into Git.
+- Normal ALL48019/6236b8 and post-reboot ALL76710/8722b4 passed. The checkout
+  was fast-forwarded to latest pushed `b393f62` with clean tracked state before
+  reboot; subsequent documentation checkpoints are synced after publishing.
+  Do not erase installed data or copy secrets into Git.
 - Existing public hostname/DNS/TLS remains on the original host; migration of
   that public endpoint is a separate decision, not implied by retaining .44.
 
@@ -46,8 +47,8 @@ Detailed assessment plan: [Kazoo4/5 CouchDB coexistence](doc/kazoo4_kazoo5_couch
   `kazoo-applications.service` alias resolves correctly. SIP template permissions under
   umask077 are also fixed/tested (`c40fd2d`), with untouched secrets/custom files.
   FreeSWITCH sound traversal/readability and existing-audio preservation are
-  fixed/tested (`237716e`). Normal FreeSWITCH/Kamailio install84616 is running
-  on .44. It completed compilation but failed13c663 before startup: the sound
+  fixed/tested (`237716e`). Normal FreeSWITCH/Kamailio install84616 on .44
+  completed compilation but failed13c663 before startup: the sound
   verifier could not traverse the private installer manifest directory, and
   inspection found restrictive public binary parents. Focused stdin-manifest
   and runtime-directory fixes pass77793/eea832 and are pushed `bc8f969`.
@@ -58,8 +59,10 @@ Detailed assessment plan: [Kazoo4/5 CouchDB coexistence](doc/kazoo4_kazoo5_couch
   verification66513/f83cde and actual browser48355/8df633 **PASS**.
   First reboot exposed delayed private-IP assignment: HAProxy stayed failed;
   CouchDB/apps/eCallMgr/Kamailio recovered after one restart. Exact-address
-  startup gate and regression tests are pushed `30daaab`; normal ALL48019 is
-  active (data services/HAProxy already pass), followed by a second reboot.
+  startup gate and regression tests are pushed `30daaab`; normal ALL48019/6236b8
+  **PASS**. Second reboot: all nine units active, restarts0, no address-bind
+  recurrence (a833e2). Post-reboot ALL76710/8722b4 and actual browser login/
+  API/socket30795/7b71ff **PASS**. No installer job remains.
   The user confirms HTTPS
   login works; the new server uses verified private-network TLS for that host.
 - [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).
@@ -1506,13 +1509,13 @@ verified; do not toggle global deletion settings to run a dashboard test.
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
 | INST-13 | CRITICAL — development main-SH installation and broker readiness PASS; release gates open | Main SH now supports push-bridge/aliases/ALL. Rootd789ab/55d3b0 installed Python3.11 and18 hash-pinned packages, protected external FCM/APNs files, non-root enabled/running kazoo-push-bridge.service with actual consumer readiness; independent verifyd6a984/c0c60f passes. Actual keys load with pinned SDKs in network-isolated service-user checkb5fb19. Development uses its own local acceptance topology, not production AMQP. Production service PID1226 unchanged. Prior8config+19runtime+14settlement+23APNs and new15service/dispatch fixtures pass. Current status78 manual recovery is NOT production availability. Finish durable bounded retry/DLQ/expiry, FCM/AMQP transport and deadlines, remote broker, repeat/reboot/recovery and designated-device ringing. No real push has been sent. See doc/push_bridge_development_acceptance.md and services/push-bridge/README.md. |
-| INST-01 | IMPLEMENTED — fresh combined acceptance running | One modular main SH supports all nine roles including mobile bridge and ALL. Each selected role's normal installation now passes on fresh .44, with source fixes for restrictive umask, dependencies, readiness and standalone catalog routing. Independent fresh ALL66513 is running; see doc/fresh_host_tls_acceptance_20260908.md. This does not certify arbitrary topologies or production capacity. |
-| INST-02 | VERIFIED — current and fresh host startup scope | Named enabled/running services and `kazoo-applications` compatibility alias verified on .44 (eeae49); SUP passes normal installation and independent checks. Pivot port reservation and prior test-phone preservation fixes retained. Fresh reboot/custom-root variations remain open. |
+| INST-01 | PASS — measured fresh/repeat/reboot scope | One modular main SH supports all nine roles including bridge and ALL. Normal fresh roles, repeated normal ALL48019/6236b8 and post-reboot independent ALL76710/8722b4 pass, with source fixes for restrictive umask, dependencies, readiness, standalone catalog routing and delayed IP assignment. See doc/fresh_host_tls_acceptance_20260908.md. Arbitrary topology, HA and production capacity are not certified. |
+| INST-02 | VERIFIED — current/fresh/reboot scope | All nine named services enabled/active, zero automatic restarts after second fresh reboot (a833e2); `kazoo-applications` alias and SUP pass. Pivot port reservation and previous test-phone preservation fixes retained. Custom-root and remaining topology variations are separate acceptance. |
 | INST-03 | VERIFIED — fresh SIP integration | Fresh normal FreeSWITCH/Kamailio run62607/2c4b73 passes SIP OPTIONS, eCallMgr link, dispatcher, exact AMQP endpoint/consumer queues, module inventory, database/RPC and JWT-cache/journal checks. Full .44 combined verification is running. Prior verifier11-group regression and no-hidden-runtime-error policy retained. |
 | INST-04 | ACTIVE — deployment acceptance | Fresh queue-recovery production build `72306` and readback `15995` pass under the unchanged 384-MiB cap: 1,931 files, 465 templates, 16 canonical preloads. Actual artifact browser `88551` passes queue-specific login and five recovery cases with explicitly mocked APIs. Older bundle fails the expected recovery guard. The earlier five-phase checkpoint omitted the main installer smoke, which subsequently passed separately in `45471`. See `doc/installer_regression_acceptance_20260906.md`; adoption, coherent backend, live authentication and clean-server dependencies remain unverified. |
 | INST-05 | ACTIVE — build | Post-build artifact verification is wired before activation and included in the fingerprint; modular fixtures with/without ACDC pass. eCallMgr no longer trusts stale `.app` files: current-invocation build reuse, environment reset and failure-before-activation fixtures pass. Full real repeat deployment remains required. |
 | INST-06 | OPEN — deployment | Publish reviewed matching source/backend/UI with exact backups; preserve unselected apps/config/customer data and runtime queue memberships/pauses. Read-only probe `29950` confirms old FSM and missing queue-login/recovery interfaces: the candidate now includes at least eleven ACDC/API modules with cf_acdc_member's feedback fix, drained work/admission control and tested migration/restoration, not a six-module hotload. Unsafe legacy FSM conversion fixed in `64f4feb`; 25 recovery tests (`99730`), 48 broader tests (`66281`) and all 63 production modules (`68050`, callback-fix recheck `44008`) pass. Repository real-OTP runner `17426` passes 27 conversion/timer/pause/refusal cases without TEST. Actual isolated old/new code replacement also passes four fresh-VM cases in shared runner `41876`, committed `a3d1110`. Live installed-code replacement, admission control and multi-module rollout remain unverified; compiled UI publication remains held. See `doc/acdc_coherent_upgrade_readiness.md`. |
-| INST-07 | PARTIAL PASS — fresh/split acceptance | Rocky9.8 .44 normal role installs pass for data, apps/eCallMgr, FreeSWITCH/Kamailio, bridge and current UI. Separate UI to the original apps node passes pinned SSH catalog/HTTPS API checks; subsequent local UI creates ten absent catalog entries. Fresh combined verification, reboot and remaining topology/upgrade/failure-recovery matrix are not yet accepted. Evidence: doc/fresh_host_tls_acceptance_20260908.md. |
+| INST-07 | PASS — measured fresh/repeat/reboot and split-UI scope; matrix open | Rocky9.8 .44 normal roles, combined ALL, repeat install and second reboot/post-boot ALL pass. Split UI to original apps passes pinned SSH catalog/HTTPS API; subsequent local UI creates ten missing catalog entries. Actual fresh browser login/API/WebSocket passes before and after reboot. Remaining fully separated-role/upgrade/failure-recovery matrix is unverified. Evidence: doc/fresh_host_tls_acceptance_20260908.md. |
 | INST-08 | ACTIVE — staging acceptance | False-success checks fixed in code: RabbitMQ selected-vhost permissions/exact AMQP bind (65 runtime + 32 password cases pass); external UI API envelope and early API/WebSocket validation (71 cases + main ALL smoke pass). No-route fallback fixed; dry-run no longer claims live validation. Read-only/modular/runtime-config/12 UI wiring groups pass. Actual separated-server connection/install acceptance remains required. |
 | INST-09 | VERIFIED — source transition scope | Main installer now handles clean/current/known-previous Blackhole and Crossbar integrations with explicit old-to-new patches, protected private preflight and final full-patch checks. Session 36178 passed all 42 tests against the extracted actual installer helper, then the main installer smoke: partial/unsafe states and staging failures stop without target changes, unrelated edits survive, repeat install is unchanged, inherited Git redirects are isolated. See doc/installer_source_transitions.md. No live checkout upgrade, clean-server deployment or crash-atomic filesystem guarantee; those remain INST-06/07. |
 | INST-10 | VERIFIED — mod_kazoo source transition scope | Fixed repeated-install failure from overlapping individual patches by validating the complete integration, preserving unrelated edits and refusing partial/unknown source. Added module-only version namespace fix and rebuild fingerprint. Run 46313 passes 15 actual-helper cases, including independent all-13-patches/aggregate equivalence and linked/missing/out-of-inventory rejection; 33997 reruns all 42 Blackhole/Crossbar cases successfully. See doc/mod_kazoo_version_namespace.md. Real fetch/checkout, native linking and clean/distributed install remain INST-01/06/07, not certified by these fixtures. |

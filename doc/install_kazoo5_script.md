@@ -7,8 +7,8 @@ enables and starts that service, and runs component-specific acceptance checks.
 Re-runs use ownership and compatibility checks; a failed preflight must be
 resolved, not bypassed. All nine fresh-host role installations and independent
 ALL checks passed on September8, followed by actual browser login. Reboot testing
-exposed delayed private-IP assignment; the startup fix is being deployed and
-must pass another reboot before that gate closes. See the
+exposed delayed private-IP assignment; source fix `30daaab`, normal ALL rerun,
+second reboot, post-boot ALL and browser login now pass. See the
 [September 8 fresh-host/TLS checkpoint](fresh_host_tls_acceptance_20260908.md).
 
 This repository checkpoint is not a production-ready certification. Consult

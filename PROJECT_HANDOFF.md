@@ -3,9 +3,10 @@
 **Primary Kazoo5 development host: `10.1.0.44`**, designated by the user on
 September8. Keep its installed stack and `/opt/kz5` checkout for future work.
 Canonical Git remote remains `https://github.com/talkchief/kz5.git`, branch
-`master`; ACDC remains tracked directly in kz5. The current normal ALL installer
-is using source `30daaab`; fast-forward to the latest pushed master only after
-that live installer finishes. Do not confuse this host with the original
+`master`; ACDC remains tracked directly in kz5. Normal ALL installation using
+source `30daaab` passed; checkout was fast-forwarded to `b393f62` with a clean
+tracked worktree before the successful reboot. Subsequent documentation commits
+are synced after publishing. Do not confuse this host with the original
 `kz5-testing`/`10.1.0.26` development site or production CouchDB `10.1.0.10`.
 No DNS/TLS hostname migration to .44 has been requested or performed.
 
@@ -43,12 +44,14 @@ Kamailio SIP/AMQP/dispatcher/JWT readiness. Current local-stack UI96182/c9749c
 and actual fresh-browser48355/8df633 **PASS**. First reboot failed acceptance:
 private IP appeared after network-online; HAProxy stayed down while four other
 units recovered after one restart. Exact-address startup gate is implemented
-and tested, pushed `30daaab`. Normal fresh `ALL`48019 is running as
-`kz5-fresh-all-address-20260908.service`, protected log
-`/root/kz5-acceptance/all-address-install.log`; data roles and restored HAProxy
-already pass. Do not restart/rebuild over this live job. Second reboot remains P0.
-This is the P0
-installer continuation, not full fresh-stack certification.
+and tested, pushed `30daaab`. Normal fresh `ALL`48019/6236b8 **PASS**, followed
+by actual reboot to `c8994ec2-c85c-4121-b4c4-2685129d3d35`: all nine services
+active, all restart counters0, no repeated address-bind errors (a833e2).
+Post-reboot independent ALL76710/8722b4 **PASS**; actual browser login/local
+API/WebSocket and `/apis`30795/7b71ff **PASS**. No installer/test job remains.
+Protected logs: `/root/kz5-acceptance/all-address-install.log` and
+`/root/kz5-acceptance/postboot-verify-all.log`. This closes the measured fresh
+installation/repeat/reboot checkpoint, not general production/HA/load acceptance.
 
 Last updated: **2026-09-08**. This is the navigation and current-state guide;
 `PROJECT_TASKS.md` is the detailed requirement/acceptance register. Neither this
