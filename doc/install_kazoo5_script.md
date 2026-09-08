@@ -5,8 +5,10 @@ standalone component, a distributed Kazoo topology, or an all-in-one host. It
 installs dependencies, writes configuration, installs a named systemd service,
 enables and starts that service, and runs component-specific acceptance checks.
 Re-runs use ownership and compatibility checks; a failed preflight must be
-resolved, not bypassed. Fresh data roles and separate-host Monster UI now pass;
-remaining fresh roles are not yet accepted. See the
+resolved, not bypassed. All nine fresh-host role installations and independent
+ALL checks passed on September8, followed by actual browser login. Reboot testing
+exposed delayed private-IP assignment; the startup fix is being deployed and
+must pass another reboot before that gate closes. See the
 [September 8 fresh-host/TLS checkpoint](fresh_host_tls_acceptance_20260908.md).
 
 This repository checkpoint is not a production-ready certification. Consult
@@ -17,8 +19,9 @@ the development host; all-five position-one/offer-six live calls and
 five-language callback registration/retry tests pass. Normal apps/eCallMgr
 installation and independent `--verify-only ALL` passed on September 8; see
 [the focused acceptance record](focused_acceptance_20260908.md).
-Native-speaker listening, fresh/split-host and
-real mobile-device acceptance are not implied. See the
+Native-speaker listening, every split-host topology and real mobile-device
+acceptance are not implied. Physical phone delivery testing was waived by the
+operator, not measured as passing. See the
 [current handoff](../PROJECT_HANDOFF.md) and
 [voice/UI deployment evidence](prerecorded_release_finalization_20260907.md).
 
@@ -190,6 +193,19 @@ without moving the whole compatibility set is not considered an upgrade.
 | `push-bridge` | `kazoo-push-bridge.service` | tracked release, locked dependencies, protected credentials and registered AMQP consumer; real-phone delivery is separate |
 
 `kazoo-applications.service` is an alias of `kazoo-apps.service`.
+
+The seven IP-binding services additionally wait for their configured local IP
+to be assigned before starting. `network-online.target` alone is insufficient
+on hosts where the private interface appears later. The installer writes
+`30-kazoo-local-address.conf` under each selected service's systemd drop-in
+directory and installs `/usr/local/libexec/kazoo5-wait-local-address`.
+It waits up to120 seconds, then fails startup explicitly; systemd has a180-second
+startup timeout and retries on failure. No firewall, routing, interface or
+remote-server configuration is changed. Wildcard listeners do not wait for a
+specific address. Verification checks the exact effective startup command and
+the installed helper bytes. Inspect `ip -brief address` and the selected unit's
+journal if the expected local address never appears; do not replace the bind
+with a public wildcard to bypass the check.
 
 The stock `freeswitch.service` and `kamailio.service` units are disabled when
 their Kazoo wrappers are installed.

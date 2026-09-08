@@ -40,8 +40,9 @@
   verification66513/f83cde and actual browser48355/8df633 **PASS**.
   First reboot exposed delayed private-IP assignment: HAProxy stayed failed;
   CouchDB/apps/eCallMgr/Kamailio recovered after one restart. Exact-address
-  startup gate and regression tests are implemented; deployment and second
-  reboot remain P0. The user confirms HTTPS
+  startup gate and regression tests are pushed `30daaab`; normal ALL48019 is
+  active (data services/HAProxy already pass), followed by a second reboot.
+  The user confirms HTTPS
   login works; the new server uses verified private-network TLS for that host.
 - [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).
 - FWD branch through `52c8d85` merged into master; no local redeployment performed.

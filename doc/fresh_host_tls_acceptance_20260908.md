@@ -372,3 +372,13 @@ including delayed IP, deadline, transient query failure, wrong-gate rejection
 and unselected-role preservation. Main smoke/modular suites pass50946/c4f7d6.
 Deployment and second reboot are next; no global network-manager configuration
 or original-host runtime change is made by this fix.
+
+Final role mapping review excludes unrelated advertised addresses: FreeSWITCH
+waits for its actual Erlang bind; Kamailio waits for its actual SIP listener.
+Tests rerun21081/ac9cb1 pass; fix `30daaab` pushed and fast-forwarded on .44.
+Additional read-only/cookie/persistence suites86000/3f6510 pass. Normal `ALL`
+run48019 is active as `kz5-fresh-all-address-20260908.service` under2GiB/CPU400%
+and umask077. Protected log: `/root/kz5-acceptance/all-address-install.log`.
+Data services and restored HAProxy already pass, including actual effective
+systemd address gate readbacked33ff. This rerun deliberately uses the standard
+installer path, not a manual drop-in deployment or bypassed build verification.

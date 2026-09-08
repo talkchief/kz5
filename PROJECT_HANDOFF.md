@@ -27,7 +27,10 @@ Kamailio SIP/AMQP/dispatcher/JWT readiness. Current local-stack UI96182/c9749c
 and actual fresh-browser48355/8df633 **PASS**. First reboot failed acceptance:
 private IP appeared after network-online; HAProxy stayed down while four other
 units recovered after one restart. Exact-address startup gate is implemented
-and tested; deployment and second reboot remain P0.
+and tested, pushed `30daaab`. Normal fresh `ALL`48019 is running as
+`kz5-fresh-all-address-20260908.service`, protected log
+`/root/kz5-acceptance/all-address-install.log`; data roles and restored HAProxy
+already pass. Do not restart/rebuild over this live job. Second reboot remains P0.
 This is the P0
 installer continuation, not full fresh-stack certification.
 
