@@ -13,7 +13,10 @@
   native3-second case21843/e6c70b reached unanswered/retry/reciprocal bridge,
   then failed the separate strict RTP-continuity assertion. Timeout restored
   and zero calls; do not label the whole case PASS or rerun blindly. Offline
-  complete-payload/deadline timing replay pending. Ordinary15-second retry
+  replay44e6d4 confirms the complete4.331s recording and digit1 received1.045s
+  after completion, with a successful retry bridge and no sequence loss.
+  The separate20ms in-prompt timestamp gap remains CALLBACK-RTP-01; native
+  negative response-expiry coverage remains unverified. Ordinary15-second retry
   fixtures cannot prove this case. See `doc/callback_confirmation_deadline.md`.
 
 - **VOICE-01 locale spelling UI DEPLOYED:** existing `HE_IL`/`HE-IL`

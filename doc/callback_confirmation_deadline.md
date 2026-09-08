@@ -121,4 +121,21 @@ Do not repeat this call to hunt for a PASS. The additive offline diagnostic
 now accepts the `deadline` scenario, checks the exact15->3->15 receipt and
 actual complete ordered English payload/digit timing, and preserves the strict
 failure independently. It explicitly does not claim native negative-expiry
-coverage. Its first replay remains pending.
+coverage.
+
+Offline replay44e6d4 completed successfully with zero database writes, provider
+requests or new calls. Its additive receipt is
+`/var/log/kazoo-acceptance/20260908T231049Z/callback-deadline-payload-diagnosis.json`.
+The entire4.331s installed English recording matches the ordered received
+payload (correlation0.999995). Playback completed4.971535s after ACK; digit1
+arrived6.016987s after ACK,1.045452s after completion. The saved three-second
+setting therefore permits the full instruction and subsequent confirmation,
+and the second attempt connects. The15->3->15 restoration is verified.
+
+This is positive deadline/lifecycle evidence only. Packet sequence loss is zero,
+but RTP timestamps advance80ms at payload sample4160 and20ms at sample5760,
+the latter inside the prompt. The strict timing failure is unchanged; no native
+negative response-expiry claim is made. Capture SHA256:
+`65ffaf8f8fb2963389b1f70c60b7992d589e513101f15caf52dd8f313446f677`.
+Use these retained captures for CALLBACK-RTP-01 source diagnosis; do not rerun
+the native case merely to obtain a PASS or regenerate the prerecorded voices.

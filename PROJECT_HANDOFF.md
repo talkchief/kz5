@@ -11,9 +11,12 @@ runtime production MD5 matches disk16532/e149bd. `/apis` published and verified.
 New short-window mode0615e50 tests the real3-second setting, not the ordinary15.
 Its native case21843/e6c70b completed the retry/bridge but failed strict RTP
 coverage, then restored the timeout; zero calls/services active confirmed.
-Both jobs are terminal. Do not repeat them. Next: additive offline deadline
-payload diagnosis on `/var/log/kazoo-acceptance/20260908T231049Z`, without
-reclassifying the strict failure. See `doc/callback_confirmation_deadline.md`.
+Both jobs and offline replay44e6d4 are terminal. Do not repeat them. The replay
+confirms full4.331s English payload, digit1 received1.045s after completion,
+and connected retry with no sequence loss. Strict timing remains failed on
+a20ms in-prompt timestamp gap; native negative expiry is still unverified.
+Next: CALLBACK-RTP-01 source diagnosis from the retained captures, not another
+call or voice regeneration. See `doc/callback_confirmation_deadline.md`.
 
 **VOICE-01 queue locale spelling UI correction deployed.** Backend
 `HE_IL`/`HE-IL` was displayed and saved as English by the editor. Source now
