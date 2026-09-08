@@ -2661,7 +2661,7 @@ configured_master_account_id() {
 }
 
 bootstrap_master_account_rpc() {
-    local erl_call_bin account_name_b64 realm_b64 admin_user_b64 admin_password_b64 rpc status
+    local erl_call_bin account_name_b64 realm_b64 admin_user_b64 admin_password_b64 rpc status output
     local xtrace_enabled=false
     erl_call_bin=$(find_erl_call) || die 'erl_call was not installed with Erlang'
     verify_cookie_copy "$KAZOO_RUNTIME_COOKIE_FILE" kazoo
@@ -2679,17 +2679,41 @@ bootstrap_master_account_rpc() {
     admin_user_b64=$(printf '%s' "$KAZOO_MASTER_ADMIN_USER" | base64 -w0)
     admin_password_b64=$(printf '%s' "$KAZOO_MASTER_ADMIN_PASSWORD" | base64 -w0)
     printf -v rpc '%s' \
-        "crossbar_maintenance:create_account(base64:decode(<<\"${account_name_b64}\">>), base64:decode(<<\"${realm_b64}\">>), base64:decode(<<\"${admin_user_b64}\">>), base64:decode(<<\"${admin_password_b64}\">>))."
-    if timeout --signal=KILL 120 runuser --user kazoo -- \
+        "try case crossbar_maintenance:create_account(base64:decode(<<\"${account_name_b64}\">>), base64:decode(<<\"${realm_b64}\">>), base64:decode(<<\"${admin_user_b64}\">>), base64:decode(<<\"${admin_password_b64}\">>)) of ok -> ok; _ -> failed end catch _:_ -> failed end."
+    # erl_call exits zero even when the maintenance function returns failed.
+    # Return only fixed atoms, suppress remote stdout, and accept exact success.
+    if output=$(timeout --signal=KILL 120 runuser --user kazoo -- \
         env -u KAZOO_COOKIE -u KAZOO_MASTER_ADMIN_PASSWORD \
         "$erl_call_bin" "$KAZOO_NODE_NAME_TYPE" "kazoo_apps@${KAZOO_HOSTNAME}" \
-        -e -no_result_term <<<"$rpc" >/dev/null 2>&1; then
-        status=0
+        -e <<<"$rpc" 2>/dev/null); then
+        status=1
+        [[ $output != '{ok, ok}' ]] || status=0
     else
         status=$?
     fi
     [[ $xtrace_enabled == false ]] || set -x
     return "$status"
+}
+
+wait_kazoo_bootstrap_ready() {
+    local erl_call_bin rpc output deadline
+    erl_call_bin=$(find_erl_call) || die 'erl_call was not installed with Erlang'
+    verify_cookie_copy "$KAZOO_RUNTIME_COOKIE_FILE" kazoo
+    # Crossbar starts its binding modules asynchronously. Datastore readiness
+    # and even an HTTP listener alone do not mean account/user routes are ready.
+    rpc='try M = crossbar_bindings:modules_loaded(), case lists:keymember(crossbar, 1, application:which_applications()) andalso lists:all(fun(A) -> lists:member(A, M) end, [cb_accounts, cb_users]) of true -> ready; false -> not_ready end catch _:_ -> not_ready end.'
+    deadline=$((SECONDS + KAZOO_START_TIMEOUT))
+    while ((SECONDS < deadline)); do
+        if output=$(timeout --signal=KILL 10 runuser --user kazoo -- "$erl_call_bin" \
+            "$KAZOO_NODE_NAME_TYPE" "kazoo_apps@${KAZOO_HOSTNAME}" -e <<<"$rpc" 2>/dev/null); then
+            if [[ $output == '{ok, ready}' ]]; then
+                log 'PASS Crossbar account/user bootstrap bindings are ready'
+                return 0
+            fi
+        fi
+        sleep 2
+    done
+    die 'Crossbar account/user bindings did not become ready; no account creation attempted'
 }
 
 ensure_master_account() {
@@ -2701,6 +2725,7 @@ ensure_master_account() {
         log "Kazoo master account already exists: ${account_id}"
         return 0
     fi
+    wait_kazoo_bootstrap_ready
     load_or_create_master_credentials
     [[ -n $KAZOO_MASTER_ADMIN_PASSWORD ]] || \
         die "No master account exists; set KAZOO_MASTER_ADMIN_PASSWORD or run installation (credentials are stored in ${KAZOO_INSTALLER_SECRETS})"

@@ -24,6 +24,7 @@ printf '%s\n' \
     'printf "%s" "$rpc" >"$RPC_STDIN_FILE"' \
     'printf "mock erl_call diagnostic that must be suppressed\n" >&2' \
     'touch "$RPC_CALLED_FILE"' \
+    'printf "%s" "${RPC_RESULT:-{ok, ok\}}"' \
     'exit "${RPC_EXIT_CODE:-0}"' >"$test_dir/erl_call"
 chmod 0700 "$test_dir/erl_call"
 
@@ -67,7 +68,7 @@ name_b64=$(printf '%s' "$KAZOO_MASTER_ACCOUNT_NAME" | base64 -w0)
 realm_b64=$(printf '%s' "$KAZOO_MASTER_ACCOUNT_REALM" | base64 -w0)
 user_b64=$(printf '%s' "$KAZOO_MASTER_ADMIN_USER" | base64 -w0)
 password_b64=$(printf '%s' "$KAZOO_MASTER_ADMIN_PASSWORD" | base64 -w0)
-expected_rpc="crossbar_maintenance:create_account(base64:decode(<<\"${name_b64}\">>), base64:decode(<<\"${realm_b64}\">>), base64:decode(<<\"${user_b64}\">>), base64:decode(<<\"${password_b64}\">>))."
+expected_rpc="try case crossbar_maintenance:create_account(base64:decode(<<\"${name_b64}\">>), base64:decode(<<\"${realm_b64}\">>), base64:decode(<<\"${user_b64}\">>), base64:decode(<<\"${password_b64}\">>)) of ok -> ok; _ -> failed end catch _:_ -> failed end."
 [[ $(<"$test_dir/stdin") == "$expected_rpc" ]] || fail 'stdin RPC did not preserve UTF-8 values exactly'
 
 for exposed in "$KAZOO_MASTER_ACCOUNT_NAME" "$KAZOO_MASTER_ADMIN_PASSWORD" \
@@ -79,8 +80,31 @@ done
     fail 'administrator password variable reached erl_call environment'
 ! grep -F 'KAZOO_COOKIE=' "$test_dir/environ" >/dev/null || \
     fail 'cluster cookie variable reached erl_call environment'
-grep -Fx -- '-no_result_term' < <(tr '\0' '\n' <"$test_dir/args") >/dev/null || \
-    fail 'erl_call result suppression was not enabled'
+if grep -Fx -- '-fetch_stdout' < <(tr '\0' '\n' <"$test_dir/args") >/dev/null; then
+    fail 'remote diagnostics must not be fetched'
+fi
+for result in '{ok, failed}' '{error, timeout}' 'unexpected diagnostic'; do
+    export RPC_RESULT=$result
+    if failure_output=$(bootstrap_master_account_rpc 2>&1); then
+        fail 'non-success RPC result was accepted with transport exit zero'
+    fi
+    [[ -z $failure_output ]] || fail 'RPC result failure emitted potentially sensitive diagnostics'
+done
+unset RPC_RESULT
+
+(
+    KAZOO_START_TIMEOUT=10
+    timeout() { local request; read -r request; [[ $request == *'application:which_applications()'* && $request == *'[cb_accounts, cb_users]'* ]] || exit 8; printf '{ok, ready}'; }
+    wait_kazoo_bootstrap_ready
+) || fail 'ready Crossbar bootstrap gate was rejected'
+if (
+    KAZOO_START_TIMEOUT=1
+    timeout() { local request; read -r request; printf '{ok, not_ready}'; }
+    sleep() { SECONDS=$((SECONDS+2)); }
+    wait_kazoo_bootstrap_ready
+) >/dev/null 2>&1; then
+    fail 'unready Crossbar bootstrap gate passed'
+fi
 
 trace_output=$({
     set -x
@@ -100,6 +124,7 @@ fi
 sup() { :; }
 master_account_id() { :; }
 load_or_create_master_credentials() { :; }
+wait_kazoo_bootstrap_ready() { :; }
 if failure_output=$( (ensure_master_account) 2>&1); then
     fail 'account bootstrap accepted an RPC transport failure'
 fi
