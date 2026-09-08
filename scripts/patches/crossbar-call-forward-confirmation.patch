@@ -1,0 +1,162 @@
+diff --git a/src/modules/cb_accounts.erl b/src/modules/cb_accounts.erl
+--- a/src/modules/cb_accounts.erl
++++ b/src/modules/cb_accounts.erl
+@@ -516,6 +516,13 @@
+ %%------------------------------------------------------------------------------
+ -spec validate_request(kz_term:api_ne_binary(), cb_context:context()) -> cb_context:context().
+ validate_request(AccountId, Context) ->
++    case cb_account_call_forward_confirmation:prepare(AccountId, Context) of
++        {ok, Prepared} -> validate_prepared_request(AccountId, Prepared);
++        {error, Failed} -> Failed
++    end.
++
++-spec validate_prepared_request(kz_term:api_ne_binary(), cb_context:context()) -> cb_context:context().
++validate_prepared_request(AccountId, Context) ->
+     ReqJObj = cb_context:req_data(Context),
+     ParentId = get_parent_id_from_req(Context),
+     case kzd_accounts:validate(ParentId, AccountId, ReqJObj) of
+@@ -641,7 +648,14 @@
+ 
+ -spec validate_patch_request(kz_term:ne_binary(), cb_context:context()) -> cb_context:context().
+ validate_patch_request(AccountId, Context) ->
+-    crossbar_doc:patch_and_validate(AccountId, Context, fun validate_request/2).
++    Context1 = cb_context:store(Context, cfwd_confirmation_request, cb_context:req_data(Context)),
++    crossbar_doc:patch_and_validate(AccountId, Context1,
++        fun(Id, Loaded) ->
++            case cb_context:resp_status(Loaded) of
++                success -> validate_request(Id, Loaded);
++                _ -> Loaded
++            end
++        end).
+ 
+ %%------------------------------------------------------------------------------
+ %% @doc Load an account document from the database
+diff --git a/priv/couchdb/schemas/accounts.json b/priv/couchdb/schemas/accounts.json
+--- a/priv/couchdb/schemas/accounts.json
++++ b/priv/couchdb/schemas/accounts.json
+@@ -35,6 +35,28 @@
+             "$ref": "call_forward",
+             "description": "Call forward settings",
+             "kz:skip_subproperty_builder": true
++        },
++        "call_forward_confirmation": {
++            "additionalProperties": false,
++            "description": "Account-only language for the press-1 prompt on forwarded calls and forwarding failover. Omission preserves existing prompt behavior. Does not enable forwarding or change other prompt languages.",
++            "kz:skip_subproperty_builder": true,
++            "properties": {
++                "language": {
++                    "description": "Built-in prerecorded confirmation language. Clear with language:null in an account update request to restore existing prompt behavior.",
++                    "enum": [
++                        "en-us",
++                        "he-il",
++                        "ar-sa",
++                        "es-es",
++                        "fr-fr"
++                    ],
++                    "type": "string"
++                }
++            },
++            "required": [
++                "language"
++            ],
++            "type": "object"
+         },
+         "call_limits": {
+             "$ref": "call_limits"
+diff --git a/src/cb_account_call_forward_confirmation.erl b/src/cb_account_call_forward_confirmation.erl
+new file mode 100644
+--- /dev/null
++++ b/src/cb_account_call_forward_confirmation.erl
+@@ -0,0 +1,92 @@
++%%% Validation for the account-only forwarded-call confirmation preference.
++%%% SPDX-License-Identifier: MPL-2.0
++-module(cb_account_call_forward_confirmation).
++-export([prepare/2]).
++-ifdef(TEST).
++-export([normalize/3, authorized/2]).
++-endif.
++-define(FIELD, <<"call_forward_confirmation">>).
++
++-spec prepare(binary() | undefined, cb_context:context()) -> {ok, cb_context:context()} | {error, cb_context:context()}.
++prepare(AccountId, Context) ->
++    Existing = case AccountId of
++                   undefined -> {ok, kz_json:new()};
++                   _ -> kzd_accounts:fetch(AccountId)
++               end,
++    case Existing of
++        {error, Error} -> {error, crossbar_doc:handle_datamgr_errors(Error, AccountId, Context)};
++        {ok, Doc} -> prepare(AccountId, Context, Doc)
++    end.
++
++-spec prepare(binary() | undefined, cb_context:context(), kz_json:object()) -> {ok, cb_context:context()} | {error, cb_context:context()}.
++prepare(AccountId, Context, Existing) ->
++    Raw = cb_context:fetch(Context, cfwd_confirmation_request, cb_context:req_data(Context)),
++    Value = kz_json:get_value(?FIELD, Raw),
++    case normalize(Value, Existing, cb_context:req_data(Context)) of
++        {error, Message} ->
++            {error, cb_context:add_validation_error(?FIELD, <<"invalid">>,
++                kz_json:from_list([{<<"message">>, Message}]), Context)};
++        {ok, Request, unchanged} -> {ok, cb_context:set_req_data(Context, Request)};
++        {ok, Request, Action} ->
++            case authorized(AccountId, Context) of
++                false -> {error, cb_context:add_system_error(forbidden, Context)};
++                true -> validate_media(Action, cb_context:set_req_data(Context, Request))
++            end
++    end.
++
++%% Omission preserves this field even on a full-document POST from an older
++%% client. Only an explicit language:null resets it. The original PATCH body
++%% is retained before Crossbar merges it, so null/presence are unambiguous.
++-spec normalize(any(), kz_json:object(), kz_json:object()) -> {ok, kz_json:object(), any()} | {error, binary()}.
++normalize(undefined, Existing, Request) ->
++    {ok, replace(kz_json:get_value(?FIELD, Existing), Request), unchanged};
++normalize(Value, Existing, Request) ->
++    case kz_json:is_json_object(Value) andalso kz_json:get_keys(Value) =:= [<<"language">>] of
++        false -> {error, <<"Expected an object containing only language: en-us, he-il, ar-sa, es-es, fr-fr, or null to reset">>};
++        true ->
++            Language = kz_json:get_value(<<"language">>, Value),
++            case Language of
++                null -> {ok, replace(undefined, Request), reset};
++                _ -> normalize_language(Language, Value, Existing, Request)
++            end
++    end.
++
++-spec normalize_language(any(), kz_json:object(), kz_json:object(), kz_json:object()) -> {ok, kz_json:object(), any()} | {error, binary()}.
++normalize_language(Language, Value, Existing, Request) ->
++    case lists:member(Language, [<<"en-us">>, <<"he-il">>, <<"ar-sa">>, <<"es-es">>, <<"fr-fr">>]) of
++        false -> {error, <<"Supported confirmation languages are en-us, he-il, ar-sa, es-es and fr-fr">>};
++        true ->
++            Action = case Value =:= kz_json:get_value(?FIELD, Existing) of
++                         true -> unchanged;
++                         false -> {set, Language}
++                     end,
++            {ok, replace(Value, Request), Action}
++    end.
++
++-spec replace(any(), kz_json:object()) -> kz_json:object().
++replace(undefined, Request) -> kz_json:delete_key(?FIELD, Request);
++replace(Value, Request) -> kz_json:set_value(?FIELD, Value, Request).
++
++-spec validate_media(any(), cb_context:context()) -> {ok, cb_context:context()} | {error, cb_context:context()}.
++validate_media(reset, Context) -> {ok, Context};
++validate_media({set, Language}, Context) ->
++    case kz_call_forward_confirmation:ready(Language) of
++        true -> {ok, Context};
++        false -> {error, cb_context:add_system_error(503, service_unavailable,
++            kz_json:from_list([{<<"message">>, <<"The selected confirmation recording is not available; the setting was not saved">>}]), Context)}
++    end.
++
++-spec authorized(binary() | undefined, cb_context:context()) -> boolean().
++authorized(AccountId, Context) ->
++    try
++        AuthAccount = cb_context:auth_account_id(Context),
++        AuthDoc = cb_context:auth_doc(Context),
++        AccountKey = kz_json:get_value(<<"method">>, AuthDoc) =:= <<"cb_api_auth">>
++            andalso cb_context:auth_user_id(Context) =:= undefined,
++        Admin = cb_context:is_superduper_admin(Context),
++        Scope = AccountId =:= undefined orelse AccountId =:= AuthAccount
++            orelse lists:member(AuthAccount, kzd_accounts:tree(AccountId)),
++        is_binary(AuthAccount) andalso AuthAccount =/= <<>>
++            andalso (Admin orelse (Scope andalso (AccountKey orelse cb_context:is_account_admin(Context))))
++    catch _:_ -> false
++    end.

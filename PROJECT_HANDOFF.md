@@ -4,6 +4,21 @@ Last updated: **2026-09-08**. This is the navigation and current-state guide;
 `PROJECT_TASKS.md` is the detailed requirement/acceptance register. Neither this
 file nor a green unit test means the platform is production-ready.
 
+**Forwarded-call confirmation complete on the development server:** EN/HE/AR/ES/FR
+account preference/API, all four selectors, MonsterUI and immutable Gemini media
+are installed. Normal apps/eCallMgr/MonsterUI installation passed64656/94b843;
+the source freeze is released. Seven focused Erlang groups, asset/UI/API,
+installer suites and deterministic OpenAPI validation pass. Twenty live API/call
+checks passed, plus seven deployed browser checks76280/888524 exit0. Preferences
+are restored, tagged users deleted and channels0. The user can test **Callflows
+→ Account Settings → Misc → Forwarded-call confirmation** after a hard refresh.
+Updated account GET/PATCH/POST, five codes, reset and JavaScript example are live
+at `https://kz5.talkchief.io/apis/`; served specification matches the validated
+file. Feature branch: `feat/account-forward-confirmation-languages`, isolated
+worktree `/opt/kz5-fwd-review`; the user will merge it. Physical cellphone/PSTN
+and formal native-language certification are not claimed. See
+[acceptance and developer handoff](doc/call_forward_confirmation_acceptance.md).
+
 ## Latest working snapshot — read before resuming
 
 **Standalone UI catalog gap implemented and locally integrated:** the installer

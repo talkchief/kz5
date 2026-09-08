@@ -689,10 +689,7 @@
     "POST /accounts/{ACCOUNT_ID}/access_lists",
     "DELETE /accounts/{ACCOUNT_ID}/access_lists",
     "PUT /accounts",
-    "GET /accounts/{ACCOUNT_ID}",
     "PUT /accounts/{ACCOUNT_ID}",
-    "POST /accounts/{ACCOUNT_ID}",
-    "PATCH /accounts/{ACCOUNT_ID}",
     "DELETE /accounts/{ACCOUNT_ID}",
     "GET /accounts/{ACCOUNT_ID}/api_key",
     "PUT /accounts/{ACCOUNT_ID}/api_key",
@@ -1297,8 +1294,8 @@
     "POST /accounts/{ACCOUNT_ID}/wordle/{WORD_ID}",
     "GET /websocket"
   ],
-  "schema_count": 506,
-  "internal_reference_count": 1603,
+  "schema_count": 509,
+  "internal_reference_count": 1653,
   "unresolved_reference_count": 0,
   "schema_adjustments": [
     {
@@ -1540,6 +1537,16 @@
       "location": "components/schemas/users/properties/call_forward",
       "keyword": "kz:skip_subproperty_builder",
       "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/AccountConfirmationPatchData/properties/call_forward",
+      "keyword": "kz:skip_subproperty_builder",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
+    },
+    {
+      "location": "components/schemas/AccountConfirmationPostData/properties/call_forward",
+      "keyword": "kz:skip_subproperty_builder",
+      "action": "Unsupported/malformed upstream keyword retained as extension; not enforced by OpenAPI 3.0 validators"
     }
   ],
   "upstream_missing_parameters_documented_as_strings": [
@@ -1551,6 +1558,11 @@
     "system_config.registrar.auth_type"
   ],
   "source_inventory": [
+    {
+      "file": "applications/crossbar/src/cb_account_call_forward_confirmation.erl",
+      "sha256": "1ce1193a4223e2f84245b0596370130612df451a1a4f780df80f5e1f8c93a745",
+      "literal_binding_nouns": []
+    },
     {
       "file": "applications/crossbar/src/cb_apps_util.erl",
       "sha256": "0b77f2cbd4422e61dbd448d88de5e0adfa84c485ed768f17e590dc5cf70457f0",
@@ -1595,7 +1607,7 @@
     },
     {
       "file": "applications/crossbar/src/modules/cb_accounts.erl",
-      "sha256": "8f94c97c1325e529e080d6f88bb708d48d193650276ff7049dd3f28cd4630931",
+      "sha256": "34626a5dbc24ad1700e896ee8870b45d072cd496e971146712908bdaa0dede7d",
       "literal_binding_nouns": [
         "accounts"
       ]
@@ -2479,8 +2491,12 @@
       "sha256": "f9e9c255d076e2881f30f7b7c003d60a31583351dab1d0be7b6e795e6f05d7b8"
     },
     {
+      "file": "applications/crossbar/priv/couchdb/schemas/accounts.json",
+      "sha256": "67fe3d39c3216705d8548bdaa35d98f23e346e1cbf011cc8b539159a4e033379"
+    },
+    {
       "file": "applications/crossbar/priv/couchdb/schemas/queues.json",
-      "sha256": "23b3a0765a3849916a6282a876748207ecda86846268314bcadb1d3854c21967"
+      "sha256": "8b09c459a3414a3e8484281b0aad459d5c35e8663c605c930c1b076ccc159a37"
     },
     {
       "file": "applications/crossbar/priv/couchdb/schemas/system_config.blackhole.json",
@@ -2887,8 +2903,16 @@
       "sha256": "3115dcc76409fa6cc0017131c9d96b07075b96ae73ed827e32f4fd3d4f06ab1b"
     },
     {
+      "file": "applications/crossbar/src/cb_account_call_forward_confirmation.erl",
+      "sha256": "1ce1193a4223e2f84245b0596370130612df451a1a4f780df80f5e1f8c93a745"
+    },
+    {
       "file": "applications/crossbar/src/cb_channel_monitor.erl",
       "sha256": "0289551f6bdd97086d8ccdf8ea9d104ae268289069fcd692a822995e184cc0a2"
+    },
+    {
+      "file": "applications/crossbar/src/modules/cb_accounts.erl",
+      "sha256": "34626a5dbc24ad1700e896ee8870b45d072cd496e971146712908bdaa0dede7d"
     },
     {
       "file": "applications/crossbar/src/modules/cb_channels.erl",
@@ -2907,6 +2931,14 @@
       "sha256": "cc79f4dbe7a754a46667920388e97c2b9a17692a432ed9dcde6e0cf3d799451e"
     },
     {
+      "file": "core/kazoo_media/src/call_forward_confirmation_assets.hrl",
+      "sha256": "9ad767900db734f12bd2f4f9f3a7093d2c4bfd0ddd9a0d4138b6ce04904e891e"
+    },
+    {
+      "file": "core/kazoo_media/src/kz_call_forward_confirmation.erl",
+      "sha256": "0c3ba82e833dd0f74503ab508200d25ef861340b3f1ce36e18114747c9b5bd22"
+    },
+    {
       "file": "scripts/api-docs-agent-queue-login.cjs",
       "sha256": "d0eb9f00621acffcf4782244a06c080e49c90731bbb4eca2b6c62adde8a60803"
     },
@@ -2915,12 +2947,16 @@
       "sha256": "2dc14b3460b810cb0dca25ce35e1bed655bb5646e35f90798365a8f6cae005db"
     },
     {
+      "file": "scripts/api-docs-call-forward-confirmation.cjs",
+      "sha256": "9d2446bb2154ede12493f8ed8410bafb53303c698b2804c7ebc4e6cdcddf866f"
+    },
+    {
       "file": "scripts/api-docs-members-devices.cjs",
       "sha256": "0d75a44da6233e1c9d1f00b5e141bdeaff446ee90c04f03ee9d0c6e0b6fe144a"
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "a17753c467a20d7af88a948ba84b5f7400d0f87830a3172a409232d2dd18baa5"
+      "sha256": "e0e83cc5ea84137486d3c64dec9382d3317685987f4e07d894dcf17ddc21e6ee"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",
@@ -2944,7 +2980,7 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "ff9029d6a56a0da1e03afdf34eabe510b2f0f877172ad900daba3f8d3d997efd"
+      "sha256": "4e3e21cc2d441e32a862aac1c03965f234712c0b5b0054bd4dddadc6769368d7"
     },
     {
       "file": "scripts/patches/blackhole-kazoo5-integration.patch",
@@ -2976,7 +3012,7 @@
     },
     {
       "file": "scripts/patches/crossbar-kazoo5-integration.patch",
-      "sha256": "8fee114b0351abd20c3b7c52d822cd805f8ed192d2fcd46729dabf8455de5272"
+      "sha256": "ed8a3fd44cd970a17252067bfbf5037d8bb7fb0f4ce96d945556900c0a9b2ac6"
     }
   ]
 }

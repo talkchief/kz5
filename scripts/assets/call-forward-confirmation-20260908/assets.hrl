@@ -1,0 +1,8 @@
+%% Generated from byte-verified release recordings; do not edit.
+-define(CFWD_CONFIRMATION_ASSETS, [
+    {<<"en-us">>, <<"en-us/cfwd-confirm-v1-sulafat-c4a7770fff6fca22">>, <<"cfwd-confirm-v1-sulafat-c4a7770fff6fca22">>, <<"c4a7770fff6fca2212aabcf6984705b455fb9d24b5796a2770040602b8dbb348">>, <<"md5-WO0al0BDkRhpfRveIOSVHQ==">>, 104540, <<"4917b6cb714c18a699f74cb11041a1ab6e9fa0667761daeb3c328f566536f055">>},
+    {<<"he-il">>, <<"he-il/cfwd-confirm-v1-sulafat-78623cec20ef271b">>, <<"cfwd-confirm-v1-sulafat-78623cec20ef271b">>, <<"78623cec20ef271b0fd0dc2501e4694a55956fd62c44c5221cf006fb8fe93003">>, <<"md5-kdnUpU1/oOzabov0fq7rvg==">>, 132700, <<"1780e1d78acffaf6fc4e8270c1030b249d52afaafc3f813637c959857ac2fef9">>},
+    {<<"ar-sa">>, <<"ar-sa/cfwd-confirm-v1-sulafat-ca7d148f1b809522">>, <<"cfwd-confirm-v1-sulafat-ca7d148f1b809522">>, <<"ca7d148f1b80952244f35555438b8b2d214b01aa7fcdd2ca655efc63f5915a08">>, <<"md5-YC90T0JqOkBq5a3Q+SnXbQ==">>, 133340, <<"84e2302784b76aa74983ebb194d5c5781ae7a37a9436a9730d5b25e8c1e52acf">>},
+    {<<"es-es">>, <<"es-es/cfwd-confirm-v1-sulafat-0be3f4ee6431339d">>, <<"cfwd-confirm-v1-sulafat-0be3f4ee6431339d">>, <<"0be3f4ee6431339d2d308fa76ec7d23f271668cad16f41e0b25c0a93930ca280">>, <<"md5-V3BAdRHJqr9XPju0XC3BbA==">>, 112860, <<"f57f4a224f7de51663f762dc7414c7b79bad9099df9e5be4abbd115c8ec1608d">>},
+    {<<"fr-fr">>, <<"fr-fr/cfwd-confirm-v1-sulafat-2bd6e86781b966fa">>, <<"cfwd-confirm-v1-sulafat-2bd6e86781b966fa">>, <<"2bd6e86781b966fae229156ad6f2017a4f2716e0bd7df162dd4fd63159ef8ff2">>, <<"md5-HyPODNLBHbpSu5yN3tzW1A==">>, 100060, <<"910c23f4a76d8300758a2f542ad15b7ff063de2f2953a293040f335c155170f7">>}
+]).
