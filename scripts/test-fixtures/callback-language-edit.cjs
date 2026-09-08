@@ -113,4 +113,7 @@ async function runtime(action,run){
     console.log(JSON.stringify({action,state:receipt.state,verified:receipt.verified===true,account_writes:'isolated queue language only',gemini_requests:0}));
 }
 module.exports={patchBody,restoredGuard};
-if(require.main===module)runtime(...process.argv.slice(2)).catch(()=>{console.error('Callback language case failed at '+stage+'; inspect protected receipt, no blind retry or overwrite.');process.exitCode=1;});
+if(require.main===module)runtime(...process.argv.slice(2)).catch(error=>{
+    const location=(error.stack||'').split('\n').slice(1).map(l=>l.match(/\/opt\/kz5\/scripts\/[A-Za-z0-9_./-]+:\d+:\d+/)?.[0]).find(Boolean)||'unavailable';
+    console.error('Callback language case failed at '+stage+' ('+location+'); inspect protected receipt, no blind retry or overwrite.');process.exitCode=1;
+});
