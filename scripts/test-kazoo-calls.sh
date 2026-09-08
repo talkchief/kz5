@@ -595,7 +595,8 @@ concurrent_call_legs_present() {
 }
 
 wait_concurrent_call_legs() {
-    local label=$1 agent_count=$2 caller_expected=$3 deadline=$((SECONDS + 60))
+    local label=$1 agent_count=$2 caller_expected=$3 arrival_budget=${4:-60}
+    local deadline=$((SECONDS + arrival_budget))
     while ((SECONDS < deadline)); do
         concurrent_call_legs_present "$label" "$agent_count" "$caller_expected" && return 0
         sleep 1
@@ -849,7 +850,11 @@ run_stress_stage() {
         "$hold_ms" "$count" "$QUEUED_EXCESS_HOLD_MS" \
         "$((excess > 0 ? QUEUED_EXCESS_DELAY_MS : 0))"
     MAIN_CALLER_PID=$CALLER_PID
-    wait_concurrent_call_legs "$label" "$count" "$expected" ||
+    # Delayed excess callers cannot arrive inside the ordinary 60s setup
+    # budget. Add only the intentional scenario delay; retain the full
+    # simultaneous hold and the existing post-arrival 60s setup allowance.
+    wait_concurrent_call_legs "$label" "$count" "$expected" \
+        "$((60 + (excess > 0 ? (QUEUED_EXCESS_DELAY_MS + 999) / 1000 : 0)))" ||
         die "$label did not simultaneously hold $expected caller legs and $count answered agent legs"
     if ((count == MAX_ANSWERED_CALLS)); then
         hold_concurrent_call_legs "$label" "$count" "$expected" "$CAPACITY_SOAK_SECONDS" ||
