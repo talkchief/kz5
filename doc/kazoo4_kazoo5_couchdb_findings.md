@@ -70,8 +70,8 @@ boundary** when both versions use the same writable CouchDB databases:
    view definitions and calls `db_view_update/2`. The resulting design documents
    are database-wide, not zone-specific. A version5 refresh can therefore alter
    the views queried by version4. Which definitions actually differ in this
-   company's snapshot remains to be measured; this path alone is not proof of
-   a breaking view change.
+   company's snapshot is measured above; the code path explains why zone
+   separation cannot protect those database-wide definitions.
 2. `kapps_maintenance:refresh_by_classification/2` invokes `ensure_aggregate/1`
    for an account. That calls faxbox/device/account aggregation and services
    reconciliation. `ensure_aggregate_account/1` saves the account document into
@@ -156,14 +156,131 @@ physical `.couch` file downgrade compatibility.
 
 ## Still required
 
-- Exercise authenticated Crossbar API reads/edits after the completed monthly restore.
-- Extend measured account refresh/view comparisons to MODB migrations and
-  additional views/edge cases.
-- Exercise remaining normal Kazoo5 migrations plus representative API reads/edits and
-  capture exact writes, including effects on isolated synthetic global DBs.
+- Additional view keys/edge cases, repeat-migration/idempotence and live call
+  behavior under both versions; the representative API/edit tests below do
+  not prove every endpoint or call feature works.
+- Full system/config/global migration semantics. The selected-company native
+  components tested below deliberately do not run broad `migrate/0` or `/1`.
+  Synthetic lab globals are not a copy of production globals, so cannot prove
+  compatibility of production authentication, billing, services or routing.
 - Establish the actual production Kazoo4 source/runtime contract and replay
   compatible queries where possible. Clearly label unavailable runtime tests.
 - Produce a final evidence-based GO/NO-GO with rollback/isolation requirements.
 
 Until these checks are complete, **do not attach a Kazoo5 zone to production
 writable CouchDB on the basis of this assessment**.
+
+## Authenticated API and selected migration evidence — September8 continuation
+
+`exercise-company-compat-api.py` authenticates natively with the copied account
+API key, held only in memory. HTTP credentials and token envelopes are never
+printed or returned into API-response evidence. Full CouchDB documents and API
+data remain in root-only private journals. A fixed account/resource allowlist,
+lab namespace checks and disabled redirects/proxies constrain all requests.
+Each edit changes only an existing label, then restores it through Crossbar and
+checks the readback. A journaled intent precedes mutation; ambiguous timeout
+still attempts restoration. HTTP400 with unchanged original value is recorded
+as a rejected edit, **not a successful edit**.
+
+The initial reads77379/b034d6 exposed lab-only setup issues: fixture selection
+included Kazoo soft-deleted documents, and minimal native lab startup had not
+registered the five optional API modules that the normal installer registers.
+The fixture picker now excludes `pvt_deleted`. `company-compat-rpc.escript
+prepare-api` uses the normal native `crossbar_maintenance:start_module/1` path
+and verifies both running and persistent autoload state (b0f8b2). This is not
+evidence of a missing registration in the already-tested normal ALL installer.
+Collections explicitly disable pagination to cover this bounded sample.
+
+Before migration, actual API reads/edits90319/6cf15e:
+
+| Resource | Collection/detail GET | Label PATCH and restore | Result |
+| --- | --- | --- | --- |
+| Account | 200/200 | 200/200 | Both readbacks correct |
+| Users (15) | 200/200 | **400/400** | Sampled user rejected; original unchanged |
+| Devices (82) | 200/200 | 200/200 | Both readbacks correct |
+| Queues (4) | 200/200 | 200/200 | Both readbacks correct |
+| Callflows (89) | 200/200 | 200/200 | Both readbacks correct |
+
+Only one representative existing document per resource was edited. The counts
+are collection sizes, **not counts of successful edits**. First native
+authentication also added `pvt_signature_secret` to the working account.
+After restoring labels, device/callflow audit fields (`pvt_auth_account_id`,
+`pvt_modified`, `pvt_request_id`) changed; the queue gained `agent_order` as
+well as audit updates. These are exact document differences, not a claim that
+every such difference is incompatible with version4.
+
+The rejected user PATCH identified `call_forward%2Efailover` with validation
+rule `additionalProperties`. Current `call_forward.json` excludes that legacy
+field and sets `additionalProperties:false`. All15 live users and9 live
+devices in this sample carried a boolean legacy flag. A working list API alone
+would not have exposed this edit failure.
+
+### Selected native migration and post-migration edits
+
+Before migration, streaming comparison20965/fd910b verified all six monthly
+working databases exactly matched baseline live documents, revisions and counts.
+It reads100-document pages and checks metadata stability instead of loading the
+entire company history into memory. Account differences at this point were
+the previously measured refresh/API effects.
+
+The first migration invocation73724/2bcfcc failed before entering maintenance:
+`kapps_maintenance:migrate/2` is private, not an exported RPC API. The helper now
+uses its exported native components on the fixed seven working databases:
+classification/existence preflight, `refresh/1` for each, account-config
+`migrate/1`, account-selected `migrate_failover_from_forward/1`, and account-scoped
+`maintenance.migrate` hooks. It never enumerates baseline/global DBs or invokes
+the deprecated-database deletion step. This is a selected-component assessment,
+not execution of the full global migration command.
+
+Actual run99861/408605 returned normally. Its private log reports seven refreshes,
+account-config/failover completion, two hook results and24 migrated documents;
+no matching failure/warning lines were found in that captured command output.
+Native functions can absorb internal errors, so the independent differences
+and post-migration API tests are the stronger evidence:
+
+- 15 users and9 devices lost the legacy `call_forward.failover` field. For23
+  documents it was false. For one user it was true: an enabled `call_failover`
+  object was added with its destination number preserved. This changes stored
+  call-routing representation; actual version4 interpretation must be tested.
+- Each of the six monthly DBs changed21 existing design documents and gained
+  `call_reports`, `functions`, `presence`. No existing monthly non-design
+  document changed; none were removed. The service views
+  `day_summary_by_source` and `day_summary_by_date` were removed from each.
+  Actual GET comparison64718/b919f6 confirms both endpoints return200 with zero
+  rows in every baseline and404 in every working MODB (12 endpoint pairs).
+- Across all seven DBs, baseline content hashes stayed unchanged and deleted
+  document counts still matched. Comparison48886/cad73a captures exact private
+  differences. Current account totals versus original baseline are38 changed
+  designs,8 new designs and28 changed non-design docs (including earlier API
+  effects; do not add overlapping counts from individual stages).
+- Post-migration API test93347/340c36: all five representative label PATCHes
+  returned200, changed-value readbacks matched, restore PATCHes returned200
+  and original-value readbacks matched. All collection/detail GETs returned200;
+  collection counts stayed15/82/4/89. The previously failing sampled user edit
+  now succeeds. Four ordinary audit-field changes remain after this final edit
+  cycle; original baseline documents remained untouched.
+
+Over the broader interval from account refresh to the final API/migration
+inspection13751/b6ddaa, synthetic lab `accounts` changed revision sequence;
+`acdc`1→2 docs, `alerts`2→3, `system_config`20→29 and `system_schemas`453→454.
+This interval includes native startup, API registration, authentication, edits
+and migration: these counts must **not** all be attributed to migration alone.
+No production global databases were copied or modified. All nine main .44
+services and all three isolated lab services remained active (941cb5).
+
+Private evidence files under `/var/lib/kazoo-compat/snapshots/`:
+
+| File | SHA256 |
+| --- | --- |
+| `api-reads-1.ndjson` | `8c8516f90ca8eacb93acf1c67e6b640b2f0ba31c12224e38e010062f52465c75` |
+| `api-edits-2.ndjson` | `8401053a4d4c7c05b65555c95a06a8c82d08547e585efeb18dd468636d949d7f` |
+| `databases-before-migration.ndjson` | `6cd50cc73ab3e415d07b046a53613ebc3e7b69c67748f5c20a8d2eecb09523bf` |
+| `databases-after-migration.ndjson` | `a21bb534804dad35cca9e3efe3344e7fe3acac12a6e17d91b0a8ed6c05bc987d` |
+| `api-after-migration.ndjson` | `fe6ff97778300e213e6ad700488920047dcce7d4536769ffa3875b113584f37a` |
+| `comparison-after-api-migration.json` | `53e420cb34c8e6527b51d425d2d4219107b475c56b7382a417e74b43897d1aaf` |
+
+Also preserve `api-edits-1.ndjson` (early abort on rejected user restore; both
+original labels verified unchanged) and `company-migration-native-2.log`.
+`monthly-view-query-comparison.json` holds the12 real MODB endpoint comparisons.
+Do not overwrite evidence paths or replay edits from an interrupted journal
+without inspecting restoration state.

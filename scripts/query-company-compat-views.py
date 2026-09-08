@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compare real view responses on baseline and refreshed lab working data."""
 import hashlib
+import argparse
 import importlib.util
 import json
 import os
@@ -16,6 +17,14 @@ spec.loader.exec_module(lab)
 VIEWS = [('trunkstore', 'lookup_user_flags'), ('vmboxes', 'legacy_msg_by_timestamp'),
          ('users', 'crossbar_listing'), ('devices', 'crossbar_listing'),
          ('callflows', 'crossbar_listing'), ('queues', 'crossbar_listing')]
+
+
+def targets(monthly=False):
+    if monthly:
+        return [(lab.DATABASE + '-2026%02d' % month,
+                 'baseline-verified-' + lab.DATABASE + '-2026%02d' % month, 'services', view)
+                for month in range(4, 10) for view in ['day_summary_by_source', 'day_summary_by_date']]
+    return [(lab.DATABASE, 'baseline-' + lab.DATABASE, design, view) for design, view in VIEWS]
 
 
 def field_changes(baseline, working):
@@ -45,6 +54,8 @@ def summarize(details):
                   'working_status': working['http_status'],
                   'baseline_rows': baseline.get('row_count'), 'working_rows': working.get('row_count'),
                   'same_rows': baseline.get('rows_sha256') == working.get('rows_sha256') if baseline['http_status'] == working['http_status'] == 200 else False}
+        if 'database' in item:
+            result['database'] = item['database']
         if item['view'].endswith('/crossbar_listing') and baseline['http_status'] == working['http_status'] == 200:
             result.update(field_changes(baseline['rows'], working['rows']))
         summaries.append(result)
@@ -63,18 +74,20 @@ def query(client, database, design, view):
 
 
 def main():
-    path = lab.restore.SNAPSHOTS / 'view-query-comparison.json'
-    if sys.argv[1:] == ['--summarize-existing']:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--monthly', action='store_true', help='Test two removed services views in the six fixed company MODBs')
+    parser.add_argument('--summarize-existing', action='store_true')
+    args = parser.parse_args()
+    path = lab.restore.SNAPSHOTS / ('monthly-view-query-comparison.json' if args.monthly else 'view-query-comparison.json')
+    if args.summarize_existing:
         print(json.dumps({'views': summarize(json.loads(path.read_text())), 'private_evidence': str(path)}, sort_keys=True))
         return
-    if sys.argv[1:]:
-        raise ValueError('Unknown arguments')
     client = lab.restore.Client()
     details = []
-    for design, view in VIEWS:
-        baseline = query(client, 'baseline-' + lab.DATABASE, design, view)
-        working = query(client, lab.DATABASE, design, view)
-        item = {'view': design + '/' + view, 'baseline': baseline, 'working': working}
+    for database, baseline_db, design, view in targets(args.monthly):
+        baseline = query(client, baseline_db, design, view)
+        working = query(client, database, design, view)
+        item = {'database': database, 'view': design + '/' + view, 'baseline': baseline, 'working': working}
         details.append(item)
     fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'w') as output:

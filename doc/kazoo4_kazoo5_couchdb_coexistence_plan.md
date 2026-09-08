@@ -31,7 +31,12 @@ Native account refresh and real view queries already demonstrate contract
 changes, including two removed views. See the evidence-backed interim
 **NO-GO for shared production writable databases** in
 [coexistence findings](kazoo4_kazoo5_couchdb_findings.md). More migration/API tests
-and the actual production Kazoo4 version/code contract remain open.
+and the actual production Kazoo4 version/code contract remain open. Native
+authenticated API reads/representative edits and selected company migration
+components have now been measured: legacy failover rejects user edits before
+migration; edits pass afterward, but24 stored user/device representations change.
+Monthly design migrations also remove two service-view endpoints. See the
+findings continuation for exact evidence and remaining limits.
 
 ## Reusable snapshot tools
 
@@ -64,15 +69,37 @@ and the actual production Kazoo4 version/code contract remain open.
   `new_edits=false`, verify `_revs_diff`, compare stable-source counts, and replay
   design docs serially. Optional baseline tags retain failed copies without
   overwriting them. No deletion or source write path exists.
-- `company-compat-rpc.escript`: fixed lab node, fixed authorized account; only
-  status and native account-refresh actions. Reads its generated lab cookie
-  from a protected file, never argv. Namespace checks precede distribution.
+- `company-compat-rpc.escript`: fixed lab node, fixed authorized account. Status,
+  native account refresh, API registration/readback and explicit selected-company
+  migration components only. After lab apps are started, use `prepare-api` to
+  register the five optional API modules just as the normal installer does.
+  `migrate-company` preflights the seven fixed working DBs and invokes exported
+  native refresh/account-config/failover/migration-hook components. `migrate/2`
+  is private; never use broad `/0` or `/1` as a substitute. No database deletion
+  step is exposed. Reads its generated lab cookie from a protected file, never
+  argv. Namespace checks precede distribution. Capture native maintenance output
+  privately; returned `ok` does not prove every internally handled operation.
 - `inspect-company-compat.py` and `query-company-compat-views.py`: private
   before/after evidence and real query comparison with sanitized public summaries.
   Never print raw captured account/API rows. All helpers live in `scripts/`;
   `test-company-compat-*`, `test-restore-company-compat.py`,
   `test-inspect-company-compat.py`, `test-query-company-compat-views.py` cover
-  their boundaries alongside exporter/receiver tests (42 Python cases total).
+  their boundaries alongside exporter/receiver tests.
+- `exercise-company-compat-api.py --phase LABEL [--cosmetic-edits]`: native
+  account API auth, complete collection reads for the bounded company sample,
+  one existing label per resource with verified original-value restoration.
+  Excludes soft-deleted fixtures, rejects out-of-scope routes, disables HTTP
+  proxies/redirects, journals intent before mutation. Authentication tokens stay
+  in memory. A rejected edit is not a test pass; inspect the result summary.
+- `compare-company-compat-databases.py --phase LABEL`:100-document streaming
+  pages, stable metadata checks, accepted baseline prefixes only, content hashes
+  and full private differences for all seven DBs. Snapshot restore separately
+  verifies revision leaves/attachments; this comparison is current live docs.
+  `query-company-compat-views.py --monthly` tests two service views in each MODB.
+  Both these tools and the API tool refuse existing evidence filenames. Use
+  unique phase labels; never overwrite evidence to rerun an interrupted test.
+  New tests: `test-exercise-company-compat-api.py` and
+  `test-compare-company-compat-databases.py`; full Python suite is60 cases.
 
 The first source attempts safely refused CouchDB's canonical-design-route
 redirect. Only three1,021-byte metadata `.partial` files were left privately on

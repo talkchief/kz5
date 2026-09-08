@@ -9,6 +9,15 @@ spec.loader.exec_module(query_lab)
 
 
 class QueryTests(unittest.TestCase):
+    def test_monthly_targets_use_verified_baselines_and_fixed_scope(self):
+        targets = query_lab.targets(True)
+        self.assertEqual(len(targets), 12)
+        for database, baseline, design, view in targets:
+            self.assertTrue(database.startswith(query_lab.lab.DATABASE + '-2026'))
+            self.assertEqual(baseline, 'baseline-verified-' + database)
+            self.assertEqual(design, 'services')
+            self.assertIn(view, ['day_summary_by_source', 'day_summary_by_date'])
+
     def test_field_contract_comparison_does_not_output_values(self):
         result = query_lab.field_changes([{'id': 'private-id', 'value': {'old': 'private-value', 'name': 'old-name'}}], [{'id': 'private-id', 'value': {'new': 'new-value', 'name': 'new-name'}}])
         self.assertEqual(result['added_value_fields'], ['new'])

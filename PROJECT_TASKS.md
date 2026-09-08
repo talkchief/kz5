@@ -15,7 +15,7 @@
 
 | ID | Status | Requirement / acceptance |
 | --- | --- | --- |
-| COMPAT-01 | ACTIVE — all company copies/restores pass; native refresh proves view contract changes | Assess whether an isolated Kazoo5 zone can safely coexist with existing Kazoo4 infrastructure without incompatible shared CouchDB writes. Authorized production read source:10.1.0.10, company/account d8520ce3f29c5b6db692289e782c92af. Use existing protected SSH credentials and separately supplied CouchDB administrator credentials; never put secrets or customer records in Git/log output. Inventory and copy only databases belonging to this exact account, including its account database and any account-scoped MODB/ACDC data actually present. Keep production strictly read-only; do not refresh views, migrate, write, restart, replicate back, or connect development Kazoo5 to production brokers/databases. Restore to an isolated development CouchDB instance or collision-safe namespace, not over active development data. Record snapshot consistency/update sequences and protected backup locations. Capture before/after documents, design documents, view/index definitions, schema/type/version fields and relevant migrations, then exercise normal Kazoo5 maintenance and representative account/queue/device/callflow API operations against the copy. Compare with the current production Kazoo4 source/runtime contract and, where available, an isolated Kazoo4 runtime using the changed copy. Identify shared system/config/design-document effects separately; copying or mutating global production databases is not authorized by this account-scoped task. Produce a clear compatibility report with exact changes, breaking/unknown cases, required isolation boundaries, recovery plan and a GO/NO-GO recommendation. A passing account-only test is not proof of whole-cluster coexistence; unresolved global effects must remain explicit. |
+| COMPAT-01 | ACTIVE — API/edit and selected migration evidence captured; NO-GO for shared writable production DBs | Assess whether an isolated Kazoo5 zone can safely coexist with existing Kazoo4 infrastructure without incompatible shared CouchDB writes. Authorized production read source:10.1.0.10, company/account d8520ce3f29c5b6db692289e782c92af. Use existing protected SSH credentials and separately supplied CouchDB administrator credentials; never put secrets or customer records in Git/log output. Inventory and copy only databases belonging to this exact account, including its account database and any account-scoped MODB/ACDC data actually present. Keep production strictly read-only; do not refresh views, migrate, write, restart, replicate back, or connect development Kazoo5 to production brokers/databases. Restore to an isolated development CouchDB instance or collision-safe namespace, not over active development data. Record snapshot consistency/update sequences and protected backup locations. Capture before/after documents, design documents, view/index definitions, schema/type/version fields and relevant migrations, then exercise normal Kazoo5 maintenance and representative account/queue/device/callflow API operations against the copy. Compare with the current production Kazoo4 source/runtime contract and, where available, an isolated Kazoo4 runtime using the changed copy. Identify shared system/config/design-document effects separately; copying or mutating global production databases is not authorized by this account-scoped task. Produce a clear compatibility report with exact changes, breaking/unknown cases, required isolation boundaries, recovery plan and a GO/NO-GO recommendation. A passing account-only test is not proof of whole-cluster coexistence; unresolved global effects must remain explicit. |
 
 Detailed assessment plan: [Kazoo4/5 CouchDB coexistence](doc/kazoo4_kazoo5_couchdb_coexistence_plan.md).
 
@@ -33,9 +33,23 @@ user features change and queue strategy is additive; sampled device/callflow
 rows match. Separate lab network/user/data verified; no production writes or
 global production copies. Lab setup/resource fixes and42 tests are in source.
 See `doc/kazoo4_kazoo5_couchdb_findings.md`: interim NO-GO for shared writable
-production DBs. Remaining: native API/edit, broader/MODB migration, exact deployed
-Kazoo4 version/runtime contract (operator asked), shared-global semantics and
-final rollout/rollback decision. No whole-cluster coexistence approval.
+production DBs.
+
+API/migration continuation: native authenticated collection/detail reads cover
+15 users/82 devices/4 queues/89 callflows. Representative user PATCH initially
+fails400 on legacy `call_forward.failover`; the other four resource types edit
+and restore successfully (90319/6cf15e). Selected native migration components
+99861/408605 migrate15 users and9 devices; one enabled legacy failover becomes
+`call_failover` with its number preserved. Each monthly DB changes21 designs and
+adds3, with no existing monthly non-design changes. All baseline hashes remain
+unchanged (48886/cad73a). Post-migration all five representative edits and restore
+readbacks pass200 (93347/340c36). Two additional legacy service-view endpoints
+return200 on baseline and404 on working in all six MODBs (64718/b919f6).
+Tools and regression coverage are in kz5; raw journals remain private on .44.
+Remaining: exact deployed Kazoo4 version/runtime contract (operator asked),
+additional view/call edge cases, repeat-migration/idempotence, full system/global
+semantics, and rollout/rollback decision. The seven-DB native component test
+does not run broad global `migrate/0`; no whole-cluster coexistence approval.
 
 ## Fresh-server and TLS continuation — 2026-09-08
 

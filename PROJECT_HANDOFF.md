@@ -29,7 +29,7 @@ All seven isolated baseline/working restores pass: account79427/a9ee43 and
 `kazoo-compat` user/storage/cookies and shared private loopback-only network
 namespace, not enabled at boot. Runtime `/var/lib/kazoo-compat-runtime`;
 main .44 stack and original site untouched. Lab setup/restore/inspection/RPC
-helpers and42 offline tests now live in `scripts/` (see plan). Do not rerun
+helpers and offline regression tests now live in `scripts/` (see plan). Do not rerun
 creation helpers against existing lab; do not restore over existing DBs.
 
 Native account refresh35650/7e39fb and comparison18164/b6feda:38 changed design
@@ -49,11 +49,39 @@ Only lab broker/apps restarted after completed imports (65bd11); all9main
 services active. Post-restore native status e5a400 verifies Crossbar/ACDC/
 Callflow/Blackhole, database bootstrap, all three lab units in the same separate
 namespace, no default route and lab Crossbar8000 listening. All copy/restore/
-test jobs are terminal. Next: API/edit and broader/MODB
-migrations. Exact production Kazoo4 app host/version requested asynchronously;
+test jobs are terminal. Exact production Kazoo4 app host/version requested asynchronously;
 unknowns and engine3.3.2→3.5.2 limits remain explicit. See
 [assessment plan](doc/kazoo4_kazoo5_couchdb_coexistence_plan.md); never point the
 development apps at production dependencies or put credentials/backups in Git.
+
+Latest COMPAT-01 continuation: authenticated API/edit and selected native
+migration tests now completed. Lab optional APIs registered/persisted using
+`company-compat-rpc.escript prepare-api`; normal ALL installer already does this.
+Initial user edit400 caused by legacy `call_forward.failover`, not credentials.
+All15 live users and9 devices contained the old flag. Selected native migration
+components99861/408605 converted24 docs; one enabled failover moved to
+`call_failover` with its number preserved. Each MODB changed21 designs and
+gained3, no existing non-design monthly records changed. Baseline hashes stayed
+unchanged. After migration, representative account/user/device/queue/callflow
+label PATCHes and restores all pass200 (93347/340c36); lists still15/82/4/89.
+Two service views become404 in all six MODBs (64718/b919f6), in addition to two
+previously measured removed account views. **Shared writable production DBs
+remain NO-GO.** No production writes or main stack restarts occurred.
+
+New reproducible tools: `exercise-company-compat-api.py` (fixed-scope native
+auth/GET/PATCH with private intent/restore journal) and
+`compare-company-compat-databases.py` (bounded seven-DB streaming differences).
+`company-compat-rpc.escript migrate-company` invokes exported selected native
+components; `migrate/2` itself is private, and broad `migrate/0` is deliberately
+not used. `query-company-compat-views.py --monthly` compares the removed monthly
+views; add `--summarize-existing` to read its completed private evidence safely.
+Current working account has28 non-design changes versus the untouched baseline
+(migration plus earlier auth/API effects),38 changed designs and8 additions.
+Private journals/hash references and exact limits are in the findings doc.
+Next: repeat-migration/idempotence, remaining view/call cases, deployed Kazoo4
+code/runtime and shared-global semantics. All native/test/copy jobs are terminal;
+all9 main and3 lab services active at941cb5. Preserve the unrelated untracked
+`doc/dashboard_caller_sidecar_design.md` when committing/syncing.
 
 Latest continuation: [fresh-host/TLS acceptance](doc/fresh_host_tls_acceptance_20260908.md).
 Physical mobile delivery testing was waived by the user. HTTPS is deployed and
