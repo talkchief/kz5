@@ -1,5 +1,22 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Queue-language API persistence now PASS on main.** Final unit
+`kz5-editor-main44-journal-20260908`, source d50cd2e, observer51137/e145bc,
+terminal exit0 in24.676s. All26 checks/eight intents complete: create/managed
+route, exact replay, changed-body/stale-revision refusal, each of EN/HE/AR/FR/ES
+saved and freshly reloaded with separate generic17/callback30 intervals, then
+conditional owned-resource cleanup. Direct inputs and service snapshots stay
+unchanged. Exact five expected INFO rejection envelopes correlate across file
+and journal; no other diagnostic errors or new cores. Zero calls and all nine
+enabled/active services verifiedabfdf1; all30 agents remain logged out64a985
+without repair writes. No runtime code/service restart was
+needed; source changes make the acceptance reusable on main. Retained evidence
+`/var/log/kazoo-acceptance/queue-editor-main44-journal.S257Izfx/`; full guidance
+and two earlier log-parser failures in `doc/queue_editor_acceptance.md`.
+All editor jobs are terminal. Do not poll them or reuse reserved2095/2096/2097.
+Remaining: actual browser-save flow, restricted principals and new-account
+inheritance, alongside wider voice, bridge, distributed/release gates.
+
 **Main development location:** `10.1.0.44:/opt/kz5` (kz5-dev). Start future
 work here, not on the original server scheduled for deletion. Git master and
 origin/master matched08e02ce before this documentation update (c7e99a), with no
@@ -27,7 +44,7 @@ All five installed Gemini confirmation references pass038efd; prepare-only
 main fixture8310dc3170a18de37f205d0da172df65 passes61bea0. No Gemini generation.
 New explicit fixture ownership, local-reference addressing, no-HOME SUP and
 optional absent test-phone helper fixes are pushed/synced. Periodic offer and
-position-one acceptance remains a separate main-host gate; result/reference paths in
+position-one outcomes are recorded separately below; retry result/reference paths in
 `doc/main44_callback_acceptance_20260908.md`.
 
 **Periodic announcement references now prepared natively:** exact CLI
@@ -49,7 +66,7 @@ All retry/reference/periodic jobs are terminal; do not poll old observer IDs
 or start duplicates. Evidence and replay guidance:
 `doc/main44_periodic_audio_acceptance_20260908.md`.
 Remaining voice gates include native pronunciation review, wider number/wait
-playback, actual MOH, alternative response paths and save/inheritance checks;
+playback, actual MOH, alternative response paths and browser-save/inheritance checks;
 these are not marked complete by the measured position-one/offer/success tests.
 
 **Normal installer74822 and independent ALL64780 passed; no installer remains active.**

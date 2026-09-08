@@ -2,7 +2,7 @@
 
 ## Immediate operator follow-up — September8
 
-- **EDITOR-MAIN44-LANGUAGE-01 SOURCE TESTED / NATIVE OPEN:** port the armed
+- **EDITOR-MAIN44-LANGUAGE-01 NATIVE MASTER-ADMIN API PASS:** port the armed
   unified-editor acceptance to the main host's protected fixture and locally
   assigned CouchDB address. New wrapper requires explicit account, virgin
   internal extension, run directory and write arming; clears inherited target
@@ -14,9 +14,17 @@
   pass010d6c. Incorrect readback or ambiguous reply retains evidence, never
   resends or deletes blindly. Native58571/fb64fd completed all26 API/language
   checks and cleanup, but its outer generic log gate failed on INFO401/409/404
-  negative-test envelopes; failed run retained. New exact server-request-ID
-  log correlation passes17 tests963d33 and awaits native repeat on a different
-  virgin extension. No production logging was weakened. Evidence:
+  negative-test envelopes; failed run retained. The second native run7180 also
+  completed the API sequence but rejected journald's different coloured format.
+  Corrected exact-ID file / unique timestamp-module-status-reason journal
+  correlation passes20 tests51747c. Final unit51137/e145bc exits0 in24.676s:
+  all26 checks, eight complete intents, all-five save/replay/reload, separate
+  intervals, exact cleanup, unchanged source/services and no unexpected errors
+  or new cores. Both log streams match exactly five intended negative responses.
+  Independentabfdf1 confirms0 calls and all nine enabled/active services.
+  Final evidence `/var/log/kazoo-acceptance/queue-editor-main44-journal.S257Izfx/`.
+  Not browser-save, restricted-token, inherited-language or all-feature proof.
+  No production logging was weakened. Earlier failed evidence:
   `/var/log/kazoo-acceptance/queue-editor-main44.GUsWUsus/`.
   See `doc/queue_editor_acceptance.md`; this is acceptance tooling, not a new
   production editor behavior claim.
@@ -1861,7 +1869,7 @@ verified; do not toggle global deletion settings to run a dashboard test.
 
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
-| ACDC-01 | ACTIVE — auth/deployment acceptance | Unified queue create/edit/read. Queue recovery UI `8c11030` passes 15 source-browser cases; fresh compiled bundle passes all five recovery cases plus queue-specific login (`88551`). Backend malformed/foreign-extra/empty-revision acknowledgement bugs reproduced, fixed, then all 41 editor/manifest tests passed (`68783`, rechecked `90416`), including partial/lost replies, persisted receipts, fresh roster/revisions and no automatic resend. Live restricted-token controls and coordinated backend/UI deployment remain required. |
+| ACDC-01 | NATIVE MASTER-ADMIN API PASS — broader auth/UI acceptance open | Unified queue create/edit/read. Prior recovery UI8c11030 and41 editor/manifest tests cover malformed/foreign/empty acknowledgements, partial/lost replies and no automatic resend. Main-host51137/e145bc now passes actual create/edit/replay/conflict and all-five language persistence with exact cleanup, unchanged services and correlated clean logs. Browser0b7f2c proves deployed editor read/local selection/cancel, not Save submission. Live restricted principals, actual browser writes and failure-recovery remain open. See EDITOR-MAIN44-LANGUAGE-01 and doc/queue_editor_acceptance.md. |
 | ACDC-02 | OPEN — UI | Reliable Callflows ACDC action and internal extension routing; dropdowns instead of technical free-text fields; default prompt selection must not trigger required-field errors. Preserve existing customer recordings. |
 | ACDC-03 | OPEN — ACDC | Verify/build supported ring strategies: ring-all, ordered, round-robin and existing alternatives. Resolve simultaneous-answer/DTMF exit ownership candidates; test fairness, single winner and cleanup. |
 | VOICE-01 | OPEN — media + UI | Finalize EN/HE/AR/FR/ES prompt-language override, queue/call/account defaults and reseller/sub-account inheritance; report incomplete packs rather than enabling unverified choices. |

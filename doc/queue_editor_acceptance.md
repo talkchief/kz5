@@ -1,6 +1,35 @@
-# Unified queue editor acceptance — 2026-09-05
+# Unified queue editor acceptance
 
 ## September8: main-host language persistence acceptance tooling
+
+**Current result: PASS on .44.** Source d50cd2e, unit
+`kz5-editor-main44-journal-20260908`, observer51137/e145bc, exited0 in24.676s.
+All26 API checks and eight operation intents completed: create plus managed
+route, replay/conflict/stale revision controls, save/replay/fresh GET for each
+language, aggregate route removal and exact-CAS queue soft deletion. Generic
+interval17 and callback30, with initial delays45/30, survived each reload.
+No roster or agent status was changed; no calls were placed.
+
+Evidence directory: `/var/log/kazoo-acceptance/queue-editor-main44-journal.S257Izfx`.
+Protected log: `/root/kz5-acceptance/queue-editor-main44-journal-20260908.log`.
+Independent receipt readbackc801c2 confirms all intents complete and cleanup.
+Receipt SHA256 `bf07e1e7ebafb1c34a7373420d9c5c51230d06b60ca49c69bfe69bfa81f2adc2`;
+log-summary SHA256 `344663758711f29ce0397e167e3f788548b39887d22d8f6417bdae6cbd3aeea2`.
+Direct source/schema pins and all service PID/restart snapshots match. File
+and journal each contain exactly the five expected negative envelopes, with
+zero missing observations or unrelated error lines4e2343. No new cores; zero
+remaining calls and all nine services enabled/activeabfdf1; all30 fixture
+agents remain logged out64a985 without status repair writes. This closes the
+master-admin API persistence slice, not browser save submission, restricted
+principal permissions, new-account/reseller inheritance or all queue features.
+
+The run used an empty root0700 directory and explicit virgin extension2095;
+2097 and2096 belong to the earlier retained runs below. Do not reuse those
+reservations or delete audit records to force another test. Test queues/routes
+were soft-deleted after exact ownership/revision checks; eight operation
+receipts plus one released extension claim remain per successful API sequence.
+
+### Earlier enclosing log-check failures, preserved
 
 First native main run81ce691 completed all26 API checks and exact cleanup:
 `/var/log/kazoo-acceptance/queue-editor-main44.GUsWUsus/queue-editor-acceptance.json`.
@@ -17,8 +46,26 @@ code and bounded reason. `queue-editor-expected-http.cjs` permits only its exact
 INFO envelope line; a different request, severity, code, reason or module,
 duplicate observation, missing expected response or unrelated error remains
 visible. All17 lifecycle/log-classification cases pass963d33. No production log
-level or error handling was changed. A new run is required to exercise this
-correlation; do not manufacture request metadata in the earlier receipt.
+level or error handling was changed; no request metadata was manufactured in
+the earlier receipt.
+
+The second run635a800, observer7180/a6ac60, also completed all API checks and
+cleanup, but its outer gate rejected the journal format. Evidence directory
+`/var/log/kazoo-acceptance/queue-editor-main44-correlated.i0Wh464M` and protected
+log `/root/kz5-acceptance/queue-editor-main44-correlated-20260908.log` are retained.
+File logs matched all five request IDs with no other errorsa077a6; journald
+uses coloured `info api_util.LINE` messages without request IDs30f24f.
+
+The corrected classifier requires the complete clean request-ID file window,
+then uniquely joins each journal envelope by exact millisecond timestamp,
+module line, status and reason, requiring INFO priority6. Ambiguous tuples,
+wrong priority/module/time/code/reason, duplicates, missing messages and any
+other diagnostic errors still fail. Priority0–3 and critical console messages
+fail regardless of wording. All20 regression cases pass51747c, including
+these distinctions. The final fresh run above exercises both formats; earlier
+failed enclosing runs are not retroactively called successful.
+
+### Repeating the acceptance
 
 The armed live runner is now `scripts/test-acdc-queue-editor-live.sh`. It
 requires explicit `--fixture-account`, `--extension` (2090–2099), `--run-dir`
@@ -58,8 +105,15 @@ The previous harness fails three new language casesa231fd. All13 cases pass
 1d9f70 and another explicitly selected synthetic account5e8498. Additional
 actual-shell/private-flock tests010d6c cover arming, target/extension validation,
 ambient isolation, identity refusal and preserved lock inode/content.
-Bash/ShellCheck/whitespace checks pass. Native main-host execution is still
-open at this source checkpoint; unit tests are not HTTP/database acceptance.
+Bash/ShellCheck/whitespace checks pass. Native execution subsequently passed
+above; unit tests alone are not HTTP/database acceptance. For log verification,
+capture the pre-run file offsets/inode/device/size and journal start time,
+refuse rotation/truncation, and use `classify` plus `classifyJournal` from
+`queue-editor-expected-http.cjs` with the new run's actual `http_rejections`.
+Require five matched and zero missing/unrelated records in each stream. Keep
+source/schema fingerprints, service PID/restart snapshots and core counts
+before/after, separately from the API receipt. Do not disable INFO or weaken
+production logging to make an expected negative request disappear.
 
 ## Historical checkpoints
 
