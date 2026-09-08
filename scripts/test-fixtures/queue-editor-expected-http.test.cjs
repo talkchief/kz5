@@ -23,3 +23,26 @@ test('partial or fabricated rejection envelope metadata is refused',()=>{
     for(const body of [{status:'success',error:'401'}, {status:'error',error:'401',message:'private data here',request_id:'a'.repeat(32)},
         {status:'error',error:'401',message:'invalid_credentials',request_id:'bad'}])assert.throws(()=>h.record({},{status:401,body},'anonymous_rejected'));
 });
+function journalFixture(){const entries=fixture(),files=entries.map((e,i)=>line(e).replace('56.789','56.00'+i));
+    const records=files.map(l=>({priority:'6',message:l.replace('[info] |','\x1b[1;37minfo |').replace(/\|[a-f0-9]{32}\|api_util:(\d+)\(<\d+\.\d+\.\d+>\) /,'api_util.$1 \x1b[0m')}));
+    return {entries,files,records};}
+test('coloured journal INFO correlates one-to-one with exact request-ID file evidence',()=>{
+    const f=journalFixture();assert.deepEqual(h.classifyJournal(f.records,f.files,f.entries),
+        {expected_http_rejections:5,missing_expected_rejections:0,unexpected_error_lines:0});
+});
+test('journal priority, timestamp, response, duplicates and unrelated failures are not ignored',()=>{
+    const f=journalFixture();for(const row of [{...f.records[0],priority:'3'},
+        {...f.records[0],message:f.records[0].message.replace('56.000','55.000')},
+        {...f.records[0],message:f.records[0].message.replace('401','500')}])
+        assert.equal(h.classifyJournal([row,...f.records.slice(1)],f.files,f.entries).unexpected_error_lines,1);
+    assert.equal(h.classifyJournal([...f.records,f.records[0]],f.files,f.entries).unexpected_error_lines,1);
+    assert.equal(h.classifyJournal(f.records.slice(1),f.files,f.entries).missing_expected_rejections,1);
+    assert.equal(h.classifyJournal([...f.records,{priority:'3',message:'error unrelated runtime failure'}],f.files,f.entries).unexpected_error_lines,1);
+    assert.equal(h.classifyJournal([...f.records,{priority:'2',message:'halt requested'}],f.files,f.entries).unexpected_error_lines,1);
+    assert.equal(h.classifyJournal([...f.records,{priority:'6',message:'12:34:56.999 critical runtime stopped'}],f.files,f.entries).unexpected_error_lines,1);
+});
+test('ambiguous or incomplete file evidence cannot authorize journal exceptions',()=>{
+    const f=journalFixture();assert.throws(()=>h.classifyJournal(f.records,f.files.slice(1),f.entries));
+    f.files[4]=f.files[4].replace('56.004','56.003');
+    assert.throws(()=>h.classifyJournal(f.records,f.files,f.entries),/Ambiguous/);
+});
