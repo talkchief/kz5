@@ -4158,10 +4158,14 @@ EOF
 configure_kazoo_freeswitch() {
     local config_source="$KAZOO_BUILD_ROOT/kazoo-configs-freeswitch"
     local module module_config
+    validate_config_directory "$KAZOO_CONFIG_DIR"
+    validate_config_directory "$KAZOO_CONFIG_DIR/freeswitch"
+    run install -d -o root -g root -m 0755 "$KAZOO_CONFIG_DIR" "$KAZOO_CONFIG_DIR/freeswitch"
     sync_git https://github.com/2600hz/kazoo-configs-freeswitch.git \
         "$config_source" "$FREESWITCH_CONFIG_REF"
-    run mkdir -p "$KAZOO_CONFIG_DIR/freeswitch"
-    run rsync -a "$config_source/freeswitch/" "$KAZOO_CONFIG_DIR/freeswitch/"
+    # Normalize only incoming public source templates, not existing secrets or
+    # recordings. Git checkouts made under umask077 otherwise remain unreadable.
+    run rsync -a --chmod=Du=rwx,Dgo=rx,Fu=rwX,Fgo=rX "$config_source/freeswitch/" "$KAZOO_CONFIG_DIR/freeswitch/"
     configure_freeswitch_logging
     reject_secret_symlink "$KAZOO_FREESWITCH_COOKIE_FILE"
     printf '%s\n' "$KAZOO_COOKIE" | write_file 0400 "$KAZOO_FREESWITCH_COOKIE_FILE"
@@ -4786,14 +4790,16 @@ configure_kazoo_kamailio() {
     local config_source="$KAZOO_BUILD_ROOT/kazoo-configs-kamailio"
     local installer_config fqdn
     fqdn=$(hostname -f 2>/dev/null || hostname)
+    validate_config_directory "$KAZOO_CONFIG_DIR"
+    validate_config_directory "$KAZOO_CONFIG_DIR/kamailio"
+    run install -d -o root -g root -m 0755 "$KAZOO_CONFIG_DIR" "$KAZOO_CONFIG_DIR/kamailio"
     sync_git https://github.com/2600hz/kazoo-configs-kamailio.git \
         "$config_source" "$KAMAILIO_CONFIG_REF"
     apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-registration-sequences.patch"
     apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-registered-source-credentials.patch"
     apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-dispatcher-reload-bookkeeping.patch"
     apply_required_source_patch "$config_source" "$SCRIPT_DIR/patches/kamailio-push-freshness.patch"
-    run mkdir -p "$KAZOO_CONFIG_DIR/kamailio"
-    run rsync -a \
+    run rsync -a --chmod=Du=rwx,Dgo=rx,Fu=rwX,Fgo=rX \
         --exclude db/ --exclude local.d/ --exclude defs.d/ \
         --exclude listeners.d/ --exclude extras.d/ \
         "$config_source/kamailio/" "$KAZOO_CONFIG_DIR/kamailio/"

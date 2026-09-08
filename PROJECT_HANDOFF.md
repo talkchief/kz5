@@ -9,7 +9,10 @@ audio and MIME prerequisites are fixed; full compilation passed, but initial
 startup exposed config traversal/private-binding defects. Both are fixed in
 `ee7877c`; rerun24127 caught a file-only validator incorrectly used for the
 configuration directories. The directory-specific fix and real-helper negative
-tests pass70666/a6a153 (`b6d8bae` pushed); normal .44 rerun88880 is active. This is the P0
+tests pass70666/a6a153 (`b6d8bae` pushed). Rerun88880 passed datastore/private
+binding but failed account bootstrap; a later protected retry created the
+master. Exact RPC-result/readiness fix `cdedba2` is pushed; rerun85919 is active.
+SIP source-template permission regression45795/1f3786 also passes. This is the P0
 installer continuation, not full fresh-stack certification.
 
 Last updated: **2026-09-08**. This is the navigation and current-state guide;

@@ -16,7 +16,11 @@
   corrected in `ee7877c`. Rerun24127 exposed a directory/file validation mix-up
   before compilation; corrected with the real directory validator and negative
   symlink/file/non-root-directory regression checks (70666/a6a153), pushed
-  `b6d8bae`. Normal apps/eCallMgr rerun88880 is active; startup is not yet accepted.
+  `b6d8bae`. Rerun88880 passed compilation/private binding/datastore, but fresh
+  account bootstrap failed. A later protected retry created the master account.
+  Exact RPC-result checking and a Crossbar startup gate are pushed (`cdedba2`);
+  normal apps/eCallMgr rerun85919 is active. SIP template permissions under
+  umask077 are also fixed/tested, including untouched secrets/custom files.
   Accepting apps/eCallMgr/media/SIP remains P0. The user confirms HTTPS
   login works; the new server uses verified private-network TLS for that host.
 - [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).

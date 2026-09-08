@@ -204,3 +204,31 @@ Normal apps/eCallMgr rerun88880 uses unit
 `kz5-fresh-apps-directories-20260908.service`, explicit `User=root`, 2GiB/CPU200%
 bounded build. Local smoke/cookie/deployment/bootstrap suites also pass
 18721/55c0e1. No private credential was placed in a Git remote or bundle.
+
+### Bootstrap result/readiness — repaired, acceptance continuing
+
+Rerun88880/0ca54d passed full compilation, source-only runtime checks and actual
+private distribution on .44:11500. Datastore readiness passed; service user can
+read config.ini (81607a). Apps remained active with zero automatic restarts,
+no recent crash/eacces reports and redacted config section-count logging
+(d95b10). It then failed master-account discovery after its bootstrap RPC.
+The initial remote function result was suppressed and cannot be reconstructed.
+A later protected retry using the same saved credentials created master
+`adecbb84fbe9e06902a76731914d1943`. Subsequent duplicate-realm diagnostic calls
+returned `{ok, failed}` with transport exit zero; no additional accounts created.
+This confirms the result-check defect; a startup-order race is inferred from the
+initial timing, not a preserved initial exception.
+
+Commit `cdedba2` accepts only the fixed `{ok, ok}` RPC result, never fetches or
+prints bootstrap diagnostics/arguments, and waits for Crossbar application plus
+account/user bindings before fresh creation. Ready/unready, failed-result,
+transport-failure and credential-redaction regressions pass92805/3cdfb8.
+Normal rerun85919, unit `kz5-fresh-apps-bootstrap-20260908.service`, uses that
+commit. Protected full log: `/root/kz5-acceptance/apps-bootstrap-install.log`.
+No reset/deletion of the new account is performed to manufacture a clean pass.
+
+Standalone FreeSWITCH/Kamailio now explicitly prepare a traversable shared
+configuration parent and normalize incoming public Git templates under umask077.
+Actual rsync/config-prefix fixtures45795/1f3786 verify directories0755,
+templates0644, executables0755 and unchanged existing secret/custom modes.
+This does not recursively relax existing credentials or custom configuration.
