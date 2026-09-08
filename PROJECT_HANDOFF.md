@@ -1,5 +1,13 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Next deployment: VOICE-01 queue locale spelling UI correction.** Backend
+`HE_IL`/`HE-IL` was displayed and saved as English by the editor. Source now
+canonicalizes the five supported locales and preserves unready settings.
+Baseline a9f2bc fails; full source UI contract4ac811 passes, including fifteen
+spelling variants. Normal Monster deployment/served-artifact verification are
+pending. See `doc/queue_language_spelling_fix.md`. This does not change account
+or reseller defaults; keep those inheritance gates separate.
+
 **VOICE-01 resumed-worker language correction deployed on main.**
 Baseline1483/ff1843 reproduces a resumed announcement worker switching EN toFR
 after the queue changed. Admission now pins effective language in serialized

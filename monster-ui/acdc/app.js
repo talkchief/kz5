@@ -620,7 +620,10 @@ define(function(require) {
 		},
 
 		queueLanguageOptions: function(items, current) {
-			var selected = this.announcementLocales.indexOf(current) >= 0 ? current : 'en-us';
+			// Match ACDC's canonical locale spelling. Otherwise an existing HE_IL
+			// queue is displayed (and adopted on Save) as English despite playing Hebrew.
+			var canonical = typeof current === 'string' ? current.toLowerCase().replace(/_/g, '-') : current,
+				selected = this.announcementLocales.indexOf(canonical) >= 0 ? canonical : 'en-us';
 			// Never add an inherit/custom sixth option or re-enable an unready pack.
 			return _.map(this.announcementLocales, function(locale) {
 				return _.assign({ label: locale, ready: false, disabled: true },

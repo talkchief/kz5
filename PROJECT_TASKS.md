@@ -2,6 +2,15 @@
 
 ## Immediate operator follow-up — September8
 
+- **VOICE-01 locale spelling UI SOURCE FIXED:** existing `HE_IL`/`HE-IL`
+  queues were selected and adopted as English despite backend Hebrew playback.
+  Baseline a9f2bc reproduces it. The dropdown now canonicalizes supported
+  spellings; fifteen variant cases preserve the same language on Save, and
+  unready packs remain disabled with their original values preserved. Full UI
+  contract4ac811 passes. Normal Monster deployment and served-artifact check
+  pending. See `doc/queue_language_spelling_fix.md`. Broader inheritance remains
+  open; do not equate spelling normalization with changing account defaults.
+
 - **VOICE-01 resumed announcement language DEPLOYED:** a resumed worker
   reapplied current FR queue settings to a serialized EN admission, unlike the
   callback's retained EN language. Baseline1483/ff1843 reproduces the mismatch.

@@ -220,6 +220,19 @@ for (const current of [undefined, '', 'fr-ca', 'en-us', 'he-il']) {
 	assert(choices.filter(item => item.value !== 'en-us').every(item => item.disabled));
 }
 for (const language of app.announcementLocales) {
+	for (const stored of [language.toUpperCase(), language.replace('-', '_'), language.replace('-', '_').toUpperCase()]) {
+		const readyChoices = app.announcementLocales.map(value => ({ value, ready: true, disabled: false, label: value }));
+		const state = app.queueLanguageSelection(readyChoices, stored, stored);
+		assert.strictEqual(state.selected, language, 'Backend-supported locale spelling must not select English: ' + stored);
+		assert.strictEqual(state.original, stored, 'Keep the stored value for preservation when readiness is unavailable');
+		const normalized = app.serializeQueue(queueForm(formValues, formChecks, { 'queue-language-selection': state }), true);
+		assert.strictEqual(normalized.announcements.language, language, 'Save must retain the same spoken language');
+		const unavailable = app.queueLanguageSelection([], stored, stored);
+		assert.strictEqual(unavailable.selected, language);
+		assert.strictEqual(unavailable.adopt, false, 'Normalization must not enable an unverified pack');
+		const preserved = app.serializeQueue(queueForm(formValues, formChecks, { 'queue-language-selection': unavailable }), true);
+		assert.strictEqual(preserved.announcements.language, stored, 'Unrelated edits preserve an unavailable legacy spelling');
+	}
 	const languageState = app.queueLanguageSelection(app.announcementLocales.map(value =>
 		({ value, ready: true, disabled: false, label: value })), language, 'en-us');
 	assert.strictEqual(languageState.adopt, true, 'Ready initial selection adopts without a change event');
@@ -921,7 +934,8 @@ assert.strictEqual(callbackSchema.originate_timeout.minimum, 5);
 assert.strictEqual(callbackSchema.originate_timeout.maximum, 300);
 assert.strictEqual(callbackSchema.media.properties.returned_confirmation.type, 'string');
 assert(announcementsRuntime.includes('{\'queue_position\', kapps_call:call_id(Call)}'));
-assert(announcementsRuntime.includes('{\'say\', kz_term:to_binary(Position), <<"number">>}')
-	|| announcementsRuntime.includes('acdc_language:number_prompts(Position, Language)'));
+// Position playback now requires the installed prerecorded cardinal playlist;
+// the retired native SAY path is no longer an acceptable voice contract.
+assert(announcementsRuntime.includes('acdc_cardinal_media:playlist(Position, Language, maps:get(position_audio, Config, undefined))'));
 
 console.log('PASS ACDC Monster UI contract checks');
