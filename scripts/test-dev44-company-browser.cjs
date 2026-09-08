@@ -64,21 +64,28 @@ function credentials() {
         await page.waitForFunction(id => window.monster && monster.apps.auth.accountId === id, MASTER, {timeout: 30000});
         await page.waitForTimeout(5000);
         async function checkCallflowsUsers(accountId, expectedCount) {
-            phase = 'callflows-users-' + (accountId === MASTER ? 'master' : 'company');
+            const prefix = 'callflows-users-' + (accountId === MASTER ? 'master' : 'company');
+            phase = prefix + '-navigation';
             await page.goto(ORIGIN + '/#/apps/callflows', {waitUntil: 'domcontentloaded'});
+            phase = prefix + '-users-button';
             const users = page.locator('.entity-element[data-type="user"]:visible');
             await users.waitFor({state: 'visible', timeout: 30000});
             const entitlement = page.waitForResponse(r => new URL(r.url()).pathname ===
                 '/v2/accounts/' + accountId + '/entitlements', {timeout: 20000});
             await users.click();
+            phase = prefix + '-entitlements-response';
             const response = await entitlement;
             assert.equal(response.status(), 200);
             const body = await response.json();
             assert.equal(body.status, 'success');
             assert.equal(typeof body.data.capabilities, 'object');
+            phase = prefix + '-list-render';
             await page.locator('.entity-edition:visible').waitFor({timeout: 15000});
             await page.waitForTimeout(2000);
-            assert.equal(await page.locator('.entity-edition .list-element[data-id]:visible').count(), expectedCount);
+            const actualCount = await page.locator('.entity-edition .list-element[data-id]:visible').count();
+            console.log(JSON.stringify({phase, expected_users: expectedCount, visible_users: actualCount}));
+            assert.equal(actualCount, expectedCount);
+            phase = prefix + '-indicator-errors';
             assert.equal(await page.evaluate(() => monster.apps.core.request.counter), 0);
             assert.equal(await page.locator('.progress-indicator.active').count(), 0);
             assert.deepEqual(issues, []);
