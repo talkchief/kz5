@@ -7,6 +7,7 @@ const ORIGIN = 'https://kz5-dev.talkchief.io';
 const MASTER = 'adecbb84fbe9e06902a76731914d1943';
 const COMPANY = 'd8520ce3f29c5b6db692289e782c92af';
 const usersOnly = process.argv.slice(2).join(' ') === '--callflows-users';
+const queueFormOnly = process.argv.slice(2).join(' ') === '--queue-create-form';
 
 function privateText(file) {
     const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
@@ -32,7 +33,7 @@ function credentials() {
         const input = fs.readFileSync(0, 'utf8'); assert(input.length < 65536);
         result = JSON.parse(input);
     } else {
-        assert(process.argv.length === 2 || usersOnly);
+        assert(process.argv.length === 2 || usersOnly || queueFormOnly);
         const auth = envFields(privateText('/etc/kazoo/installer-secrets.env'));
         const config = envFields(privateText('/etc/kazoo/deployment.env'));
         result = {account: Buffer.from(config.KAZOO_MASTER_ACCOUNT_NAME, 'base64').toString('utf8'),
@@ -117,6 +118,37 @@ function credentials() {
         await page.goto(ORIGIN + '/#/apps/acdc', {waitUntil: 'domcontentloaded'});
         assert.equal((await masterLive).status(), 200);
         await page.waitForTimeout(2000);
+        if (queueFormOnly) {
+            phase = 'queue-create-form';
+            // Check the reported create/default-validation/storage-loading path;
+            // no mutation, synthetic HTTP success or account configuration change.
+            await page.route(ORIGIN + '/v2/accounts/**', async route => {
+                if (!['GET', 'HEAD', 'OPTIONS'].includes(route.request().method())) {
+                    issues.push('unexpected-mutation'); await route.abort();
+                } else { await route.continue(); }
+            });
+            const storageRequests = [];
+            page.on('request', request => {
+                if (/\/storage(?:[/?]|$)/.test(new URL(request.url()).pathname)) storageRequests.push(request.method());
+            });
+            await page.locator('.acdc-live-add:visible').first().click();
+            const form = page.locator('.acdc-queue-form:visible');
+            await form.waitFor({timeout: 30000});
+            await form.locator('[name="name"]').fill('Queue form validation draft - never saved');
+            assert.equal(await form.evaluate(element => element.checkValidity()), true);
+            assert.deepEqual(await form.locator('[name="announcements.language"] option').evaluateAll(
+                options => options.map(option => option.value).sort()), ['ar-sa', 'en-us', 'es-es', 'fr-fr', 'he-il']);
+            assert.deepEqual(storageRequests, []);
+            assert.deepEqual(issues, []);
+            assert.equal(await page.evaluate(() => monster.apps.core.request.counter), 0);
+            assert.equal(await page.locator('.progress-indicator.active').count(), 0);
+            await form.locator('.acdc-cancel').click();
+            await form.waitFor({state: 'hidden', timeout: 15000});
+            console.log(JSON.stringify({status: 'PASS', queue_create_form: true, default_validation: true,
+                five_languages: true, storage_requests: 0, inactive_global_indicator: true,
+                scope: 'actual Add queue form; local draft and cancel; no save'}));
+            return;
+        }
         phase = 'account-selector';
         await page.locator('#main_topbar_account_toggle_link').click();
         const row = page.locator('.account-list-element[data-id="' + COMPANY + '"]');

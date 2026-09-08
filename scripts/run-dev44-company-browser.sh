@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Read-only company acceptance on the main development server. No secret argv.
 set -Eeuo pipefail
-[[ $EUID == 0 && ( $# == 0 || ( $# == 1 && $1 == --callflows-users ) ) ]] || { echo 'Usage: sudo bash scripts/run-dev44-company-browser.sh [--callflows-users]' >&2; exit 64; }
+[[ $EUID == 0 && ( $# == 0 || ( $# == 1 && ( $1 == --callflows-users || $1 == --queue-create-form ) ) ) ]] || { echo 'Usage: sudo bash scripts/run-dev44-company-browser.sh [--callflows-users|--queue-create-form]' >&2; exit 64; }
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 base=/usr/local/lib/kazoo5-browser-tests
 [[ -d $base && ! -L $base && $(stat -c '%u:%a' "$base") == 0:700 ]] || exit 78
