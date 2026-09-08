@@ -142,8 +142,29 @@ forwarding recordings and the 210 fixed plus 584 cardinal assets imported and
 verified. It then failed at the MIME generator: that target also compiles its
 module, before the later root core target builds `lager_transform`. Commit
 `1cca106` builds dependency BEAMs before generators. The mocked ordering test
-passes with the fix and fails without it. Main-SH rerun9339 uses this commit.
-Record its final outcome before apps acceptance.
+passes with the fix and fails without it. Rerun9339 failed Rebar bootstrap
+because our transient root-default test unit omitted the login home environment:
+`init:get_argument(home)` returned `error`, independently reproduced b35eb1.
+Explicit `User=root` restores the actual root home (37bcf0). This was an acceptance
+runner defect, not missing audio or a Kazoo application crash. Corrected rerun
+97630 (`kz5-fresh-apps-rootenv-20260908.service`) installs `kazoo-apps ecallmgr`
+through the normal entry point with one shared build. It compiled dependencies,
+core and all apps, assembled the release, installed SUP and started apps, but
+failed datastore readiness (97630/8a1892). Two actual deployment defects:
+
+- `/etc/kazoo` remained root0700 after the earlier data-only setup; config.ini
+  was correctly root:kazoo0640 but inaccessible through its parent. Configuration
+  setup now prepares only the shared directories as root0755; secret file modes
+  are unchanged and no recursive permission relaxation is performed.
+- OTP takes the first repeated kernel option. The launchers placed the requested
+  private interface after the args-file loopback default, so apps listened on
+  127.0.0.1 despite the unit's correct .44 environment. Both launchers now put
+  the explicit interface first. Native OTP regression reproduces old loopback
+  behavior and verifies the corrected private setting, without opening a node.
+
+The source fix also removes full configuration-value logging on startup; only
+the section count is logged. Seven earlier forwarding groups and the logging
+suite are unaffected. A new full normal-install rerun must pass before acceptance.
 
 ### Fresh mobile bridge — PASS installation
 
@@ -154,7 +175,9 @@ Protected provider files were copied from the existing authorized development
 configuration, not fetched again from or written to production .28. Configuration
 uses .44's broker credentials and a new `kazoo5-fresh-mobile-acceptance`
 exchange/queue with `acceptance.only` binding, never the production queue.
-The service reports registered-consumer readiness, not phone delivery. No push
+Independent normal `--verify-only push-bridge`9339/0454fe also passed; service
+active/running, automatic restarts0. The service reports registered-consumer
+readiness, not phone delivery. No push
 was published and no provider send was requested. Physical delivery is waived.
 Private provisioning helper: `/tmp/kz5-remote-acceptance.mEOv1zDq/prepare-bridge.cjs`;
 remote protected configuration: `/etc/kazoo-push-bridge/`.

@@ -4,8 +4,11 @@ Latest continuation: [fresh-host/TLS acceptance](doc/fresh_host_tls_acceptance_2
 Physical mobile delivery testing was waived by the user. HTTPS is deployed and
 browser transport checks pass. Fresh data services and separate UI on 10.1.0.44
 pass installation and verification. The user confirms HTTPS login works.
-Fresh apps failed the immutable cardinal source prerequisite; this is the P0
-installer continuation. This is not full fresh-stack certification.
+Fresh bridge installation and independent verification also pass. Fresh apps
+audio and MIME prerequisites are fixed; full compilation passed, but initial
+startup exposed config traversal/private-binding defects. Both are fixed in
+`ee7877c`; normal apps/eCallMgr rerun24127 on .44 is active. This is the P0
+installer continuation, not full fresh-stack certification.
 
 Last updated: **2026-09-08**. This is the navigation and current-state guide;
 `PROJECT_TASKS.md` is the detailed requirement/acceptance register. Neither this

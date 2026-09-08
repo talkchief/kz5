@@ -11,7 +11,9 @@
   independent verification **PASS**, including pinned remote catalog access.
   Fresh bridge installation **PASS**, isolated registered consumer; no phone send.
   Fresh apps audio prerequisite fixed (`5ee63e1`), full inventory verified;
-  MIME dependency-order failure fixed (`1cca106`), normal apps rerun in progress.
+  MIME dependency-order failure fixed (`1cca106`), full fresh compilation passed.
+  First startup exposed config-parent traversal and Erlang option precedence;
+  both fixed and regression-tested (`ee7877c`). Apps/eCallMgr rerun24127 is active.
   Accepting apps/eCallMgr/media/SIP remains P0. The user confirms HTTPS
   login works; the new server uses verified private-network TLS for that host.
 - [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).
