@@ -1,10 +1,13 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Next deployment: INSTALL-MODULE-SCOPE-01.** Root installer patch fixes native
+**Active deployment: INSTALL-MODULE-SCOPE-01.** Root installer patch fixes native
 Crossbar start/stop writing a node/zone override into cluster default. It now
 updates the effective setting's owner and preserves other scopes. Baseline6/9
 fail; candidate9/9 plus repeatable source-patch replay pass039b20. Native apps
-deployment and module parity are still pending. Do not modify live autoload
+deployment is now running as `kz5-module-scope-install-main44-20260908`,
+observer67279, confirmed MainPID813674 (7a2b91). Source4fe0dbd synced and
+zero-call preflight passed. Poll this job, not a second build; completion and
+module parity remain pending. Do not modify live autoload
 overrides merely to test this. See `doc/crossbar_module_autoload_scope.md`.
 
 **UI-01 native storage registration DEPLOYED / scoped PASS.** Main f0eb1c

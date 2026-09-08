@@ -2,14 +2,17 @@
 
 ## Immediate operator follow-up — September8
 
-- **INSTALL-MODULE-SCOPE-01 SOURCE FIX — deployment pending:** native Crossbar
+- **INSTALL-MODULE-SCOPE-01 SOURCE FIX — deployment active:** native Crossbar
   start/stop read node/zone autoload overrides but overwrote cluster default,
   leaving their own startup list unchanged. Root-owned patch now persists to
   the setting's actual node/zone/default owner and preserves other scopes.
   Baseline f53f5a fails6/9; final039b20 passes9/9 plus clean-source/double-patch
   byte replay. No live overrides changed for testing. Applies to the normal
-  installer and SUP module commands, not only storage. Native deployment/parity
-  pending; concurrent writers and real split-host reboot are not proven.
+  installer and SUP module commands, not only storage. Source4fe0dbd synced;
+  normal apps unit `kz5-module-scope-install-main44-20260908` is active/running
+  (7a2b91, MainPID813674; observer67279). Zero-call preflight passed. Poll that
+  job rather than launching another. Native completion/parity pending;
+  concurrent writers and real split-host reboot are not proven.
   See `doc/crossbar_module_autoload_scope.md`.
 
 - **UI-01 native storage API installer gap — DEPLOYED / scoped PASS:**

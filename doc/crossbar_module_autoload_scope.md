@@ -48,8 +48,13 @@ bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 512 \
   --runtime-sec 180 -- /bin/bash /opt/kz5/scripts/test-crossbar-module-scope.sh
 ```
 
-Native deployment and running/disk module parity are pending. Do not label the
-current dev server fixed until those complete. The earlier storage registration
+Source4fe0dbd is pushed/synced. Normal `install_kazoo_apps` deployment is active:
+unit `kz5-module-scope-install-main44-20260908`, observer session67279. Readback
+7a2b91 confirms MainPID813674 and active/running, not completion. The protected
+log is `/root/kz5-acceptance/module-scope-install-main44-20260908.log`. Preflight
+a5a4af confirmed zero calls. Poll this existing job; do not start another build.
+Running/disk module parity is pending. Do not label the current dev server
+fixed until deployment and parity complete. The earlier storage registration
 on its default scope remains valid; it did not prove custom-node behavior.
 Concurrent writers changing the same module list, live zone/node failure and
 reboot acceptance on separately configured hosts remain separate release gates.
