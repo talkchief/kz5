@@ -23,6 +23,14 @@
   check account/realm/tree collisions and production-facing configuration before
   import. Preserve the original lab baseline and never connect to production
   services or activate copied production outbound/push/webhook behavior blindly.
+  `prepare-dev-company-copy.py` now implements a fixed-host/account two-phase
+  copy: GET-only preparation in the existing lab, explicit application on .44's
+  main datastore, exact-plan ownership, no overwrite, protected receipts and
+  per-document readback. Account is initially disabled for calling; SIP/user
+  credentials replaced, device push/provisioning removed, realm changed to
+  `talkchief-dev44.invalid`, parent set to development master. Source baseline
+  remains untouched. Eleven offline transformation/scope/recovery tests pass
+  a72ee4. Real plan/copy and main account-picker/SmartPBX/ACDC checks remain open.
 - **HOST-HANDOFF-01 SOURCE CHECKPOINT PRESERVED:** original development server will be deleted.
   Canonical checkout and installed stack must remain on10.1.0.44 at `/opt/kz5`,
   latest pushed master. Preserve outstanding source work and durable guidance on
