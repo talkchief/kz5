@@ -6,6 +6,30 @@ const assert=require('node:assert/strict'),{spawnSync}=require('node:child_proce
 const {createRequire}=require('node:module');
 const {safePath,snapshot}=require('./deploy-owned-monster.cjs');
 const minifierProfile=require('./monster-minifier-profile.cjs');
+function workerHeapMiB(read=file=>fs.readFileSync(file,'utf8'), free=require('node:os').freemem()) {
+    // Keep the old 256MiB profile inside the small development guard. Larger
+    // build hosts need 512MiB for fresh full bundles; inspect all cgroup v2
+    // ancestors instead of assuming host RAM is the process's allowance.
+    try {
+        const rows=read('/proc/self/cgroup').trim().split('\n');
+        const row=rows.find(line=>line.startsWith('0::/'));
+        if(!row || rows.length!==1) return 256;
+        const root='/sys/fs/cgroup';
+        let directory=path.resolve(root,'.'+row.slice(3)), allowance=free;
+        if(directory!==root && !directory.startsWith(root+'/')) return 256;
+        for (;;) {
+            // The unified hierarchy root itself has no memory.max controller.
+            if(directory===root) break;
+            const limit=read(path.join(directory,'memory.max')).trim();
+            if(limit!=='max') {
+                if(!/^[0-9]+$/.test(limit) || !Number.isSafeInteger(Number(limit))) return 256;
+                allowance=Math.min(allowance,Number(limit));
+            }
+            directory=path.dirname(directory);
+        }
+        return allowance>=1024*1024*1024 ? 512 : 256;
+    } catch {return 256;}
+}
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const FILES=['main.js','templates.js'];
 const BUILD_FILES=['gulpfile.babel.js','.babelrc','.babelrc.js','.babelregister.js'];
@@ -68,7 +92,7 @@ function fixedInputs(source){return {
     source:hash(JSON.stringify(snapshot(path.join(source,'src'))))
 };}
 function run(source,argv){
-    const result=spawnSync(process.execPath,argv,{cwd:source,stdio:'inherit',timeout:300000,killSignal:'SIGKILL',env:{...process.env,NODE_OPTIONS:'--max-old-space-size=256'}});
+    const result=spawnSync(process.execPath,argv,{cwd:source,stdio:'inherit',timeout:300000,killSignal:'SIGKILL',env:{...process.env,NODE_OPTIONS:'--max-old-space-size='+workerHeapMiB()}});
     assert(!result.error&&result.status===0&&!result.signal,'Production build child failed');
 }
 async function build(source){
@@ -100,4 +124,4 @@ if(require.main===module){
         console.log(JSON.stringify(result));
     })().catch(error=>{console.error('FAIL bounded Monster production build: '+(error.code||error.name));process.exitCode=1;});
 }
-module.exports={sourceRoot,transformBytes,minifyOne,build};
+module.exports={sourceRoot,transformBytes,minifyOne,build,workerHeapMiB};

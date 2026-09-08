@@ -6,14 +6,23 @@
 -compile(warnings_as_errors).
 -include_lib("kernel/include/file.hrl").
 
+main(["--https"|Args]) ->
+    true = erlang:get(migration_https) =:= undefined,
+    put(migration_https, true),
+    main(Args);
 main(["--self-test"]) ->
     add_json_path(),
+    ok = io:setopts(standard_io, [{encoding,unicode}]),
     self_test(),
+    io:put_chars([jiffy:encode({[{<<"unicode">>,<<195,169,215,144>>}]}), "\n"]),
     io:put_chars("PASS bridge pure guards; no cookie read or distributed connection\n");
 main(["--node", Node, "--cookie-file", CookiePath]) ->
     put(migration_stage, <<"json_loader">>),
     try
         add_json_path(),
+        %% A C-locale service otherwise renders non-Latin metadata as \x{...},
+        %% which is not a JSON escape. Keep the stdin/stdout protocol UTF-8.
+        ok = io:setopts(standard_io, [{encoding,unicode}]),
         put(migration_stage, <<"local_identity">>),
         true = os:getenv("USER") =:= "root",
         {ok, Host} = inet:gethostname(),
@@ -74,8 +83,16 @@ apps() ->
     ,{<<"webhooks">>,<<"b94a5cff43467f9e0755aa2f7e9d560e">>}].
 db() -> <<"account%2F30%2F2a%2Fe5a70c403124f764cbc54229cfcd">>.
 account() -> <<"302ae5a70c403124f764cbc54229cfcd">>.
-from_url() -> <<"http://91.99.188.145:8000/v2/">>.
-to_url() -> <<"http://kz5.talkchief.io/v2/">>.
+from_url() ->
+    case erlang:get(migration_https) of
+        true -> <<"http://kz5.talkchief.io/v2/">>;
+        _ -> <<"http://91.99.188.145:8000/v2/">>
+    end.
+to_url() ->
+    case erlang:get(migration_https) of
+        true -> <<"https://kz5.talkchief.io/v2/">>;
+        _ -> <<"http://kz5.talkchief.io/v2/">>
+    end.
 get(Key, {Props}) -> proplists:get_value(Key, Props).
 valid_revision(Rev) when is_binary(Rev) ->
     re:run(Rev, <<"^[1-9][0-9]*-[a-f0-9]+$">>, [{capture,none}]) =:= match;

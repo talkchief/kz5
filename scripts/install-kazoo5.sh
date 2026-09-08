@@ -1385,6 +1385,16 @@ collect_statistics = coarse
 collect_statistics_interval = 60000
 EOF
     run rabbitmq-plugins enable --offline rabbitmq_management rabbitmq_consistent_hash_exchange
+    # The root CLI creates this file with the caller's umask. With umask 077
+    # a fresh install otherwise fails at boot with enabled_plugins/eacces.
+    if [[ $DRY_RUN != true ]]; then
+        [[ -f /etc/rabbitmq/enabled_plugins && ! -L /etc/rabbitmq/enabled_plugins ]] || \
+            die 'RabbitMQ enabled_plugins must be a regular file'
+        [[ $(stat -c '%h' /etc/rabbitmq/enabled_plugins) == 1 ]] || \
+            die 'RabbitMQ enabled_plugins must not be hard-linked'
+    fi
+    run chown root:rabbitmq /etc/rabbitmq/enabled_plugins
+    run chmod 0640 /etc/rabbitmq/enabled_plugins
     service_enable_restart rabbitmq-server.service
     if [[ $DRY_RUN != true ]]; then
         timeout 120 bash -c 'until rabbitmq-diagnostics -q ping; do sleep 2; done' || \
@@ -5097,9 +5107,13 @@ monster_ui_build_fingerprint() {
 }
 
 install_nodejs_toolchain() {
-    local enabled_stream=
-    enabled_stream=$(dnf -q module list nodejs --enabled 2>/dev/null | \
-        awk '$1 == "nodejs" {gsub(/[^0-9].*/, "", $2); print $2; exit}')
+    local enabled_stream= module_inventory
+    # --enabled exits 1 on a clean server with no enabled stream. Query all
+    # streams so an empty selection is distinct from a repository/query error.
+    module_inventory=$(LC_ALL=C dnf -q module list nodejs) || \
+        die 'Cannot inspect available Node.js module streams'
+    enabled_stream=$(awk '$1 == "nodejs" && /\[e\]/ {gsub(/[^0-9].*/, "", $2); print $2; exit}' \
+        <<<"$module_inventory")
     if [[ $enabled_stream != "$MONSTER_UI_NODE_MAJOR" ]]; then
         if [[ -n $enabled_stream ]]; then
             run dnf module switch-to -y "nodejs:${MONSTER_UI_NODE_MAJOR}/common"

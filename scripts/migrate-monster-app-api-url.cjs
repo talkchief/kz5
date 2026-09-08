@@ -6,7 +6,9 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 const crypto = require('node:crypto'), {spawnSync} = require('node:child_process');
 const ACCOUNT = '302ae5a70c403124f764cbc54229cfcd';
 const DATABASE = 'account%2F30%2F2a%2Fe5a70c403124f764cbc54229cfcd';
-const SOURCE = 'http://91.99.188.145:8000/v2/', TARGET = 'http://kz5.talkchief.io/v2/';
+const HTTPS = process.argv.slice(2).includes('--https');
+const SOURCE = HTTPS ? 'http://kz5.talkchief.io/v2/' : 'http://91.99.188.145:8000/v2/';
+const TARGET = HTTPS ? 'https://kz5.talkchief.io/v2/' : 'http://kz5.talkchief.io/v2/';
 const APPS = Object.freeze([
     ['accounts','6fd9207e022cedcc3b1c9493b1bf7b20'],['acdc','9ed4c13921516bb1d2afb9f1874290a3'],
     ['callflows','f607173df478e2654a7aa28b219c1a72'],['csv-onboarding','747e264204ec61bae44a47fe8bc24532'],
@@ -178,7 +180,7 @@ function rpcStorage({node,cookieFile},spawn=spawnSync) {
     protectedFile(cookieFile,256); // Validate privately; never print or pass contents.
     const bridge=path.join(__dirname,'monster-app-url-rpc.escript');
     function request(input) {
-        const result=spawn('/usr/bin/escript',[bridge,'--node',node,'--cookie-file',cookieFile],{
+        const result=spawn('/usr/bin/escript',[bridge,...(HTTPS?['--https']:[]),'--node',node,'--cookie-file',cookieFile],{
             input:JSON.stringify(input)+'\n',encoding:'utf8',timeout:15000,maxBuffer:2*MAX_DOCUMENT,
             env:{...process.env,ERL_CRASH_DUMP:'/dev/null',ERL_FLAGS:'',ERL_AFLAGS:'',ERL_ZFLAGS:''}});
         let response;try{response=JSON.parse(result.stdout);}catch{throw new MigrationError('bridge_unconfirmed');}
@@ -190,7 +192,7 @@ function rpcStorage({node,cookieFile},spawn=spawnSync) {
 }
 function main(args) {
     if(args.length===0 || args.includes('--help')) {
-        console.log('Usage: migrate-monster-app-api-url.cjs --plan|--apply --receipt-dir NEW_OR_EXISTING_PRIVATE_DIR [--node kazoo_apps@LOCAL_HOST] [--cookie-file /etc/kazoo/.erlang.cookie]');return;
+        console.log('Usage: migrate-monster-app-api-url.cjs [--https] --plan|--apply --receipt-dir NEW_OR_EXISTING_PRIVATE_DIR [--node kazoo_apps@LOCAL_HOST] [--cookie-file /etc/kazoo/.erlang.cookie]');return;
     }
     check(process.getuid()===0,'root_required');
     let mode, directory;const options={node:'kazoo_apps@'+os.hostname(),cookieFile:'/etc/kazoo/.erlang.cookie'};
@@ -200,6 +202,7 @@ function main(args) {
         else if(arg==='--receipt-dir') {check(!directory && args[i+1],'receipt_directory_required');directory=args[++i];}
         else if(arg==='--node') options.node=args[++i];
         else if(arg==='--cookie-file') options.cookieFile=args[++i];
+        else if(arg==='--https') check(args.filter(value=>value==='--https').length===1,'duplicate_https_mode');
         else throw new MigrationError('unknown_argument');
     }
     check(mode && directory,'mode_and_receipt_required');

@@ -5,7 +5,9 @@ standalone component, a distributed Kazoo topology, or an all-in-one host. It
 installs dependencies, writes configuration, installs a named systemd service,
 enables and starts that service, and runs component-specific acceptance checks.
 Re-runs use ownership and compatibility checks; a failed preflight must be
-resolved, not bypassed. Clean-host and split-host acceptance remain incomplete.
+resolved, not bypassed. Fresh data roles and separate-host Monster UI now pass;
+remaining fresh roles are not yet accepted. See the
+[September 8 fresh-host/TLS checkpoint](fresh_host_tls_acceptance_20260908.md).
 
 This repository checkpoint is not a production-ready certification. Consult
 [the current acceptance status](kazoo5_acceptance_status.md) before deploying:
@@ -50,7 +52,10 @@ a different state file. Verification and dry runs do not rewrite it.
 - Root privileges and outbound HTTPS access to the official package and source
   repositories.
 - A stable hostname. Use an FQDN that resolves on every node in a distributed
-  installation; Erlang node names depend on it.
+  installation; Erlang node names depend on it. A private-bound RabbitMQ node's
+  hostname must resolve to that private address, not a cloud-init loopback alias.
+  Prepare persistent DNS or hosts mappings before installation; the installer
+  does not rewrite your DNS or cloud-init configuration.
 - UTC time with a synchronized clock.
 - At least 10 GiB free while compiling an all-in-one test installation. The
   merged Rocky 9 guide recommends roughly 120 GiB for a production all-in-one
