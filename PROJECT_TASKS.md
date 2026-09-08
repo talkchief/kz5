@@ -2,6 +2,20 @@
 
 ## Immediate operator follow-up — September8
 
+- **EDITOR-MAIN44-LANGUAGE-01 SOURCE TESTED / NATIVE OPEN:** port the armed
+  unified-editor acceptance to the main host's protected fixture and locally
+  assigned CouchDB address. New wrapper requires explicit account, virgin
+  internal extension, run directory and write arming; clears inherited target
+  overrides and holds the shared acceptance lock. `run-languages` adds all-five
+  language PATCH/replay/fresh-GET checks with generic interval17 and callback30,
+  no agent writes, exact raw-revision ownership and conditional cleanup.
+  Three new cases fail against the prior harnessa231fd; all13 pass1d9f70 and
+  with another synthetic account5e8498. Real private flock/CLI refusal tests
+  pass010d6c. Incorrect readback or ambiguous reply retains evidence, never
+  resends or deletes blindly. Native create/edit/save/reload remains to run.
+  See `doc/queue_editor_acceptance.md`; this is acceptance tooling, not a new
+  production editor behavior claim.
+
 - **VOICE-MAIN44-SCHEDULE-01 FIVE-LANGUAGE NATIVE PASS:** the periodic
   callback-offer/full-position-one harness now supports explicit protected
   fixture selection, absent manual-phone helper, non-truncating shared lock,

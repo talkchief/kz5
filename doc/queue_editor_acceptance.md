@@ -1,5 +1,50 @@
 # Unified queue editor acceptance — 2026-09-05
 
+## September8: main-host language persistence acceptance tooling
+
+The armed live runner is now `scripts/test-acdc-queue-editor-live.sh`. It
+requires explicit `--fixture-account`, `--extension` (2090–2099), `--run-dir`
+and `--allow-fixture-writes`; ambient target/state overrides are cleared. It
+validates the canonical protected Acceptance tenant and serializes with call
+tests using the non-truncating shared lock. The Node adapter checks the live
+account identity and ordinary read-only provisioner inventory, then connects
+only to loopback or an IPv4 address assigned to the host for CouchDB reads.
+It never selects the imported company or an authenticated master as its fixture.
+
+`run-languages` retains the existing create/replay/idempotency-conflict/edit/
+stale-revision sequence, then PATCHes each of EN/HE/AR/FR/ES. Each language has
+its own fresh revision snapshot and operation ID, exact replay, and fresh GET
+checking language plus distinct generic17/callback30 intervals and45/30 initial
+delays. Callback calling is disabled and no roster write is allowed. The
+managed route is removed through aggregate hooks; only the exact owned queue
+revision is soft-deleted. Operation receipts and released extension claim stay
+as audit records. Unknown/partial outcomes are retained without automatic
+retries, revision refresh or destructive rollback.
+
+Create an empty root0700 evidence directory under `/var/log/kazoo-acceptance/`
+and run through bounded validation/systemd controls, with no active calls:
+
+```sh
+bash scripts/test-acdc-queue-editor-live.sh run-languages \
+  --fixture-account "$acceptance_account" --extension 2097 \
+  --run-dir "$protected_run_directory" --allow-fixture-writes
+```
+
+The extension must be unused with no prior aggregate reservation; the runner
+refuses otherwise. Do not delete an old claim to force acceptance. Explicit
+`cleanup` uses the same account/extension/directory and all original receipt,
+call, callback, ownership and revision guards; an ambiguous intent is not
+automatically repaired by cleanup.
+
+The previous harness fails three new language casesa231fd. All13 cases pass
+1d9f70 and another explicitly selected synthetic account5e8498. Additional
+actual-shell/private-flock tests010d6c cover arming, target/extension validation,
+ambient isolation, identity refusal and preserved lock inode/content.
+Bash/ShellCheck/whitespace checks pass. Native main-host execution is still
+open at this source checkpoint; unit tests are not HTTP/database acceptance.
+
+## Historical checkpoints
+
 This is a historical live checkpoint, not acceptance of the latest source.
 The source-only 2026-09-06 acknowledgement repair is recorded below.
 

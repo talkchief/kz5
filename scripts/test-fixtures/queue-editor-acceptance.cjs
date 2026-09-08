@@ -3,6 +3,9 @@
 // not authenticate, read secrets, execute SUP, or make any network request.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
 const {spawnSync}=require('node:child_process');
+const fixtureAccount=require('./callback-fixture-account.cjs');
+const {localMediaHost}=require('./callback-gemini-reference.cjs');
+const LANGUAGES=Object.freeze(['en-us','he-il','ar-sa','fr-fr','es-es']);
 const {ACCOUNT,DATABASE,ENCODED_DATABASE,fingerprint,contentFingerprint,conditionalSaveArguments,
     assertExpectedConfiguration}=require('./callback-offer-queue.cjs');
 function selectedExtension(value) {
@@ -176,7 +179,8 @@ async function cleanup(io,receipt) {
     assert(await io.apiMissing('queues',receipt.queue_id)&&await io.apiMissing('callflows',receipt.route_id),'Soft-deleted fixture remains API-visible');
     receipt.cleaned_at=new Date().toISOString();receipt.checks.push('exact_cas_queue_cleanup');io.persist(receipt);
 }
-async function runAcceptance(io,receipt) {
+async function runAcceptance(io,receipt,allLanguages=false) {
+    assert(typeof allLanguages==='boolean','Explicit language acceptance mode required');
     assert(!receipt.queue_id&&receipt.intents.length===0,'Run cannot be restarted against a partial fixture');
     const anonymous=await io.anonymousEditor();assert([401,403].includes(anonymous.status),'Unauthenticated editor must be rejected');
     receipt.checks.push('anonymous_rejected');io.persist(receipt);
@@ -198,11 +202,30 @@ async function runAcceptance(io,receipt) {
     const current=editorData(await io.editor('GET',receipt.queue_id),receipt.queue_id);
     assert(current.queue.announcements?.language==='en-us'&&current.queue.connection_timeout===31&&current.queue.callback?.announcement?.initial_delay===5
         &&current.queue.callback?.announcement?.interval===30,'Fresh editor did not return edited settings');
-    receipt.checks.push('fresh_get_confirms_edit','explicit_english_language_selection_preserved');io.persist(receipt);await cleanup(io,receipt);return receipt;
+    receipt.checks.push('fresh_get_confirms_edit','explicit_english_language_selection_preserved');io.persist(receipt);
+    if(allLanguages)for(const language of LANGUAGES) {
+        const snapshot=editorData(await io.editor('GET',receipt.queue_id),receipt.queue_id);
+        // Distinct generic/callback settings, no media overrides, no roster
+        // changes. Every request is pinned to a newly read revision snapshot.
+        const selection=body({announcements:{language,initial_delay:45,interval:17},
+            callback:{announcement:{enabled:true,initial_delay:30,interval:30}}},
+        snapshot.revisions,{extension:EXTENSION},io.randomId());
+        const result=await change(io,receipt,receipt.queue_id,selection,'save_language_'+language);
+        await unchangedRequest(io,receipt,receipt.queue_id,selection,result.status,'replay_language_'+language,result.body.data);
+        const reloaded=editorData(await io.editor('GET',receipt.queue_id),receipt.queue_id).queue;
+        assert(reloaded.announcements?.language===language&&reloaded.announcements.initial_delay===45
+            &&reloaded.announcements.interval===17&&reloaded.callback?.announcement?.initial_delay===30
+            &&reloaded.callback.announcement.interval===30,'Language or separate intervals did not survive reload');
+        receipt.checks.push('reload_language_'+language);io.persist(receipt);
+    }
+    await cleanup(io,receipt);return receipt;
 }
 function protectedRead(file) {
-    const s=fs.lstatSync(file);assert(s.isFile()&&!s.isSymbolicLink()&&s.uid===0&&(s.mode&511)===384&&s.size<4*1024*1024,'Protected root-owned0600 file required');
-    return fs.readFileSync(file,'utf8');
+    const fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
+    try {
+        const s=fs.fstatSync(fd);assert(s.isFile()&&s.uid===0&&s.nlink===1&&(s.mode&511)===384&&s.size<4*1024*1024,'Protected root-owned0600 file required');
+        return fs.readFileSync(fd,'utf8');
+    } finally {fs.closeSync(fd);}
 }
 function readEnv(file,encoded=false) {
     return Object.fromEntries(protectedRead(file).split('\n').filter(l=>l&&!l.startsWith('#')).map(line=>{
@@ -214,16 +237,16 @@ function readEnv(file,encoded=false) {
     }));
 }
 async function runtime(action,arm,run) {
-    assert(['run','cleanup'].includes(action)&&arm==='--allow-fixture-writes'&&path.isAbsolute(run),'Explicit fixture-write flag and private run directory required');
+    assert(['run','run-languages','cleanup'].includes(action)&&arm==='--allow-fixture-writes'&&path.isAbsolute(run),'Explicit fixture-write flag and private run directory required');
     const s=fs.lstatSync(run);assert(s.isDirectory()&&!s.isSymbolicLink()&&s.uid===0&&(s.mode&511)===448
         &&fs.realpathSync(run)===run&&run.startsWith('/var/log/kazoo-acceptance/'),'Invalid private acceptance directory');
     const receiptFile=path.join(run,'queue-editor-acceptance.json'),lockFile=path.join(run,'queue-editor-acceptance.lock');
     const lock=fs.openSync(lockFile,'wx',384);
     try {
-        const state=readEnv('/etc/kazoo/acceptance-secrets.env',true),secrets=readEnv('/etc/kazoo/installer-secrets.env'),deployment=readEnv('/etc/kazoo/deployment.env',true);
+        const state=fixtureAccount.readState('/etc/kazoo/acceptance-secrets.env'),secrets=readEnv('/etc/kazoo/installer-secrets.env'),deployment=readEnv('/etc/kazoo/deployment.env',true);
         assert(state.ACCEPTANCE_ACCOUNT_ID===ACCOUNT&&/^acceptance-[a-f0-9]{12}\.invalid$/.test(state.ACCEPTANCE_REALM)
             &&/^Kazoo5 Acceptance [a-f0-9]{12}$/.test(state.ACCEPTANCE_ACCOUNT_NAME),'Not the isolated acceptance tenant');
-        assert(['127.0.0.1','localhost'].includes(deployment.KAZOO_COUCHDB_HOST),'CouchDB must be local');
+        const couchHost=localMediaHost(deployment.KAZOO_COUCHDB_HOST);
         const port=Number(deployment.KAZOO_COUCHDB_PORT||5984);assert(Number.isInteger(port)&&port>0&&port<65536);
         assert(deployment.KAZOO_COUCHDB_USER&&deployment.KAZOO_COUCHDB_PASSWORD&&!deployment.KAZOO_COUCHDB_USER.includes(':'));
         const authorization='Basic '+Buffer.from(deployment.KAZOO_COUCHDB_USER+':'+deployment.KAZOO_COUCHDB_PASSWORD).toString('base64');
@@ -243,14 +266,18 @@ async function runtime(action,arm,run) {
         }
         const auth=await request('PUT','user_auth',{credentials:crypto.createHash('md5').update((secrets.KAZOO_MASTER_ADMIN_USER||'admin')+':'+secrets.KAZOO_MASTER_ADMIN_PASSWORD).digest('hex'),method:'md5',realm:secrets.KAZOO_MASTER_ACCOUNT_REALM});
         token=auth.body.auth_token;assert(auth.status===201||auth.status===200);assert(token&&auth.body.data.account_id!==ACCOUNT);
-        const tenant=await request('GET','');assert(tenant.status===200&&tenant.body.data.name===state.ACCEPTANCE_ACCOUNT_NAME&&tenant.body.data.realm===state.ACCEPTANCE_REALM);
+        const tenant=await request('GET','');assert(tenant.status===200&&tenant.body.data.id===ACCOUNT
+            &&tenant.body.data.name===state.ACCEPTANCE_ACCOUNT_NAME&&tenant.body.data.realm===state.ACCEPTANCE_REALM);
+        const ownership=spawnSync('/bin/bash',[path.join(__dirname,'../test-kazoo-call-provision.sh'),'--verify-only'],
+            {encoding:'utf8',timeout:120000,maxBuffer:65536});
+        assert(!ownership.error&&ownership.status===0,'Protected live acceptance resources must verify before editor writes');
         const io={randomId:()=>crypto.randomBytes(16).toString('hex'),
             persist:r=>fs.writeFileSync(receiptFile,JSON.stringify(r,null,2)+'\n',{mode:384}),
             queueSchema:JSON.parse(fs.readFileSync(path.join(__dirname,'../../applications/crossbar/priv/couchdb/schemas/queues.json'),'utf8')),
             editor:(method,queueId,data)=>request(method,'queues/'+(queueId?queueId+'/':'')+'editor',data),
             anonymousEditor:()=>request('GET','queues/editor',undefined,true),
             inventory:async()=>{
-                const r=await fetch('http://127.0.0.1:'+port+'/'+ENCODED_DATABASE+'/_find',{method:'POST',headers:{authorization,'Content-Type':'application/json'},
+                const r=await fetch('http://'+couchHost+':'+port+'/'+ENCODED_DATABASE+'/_find',{method:'POST',headers:{authorization,'Content-Type':'application/json'},
                     body:JSON.stringify({selector:{pvt_type:{$in:TYPES}},limit:1001}),redirect:'error',signal:AbortSignal.timeout(20000)});
                 assert(r.ok,'Scoped inventory read failed');const bytes=Buffer.from(await r.arrayBuffer());assert(bytes.length<4*1024*1024);
                 const docs=JSON.parse(bytes.toString()).docs;inventoryMap(docs);return docs;
@@ -270,7 +297,7 @@ async function runtime(action,arm,run) {
             },
             apiMissing:async(collection,documentId)=>(await request('GET',collection+'/'+documentId)).status===404};
         let receipt;
-        if(action==='run') {
+        if(action==='run'||action==='run-languages') {
             assert(!fs.existsSync(receiptFile),'Existing receipt requires explicit cleanup/recovery');await io.noCalls();
             const docs=await io.inventory(),map=inventoryMap(docs);
             assert(!docs.some(d=>d.pvt_type==='callflow'&&live(d)&&(d.numbers||[]).includes(EXTENSION)),'Acceptance extension is occupied');
@@ -279,7 +306,7 @@ async function runtime(action,arm,run) {
             assert(managed.status===0&&managed.stdout.trim()==='false','Acceptance extension is a managed public number');
             receipt={schema_version:1,account:ACCOUNT,extension:EXTENSION,marker:'acdc-editor-'+crypto.randomBytes(12).toString('hex'),
                 baseline:Object.fromEntries(docs.map(d=>[d._id,hash(d)])),owned:{},intents:[],checks:[],started_at:new Date().toISOString()};io.persist(receipt);
-            await runAcceptance(io,receipt);
+            await runAcceptance(io,receipt,action==='run-languages');
         } else {receipt=JSON.parse(protectedRead(receiptFile));checkReceipt(receipt);await cleanup(io,receipt);}
         console.log(JSON.stringify({result:'PASS',action,account:ACCOUNT,queue_id:receipt.queue_id,route_id:receipt.route_id,
             checks:receipt.checks,agents_changed:0,fixture_api_resources_removed:true,
@@ -287,7 +314,7 @@ async function runtime(action,arm,run) {
             coverage_limits:['master-admin auth only; restricted-token authorization not proven','no SIP or callback calling','no cross-document atomicity claim']}));
     } finally {fs.closeSync(lock);fs.unlinkSync(lockFile);}
 }
-module.exports={ACCOUNT,EXTENSION,TYPES,selectedExtension,hash,merge,body,checkReceipt,checkQueue,checkRoute,checkOperation,checkClaim,
+module.exports={ACCOUNT,EXTENSION,TYPES,LANGUAGES,selectedExtension,hash,merge,body,checkReceipt,checkQueue,checkRoute,checkOperation,checkClaim,
     inventoryMap,assertBaseline,assertNoReferences,guard,change,unchangedRequest,cleanup,runAcceptance};
 if(require.main===module)runtime(...process.argv.slice(2)).catch(error=>{
     // Never echo assertion actual/expected documents, HTTP bodies, tokens, or

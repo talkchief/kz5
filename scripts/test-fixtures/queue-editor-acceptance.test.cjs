@@ -78,6 +78,40 @@ test('changed unrelated user revision blocks mutation and cleanup before deletio
     const f=fixture();await create(f);f.save({...f.documents[userId],queues:['4'.repeat(32)]});
     await assert.rejects(()=>h.cleanup(f.io,f.receipt),/Unrelated document/);assert.equal(f.counts().deletes,0);
 });
+test('all-five mode saves and reloads each language with distinct intervals and preserved roster',async()=>{
+    const f=fixture(),before=copy(f.documents[userId]);await h.runAcceptance(f.io,f.receipt,true);
+    assert(f.receipt.cleaned_at);assert.deepEqual(f.documents[userId],before);
+    assert.deepEqual(f.counts(),{writes:8,deletes:1});
+    for(const language of h.LANGUAGES)for(const action of ['save','replay','reload'])
+        assert(f.receipt.checks.includes(action+'_language_'+language));
+    assert.equal(f.documents[f.receipt.queue_id].announcements.language,'es-es');
+    assert.equal(f.documents[f.receipt.queue_id].announcements.interval,17);
+    assert.equal(f.documents[f.receipt.queue_id].callback.announcement.interval,30);
+});
+test('incorrect fresh language readback fails without deleting or retrying the save',async()=>{
+    const f=fixture(),editor=f.io.editor;
+    f.io.editor=async(...args)=>{
+        const response=await editor(...args);
+        if(args[0]==='GET'&&f.receipt.checks.includes('replay_language_he-il'))
+            response.body.data.queue.announcements.language='en-us';
+        return response;
+    };
+    await assert.rejects(()=>h.runAcceptance(f.io,f.receipt,true),/did not survive reload/);
+    assert.equal(f.counts().deletes,0);assert.equal(f.counts().writes,4);
+    assert(!f.receipt.cleaned_at);assert.equal(f.documents[f.receipt.queue_id].announcements.language,'he-il');
+});
+test('ambiguous language PATCH retains intent and refuses automatic cleanup',async()=>{
+    const f=fixture(),editor=f.io.editor;
+    f.io.editor=async(...args)=>{
+        const response=await editor(...args);
+        if(args[0]==='PATCH'&&args[2].queue.announcements?.language==='ar-sa')throw Error('lost language reply');
+        return response;
+    };
+    await assert.rejects(()=>h.runAcceptance(f.io,f.receipt,true),/lost language reply/);
+    assert.equal(f.receipt.intents.at(-1).state,'in_flight');
+    await assert.rejects(()=>h.cleanup(f.io,f.receipt),/Ambiguous request/);
+    assert.equal(f.counts().deletes,0);assert(!f.receipt.cleaned_at);
+});
 test('changed marked fixture is retained; never recaptures its new revision',async()=>{
     const f=fixture();await create(f);const old=f.receipt.owned[f.receipt.queue_id].revision;
     f.save({...f.documents[f.receipt.queue_id],connection_timeout:123});
