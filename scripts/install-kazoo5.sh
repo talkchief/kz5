@@ -2612,6 +2612,22 @@ if ((sup_command_index + 2 == ${#sup_args[@]})) &&
     sup_args[sup_command_index+1]=running_apps
 fi
 
+# Root systemd/automation invocations may have no HOME. OTP initializes its
+# distribution authentication before SUP reads the configured cluster cookie,
+# and otherwise crashes in filename:basedir_join_home/1. Resolve the real
+# invoking user's home through NSS; never invent a shared writable directory.
+if [[ -z ${HOME:-} ]]; then
+    sup_passwd=$(getent passwd "$(id -u)") || {
+        printf 'SUP cannot resolve the invoking user home directory\n' >&2
+        exit 1
+    }
+    IFS=: read -r _ _ _ _ _ sup_home _ <<<"$sup_passwd"
+    [[ $sup_home == /* && -d $sup_home && ! $sup_home =~ [[:cntrl:]] ]] || {
+        printf 'SUP requires a valid invoking user home directory\n' >&2
+        exit 1
+    }
+    exec env "HOME=$sup_home" "$sup_root/core/sup/sup" "${name_args[@]}" "${sup_args[@]}"
+fi
 exec "$sup_root/core/sup/sup" "${name_args[@]}" "${sup_args[@]}"
 EOF
     run install -D -m 0644 "$KAZOO_ROOT/sup.bash" /etc/bash_completion.d/sup

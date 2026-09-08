@@ -32,5 +32,21 @@ try {
   if(actual[0]==='-s'&&actual[1]==='true')actual.splice(0,2);
   a.deepEqual(actual,expected);
  }
+ // The real wrapper must supply the NSS home only when HOME is absent/empty,
+ // preserve an explicitly configured home, and fail closed on missing NSS.
+ fs.writeFileSync(path.join(dir,'core/sup/sup'),'#!/bin/bash\nprintf "%s" "${HOME:-missing}"\n',{mode:0o700});
+ const nss=cp.execFileSync('getent',['passwd',String(process.getuid())],{encoding:'utf8'}).trim().split(':')[5];
+ for(const supplied of [undefined,'',dir]) {
+  const env={PATH:'/usr/bin:/bin',KAZOO_ROOT:dir,KAZOO_CONFIG:path.join(dir,'config.ini')};
+  if(supplied!==undefined)env.HOME=supplied;
+  const r=cp.spawnSync('/usr/bin/bash',[path.join(dir,'wrapper.sh'),'kapps_controller','kapps'],{encoding:'utf8',env,timeout:5000});
+  a.equal(r.status,0,r.stderr);a.equal(r.stdout,supplied||nss);
+ }
+ fs.mkdirSync(path.join(dir,'bin'));
+ fs.writeFileSync(path.join(dir,'bin/getent'),'#!/bin/bash\nexit 2\n',{mode:0o700});
+ const refused=cp.spawnSync('/usr/bin/bash',[path.join(dir,'wrapper.sh')],{encoding:'utf8',timeout:5000,
+  env:{PATH:path.join(dir,'bin')+':/usr/bin:/bin',KAZOO_ROOT:dir,KAZOO_CONFIG:path.join(dir,'config.ini')}});
+ a.equal(refused.status,1);a.match(refused.stderr,/cannot resolve/);
+ console.log('PASS absent/empty/explicit HOME and missing NSS checks');
  console.log('PASS '+cases.length+' actual SUP wrapper argument cases; no RPC or live configuration');
 } finally {fs.rmSync(dir,{recursive:true,force:true});}
