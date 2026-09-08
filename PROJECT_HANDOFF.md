@@ -1,5 +1,16 @@
 # Kazoo 5 — start here / engineering handoff
 
+**UI-01 optional storage selector fixed / deployed-browser PASS.**
+Installer-owned patchf85bb21 completes failed reads, reports unavailable storage
+and avoids an empty-data crash without fabricating plans or hiding real errors.
+Baseline fails4/7 focused groups; candidate passes7/7 including main build source.
+Normal Monster installer22488/383cf4 exits0 in79.417s. Actual Common subscriber
+browser33704/37350c exits0 in9.931s: native404, visible unavailable warning,
+settled error callback, inactive bar and zero account writes. Both jobs are
+terminal. See `doc/monster_optional_storage.md` for replay, rollback and limits.
+Current ACDC Save makes no storage request; backend404 is not removed by this
+selector-only correction. No storage/account documents were modified.
+
 **Current scope: reported bugs and deployment gaps, not unrelated testing.**
 Dashboards remain postponed. Reuse completed callback/voice/browser evidence;
 only run checks needed to reproduce and verify a named remaining defect.
