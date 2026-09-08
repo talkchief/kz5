@@ -19,8 +19,11 @@
   `b6d8bae`. Rerun88880 passed compilation/private binding/datastore, but fresh
   account bootstrap failed. A later protected retry created the master account.
   Exact RPC-result checking and a Crossbar startup gate are pushed (`cdedba2`);
-  normal apps/eCallMgr rerun85919 is active. SIP template permissions under
-  umask077 are also fixed/tested, including untouched secrets/custom files.
+  rerun85919 exposed JSON formatting dropping public datastore file permissions
+  under umask077 and triggered fresh-node restarts. Apps stopped on .44 to end
+  the loop. Formatter mode preservation/public runtime JSON repair are pushed
+  (`1e7e40b`); normal rerun23557 is active. SIP template permissions under
+  umask077 are also fixed/tested (`c40fd2d`), with untouched secrets/custom files.
   Accepting apps/eCallMgr/media/SIP remains P0. The user confirms HTTPS
   login works; the new server uses verified private-network TLS for that host.
 - [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).

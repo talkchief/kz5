@@ -232,3 +232,25 @@ configuration parent and normalize incoming public Git templates under umask077.
 Actual rsync/config-prefix fixtures45795/1f3786 verify directories0755,
 templates0644, executables0755 and unchanged existing secret/custom modes.
 This does not recursively relax existing credentials or custom configuration.
+
+### Full umask077 build — additional runtime regression corrected
+
+Normal rerun85919/9f75ac completed compilation, but Crossbar configuration failed
+while apps restarted. Read-only diagnostics280d7a/d4e9cf found six automatic
+restarts and `kzs_plan:default_dataplan` failing to read
+`core/kazoo_data/priv/defaults/system.json` (root0600). Stopped only .44 apps to
+end the loop. JSON formatting wrote a new `~` file under caller umask077 and
+replaced its input without preserving mode; the existing permissions gate
+covered BEAMs/views/schemas but missed datastore defaults and account views.
+
+Fix `1e7e40b` preserves formatter input modes, repairs public runtime JSON under
+`priv/defaults` and `priv/couchdb`, and waits for Crossbar readiness on existing
+account reruns as well as initial bootstrap. Private configuration and symlink
+targets remain untouched. Formatter mode tests plus actual artifact-permission,
+production-BEAM, bootstrap and installer smoke tests pass11921/65fcd1. A native
+Crossbar readiness check also passedb7b540 before that restart.
+
+Normal rerun23557 uses unit `kz5-fresh-apps-jsonmodes-20260908.service`, source
+`1e7e40b`, and deliberately retains umask077 to prove the correction. Protected
+full log: `/root/kz5-acceptance/apps-jsonmodes-install.log`. Earlier failed runs
+remain recorded; no full fresh-stack pass is claimed yet.

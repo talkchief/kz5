@@ -11,8 +11,11 @@ startup exposed config traversal/private-binding defects. Both are fixed in
 configuration directories. The directory-specific fix and real-helper negative
 tests pass70666/a6a153 (`b6d8bae` pushed). Rerun88880 passed datastore/private
 binding but failed account bootstrap; a later protected retry created the
-master. Exact RPC-result/readiness fix `cdedba2` is pushed; rerun85919 is active.
-SIP source-template permission regression45795/1f3786 also passes. This is the P0
+master. Exact RPC-result/readiness fix `cdedba2` is pushed. Rerun85919 found
+formatter-created private datastore defaults causing .44 restarts; apps stopped
+to end the loop. Fix `1e7e40b` preserves JSON modes and repairs public runtime
+JSON; normal rerun23557 is active. SIP template fix `c40fd2d` is also pushed.
+This is the P0
 installer continuation, not full fresh-stack certification.
 
 Last updated: **2026-09-08**. This is the navigation and current-state guide;
