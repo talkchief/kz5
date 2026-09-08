@@ -1,19 +1,21 @@
 # Kazoo 5 — start here / engineering handoff
 
-**VOICE-01 resumed-worker language source fix ready for normal deployment.**
+**VOICE-01 resumed-worker language correction deployed on main.**
 Baseline1483/ff1843 reproduces a resumed announcement worker switching EN toFR
 after the queue changed. Admission now pins effective language in serialized
 call KVS; workers honor it while subsequent queue admission and legacy fallback
 remain correct. All12 language tests44618/5b971e pass. No voice generation,
 account-language changes or FreeSWITCH rebuild. Queue-schema/OpenAPI wording
-is updated. Source18eef3e pushed/synced; normal kazoo-apps deployment is running
-as `kz5-announcement-language-install-main44-20260908`, observer35217. Its log is
+is updated. Source18eef3e pushed/synced; normal kazoo-apps deployment completed
+as `kz5-announcement-language-install-main44-20260908`, observer35217/1d8bcf:
+exit0,11m44.063s,383.1MiB peak. Both changed modules match running/disk BEAMs
+86091/c2092a. Apps/eCallMgr active and zero calls7ece16. Its log is
 `/root/kz5-acceptance/announcement-language-install-main44-20260908.log`.
-Wait for this exact job's terminal result and then verify runtime parity; no
-duplicate install. Deployment completion remains pending. The separate static
+The job is terminal; do not poll or repeat it. The separate static
 documentation unit `kz5-announcement-language-docs-main44-20260908` completed
 successfully at 22:25:26 UTC; HTTPS `/apis/openapi.json` readback confirms the
-queue-language contract. Do not confuse that with application deployment.
+queue-language contract. Actual worker-failure lifecycle and account/reseller
+inheritance remain separate from the deterministic language regression.
 See
 `doc/acdc_callback_language_snapshot.md`.
 

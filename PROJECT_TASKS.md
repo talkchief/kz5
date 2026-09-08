@@ -2,7 +2,7 @@
 
 ## Immediate operator follow-up — September8
 
-- **VOICE-01 resumed announcement language SOURCE FIXED:** a resumed worker
+- **VOICE-01 resumed announcement language DEPLOYED:** a resumed worker
   reapplied current FR queue settings to a serialized EN admission, unlike the
   callback's retained EN language. Baseline1483/ff1843 reproduces the mismatch.
   Queue admission now stores its effective language in existing serialized call
@@ -10,8 +10,9 @@
   calls retain fallback behavior. All12 language tests44618/5b971e pass,
   including all five locales and inherited HE_IL normalization. No new audio
   or account defaults. Source18eef3e pushed/synced; normal kazoo-apps deployment
-  running as `kz5-announcement-language-install-main44-20260908` (observer35217).
-  Terminal result and runtime parity pending; do not restart the live job.
+  `kz5-announcement-language-install-main44-20260908` completed successfully
+  (35217/1d8bcf, exit0,11m44.063s,383.1MiB peak). Both changed modules match
+  running/disk BEAMs86091/c2092a. Apps/eCallMgr active and zero calls7ece16.
   Matching static `/apis` publication completed successfully on main at
   22:25:26 UTC; HTTPS readback confirms the admitted-language contract.
   See
@@ -30,8 +31,8 @@
   ordered EN response verified13098/a4b1e3. Strict audio timing fails on a20ms
   in-prompt RTP timestamp advance despite no packet sequence loss; track
   CALLBACK-RTP-01 below, not another blind rerun. Queue restored, zero calls.
-  Inheritance and
-  resumed position-worker language remain separate. See
+  Account/reseller inheritance and actual worker-failure lifecycle acceptance
+  remain separate. The resumed-worker source correction is deployed above. See
   `doc/acdc_callback_language_snapshot.md`.
 
 - **CALLBACK-RTP-01 OPEN — focused media timing diagnosis:** retained main run
@@ -1990,7 +1991,7 @@ verified; do not toggle global deletion settings to run a dashboard test.
 
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
-| ACDC-01 | NATIVE MASTER-ADMIN API PASS — broader auth/UI acceptance open | Unified queue create/edit/read. Prior recovery UI8c11030 and41 editor/manifest tests cover malformed/foreign/empty acknowledgements, partial/lost replies and no automatic resend. Main-host51137/e145bc now passes actual create/edit/replay/conflict and all-five language persistence with exact cleanup, unchanged services and correlated clean logs. Browser0b7f2c proves deployed editor read/local selection/cancel, not Save submission. Live restricted principals, actual browser writes and failure-recovery remain open. See EDITOR-MAIN44-LANGUAGE-01 and doc/queue_editor_acceptance.md. |
+| ACDC-01 | NATIVE MASTER-ADMIN API AND BROWSER SAVE PASS — broader auth/recovery open | Unified queue create/edit/read. Main-host51137/e145bc passes actual create/edit/replay/conflict and all-five language persistence. Later deployed browser97969/d810a2 passes six actual writes: create EN, save HE/AR/FR/ES, then disable callback; fresh reads and reopening confirm persistence with no browser errors or stuck bar. This supersedes the earlier read/select/cancel-only limitation. Restricted principals and live uncertain-write recovery remain open. See doc/queue_editor_acceptance.md and doc/queue_browser_save_acceptance.md; do not repeat successful saves without a new defect. |
 | ACDC-02 | OPEN — UI | Reliable Callflows ACDC action and internal extension routing; dropdowns instead of technical free-text fields; default prompt selection must not trigger required-field errors. Preserve existing customer recordings. |
 | ACDC-03 | OPEN — ACDC | Verify/build supported ring strategies: ring-all, ordered, round-robin and existing alternatives. Resolve simultaneous-answer/DTMF exit ownership candidates; test fairness, single winner and cleanup. |
 | VOICE-01 | OPEN — media + UI | Finalize EN/HE/AR/FR/ES prompt-language override, queue/call/account defaults and reseller/sub-account inheritance; report incomplete packs rather than enabling unverified choices. |
@@ -1998,7 +1999,7 @@ verified; do not toggle global deletion settings to run a dashboard test.
 | VOICE-02 | VERIFIED — generated assets and installer byte check | Existing165 effective Gemini entries /330 WAVs remain unchanged. September6 supplemental generation completed45 missing callback clips /90 WAVs in47 requests (two French digits retried once, previous failures retained). Combined immutable lookup210 assets /420 WAVs, committed0904240. Actual installer media-import19674 verified210, preserved210 and created0; nonsecret receipt at /usr/local/share/kazoo5-installer/acdc-gemini-media.json. This is not runtime mapping activation, five-language playback certification or complete prerecorded queue-position speech. |
 | VOICE-03 | DEPLOYED SHARED ARTIFACTS — broader language acceptance open | Shared fixed/cardinal packs are checked into kz5 and installed on .44 through the normal SH; retained runtime proof covers796 media documents and1,592 mappings. Main-host all-five callback success/retry passes; periodic offer/position validation is tracked in VOICE-MAIN44-SCHEDULE-01. Native listening, wider spoken numbers/wait-time/alternate-response call paths and explicit new-account/sub-account inheritance acceptance remain open. Never generate during installation, account creation, queue editing or calls. |
 | VOICE-04 | HISTORICAL AUTHORING AUTHORITY — no generation job active | September6 authorization allowed one-time authoring of missing release WAVs; those saved assets are now in the deployed fixed/cardinal packs. Reuse them without provider credentials. This row is not a request to regenerate completed clips or introduce runtime TTS. Native language review and remaining call-path gates are distinct from generation. |
-| VOICE-06 | DEPLOYED — five-choice browser PASS; save/inheritance gates open | Commit61bf505 introduced one Queue language dropdown and built-in adoption. Main-host deployed editor browser0b7f2c now proves exactly EN/HE/AR/FR/ES, no disabled or sixth option, successful local selection of each, and separate callback/position interval controls. Cancel returns with request counter0 and inactive top indicator; no page/HTTP errors. Network interception forbids copied-company writes during inspection. This is not save/reload, new-account/sub-account inheritance, every prompt branch or native pronunciation approval. Earlier UI30215/all42 editor tests71128 cover deletion/adoption; native callback playback and periodic clocks have separate receipts. |
+| VOICE-06 | DEPLOYED — five-choice selection AND SAVE/RELOAD PASS; inheritance open | One Queue language dropdown offers exactly EN/HE/AR/FR/ES with separate callback/position interval controls. Earlier browser0b7f2c proves selection/cancel. Later isolated-fixture browser97969/d810a2 proves actual create/save for all five languages and fresh readback, then callback disable and reopening ES with generic17/callback30 intervals. No copied-company writes, browser errors or stuck indicator. See doc/queue_browser_save_acceptance.md. New-account/sub-account inheritance, every prompt branch and native pronunciation remain separate gates; this row no longer treats Save as untested. |
 | VOICE-07 | DEPLOYED IMMUTABLE PACK — full linguistic/call-path gate open | Fixed/numeric/auxiliary release assets, PCM16 masters, telephony WAVs, transcripts, provenance and hashes are retained in Git. Normal .44 installer validates796 installed media documents; read-only native preparation10b220 reuses the installed/source-pinned packs with0 provider requests. Five-language callback success/retry is measured separately. Full natural-female-voice review, wider number/telephone composition, all auxiliary responses and wait-time audio remain unproven; no broad linguistic certification. No native robotic SAY or mixed-voice fallback may substitute for missing built-ins. Missing artifacts fail readiness/installation, never trigger online synthesis or require a provider key. Do not regenerate completed assets. |
 | VOICE-08 | DEPLOYED CANONICAL SOURCE — distributed/inheritance acceptance open | ACDC, prerecorded maps, shared WAVs, import/readback logic and installer wiring are tracked in kz5; .44 has no nested ACDC Git metadata. Normal apps/eCallMgr deployment and actual runtime media/map proof passed; all-five callback success tests retain the selected language. Explicit new-account/sub-account inheritance, every response path and separated apps-node installation remain required. A passing single-host install does not close distributed deployment or all language-context paths. |
 | VOICE-09 | OPEN — deployment acceptance; development deployment authorized | User confirmed September 6 this is a development environment with no active calls and explicitly authorized replacement/deployment as needed. Verify current call state before restart; preserve account data and rollback artifacts. Prove the selected queue uses the expected Gemini assets for position, independent callback interval, key-6 menu/success, invalid/alternate-number responses and returned-call confirmation in each language. Listen for natural female speech, correct words/numbers/language, no clipping or silence. Deploy matching source/backend/UI/assets through the installer. Imported files or successful TTS generation alone do not close this task. |

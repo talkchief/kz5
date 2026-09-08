@@ -174,20 +174,30 @@ Final source tests44618/5b971e pass all12 language tests, including all five
 locales through call serialization, next-queue override, inherited HE_IL
 canonicalization and legacy fallback. Queue-schema documentation now states
 this admission contract. Source18eef3e is pushed and synced to main; deployment
-of this second correction is running through normal `kazoo-apps` installation:
-unit `kz5-announcement-language-install-main44-20260908`, observer35217,
+of this second correction completed through normal `kazoo-apps` installation:
+unit `kz5-announcement-language-install-main44-20260908`, observer35217/1d8bcf,
 protected log `/root/kz5-acceptance/announcement-language-install-main44-20260908.log`.
-The pre-install native call count was zero31aa97. Observe this same job to its
-terminal result; do not restart it because the log is quiet. Final deployment
-and runtime-parity verification remain pending;
-account/reseller default resolution and actual worker-failure lifecycle
-acceptance remain separate from these deterministic language checks.
+It exited0 in11m44.063s,383.1MiB peak, at22:35:41 UTC. Journal8cdd46 confirms
+successful completion. Log SHA256:
+`8e6f32d701fb35c01c523736997ab10f7d12d603a4a64f2e8edf8f006d333307`.
+Read-only check86091/c2092a confirms both running modules match their production
+BEAMs under `/opt/kz5/applications/acdc/ebin/`:
+
+- `cf_acdc_member`: MD5 `a10d768e376e896104ceb4b3f5443b20`.
+- `acdc_announcements`: MD5 `ef729957c6b7d8ac86b90edbd397d7ce`.
+
+The pre-install native call count was zero31aa97; post-install7ece16 confirms
+zero calls and active apps/eCallMgr. The job is terminal; do not rerun it merely
+to repeat this evidence. Account/reseller default resolution and actual
+worker-failure lifecycle acceptance remain separate from these deterministic
+language checks.
 
 The separate static documentation publication unit
 `kz5-announcement-language-docs-main44-20260908` completed successfully at
 22:25:26 UTC on September 8. Journal verification3382da and HTTPS readbackeeee73
 confirm the queue-schema language description at `/apis/openapi.json`. This
-does not establish application deployment completion. The readback used the
+was a separate static operation from the successful application deployment above.
+The readback used the
 private main-server address with certificate validation, not a public-routing
 test.
 
