@@ -10,6 +10,8 @@ sudo bash scripts/setup-kazoo-browser-tests.sh
 sudo bash scripts/run-dev44-company-browser.sh
 # Focused reported UI-03 regression only:
 sudo bash scripts/run-dev44-company-browser.sh --callflows-users
+# Reported queue-create/default-validation/loading path, without saving:
+sudo bash scripts/run-dev44-company-browser.sh --queue-create-form
 ```
 
 Setup supports Rocky Linux 9 x86_64 only. It installs missing browser OS libraries
@@ -48,3 +50,9 @@ Ubuntu24.04 fallback; actual local launch/DOM and focused Users UI checks pass,
 not a claim of upstream Rocky support. System Node remains18.20.8; the private
 Node22 executes Playwright. The Users check passed on both master and Talkchief
 as documented in `callflows_users_entitlements_fix.md`.
+
+Focused Add queue/form validation passed on main (sourcef9b5bf7,
+`kz5-queue-create-form-main44-20260908`, terminal exit0 in10.969s). It fills only
+a local draft name, checks native default validity and five language choices,
+asserts no storage requests/errors/active blue bar, then cancels. Mutations are
+blocked. It does not submit Save or validate optional external-storage screens.

@@ -2,6 +2,22 @@
 
 ## Immediate operator follow-up — September8
 
+- **P0-26 / UI-01 focused current-form check PASS:** actual Add queue click on
+  kz5-dev renders the create form, accepts the named draft with default HTML
+  validation, offers exactly EN/HE/AR/FR/ES, makes zero `/storage` requests,
+  captures no page/HTTP/insecure-request errors and leaves the blue indicator
+  inactive. Cancel completes; all mutations were blocked. Unit
+  `kz5-queue-create-form-main44-20260908`, sourcef9b5bf7,64600/e4b274 exits0
+  in10.969s. This does NOT prove browser Save or close every storage workflow.
+  Current ACDC source does not call `storage.get`; separate Monster optional
+  storage consumers exist in SmartPBX recording, fax/voicemail and Common.
+  `cb_storage` is absent from main's running/effective modules; its native GET
+  also returns404 for a genuinely absent account plan, so registration alone
+  would not establish a fix. No module/plan/config was changed for this check.
+  Do not fabricate a storage document or success response to hide the error.
+  Replay: `bash scripts/run-dev44-company-browser.sh --queue-create-form`.
+  Actual browser Save remains the next queue-create acceptance gap.
+
 - **UI-03 FIXED / MAIN BROWSER PASS:** Callflows → Users entitlement404 was
   missing Crossbar registration. Registration also exposed master ancestry
   `tl([])` HTTP500; both are fixed in installer-owned source. Real master/company

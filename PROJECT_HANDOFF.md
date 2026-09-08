@@ -1,5 +1,13 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Next focused queue gap: actual browser Save, not initial form loading.**
+Main Add queue/default validation check64600/e4b274 passes in10.969s with zero
+storage requests, no captured errors, five language choices and inactive blue
+bar; local draft/cancel only, writes blocked. Sourcef9b5bf7 adds repeatable
+`--queue-create-form` mode. Current ACDC does not request `/storage`; optional
+storage callers elsewhere and the absent `cb_storage` module remain separately
+diagnosed, not globally fixed. No dummy storage plan/module was created.
+
 **Latest focused fix: UI-03 Callflows → Users PASS on main.** Missing entitlement
 registration and master-account `tl([])` crash are fixed in installer-owned
 source, pushed to master and deployed on10.1.0.44 without restart. Actual browser
