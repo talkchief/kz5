@@ -1636,11 +1636,14 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-channel-monitoring.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-playback-file-timeout.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-sup-audit-redaction.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-call-forward-confirmation.patch"
     # One patch per overlapping source stack makes reinstallation idempotent:
     # later callback edits must not invalidate reverse checks of earlier OTP
     # and announcement hunks. Feature patches remain review/test provenance.
     # ACDC is already part of kz5; its historical patches are not applied.
     apply_kazoo_integration_patch crossbar
+    apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
+        "$SCRIPT_DIR/patches/crossbar-call-forward-confirmation.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
         "$SCRIPT_DIR/patches/crossbar-soft-delete-revision.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
@@ -2865,6 +2868,7 @@ install_kazoo_apps() {
     # Validate/import immutable defaults before touching the application build
     # or restarting mapped code. Fresh bootstrap needs only configured CouchDB,
     # not SUP or a running local Kazoo/FreeSWITCH service.
+    install_call_forward_confirmation_pack
     install_acdc_language_packs
     install_acdc_editor_capabilities
     build_kazoo
@@ -3016,6 +3020,24 @@ validate_acdc_cardinal_receipt() {
                     and .created == 0 and .intro_installed_verified == true) end)
     ' >/dev/null
 }
+
+install_call_forward_confirmation_pack() (
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would verify and create-only import five packaged EN/HE/AR/ES/FR forwarded-call confirmation recordings; no account changes or synthesis'
+        return 0
+    fi
+    install_nodejs_toolchain
+    node "$SCRIPT_DIR/call-forward-confirmation-pack.cjs" --plan >/dev/null || die 'Forwarded-call confirmation source pack is incomplete'
+    ensure_system_media_database
+    export KAZOO_COUCHDB_HOST KAZOO_COUCHDB_PORT KAZOO_COUCHDB_USER KAZOO_COUCHDB_PASSWORD
+    node "$SCRIPT_DIR/call-forward-confirmation-pack.cjs" --import || die 'Forwarded-call confirmation import/readback failed'
+)
+
+verify_call_forward_confirmation_pack() (
+    [[ $DRY_RUN != true ]] || return 0
+    export KAZOO_COUCHDB_HOST KAZOO_COUCHDB_PORT KAZOO_COUCHDB_USER KAZOO_COUCHDB_PASSWORD
+    node "$SCRIPT_DIR/call-forward-confirmation-pack.cjs" --verify-only || die 'Forwarded-call confirmation recordings are missing or changed'
+)
 
 install_acdc_language_packs() (
     local fixed_dir="$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905"
@@ -3575,6 +3597,7 @@ verify_kazoo_apps() {
     verify_sup_cli
     verify_acdc_interfaces
     verify_kazoo_prompts
+    verify_call_forward_confirmation_pack
     verify_acdc_language_packs
     finalize_acdc_prerecorded_capabilities --check
 }
@@ -5088,6 +5111,7 @@ monster_ui_build_fingerprint() {
         "braintree=${MONSTER_UI_BRAINTREE}"
     if [[ ",${MONSTER_UI_APPS_LIST}," == *',callflows,'* ]]; then
         inputs+=(callflows_acdc_queue_patch:patches/monster-ui-callflows-acdc-queue.patch
+                 callflows_confirmation_patch:patches/monster-ui-call-forward-confirmation.patch
                  callflows_css_nesting_patch:patches/monster-ui-callflows-css-nesting.patch)
     fi
     for entry in "${inputs[@]}"; do
@@ -5207,6 +5231,8 @@ sync_monster_ui_sources() {
         fi
         apply_required_source_patch "$app_dir" \
             "$SCRIPT_DIR/patches/monster-ui-callflows-acdc-queue.patch"
+        apply_required_source_patch "$app_dir" \
+            "$SCRIPT_DIR/patches/monster-ui-call-forward-confirmation.patch"
     fi
 }
 

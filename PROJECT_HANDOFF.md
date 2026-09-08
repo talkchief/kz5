@@ -4,6 +4,32 @@ Last updated: **2026-09-08**. This is the navigation and current-state guide;
 `PROJECT_TASKS.md` is the detailed requirement/acceptance register. Neither this
 file nor a green unit test means the platform is production-ready.
 
+**Forwarded-call confirmation complete, including the UI follow-up:** EN/HE/AR/ES/FR
+account preference/API, four selectors, immutable Gemini media and MonsterUI are
+installed. Normal full installation passed64656/94b843; corrected UI deployment
+passed92313/fb92d5. The user can hard-refresh and test **Callflows → Account
+Settings → Misc → Forwarded-call confirmation**. The section header and field
+label are visible, options align left, and Update saves a changed language,
+keeps the form open and confirms success. An untouched dropdown preserves a
+newer API value. Both save buttons, reset and missing-locale fallback pass.
+
+Seven Erlang groups and asset/API/installer suites pass; 20 live API/call checks,
+seven initial browser checks and ten follow-up browser checks97471/06800e pass.
+Full fixture account settings are restored, tagged users deleted, channels0.
+OpenAPI account GET/PATCH/POST, all five codes, reset and frontend sample are live
+at `https://kz5.talkchief.io/apis/`. Branch:
+`feat/account-forward-confirmation-languages`, isolated worktree
+`/opt/kz5-fwd-review`; the user will merge it. Preserve the other team's staged
+fresh-server/TLS work and the feature source in the running shared workspace.
+Authoring credential: protected `/root/key.key`, the same file used for ACDC WAV
+generation; use the Gemini-specific reader in `generate-acdc-gemini-samples.cjs`.
+Keep only this location in the handoff, never the key value. All five recordings
+are committed. Clean Git-export check bb9c13 imported and byte-verified them in
+an empty media fixture with networking disabled and no credential reads or
+provider calls. Normal installer hooks install and verify the packaged assets.
+Physical cellphone/PSTN and native-speaker certification are not claimed.
+[Acceptance and developer handoff](doc/call_forward_confirmation_acceptance.md).
+
 ## Latest working snapshot — read before resuming
 
 **Standalone UI catalog gap implemented and locally integrated:** the installer

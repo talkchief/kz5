@@ -1,0 +1,230 @@
+{
+  "owner": "kazoo5_call_forward_confirmation_v1",
+  "schema_version": 1,
+  "catalog_sha256": "213d1a396a968386081a3632f5f324930853f66959c7a2f4fe3ad35fa08ae0ca",
+  "provider": "google-gemini",
+  "model": "gemini-2.5-pro-preview-tts",
+  "voice": "Sulafat",
+  "automatic_retries": 0,
+  "native_speaker_review": false,
+  "runtime_verified": false,
+  "requests_reserved": 5,
+  "attempts": [
+    {
+      "locale": "en-us",
+      "attempt": 1,
+      "status": "GENERATED",
+      "transcript_sha256": "4917b6cb714c18a699f74cb11041a1ab6e9fa0667761daeb3c328f566536f055",
+      "request_sha256": "c21ae528bdacf044f076f1a4cec55876d6e3514e7d86627381652c690ac0c0c3",
+      "reserved_at": "2026-09-08T07:33:11.952Z",
+      "raw_pcm_sha256": "e6e88c9220ad33e2e211f99401f1cd9d51171a9211d3ef505ee7624a1773ff68",
+      "master": {
+        "file": "en-us.attempt-1.master.wav",
+        "metrics": {
+          "sample_rate_hz": 24000,
+          "channels": 1,
+          "bits_per_sample": 16,
+          "duration_seconds": 6.530958333333333,
+          "rms": 3507.6653563983245,
+          "peak": 23524,
+          "clipped_samples": 0,
+          "silence_fraction": 0.18628583094619855,
+          "sha256": "3e4664b0ab7e376eaa41ceb966b342df848f01ade3a35d52997d4ea734e5c003"
+        }
+      },
+      "telephony": {
+        "file": "en-us.attempt-1.telephony.wav",
+        "metrics": {
+          "sample_rate_hz": 8000,
+          "channels": 1,
+          "bits_per_sample": 16,
+          "duration_seconds": 6.531,
+          "rms": 3355.3082767039396,
+          "peak": 23975,
+          "clipped_samples": 0,
+          "silence_fraction": 0.20885009952534067,
+          "sha256": "c4a7770fff6fca2212aabcf6984705b455fb9d24b5796a2770040602b8dbb348"
+        }
+      }
+    },
+    {
+      "locale": "he-il",
+      "attempt": 1,
+      "status": "GENERATED",
+      "transcript_sha256": "1780e1d78acffaf6fc4e8270c1030b249d52afaafc3f813637c959857ac2fef9",
+      "request_sha256": "ad94d01246c295dc46a72f963d5bf7106b174a2d30df519ef7a794f9fca0ad42",
+      "reserved_at": "2026-09-08T07:33:18.451Z",
+      "raw_pcm_sha256": "f733b98153a8b0403e0c4c2a60707bcc8531f77015826b6e45d45b2ecbb7731e",
+      "master": {
+        "file": "he-il.attempt-1.master.wav",
+        "metrics": {
+          "sample_rate_hz": 24000,
+          "channels": 1,
+          "bits_per_sample": 16,
+          "duration_seconds": 8.290958333333334,
+          "rms": 3259.1339794306627,
+          "peak": 19327,
+          "clipped_samples": 0,
+          "silence_fraction": 0.24392536045792856,
+          "sha256": "cd4220c0d4b587f8e278d9c36e93d63cc6b03a38967608713d90410620ebc3f4"
+        }
+      },
+      "telephony": {
+        "file": "he-il.attempt-1.telephony.wav",
+        "metrics": {
+          "sample_rate_hz": 8000,
+          "channels": 1,
+          "bits_per_sample": 16,
+          "duration_seconds": 8.291,
+          "rms": 3110.738426340299,
+          "peak": 19159,
+          "clipped_samples": 0,
+          "silence_fraction": 0.2528645519237728,
+          "sha256": "78623cec20ef271b0fd0dc2501e4694a55956fd62c44c5221cf006fb8fe93003"
+        }
+      }
+    },
+    {
+      "locale": "ar-sa",
+      "attempt": 1,
+      "status": "GENERATED",
+      "transcript_sha256": "84e2302784b76aa74983ebb194d5c5781ae7a37a9436a9730d5b25e8c1e52acf",
+      "request_sha256": "15eb49de907aa22f48bc175fbafc538675838e5bdd9ce66129d783bf00da8af3",
+      "reserved_at": "2026-09-08T07:33:27.455Z",
+      "raw_pcm_sha256": "0b2108910b10f7bede763d09f2416e64381088cd0aaa9f38d8707ab5a76a01e6",
+      "master": {
+        "file": "ar-sa.attempt-1.master.wav",
+        "metrics": {
+          "sample_rate_hz": 24000,
+          "channels": 1,
+          "bits_per_sample": 16,
+          "duration_seconds": 8.330958333333333,
+          "rms": 4315.248980597516,
+          "peak": 24658,
+          "clipped_samples": 0,
+          "silence_fraction": 0.16066078832467254,
+          "sha256": "e90ae90f8bd1bdafb912c037632c3a7ff3cd3125e7660402ddc7166e473d011b"
+        }
+      },
+      "telephony": {
+        "file": "ar-sa.attempt-1.telephony.wav",
+        "metrics": {
+          "sample_rate_hz": 8000,
+          "channels": 1,
+          "bits_per_sample": 16,
+          "duration_seconds": 8.331,
+          "rms": 4296.916725729904,
+          "peak": 21618,
+          "clipped_samples": 0,
+          "silence_fraction": 0.16212039371023887,
+          "sha256": "ca7d148f1b80952244f35555438b8b2d214b01aa7fcdd2ca655efc63f5915a08"
+        }
+      }
+    },
+    {
+      "locale": "es-es",
+      "attempt": 1,
+      "status": "GENERATED",
+      "transcript_sha256": "f57f4a224f7de51663f762dc7414c7b79bad9099df9e5be4abbd115c8ec1608d",
+      "request_sha256": "958e771aae7d58f67e14c7bd226ef80fcc1aeaf1c8532d6fa7480aea1325837d",
+      "reserved_at": "2026-09-08T08:01:35.749Z",
+      "raw_pcm_sha256": "822dc9aefe6b32c0c22d84fc04be5fd9edcbbbeda63edea04eb2a69bc90f090f",
+      "master": {
+        "file": "es-es.attempt-1.master.wav",
+        "metrics": {
+          "sample_rate_hz": 24000,
+          "channels": 1,
+          "bits_per_sample": 16,
+          "duration_seconds": 7.050958333333333,
+          "rms": 4217.629796976213,
+          "peak": 20835,
+          "clipped_samples": 0,
+          "silence_fraction": 0.2025847550273899,
+          "sha256": "c4b2ca162c75fd605469525382539095fe08cf33bbde92fb142341046961b29a"
+        }
+      },
+      "telephony": {
+        "file": "es-es.attempt-1.telephony.wav",
+        "metrics": {
+          "sample_rate_hz": 8000,
+          "channels": 1,
+          "bits_per_sample": 16,
+          "duration_seconds": 7.051,
+          "rms": 4167.011079639956,
+          "peak": 20913,
+          "clipped_samples": 0,
+          "silence_fraction": 0.21371082116011914,
+          "sha256": "0be3f4ee6431339d2d308fa76ec7d23f271668cad16f41e0b25c0a93930ca280"
+        }
+      }
+    },
+    {
+      "locale": "fr-fr",
+      "attempt": 1,
+      "status": "GENERATED",
+      "transcript_sha256": "910c23f4a76d8300758a2f542ad15b7ff063de2f2953a293040f335c155170f7",
+      "request_sha256": "2df95b4e3c97e49b6d25908b60271256b872c42b5fac87af6cd2062865d4659a",
+      "reserved_at": "2026-09-08T08:01:42.874Z",
+      "raw_pcm_sha256": "4e179423469661ddb11c6e463eb542879cc485f259c879073ac9a8a119208a01",
+      "master": {
+        "file": "fr-fr.attempt-1.master.wav",
+        "metrics": {
+          "sample_rate_hz": 24000,
+          "channels": 1,
+          "bits_per_sample": 16,
+          "duration_seconds": 6.250958333333333,
+          "rms": 4561.581197346332,
+          "peak": 23347,
+          "clipped_samples": 0,
+          "silence_fraction": 0.18212540743752625,
+          "sha256": "caf9aceb2fa3f0e7acd222ab0d604c542fc1cf1804f1d49323f48029398237bc"
+        }
+      },
+      "telephony": {
+        "file": "fr-fr.attempt-1.telephony.wav",
+        "metrics": {
+          "sample_rate_hz": 8000,
+          "channels": 1,
+          "bits_per_sample": 16,
+          "duration_seconds": 6.251,
+          "rms": 4393.007622745974,
+          "peak": 22029,
+          "clipped_samples": 0,
+          "silence_fraction": 0.1954087346024636,
+          "sha256": "2bd6e86781b966fae229156ad6f2017a4f2716e0bd7df162dd4fd63159ef8ff2"
+        }
+      }
+    }
+  ],
+  "conversion": {
+    "tool": "sox",
+    "version": "14.4.2"
+  },
+  "transcripts": [
+    {
+      "locale": "en-us",
+      "language": "American English",
+      "transcript": "This is a forwarded call. Press one to accept, or hang up to ignore."
+    },
+    {
+      "locale": "he-il",
+      "language": "Israeli Hebrew",
+      "transcript": "זוהי שיחה שהועברה אליכם. לקבלת השיחה, הקישו אחת. כדי להתעלם מהשיחה, נתקו."
+    },
+    {
+      "locale": "ar-sa",
+      "language": "Modern Standard Arabic",
+      "transcript": "هذه مكالمة مُحوَّلة. لقبول المكالمة، اضغط واحدًا. لتجاهل المكالمة، أغلق الخط."
+    },
+    {
+      "locale": "es-es",
+      "language": "Spanish",
+      "transcript": "Esta es una llamada transferida. Pulse uno para aceptar, o cuelgue para ignorar la llamada."
+    },
+    {
+      "locale": "fr-fr",
+      "language": "French",
+      "transcript": "Ceci est un appel transféré. Appuyez sur un pour accepter, ou raccrochez pour ignorer cet appel."
+    }
+  ]
+}

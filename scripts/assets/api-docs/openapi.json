@@ -180,17 +180,104 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful operation"
+            "description": "Success; standard Crossbar envelope and account data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/accounts"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid account or preference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Tenant, token scope or account administrator permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Account revision conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Selected recording or datastore unavailable; no preference saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
           }
         },
         "summary": "Get a accounts by ID",
         "tags": [
           "accounts"
         ],
-        "x-contract-review": "upstream-generated; not individually verified",
-        "x-source-file": "applications/crossbar/priv/oas3/paths/accounts.yml",
+        "x-contract-review": "source-reviewed for forwarded-call confirmation; other account behavior remains upstream-described",
+        "x-source-file": "applications/crossbar/src/cb_account_call_forward_confirmation.erl",
         "x-runtime-verification": "not asserted by this catalog",
-        "x-auth-review": "No auth header in upstream entry; public access is not independently verified."
+        "x-auth-review": "No auth header in upstream entry; public access is not independently verified.",
+        "description": "Forwarded-call confirmation: data.call_forward_confirmation.language selects en-us, he-il, ar-sa, es-es or fr-fr for the account owning the forwarding rule. It applies only where forwarding/failover already requires key 1; forwarding enablement, keypress settings, timeouts, caller ID and other prompt languages are unchanged. No preference retains the existing call/endpoint-language and custom-media resolver. Explicit selection uses immutable shared recordings; no online synthesis occurs on save or calls. Use PATCH with the data envelope for this setting. Omission preserves its current value even on a full account POST; language:null explicitly clears it. Each account/sub-account has its own preference with no new automatic parent inheritance. Existing legs retain their prompt; new legs observe changes after normal account-cache invalidation. Changes/reset require an authenticated account administrator, account API-auth principal, or system administrator with the applicable tenant/hierarchy and token scopes. Unsupported/invalid values return 400, forbidden changes 403 and unavailable or corrupt selected audio 503 without saving. Account/token/transport failures retain the existing Crossbar behavior. Stored/read values never contain the reset null. Ordinary account fields and their existing requirements remain authoritative. This source contract is not evidence of deployed or physical-cellphone acceptance.",
+        "security": [
+          {
+            "CrossbarToken": []
+          }
+        ]
       },
       "patch": {
         "operationId": "PatchAccountsAccountId",
@@ -200,27 +287,186 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/accounts"
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "$ref": "#/components/schemas/AccountConfirmationPatchData"
+                  }
+                }
+              },
+              "examples": {
+                "english": {
+                  "value": {
+                    "data": {
+                      "call_forward_confirmation": {
+                        "language": "en-us"
+                      }
+                    }
+                  }
+                },
+                "hebrew": {
+                  "value": {
+                    "data": {
+                      "call_forward_confirmation": {
+                        "language": "he-il"
+                      }
+                    }
+                  }
+                },
+                "arabic": {
+                  "value": {
+                    "data": {
+                      "call_forward_confirmation": {
+                        "language": "ar-sa"
+                      }
+                    }
+                  }
+                },
+                "spanish": {
+                  "value": {
+                    "data": {
+                      "call_forward_confirmation": {
+                        "language": "es-es"
+                      }
+                    }
+                  }
+                },
+                "french": {
+                  "value": {
+                    "data": {
+                      "call_forward_confirmation": {
+                        "language": "fr-fr"
+                      }
+                    }
+                  }
+                },
+                "reset": {
+                  "value": {
+                    "data": {
+                      "call_forward_confirmation": {
+                        "language": null
+                      }
+                    }
+                  }
+                }
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Successful operation"
+            "description": "Success; standard Crossbar envelope and account data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/accounts"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid account or preference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Tenant, token scope or account administrator permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Account revision conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Selected recording or datastore unavailable; no preference saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
           }
         },
         "summary": "Patch specific fields of accounts",
         "tags": [
           "accounts"
         ],
-        "x-contract-review": "upstream-generated; not individually verified",
-        "x-source-file": "applications/crossbar/priv/oas3/paths/accounts.yml",
+        "x-contract-review": "source-reviewed for forwarded-call confirmation; other account behavior remains upstream-described",
+        "x-source-file": "applications/crossbar/src/cb_account_call_forward_confirmation.erl",
         "x-runtime-verification": "not asserted by this catalog",
-        "x-auth-review": "No auth header in upstream entry; public access is not independently verified."
+        "x-auth-review": "No auth header in upstream entry; public access is not independently verified.",
+        "description": "Forwarded-call confirmation: data.call_forward_confirmation.language selects en-us, he-il, ar-sa, es-es or fr-fr for the account owning the forwarding rule. It applies only where forwarding/failover already requires key 1; forwarding enablement, keypress settings, timeouts, caller ID and other prompt languages are unchanged. No preference retains the existing call/endpoint-language and custom-media resolver. Explicit selection uses immutable shared recordings; no online synthesis occurs on save or calls. Use PATCH with the data envelope for this setting. Omission preserves its current value even on a full account POST; language:null explicitly clears it. Each account/sub-account has its own preference with no new automatic parent inheritance. Existing legs retain their prompt; new legs observe changes after normal account-cache invalidation. Changes/reset require an authenticated account administrator, account API-auth principal, or system administrator with the applicable tenant/hierarchy and token scopes. Unsupported/invalid values return 400, forbidden changes 403 and unavailable or corrupt selected audio 503 without saving. Account/token/transport failures retain the existing Crossbar behavior. Stored/read values never contain the reset null. Ordinary account fields and their existing requirements remain authoritative. This source contract is not evidence of deployed or physical-cellphone acceptance.",
+        "security": [
+          {
+            "CrossbarToken": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "JavaScript",
+            "label": "Custom frontend: change confirmation language",
+            "source": "async function setConfirmationLanguage(apiBase, accountId, token, language) {\n  const response = await fetch(`${apiBase}/accounts/${encodeURIComponent(accountId)}`, {\n    method: 'PATCH', headers: {'Content-Type': 'application/json', 'X-Auth-Token': token},\n    body: JSON.stringify({data: {call_forward_confirmation: {language}}})\n  });\n  const result = await response.json();\n  if (!response.ok) throw new Error(result.message || 'Language change failed');\n  return result.data.call_forward_confirmation?.language ?? null;\n}\n// apiBase is your HTTPS Crossbar URL ending in /v2.\n// language: 'en-us', 'he-il', 'ar-sa', 'es-es', 'fr-fr', or null to reset. Keep token in runtime state only."
+          }
+        ]
       },
       "post": {
         "operationId": "PostAccountsAccountId",
@@ -230,27 +476,123 @@
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/accounts"
+                "type": "object",
+                "required": [
+                  "data"
+                ],
+                "properties": {
+                  "data": {
+                    "$ref": "#/components/schemas/AccountConfirmationPostData"
+                  }
+                }
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Successful operation"
+            "description": "Success; standard Crossbar envelope and account data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/accounts"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid account or preference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired authentication",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Tenant, token scope or account administrator permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Account revision conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Selected recording or datastore unavailable; no preference saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrossbarError"
+                }
+              }
+            }
           }
         },
         "summary": "Update an instance of accounts",
         "tags": [
           "accounts"
         ],
-        "x-contract-review": "upstream-generated; not individually verified",
-        "x-source-file": "applications/crossbar/priv/oas3/paths/accounts.yml",
+        "x-contract-review": "source-reviewed for forwarded-call confirmation; other account behavior remains upstream-described",
+        "x-source-file": "applications/crossbar/src/cb_account_call_forward_confirmation.erl",
         "x-runtime-verification": "not asserted by this catalog",
-        "x-auth-review": "No auth header in upstream entry; public access is not independently verified."
+        "x-auth-review": "No auth header in upstream entry; public access is not independently verified.",
+        "description": "Forwarded-call confirmation: data.call_forward_confirmation.language selects en-us, he-il, ar-sa, es-es or fr-fr for the account owning the forwarding rule. It applies only where forwarding/failover already requires key 1; forwarding enablement, keypress settings, timeouts, caller ID and other prompt languages are unchanged. No preference retains the existing call/endpoint-language and custom-media resolver. Explicit selection uses immutable shared recordings; no online synthesis occurs on save or calls. Use PATCH with the data envelope for this setting. Omission preserves its current value even on a full account POST; language:null explicitly clears it. Each account/sub-account has its own preference with no new automatic parent inheritance. Existing legs retain their prompt; new legs observe changes after normal account-cache invalidation. Changes/reset require an authenticated account administrator, account API-auth principal, or system administrator with the applicable tenant/hierarchy and token scopes. Unsupported/invalid values return 400, forbidden changes 403 and unavailable or corrupt selected audio 503 without saving. Account/token/transport failures retain the existing Crossbar behavior. Stored/read values never contain the reset null. Ordinary account fields and their existing requirements remain authoritative. This source contract is not evidence of deployed or physical-cellphone acceptance.",
+        "security": [
+          {
+            "CrossbarToken": []
+          }
+        ]
       },
       "put": {
         "operationId": "PutAccountsAccountId",
@@ -24450,6 +24792,9 @@
           "zones": {
             "description": "A priority ordered mapping of zones for the account",
             "type": "object"
+          },
+          "call_forward_confirmation": {
+            "$ref": "#/components/schemas/ForwardedCallConfirmation"
           }
         },
         "required": [
@@ -35198,6 +35543,17 @@
       "queues": {
         "description": "Call Queues - FIFO call queues for serializing callers connecting to agents",
         "properties": {
+          "agent_order": {
+            "default": [],
+            "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
           "agent_ring_timeout": {
             "default": 15,
             "description": "In seconds, how long to ring an agent before progressing to the next agent available",
@@ -35220,8 +35576,8 @@
               "initial_delay": {
                 "default": 30,
                 "description": "Seconds to wait after queue entry before the first position or wait-time announcement",
-                "minimum": 1,
                 "maximum": 3600,
+                "minimum": 1,
                 "type": "integer"
               },
               "interval": {
@@ -35279,6 +35635,11 @@
           "callback": {
             "description": "Authenticated virtual callback configuration. Registrations are created only by a live queue member flow.",
             "properties": {
+              "allow_alternate_number": {
+                "default": false,
+                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
+                "type": "boolean"
+              },
               "announcement": {
                 "description": "Independent schedule for announcing the callback option while waiting. Disabling this announcement does not disable callback registration with entry_key.",
                 "properties": {
@@ -35304,15 +35665,20 @@
                 },
                 "type": "object"
               },
-              "allow_alternate_number": {
-                "default": false,
-                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
-                "type": "boolean"
+              "caller_id_source": {
+                "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
+                "enum": [
+                  "inherit",
+                  "custom"
+                ],
+                "type": "string"
               },
-              "use_local_resources": {
-                "default": false,
-                "description": "Restrict callback origination to resources owned by the authenticated account",
-                "type": "boolean"
+              "confirmation_timeout": {
+                "default": 10,
+                "description": "Seconds allowed for the returned caller to press DTMF 1",
+                "maximum": 30,
+                "minimum": 3,
+                "type": "integer"
               },
               "enabled": {
                 "default": false,
@@ -35436,14 +35802,6 @@
                 ],
                 "type": "object"
               },
-              "caller_id_source": {
-                "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
-                "enum": [
-                  "inherit",
-                  "custom"
-                ],
-                "type": "string"
-              },
               "ready_ack_timeout": {
                 "default": 5,
                 "description": "Seconds allowed to retain an outbound originate cancellation handle before execution",
@@ -35456,13 +35814,6 @@
                 "description": "Seconds before an eligible failed callback attempt may be retried",
                 "maximum": 3600,
                 "minimum": 15,
-                "type": "integer"
-              },
-              "confirmation_timeout": {
-                "default": 10,
-                "description": "Seconds allowed for the returned caller to press DTMF 1",
-                "maximum": 30,
-                "minimum": 3,
                 "type": "integer"
               },
               "success_timeout_ms": {
@@ -35478,6 +35829,11 @@
                 "maximum": 86400,
                 "minimum": 60,
                 "type": "integer"
+              },
+              "use_local_resources": {
+                "default": false,
+                "description": "Restrict callback origination to resources owned by the authenticated account",
+                "type": "boolean"
               }
             },
             "type": "object"
@@ -35566,17 +35922,6 @@
               "in_order"
             ],
             "type": "string"
-          },
-          "agent_order": {
-            "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
-            "type": "array",
-            "default": [],
-            "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
           }
         },
         "required": [
@@ -48046,6 +48391,17 @@
       "QueuePatch": {
         "description": "Partial queue update; omitted fields are preserved. The queue resource schema describes allowed values.",
         "properties": {
+          "agent_order": {
+            "default": [],
+            "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
           "agent_ring_timeout": {
             "default": 15,
             "description": "In seconds, how long to ring an agent before progressing to the next agent available",
@@ -48068,8 +48424,8 @@
               "initial_delay": {
                 "default": 30,
                 "description": "Seconds to wait after queue entry before the first position or wait-time announcement",
-                "minimum": 1,
                 "maximum": 3600,
+                "minimum": 1,
                 "type": "integer"
               },
               "interval": {
@@ -48127,6 +48483,11 @@
           "callback": {
             "description": "Authenticated virtual callback configuration. Registrations are created only by a live queue member flow.",
             "properties": {
+              "allow_alternate_number": {
+                "default": false,
+                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
+                "type": "boolean"
+              },
               "announcement": {
                 "description": "Independent schedule for announcing the callback option while waiting. Disabling this announcement does not disable callback registration with entry_key.",
                 "properties": {
@@ -48152,15 +48513,20 @@
                 },
                 "type": "object"
               },
-              "allow_alternate_number": {
-                "default": false,
-                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
-                "type": "boolean"
+              "caller_id_source": {
+                "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
+                "enum": [
+                  "inherit",
+                  "custom"
+                ],
+                "type": "string"
               },
-              "use_local_resources": {
-                "default": false,
-                "description": "Restrict callback origination to resources owned by the authenticated account",
-                "type": "boolean"
+              "confirmation_timeout": {
+                "default": 10,
+                "description": "Seconds allowed for the returned caller to press DTMF 1",
+                "maximum": 30,
+                "minimum": 3,
+                "type": "integer"
               },
               "enabled": {
                 "default": false,
@@ -48284,14 +48650,6 @@
                 ],
                 "type": "object"
               },
-              "caller_id_source": {
-                "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
-                "enum": [
-                  "inherit",
-                  "custom"
-                ],
-                "type": "string"
-              },
               "ready_ack_timeout": {
                 "default": 5,
                 "description": "Seconds allowed to retain an outbound originate cancellation handle before execution",
@@ -48304,13 +48662,6 @@
                 "description": "Seconds before an eligible failed callback attempt may be retried",
                 "maximum": 3600,
                 "minimum": 15,
-                "type": "integer"
-              },
-              "confirmation_timeout": {
-                "default": 10,
-                "description": "Seconds allowed for the returned caller to press DTMF 1",
-                "maximum": 30,
-                "minimum": 3,
                 "type": "integer"
               },
               "success_timeout_ms": {
@@ -48326,6 +48677,11 @@
                 "maximum": 86400,
                 "minimum": 60,
                 "type": "integer"
+              },
+              "use_local_resources": {
+                "default": false,
+                "description": "Restrict callback origination to resources owned by the authenticated account",
+                "type": "boolean"
               }
             },
             "type": "object"
@@ -48414,17 +48770,6 @@
               "in_order"
             ],
             "type": "string"
-          },
-          "agent_order": {
-            "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
-            "type": "array",
-            "default": [],
-            "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
           }
         },
         "type": "object"
@@ -51417,6 +51762,17 @@
           "queue": {
             "description": "Partial queue update; omitted fields are preserved. The queue resource schema describes allowed values.",
             "properties": {
+              "agent_order": {
+                "default": [],
+                "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
+                "items": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
               "agent_ring_timeout": {
                 "default": 15,
                 "description": "In seconds, how long to ring an agent before progressing to the next agent available",
@@ -51439,8 +51795,8 @@
                   "initial_delay": {
                     "default": 30,
                     "description": "Seconds to wait after queue entry before the first position or wait-time announcement",
-                    "minimum": 1,
                     "maximum": 3600,
+                    "minimum": 1,
                     "type": "integer"
                   },
                   "interval": {
@@ -51498,6 +51854,11 @@
               "callback": {
                 "description": "Authenticated virtual callback configuration. Registrations are created only by a live queue member flow.",
                 "properties": {
+                  "allow_alternate_number": {
+                    "default": false,
+                    "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
+                    "type": "boolean"
+                  },
                   "announcement": {
                     "description": "Independent schedule for announcing the callback option while waiting. Disabling this announcement does not disable callback registration with entry_key.",
                     "properties": {
@@ -51523,15 +51884,20 @@
                     },
                     "type": "object"
                   },
-                  "allow_alternate_number": {
-                    "default": false,
-                    "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
-                    "type": "boolean"
+                  "caller_id_source": {
+                    "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
+                    "enum": [
+                      "inherit",
+                      "custom"
+                    ],
+                    "type": "string"
                   },
-                  "use_local_resources": {
-                    "default": false,
-                    "description": "Restrict callback origination to resources owned by the authenticated account",
-                    "type": "boolean"
+                  "confirmation_timeout": {
+                    "default": 10,
+                    "description": "Seconds allowed for the returned caller to press DTMF 1",
+                    "maximum": 30,
+                    "minimum": 3,
+                    "type": "integer"
                   },
                   "enabled": {
                     "default": false,
@@ -51655,14 +52021,6 @@
                     ],
                     "type": "object"
                   },
-                  "caller_id_source": {
-                    "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
-                    "enum": [
-                      "inherit",
-                      "custom"
-                    ],
-                    "type": "string"
-                  },
                   "ready_ack_timeout": {
                     "default": 5,
                     "description": "Seconds allowed to retain an outbound originate cancellation handle before execution",
@@ -51675,13 +52033,6 @@
                     "description": "Seconds before an eligible failed callback attempt may be retried",
                     "maximum": 3600,
                     "minimum": 15,
-                    "type": "integer"
-                  },
-                  "confirmation_timeout": {
-                    "default": 10,
-                    "description": "Seconds allowed for the returned caller to press DTMF 1",
-                    "maximum": 30,
-                    "minimum": 3,
                     "type": "integer"
                   },
                   "success_timeout_ms": {
@@ -51697,6 +52048,11 @@
                     "maximum": 86400,
                     "minimum": 60,
                     "type": "integer"
+                  },
+                  "use_local_resources": {
+                    "default": false,
+                    "description": "Restrict callback origination to resources owned by the authenticated account",
+                    "type": "boolean"
                   }
                 },
                 "type": "object"
@@ -51785,17 +52141,6 @@
                   "in_order"
                 ],
                 "type": "string"
-              },
-              "agent_order": {
-                "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
-                "type": "array",
-                "default": [],
-                "uniqueItems": true,
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 128
-                }
               },
               "agents": {
                 "type": "array",
@@ -51935,6 +52280,17 @@
       "QueueEditorSettings": {
         "description": "Queue settings only (encoded JSON at most 65536 bytes). Do not include id, agents, keys beginning with pvt_, or keys beginning with _. Identity and roster are server-owned. A create request must satisfy the ordinary queues create schema; PATCH merges the supplied settings. Built-in language adoption uses announcements.language plus announcements.media=null, callback.media=null and callback.return_confirmation_prompt=null. The server consumes null as a deletion marker before validating/saving the merged queue. Use a supported ready locale from GET editor; changing references does not certify playback readiness.",
         "properties": {
+          "agent_order": {
+            "default": [],
+            "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
           "agent_ring_timeout": {
             "default": 15,
             "description": "In seconds, how long to ring an agent before progressing to the next agent available",
@@ -51957,8 +52313,8 @@
               "initial_delay": {
                 "default": 30,
                 "description": "Seconds to wait after queue entry before the first position or wait-time announcement",
-                "minimum": 1,
                 "maximum": 3600,
+                "minimum": 1,
                 "type": "integer"
               },
               "interval": {
@@ -52017,6 +52373,11 @@
           "callback": {
             "description": "Authenticated virtual callback configuration. Registrations are created only by a live queue member flow.",
             "properties": {
+              "allow_alternate_number": {
+                "default": false,
+                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
+                "type": "boolean"
+              },
               "announcement": {
                 "description": "Independent schedule for announcing the callback option while waiting. Disabling this announcement does not disable callback registration with entry_key.",
                 "properties": {
@@ -52042,15 +52403,20 @@
                 },
                 "type": "object"
               },
-              "allow_alternate_number": {
-                "default": false,
-                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
-                "type": "boolean"
+              "caller_id_source": {
+                "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
+                "enum": [
+                  "inherit",
+                  "custom"
+                ],
+                "type": "string"
               },
-              "use_local_resources": {
-                "default": false,
-                "description": "Restrict callback origination to resources owned by the authenticated account",
-                "type": "boolean"
+              "confirmation_timeout": {
+                "default": 10,
+                "description": "Seconds allowed for the returned caller to press DTMF 1",
+                "maximum": 30,
+                "minimum": 3,
+                "type": "integer"
               },
               "enabled": {
                 "default": false,
@@ -52175,14 +52541,6 @@
                 ],
                 "type": "object"
               },
-              "caller_id_source": {
-                "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
-                "enum": [
-                  "inherit",
-                  "custom"
-                ],
-                "type": "string"
-              },
               "ready_ack_timeout": {
                 "default": 5,
                 "description": "Seconds allowed to retain an outbound originate cancellation handle before execution",
@@ -52195,13 +52553,6 @@
                 "description": "Seconds before an eligible failed callback attempt may be retried",
                 "maximum": 3600,
                 "minimum": 15,
-                "type": "integer"
-              },
-              "confirmation_timeout": {
-                "default": 10,
-                "description": "Seconds allowed for the returned caller to press DTMF 1",
-                "maximum": 30,
-                "minimum": 3,
                 "type": "integer"
               },
               "success_timeout_ms": {
@@ -52217,6 +52568,11 @@
                 "maximum": 86400,
                 "minimum": 60,
                 "type": "integer"
+              },
+              "use_local_resources": {
+                "default": false,
+                "description": "Restrict callback origination to resources owned by the authenticated account",
+                "type": "boolean"
               },
               "return_confirmation_prompt": {
                 "type": "string",
@@ -52313,17 +52669,6 @@
               "in_order"
             ],
             "type": "string"
-          },
-          "agent_order": {
-            "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
-            "type": "array",
-            "default": [],
-            "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
           }
         },
         "type": "object",
@@ -52350,6 +52695,17 @@
       "QueueEditorCreateSettings": {
         "description": "New queue settings; satisfy the ordinary queues create schema. For built-in voice defaults select announcements.language and omit announcements.media and callback.media. Null prompt deletion markers apply to PATCH, not creation.",
         "properties": {
+          "agent_order": {
+            "default": [],
+            "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
           "agent_ring_timeout": {
             "default": 15,
             "description": "In seconds, how long to ring an agent before progressing to the next agent available",
@@ -52372,8 +52728,8 @@
               "initial_delay": {
                 "default": 30,
                 "description": "Seconds to wait after queue entry before the first position or wait-time announcement",
-                "minimum": 1,
                 "maximum": 3600,
+                "minimum": 1,
                 "type": "integer"
               },
               "interval": {
@@ -52431,6 +52787,11 @@
           "callback": {
             "description": "Authenticated virtual callback configuration. Registrations are created only by a live queue member flow.",
             "properties": {
+              "allow_alternate_number": {
+                "default": false,
+                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
+                "type": "boolean"
+              },
               "announcement": {
                 "description": "Independent schedule for announcing the callback option while waiting. Disabling this announcement does not disable callback registration with entry_key.",
                 "properties": {
@@ -52456,15 +52817,20 @@
                 },
                 "type": "object"
               },
-              "allow_alternate_number": {
-                "default": false,
-                "description": "Default false: the queue entry_key requests registration of the valid current caller-ID destination without an extra confirmation digit. When true, entry_key opens a choice menu: 1 confirms the current number, or 2 collects an alternate number, followed by #, readback and 1 confirmation. An invalid current number goes directly to alternate collection only when true. All destinations remain subject to authorization and durable registration before success audio or hangup; returned-call confirmation 1 is separate.",
-                "type": "boolean"
+              "caller_id_source": {
+                "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
+                "enum": [
+                  "inherit",
+                  "custom"
+                ],
+                "type": "string"
               },
-              "use_local_resources": {
-                "default": false,
-                "description": "Restrict callback origination to resources owned by the authenticated account",
-                "type": "boolean"
+              "confirmation_timeout": {
+                "default": 10,
+                "description": "Seconds allowed for the returned caller to press DTMF 1",
+                "maximum": 30,
+                "minimum": 3,
+                "type": "integer"
               },
               "enabled": {
                 "default": false,
@@ -52588,14 +52954,6 @@
                 ],
                 "type": "object"
               },
-              "caller_id_source": {
-                "description": "inherit resolves the callback user's current external caller ID with account fallback on every attempt; custom uses the explicit owned-number override. Omitted preserves legacy explicit identity, or inherits when no override exists.",
-                "enum": [
-                  "inherit",
-                  "custom"
-                ],
-                "type": "string"
-              },
               "ready_ack_timeout": {
                 "default": 5,
                 "description": "Seconds allowed to retain an outbound originate cancellation handle before execution",
@@ -52608,13 +52966,6 @@
                 "description": "Seconds before an eligible failed callback attempt may be retried",
                 "maximum": 3600,
                 "minimum": 15,
-                "type": "integer"
-              },
-              "confirmation_timeout": {
-                "default": 10,
-                "description": "Seconds allowed for the returned caller to press DTMF 1",
-                "maximum": 30,
-                "minimum": 3,
                 "type": "integer"
               },
               "success_timeout_ms": {
@@ -52630,6 +52981,11 @@
                 "maximum": 86400,
                 "minimum": 60,
                 "type": "integer"
+              },
+              "use_local_resources": {
+                "default": false,
+                "description": "Restrict callback origination to resources owned by the authenticated account",
+                "type": "boolean"
               }
             },
             "type": "object"
@@ -52718,17 +53074,6 @@
               "in_order"
             ],
             "type": "string"
-          },
-          "agent_order": {
-            "description": "Agent user IDs in priority order for in_order. Unlisted eligible members follow in stable ID order; unavailable members are skipped.",
-            "type": "array",
-            "default": [],
-            "uniqueItems": true,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
           }
         },
         "required": [
@@ -53789,6 +54134,652 @@
           }
         },
         "additionalProperties": true
+      },
+      "ForwardedCallConfirmation": {
+        "additionalProperties": false,
+        "description": "Account-only language for the press-1 prompt on forwarded calls and forwarding failover. Omission preserves existing prompt behavior. Does not enable forwarding or change other prompt languages.",
+        "properties": {
+          "language": {
+            "description": "Built-in prerecorded confirmation language. Clear with language:null in an account update request to restore existing prompt behavior.",
+            "enum": [
+              "en-us",
+              "he-il",
+              "ar-sa",
+              "es-es",
+              "fr-fr"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "language"
+        ],
+        "type": "object"
+      },
+      "AccountConfirmationPatchData": {
+        "description": "Accounts represent tenants or customers on the system. Each account represents an individual dataset or sandbox that only one tenant can access. The data set is architecturally independent from other tenants.",
+        "properties": {
+          "addresses": {
+            "description": "Account addresses",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/addresses"
+              }
+            ]
+          },
+          "announcement": {
+            "description": "The announcement will be pop up when use log in to this account",
+            "type": "string",
+            "x-kazoo-validation": true
+          },
+          "blacklists": {
+            "description": "A list blacklist ids that apply to the account",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "call_failover": {
+            "$ref": "#/components/schemas/call_failover"
+          },
+          "call_forward": {
+            "description": "Call forward settings",
+            "x-kazoo-kz:skip_subproperty_builder": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/call_forward"
+              }
+            ]
+          },
+          "call_limits": {
+            "$ref": "#/components/schemas/call_limits"
+          },
+          "call_recording": {
+            "additionalProperties": false,
+            "description": "call recording configuration",
+            "properties": {
+              "account": {
+                "$ref": "#/components/schemas/call_recording"
+              },
+              "endpoint": {
+                "$ref": "#/components/schemas/call_recording"
+              }
+            },
+            "type": "object"
+          },
+          "call_restriction": {
+            "additionalProperties": {
+              "properties": {
+                "action": {
+                  "description": "If set to deny all calls of this type will be rejected.  If set to inherit the user/device rules apply",
+                  "enum": [
+                    "inherit",
+                    "deny"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "default": {},
+            "description": "Account level call restrictions for each available number classification",
+            "type": "object"
+          },
+          "call_waiting": {
+            "$ref": "#/components/schemas/call_waiting"
+          },
+          "caller_id": {
+            "description": "The account default caller ID parameters",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/caller_id"
+              }
+            ]
+          },
+          "caller_id_options": {
+            "description": "custom properties for configuring caller_id",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/caller_id_options"
+              }
+            ]
+          },
+          "dial_plan": {
+            "description": "A list of default rules used to modify dialed numbers",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/dialplans"
+              }
+            ]
+          },
+          "do_not_disturb": {
+            "properties": {
+              "enabled": {
+                "description": "The default value for do-not-disturb",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
+          "enabled": {
+            "default": true,
+            "description": "Determines if the account is currently enabled",
+            "type": "boolean",
+            "x-support_level": "supported"
+          },
+          "flags": {
+            "description": "Flags set by external applications",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "x-support_level": "supported"
+          },
+          "formatters": {
+            "$ref": "#/components/schemas/formatters"
+          },
+          "language": {
+            "description": "The language for this account",
+            "type": "string",
+            "x-support_level": "supported"
+          },
+          "metaflows": {
+            "$ref": "#/components/schemas/metaflows"
+          },
+          "music_on_hold": {
+            "default": {},
+            "description": "The default music on hold parameters",
+            "properties": {
+              "media_id": {
+                "description": "The ID of a media object that should be used as the default music on hold",
+                "maxLength": 2048,
+                "type": "string"
+              },
+              "options": {
+                "description": "Options for playing music on hold",
+                "items": {
+                  "enum": [
+                    "preserve-position",
+                    "random-start"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "name": {
+            "description": "A friendly name for the account",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string",
+            "x-support_level": "supported"
+          },
+          "notifications": {
+            "description": "account notification settings",
+            "properties": {
+              "first_occurrence": {
+                "description": "send emails on these account-firsts",
+                "properties": {
+                  "sent_initial_call": {
+                    "default": false,
+                    "description": "has the account made their first call",
+                    "type": "boolean"
+                  },
+                  "sent_initial_registration": {
+                    "default": false,
+                    "description": "has the account registered their first device",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              },
+              "low_balance": {
+                "description": "Low balance settings",
+                "properties": {
+                  "enabled": {
+                    "description": "should the account be checked for this alert",
+                    "type": "boolean"
+                  },
+                  "last_notification": {
+                    "description": "Timestamp, in Gregorian seconds, of when the last low_balance alert was sent",
+                    "type": "integer"
+                  },
+                  "sent_low_balance": {
+                    "description": "has the alert been sent (avoids duplication/spamming)",
+                    "type": "boolean"
+                  },
+                  "threshold": {
+                    "description": "account balance to send alert on",
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "org": {
+            "description": "Full legal name of the organization",
+            "type": "string"
+          },
+          "preflow": {
+            "additionalProperties": false,
+            "default": {},
+            "description": "Each property provides functionality that can be applied to calls using the callflow application",
+            "properties": {
+              "always": {
+                "description": "The ID of a callflow to always execute prior to processing the callflow with numbers/patterns matching the request",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "realm": {
+            "description": "The realm of the account, ie: 'account1.2600hz.com'",
+            "maxLength": 253,
+            "minLength": 4,
+            "pattern": "^[.\\w-]+$",
+            "type": "string",
+            "x-support_level": "supported"
+          },
+          "ringtones": {
+            "default": {},
+            "description": "Ringtone Parameters",
+            "properties": {
+              "external": {
+                "description": "The alert info SIP header added when the call is from internal sources",
+                "maxLength": 256,
+                "type": "string"
+              },
+              "internal": {
+                "description": "The alert info SIP header added when the call is from external sources",
+                "maxLength": 256,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "timezone": {
+            "description": "The default account timezone",
+            "x-support_level": "supported",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/timezone"
+              }
+            ]
+          },
+          "topup": {
+            "description": "Topup settings for the account",
+            "properties": {
+              "amount": {
+                "description": "Amount to topup with",
+                "type": "number"
+              },
+              "threshold": {
+                "description": "The account balance when topup occurs",
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "voicemail": {
+            "properties": {
+              "notify": {
+                "properties": {
+                  "callback": {
+                    "$ref": "#/components/schemas/notify.callback"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "zones": {
+            "description": "A priority ordered mapping of zones for the account",
+            "type": "object"
+          },
+          "call_forward_confirmation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "language"
+            ],
+            "properties": {
+              "language": {
+                "type": "string",
+                "enum": [
+                  "en-us",
+                  "he-il",
+                  "ar-sa",
+                  "es-es",
+                  "fr-fr",
+                  null
+                ],
+                "nullable": true,
+                "description": "en-us, he-il, ar-sa, es-es or fr-fr selects a packaged recording. Explicit null deletes the stored preference and restores the existing prompt resolver. Omission preserves the saved preference, including on POST."
+              }
+            }
+          }
+        },
+        "type": "object"
+      },
+      "AccountConfirmationPostData": {
+        "description": "Accounts represent tenants or customers on the system. Each account represents an individual dataset or sandbox that only one tenant can access. The data set is architecturally independent from other tenants.",
+        "properties": {
+          "addresses": {
+            "description": "Account addresses",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/addresses"
+              }
+            ]
+          },
+          "announcement": {
+            "description": "The announcement will be pop up when use log in to this account",
+            "type": "string",
+            "x-kazoo-validation": true
+          },
+          "blacklists": {
+            "description": "A list blacklist ids that apply to the account",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "call_failover": {
+            "$ref": "#/components/schemas/call_failover"
+          },
+          "call_forward": {
+            "description": "Call forward settings",
+            "x-kazoo-kz:skip_subproperty_builder": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/call_forward"
+              }
+            ]
+          },
+          "call_limits": {
+            "$ref": "#/components/schemas/call_limits"
+          },
+          "call_recording": {
+            "additionalProperties": false,
+            "description": "call recording configuration",
+            "properties": {
+              "account": {
+                "$ref": "#/components/schemas/call_recording"
+              },
+              "endpoint": {
+                "$ref": "#/components/schemas/call_recording"
+              }
+            },
+            "type": "object"
+          },
+          "call_restriction": {
+            "additionalProperties": {
+              "properties": {
+                "action": {
+                  "description": "If set to deny all calls of this type will be rejected.  If set to inherit the user/device rules apply",
+                  "enum": [
+                    "inherit",
+                    "deny"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "default": {},
+            "description": "Account level call restrictions for each available number classification",
+            "type": "object"
+          },
+          "call_waiting": {
+            "$ref": "#/components/schemas/call_waiting"
+          },
+          "caller_id": {
+            "description": "The account default caller ID parameters",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/caller_id"
+              }
+            ]
+          },
+          "caller_id_options": {
+            "description": "custom properties for configuring caller_id",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/caller_id_options"
+              }
+            ]
+          },
+          "dial_plan": {
+            "description": "A list of default rules used to modify dialed numbers",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/dialplans"
+              }
+            ]
+          },
+          "do_not_disturb": {
+            "properties": {
+              "enabled": {
+                "description": "The default value for do-not-disturb",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
+          "enabled": {
+            "default": true,
+            "description": "Determines if the account is currently enabled",
+            "type": "boolean",
+            "x-support_level": "supported"
+          },
+          "flags": {
+            "description": "Flags set by external applications",
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "x-support_level": "supported"
+          },
+          "formatters": {
+            "$ref": "#/components/schemas/formatters"
+          },
+          "language": {
+            "description": "The language for this account",
+            "type": "string",
+            "x-support_level": "supported"
+          },
+          "metaflows": {
+            "$ref": "#/components/schemas/metaflows"
+          },
+          "music_on_hold": {
+            "default": {},
+            "description": "The default music on hold parameters",
+            "properties": {
+              "media_id": {
+                "description": "The ID of a media object that should be used as the default music on hold",
+                "maxLength": 2048,
+                "type": "string"
+              },
+              "options": {
+                "description": "Options for playing music on hold",
+                "items": {
+                  "enum": [
+                    "preserve-position",
+                    "random-start"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "name": {
+            "description": "A friendly name for the account",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string",
+            "x-support_level": "supported"
+          },
+          "notifications": {
+            "description": "account notification settings",
+            "properties": {
+              "first_occurrence": {
+                "description": "send emails on these account-firsts",
+                "properties": {
+                  "sent_initial_call": {
+                    "default": false,
+                    "description": "has the account made their first call",
+                    "type": "boolean"
+                  },
+                  "sent_initial_registration": {
+                    "default": false,
+                    "description": "has the account registered their first device",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              },
+              "low_balance": {
+                "description": "Low balance settings",
+                "properties": {
+                  "enabled": {
+                    "description": "should the account be checked for this alert",
+                    "type": "boolean"
+                  },
+                  "last_notification": {
+                    "description": "Timestamp, in Gregorian seconds, of when the last low_balance alert was sent",
+                    "type": "integer"
+                  },
+                  "sent_low_balance": {
+                    "description": "has the alert been sent (avoids duplication/spamming)",
+                    "type": "boolean"
+                  },
+                  "threshold": {
+                    "description": "account balance to send alert on",
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "org": {
+            "description": "Full legal name of the organization",
+            "type": "string"
+          },
+          "preflow": {
+            "additionalProperties": false,
+            "default": {},
+            "description": "Each property provides functionality that can be applied to calls using the callflow application",
+            "properties": {
+              "always": {
+                "description": "The ID of a callflow to always execute prior to processing the callflow with numbers/patterns matching the request",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "realm": {
+            "description": "The realm of the account, ie: 'account1.2600hz.com'",
+            "maxLength": 253,
+            "minLength": 4,
+            "pattern": "^[.\\w-]+$",
+            "type": "string",
+            "x-support_level": "supported"
+          },
+          "ringtones": {
+            "default": {},
+            "description": "Ringtone Parameters",
+            "properties": {
+              "external": {
+                "description": "The alert info SIP header added when the call is from internal sources",
+                "maxLength": 256,
+                "type": "string"
+              },
+              "internal": {
+                "description": "The alert info SIP header added when the call is from external sources",
+                "maxLength": 256,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "timezone": {
+            "description": "The default account timezone",
+            "x-support_level": "supported",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/timezone"
+              }
+            ]
+          },
+          "topup": {
+            "description": "Topup settings for the account",
+            "properties": {
+              "amount": {
+                "description": "Amount to topup with",
+                "type": "number"
+              },
+              "threshold": {
+                "description": "The account balance when topup occurs",
+                "type": "number"
+              }
+            },
+            "type": "object"
+          },
+          "voicemail": {
+            "properties": {
+              "notify": {
+                "properties": {
+                  "callback": {
+                    "$ref": "#/components/schemas/notify.callback"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "zones": {
+            "description": "A priority ordered mapping of zones for the account",
+            "type": "object"
+          },
+          "call_forward_confirmation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "language"
+            ],
+            "properties": {
+              "language": {
+                "type": "string",
+                "enum": [
+                  "en-us",
+                  "he-il",
+                  "ar-sa",
+                  "es-es",
+                  "fr-fr",
+                  null
+                ],
+                "nullable": true,
+                "description": "en-us, he-il, ar-sa, es-es or fr-fr selects a packaged recording. Explicit null deletes the stored preference and restores the existing prompt resolver. Omission preserves the saved preference, including on POST."
+              }
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ]
       },
       "BlackholeQueueLiveSubscribe": {
         "type": "object",

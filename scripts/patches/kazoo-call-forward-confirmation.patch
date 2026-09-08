@@ -1,0 +1,233 @@
+diff --git a/kazoo_documents/src/kzd_accounts.erl b/kazoo_documents/src/kzd_accounts.erl
+--- a/kazoo_documents/src/kzd_accounts.erl
++++ b/kazoo_documents/src/kzd_accounts.erl
+@@ -15,6 +15,8 @@
+ -export([blacklists/1, blacklists/2, set_blacklists/2]).
+ -export([call_failover/1, call_failover/2, set_call_failover/2]).
+ -export([call_forward/1, call_forward/2, set_call_forward/2]).
++-export([call_forward_confirmation_language/1, call_forward_confirmation_language/2,
++         set_call_forward_confirmation_language/2]).
+ -export([call_limits/1, call_limits/2, set_call_limits/2]).
+ -export([call_recording/1, call_recording/2, set_call_recording/2]).
+ -export([call_recording_account/1, call_recording_account/2, set_call_recording_account/2]).
+@@ -221,6 +223,18 @@
+ set_call_forward(Doc, CallForward) ->
+     kz_json:set_value([<<"call_forward">>], CallForward, Doc).
+ 
++-spec call_forward_confirmation_language(doc()) -> kz_term:api_ne_binary().
++call_forward_confirmation_language(Doc) ->
++    call_forward_confirmation_language(Doc, 'undefined').
++
++-spec call_forward_confirmation_language(doc(), Default) -> kz_term:ne_binary() | Default.
++call_forward_confirmation_language(Doc, Default) ->
++    kz_json:get_ne_binary_value([<<"call_forward_confirmation">>, <<"language">>], Doc, Default).
++
++-spec set_call_forward_confirmation_language(doc(), kz_term:ne_binary()) -> doc().
++set_call_forward_confirmation_language(Doc, Language) ->
++    kz_json:set_value([<<"call_forward_confirmation">>, <<"language">>], Language, Doc).
++
+ -spec call_limits(doc()) -> kz_term:api_object().
+ call_limits(Doc) ->
+     call_limits(Doc, 'undefined').
+diff --git a/kazoo_endpoint/src/kz_endpoint_v4.erl b/kazoo_endpoint/src/kz_endpoint_v4.erl
+--- a/kazoo_endpoint/src/kz_endpoint_v4.erl
++++ b/kazoo_endpoint/src/kz_endpoint_v4.erl
+@@ -1829,7 +1829,9 @@
+             Confirm = [{<<"Confirm-Key">>, <<"1">>}
+                       ,{<<"Confirm-Cancel-Timeout">>, 'true'}
+                       ,{<<"Confirm-Read-Timeout">>, kz_term:to_binary(7 * ?MILLISECONDS_IN_SECOND)}
+-                      ,{<<"Confirm-File">>, ?CONFIRM_FILE(Call)}
++                      ,{<<"Confirm-File">>, kz_call_forward_confirmation:select(
++                                              kz_doc:account_id(Endpoint, kapps_call:account_id(Call)),
++                                              fun() -> ?CONFIRM_FILE(Call) end)}
+                       ,{<<"Require-Ignore-Early-Media">>, <<"true">>}
+                       ,{<<"Require-Fail-On-Single-Reject">>, <<"USER_BUSY,CALL_REJECTED,NO_ANSWER,NORMAL_CLEARING,PROGRESS_TIMEOUT">>}
+                       ],
+diff --git a/kazoo_endpoint/src/kz_endpoint_v5.erl b/kazoo_endpoint/src/kz_endpoint_v5.erl
+--- a/kazoo_endpoint/src/kz_endpoint_v5.erl
++++ b/kazoo_endpoint/src/kz_endpoint_v5.erl
+@@ -1599,7 +1599,9 @@
+             Confirm = [{<<"Confirm-Key">>, <<"1">>}
+                       ,{<<"Confirm-Cancel-Timeout">>, 'true'}
+                       ,{<<"Confirm-Read-Timeout">>, kz_term:to_binary(7 * ?MILLISECONDS_IN_SECOND)}
+-                      ,{<<"Confirm-File">>, ?CONFIRM_FILE(Call)}
++                      ,{<<"Confirm-File">>, kz_call_forward_confirmation:select(
++                                              kz_doc:account_id(Endpoint, kapps_call:account_id(Call)),
++                                              fun() -> ?CONFIRM_FILE(Call) end)}
+                       ,{<<"Require-Ignore-Early-Media">>, <<"true">>}
+                       ,{<<"Require-Fail-On-Single-Reject">>, [<<"USER_BUSY">>
+                                                              ,<<"CALL_REJECTED">>
+diff --git a/kazoo_directory/src/kz_directory_cfwd.erl b/kazoo_directory/src/kz_directory_cfwd.erl
+--- a/kazoo_directory/src/kz_directory_cfwd.erl
++++ b/kazoo_directory/src/kz_directory_cfwd.erl
+@@ -107,7 +107,7 @@
+     ].
+ 
+ -spec call_forward_confirm_properties(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), kz_json:object(), boolean()) -> kz_term:proplist().
+-call_forward_confirm_properties(_EndpointId, _AccountId, Endpoint, CallForward, _IsReconcilable) ->
++call_forward_confirm_properties(_EndpointId, AccountId, Endpoint, CallForward, _IsReconcilable) ->
+     case kzd_call_forward:require_keypress(CallForward) of
+         'false' -> [];
+         'true' ->
+@@ -115,7 +115,8 @@
+             ,{<<"Confirm-Cancel-Timeout">>, 'true'}
+             ,{<<"Confirm-Read-Timeout">>, ?CONFIRM_READ_TIMEOUT_SEC * ?MILLISECONDS_IN_SECOND}
+             ,{<<"Confirm-Play-Count">>, ?CONFIRM_PLAY_COUNT}
+-            ,{<<"Confirm-File">>, kzd_endpoint:get_prompt(Endpoint, <<"ivr-group_confirm">>)}
++            ,{<<"Confirm-File">>, kz_call_forward_confirmation:select(AccountId,
++                                    fun() -> kzd_endpoint:get_prompt(Endpoint, <<"ivr-group_confirm">>) end)}
+             ,{<<"Require-Ignore-Early-Media">>, 'true'}
+             ,{<<"Require-Fail-On-Single-Reject">>, cfw_single_reject()}
+             ]
+diff --git a/kazoo_directory/src/kz_directory_failover.erl b/kazoo_directory/src/kz_directory_failover.erl
+--- a/kazoo_directory/src/kz_directory_failover.erl
++++ b/kazoo_directory/src/kz_directory_failover.erl
+@@ -109,7 +109,7 @@
+     ].
+ 
+ -spec call_failover_confirm_properties(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), boolean()) -> kz_term:proplist().
+-call_failover_confirm_properties(_EndpointId, _AccountId, Endpoint, _IsReconcilable) ->
++call_failover_confirm_properties(_EndpointId, AccountId, Endpoint, _IsReconcilable) ->
+     Failover = kzd_endpoint:call_failover(Endpoint, kz_json:new()),
+     case kzd_call_failover:require_keypress(Failover) of
+         'false' -> [];
+@@ -118,7 +118,8 @@
+             ,{<<"Confirm-Cancel-Timeout">>, 'true'}
+             ,{<<"Confirm-Read-Timeout">>, ?CONFIRM_READ_TIMEOUT_SEC * ?MILLISECONDS_IN_SECOND}
+             ,{<<"Confirm-Play-Count">>, ?CONFIRM_PLAY_COUNT}
+-            ,{<<"Confirm-File">>, kzd_endpoint:get_prompt(Endpoint, <<"ivr-group_confirm">>)}
++            ,{<<"Confirm-File">>, kz_call_forward_confirmation:select(AccountId,
++                                    fun() -> kzd_endpoint:get_prompt(Endpoint, <<"ivr-group_confirm">>) end)}
+             ,{<<"Require-Ignore-Early-Media">>, 'true'}
+             ,{<<"Require-Fail-On-Single-Reject">>, cfw_single_reject()}
+             ]
+diff --git a/kazoo_media/src/kz_call_forward_confirmation.erl b/kazoo_media/src/kz_call_forward_confirmation.erl
+new file mode 100644
+--- /dev/null
++++ b/kazoo_media/src/kz_call_forward_confirmation.erl
+@@ -0,0 +1,112 @@
++%%% Account-scoped selection of immutable forwarded-call confirmation media.
++%%% SPDX-License-Identifier: MPL-2.0
++-module(kz_call_forward_confirmation).
++
++-export([select/2, builtin/1, ready/1, available_languages/0, assets/0]).
++-ifdef(TEST).
++-export([select_with/4, builtin_with/2, valid_media/2]).
++-endif.
++
++-include("call_forward_confirmation_assets.hrl").
++-define(DB, <<"system_media">>).
++-define(OWNER, <<"kazoo5_call_forward_confirmation_v1">>).
++
++-spec assets() -> [tuple()].
++assets() -> ?CFWD_CONFIRMATION_ASSETS.
++
++-spec select(binary() | undefined, fun(() -> any())) -> any().
++select(AccountId, Legacy) ->
++    select_with(AccountId, Legacy, fun kzd_accounts:fetch/1, fun read_media/1).
++
++-spec select_with(any(), function(), function(), function()) -> any().
++select_with(AccountId, Legacy, ReadAccount, ReadMedia) ->
++    Result = try
++                 case ReadAccount(AccountId) of
++                     {ok, Account} ->
++                         case kzd_accounts:call_forward_confirmation_language(Account) of
++                             undefined -> legacy;
++                             Language -> builtin_with(Language, ReadMedia)
++                         end;
++                     _ -> {error, account_unavailable}
++                 end
++             catch _:_ -> {error, lookup_failed}
++             end,
++    case Result of
++        {ok, Path} -> Path;
++        legacy -> Legacy();
++        {error, _} ->
++            lager:warning("forwarded-call confirmation lookup failed; retaining legacy prompt and keypress"),
++            Legacy()
++    end.
++
++-spec builtin(any()) -> {ok, binary()} | {error, atom()}.
++builtin(Language) -> builtin_with(Language, fun read_media/1).
++
++-spec builtin_with(any(), function()) -> {ok, binary()} | {error, atom()}.
++builtin_with(Language, Read) ->
++    case lists:keyfind(Language, 1, assets()) of
++        false -> {error, unsupported_language};
++        Asset ->
++            Id = element(2, Asset),
++            try
++                case valid_media(Asset, Read(Id)) of
++                    true -> {ok, <<"/system_media/", Id/binary>>};
++                    false -> {error, media_unavailable}
++                end
++            catch _:_ -> {error, media_unavailable}
++            end
++    end.
++
++%% Used on an explicit preference change. Calls use cached metadata; saving
++%% checks fresh metadata AND attachment bytes against the compiled release.
++-spec ready(any()) -> boolean().
++ready(Language) ->
++    case lists:keyfind(Language, 1, assets()) of
++        false -> false;
++        {_, Id, Prompt, Sha, _, Length, _} = Asset ->
++            try
++                true = valid_media(Asset, kz_datamgr:open_doc(?DB, Id, [{conflicts, true}])),
++                {ok, Bytes} = kz_datamgr:fetch_attachment(?DB, Id, <<Prompt/binary, ".wav">>),
++                byte_size(Bytes) =:= Length andalso kz_binary:hexencode(crypto:hash(sha256, Bytes)) =:= Sha
++            catch _:_ -> false
++            end
++    end.
++
++-spec available_languages() -> [binary()].
++available_languages() -> [L || {L, _, _, _, _, _, _} <- assets(), {ok, _} <- [builtin(L)]].
++
++-spec read_media(binary()) -> any().
++read_media(Id) -> kz_datamgr:open_cache_doc(?DB, Id).
++
++-spec valid_media(tuple(), any()) -> boolean().
++valid_media({Language, Id, Prompt, Sha, Md5, Length, Transcript}, {ok, Doc}) ->
++    Voice = kz_json:get_json_value(<<"source_voice">>, Doc, kz_json:new()),
++    Atts = kz_json:get_json_value(<<"_attachments">>, Doc, kz_json:new()),
++    Name = <<Prompt/binary, ".wav">>,
++    Att = kz_json:get_json_value(Name, Atts, kz_json:new()),
++    get(<<"_id">>, Doc) =:= Id
++        andalso is_binary(get(<<"_rev">>, Doc))
++        andalso lists:member(get(<<"_deleted">>, Doc), [undefined, false])
++        andalso lists:member(get(<<"pvt_deleted">>, Doc), [undefined, false])
++        andalso kz_json:get_value(<<"_conflicts">>, Doc, []) =:= []
++        andalso get(<<"pvt_type">>, Doc) =:= <<"media">>
++        andalso get(<<"pvt_account_db">>, Doc) =:= ?DB
++        andalso get(<<"source_type">>, Doc) =:= ?OWNER
++        andalso get(<<"prompt_id">>, Doc) =:= Prompt
++        andalso get(<<"language">>, Doc) =:= Language
++        andalso get(<<"content_type">>, Doc) =:= <<"audio/wav">>
++        andalso get(<<"content_length">>, Doc) =:= Length
++        andalso get(<<"streamable">>, Doc) =:= true
++        andalso get(<<"provider">>, Voice) =:= <<"google-gemini">>
++        andalso get(<<"model">>, Voice) =:= <<"gemini-2.5-pro-preview-tts">>
++        andalso get(<<"voice">>, Voice) =:= <<"Sulafat">>
++        andalso get(<<"sha256">>, Voice) =:= Sha
++        andalso get(<<"transcript_sha256">>, Voice) =:= Transcript
++        andalso kz_json:get_keys(Atts) =:= [Name]
++        andalso get(<<"content_type">>, Att) =:= <<"audio/wav">>
++        andalso get(<<"digest">>, Att) =:= Md5
++        andalso get(<<"length">>, Att) =:= Length;
++valid_media(_, _) -> false.
++
++-spec get(binary(), any()) -> any().
++get(Key, Doc) -> kz_json:get_value(Key, Doc).
+diff --git a/kazoo_media/src/call_forward_confirmation_assets.hrl b/kazoo_media/src/call_forward_confirmation_assets.hrl
+new file mode 100644
+--- /dev/null
++++ b/kazoo_media/src/call_forward_confirmation_assets.hrl
+@@ -0,0 +1,8 @@
++%% Generated from byte-verified release recordings; do not edit.
++-define(CFWD_CONFIRMATION_ASSETS, [
++    {<<"en-us">>, <<"en-us/cfwd-confirm-v1-sulafat-c4a7770fff6fca22">>, <<"cfwd-confirm-v1-sulafat-c4a7770fff6fca22">>, <<"c4a7770fff6fca2212aabcf6984705b455fb9d24b5796a2770040602b8dbb348">>, <<"md5-WO0al0BDkRhpfRveIOSVHQ==">>, 104540, <<"4917b6cb714c18a699f74cb11041a1ab6e9fa0667761daeb3c328f566536f055">>},
++    {<<"he-il">>, <<"he-il/cfwd-confirm-v1-sulafat-78623cec20ef271b">>, <<"cfwd-confirm-v1-sulafat-78623cec20ef271b">>, <<"78623cec20ef271b0fd0dc2501e4694a55956fd62c44c5221cf006fb8fe93003">>, <<"md5-kdnUpU1/oOzabov0fq7rvg==">>, 132700, <<"1780e1d78acffaf6fc4e8270c1030b249d52afaafc3f813637c959857ac2fef9">>},
++    {<<"ar-sa">>, <<"ar-sa/cfwd-confirm-v1-sulafat-ca7d148f1b809522">>, <<"cfwd-confirm-v1-sulafat-ca7d148f1b809522">>, <<"ca7d148f1b80952244f35555438b8b2d214b01aa7fcdd2ca655efc63f5915a08">>, <<"md5-YC90T0JqOkBq5a3Q+SnXbQ==">>, 133340, <<"84e2302784b76aa74983ebb194d5c5781ae7a37a9436a9730d5b25e8c1e52acf">>},
++    {<<"es-es">>, <<"es-es/cfwd-confirm-v1-sulafat-0be3f4ee6431339d">>, <<"cfwd-confirm-v1-sulafat-0be3f4ee6431339d">>, <<"0be3f4ee6431339d2d308fa76ec7d23f271668cad16f41e0b25c0a93930ca280">>, <<"md5-V3BAdRHJqr9XPju0XC3BbA==">>, 112860, <<"f57f4a224f7de51663f762dc7414c7b79bad9099df9e5be4abbd115c8ec1608d">>},
++    {<<"fr-fr">>, <<"fr-fr/cfwd-confirm-v1-sulafat-2bd6e86781b966fa">>, <<"cfwd-confirm-v1-sulafat-2bd6e86781b966fa">>, <<"2bd6e86781b966fae229156ad6f2017a4f2716e0bd7df162dd4fd63159ef8ff2">>, <<"md5-HyPODNLBHbpSu5yN3tzW1A==">>, 100060, <<"910c23f4a76d8300758a2f542ad15b7ff063de2f2953a293040f335c155170f7">>}
++]).

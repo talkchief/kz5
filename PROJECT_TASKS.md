@@ -1,5 +1,29 @@
 # Kazoo 5 project task register
 
+## New task — account language for forwarded-call confirmation — 2026-09-08
+
+User requested assessment/planning first for the “press 1 to accept” audio heard
+when a call is forwarded to a cellphone: EN/HE/AR, later extended to ES/FR, one preference per account,
+MonsterUI control, and API/OpenAPI support for the custom frontend. Assessment
+finds a feasible, moderate change using existing confirmation/media/account
+infrastructure; four endpoint/directory forwarding/failover selectors must agree.
+Implementation and source/offline checks are complete for all five languages.
+The five packaged recordings each completed internal extension1000 press-1
+confirmation; the user identified EN/HE/AR. Normal development installation,
+20 live API/call checks and ten final deployed browser checks pass. UI and `/apis/`
+are ready. Branch: `feat/account-forward-confirmation-languages`; user will merge. See [implementation evidence](doc/call_forward_confirmation_acceptance.md).
+Detailed design, API/reset, risks and acceptance:
+[forwarded-call confirmation plan](doc/call_forward_confirmation_language_plan.md).
+
+| ID | Status | Requirement / acceptance |
+| --- | --- | --- |
+| FWD-01 | ASSESSED — planning complete | Source assessment identifies `ivr-group_confirm`, account-aware resolution, all four selectors and existing account API/UI seams. Feasible with moderate effort; zero operational risk is not established by source review. |
+| FWD-02 | DEPLOYED / API PASS | Account-only EN/HE/AR/ES/FR preference with validated GET/PATCH/reset, server-side permission checks, shared prompt selection across endpoint v4/v5 and directory forwarding/failover, and cache invalidation. Preserve absent-setting/custom-media behavior and keypress/timing/routing. |
+| FWD-03 | PACKAGED / IMPORT VERIFIED | Five Gemini recordings authored once, immutable/versioned shared assets, create-only import and exact readback/readiness. Reuse for all accounts; no generation on save/install/call. Five initial provider requests succeeded; original EN/HE/AR bytes unchanged when ES/FR were added. Formal native-speaker certification is not claimed. |
+| FWD-04 | DEPLOYED / BROWSER PASS | Visible section header and associated label, native EN/HE/AR/ES/FR options aligned left, default/reset and missing-locale fallback. Dedicated PATCH and main Update both save. Update stays on the form, includes only a changed preference, preserves a newer API value when untouched, and retains pending selection on failure. Actual formatter/handler tests and ten deployed follow-up browser checks pass; test account fully restored. |
+| FWD-05 | PUBLISHED / VERIFIED | Document the account field through existing GET/PATCH routes, envelopes, locales, reset/defaults, permissions and errors; add a custom-frontend example and source-reviewed schema overlay. Served HTTPS specification matches the validated generated artifact and live account behavior. |
+| FWD-06 | DEVELOPMENT ACCEPTANCE PASS | All five internal phone recordings accepted digit 1; live account/cache/media selection and complete RTP waveform checks pass for five synthetic calls. Wrong digit/no digit/hangup prevented connection. API isolation/permissions/reset/older-client preservation and deployed browser saves pass; original preferences restored and temporary users deleted. Real cellphone/PSTN, mobile voicemail, formal native-speaker certification and every physical routing combination were not tested on this development host. |
+
 ## Current focused release checkpoint — 2026-09-08
 
 - **Standalone UI catalog transport implemented:** fixed-command pinned SSH
