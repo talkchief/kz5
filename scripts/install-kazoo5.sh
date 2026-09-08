@@ -761,8 +761,53 @@ dnf_install() {
     run dnf install -y "$@"
 }
 
+service_local_addresses() {
+    local unit=$1
+    case $unit in
+        couchdb.service) printf '%s' "$KAZOO_COUCHDB_BIND" ;;
+        rabbitmq-server.service) printf '%s' "$KAZOO_RABBITMQ_BIND" ;;
+        haproxy.service) printf '%s' "$KAZOO_HAPROXY_BIND" ;;
+        kazoo-apps.service|kazoo-ecallmgr.service|kazoo-freeswitch.service)
+            printf '%s' "$KAZOO_ERLANG_DIST_IP" ;;
+        kazoo-kamailio.service) printf '%s' "$KAZOO_PUBLIC_IP" ;;
+        *) return 0 ;;
+    esac
+}
+
+install_service_address_gate() {
+    local unit=$1 addresses
+    addresses=$(service_local_addresses "$unit")
+    [[ -n $addresses ]] || return 0
+    validate_config_directory /usr/local/libexec
+    run install -d -o root -g root -m 0755 /usr/local/libexec
+    run install -m 0755 "$SCRIPT_DIR/wait-kazoo-local-address.py" /usr/local/libexec/kazoo5-wait-local-address
+    write_file 0644 "/etc/systemd/system/${unit}.d/30-kazoo-local-address.conf" <<EOF
+[Unit]
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+ExecStartPre=/usr/local/libexec/kazoo5-wait-local-address --timeout 120 ${addresses}
+TimeoutStartSec=180
+Restart=on-failure
+RestartSec=5
+EOF
+}
+
+verify_service_address_gate() {
+    local unit=$1 addresses commands
+    addresses=$(service_local_addresses "$unit")
+    [[ -n $addresses ]] || return 0
+    cmp -s "$SCRIPT_DIR/wait-kazoo-local-address.py" /usr/local/libexec/kazoo5-wait-local-address || \
+        die 'Installed local-address startup helper differs; reinstall the selected role'
+    commands=$(systemctl show "$unit" -p ExecStartPre --value) || die 'Cannot inspect address startup gate'
+    [[ $commands == *"argv[]=/usr/local/libexec/kazoo5-wait-local-address --timeout 120 ${addresses} ;"* ]] || \
+        die "${unit} is missing the configured local-address startup gate"
+}
+
 service_enable_restart() {
     local unit=$1
+    install_service_address_gate "$unit"
     run systemctl daemon-reload
     run systemctl enable "$unit"
     run systemctl restart "$unit"
@@ -823,6 +868,7 @@ PY
 
 assert_service() {
     local unit=$1
+    verify_service_address_gate "$unit"
     systemctl is-enabled --quiet "$unit" || die "${unit} is not enabled"
     systemctl is-active --quiet "$unit" || {
         systemctl --no-pager --full status "$unit" >&2 || true
@@ -1487,7 +1533,6 @@ install_haproxy() {
 global
     log         127.0.0.1 local2
     chroot      /var/lib/haproxy
-    pidfile     /run/haproxy.pid
     maxconn     4096
     user        haproxy
     group       haproxy

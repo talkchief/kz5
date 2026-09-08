@@ -20,8 +20,14 @@ zero automatic restarts; `kazoo-applications.service` alias verified.
 SIP template fix `c40fd2d` and sound readability fix `237716e` are pushed.
 Normal .44 FreeSWITCH/Kamailio install84616 finished13c663 with a pre-start
 permission-check failure after successful compilation. Sound manifest transport
-and public binary-parent permissions are being corrected; SIP/media, current
-local-stack UI and final independent fresh ALL verification remain open.
+and public binary-parent fixes `bc8f969` pass regressions77793/eea832.
+Normal SIP rerun62607/2c4b73 **PASS**, including FreeSWITCH/eCallMgr/Sofia,
+Kamailio SIP/AMQP/dispatcher/JWT readiness. Current local-stack UI96182/c9749c
+**PASS**, with ten absent catalog entries created. Independent fresh ALL66513/f83cde
+and actual fresh-browser48355/8df633 **PASS**. First reboot failed acceptance:
+private IP appeared after network-online; HAProxy stayed down while four other
+units recovered after one restart. Exact-address startup gate is implemented
+and tested; deployment and second reboot remain P0.
 This is the P0
 installer continuation, not full fresh-stack certification.
 

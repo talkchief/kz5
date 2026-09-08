@@ -302,3 +302,73 @@ repair only the five exact runtime parent directories on reruns; keep private
 etc/var trees unchanged, reject symlinks, and check binary execution as the actual
 service user before starting it. Regressions include a private manifest parent,
 unprivileged binary execution, unchanged private paths and symlink rejection.
+
+Correction `bc8f969` passes77793/eea832 and is pushed. Normal rerun62607/2c4b73
+exited0 in1m46.409s without rebuilding unchanged source. FreeSWITCH is enabled,
+stable and connected to local eCallMgr; mod_kazoo/mod_spandsp/Sofia and sound
+checks pass. Kazoo Kamailio6.1.4 packages/config/patches install normally; SIP
+OPTIONS, AMQP transport and consumer queues, SBC ACL, dispatcher, SQLite, RPC,
+module inventory and current JWT cache/journal checks all pass. Protected log:
+`/root/kz5-acceptance/sip-runtime-install.log`.
+
+### Current local-stack UI — PASS
+
+Normal .44 `monster-ui`96182/c9749c exited0 in1m14.448s. Explicitly cleared the
+previous remote catalog authority and selected .44's local API/WebSocket routes;
+no original-master catalog changes. Current merged source built and exact served
+assets passed readback. The normal create-only importer created all ten absent
+entries on .44: acdc, accounts, callflows, csv-onboarding, fax, numbers, pbxs,
+voicemails, webhooks and voip. Local proxy/API, nginx and catalog checks pass.
+OpenAPI publishes358 paths/653 operations. Protected log:
+`/root/kz5-acceptance/local-ui-install.log`; invocation helper beside it.
+
+Independent `--verify-only ALL`66513 is running as
+`kz5-fresh-verify-all-20260908.service`, log `/root/kz5-acceptance/verify-all.log`.
+Actual fresh browser acceptance is also running. Its first attempt selected
+Node18 incompatible with installed Playwright and exited before opening a browser;
+the corrected runner uses the existing dedicated Node executable. No target
+Node/package or service change was made for this harness issue.
+
+### Independent fresh ALL and actual browser — PASS
+
+Independent66513/f83cde exited0 in1m40.655s. All nine role checks passed, including
+native `kz_intercept` inventory through the connected eCallMgr/FreeSWITCH path,
+four-byte framing, exact Gemini/cardinal bytes and mappings, local UI/catalog,
+Kamailio JWT/SIP/AMQP and isolated bridge consumer readiness. This verifier is
+read-only: no queue configuration, media or provider-generation writes.
+
+Actual Chromium48355/8df633 logged into the fresh master using its protected
+generated credentials, loaded the real UI with zero captured page/request/HTTP
+errors, verified .44-local API/socket configuration, opened a WebSocket and
+received200 from `/apis/`. No ignored TLS errors (this isolated target uses
+private HTTP), mocked APIs, screenshots containing credentials or saved tokens.
+This proves browser login/transport, not call audio or scoped subscriptions.
+
+Pre-reboot99dbae: all nine units enabled/active, all automatic restart counters0,
+FreeSWITCH calls0, no pending systemd jobs. Old boot ID:
+`237e582c-3f84-4700-9e41-f14b9ed48dd3`. Reboot requested only on authorized fresh
+development target .44. Reboot recovery and a post-boot ALL pass remain pending.
+
+### First fresh reboot — address-assignment race found
+
+New boot901d55aa-a271-4a06-b198-ab958f608824 confirmed. NetworkManager declared
+network-online at11:34:04, but .44's private address was still unavailable when
+listeners started at11:34:05–07. Actual journal895455 shows `eaddrnotavail` for
+CouchDB/apps/eCallMgr/Kamailio and HAProxy `Cannot assign requested address`.
+The first four recovered after one automatic restart; HAProxy's packaged unit
+has Restart=no and remained failed. This is a failed reboot acceptance, not
+hidden by the successful pre-reboot ALL pass.
+
+Installer fix adds a dedicated bounded read-only local-address gate before each
+of the seven IP-binding services. It checks actual assigned addresses, not just
+network-online, makes no remote connections or network changes, and excludes
+tentative addresses. Wildcard binding does not require a specific interface.
+Each role waits only for its own configured bind (never remote datastore/broker
+addresses). Startup has a180s systemd timeout around a120s address deadline and
+on-failure recovery; effective ExecStartPre plus helper bytes are independently
+verified. Duplicate HAProxy pidfile configuration removed (package already sets
+it). Nine helper tests and seven actual installer role/drop-in fixtures pass,
+including delayed IP, deadline, transient query failure, wrong-gate rejection
+and unselected-role preservation. Main smoke/modular suites pass50946/c4f7d6.
+Deployment and second reboot are next; no global network-manager configuration
+or original-host runtime change is made by this fix.
