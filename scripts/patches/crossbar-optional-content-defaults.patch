@@ -1,0 +1,92 @@
+diff --git a/src/cb_apps_util.erl b/src/cb_apps_util.erl
+index e133bfe0..4a5a41e4 100644
+--- a/src/cb_apps_util.erl
++++ b/src/cb_apps_util.erl
+@@ -544,6 +544,11 @@ add_service_app_doc(VendorId, AppId, AppsMap) ->
+ -spec allowed_apps_store_doc(kz_term:ne_binary(), kz_term:api_binary(), apps_map()) -> apps_map().
+ allowed_apps_store_doc(AccountId, UserId, AppsMap) ->
+     case kzd_apps_store:fetch(AccountId) of
++        {'error', 'not_found'} ->
++            %% Overrides are optional. Preserve inherited app permissions when
++            %% no local document exists; do not create data during a GET.
++            lager:debug("no apps store overrides for account ~s", [AccountId]),
++            AppsMap;
+         {'error', _R} ->
+             lager:error("failed to fetch apps store doc in ~s : ~p"
+                        ,[AccountId, _R]
+diff --git a/src/modules/cb_apps_store.erl b/src/modules/cb_apps_store.erl
+index 35be21d5..88a7e6fd 100644
+--- a/src/modules/cb_apps_store.erl
++++ b/src/modules/cb_apps_store.erl
+@@ -17,6 +17,7 @@
+         ,authenticate/1, authenticate/2, authenticate/3, authenticate/4, authenticate/5
+         ,authorize/1, authorize/2, authorize/3, authorize/4, authorize/5
+         ,validate/1, validate/2, validate/3, validate/4, validate/5
++        ,content_types_provided/1, content_types_provided/2
+         ,content_types_provided/3 ,content_types_provided/4, content_types_provided/5
+         ,content_types_accepted/4
+         ,put/2, put/3
+@@ -124,6 +125,13 @@ resource_exists(_AppId, ?OVERRIDE, ?SCREENSHOT, _AppScreenshotIndex) -> 'true'.
+ %% @doc
+ %% @end
+ %%------------------------------------------------------------------------------
++%% Collection and metadata resources retain Crossbar's default JSON types.
++-spec content_types_provided(cb_context:context()) -> cb_context:context().
++content_types_provided(Context) -> Context.
++
++-spec content_types_provided(cb_context:context(), path_token()) -> cb_context:context().
++content_types_provided(Context, _Id) -> Context.
++
+ -spec content_types_provided(cb_context:context(), path_token(), path_token()) ->
+           cb_context:context().
+ content_types_provided(Context, Id, ?ICON) ->
+diff --git a/src/modules/cb_directories.erl b/src/modules/cb_directories.erl
+index 7fac20b6..92387a81 100644
+--- a/src/modules/cb_directories.erl
++++ b/src/modules/cb_directories.erl
+@@ -14,7 +14,7 @@
+ -export([init/0
+         ,allowed_methods/0, allowed_methods/1
+         ,resource_exists/0, resource_exists/1
+-        ,content_types_provided/2
++        ,content_types_provided/1, content_types_provided/2
+         ,to_pdf/1
+         ,validate/1, validate/2
+         ,put/1
+@@ -85,6 +85,10 @@ resource_exists(_) -> 'true'.
+ %% Of the form `{atom, [{Type, SubType}]} :: {to_json, [{<<"application">>, <<"json">>}]}'
+ %% @end
+ %%------------------------------------------------------------------------------
++%% A directory collection is JSON; PDF is offered only for an individual item.
++-spec content_types_provided(cb_context:context()) -> cb_context:context().
++content_types_provided(Context) -> Context.
++
+ -spec content_types_provided(cb_context:context(), path_token()) -> cb_context:context().
+ content_types_provided(Context, _Id) ->
+     case cb_context:req_verb(Context) of
+diff --git a/src/modules/cb_vmboxes.erl b/src/modules/cb_vmboxes.erl
+index 58c979ca..75956241 100644
+--- a/src/modules/cb_vmboxes.erl
++++ b/src/modules/cb_vmboxes.erl
+@@ -21,6 +21,7 @@
+         ,resource_exists/0, resource_exists/1, resource_exists/2, resource_exists/3, resource_exists/4
+         ,validate/1, validate/2, validate/3, validate/4, validate/5
+         ,content_types_accepted/3, content_types_accepted/4, content_types_accepted/5
++        ,content_types_provided/1, content_types_provided/2
+         ,content_types_provided/3, content_types_provided/4, content_types_provided/5
+         ,put/1, put/3, put/5
+         ,post/2, post/3, post/4
+@@ -281,6 +282,13 @@ maybe_add_types_accepted(Context, _, _) -> Context.
+ %% @doc Add content types provided by this module
+ %% @end
+ %%------------------------------------------------------------------------------
++%% Collection and mailbox metadata use the default JSON representation.
++-spec content_types_provided(cb_context:context()) -> cb_context:context().
++content_types_provided(Context) -> Context.
++
++-spec content_types_provided(cb_context:context(), path_token()) -> cb_context:context().
++content_types_provided(Context, _VMBox) -> Context.
++
+ -spec content_types_provided(cb_context:context(), path_token(), path_token()) -> cb_context:context().
+ content_types_provided(Context, _VMBox, ?MESSAGES_RESOURCE) ->
+     maybe_add_types_provided(Context, ?MESSAGES_RESOURCE, cb_context:req_verb(Context)).

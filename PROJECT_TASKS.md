@@ -2,6 +2,16 @@
 
 ## Immediate operator follow-up — September8
 
+- **CB-CONTENT-01 SOURCE FIX / DEPLOYMENT NEXT:** explicit default JSON callbacks
+  for apps-store collection/item, voicemail collection/item and directory
+  collection; optional absent apps-store overrides preserve inherited permissions
+  without error logging or GET-time writes. Real datastore errors still log and
+  existing blacklists still apply. Production-compiled regression: six failures
+  before (`0946ad`), all nine cases pass after (`63cef2`), including PDF/audio
+  representations. Installer fresh/repeat/reverse/conflict byte replay passes
+  `7a0528`. Tracked `crossbar-optional-content-defaults.patch` is applied by the
+  normal installer; no separate Crossbar commit. Deploy/recheck remains required.
+
 - **LOAD-01 TERMINAL10423 / LOG GATE OPEN:** 30+5 calls completed with35/0
   caller and35/0 agent successes/failures,180s concurrent hold, RTP and ready
   checks passed. Final gate failed on eight application error lines during
