@@ -2,18 +2,19 @@
 
 ## Immediate operator follow-up — September8
 
-- **P0-CALLBACK-CONFIRM-01 SOURCE FIXED — returned prompt cut off by valid
+- **P0-CALLBACK-CONFIRM-01 DEPLOYED — returned prompt cut off by valid
   short timeout:** confirmation_timeout3 began before the4.331s English
   instruction completed. Actual worker regression77012/66fe74 fails before;
   final14542/a37868 passes all7 caller tests. A separate30s playback watchdog
   now precedes the configured response window, bound to exact call/noop;
   early digit1 works and duplicate/stale events cannot extend or resurrect it.
-  OpenAPI regenerated. Source f593ab0 pushed/synced; normal apps deployment
-  `kz5-callback-confirmation-deadline-main44-20260908` is active (observer68345,
-  PID741452). Observe this job, no duplicate install or source sync mid-build.
-  Terminal/parity, `/apis` publication and one scoped native short-window case
-  remain pending. Ordinary retry fixtures use15 seconds and cannot prove the
-  minimum3-second case. See `doc/callback_confirmation_deadline.md`.
+  Normal apps installer68345/50b9bf exits0; runtime production BEAM matches
+  disk16532/e149bd, `/apis` published/readback verified. The explicitly armed
+  native3-second case21843/e6c70b reached unanswered/retry/reciprocal bridge,
+  then failed the separate strict RTP-continuity assertion. Timeout restored
+  and zero calls; do not label the whole case PASS or rerun blindly. Offline
+  complete-payload/deadline timing replay pending. Ordinary15-second retry
+  fixtures cannot prove this case. See `doc/callback_confirmation_deadline.md`.
 
 - **VOICE-01 locale spelling UI DEPLOYED:** existing `HE_IL`/`HE-IL`
   queues were selected and adopted as English despite backend Hebrew playback.

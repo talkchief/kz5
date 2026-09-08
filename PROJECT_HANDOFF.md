@@ -1,17 +1,19 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Priority: P0-CALLBACK-CONFIRM-01 source corrected, deployment running.**
+**Priority: P0-CALLBACK-CONFIRM-01 deployed; native strict-media gate failed.**
 A legal three-second returned-caller response timer began before its4.331s
 English recording finished. Source now separates the bounded playback phase
 from the response window and correlates completion exactly; early confirmation
 is retained, stale/duplicate events cannot restart it. Actual worker baseline
 77012 fails; final14542/a37868 passes all7 caller tests. OpenAPI regenerated.
-Source f593ab0 pushed/synced; normal apps job
-`kz5-callback-confirmation-deadline-main44-20260908` is active, observer68345,
-PID741452. Observe this job; no hot load, duplicate install or source sync during
-the build. Then runtime parity, publish `/apis`, and one native short-window
-case: the existing retry fixture uses15 seconds, not3. See
-`doc/callback_confirmation_deadline.md` for the log and remaining acceptance.
+Source f593ab0 deployed through normal apps installer68345/50b9bf, exit0;
+runtime production MD5 matches disk16532/e149bd. `/apis` published and verified.
+New short-window mode0615e50 tests the real3-second setting, not the ordinary15.
+Its native case21843/e6c70b completed the retry/bridge but failed strict RTP
+coverage, then restored the timeout; zero calls/services active confirmed.
+Both jobs are terminal. Do not repeat them. Next: additive offline deadline
+payload diagnosis on `/var/log/kazoo-acceptance/20260908T231049Z`, without
+reclassifying the strict failure. See `doc/callback_confirmation_deadline.md`.
 
 **VOICE-01 queue locale spelling UI correction deployed.** Backend
 `HE_IL`/`HE-IL` was displayed and saved as English by the editor. Source now

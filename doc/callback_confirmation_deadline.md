@@ -1,6 +1,6 @@
 # Returned-caller confirmation deadline
 
-September 8, 2026 — P0-CALLBACK-CONFIRM-01, source fixed; deployment running.
+September 8, 2026 — P0-CALLBACK-CONFIRM-01, deployed; native strict-media gate failed.
 
 The API permits `callback.confirmation_timeout=3`. The worker previously
 started that three-second timer when it submitted playback, although the
@@ -47,16 +47,24 @@ digit1 after completion but within the response window, a single agent bridge,
 and exact fixture restoration. Do not rerun unrelated load/voice suites or
 mark the separate strict RTP-timing failure passed.
 
-Source `f593ab0` is pushed to master and synced to main. Pre-install93ecc5
-confirmed zero native calls. The normal deployment is currently running:
+Source `f593ab0` is pushed to master and deployed on main. Pre-install93ecc5
+confirmed zero native calls. The normal deployment completed successfully:
 
 - Unit: `kz5-callback-confirmation-deadline-main44-20260908`.
-- Observer:68345; authoritative54cee7 confirms active/running, MainPID741452.
+- Observer:68345/50b9bf, exit0 in11m44.842s,368.2MiB peak.
 - Log: `/root/kz5-acceptance/callback-confirmation-deadline-main44-20260908.log`.
+- Log SHA256: `feb5b47cf818460776ac4eb9458d2d0df9fb1a92806d3c12fffcf881fb176f7e`.
 
-Observe that exact job; do not restart it because output is quiet. Do not sync
-additional source into main during the build. Completion/runtime parity and
-static `/apis` publication remain pending.
+Runtime check16532/e149bd confirms `acdc_callback_caller` is loaded from its
+production BEAM in `/opt/kz5/applications/acdc/ebin/`, matching disk MD5
+`c36359252aa5033a4bfc1acbf2828d7f`. Test-only helpers are not exported. Both
+apps/eCallMgr were active; post-deployb43491 confirmed zero calls before testing.
+This installer job is terminal; do not poll or repeat it.
+
+Static `/apis` publication also passed (unit
+`kz5-callback-deadline-docs-main44-20260908`,87971/df0dc1,834ms). HTTPS readback
+383c7f confirms the queue confirmation-timeout description. This uses the
+private main address with certificate validation, not a public-routing test.
 
 The ordinary retry fixture installs `confirmation_timeout:15`; an ordinary
 retry PASS therefore cannot prove this minimum-window case. The new explicit
@@ -94,4 +102,23 @@ bash scripts/test-acdc-callback-retry.sh --live --keep-fixture \
 
 Use a bounded unit and protected log. The mode retains
 `callback-confirmation-deadline-edit.json` alongside normal packet/bridge
-evidence. It is implemented, not yet native-validated.
+evidence. Source0615e50 is synced to main. Preparation43222/e62431 passed with
+no API writes or SIP traffic. Native unit `kz5-callback-short-window-main44-20260908`
+completed (observer21843/e6c70b, exit1 in3m56.375s,70.4MiB peak), log
+`/root/kz5-acceptance/callback-short-window-main44-20260908.log`.
+Observation8acc59 confirms timeout edit, original audio, unanswered first attempt,
+durable retry and reciprocal second bridge. The lifecycle/phase-scoped SIP/RTP
+gate passed, but the full returned-audio gate failed `covered.every(Boolean)`
+at `assert-callback-returned-audio.cjs:62`. The conditional timeout restoration
+completed with state=restored, verified=false (925311). Independent e16c85
+confirms zero calls and active apps/eCallMgr. The later aggregate log/core and
+agent-readiness gates were not reached; do not claim full acceptance.
+
+Evidence directory: `/var/log/kazoo-acceptance/20260908T231049Z`.
+Run-log SHA256:
+`ed0c3069bc5ac8a48c8f9788e8e44963b74aa369133426639067acbe09489f73`.
+Do not repeat this call to hunt for a PASS. The additive offline diagnostic
+now accepts the `deadline` scenario, checks the exact15->3->15 receipt and
+actual complete ordered English payload/digit timing, and preserves the strict
+failure independently. It explicitly does not claim native negative-expiry
+coverage. Its first replay remains pending.
