@@ -18,7 +18,9 @@ JSON; normal rerun23557/5db474 **PASS** for apps/eCallMgr, fresh admin/API/SUP,
 and 796 shared prerecorded media documents. Services are enabled/active with
 zero automatic restarts; `kazoo-applications.service` alias verified.
 SIP template fix `c40fd2d` and sound readability fix `237716e` are pushed.
-Normal .44 FreeSWITCH/Kamailio install84616 is running; SIP/media, current
+Normal .44 FreeSWITCH/Kamailio install84616 finished13c663 with a pre-start
+permission-check failure after successful compilation. Sound manifest transport
+and public binary-parent permissions are being corrected; SIP/media, current
 local-stack UI and final independent fresh ALL verification remain open.
 This is the P0
 installer continuation, not full fresh-stack certification.

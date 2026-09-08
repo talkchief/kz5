@@ -4,7 +4,8 @@ const source=fs.readFileSync(path.join(__dirname,'install-kazoo5.sh'),'utf8');
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'kazoo-sound-modes-'));
 try {
   fs.chmodSync(tmp,0o755);
-  const build=tmp+'/build', destination=tmp+'/sounds', manifest=tmp+'/sounds.manifest';
+  const build=tmp+'/build', destination=tmp+'/sounds', manifest=tmp+'/private-manifests/sounds.manifest';
+  fs.mkdirSync(path.dirname(manifest),{mode:0o700});
   fs.mkdirSync(destination,{mode:0o755});
   for(const locale of ['en/us','es/es','fr/fr','music']) {
     const from=build+'/kazoo-sounds/freeswitch/'+locale;

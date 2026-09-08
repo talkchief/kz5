@@ -290,3 +290,15 @@ FreeSWITCH1.11.3 and Kazoo integration are compiling. Do not change remote sourc
 while this installer is running. Next: SIP/media acceptance, rebuild current UI
 against the independent local .44 stack, then independent `--verify-only ALL`.
 Original development services were not restarted during these fresh-host runs.
+
+Install84616/13c663 subsequently completed FreeSWITCH compilation and installation,
+then failed the new service-user sound check before starting FreeSWITCH. The WAV
+itself was readable (a04742); the verifier incorrectly made the service open a
+manifest beneath a root0700 installer-state directory. Pass the root-validated
+manifest on stdin instead, preserving private installer-state permissions.
+Read-only inspection also found root0700 FreeSWITCH executable/library parents
+from `make install` under umask077. Install public build output with umask022 and
+repair only the five exact runtime parent directories on reruns; keep private
+etc/var trees unchanged, reject symlinks, and check binary execution as the actual
+service user before starting it. Regressions include a private manifest parent,
+unprivileged binary execution, unchanged private paths and symlink rejection.

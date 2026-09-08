@@ -29,7 +29,11 @@
   umask077 are also fixed/tested (`c40fd2d`), with untouched secrets/custom files.
   FreeSWITCH sound traversal/readability and existing-audio preservation are
   fixed/tested (`237716e`). Normal FreeSWITCH/Kamailio install84616 is running
-  on .44. SIP/media acceptance, current local-stack UI and final fresh ALL
+  on .44. It completed compilation but failed13c663 before startup: the sound
+  verifier could not traverse the private installer manifest directory, and
+  inspection found restrictive public binary parents. Focused stdin-manifest
+  and runtime-directory fixes are under regression test. SIP/media acceptance,
+  current local-stack UI and final fresh ALL
   verification remain P0. The user confirms HTTPS
   login works; the new server uses verified private-network TLS for that host.
 - [Detailed evidence, commands and recovery paths](doc/fresh_host_tls_acceptance_20260908.md).

@@ -4114,7 +4114,7 @@ EOF
             LDFLAGS="-L/usr/local/lib64 -Wl,-rpath,/usr/local/lib64" \
             ./configure --prefix=/usr/local/freeswitch --disable-dependency-tracking
         make -j"$KAZOO_MAKE_JOBS"
-        make install
+        (umask 022; make install)
     )
     freeswitch_build_fingerprint | write_file 0644 "$marker"
     ldconfig
@@ -4154,6 +4154,18 @@ configure_freeswitch_logging() {
     </profiles>
 </configuration>
 EOF
+}
+
+prepare_freeswitch_runtime_permissions() {
+    # Build output contains public executables/libraries, not deployment secrets.
+    # Repair only their parent directories on an existing restrictive-umask build.
+    local directory
+    for directory in /usr/local/freeswitch /usr/local/freeswitch/bin \
+        /usr/local/freeswitch/lib /usr/local/freeswitch/lib/freeswitch \
+        /usr/local/freeswitch/lib/freeswitch/mod; do
+        validate_config_directory "$directory"
+        run install -d -o root -g root -m 0755 "$directory"
+    done
 }
 
 configure_kazoo_freeswitch() {
@@ -4275,6 +4287,7 @@ EOF
     run mkdir -p /var/lib/kazoo-freeswitch /var/log/freeswitch /run/freeswitch /usr/share/kazoo-freeswitch/sounds
     run chown -R freeswitch:freeswitch /var/lib/kazoo-freeswitch /var/log/freeswitch /run/freeswitch /usr/share/kazoo-freeswitch
     run install -d -m 0750 -o freeswitch -g freeswitch /var/log/freeswitch
+    prepare_freeswitch_runtime_permissions
     install_freeswitch_sounds
 }
 
@@ -4308,13 +4321,13 @@ verify_freeswitch_sounds() {
     runuser --user freeswitch -- python3 -B -I -c '
 import pathlib, sys
 try:
-    for name in pathlib.Path(sys.argv[1]).read_text().splitlines():
+    for name in sys.stdin.read().splitlines():
         with (pathlib.Path("/usr/share/kazoo-freeswitch/sounds") / name).open("rb") as audio:
             if not audio.read(1):
                 raise OSError("empty audio")
 except OSError:
     raise SystemExit("FreeSWITCH service user cannot read a required sound")
-' "$manifest" || die 'FreeSWITCH sounds are not readable by the service user'
+' < "$manifest" || die 'FreeSWITCH sounds are not readable by the service user'
     log "PASS ${count} FreeSWITCH speech and hold-music files"
 }
 
@@ -4342,6 +4355,10 @@ install_freeswitch() {
         build_kazoo_freeswitch
     fi
     configure_kazoo_freeswitch
+    if [[ $DRY_RUN != true ]]; then
+        runuser --user freeswitch -- /usr/local/freeswitch/bin/freeswitch -version >/dev/null || \
+            die 'FreeSWITCH service user cannot execute the installed binary'
+    fi
     service_enable_restart kazoo-freeswitch.service
     wait_for_port 127.0.0.1 8021 90 || die 'Kazoo FreeSWITCH event socket did not open port 8021'
     wait_for_port "$KAZOO_ERLANG_DIST_IP" 8031 90 || \
