@@ -1,5 +1,13 @@
 # Kazoo 5 — start here / engineering handoff
 
+Main development host also passes the ordinary selected `push-bridge` install
+at source `2b2043c` (14352/30a1d9), including locked dependencies, protected
+configuration, systemd activation/consumer readiness and unchanged CRB repo
+timestamp. This was a real same-host bridge redeployment on .44, not a new
+fresh-server test. Source and remote-TLS receipt SHA were independently matched.
+All nine main services remain active; bridge PID57635 is registered. The
+temporary test broker remains inactive with PID0 (fa350f).
+
 September8 source-retention follow-up: `/opt/kz5` on10.1.0.44 was independently
 fast-forwarded from GitHub to `1f30654`; subsequent follow-up commits must also
 be synced there. The UI progress-counter, HTTPS catalog and dialog fixes are

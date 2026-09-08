@@ -55,6 +55,12 @@ outage/reconnect and duplicate-dispatch recovery gates remain open.
 
 ## Result and scope
 
+The subsequent same-host normal bridge redeployment on the main development
+host .44 also passes14352/30a1d9 at source `2b2043c`, with unchanged CRB mtime,
+locked dependency/config/source verification and registered service PID57635.
+All nine main services remain active, and the temporary test broker is inactive
+with PID0 (fa350f). This follow-up does not add clean-host or outage coverage.
+
 **PASS ef7ad0 / session6035:** the original development host10.1.0.26 ran the
 actual bridge consumer/owner loop against a distinct native RabbitMQ3.13.7
 instance on the main dev host10.1.0.44. The connection negotiated TLS1.3.

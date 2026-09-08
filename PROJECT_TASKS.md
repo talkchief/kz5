@@ -23,6 +23,8 @@
   timeout/orphan correction is retained, not hidden. Temporary broker stopped;
   main RabbitMQ PID2355/restarts0 and all nine services unchanged. Outage and
   duplicate-dispatch recovery remain open; details in `PROJECT_HANDOFF.md`.
+  Main .44 normal bridge redeployment at `2b2043c` also passes14352/30a1d9,
+  with current source/dependencies, registered service and unchanged CRB mtime.
 - **BRIDGE-REMOTE-01 NATIVE REMOTE TLS/CONSUMER PASS:** actual .26 client to
   isolated native .44 RabbitMQ6035/ef7ad0 passes TLS1.3, certificate negative
   cases, authenticated HTTPS exact-broker checks, registered consumer,503→200
