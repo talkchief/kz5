@@ -8,6 +8,11 @@ cardinal_fixture=$(mktemp -d /tmp/kazoo-cardinal-shell.XXXXXX)
 trap 'printf "Cardinal shell fixture: %s\n" "$cardinal_fixture"' EXIT
 DRY_RUN=false
 install_nodejs_toolchain() { :; }
+run() {
+    [[ "$*" == 'dnf -y install sox' ]] || return 91
+    printf '%s\n' dependency:sox >>"$cardinal_fixture/events"
+    [[ ${CARDINAL_REJECT_DEPENDENCY:-false} != true ]]
+}
 ensure_system_media_database() { printf '%s\n' database >>"$cardinal_fixture/events"; }
 write_file() { printf 'write:%s\n' "$2" >>"$cardinal_fixture/events"; /usr/bin/cat >/dev/null; }
 validate_acdc_language_receipt() { /usr/bin/cat >/dev/null; }
@@ -35,13 +40,18 @@ node() {
 }
 # A missing final source/map must reject before system_media creation or fixed
 # imports, including reruns against an existing remote CouchDB.
+if (export CARDINAL_REJECT_DEPENDENCY=true; install_acdc_language_packs); then
+    die 'Missing source-verification dependency was accepted'
+fi
+[[ $(<"$cardinal_fixture/events") == dependency:sox ]]
+: >"$cardinal_fixture/events"
 if (export CARDINAL_REJECT_PLAN=true; install_acdc_language_packs); then
     die 'Incomplete cardinal source was accepted'
 fi
-[[ $(<"$cardinal_fixture/events") == $'fixed:--plan\ncardinal:--plan' ]]
+[[ $(<"$cardinal_fixture/events") == $'dependency:sox\nfixed:--plan\ncardinal:--plan' ]]
 : >"$cardinal_fixture/events"
 install_acdc_language_packs
-[[ $(<"$cardinal_fixture/events") == $'fixed:--plan\ncardinal:--plan\ndatabase\nfixed:--import\nfixed:--verify-only\nwrite:/usr/local/share/kazoo5-installer/acdc-gemini-media.json\ncardinal:--import\ncardinal:--verify-only\nwrite:/usr/local/share/kazoo5-installer/acdc-cardinal-media.json' ]]
+[[ $(<"$cardinal_fixture/events") == $'dependency:sox\nfixed:--plan\ncardinal:--plan\ndatabase\nfixed:--import\nfixed:--verify-only\nwrite:/usr/local/share/kazoo5-installer/acdc-gemini-media.json\ncardinal:--import\ncardinal:--verify-only\nwrite:/usr/local/share/kazoo5-installer/acdc-cardinal-media.json' ]]
 # Actual receipt predicate rejects missing/duplicate locales and readiness claims.
 valid=$(node "$SCRIPT_DIR/install-acdc-cardinal-pack.cjs" --verify-only --all-locales --model-trial-index \
     "$SCRIPT_DIR/assets/acdc-gemini-cardinal-model-trials-20260907/index.json" --model-trial-index-sha256 \

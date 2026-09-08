@@ -3052,6 +3052,9 @@ install_acdc_language_packs() (
     [[ -s $SCRIPT_DIR/import-acdc-gemini-voices.cjs && -s $SCRIPT_DIR/validate-acdc-gemini-receipt.cjs ]] || \
         die 'Required immutable voice import/receipt tools are missing'
     install_nodejs_toolchain
+    # The source verifier replays the pinned resampling recipe offline. Apps
+    # build dependencies are installed later, so clean hosts need SoX here.
+    run dnf -y install sox || die 'Could not install prerecorded audio verification dependency: sox'
     receipt=$(mktemp /tmp/kazoo-acdc-gemini-media.XXXXXX)
     trap 'rm -f -- "$receipt"' EXIT
     # Verify every checked-in source before any database or application effect.
