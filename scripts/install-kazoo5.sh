@@ -5226,6 +5226,7 @@ monster_ui_build_fingerprint() {
         monster-ui-app-load-singleflight.patch:patches/monster-ui-app-load-singleflight.patch
         monster-ui-websocket-config.patch:patches/monster-ui-websocket-config.patch
         monster-ui-websocket-subscription-lifecycle.patch:patches/monster-ui-websocket-subscription-lifecycle.patch
+        monster-ui-dialog-resize-lifecycle.patch:patches/monster-ui-dialog-resize-lifecycle.patch
         monster-ui-optional-integrations.patch:patches/monster-ui-optional-integrations.patch
         monster-ui-isolated-minify.patch:patches/monster-ui-isolated-minify.patch
         monster-ui-preloaded-apps.patch:patches/monster-ui-preloaded-apps.patch
@@ -5330,6 +5331,7 @@ sync_monster_ui_sources() {
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-app-load-singleflight.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-websocket-config.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-websocket-subscription-lifecycle.patch"
+    apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-dialog-resize-lifecycle.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-optional-integrations.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-isolated-minify.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-preloaded-apps.patch"

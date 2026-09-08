@@ -67,6 +67,7 @@ test('New settings are persisted, fingerprinted and passed through the real sour
     for (const name of ['MONSTER_UI_WEBSOCKET_URL', 'MONSTER_UI_REMOTE_BRANDING', 'MONSTER_UI_BRAINTREE',
         'configure-monster-runtime.cjs', 'monster-ui-branding-billing.patch', 'monster-ui-account-picker-readiness.patch', 'monster-ui-websocket-config.patch',
         'monster-ui-websocket-subscription-lifecycle.patch',
+        'monster-ui-dialog-resize-lifecycle.patch',
         'monster-ui-optional-integrations.patch']) assert(fingerprint.includes(name), 'Missing build identity input: ' + name);
     const configureApi = functionSource('configure_monster_ui_api');
     assert(configureApi.includes('"$KAZOO_API_URL" "$MONSTER_UI_WEBSOCKET_URL" "$MONSTER_UI_REMOTE_BRANDING" "$MONSTER_UI_BRAINTREE"'));
@@ -93,7 +94,7 @@ test('Legacy initializer runs after artifact preservation, outside rebuild-only 
             + 'install_api_developer_docs(){ :; }\nconfigure_monster_ui_nginx(){ :; }\n'
             + 'node(){ printf "Unexpected Node action during dry run\\n" >&2; exit 42; }\n'
             + install + '\ninstall_monster_ui\n',
-        env: {PATH: '/usr/bin:/bin', DRY_RUN: 'true', KAZOO_BUILD_ROOT: '/unused-fixture-build', MONSTER_UI_APPS_LIST: 'acdc'}});
+        env: {PATH: '/usr/bin:/bin', DRY_RUN: 'true', MONSTER_CATALOG_MODE: 'local', KAZOO_BUILD_ROOT: '/unused-fixture-build', MONSTER_UI_APPS_LIST: 'acdc'}});
     assert.equal(dryRun.status, 0, 'Actual dry-run branch must return before initialization or build: ' + dryRun.stderr);
     assert(install.lastIndexOf('configure_monster_ui_nginx') < install.indexOf('run nginx -t'));
     assert(install.indexOf('run nginx -t') < install.indexOf('service_enable_restart nginx.service'));
@@ -246,7 +247,7 @@ test('Transition + readiness + branding/billing + socket/lifecycle + optional pa
     const pin = '7ef735eada6fd0e2b96c06f32c0bb868867f7d18';
     assert.equal(cp.execFileSync('git', ['-C', framework, 'rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(), pin);
     const files = new Map(), patches = ['monster-ui-myaccount-transition.patch', 'monster-ui-branding-billing.patch', 'monster-ui-account-picker-readiness.patch',
-        'monster-ui-websocket-config.patch', 'monster-ui-websocket-subscription-lifecycle.patch', 'monster-ui-optional-integrations.patch'];
+        'monster-ui-websocket-config.patch', 'monster-ui-websocket-subscription-lifecycle.patch', 'monster-ui-dialog-resize-lifecycle.patch', 'monster-ui-optional-integrations.patch'];
     for (const patchName of patches) {
         const patchPath = path.join(__dirname, 'patches', patchName);
         const patch = fs.readFileSync(patchPath, 'utf8');
@@ -277,7 +278,7 @@ test('Transition + readiness + branding/billing + socket/lifecycle + optional pa
             result.push(...baseline.slice(cursor)); files.set(file, result.join('\n'));
         }
     }
-    assert.equal(files.size, 11, 'Unexpected framework patch scope');
+    assert.equal(files.size, 12, 'Unexpected framework patch scope');
     for (const [file, bytes] of files) assertTextEqual(fs.readFileSync(path.join(framework, file), 'utf8'), bytes, 'Byte mismatch: ' + file);
     cp.execFileSync('git', ['-C', framework, 'apply', '--check', '--reverse',
         ...patches.map(name => path.join(__dirname, 'patches', name))], {stdio: 'pipe'});

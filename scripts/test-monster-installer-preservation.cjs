@@ -27,7 +27,7 @@ function funcs(...names){return names.map(n=>{
 const common='set -euo pipefail\ndie(){ printf "%s\\n" "$*" >&2; exit 1; }\nlog(){ :; }\nwrite_file(){ local mode=$1 target=$2; install -m "$mode" /dev/stdin "$target"; }\n';
 function shell(code,env={},root=temp){
     return spawnSync('bash',['-c',common+code.replaceAll('/usr/local/share/kazoo5-installer',path.join(root,'registry'))],
-        {encoding:'utf8',env:{...process.env,DRY_RUN:'false',SCRIPT_DIR:__dirname,...env}});
+        {encoding:'utf8',env:{...process.env,DRY_RUN:'false',MONSTER_CATALOG_MODE:'local',SCRIPT_DIR:__dirname,...env}});
 }
 function succeeds(result){assert.equal(result.status,0,result.stderr);return result.stdout;}
 try {
@@ -50,8 +50,8 @@ try {
             fs.copyFileSync(path.join(__dirname,file),path.join(scripts,file));
         write(path.join(scripts,'assets/monster-ui/package-lock.npm10.json'),fs.readFileSync(path.join(__dirname,'assets/monster-ui/package-lock.npm10.json')));
         write(path.join(scripts,'assets/monster-ui/minifier-profile.json'),fs.readFileSync(path.join(__dirname,'assets/monster-ui/minifier-profile.json')));
-        const patches=['monster-ui-myaccount-transition.patch','monster-ui-branding-billing.patch','monster-ui-account-picker-readiness.patch','monster-ui-websocket-config.patch','monster-ui-websocket-subscription-lifecycle.patch',
-            'monster-ui-optional-integrations.patch','monster-ui-callflows-acdc-queue.patch','monster-ui-callflows-css-nesting.patch','monster-ui-npm-native-overrides.patch','monster-ui-isolated-minify.patch','monster-ui-preloaded-apps.patch'];
+        const patches=['monster-ui-myaccount-transition.patch','monster-ui-branding-billing.patch','monster-ui-account-picker-readiness.patch','monster-ui-background-app-load.patch','monster-ui-app-load-singleflight.patch','monster-ui-call-forward-confirmation.patch','monster-ui-websocket-config.patch','monster-ui-websocket-subscription-lifecycle.patch',
+            'monster-ui-dialog-resize-lifecycle.patch','monster-ui-optional-integrations.patch','monster-ui-callflows-acdc-queue.patch','monster-ui-callflows-css-nesting.patch','monster-ui-npm-native-overrides.patch','monster-ui-isolated-minify.patch','monster-ui-preloaded-apps.patch'];
         for(const file of patches)write(path.join(scripts,'patches',file),fs.readFileSync(path.join(['monster-ui-npm-native-overrides.patch','monster-ui-isolated-minify.patch'].includes(file)?__dirname:path.join(project,'scripts'),'patches',file)));
         const env={SCRIPT_DIR:scripts,MONSTER_UI_REF:'a'.repeat(40),MONSTER_UI_NODE_MAJOR:'18',MONSTER_UI_LOCK_SHA256:'b'.repeat(64),
             MONSTER_UI_APPS_LIST:'callflows',MONSTER_UI_CALLFLOWS_REF:'c'.repeat(40),KAZOO_API_URL:options.api,

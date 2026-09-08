@@ -1,0 +1,23 @@
+diff --git a/src/js/lib/monster.ui.js b/src/js/lib/monster.ui.js
+--- a/src/js/lib/monster.ui.js
++++ b/src/js/lib/monster.ui.js
+@@ -760,6 +760,11 @@
+ 				return $dialogBody.closest('.ui-dialog');
+ 			});
+ 			var setDialogSizes = function() {
++				// A queued resize may outlive a closed or externally destroyed dialog.
++				if (!$dialogBody.data('ui-dialog')) {
++					return;
++				}
++
+ 				var $dialog = getFullDialog();
+ 				var dialogMaxHeight = $window.height() - 48;	// 100% - 3rem
+ 				var dialogMaxWidth = $window.width() - 48;	// 100% - 3rem
+@@ -813,6 +818,7 @@
+ 
+ 					// Clear events
+ 					$window.off('resize', windowResizeHandler);
++					windowResizeHandler.cancel();
+ 
+ 					// Remove elements
+ 					$('div.popover').remove();
