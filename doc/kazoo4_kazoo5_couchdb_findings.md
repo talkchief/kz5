@@ -137,6 +137,9 @@ counts/revisions); subsequent canonical working restore also passes5405/120ead,
 terminal success1m8.444s. Working databases keep canonical `account/` names for
 native Kazoo. Snapshot files are now read-only/root-only0400. The lab broker/apps
 are restarted after the successful import, with main stack services untouched.
+Post-restore verificatione5a400 confirms Crossbar, ACDC, Callflow, Blackhole and
+database bootstrap; all three lab units share the separate namespace, no default
+route exists, and lab Crossbar8000 is listening. All copy/restore jobs are terminal.
 
 The protected export uses GET-only `_changes` and exact revision/document reads;
 it does not invoke source replication/checkpoint writes. It captures current
@@ -153,7 +156,7 @@ physical `.couch` file downgrade compatibility.
 
 ## Still required
 
-- Recheck native lab application/API readiness after the completed monthly restore.
+- Exercise authenticated Crossbar API reads/edits after the completed monthly restore.
 - Extend measured account refresh/view comparisons to MODB migrations and
   additional views/edge cases.
 - Exercise remaining normal Kazoo5 migrations plus representative API reads/edits and

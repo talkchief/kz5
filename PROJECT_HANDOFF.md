@@ -46,7 +46,10 @@ interrupted monthly baseline sets remain preserved: do NOT use them. Accepted
 monthly baselines use `baseline-verified-account/`; account baseline uses
 `baseline-account/`; working names remain canonical `account/`.
 Only lab broker/apps restarted after completed imports (65bd11); all9main
-services active. Next: recheck native lab readiness, API/edit and broader/MODB
+services active. Post-restore native status e5a400 verifies Crossbar/ACDC/
+Callflow/Blackhole, database bootstrap, all three lab units in the same separate
+namespace, no default route and lab Crossbar8000 listening. All copy/restore/
+test jobs are terminal. Next: API/edit and broader/MODB
 migrations. Exact production Kazoo4 app host/version requested asynchronously;
 unknowns and engine3.3.2→3.5.2 limits remain explicit. See
 [assessment plan](doc/kazoo4_kazoo5_couchdb_coexistence_plan.md); never point the
