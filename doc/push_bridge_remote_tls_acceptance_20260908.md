@@ -1,5 +1,67 @@
 # Mobile bridge: actual cross-server TLS consumer acceptance
 
+## In-flight uncertain HTTP delivery: containment, not automatic recovery
+
+**PASS 42712/afe573:** `scripts/accept-bridge-inflight-loss.py` extends the
+existing guarded remote TLS/registered-consumer proof. It first reruns all
+native retry/companion/exhaustion cases, then launches a separate child using
+the production `BridgeRuntime.run(fail_stop_exit=True)`, connector, verified
+quorum topology, worker pool, freshness, owner settlements and fatal deadline.
+Only constructor/provider delivery are substituted. The delivery performs a
+real HTTP POST to an exclusively bound loopback fixture; no FCM/APNs clients,
+OAuth flow, mobile tokens or production bridge settings are loaded.
+
+The fixture records exactly one accepted POST but withholds its HTTP response.
+The test identifies the child's actual TLS socket using its PID, correlates
+it to the UUID queue's single consumer and the authenticated isolated broker
+connection, then closes **only that connection** using the supported
+[RabbitMQ connection-close endpoint](https://www.rabbitmq.com/docs/http-api-reference#delete--api-connections-name).
+It never closes all connections by username or stops a broker during this case.
+
+Verified result:
+
+- Child exits with code 78 in 3.532 seconds after connection closure.
+- Exactly one synthetic HTTP POST was accepted, with no second dispatch.
+- The original body is read back unchanged from RabbitMQ, `redelivered=true`
+  and `x-delivery-count=1`. The readback is an inspector, not a recovery worker.
+- Only after that evidence, the inspector ACKs this synthetic body and removes
+  the now-empty owned UUID queues/exchanges. No real message is deleted.
+- Runner and production source hashes are unchanged during the test.
+
+The result validates the existing uncertainty-containment policy. **It does
+not establish safe automatic replay or high availability.** An accepted send
+with no received response remains ambiguous, so manual evidence review is
+required before recovery. The normal bridge service was not reconfigured;
+this child test does not exercise systemd's installed no-restart-on-78 policy,
+real provider protocol behavior, loss after an HTTP result, or competing nodes.
+Those scopes remain open rather than being inferred from this pass.
+
+Run only against the existing owned, certificate-valid isolated broker:
+
+```sh
+bash /opt/kz5/scripts/run-kazoo-validation.sh \
+  --memory-mib 384 --reserve-mib 512 --runtime-sec 180 -- \
+  /usr/local/lib/kazoo-push-bridge/current/venv/bin/python -B -I \
+  /opt/kz5/scripts/accept-bridge-inflight-loss.py \
+  --run-development-inflight-loss-proof
+```
+
+The runner inherits the fixed `.26` client / `.44:35671` TLS authority guards,
+creates fresh UUID resources, and retains a root-only receipt. Six tests in
+`scripts/test-accept-bridge-inflight-loss.py` cover wrong broker/mode/queue,
+nonlocal/credentialed HTTP destinations, input bounds, actual loopback held
+responses and body rejection (68f213). The native run is the acceptance for the
+connection-loss/retained-body case, not those scope tests alone.
+
+Receipt and public test CA were copied to the main development host:
+`/root/kz5-acceptance/bridge-remote-tls/bridge-remote-tls-08509fba-85ec-4d38-9627-de9e086070d6/`.
+Receipt SHA256 independently matchesd6edd0:
+`f04ae8d73838a9615b87f20b1965980fda6403160c88e501a9220feb028b9c0b`.
+Original evidence is at the same basename under `/var/log/kazoo-acceptance/`
+on `.26`. The temporary broker is stopped again (f2a441), main RabbitMQ remains
+PID2355/restarts0, main bridge PIDs2439533/57635 are unchanged, and all nine
+main `.44` services are active (d6edd0).
+
 ## Installed-service idle broker outage recovery
 
 **PASS 53408/858b7f:** the real installed `.26` bridge survived an actual stop

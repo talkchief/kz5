@@ -1,5 +1,20 @@
 # Kazoo 5 — start here / engineering handoff
 
+**In-flight uncertainty containment now has native broker/HTTP evidence:
+42712/afe573 passes.** A separate child ran the production consumer/settlement/
+fail-stop code against the isolated remote TLS broker, with only constructor
+and delivery adapter replaced by a real loopback HTTP fixture. The fixture
+accepted one POST and held its response. Closing only the PID-correlated child
+AMQP connection caused exit 78 after 3.532 seconds; the unchanged body remained
+redeliverable with broker count 1. No second POST occurred. This is containment,
+not automatic recovery, installed systemd restart-policy acceptance, or actual
+FCM/APNs protocol testing. Manual recovery of uncertain sends remains required.
+See the new section in `doc/push_bridge_remote_tls_acceptance_20260908.md`.
+Receipt and test CA are retained on `.44` under
+`/root/kz5-acceptance/bridge-remote-tls/bridge-remote-tls-08509fba-85ec-4d38-9627-de9e086070d6/`.
+Main bridge PIDs (.26:2439533, .44:57635) did not change; temporary broker is
+stopped and all nine main `.44` services active. Six scope/HTTP tests pass68f213.
+
 **Latest bridge gate: installed-service idle broker outage/recovery passes
 53408/858b7f.** Only the isolated `.44` broker was stopped and started (PID
 58463 -> 0 -> 58729); main RabbitMQ PID 2355/restarts 0 was unchanged. The `.26`

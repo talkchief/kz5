@@ -2,6 +2,17 @@
 
 ## Immediate operator follow-up — September8
 
+- **BRIDGE-REMOTE-03 IN-FLIGHT FAIL-STOP CONTAINMENT PASS:**42712/afe573 uses
+  native consumer/settlements and a real loopback HTTP acceptance with response
+  held. Only the verified child's AMQP connection is closed. Exit 78 in3.532s,
+  one POST, unchanged broker body redelivered/count1; no automatic replay.
+  Source pins stable; only synthetic body/resources cleaned after readback.
+  Six scope/HTTP tests pass68f213. Receipt/CA copied to `.44`, SHA independently
+  matchedd6edd0. Main services untouched and active; test broker stopped.
+  This is a standalone child with synthetic provider adapter, not actual
+  FCM/APNs or installed systemd restart-policy proof. Manual uncertain-send
+  recovery, loss after receiving an HTTP result, and HA/duplicate coordination
+  remain open. Full scope in the remote TLS acceptance report.
 - **BRIDGE-REMOTE-02 IDLE BROKER OUTAGE / SAME-PROCESS RECOVERY PASS:** actual
   installed bridge `53408/858b7f` survives stop/start of only the isolated `.44`
   broker. Bridge PID 2437369 stays constant, disconnected status persists at
