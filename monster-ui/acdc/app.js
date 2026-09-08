@@ -2678,6 +2678,21 @@ define(function(require) {
 			return _.assign({}, entry);
 		},
 
+		agentQueueProofEpoch: function(agentId) {
+			return _.get(this.appFlags.acdc.queueLoginEpochs, [this.accountId + ':' + agentId], 0);
+		},
+
+		invalidateAgentQueueProofs: function(agentId) {
+			var flags = this.appFlags.acdc,
+				key = this.accountId + ':' + agentId;
+
+			flags.queueLoginEpochs = flags.queueLoginEpochs || {};
+			flags.queueLoginEpochs[key] = this.agentQueueProofEpoch(agentId) + 1;
+			_.each(flags.queueLogins || {}, function(value, entry) {
+				if (entry.indexOf(key + ':') === 0) { delete flags.queueLogins[entry]; }
+			});
+		},
+
 		renderAgentQueueSessions: function(view) {
 			var self = this,
 				labels = self.i18n.active().acdc.agents,
@@ -2708,11 +2723,15 @@ define(function(require) {
 
 		checkAgentQueueLogin: function(agentId, queueId, callback) {
 			var self = this,
-				accountId = self.accountId;
+				accountId = self.accountId,
+				epoch = self.agentQueueProofEpoch(agentId);
 
 			self.request('acdc.agents.queueLoginStatus', { agentId: agentId, queueId: queueId }, function(error, data) {
 				var proof;
 				if (self.accountId !== accountId) { return; }
+				if (self.agentQueueProofEpoch(agentId) !== epoch) {
+					callback(self.i18n.active().acdc.agents.queueProofUnavailable); return;
+				}
 				proof = !error && self.queueLoginProof(data, agentId, queueId);
 				if (!proof) { callback(error || self.i18n.active().acdc.agents.queueProofUnavailable); return; }
 				if (proof.state === 'pending' && self.agentQueueSession(agentId, queueId).state !== 'pending') {
@@ -2725,7 +2744,8 @@ define(function(require) {
 
 		sendAgentQueueLogin: function(agentId, queueId, callback) {
 			var self = this,
-				accountId = self.accountId;
+				accountId = self.accountId,
+				epoch = self.agentQueueProofEpoch(agentId);
 
 			// This is the only Login mutation. Never use global setStatus, roster
 			// update, legacy unflagged queue_status, or any other agent's endpoint.
@@ -2734,6 +2754,9 @@ define(function(require) {
 				data: { action: 'login', queue_id: queueId, runtime_only: true }
 			}, function(error, data) {
 				if (self.accountId !== accountId) { return; }
+				if (self.agentQueueProofEpoch(agentId) !== epoch) {
+					callback(self.i18n.active().acdc.agents.queueProofUnavailable); return;
+				}
 				if (error) { callback(error); return; }
 				if (!_.isPlainObject(data) || data.agent_id !== agentId || data.queue_id !== queueId || data.action !== 'login'
 					|| data.account_id !== accountId || data.runtime_only !== true || data.state !== 'pending' || data.confirmed !== false) {
@@ -2852,6 +2875,12 @@ define(function(require) {
 					timeout;
 
 				if (['logout', 'pause', 'resume'].indexOf(status) < 0) { return; }
+				if (status === 'logout') {
+					// A command invalidates older proof even if its delivery is
+					// uncertain. Late reads/acceptances must not restore it.
+					self.invalidateAgentQueueProofs(agentId);
+					self.renderAgentQueueSessions(view);
+				}
 				if (status === 'pause') {
 					timeout = parseInt(row.find('.acdc-pause-timeout').val(), 10);
 					payload.timeout = timeout > 0 ? timeout : 300;

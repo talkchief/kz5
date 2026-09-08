@@ -78,6 +78,37 @@ test('check again can confirm without another command; table proof expires',()=>
 test('dialog close cancels read polling; account switch prevents stale proof',()=>{const f=fixture();f.open();f.select();f.click();const n=f.requests.length;f.dialog.dialog('close');assert.equal(f.poll(),false);assert.equal(f.requests.length,n);
  let callback;f.app.request=(r,d,cb)=>{callback=cb;};f.app.checkAgentQueueLogin(U,Q,()=>assert.fail('Stale account callback'));f.app.accountId=B;callback(null,{...f.pending,state:'confirmed',confirmed:true,runtime_member:true});assert.equal(f.app.agentQueueSession(U,Q).state,'unconfirmed');});
 test('old global status handler explicitly rejects login',()=>{const f=fixture();f.app.bindAgentEvents(f.view,1,A);const button=new Element();button.data('id',U).data('status','login');f.view.find('.acdc-agent-action').events.click.call(button);assert.deepEqual(f.requests,[]);});
+function statusClick(f,status='logout'){
+ f.app.bindAgentEvents(f.view,1,A);const button=new Element();button.data('id',U).data('status',status);
+ f.view.find('.acdc-agent-action').events.click.call(button);
+}
+test('explicit Logout immediately invalidates only that account and agent proofs',()=>{
+ const f=fixture();for(const id of [U,V])for(const q of [Q,R])f.app.agentQueueSession(id,q,{state:'confirmed'});
+ f.app.accountId=B;f.app.agentQueueSession(U,Q,{state:'confirmed'});f.app.accountId=A;
+ let writes=0;f.app.request=(resource,data)=>{assert.equal(resource,'acdc.agents.setStatus');assert.deepEqual(plain(data),{agentId:U,data:{status:'logout'}});writes++;};
+ statusClick(f);assert.equal(writes,1);for(const q of [Q,R])assert.equal(f.app.agentQueueSession(U,q).state,'unconfirmed');
+ assert.equal(f.app.agentQueueSession(V,Q).state,'confirmed');f.app.accountId=B;assert.equal(f.app.agentQueueSession(U,Q).state,'confirmed');
+});
+test('proof read started before Logout cannot restore confirmation; a fresh read can',()=>{
+ const f=fixture();let delayed,staleError,freshProof;
+ f.app.request=(resource,data,cb)=>{if(resource==='acdc.agents.queueLoginStatus')delayed=cb;};
+ f.app.checkAgentQueueLogin(U,Q,error=>{staleError=error;});statusClick(f);
+ const proof={...f.pending,state:'confirmed',confirmed:true,runtime_member:true};
+ delayed(null,proof);assert(staleError);assert.equal(f.app.agentQueueSession(U,Q).state,'unconfirmed');
+ f.app.checkAgentQueueLogin(U,Q,(error,p)=>{assert(!error);freshProof=p;});delayed(null,proof);assert.equal(freshProof.state,'confirmed');
+});
+test('late Login acceptance after Logout cannot start success polling',()=>{
+ const f=fixture();let delayed,result;
+ f.app.request=(resource,data,cb)=>{if(resource==='acdc.agents.queueLogin')delayed=cb;};
+ f.app.sendAgentQueueLogin(U,Q,error=>{result=error||'accepted';});statusClick(f);
+ delayed(null,{account_id:A,agent_id:U,queue_id:Q,action:'login',runtime_only:true,state:'pending',confirmed:false});
+ assert(result && result!=='accepted');assert.equal(f.app.agentQueueSession(U,Q).state,'unconfirmed');
+});
+test('failed Logout does not restore obsolete proof, while pause and resume preserve membership',()=>{
+ for(const status of ['logout','pause','resume']){const f=fixture();f.app.agentQueueSession(U,Q,{state:'confirmed'});
+  f.app.toastError=()=>{};f.app.request=(resource,data,cb)=>cb('transport unavailable');statusClick(f,status);
+  assert.equal(f.app.agentQueueSession(U,Q).state,status==='logout'?'unconfirmed':'confirmed');}
+});
 test('complete-list envelope refuses pagination before queue choice',()=>{const f=fixture();const requests=[];let app;vm.runInNewContext(source,{define:factory=>app=factory(name=>name==='jquery'?Object.assign(()=>{}, {trim:String}):name==='lodash'?lodash:{}),Date,Math,setTimeout,clearTimeout});app.i18n.active=()=>strings;
  app.requestEnvelope=(r,d,cb)=>cb(null,{status:'success',data:[Q],next_start_key:'more'});app.requestCompleteList('acdc.agents.queueMemberships',{},error=>requests.push(error));assert(requests[0]);});
 test('templates separate global status and escape queue and agent labels',()=>{const table=fs.readFileSync(path.join(root,'views/agents.html'),'utf8');assert(table.includes('acdc-agent-queue-login'));assert(!table.includes('data-status="login"'));assert(table.includes('agents.globalStatus'));

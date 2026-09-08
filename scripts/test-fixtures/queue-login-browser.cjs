@@ -99,9 +99,15 @@ module.exports = async function queueLoginBrowser(page, issues) {
             monster.apps.acdc.i18n.active().acdc.agents.queueConfirmed, null, {timeout: 20000});
         assert.equal(receipt.writes.length, 1); receipt.read_recovery = true; persist();
         await dialog.locator('.acdc-cancel-queue-login').click();
+        const sessions = page.locator('.acdc-agent-queue-sessions[data-agent-id="' + agent + '"]');
+        assert.equal(await sessions.locator('.acdc-queue-session.confirmed').count(), 1);
         receipt.phase = 'restore-selected-agent';
         action = {type: 'logout', sent: false}; receipt.writes.push(action); persist();
         await page.locator('.acdc-action-logout[data-id="' + agent + '"]:visible').click();
+        // The UI must discard old proof immediately, not wait for its30s TTL.
+        await sessions.locator('.acdc-queue-session.unconfirmed').first().waitFor({state: 'visible', timeout: 2000});
+        assert.equal(await sessions.locator('.acdc-queue-session.confirmed').count(), 0);
+        receipt.logout_label_invalidated = true; persist();
         let after;
         for (let attempt = 0; attempt < 10; attempt++) {
             after = await statuses();
@@ -114,7 +120,7 @@ module.exports = async function queueLoginBrowser(page, issues) {
         assert.deepEqual(issues, []);
         receipt.status = 'PASS'; receipt.phase = 'complete'; receipt.after = after; persist();
         console.log(JSON.stringify({status: 'PASS', real_login_confirmed: true, failed_read_recovered: true,
-            login_posts: 1, selected_agent_logged_out: true, unchanged_other_agents: 29,
+            login_posts: 1, selected_agent_logged_out: true, logout_label_invalidated: true, unchanged_other_agents: 29,
             unchanged_memberships: true, intentional_failed_gets: 1, evidence: dir}));
     } catch (error) {
         receipt.status = 'FAIL'; persist();
