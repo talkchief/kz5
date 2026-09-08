@@ -59,6 +59,7 @@ module.exports = async function queueBrowserSave(page, issues) {
             assert.deepEqual(data.route, {extension: ''});
             assert(/^[a-f0-9]{32}$/.test(data.request_id));
             pending.request_id = data.request_id; pending.sent = true;
+            pending.body = data;
             pending.body_sha256 = crypto.createHash('sha256').update(request.postData()).digest('hex');
             persist();
             await route.continue();
@@ -94,8 +95,13 @@ module.exports = async function queueBrowserSave(page, issues) {
             }, {timeout: 30000});
             await form.locator('[type="submit"]').click();
             const response = await responsePromise;
-            assert.equal(response.status(), receipt.queue_id ? 200 : 201);
             const body = await response.json(), result = body.data;
+            // Keep the acknowledged outcome before any assertion can fail.
+            // Exclude envelope authentication tokens; receipt is root-only.
+            pending.response = {http_status: response.status(), status: body.status,
+                error: body.error, message: body.message, data: result};
+            persist();
+            assert.equal(response.status(), receipt.queue_id ? 200 : 201);
             assert.equal(body.status, 'success');
             assert.equal(result.state, 'complete');
             assert(/^[a-f0-9]{32}$/.test(result.queue_id));
