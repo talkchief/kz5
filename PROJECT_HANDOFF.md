@@ -1,5 +1,18 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Current scope: reported bugs and deployment gaps, not unrelated testing.**
+Dashboards remain postponed. Reuse completed callback/voice/browser evidence;
+only run checks needed to reproduce and verify a named remaining defect.
+
+**P0-22 actual queue Login and failed-read recovery PASS on main.** Source
+4b4fcf3, unit `kz5-queue-login-browser-main44-20260908`,72753/569476 exits0
+in20.561s. Exactly one Login POST; genuine proof confirms, one aborted proof
+GET displays unavailable, Check again recovers without resending Login.
+Selected agent logs out afterward; other29 statuses and memberships unchanged.
+See `doc/queue_login_browser_acceptance.md`. Possible stale cached proof after
+explicit Logout is a source-review candidate, not a reproduced/fixed bug yet.
+Do not rerun completed acceptance merely to generate more evidence.
+
 **Actual browser Create/Save now PASS on main.** Unit
 `kz5-queue-browser-schedule-save-main44-20260908`, source6ebb5fd, observer97969/d810a2
 exits0 in20.619s. Real create + all-five language saves + final callback-disable
@@ -45,8 +58,9 @@ needed; source changes make the acceptance reusable on main. Retained evidence
 `/var/log/kazoo-acceptance/queue-editor-main44-journal.S257Izfx/`; full guidance
 and two earlier log-parser failures in `doc/queue_editor_acceptance.md`.
 All editor jobs are terminal. Do not poll them or reuse reserved2095/2096/2097.
-Remaining: actual browser-save flow, restricted principals and new-account
-inheritance, alongside wider voice, bridge, distributed/release gates.
+Actual browser-save flow subsequently passed as recorded above. Restricted
+principals and new-account inheritance remain, alongside wider voice, bridge,
+distributed/release gates.
 
 **Main development location:** `10.1.0.44:/opt/kz5` (kz5-dev). Start future
 work here, not on the original server scheduled for deletion. Git master and

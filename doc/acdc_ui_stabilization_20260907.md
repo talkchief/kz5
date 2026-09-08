@@ -63,6 +63,15 @@ response-envelope path. Root `078c38`/`a26140` passed 52 dashboard groups,
 including timeout, cancellation, late replies and plain-label coverage.
 Both are offline fixtures, not current deployed-build acceptance.
 
+September8 update: actual selected-queue Login and failed proof-read recovery
+now pass on main in source4b4fcf3. One aborted verification GET displays
+unavailable; Check again obtains genuine confirmation without repeating the
+Login write. The selected agent logs out afterward and the other29 statuses
+and memberships remain unchanged. See `queue_login_browser_acceptance.md` for
+the receipt and exact scope. This does not classify the older TypeError or
+prove every intermittent case. A possible stale confirmation cache after
+explicit Logout remains a focused source-review candidate to reproduce.
+
 ## Dashboard wording
 
 User-facing values no longer include “observed”. Waiting, Ready, Member and
