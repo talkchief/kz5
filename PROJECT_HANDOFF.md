@@ -1,5 +1,16 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Latest focused fix: UI-03 Callflows → Users PASS on main.** Missing entitlement
+registration and master-account `tl([])` crash are fixed in installer-owned
+source, pushed to master and deployed on10.1.0.44 without restart. Actual browser
+Users clicks show1 master and15 Talkchief users; entitlement200, no captured
+browser errors, counter0/inactive blue bar. Terminal unit
+`kz5-callflows-users-controls-main44-20260908`, sourceb2d014c, observer51327/211278.
+The browser now runs entirely on main with retained private tooling, not the
+original server's temporary dependencies. See `doc/callflows_users_entitlements_fix.md`
+and `doc/main44_browser_tools.md`. Imported company remains inspection-only.
+User requested focus on reported bugs/gaps; do not expand into unrelated testing.
+
 **Queue-language API persistence now PASS on main.** Final unit
 `kz5-editor-main44-journal-20260908`, source d50cd2e, observer51137/e145bc,
 terminal exit0 in24.676s. All26 checks/eight intents complete: create/managed

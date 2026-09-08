@@ -8,6 +8,8 @@ They replace the original server's temporary Node/Playwright/browser paths.
 cd /opt/kz5
 sudo bash scripts/setup-kazoo-browser-tests.sh
 sudo bash scripts/run-dev44-company-browser.sh
+# Focused reported UI-03 regression only:
+sudo bash scripts/run-dev44-company-browser.sh --callflows-users
 ```
 
 Setup supports Rocky Linux 9 x86_64 only. It installs missing browser OS libraries
@@ -37,3 +39,12 @@ users/devices. No credentials or browser session artifacts are written to Git.
 HTTPS is certificate-verified but deliberately mapped to10.1.0.44, so this test
 does not establish public-IP routing. It is not an actual Save, restricted-token,
 new-account inheritance or full production acceptance test.
+
+Main setup passed (unit `kz5-browser-tools-configfix-main44-20260908`, exit0),
+using private release `release.0BoeCwgr`. The initial setup failure was npm
+rejecting a shared user/global config path;7db656f fixes it with distinct empty
+protected files. Playwright reports Rocky as unsupported and selects its
+Ubuntu24.04 fallback; actual local launch/DOM and focused Users UI checks pass,
+not a claim of upstream Rocky support. System Node remains18.20.8; the private
+Node22 executes Playwright. The Users check passed on both master and Talkchief
+as documented in `callflows_users_entitlements_fix.md`.

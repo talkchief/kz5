@@ -2,13 +2,26 @@
 
 ## Immediate operator follow-up — September8
 
-- **DEV44-BROWSER-TOOLS-01 ACTIVE:** retain reproducible acceptance tooling on
+- **UI-03 FIXED / MAIN BROWSER PASS:** Callflows → Users entitlement404 was
+  missing Crossbar registration. Registration also exposed master ancestry
+  `tl([])` HTTP500; both are fixed in installer-owned source. Real master/company
+  entitlement responses succeed; anonymous remains401. Actual Users clicks
+  pass on main with1/15 visible users, no captured browser errors and inactive
+  blue bar (51327/211278, sourceb2d014c,17.682s). No service restart or user edits.
+  Full source, retained backup and focused replay commands:
+  `doc/callflows_users_entitlements_fix.md`.
+
+- **DEV44-BROWSER-TOOLS-01 INSTALLED / USED ON MAIN:** retain reproducible acceptance tooling on
   the replacement main host, not the original server's temporary directories.
   New optional Rocky9/x64 setup locks private Node22.23.2/Playwright1.62.1 and
   its headless browser, disables npm lifecycle scripts, leaves global Node and
   Kazoo services unchanged, smoke-tests before activation, and provides a
   tracked local company-browser launcher. Bash syntax, ShellCheck and JS syntax
-  pass; main installation and browser acceptance still pending. Guidance:
+  pass; native setup91666/b39938 exits0 and the focused Users browser test now
+  runs entirely on main. Initial npm setup failed before activation because
+  npm rejects the same empty config path for user/global; corrected to separate
+  protected empty files in7db656f. Prior stage retained, system Node unchanged.
+  Guidance:
   `doc/main44_browser_tools.md`. Actual browser Save remains a separate open gate.
 
 - **EDITOR-MAIN44-LANGUAGE-01 NATIVE MASTER-ADMIN API PASS:** port the armed
@@ -1473,7 +1486,7 @@ proof before promotion; the handoff does not waive those safety gates.
 
 ### Important UI regression — Callflows → Users entitlements lookup
 
-**UI-03 — OPEN, reported September7 at13:54:21UTC.** Opening the Callflows app
+**UI-03 — FIXED on main, browser verified September8; reported September7 at13:54:21UTC.** Opening the Callflows app
 and then Users requests `GET /v2/accounts/302ae5a70c403124f764cbc54229cfcd/entitlements`.
 The server returns404 `not_found` with `data.message: not found`; the frontend
 shows “An unknown error happened, please try again in a few seconds!”
@@ -1483,13 +1496,14 @@ register and all repository evidence.
 This issue was previously mislabeled UI-02, which already identifies the closed
 dashboard wording fix. UI-03 is the unique entitlement-regression identifier.
 
-Investigate the served Users component, endpoint availability/registration and
-actual account authorization. Fix the backend contract or explicitly handle an
-unsupported optional capability without hiding real authentication/server errors.
-Acceptance: reproduce before fix; Users loads without this error after fix;
-supported entitlement data and authorization remain correct; include regression
-tests and repeatable installer deployment. Keep callbacks/voices/bridge work
-active; this new report does not postpone those priorities.
+Resolved missing module registration and the subsequently reproduced master
+empty-ancestry crash. Installer registers/verifies/probes the actual endpoint;
+root-owned core patch preserves descendant ancestry and capability semantics.
+Main master/company GETs succeed, anonymous remains401, actual Users clicks
+render1/15 users without captured browser errors or active loading indicator.
+Three focused ancestry tests and8 registration cases pass. Broader restricted
+principals/enrollment-write cases are not claimed by this fix.
+See `doc/callflows_users_entitlements_fix.md` for source, deployment and replay.
 
 | ID | Status / owner | Work and acceptance requirement |
 | --- | --- | --- |
