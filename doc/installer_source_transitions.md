@@ -5,6 +5,42 @@ previous integration patches as well as accepting clean and already-current
 sources. No extra deployment entry point or nested Git commit is required.
 ACDC remains directly tracked in kz5 and is not handled by these transitions.
 
+## September 8: normal-build schema formatting
+
+A real apps/eCallMgr reinstall (`39751/8e209c`) passed voice media verification
+but stopped before compilation/restarts because the previous build had formatted
+three Crossbar schemas. `make/kz.mk` includes the `json` target in compilation;
+that target invokes `scripts/format-json.py`. The resulting byte changes were
+not functional schema changes, but invalidated the raw aggregate reverse check.
+
+`crossbar-build-json-format.patch` records the complete raw and formatted bytes
+of `channel_monitoring.json`, `queues.json`, and `queue_update.json`. The same
+raw schema sections occur in the current, pre-icon and before-frame aggregates.
+The helper recognizes only those exact complete representations, privately
+reverses known formatting where needed, then rehearses the ordinary source
+upgrade and proves the complete current aggregate. Actual normalization occurs
+only after the existing source metadata/byte and patch-input rechecks.
+
+No generic JSON equality or reserialization is used to accept caller input.
+Duplicate keys, semantic/property edits, partial formatting and arbitrary
+whitespace changes remain unknown edits and are refused without source writes.
+Unrelated files and supported comments outside owned Erlang hunks remain
+preserved. A subsequent normal build may format the schemas again; the same
+known representation can be recognized on the next installation.
+
+The new regression suite adds real install/formatter/reinstall cycles and raw/
+formatted previous-state cases. Consult `PROJECT_TASKS.md` for its latest
+executed result; source edits or a prepared test are not acceptance evidence.
+
+Executed26154/15c456:110 source-transition cases, installer smoke checks and12
+catalog tests PASS. Evidence `/tmp/kazoo-source-transition-tests.x7UYvz`.
+Actual server transition82966/00c47b also PASS, with source preflight retained
+at `/tmp/kazoo-integration-preflight.LLkrRB`. Full apps/eCallMgr installation
+must still pass separately. A build interrupted between schema formatting steps
+can leave a mixed state, intentionally refused for inspected recovery.
+
+### Earlier source-transition checkpoints
+
 `apply_kazoo_integration_patch` accepts `blackhole` or `crossbar`, plus
 `mod_kazoo` with an explicit canonical source-directory argument:
 

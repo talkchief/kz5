@@ -1647,6 +1647,7 @@ apply_kazoo_integration_patch() (
     local transition_state transition_stage transition_intercept='' transition_cleanup=''
     local transition_pre_queue='' transition_queue_live=''
     local transition_pre_catalog='' transition_catalog=''
+    local transition_format='' transition_unformat=false
     local transition_apply=()
     local transition_files=() transition_old_files=() transition_delta_files=()
     local transition_created_files=()
@@ -1670,6 +1671,7 @@ apply_kazoo_integration_patch() (
             transition_delta=crossbar-blackhole-frame-schema.patch
             transition_pre_catalog=crossbar-kazoo5-before-empty-icon.patch
             transition_catalog=crossbar-empty-icon.patch
+            transition_format=crossbar-build-json-format.patch
             transition_files=(priv/couchdb/schemas/queue_update.json priv/couchdb/schemas/queues.json
                 src/api_util.erl src/crossbar_auth.erl src/modules/cb_channels.erl src/modules/cb_devices.erl
                 priv/couchdb/schemas/channel_monitoring.json src/cb_channel_monitor.erl
@@ -1725,6 +1727,51 @@ apply_kazoo_integration_patch() (
     [[ ! $transition_queue_live ]] || transition_queue_live="$SCRIPT_DIR/patches/$transition_queue_live"
     [[ ! $transition_pre_catalog ]] || transition_pre_catalog="$SCRIPT_DIR/patches/$transition_pre_catalog"
     [[ ! $transition_catalog ]] || transition_catalog="$SCRIPT_DIR/patches/$transition_catalog"
+    [[ ! $transition_format ]] || transition_format="$SCRIPT_DIR/patches/$transition_format"
+    # The reviewed formatter delta contains one COMPLETE old/new hunk per
+    # schema. Match those entire bytes, not JSON equality or Git hunk presence:
+    # duplicate keys, extra properties and unknown whitespace remain edits.
+    # This reads only; normalization is rehearsed later in the private copy.
+    transition_exact_json_bytes() {
+        /usr/bin/python3 -I - "$transition_format" "$1" "$2" <<'PY'
+import pathlib, re, sys
+try:
+    patch, directory, side = sys.argv[1:]
+    assert side in ('raw', 'formatted')
+    def bounded(file):
+        with open(file, 'rb') as stream:
+            data = stream.read(4 * 1024 * 1024 + 1)
+        assert 0 < len(data) <= 4 * 1024 * 1024
+        return data
+    sections = bounded(patch).split(b'diff --git ')
+    assert sections[0] == b'' and len(sections) == 4
+    wanted = {'priv/couchdb/schemas/' + name + '.json'
+              for name in ('channel_monitoring', 'queues', 'queue_update')}
+    for section in sections[1:]:
+        lines = section.splitlines(keepends=True)
+        header = re.fullmatch(rb'a/([^\n ]+) b/([^\n ]+)\n', lines[0])
+        assert header and header[1] == header[2]
+        name = header[1].decode('ascii')
+        assert name in wanted
+        wanted.remove(name)
+        assert re.fullmatch(rb'index [0-9a-f]+\.\.[0-9a-f]+ 100644\n', lines[1])
+        assert lines[2] == b'--- a/' + header[1] + b'\n'
+        assert lines[3] == b'+++ b/' + header[1] + b'\n'
+        hunk = re.fullmatch(rb'@@ -1,([0-9]+) \+1,([0-9]+) @@\n', lines[4])
+        assert hunk
+        old, new = [], []
+        for line in lines[5:]:
+            assert line[:1] in (b' ', b'-', b'+') and line.endswith(b'\n')
+            if line[:1] != b'+': old.append(line[1:])
+            if line[:1] != b'-': new.append(line[1:])
+        assert len(old) == int(hunk[1]) and len(new) == int(hunk[2])
+        expected = b''.join(old if side == 'raw' else new)
+        assert bounded(pathlib.Path(directory) / name) == expected
+    assert not wanted
+except Exception:
+    sys.exit(1)
+PY
+    }
     if [[ $DRY_RUN == true ]]; then
         transition_safe_file "$transition_new"
         transition_safe_file "$transition_old"
@@ -1735,6 +1782,7 @@ apply_kazoo_integration_patch() (
         [[ ! $transition_queue_live ]] || transition_safe_file "$transition_queue_live"
         [[ ! $transition_pre_catalog ]] || transition_safe_file "$transition_pre_catalog"
         [[ ! $transition_catalog ]] || transition_safe_file "$transition_catalog"
+        [[ ! $transition_format ]] || transition_safe_file "$transition_format"
         log "Would ensure $transition_app integration with private preflight; source state and preflight are unverified"
         return 0
     fi
@@ -1791,6 +1839,8 @@ apply_kazoo_integration_patch() (
     if [[ $transition_catalog ]]; then
         transition_check_inventory "$transition_pre_catalog" "${transition_files[@]}"
         transition_check_inventory "$transition_catalog" src/kazoo_monster_catalog.erl
+        transition_check_inventory "$transition_format" priv/couchdb/schemas/channel_monitoring.json \
+            priv/couchdb/schemas/queues.json priv/couchdb/schemas/queue_update.json
     fi
     # Only explicitly added files may be absent before their reviewed transition.
     transition_check_sources() {
@@ -1815,6 +1865,8 @@ apply_kazoo_integration_patch() (
         transition_state=clean
         transition_apply=("$transition_new")
     elif git -C "$transition_source" apply --reverse --check "$transition_new" 2>/dev/null; then
+        [[ ! $transition_format ]] || transition_exact_json_bytes "$transition_source" raw ||
+            die 'Current Crossbar schemas are not the exact reviewed raw bytes'
         log "Required $transition_app integration is already current"
         return 0
     elif [[ $transition_app == blackhole ]]; then
@@ -1896,7 +1948,7 @@ apply_kazoo_integration_patch() (
             die 'Cannot retain intercept patch hash'
     fi
     if [[ $transition_catalog ]]; then
-        sha256sum "$transition_pre_catalog" "$transition_catalog" >>"$transition_stage/patch-pins.sha256" ||
+        sha256sum "$transition_pre_catalog" "$transition_catalog" "$transition_format" >>"$transition_stage/patch-pins.sha256" ||
             die 'Cannot retain catalog transition patch hashes'
     fi
     if [[ $transition_app == blackhole && $transition_state == previous ]]; then
@@ -1919,22 +1971,35 @@ apply_kazoo_integration_patch() (
             die 'Cannot apply queue-live transition to private source copies'
         transition_apply+=("$transition_queue_live")
     elif [[ $transition_app == crossbar && $transition_state == previous ]]; then
-        if ! git -C "$transition_stage/desired" apply --reverse --check "$transition_pre_catalog" 2>/dev/null; then
-            git -C "$transition_stage/desired" apply --reverse --check "$transition_old" ||
-                die 'Previous Crossbar source is not a complete reviewed integration'
-            git -C "$transition_stage/desired" apply --check "$transition_delta" ||
-                die 'Previous Crossbar frame transition does not apply'
-            git -C "$transition_stage/desired" apply "$transition_delta" ||
-                die 'Cannot normalize previous Crossbar source privately'
-            transition_apply+=("$transition_delta")
+        if ! transition_exact_json_bytes "$transition_stage/desired" raw; then
+            transition_exact_json_bytes "$transition_stage/desired" formatted ||
+                die 'Crossbar schemas are neither exact reviewed raw nor build-formatted bytes'
+            git -C "$transition_stage/desired" apply --reverse --check "$transition_format" ||
+                die 'Reviewed Crossbar formatter transition cannot reverse privately'
+            git -C "$transition_stage/desired" apply --reverse "$transition_format" ||
+                die 'Cannot normalize reviewed Crossbar build formatting privately'
+            transition_unformat=true
         fi
-        git -C "$transition_stage/desired" apply --reverse --check "$transition_pre_catalog" ||
-            die 'Previous Crossbar source is not the complete pre-icon integration'
-        git -C "$transition_stage/desired" apply --check "$transition_catalog" ||
-            die 'Catalog empty-icon transition does not apply'
-        git -C "$transition_stage/desired" apply "$transition_catalog" ||
-            die 'Cannot apply catalog empty-icon transition privately'
-        transition_apply+=("$transition_catalog")
+        if git -C "$transition_stage/desired" apply --reverse --check "$transition_new" 2>/dev/null; then
+            : # Current code with only the exact known build formatting drift.
+        else
+            if ! git -C "$transition_stage/desired" apply --reverse --check "$transition_pre_catalog" 2>/dev/null; then
+                git -C "$transition_stage/desired" apply --reverse --check "$transition_old" ||
+                    die 'Previous Crossbar source is not a complete reviewed integration'
+                git -C "$transition_stage/desired" apply --check "$transition_delta" ||
+                    die 'Previous Crossbar frame transition does not apply'
+                git -C "$transition_stage/desired" apply "$transition_delta" ||
+                    die 'Cannot normalize previous Crossbar source privately'
+                transition_apply+=("$transition_delta")
+            fi
+            git -C "$transition_stage/desired" apply --reverse --check "$transition_pre_catalog" ||
+                die 'Previous Crossbar source is not the complete pre-icon integration'
+            git -C "$transition_stage/desired" apply --check "$transition_catalog" ||
+                die 'Catalog empty-icon transition does not apply'
+            git -C "$transition_stage/desired" apply "$transition_catalog" ||
+                die 'Cannot apply catalog empty-icon transition privately'
+            transition_apply+=("$transition_catalog")
+        fi
     else
         git -C "$transition_stage/desired" apply --check "${transition_apply[@]}" ||
             die 'Integration patch cannot apply to private source copies'
@@ -1943,6 +2008,8 @@ apply_kazoo_integration_patch() (
     fi
     git -C "$transition_stage/desired" apply --reverse --check "$transition_new" ||
         die 'Transition does not produce the complete current integration'
+    [[ ! $transition_format ]] || transition_exact_json_bytes "$transition_stage/desired" raw ||
+        die 'Desired Crossbar schemas are not the exact reviewed raw bytes'
     # All validation above is private. Recheck every real target and patch
     # immediately before git apply (never --reject/--index). This validates all
     # hunks, but is not a crash-atomic transaction across multiple source files.
@@ -1960,7 +2027,20 @@ apply_kazoo_integration_patch() (
                 die 'Integration source changed during preflight'
         fi
     done
-    if [[ $transition_app == blackhole && $transition_state == previous ]]; then
+    if [[ $transition_app == crossbar && $transition_state == previous ]]; then
+        if [[ $transition_unformat == true ]]; then
+            git -C "$transition_source" apply --reverse --check "$transition_format" ||
+                die 'Reviewed Crossbar formatter transition no longer reverses on target'
+            git -C "$transition_source" apply --reverse "$transition_format" ||
+                die 'Cannot restore reviewed raw Crossbar schema representation'
+        fi
+        for transition_path in "${transition_apply[@]}"; do
+            git -C "$transition_source" apply --check "$transition_path" ||
+                die 'Crossbar transition no longer applies to target sources'
+            git -C "$transition_source" apply "$transition_path" ||
+                die 'Cannot apply ordered Crossbar transition to target sources'
+        done
+    elif [[ $transition_app == blackhole && $transition_state == previous ]]; then
         # These overlapping steps were already rehearsed in order against the
         # exact original bytes above. Keep that order; this is not crash-atomic.
         for transition_path in "${transition_apply[@]}"; do

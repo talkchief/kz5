@@ -9,8 +9,13 @@ resolved, not bypassed. Clean-host and split-host acceptance remain incomplete.
 
 This repository checkpoint is not a production-ready certification. Consult
 [the current acceptance status](kazoo5_acceptance_status.md) before deploying:
-some packaged source fixes have passed isolated tests but still await live
-rollout/acceptance, and the additional announcement languages are unfinished.
+some packaged source fixes have passed isolated tests but still await broader
+acceptance. Prerecorded queue voices for EN, HE, FR, ES and AR are deployed on
+the development host; all-five position-one/offer-six live calls and an English
+callback retry pass. Native-speaker listening, complete-stack/fresh-host and
+real mobile-device acceptance are not implied. See the
+[current handoff](../PROJECT_HANDOFF.md) and
+[voice/UI deployment evidence](prerecorded_release_finalization_20260907.md).
 
 ACDC is directly tracked in this repository under `applications/acdc`. Commit
 its source and tests to **kz5**, never to a nested ACDC repository. Installation
@@ -68,7 +73,9 @@ Review the full resolved path without changing the host:
 sudo ./scripts/install-kazoo5.sh --dry-run ALL
 ```
 
-Install and test every component on one host:
+Install and test every component on one host. `ALL` includes the mobile push
+bridge and requires its protected configuration and provider credential files
+first (see below); missing bridge inputs fail preflight before host changes:
 
 ```sh
 sudo ./scripts/install-kazoo5.sh ALL
@@ -89,9 +96,41 @@ sudo ./scripts/install-kazoo5.sh --verify-only ALL
 ```
 
 The canonical names are `couchdb`, `rabbitmq`, `haproxy`, `kazoo-apps`,
-`ecallmgr`, `freeswitch`, `kamailio`, `monster-ui`, and `ALL`. The aliases
+`ecallmgr`, `freeswitch`, `kamailio`, `monster-ui`, `push-bridge`, and `ALL`. The aliases
 `apps`, `kazoo_apps`, `monster_ui`, and the requested `kamaialio` misspelling
-are accepted.
+are accepted. Bridge aliases are `bridge`, `mobile-bridge`, and `kazoo-push-bridge`.
+
+## Mobile push bridge: standalone or co-located
+
+Prepare `/etc/kazoo-push-bridge/config.json` using the tracked
+[`config.json.example`](../services/push-bridge/config.json.example). Keep
+populated configuration, the FCM service-account JSON and APNs signing keys
+outside Git. Initially use root ownership, directory mode `0700` and file
+mode `0600`. Installation grants only the dedicated service user the validated
+read access it needs. Configuration is JSON data, not a shell environment file;
+numeric settings are also strings. Never source it.
+
+Configure the bridge's own broker host, port, vhost, credentials and binding.
+Selecting bridge alone does not install or reconfigure RabbitMQ or Kamailio,
+so the broker may be on another server. Remote broker TLS must be explicitly
+configured; port `5671` by itself does not enable certificate verification.
+Use a separate development queue; do not attach test consumers to production
+mobile traffic. See the [bridge guide](../services/push-bridge/README.md) for
+the exact provider fields, optional quorum/retry/freshness settings and TLS.
+
+```sh
+sudo ./scripts/install-kazoo5.sh push-bridge
+sudo ./scripts/install-kazoo5.sh --verify-only push-bridge
+systemctl status kazoo-push-bridge.service
+```
+
+The installer provisions Python 3.11, a private virtual environment with
+hash-locked dependencies, a versioned release, and the enabled non-root
+`kazoo-push-bridge.service`. Its readiness check confirms a registered broker
+consumer, not FCM/APNs acceptance or phone ringing. Real mobile acceptance
+requires designated test devices/tokens and an answered call. Existing bridge
+topology is not silently migrated to quorum mode. The dependency lock currently
+supports Rocky Linux 9 on x86_64.
 
 ## Installed versions
 
@@ -664,9 +703,13 @@ external certificate issuance and renewal are not automated by this mode.
 
 ## Diagnostic retention
 
-Selecting `kazoo-apps` imports and verifies the committed 165 immutable Gemini
-assets, then imports missing official English-US system prompts and activates
-the verified resolver mappings. It no longer generates eSpeak ACDC prompts.
+Selecting `kazoo-apps` imports and verifies the committed prerecorded Gemini
+queue release for EN, HE, FR, ES and AR: 210 fixed prompt documents, 584 cardinal
+documents and two dedicated position-intro documents. It then imports missing
+official English-US system prompts and activates the verified resolver mappings.
+Installation and calls do not invoke Gemini or require its API key. Generation
+is an offline release-authoring operation; the checked-in WAV files are reused
+for future accounts and deployments. It no longer generates eSpeak ACDC prompts.
 The pinned sounds source has 175 official top-level English-US WAVs. This
 server's older 192-document manifest also includes 17 locally generated legacy
 extras; that observed inventory is not evidence that a fresh clone supplies
@@ -674,8 +717,9 @@ them. The source-selection and editor prerequisite repair is tracked in the
 [installer checkpoint](installer_verification_checkpoint.md).
 Existing prompt attachments are preserved. Selecting `freeswitch` also installs
 the pinned English-US local speech and hold-music files without overwriting existing files.
-`KAZOO_SOUNDS_REF` pins the shared `2600hz/kazoo-sounds` checkout. This default
-does not install every language; additional languages require their own import.
+`KAZOO_SOUNDS_REF` pins the shared `2600hz/kazoo-sounds` checkout. Those ordinary
+system prompts and FreeSWITCH local speech files are distinct from the five
+built-in queue languages; non-queue multilingual prompts require their own import.
 
 The applications and eCallMgr nodes use separate Lager roots under
 `/var/log/kazoo/kazoo_apps` and `/var/log/kazoo/ecallmgr`. Normal files are in

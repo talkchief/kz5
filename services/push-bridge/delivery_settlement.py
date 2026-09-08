@@ -10,6 +10,7 @@ dead-letter topology owns retention until that durable transfer completes.
 
 from concurrent.futures import Future
 import threading
+import time
 from push_payload import MAX_BODY_BYTES
 from delivery_retry import MAX_DISPATCHES, DELAYS_MS, delivery_count, completed_transient
 from freshness import Freshness, FreshnessFailure
@@ -24,7 +25,8 @@ class SettlementFailure(RuntimeError):
 
 
 class OwnerSettlements:
-    def __init__(self, limit, quarantine=False, retry=False, clock=None):
+    def __init__(self, limit, quarantine=False, retry=False, clock=None,
+                 delivery_timeout=60, deadline_clock=None):
         if type(limit) is not int or not 1 <= limit <= 128:
             raise ValueError("invalid_settlement_limit")
         if type(quarantine) is not bool:
@@ -33,6 +35,14 @@ class OwnerSettlements:
             raise ValueError("invalid_retry_mode")
         if clock is not None and not callable(clock):
             raise ValueError("invalid_retry_clock")
+        if type(delivery_timeout) is not int or not 10 <= delivery_timeout <= 300:
+            raise ValueError("invalid_delivery_timeout")
+        if deadline_clock is not None and not callable(deadline_clock):
+            raise ValueError("invalid_delivery_clock")
+        self._deadline_clock = (lambda: time.monotonic_ns() // 1000000) if deadline_clock is None else deadline_clock
+        self._delivery_timeout_ms = delivery_timeout * 1000
+        self._last_deadline_time = None
+        self._worker_deadlines = {}
         # Runtime enables this only after this connection's quorum-v1 topology
         # has been declared and independently verified, never from body/header.
         self._quarantine = quarantine
@@ -48,6 +58,20 @@ class OwnerSettlements:
     def _check_owner(self):
         if threading.get_ident() != self._owner or not self._active:
             raise SettlementFailure()
+
+    def _deadline_now(self):
+        # Admission and elapsed time use only a private monotonic clock, never
+        # producer timestamps, broker headers, wall time, or retry scheduling.
+        try:
+            now = self._deadline_clock()
+            if (type(now) is not int or now < 0
+                    or self._last_deadline_time is not None and now < self._last_deadline_time):
+                raise ValueError()
+        except Exception:
+            self._failed = True
+            raise SettlementFailure() from None
+        self._last_deadline_time = now
+        return now
 
     @property
     def pending_count(self):
@@ -102,6 +126,7 @@ class OwnerSettlements:
             self._pending[future] = (message, provider)
             return
         try:
+            deadline = self._deadline_now() + self._delivery_timeout_ms
             # Do not capture message in the submitted callable or a worker-side
             # done callback. Only the owning broker thread may settle delivery.
             future = executor.submit(worker, body)
@@ -109,6 +134,7 @@ class OwnerSettlements:
             self._failed = True
             raise SettlementFailure() from None
         self._pending[future] = (message, provider)
+        self._worker_deadlines[future] = deadline
         if state is not None:
             self._retry_states[future] = state
 
@@ -155,6 +181,13 @@ class OwnerSettlements:
         failed = False
         for future, (message, provider) in tuple(self._pending.items()):
             if not future.done():
+                try:
+                    if self._deadline_now() >= self._worker_deadlines[future]:
+                        failed = True
+                except Exception:
+                    failed = True
+                # Timeout proves neither acceptance nor absence of a send.
+                # Keep this delivery unacknowledged; never retry/quarantine it.
                 continue
             try:
                 result = future.result()
@@ -196,6 +229,7 @@ class OwnerSettlements:
                 continue
             del self._pending[future]
             self._retry_states.pop(future, None)
+            self._worker_deadlines.pop(future, None)
         if failed:
             self._failed = True
             raise SettlementFailure()
@@ -207,3 +241,4 @@ class OwnerSettlements:
         # do not hold message handles; the broker retains unsettled deliveries.
         self._pending.clear()
         self._retry_states.clear()
+        self._worker_deadlines.clear()

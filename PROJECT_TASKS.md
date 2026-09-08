@@ -2,6 +2,56 @@
 
 ## Current focused release checkpoint — 2026-09-08
 
+- **Bridge deadline deployed through main SH:** repository205 tests and main
+  installer smoke checks pass82499/98c851; bridge dispatch/rollback checks
+  pass82966. Normal `install-kazoo5.sh push-bridge` followed by independent
+  `--verify-only push-bridge` pass74779/c9f0f1. Release
+  `0a3a5ba26bdf26caa9fea2343fb565c3ce218079cf976eb5be801ac9143e94da`,
+  PID1172968, active, restart count0; installed bridge/settlement hashes match
+  repository source (`4aaccc`). Registered-consumer readiness, protected config
+  and18 locked dependency versions pass. No actual provider sends or production
+  server changes. Phone, remote-broker and failure/recovery gates stay open.
+- **Actual Crossbar formatter transition PASS:**82966/00c47b successfully
+  normalized the known build-formatted schemas on this server after private
+  preflight, retaining `/tmp/kazoo-integration-preflight.LLkrRB`. No services
+  restarted in this step. Full apps/eCallMgr main-SH run still required.
+
+- **Formatter transition regression PASS:** session26154/15c456 exited0:
+  all110 source-transition cases, main installer smoke checks and12 catalog
+  tests pass. Evidence `/tmp/kazoo-source-transition-tests.x7UYvz` includes
+  actual install/format/reinstall and rejection of duplicate keys, semantic
+  edits and partial formatting. Read-only independent review found no blocker.
+  An interrupted formatter's mixed state is intentionally refused and still
+  needs inspected recovery; full normal apps/eCallMgr rerun is next.
+- **Bridge deadline candidate PASS, applied to source:** private12055/09efad
+  exited0 with205 tests across14 suites, including18 new deadline/fail-stop
+  tests and real private-process exit78 despite blocked worker and cleanup.
+  No provider/broker traffic. New default60s `PUSH_BRIDGE_DELIVERY_TIMEOUT`
+  bounds unfinished workers when the owner loop is healthy; uncertain sends
+  remain unacknowledged and are not automatically replayed. Source-suite rerun,
+  main-SH deployment and actual consumer/broker/device acceptance remain open.
+  See `doc/push_bridge_worker_deadline.md`.
+
+- **Full apps/eCallMgr installer stopped before compilation:** session39751, guarded unit
+  `kazoo-validation-819270c4-30cf-4304-98c5-22c3a9bf5178.service`, started
+  00:02:46UTC from pushed918cf6e with one build job; terminal exit1 `8e209c`.
+  All210 fixed and584 cardinal assets/approved intros passed source/import/
+  readback checks. Crossbar preflight then rejected build-generated formatting
+  in three schemas; no compilation or service restart occurred. The real
+  `scripts/format-json.py` output exactly matches those source bytes. Evidence:
+  `/tmp/kazoo-crossbar-compare.TG5HL2`,
+  `/tmp/kazoo-crossbar-format-proof.a9OjwO`, and failed private preflight
+  `/tmp/kazoo-integration-preflight.QvDWgx`. A known whole-file formatting
+  transition is being added; arbitrary JSON/user changes must still be refused.
+- **Bridge worker-deadline gap identified:** unfinished provider futures are
+  skipped by `OwnerSettlements.drain`, while the broker loop continues updating
+  its watchdog. A permanently blocked refresh/worker can exhaust capacity
+  without failing consumer readiness. A focused private proposal is in progress;
+  require synthetic blocked-worker/clock tests and bounded fail-stop with no
+  ACK/replay of uncertain delivery, preserving exit78 and generation fencing.
+  Also still open: actual basic.consume retry-loop proof (prior broker test
+  uses Basic.Get), and retention when the isolated DLQ is full/unavailable.
+
 - **Final focused checks PASS:** `90006/cb79bd` reran15 replay-cache cases,
   26 readiness cases, current-build ordering/failure checks,32 finalization
   cases, actual deployed queue-editor language verification, and main-SH

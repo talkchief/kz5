@@ -5,6 +5,7 @@ umask 077
 [[ $# == 0 ]] || { printf 'Usage: %s\n' "$0" >&2; exit 2; }
 transition_fixture_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 transition_fixture_installer="$transition_fixture_dir/install-kazoo5.sh"
+transition_fixture_formatter="$transition_fixture_dir/format-json.py"
 transition_fixture_patches="$transition_fixture_dir/patches"
 transition_fixture_output=$(mktemp -d /tmp/kazoo-source-transition-tests.XXXXXX)
 transition_fixture_helper="$transition_fixture_output/apply-source-transition.sh"
@@ -24,6 +25,7 @@ transition_fixture_inputs=(
     "$transition_fixture_patches/crossbar-blackhole-frame-schema.patch"
     "$transition_fixture_patches/crossbar-kazoo5-before-empty-icon.patch"
     "$transition_fixture_patches/crossbar-empty-icon.patch"
+    "$transition_fixture_patches/crossbar-build-json-format.patch"
     "$transition_fixture_patches/blackhole-binding-cleanup.patch"
     "$transition_fixture_patches/blackhole-pre-queue-live-integration.patch"
     "$transition_fixture_patches/blackhole-queue-live.patch"
@@ -50,7 +52,11 @@ for transition_fixture_input in "${transition_fixture_inputs[@]}"; do
         exit 2
     }
 done
-sha256sum "${transition_fixture_inputs[@]}" >"$transition_fixture_output/input-pins.sha256"
+[[ -f $transition_fixture_formatter && ! -L $transition_fixture_formatter ]] || {
+    printf 'Missing or symlinked real build JSON formatter\n' >&2
+    exit 2
+}
+sha256sum "${transition_fixture_inputs[@]}" "$transition_fixture_formatter" >"$transition_fixture_output/input-pins.sha256"
 
 # Generate only the reviewed function into the protected evidence directory.
 # Pin the full installer, assert both integration call sites, and pin extraction.
@@ -322,6 +328,19 @@ expect_unverified_dry_run() {
     pass "$app/dry-run absent source, explicit unverified warning, no mutation"
 }
 
+format_crossbar_case() (
+    [[ $app == crossbar ]] || fail 'JSON formatter fixture is Crossbar only'
+    # The completed installer exposes public schemas as0644. The formatter
+    # replaces files, so use that public-file mode inside this isolated fixture.
+    umask 022
+    /usr/bin/python3 -I "$transition_fixture_formatter" \
+        "$source_dir/priv/couchdb/schemas/channel_monitoring.json" \
+        "$source_dir/priv/couchdb/schemas/queues.json" \
+        "$source_dir/priv/couchdb/schemas/queue_update.json"
+    git -C "$source_dir" apply --reverse --check "$script_dir/patches/crossbar-build-json-format.patch" ||
+        fail 'Real build formatter no longer matches the exact reviewed delta'
+)
+
 for app in blackhole crossbar ecallmgr; do
     select_app "$app"
     for state in clean current legacy; do
@@ -332,6 +351,87 @@ for app in blackhole crossbar ecallmgr; do
     if [[ $app == crossbar ]]; then
         new_case pre-icon pre-icon
         expect_success pre-icon
+
+        for state in current pre-icon legacy; do
+            new_case "build-formatted-$state" "$state"
+            format_crossbar_case
+            expect_success "build-formatted-$state"
+        done
+
+        new_case completed-install-build-repeat clean
+        invoke_helper >"$case_dir/first-install.log" 2>&1 || fail 'Initial clean Crossbar installation failed'
+        format_crossbar_case
+        expect_success completed-install-build-repeat
+
+        # Known formatting is byte-exact, not permissive JSON equality. Include
+        # edits outside aggregate hunks and even duplicate keys with equal values.
+        for representation in raw formatted; do
+            for mutation in duplicate-key conflicting-key semantic schema-property whitespace; do
+                new_case "$representation-json-$mutation" current
+                [[ $representation != formatted ]] || format_crossbar_case
+                case $mutation in
+                    duplicate-key)
+                        replace_once "$source_dir/priv/couchdb/schemas/queues.json" \
+                            '    "_id": "queues",' $'    "_id": "queues",\n    "_id": "queues",' ;;
+                    conflicting-key)
+                        replace_once "$source_dir/priv/couchdb/schemas/queues.json" \
+                            '    "_id": "queues",' $'    "_id": "wrong",\n    "_id": "queues",' ;;
+                    semantic)
+                        replace_once "$source_dir/priv/couchdb/schemas/queues.json" \
+                            'Call Queues - FIFO call queues' 'Operator-edited call queues' ;;
+                    schema-property)
+                        replace_once "$source_dir/priv/couchdb/schemas/queues.json" \
+                            '    "_id": "queues",' $'    "_id": "queues",\n    "operator_schema_extension": true,' ;;
+                    whitespace)
+                        printf '\n' >>"$source_dir/priv/couchdb/schemas/queue_update.json" ;;
+                esac
+                expect_rejection "$representation-json-$mutation"
+            done
+        done
+
+        for mutation in duplicate-key semantic; do
+            new_case "clean-json-$mutation" clean
+            if [[ $mutation == duplicate-key ]]; then
+                replace_once "$source_dir/priv/couchdb/schemas/queues.json" \
+                    '    "_id": "queues",' $'    "_id": "queues",\n    "_id": "queues",'
+            else
+                replace_once "$source_dir/priv/couchdb/schemas/queues.json" \
+                    'Call Queues - FIFO call queues' 'Operator-edited call queues'
+            fi
+            expect_rejection "clean-json-$mutation"
+        done
+
+        new_case partially-build-formatted current
+        /usr/bin/python3 -I "$transition_fixture_formatter" "$source_dir/priv/couchdb/schemas/queues.json"
+        expect_rejection partially-build-formatted
+
+        for dry in false true; do
+            new_case "missing-formatter-$dry" current
+            fixture_dry_run=$dry
+            mv -- "$script_dir/patches/crossbar-build-json-format.patch" "$work/withheld-formatter.patch"
+            expect_rejection "missing-formatter-$dry"
+        done
+
+        new_case wrong-formatter-content current
+        format_crossbar_case
+        replace_once "$script_dir/patches/crossbar-build-json-format.patch" \
+            '+    "id": "channel_monitoring",' '+    "id": "wrong_monitoring",'
+        expect_rejection wrong-formatter-content
+
+        new_case non-whole-file-formatter current
+        replace_once "$script_dir/patches/crossbar-build-json-format.patch" \
+            '@@ -1,27 +1,60 @@' '@@ -2,27 +2,60 @@'
+        expect_rejection non-whole-file-formatter
+
+        new_case symlink-formatter current
+        mv -- "$script_dir/patches/crossbar-build-json-format.patch" "$work/formatter-target.patch"
+        ln -s -- "$work/formatter-target.patch" "$script_dir/patches/crossbar-build-json-format.patch"
+        expect_rejection symlink-formatter
+
+        new_case out-of-scope-formatter current
+        printf '\ndiff --git a/src/fixture-out-of-scope b/src/fixture-out-of-scope\nnew file mode 100644\n--- /dev/null\n+++ b/src/fixture-out-of-scope\n@@ -0,0 +1 @@\n+unexpected mutation\n' \
+            >>"$script_dir/patches/crossbar-build-json-format.patch"
+        expect_rejection out-of-scope-formatter
 
         new_case edited-catalog pre-icon
         replace_once "$source_dir/src/kazoo_monster_catalog.erl" \
@@ -567,6 +667,6 @@ replace_once "$script_dir/patches/blackhole-pre-queue-live-integration.patch" \
     '+    lager:debug("fixture-inconsistent-pre-queue-baseline"),'
 expect_rejection wrong-pre-queue-baseline
 
-[[ $transition_fixture_count == 87 ]] || fail "unexpected case count: $transition_fixture_count"
+[[ $transition_fixture_count == 110 ]] || fail "unexpected case count: $transition_fixture_count"
 printf 'PASS all %s bounded source-transition cases (no builds, services or network)\n' "$transition_fixture_count" \
     | tee -a "$transition_fixture_output/results.log"

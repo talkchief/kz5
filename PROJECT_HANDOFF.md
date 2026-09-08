@@ -6,6 +6,26 @@ file nor a green unit test means the platform is production-ready.
 
 ## Latest working snapshot — read before resuming
 
+Bridge deadline is now deployed: source205 tests/smoke82499/98c851 and actual
+main-SH install plus independent verify74779/c9f0f1 PASS. New release
+`0a3a5ba26bdf26caa9fea2343fb565c3ce218079cf976eb5be801ac9143e94da`,
+PID1172968 active, restart count0, installed source hashes match. No actual
+provider sends. Dispatch/rollback suite and actual Crossbar formatter transition
+pass82966/00c47b; preflight `/tmp/kazoo-integration-preflight.LLkrRB` retained.
+Next: commit/push these fixes and run the complete apps/eCallMgr main installer.
+
+Latest source work: full apps/eCallMgr installation39751/8e209c stopped before
+compilation/restarts on three build-formatted Crossbar schemas. Exact known
+formatter transition is now implemented;110 transition cases, installer smoke
+and12 catalog tests passed26154/15c456. Full installer rerun remains required.
+Unknown/mixed schema changes remain refused rather than overwritten.
+
+Bridge worker-deadline proposal passed205 private offline tests12055/09efad and
+is applied to repository source, not yet deployed. Default60s monotonic admission
+deadline, no uncertain ACK/replay, and production exit78 before blocked cleanup.
+See `doc/push_bridge_worker_deadline.md`. Run source tests and main-SH deployment;
+actual registered-consumer retry/DLQ failure and phone delivery remain open.
+
 Final focused verification `90006/cb79bd` PASS: cache15, readiness26,
 current-build checks, finalization32, actual deployed editor-language functions,
 and main-SH `--verify-only push-bridge`. Provider delivery remains unverified.

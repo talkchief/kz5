@@ -29,6 +29,7 @@ NUMBERS = {
     "WORKERS": ("32", 1, 64),
     "APNS_WORKERS": ("8", 1, 32),
     "STALL_TIMEOUT": ("70", 30, 300),
+    "DELIVERY_TIMEOUT": ("60", 10, 300),
 }
 APNS_REQUIRED = (
     "APNS_KEY_FILE", "APNS_KEY_ID", "APNS_TEAM_ID", "APNS_TOPIC",

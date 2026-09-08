@@ -292,6 +292,8 @@ class BridgeRuntime:
                 # Token refresh and worker/HTTP lease contention may consume
                 # the event lifetime. Recheck immediately before each POST.
                 left_ms = self._check_freshness(freshness)
+                if getattr(self, "_unsettled_stop", False):
+                    return False, 0, "bridge_closing"
                 if left_ms is not None:
                     message["message"]["android"]["ttl"] = "{}.{:03d}s".format(*divmod(left_ms, 1000))
                 response = http.post(
@@ -372,6 +374,8 @@ class BridgeRuntime:
         options = {"sandbox": push.sandbox}
         if freshness is not None:
             options["freshness"] = freshness
+        if getattr(self, "_unsettled_stop", False):
+            return False, 0, "bridge_closing"
         result = sender.send(push.token_id, apns_payload(push), **options)
         ok, status, _text = result
         if ok:
@@ -383,6 +387,8 @@ class BridgeRuntime:
         return result
 
     def deliver(self, raw_body, freshness=None):
+        if getattr(self, "_unsettled_stop", False):
+            return False, 0, "bridge_closing"
         try:
             if freshness is None:
                 freshness = capture_body(raw_body, self._settings.get("FRESHNESS", "legacy"))
@@ -407,7 +413,27 @@ class BridgeRuntime:
             log.error("fcm_delivery_failed status=%s", status)
         return result
 
-    def run(self):
+    def _fail_unsettled(self, process_exit):
+        # Called by the owner before any connection/session/executor cleanup.
+        # A blocked worker can prevent Python's normal interpreter exit even
+        # after shutdown(wait=False); a daemon deadline enforces fixed exit78.
+        self._unsettled_stop = True
+        self._stop.set()
+        if not process_exit or getattr(self, "_unsettled_exit_armed", False):
+            return
+        self._unsettled_exit_armed = True
+        try:
+            timer = threading.Timer(3, lambda: os._exit(78))
+            timer.daemon = True
+            timer.start()
+        except Exception:
+            os._exit(78)
+
+    def run(self, *, fail_stop_exit=False):
+        # Only the process entry point opts into a process-killing deadline.
+        # Embedded/offline owner-loop callers still receive SettlementFailure.
+        if type(fail_stop_exit) is not bool:
+            raise ValueError("invalid_fail_stop_exit")
         settings = self._settings
         pool = ThreadPoolExecutor(max_workers=settings["WORKERS"])
         apns_pool = ThreadPoolExecutor(max_workers=settings["APNS_WORKERS"])
@@ -469,6 +495,7 @@ class BridgeRuntime:
                     # This branch is reached only after live quorum preflight
                     # returned successfully for this connection generation.
                     settlements = OwnerSettlements(limit, quarantine=settings.get("TOPOLOGY") == "quorum-v1",
+                        delivery_timeout=settings.get("DELIVERY_TIMEOUT", 60),
                         **({"retry": True} if settings.get("RETRY") == RETRY_MODE else {}))
                     generation["settlements"] = settlements
                     channel.basic.qos(prefetch_count=limit)
@@ -491,7 +518,11 @@ class BridgeRuntime:
                         self._stop.wait(0.5)
                     if not self._stop.is_set() and settlements.pending_count:
                         raise SettlementFailure()
-                except (SettlementFailure, TopologyFailure):
+                except SettlementFailure:
+                    generation["failed"] = True
+                    self._fail_unsettled(fail_stop_exit)
+                    raise
+                except TopologyFailure:
                     self._stop.set()
                     raise
                 except Exception:
@@ -499,7 +530,8 @@ class BridgeRuntime:
                     # can still reach providers. No unconditional requeue or
                     # automatic reconnect is safe for these pending messages.
                     if settlements is not None and settlements.pending_count:
-                        self._stop.set()
+                        generation["failed"] = True
+                        self._fail_unsettled(fail_stop_exit)
                         raise SettlementFailure() from None
                     if not self._stop.is_set():
                         log.error("amqp_loop_failed reconnect_seconds=%d", RECONNECT_DELAY)
@@ -516,10 +548,13 @@ class BridgeRuntime:
                     except Exception:
                         pass
         finally:
-            pool.shutdown(wait=False)
-            apns_pool.shutdown(wait=False)
+            options = {"cancel_futures": True} if getattr(self, "_unsettled_stop", False) else {}
+            pool.shutdown(wait=False, **options)
+            apns_pool.shutdown(wait=False, **options)
 
     def handle_term(self, *_):
+        if getattr(self, "_unsettled_stop", False):
+            return  # Never replace a pending manual-recovery exit78 with exit0.
         log.info("shutdown_requested")
         self._stop.set()
         try:
@@ -591,15 +626,14 @@ def main(argv=None, environment=None):
         runtime = BridgeRuntime(environment)
         signal.signal(signal.SIGTERM, runtime.handle_term)
         signal.signal(signal.SIGINT, runtime.handle_term)
-        runtime.run()
+        runtime.run(fail_stop_exit=True)
         return 0
     except TopologyFailure:
         log.error("push_bridge_topology_unverified")
         return 78
     except SettlementFailure:
         log.error("push_delivery_unsettled_manual_recovery_required")
-        # A future service unit must prevent automatic restarts for this status
-        # until durable bounded retry/dead-letter policy is implemented.
+        # The service's RestartPreventExitStatus=2 78 forbids automatic replay.
         return 78
     except Exception:
         log.error("bridge_startup_or_runtime_failed")
