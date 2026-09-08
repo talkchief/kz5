@@ -2,6 +2,18 @@
 
 ## Immediate operator follow-up — September8
 
+- **VOICE-MAIN44-SCHEDULE-01 SOURCE TESTED / NATIVE OPEN:** the periodic
+  callback-offer/full-position-one harness now supports explicit protected
+  fixture selection, absent manual-phone helper, non-truncating shared lock,
+  caller-contact absence and live resource ownership gates. It accepts only
+  local assigned CouchDB addresses. `prepare-installed` reconstructs references
+  from the current capability ownership marker and exact retained runtime proof,
+  rejecting changed media/BEAM/input hashes; no provider or new runtime proof.
+  Original new-account refusal reproducedeb643e; actual entry/service wiring
+  tests1596ad,metadata trust-chain tests and existing33ownership/52audio/10reference
+  cases pass8c37ce. Native main-host30/60s callback offers and45/75s full
+  position-one audio remain required. See doc/acdc_five_language_live_audio_acceptance.md.
+
 - **CALLBACK-MAIN44-01 SOURCE FIX / NATIVE ACCEPTANCE OPEN:** the retained retry
   harness, explicit-language setup and internal endpoint preflight previously pinned
   the old development tenant `7807ad61761269a1ccec833dde63f621` in

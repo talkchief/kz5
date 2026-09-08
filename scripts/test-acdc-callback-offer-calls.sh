@@ -10,14 +10,24 @@ offer_fixture=$SCRIPT_DIR/test-fixtures/callback-offer-queue.cjs
 offer_audio=$SCRIPT_DIR/test-fixtures/assert-callback-offer-audio.cjs
 offer_scenario=$SCRIPT_DIR/test-fixtures/callback-offer-scenario.cjs
 offer_capture_pid='' offer_call_id='' offer_queue_id='' offer_cleaning=false offer_fixture_started=false
+offer_allow_absent_master_test_phones=false
 offer_services=(couchdb rabbitmq-server haproxy nginx kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents)
 offer_empty() {
     /usr/local/freeswitch/bin/fs_cli -x 'show channels as json' |
         jq -e '.row_count==0 and (.rows==null or .rows==[])' >/dev/null
 }
 offer_service_snapshot() {
-    local service
+    local service scope
+    scope=$(systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents \
+        -p Id -p LoadState -p ActiveState -p SubState -p MainPID -p NRestarts) || return 1
+    printf '%s\n' "$scope" | node -e '
+        const fs=require("fs"), gate=require(process.argv[1]);
+        gate.inspect(fs.readFileSync(0,"utf8"),false,process.argv[2]==="true");
+        ' "$SCRIPT_DIR/test-fixtures/callback-retry-service-scope.cjs" "$offer_allow_absent_master_test_phones" || return 1
+    printf '%s\n' "$scope"
     for service in "${offer_services[@]}"; do
+        # Included with its exact active or explicitly absent state above.
+        [[ $service != kazoo-live-test-agents ]] || continue
         systemctl is-active --quiet "$service" || return 1
         printf '%s\n' "$service"
         systemctl show "$service" -p MainPID -p NRestarts -p ActiveState
@@ -73,13 +83,20 @@ offer_main() {
     local mode=${1:-} expected_md5='' live_md5 before_cores since log_errors file_errors caller_exit=0
     local gemini=false interval30=false hold_ms=46000
     local prerecorded_locale='' reference_index='' reference_sha=''
+    local selected_account=7807ad61761269a1ccec833dde63f621 account_explicit=false
     local -a fixture_audio_options=()
     umask 077
     ((EUID==0)) || die 'Root required'
     [[ $mode == --prepare-only || $mode == --live ]] || die 'Use --prepare-only or --live --runtime-md5 HEX'
     shift
+    unset -v KAZOO_CALLBACK_TEST_ACCOUNT_ID || die 'Cannot isolate offer fixture account environment'
     while (($#)); do
         case $1 in
+            --fixture-account)
+                (($# >= 2)) || die 'Missing fixture account'
+                [[ $account_explicit == false && $2 =~ ^[a-f0-9]{32}$ ]] || die 'Invalid or repeated fixture account'
+                selected_account=$2; account_explicit=true; shift 2 ;;
+            --allow-absent-master-test-phones) offer_allow_absent_master_test_phones=true; shift ;;
             --gemini) [[ $gemini == false && -z $prerecorded_locale ]] || die 'Duplicate Gemini option'; gemini=true; fixture_audio_options=(--gemini); shift ;;
             --gemini-30) [[ $gemini == false && -z $prerecorded_locale ]] || die 'Duplicate Gemini option'; gemini=true; interval30=true; hold_ms=76000; fixture_audio_options=(--gemini-30); shift ;;
             --prerecorded-locale)
@@ -101,7 +118,9 @@ offer_main() {
     fi
     [[ $mode == --live || -z $expected_md5 ]] || die 'Runtime MD5 applies only to live mode'
     load_state; validate_state; resolve_local_ip; ensure_sipp
-    [[ ${STATE[ACCEPTANCE_ACCOUNT_ID]} == 7807ad61761269a1ccec833dde63f621 && $LOCAL_IP == 127.0.0.20 ]] || die 'Wrong isolated local fixture'
+    [[ ${STATE[ACCEPTANCE_ACCOUNT_ID]} == "$selected_account" && $LOCAL_IP == 127.0.0.20 ]] || die 'Wrong isolated local fixture'
+    export KAZOO_CALLBACK_TEST_ACCOUNT_ID=$selected_account
+    node "$SCRIPT_DIR/test-fixtures/callback-fixture-account.cjs" "$STATE_FILE" || die 'Protected offer fixture identity refused'
     ip -o route get "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}" | grep -Eq '(^| )local .* dev lo( |$)' || die 'SIP proxy must route locally'
     command -v sox >/dev/null; command -v tcpdump >/dev/null
     node --check "$offer_fixture"; node --check "$offer_audio"; node --check "$offer_scenario"
@@ -110,10 +129,12 @@ offer_main() {
     fi
     if [[ $mode == --prepare-only ]]; then log 'PASS prepare only; no API writes, reference fetch or SIP traffic'; return; fi
     [[ -n $expected_md5 ]] || die 'Live run requires root-approved loaded scheduler module MD5'
-    exec {offer_lock_fd}>/etc/kazoo/monitor-acceptance.lock
+    node "$SCRIPT_DIR/test-fixtures/callback-fixture-account.cjs" --ensure-lock || die 'Cannot prepare protected shared acceptance lock'
+    exec {offer_lock_fd}<>/etc/kazoo/monitor-acceptance.lock
     flock -n "$offer_lock_fd" || die 'Acceptance lock is held'
     LIVE=true; create_run_dir; trap offer_cleanup EXIT; trap 'exit 130' INT TERM
     offer_empty || die 'Calls already active'
+    node "$SCRIPT_DIR/test-fixtures/callback-internal-scenarios.cjs" preflight "$STATE_FILE" || die 'Caller registration already exists or is unknown'
     offer_service_snapshot > "$RUN_DIR/offer-services-before.txt"
     live_md5=$(sup -e acdc_announcements module_info md5 | node -e '
         const s=require("fs").readFileSync(0,"utf8"),m=/^\s*<<([0-9,\s]+)>>\s*$/.exec(s);

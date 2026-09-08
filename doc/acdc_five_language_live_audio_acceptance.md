@@ -8,7 +8,8 @@ Gemini. It is an acceptance tool, not a production announcement worker.
 `scripts/test-acdc-callback-offer-calls.sh` accepts an explicit
 `--prerecorded-locale` of `en-us`, `he-il`, `fr-fr`, `es-es` or `ar-sa`.
 The test creates a marked queue/callflow at extension2098 only in the existing
-isolated acceptance account `7807ad61761269a1ccec833dde63f621`, with caller
+isolated acceptance account (legacy default `7807ad61761269a1ccec833dde63f621`,
+or explicit `--fixture-account ACCOUNT_ID` matching protected state), with caller
 127.0.0.20. It does not use the operator's extension1000 or a PSTN route.
 
 Each 86-second call checks callback offers at30/60seconds and the complete
@@ -38,6 +39,22 @@ Use the actual installed receipts, BEAM manifest, source-map/index/alias pins
 and probe output path; do not invent successful runtime evidence. The source
 account is recorded separately from the isolated live-call account.
 
+For an installer-managed deployment, the same reference input can now be
+reconstructed without copying old-host options:
+
+```sh
+node scripts/test-fixtures/callback-prerecorded-reference.cjs prepare-installed \
+  /etc/kazoo/acdc/language-capabilities.json CAPABILITY_SHA256 \
+  /protected/empty-reference-dir
+```
+
+Supply the current exact capability hash. This validates its installer ownership
+marker and retained successful runtime receipt, current media receipts, BEAM
+manifest and full source input hash before capturing the local installed WAVs.
+It does not execute the runtime probe, publish capability or call Gemini.
+Changed/unowned proof is rejected; do not substitute a new hash to excuse a
+mismatch between current sources and the measured runtime proof.
+
 Create an empty protected0700 reference directory, then run under the shared
 validation guard:
 
@@ -56,10 +73,20 @@ use3.1Flash according to their saved provenance. Never relabel their metadata.
 
 ```sh
 bash scripts/test-acdc-callback-offer-calls.sh --live \
+  --fixture-account "$callback_account" \
   --prerecorded-locale en-us \
   --reference-index /protected/empty-reference-dir/index.json \
   --reference-index-sha256 INDEX_SHA256 --runtime-md5 LOADED_SCHEDULER_MD5
 ```
+
+On the fresh main host, add `--allow-absent-master-test-phones` only for the
+confirmed not-installed helper. All core services must still be active; the
+helper's exact not-found/inactive/dead/PID0 state is recorded and compared before
+and after. The test refuses existing caller registrations and verifies live
+Acceptance resources before creating its marked2098 queue/callflow. The shared
+lock is validated/created without truncating an existing file. Loopback or an
+IPv4 address actually assigned to this host is accepted for local CouchDB;
+remote databases remain outside this acceptance helper's scope.
 
 Repeat for the other four locales. Each call rechecks the selected installed
 bytes and pins the exact index into its private run evidence. The final audio

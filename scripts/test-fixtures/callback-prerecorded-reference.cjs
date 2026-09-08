@@ -101,12 +101,13 @@ function client(root) {
         assert(n > 0 && b.toString('base64') === l.slice(n + 1)); return [l.slice(0, n), b.toString()];
     }));
     const port = Number(env.KAZOO_COUCHDB_PORT || 5984);
-    assert(['127.0.0.1','localhost'].includes(env.KAZOO_COUCHDB_HOST) && Number.isInteger(port) && port > 0 && port < 65536
+    const host = require('./callback-gemini-reference.cjs').localMediaHost(env.KAZOO_COUCHDB_HOST);
+    assert(Number.isInteger(port) && port > 0 && port < 65536
         && env.KAZOO_COUCHDB_USER && !env.KAZOO_COUCHDB_USER.includes(':') && env.KAZOO_COUCHDB_PASSWORD);
     const authorization = 'Basic ' + Buffer.from(env.KAZOO_COUCHDB_USER + ':' + env.KAZOO_COUCHDB_PASSWORD).toString('base64');
     return async expected => {
         assert(LOCALES.includes(expected.language) && expected._id === expected.language + '/' + expected.prompt_id);
-        const response = await fetch('http://127.0.0.1:' + port + '/system_media/' + encodeURIComponent(expected._id)
+        const response = await fetch('http://' + host + ':' + port + '/system_media/' + encodeURIComponent(expected._id)
             + '?attachments=true&conflicts=true', {headers:{authorization, accept:'application/json'},
             redirect:'error', signal:AbortSignal.timeout(15000)});
         assert(response.status === 200 && /^application\/json(?:;|$)/i.test(response.headers.get('content-type') || ''));
@@ -144,6 +145,59 @@ async function prepare(optionsFile, optionsSha, directory, root = sourceRoot()) 
         wait_time_verified:false, native_listening_approved:false, full_language_ready:false}, catalog);
     const bytes = Buffer.from(JSON.stringify(index, null, 2) + '\n'), file = path.join(directory, 'index.json');
     probe.createEvidence(file, bytes); return {index:file, sha256:sha(bytes), locales:LOCALES, provider_requests:0, wait_time_verified:false};
+}
+async function prepareInstalled(capabilityFile, capabilitySha, directory, root = sourceRoot()) {
+    const {probe}=helpers(root);
+    // Reconstruct the exact prior installer proof, never manufacture a new
+    // runtime-success receipt. Read all metadata through protected file pins.
+    const pin=(file,limit=8*1024*1024)=>{
+        probe.protectedParents(path.dirname(file));
+        const fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
+        let bytes;
+        try {
+            const st=fs.fstatSync(fd);
+            assert(st.isFile()&&st.uid===0&&st.nlink===1&&!(st.mode&0o022)&&st.size>0&&st.size<=limit);
+            const buffer=Buffer.alloc(st.size+1);let size=0,n;
+            while(size<buffer.length&&(n=fs.readSync(fd,buffer,size,buffer.length-size,null))>0)size+=n;
+            assert(size===st.size);bytes=buffer.subarray(0,size);
+        } finally {fs.closeSync(fd);}
+        const digest=sha(bytes);return {digest,bytes:probe.readPinned(file,digest,limit)};
+    };
+    const capability=JSON.parse(protectedRead(capabilityFile,capabilitySha,root));
+    const markerFile=capabilityFile+'.installer-'+capabilitySha+'.json',markerPin=pin(markerFile,65536);
+    const marker=JSON.parse(markerPin.bytes);
+    exact(marker,['owner','capability_sha256','receipt','receipt_sha256']);
+    assert(marker.owner==='kazoo5-acdc-prerecorded-finalization'&&marker.capability_sha256===capabilitySha);
+    const receipt=JSON.parse(protectedRead(marker.receipt,marker.receipt_sha256,root));
+    const publisher=require(path.join(root,'scripts/publish-acdc-prerecorded-capabilities.cjs'));
+    publisher.validateReceipt(receipt,Date.parse(receipt.finished_at));
+    assert.deepEqual(capability,publisher.capability(receipt,marker.receipt_sha256,Date.parse(capability.generated_at)));
+    const scripts=path.join(root,'scripts'),manifest=path.join(path.dirname(marker.receipt),'production-beams.json');
+    const cardinal='/usr/local/share/kazoo5-installer/acdc-cardinal-media.json',fixed='/usr/local/share/kazoo5-installer/acdc-gemini-media.json';
+    assert.equal(pin(cardinal).digest,receipt.cardinal_receipt_sha256);
+    assert.equal(pin(fixed).digest,receipt.fixed_receipt_sha256);
+    assert.equal(pin(manifest).digest,receipt.beam_manifest_sha256);
+    const map=path.join(root,'applications/acdc/src/acdc_gemini_map.hrl');
+    const trial=path.join(scripts,'assets/acdc-gemini-cardinal-model-trials-20260907/index.json');
+    const aliases=path.join(scripts,'acdc-cardinal-reuse-es-20260907.json');
+    const args=['--node',receipt.node,'--account',receipt.account,
+        '--cardinal-receipt',cardinal,'--cardinal-receipt-sha256',receipt.cardinal_receipt_sha256,
+        '--fixed-receipt',fixed,'--fixed-receipt-sha256',receipt.fixed_receipt_sha256,
+        '--beam-manifest',manifest,'--beam-manifest-sha256',receipt.beam_manifest_sha256,
+        '--fixed-map',map,'--fixed-map-sha256',pin(map).digest,
+        '--fixed-pack',path.join(scripts,'assets/acdc-gemini-fixed-20260905'),
+        '--completion-pack',path.join(scripts,'assets/acdc-gemini-completion-20260905'),
+        '--supplemental-pack',path.join(scripts,'assets/acdc-gemini-supplemental-20260906'),
+        '--model-trial-index',trial,'--model-trial-index-sha256',pin(trial).digest,
+        '--alias-file',aliases,'--alias-sha256',pin(aliases).digest,'--output',marker.receipt];
+    const input=probe.buildInput(probe.parseArgs(args));
+    assert.equal(sha(JSON.stringify(input)),receipt.input_sha256,'Current sources do not match retained runtime proof');
+    const optionsFile=directory+'.options.json',options=Buffer.from(JSON.stringify({schema_version:1,probe_args:args})+'\n');
+    probe.createEvidence(optionsFile,options);
+    const result=await prepare(optionsFile,sha(options),directory,root);
+    protectedRead(capabilityFile,capabilitySha,root);protectedRead(markerFile,markerPin.digest,root);
+    protectedRead(marker.receipt,marker.receipt_sha256,root);
+    return {...result,runtime_receipt_sha256:marker.receipt_sha256,runtime_probe_executed:false};
 }
 function load(indexFile, indexSha, locale, root = sourceRoot()) {
     const {catalog} = helpers(root);
@@ -188,12 +242,13 @@ async function capture(run, indexFile, indexSha, locale, root = sourceRoot()) {
     probe.createEvidence(path.join(run, 'offer-reference-receipt.json'), Buffer.from(JSON.stringify(receipt, null, 2) + '\n'));
     return receipt;
 }
-module.exports = {LOCALES, OWNER, selection, verifyDocument, validateIndex, verifyReceiptIndex, convert, load, prepare, capture};
+module.exports = {LOCALES, OWNER, selection, verifyDocument, validateIndex, verifyReceiptIndex, convert, load, prepare, prepareInstalled, capture};
 if (require.main === module) {
     (async () => {
         const [action, options, digest, directory] = process.argv.slice(2);
-        assert(['prepare','check'].includes(action) && process.argv.length === 6 && hash(digest), 'Use prepare OPTIONS_JSON OPTIONS_SHA256 EMPTY_PROTECTED_DIR or check INDEX INDEX_SHA256 LOCALE');
-        if(action==='prepare') console.log(JSON.stringify(await prepare(options, digest, directory)));
+        assert(['prepare','prepare-installed','check'].includes(action) && process.argv.length === 6 && hash(digest), 'Use prepare OPTIONS_JSON OPTIONS_SHA256 EMPTY_PROTECTED_DIR, prepare-installed CAPABILITY CAPABILITY_SHA256 EMPTY_PROTECTED_DIR, or check INDEX INDEX_SHA256 LOCALE');
+        if(action==='prepare-installed') console.log(JSON.stringify(await prepareInstalled(options,digest,directory)));
+        else if(action==='prepare') console.log(JSON.stringify(await prepare(options, digest, directory)));
         else {
             const selected=load(options,digest,directory);
             console.log(JSON.stringify({result:'PASS',locale:directory,assets:selected.assets.length,network_requests:0}));

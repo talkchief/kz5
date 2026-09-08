@@ -5,7 +5,8 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {spawnSync}=require('node:child_process');
 const {timingProfile}=require('./callback-offer-profile.cjs');
 const prerecorded=require('./callback-prerecorded-reference.cjs');
-const ACCOUNT='7807ad61761269a1ccec833dde63f621', id=v=>/^[a-f0-9]{32}$/.test(v||'');
+const fixtureAccount=require('./callback-fixture-account.cjs');
+const ACCOUNT=fixtureAccount.selectedAccount(), id=v=>/^[a-f0-9]{32}$/.test(v||'');
 const sha=v=>crypto.createHash('sha256').update(v).digest('hex');
 const canonical=v=>JSON.stringify(v,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)
     ?Object.fromEntries(Object.keys(value).sort().map(key=>[key,value[key]])):value);
@@ -284,8 +285,8 @@ async function runtime(action,run,option,...extra) {
         assert(found.length===1&&found[0].queue_id===expected.queue_id,'Missing/ambiguous exact2098 queue entry');
         fs.writeFileSync(path.join(run,'offer-queue-entry.json'),JSON.stringify(found[0])+'\n',{mode:384});return;
     }
-    const state=readEnv(process.env.KAZOO_ACCEPTANCE_STATE_FILE||'/etc/kazoo/acceptance-secrets.env',true);
-    assert(state.ACCEPTANCE_ACCOUNT_ID===ACCOUNT,'Wrong acceptance tenant');
+    const stateFile=process.env.KAZOO_ACCEPTANCE_STATE_FILE||'/etc/kazoo/acceptance-secrets.env';
+    const state=fixtureAccount.readState(stateFile);
     const secrets=readEnv('/etc/kazoo/installer-secrets.env');let token;
     const api=async(method,relative,data,match,optional404=false)=>{
         assert(relative===''||relative==='user_auth'||relative==='channels'||/^(users|queues|callflows)(?:\/[a-f0-9]{32}(?:\/callbacks)?)?(?:\?paginate=false)?$/.test(relative),'Unexpected API resource');
@@ -299,15 +300,20 @@ async function runtime(action,run,option,...extra) {
     };
     const auth=await api('PUT','user_auth',{credentials:crypto.createHash('md5').update((secrets.KAZOO_MASTER_ADMIN_USER||'admin')+':'+secrets.KAZOO_MASTER_ADMIN_PASSWORD).digest('hex'),method:'md5',realm:secrets.KAZOO_MASTER_ACCOUNT_REALM});
     token=auth.auth_token;assert(token&&auth.data.account_id!==ACCOUNT);
-    const tenant=(await api('GET','')).data;assert(tenant.name===state.ACCEPTANCE_ACCOUNT_NAME&&tenant.realm===state.ACCEPTANCE_REALM);
+    const tenant=(await api('GET','')).data;assert(tenant.id===ACCOUNT&&tenant.name===state.ACCEPTANCE_ACCOUNT_NAME&&tenant.realm===state.ACCEPTANCE_REALM);
+    if(action==='setup') {
+        const ownership=spawnSync('/bin/bash',[path.join(__dirname,'../test-kazoo-call-provision.sh'),'--verify-only'],
+            {env:{...process.env,KAZOO_ACCEPTANCE_STATE_FILE:stateFile},encoding:'utf8',timeout:120000,maxBuffer:65536});
+        assert(!ownership.error&&ownership.status===0,'Owned acceptance resources must verify before offer fixture writes');
+    }
     const deployment=readEnv('/etc/kazoo/deployment.env',true);
-    assert(['127.0.0.1','localhost'].includes(deployment.KAZOO_COUCHDB_HOST));
+    const couchHost=require('./callback-gemini-reference.cjs').localMediaHost(deployment.KAZOO_COUCHDB_HOST);
     const couchPort=Number(deployment.KAZOO_COUCHDB_PORT||5984);assert(Number.isInteger(couchPort)&&couchPort>0&&couchPort<65536);
     assert(deployment.KAZOO_COUCHDB_USER&&deployment.KAZOO_COUCHDB_PASSWORD&&!deployment.KAZOO_COUCHDB_USER.includes(':'));
     const couchAuthorization='Basic '+Buffer.from(deployment.KAZOO_COUCHDB_USER+':'+deployment.KAZOO_COUCHDB_PASSWORD).toString('base64');
     const couch=async(relative,data)=>{
         assert(id(relative)||relative==='_find','Unexpected scoped Couch resource');
-        const response=await fetch('http://127.0.0.1:'+couchPort+'/'+ENCODED_DATABASE+'/'+relative,
+        const response=await fetch('http://'+couchHost+':'+couchPort+'/'+ENCODED_DATABASE+'/'+relative,
             {method:data===undefined?'GET':'POST',headers:{authorization:couchAuthorization,'Content-Type':'application/json'},
                 ...(data===undefined?{}:{body:JSON.stringify(data)}),redirect:'error',signal:AbortSignal.timeout(15000)});
         assert(response.ok,'Scoped Couch read HTTP '+response.status);
