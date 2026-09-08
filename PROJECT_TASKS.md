@@ -10,7 +10,7 @@
   Main systemd services use `scripts/dev-start-apps.sh`, not this legacy wrapper.
   Synced with ec2ec69; actual isolated wrapper regression passes on main57cdbf.
 
-- **CB-CONTENT-01 SOURCE FIX / BOTH BUILD HELPERS FIXED:** explicit default JSON callbacks
+- **CB-CONTENT-01 DEPLOYED / UI AND LOG PASS:** explicit default JSON callbacks
   for apps-store collection/item, voicemail collection/item and directory
   collection; optional absent apps-store overrides preserve inherited permissions
   without error logging or GET-time writes. Real datastore errors still log and
@@ -25,10 +25,15 @@
   the full release, then failed before restart in SUP completion with the same
   named-node dependency. It is terminal. The completion generator is now fixed
   via installer patch; actual no-HOME make target plus pinned patch replay pass
-  70253/f26aa0. Third normal installer run74822 is active in
-  `kz5-crossbar-content-completionfix-20260908`, PID319018, sourceec2ec69.
-  Native installed SUP/no-HOME check passesb0f05b. No source sync or duplicate
-  installer while it runs; post-install browser/log and capacity checks pending.
+  70253/f26aa0. Third normal installer74822 passes09fb22/2cde08, including full
+  release, SUP completion, activation and selected-role verification. Native
+  callback exports pass83083/dabfb9; HTTPS browser passes76601/52c6e4. A mixed
+  log window counted the simultaneous verifier's intentional informational401;
+  repeat browser/log in isolation. ALL44779 failed retained16:50 Kamailio errors
+  from the fixed negative SIP fixture. With0 calls, dev Kamailio restarted;
+  read-only ALL retry64780 passesfe58e6. Isolated UI79330 passes e6baef with0
+  file/journal matchesb50240. All installers terminal. Next30+5 capacity with
+  browser activity, without overlapping unauthenticated installer probes.
   Deploy/recheck remains required. Details:
   `doc/crossbar_content_defaults_acceptance_20260908.md`.
 

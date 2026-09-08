@@ -1,15 +1,52 @@
 # Crossbar collection content types and optional app overrides
 
-## Current job: third normal installer run
+## Normal installer, independent ALL and isolated browser/log checks passed
 
-Main `/opt/kz5` is pinned to `ec2ec69` for this build. Unit
-`kz5-crossbar-content-completionfix-20260908.service`, observer74822, PID319018
-is verified active (`5fc6b3`, `3c4cb4`). Protected log:
+Main `/opt/kz5` used source `ec2ec69` for this build. Unit
+`kz5-crossbar-content-completionfix-20260908.service`, observer74822, is
+terminal success (`09fb22`, `2cde08`), PID0/inactive. Protected log:
 `/root/kz5-acceptance/crossbar-content-completionfix-20260908.log`.
 Same normal apps/eCallMgr command and2GiB/CPU200%/3600s bounds as below; no HOME
-override or skip-build. Do not sync revisions into the compiling checkout or
-start another installer until this unit is terminal. The old51560/98460 jobs
-are terminal failures, not active observers.
+override or skip-build. Actual runtime12m3.090s, CPU15m53.050s, peak378.4MiB.
+Compilation/release, SUP completion, apps/eCallMgr activation, configured
+applications, authenticated APIs, prerecorded inventory/mappings/capabilities,
+FreeSWITCH connection/framing and final selected-role validation all passed.
+Documentation-only updates were subsequently fast-forwarded to08b2bc7 on main.
+The old51560/98460 jobs remain terminal failures, not active observers.
+
+Loaded callback exports were independently confirmed in the restarted apps node
+(`83083/dabfb9`, `038973`): all five added arities are present. Actual HTTPS
+browser76601/52c6e4 passes Talkchief selection,15 users/82 devices/4 queues/89
+callflows, SmartPBX,4 ACDC cards, no captured page/request errors, and inactive
+global indicator.30 test agents remain logged out after restart (`30550/8ddddf`).
+
+The first browser log baseline overlapped independent ALL verification. It
+counted one INFO `generating error401` line (`a0ffd5`), not the old callback
+undef or missing override errors. Exact request correlation524fcb identifies
+unauthenticated `GET /v2/?` from127.0.0.1; source `verify_kazoo_apps` deliberately
+uses this JSON health probe and accepts HTTP4xx (`911047`). Repeat the isolated
+browser/log gate after the ALL verifier is terminal; do not change the matcher
+or claim this mixed window had zero matched lines.
+
+Independent ALL44779/9328d0 failed Kamailio's activation-history check. All three
+ERROR records are at16:50:06 (`04c8ab`), the already documented first broken
+negative SIP registration fixture; no later integration ERROR was found by that
+readback. Sourceae87595 fixed that fixture and its subsequent functional run
+passed. With zero calls independently read back, development Kamailio was
+restarted (`04c8ab`) to validate a fresh corrected activation. No journal records
+were deleted, matcher changed, or previous failure retroactively marked passed.
+
+Read-only ALL retry64780/fe58e6 passes, all nine components, unit
+`kz5-content-verify-all-fresh-20260908` terminal/PID0 (`d99514`). Runtime1m40.245s,
+peak244.9MiB; log `/root/kz5-acceptance/content-verify-all-fresh-20260908.log`.
+Isolated HTTPS browser79330/e6baef passes the same complete company/UI checks;
+fresh file/journal matches are both0 (`b50240`) using the unchanged matcher.
+No calls remain. Baseline directory:
+`/var/log/kazoo-acceptance/main44-ui-content-isolated-20260908`, since1788892632.
+This closes the observed missing callback/optional override error paths for the
+tested browser flows; it does not certify every Crossbar endpoint.
+Next:30+5 call acceptance with browser activity, without concurrent installer
+health probes. Original failures and mixed-window informational401 remain above.
 
 Native installed SUP with a clean environment and no HOME successfully locates
 the running Crossbar module (`b0f05b`). Legacy release-wrapper cookie-output
@@ -19,7 +56,7 @@ logs are preserved under `/root/kz5-handoff/crossbar-content-20260908/`, with
 independent matching SHA readback57cdbf/6e4845. No service or provider call was
 made by that isolated wrapper test. Required post-install checks remain below.
 
-## Latest job: second installer run is terminal; completion fix ready
+## Historical second installer failure: completion generator
 
 Source `38cbb03` was used by unit
 `kz5-crossbar-content-localbuild-20260908.service`, observer98460; it is now

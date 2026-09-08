@@ -1,13 +1,17 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Current installer run:74822 / kz5-crossbar-content-completionfix-20260908.**
-Main sourceec2ec69, PID319018 verified active. Do not sync source or launch a
-duplicate while it builds. It includes both missing-HOME build-helper fixes.
-Protected log: `/root/kz5-acceptance/crossbar-content-completionfix-20260908.log`.
-Native SUP without HOME passes; legacy wrapper redaction passes on main.
-Post-install browser/log and30+5 capacity acceptance remain outstanding.
+**Normal installer74822 and independent ALL64780 passed; no installer remains active.**
+Sourceec2ec69 build took12m3s, apps/eCallMgr restarted and selected roles verified.
+Native callback exports pass;30 fixture agents remain logged out. Isolated
+HTTPS browser79330/e6baef passes Talkchief/SmartPBX/ACDC and inactive loading bar;
+fresh file/journal error matches both0 (`b50240`). All nine roles pass the fresh
+activation verifier (`fe58e6`). Earlier ALL44779 retained16:50 Kamailio errors
+from the fixed SIP fixture; dev Kamailio restarted with0 calls and logs preserved.
+The mixed browser/verifier401 window is documented, not marked clean.
+Next:30+5 capacity with browser activity, without installer health probes.
+Full paths/evidence in `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
-**Retry98460 is terminal exit2 before restart, not a deployed fix.** Full release
+**Historical retry98460 is terminal exit2 before restart.** Full release
 assembly now passes with38cbb03, but the next SUP completion generator had the
 same unnecessary named-node/HOME dependency. Its focused installer patch and
 real make/no-HOME/pinned replay regressions now pass70253/f26aa0. Both old units
@@ -19,12 +23,12 @@ open. Both existing apps/eCallMgr processes are active. Full evidence,
 command/bounds/log and public-HTTPS packet diagnosis:
 `doc/crossbar_content_defaults_acceptance_20260908.md`.
 
-**Capacity run10423 is terminal, not passed:** all35 caller and agent calls
+**Historical capacity run10423 is terminal, not passed:** all35 caller and agent calls
 succeeded, the30-call hold lasted180 seconds, and RTP/agent-ready checks passed.
 The final gate found eight application log errors; investigation identifies
 seven missing Crossbar content-type callback arities and one missing imported
 account apps-store document during the overlapping UI check. These are still
-open source/data-handling issues, not grounds to waive the log gate. Zero calls,
+now corrected and browser/log validated above, not grounds to waive that old run's log gate. Zero calls,
 unit PID0 and all nine enabled/active services were independently confirmed.
 See `doc/main44_call_acceptance_20260908.md`. Do not poll old handles or start
 another load run before addressing the findings.
