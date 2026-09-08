@@ -58,6 +58,14 @@ def encoded(value):
     return quote(value.encode('utf-8'), safe='')
 
 
+def document_path(doc_id):
+    # CouchDB redirects an encoded _design/ prefix to its canonical route.
+    # Construct it directly; never relax the transport's redirect refusal.
+    if doc_id.startswith('_design/'):
+        return '_design/' + encoded(doc_id[len('_design/'):])
+    return encoded(doc_id)
+
+
 class Reader(object):
     def __init__(self, username, password):
         if not username or not password:
@@ -158,7 +166,7 @@ def export(config, reader, writer):
                     identity = (doc_id, rev)
                     if identity in seen:
                         continue
-                    doc = reader.get(path + '/' + encoded(doc_id),
+                    doc = reader.get(path + '/' + document_path(doc_id),
                                      {'rev': rev, 'revs': 'true', 'attachments': 'true'})
                     validate_doc(doc, doc_id, rev)
                     writer.emit({'type': 'document', 'database': name, 'doc': doc})
@@ -196,9 +204,14 @@ def main():
         scope(config)  # Validate the entire allowlist before any network access.
         reader = Reader(config.get('username'), config.get('password'))
         export(config, reader, Writer(sys.stdout))
-    except Exception:
+    except Exception as error:
         # Deliberately exclude URLs, IDs, response bodies and credentials.
-        sys.stderr.write('Company export failed; partial stream is not a completed snapshot.\n')
+        status = getattr(error, 'code', None)
+        status = status if isinstance(status, int) else None
+        sys.stderr.write('Company export failed (%s, HTTP %s); partial stream is not a completed snapshot.\n'
+                         % (type(error).__name__, status))
+        if isinstance(error, ExportError):
+            sys.stderr.write('Export validation: ' + str(error) + '\n')
         return 1
     return 0
 

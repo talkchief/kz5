@@ -6,7 +6,13 @@ production metadata inventory passed September8 (475ad5). Production node
 `cdb11.talkchief.io` runs CouchDB3.3.2. Seven exact account-owned databases exist:
 `account/d8/52/0ce3f29c5b6db692289e782c92af` and its monthly databases
 `-202604`, `-202605`, `-202606`, `-202607`, `-202608`, `-202609`.
-No customer documents have been copied at this preparation checkpoint.
+Account-only export26720/e97565 now passes:1,847 leaf revisions, matching1,805
+live documents +42 tombstones in the inventory; database update/purge/security
+metadata unchanged during the export. Snapshot is protected on .44 at
+`/var/lib/kazoo-compat/snapshots/company-b05rg4rz.ndjson`, SHA256
+`4d2267c62c7a6f280892d4b98c3abdce45bad75596a13909d14ec95b52d004c4`.
+No database restore or Kazoo5 migration has run yet. Six monthly exports remain
+next; no unrelated/global company data was copied.
 
 ## Reusable snapshot tools
 
@@ -21,11 +27,21 @@ No customer documents have been copied at this preparation checkpoint.
   Exclusive mode0600 files in an owned mode0700 directory outside Git. Interrupted
   or invalid copies remain `.partial`; only complete verified copies become
   `.ndjson`. This helper does not connect to CouchDB or restore into running apps.
-- Offline tests: `python3 -B scripts/test-export-company-couchdb.py` (12) and
-  `python3 -B scripts/test-receive-company-couchdb.py` (6), passedff6226.
+- Offline tests: `python3 -B scripts/test-export-company-couchdb.py` (13) and
+  `python3 -B scripts/test-receive-company-couchdb.py` (6), passedfcdbd3.
   Include foreign/global DB rejection, GET-only transport, conflict/deletion/
   design/attachment preservation, moving source, truncation, tamper, private
-  modes and non-overwriting repeats. Live export/restore acceptance remains next.
+  modes and non-overwriting repeats. Source Python2.7.5 live account export
+  passes26720/e97565; isolated restore acceptance remains next.
+
+The first source attempts safely refused CouchDB's canonical-design-route
+redirect. Only three1,021-byte metadata `.partial` files were left privately on
+.44, no document records. Source now constructs `_design/name` directly without
+weakening redirect refusal; the exact route regression passes. These partials
+are not completed backups and must not be restored.
+
+Initial code findings and remaining scope:
+[coexistence findings](kazoo4_kazoo5_couchdb_findings.md).
 
 The stream preserves current leaf revisions, known revision ancestry and
 attachment bytes, plus database/security metadata before/after. It does not

@@ -15,9 +15,12 @@ company `d8520ce3f29c5b6db692289e782c92af` from production CouchDB `10.1.0.10`
 into isolated development storage, then assess Kazoo5 writes/migrations against
 Kazoo4 compatibility. Read-only production metadata inventory475ad5 confirmed
 CouchDB3.3.2 and seven exact company databases (account + April–September2026
-MODBs). No customer documents copied at this preparation checkpoint. Reusable
-GET-only exporter/private receiver and18 offline safety tests passff6226;
-live protected export and isolated restore are next. See
+MODBs). Account export26720/e97565 passes with1,847 leaf revisions and unchanged
+source metadata; private verified file on .44 is
+`/var/lib/kazoo-compat/snapshots/company-b05rg4rz.ndjson`. No restore/migration
+performed. Reusable GET-only exporter/private receiver and19 offline safety
+tests passfcdbd3, including the live-discovered canonical design-route fix.
+Six monthly copies and isolated restore are next. See
 [assessment plan](doc/kazoo4_kazoo5_couchdb_coexistence_plan.md); never point the
 development apps at production dependencies or put credentials/backups in Git.
 

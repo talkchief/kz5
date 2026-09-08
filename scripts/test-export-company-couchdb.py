@@ -43,7 +43,7 @@ class FakeReader:
             if query['since'] == '0':
                 return {'results': [{'id': '_design/test', 'changes': [{'rev': '2-new'}, {'rev': '2-conflict'}]}], 'last_seq': '1-next', 'pending': 1}
             return {'results': [{'id': 'gone', 'deleted': True, 'changes': [{'rev': '2-deleted'}]}], 'last_seq': '2-end', 'pending': 0}
-        if path == base + '/_design%2Ftest':
+        if path == base + '/_design/test':
             return document('_design/test', query['rev'], _attachments={'x.wav': {'data': 'd2F2', 'content_type': 'audio/wav'}})
         if path == base + '/gone':
             return document('gone', '2-deleted', _deleted=True)
@@ -51,6 +51,11 @@ class FakeReader:
 
 
 class ExportTests(unittest.TestCase):
+    def test_design_route_without_redirect_and_normal_ids_stay_encoded(self):
+        self.assertEqual(module.document_path('_design/test'), '_design/test')
+        self.assertEqual(module.document_path('_design/odd/name'), '_design/odd%2Fname')
+        self.assertEqual(module.document_path('normal/id?secret'), 'normal%2Fid%3Fsecret')
+
     def test_exact_account_allowlist(self):
         for name in [DB, DB + '-202601', DB + '-202612']:
             self.assertEqual(module.scope({'account_id': ACCOUNT, 'databases': [name]})[1], [name])

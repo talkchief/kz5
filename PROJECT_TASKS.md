@@ -21,9 +21,13 @@ Detailed assessment plan: [Kazoo4/5 CouchDB coexistence](doc/kazoo4_kazoo5_couch
 
 September8 checkpoint: source metadata475ad5 confirms CouchDB3.3.2 and exactly
 seven company databases. GET-only exporter and private receiver now tracked in
-`scripts/`;18 offline source-safety/integrity tests passff6226. No customer data
-copied at this preparation checkpoint; isolated export/restore and actual
-Kazoo4/5 compatibility comparison are still pending.
+`scripts/`;19 offline source-safety/integrity tests passfcdbd3 after fixing the
+live-discovered canonical design URL. Account-only export26720/e97565 passes:
+1,847 leaf revisions, stable source metadata, protected verified .44 file
+`/var/lib/kazoo-compat/snapshots/company-b05rg4rz.ndjson`. Six monthly copies,
+isolated restore and actual Kazoo4/5 compatibility comparison remain pending.
+Initial source audit finds account refresh also writes shared aggregate DBs;
+see `doc/kazoo4_kazoo5_couchdb_findings.md`. No coexistence approval yet.
 
 ## Fresh-server and TLS continuation — 2026-09-08
 
