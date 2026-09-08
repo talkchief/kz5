@@ -48,10 +48,13 @@ module.exports = async function queueBrowserSave(page, issues) {
             const data = request.postDataJSON().data;
             assert.deepEqual(Object.keys(data).sort(), ['queue', 'request_id', 'revisions', 'roster', 'route']);
             assert.equal(data.queue.name, receipt.marker);
-            assert.equal(data.queue.callback.enabled, false);
+            assert.equal(data.queue.callback.enabled, pending.enabled);
+            assert.equal(data.queue.callback.outbound_authority.id, state.ACCEPTANCE_AGENT_1_USER_ID);
+            assert.equal(data.queue.callback.outbound_authority.type, 'user');
+            assert.equal(data.queue.callback.caller_id_source, 'inherit');
             assert.equal(data.queue.announcements.language, pending.language);
             assert.equal(data.queue.announcements.interval, 17);
-            assert.equal(data.queue.callback.announcement.interval, 30);
+            assert.equal(data.queue.callback.announcement.interval, pending.enabled ? 30 : undefined);
             assert.deepEqual(data.roster, []);
             assert.deepEqual(data.route, {extension: ''});
             assert(/^[a-f0-9]{32}$/.test(data.request_id));
@@ -66,21 +69,23 @@ module.exports = async function queueBrowserSave(page, issues) {
     });
     try {
         await page.locator('.acdc-live-add:visible').first().click();
-        for (const language of ['en-us', 'he-il', 'ar-sa', 'fr-fr', 'es-es']) {
+        for (const [language, enabled] of [['en-us', true], ['he-il', true], ['ar-sa', true],
+            ['fr-fr', true], ['es-es', true], ['es-es', false]]) {
             if (receipt.queue_id) await page.locator('.acdc-edit-queue[data-id="' + receipt.queue_id + '"]:visible').click();
             const form = page.locator('.acdc-queue-form:visible');
             await form.waitFor({timeout: 30000});
             await form.locator('[name="name"]').fill(receipt.marker);
             await form.locator('[name="announcements.language"]').selectOption(language);
             await form.locator('[name="announcements.interval"]').fill('17');
-            // Exercise real controls, then leave callbacks disabled on this
-            // deliberately unassigned/non-dialable fixture queue.
+            // No route or agents are assigned, so enabling this setting cannot
+            // receive calls. Select only the protected fixture's internal user.
             await form.locator('[name="callback.enabled"]').check();
+            await form.locator('[name="callback.outbound_authority.id"]').selectOption(state.ACCEPTANCE_AGENT_1_USER_ID);
             await form.locator('[name="callback.announcement.interval"]').fill('30');
-            await form.locator('[name="callback.enabled"]').uncheck();
+            if (!enabled) await form.locator('[name="callback.enabled"]').uncheck();
             assert.equal(await form.locator('[name="route_extension"]').inputValue(), '');
             assert.equal(await form.evaluate(element => element.checkValidity()), true);
-            pending = {language, sent: false, state: 'in_flight'};
+            pending = {language, enabled, sent: false, state: 'in_flight'};
             receipt.intents.push(pending); persist();
             const responsePromise = page.waitForResponse(response => {
                 const request = response.request();
@@ -100,13 +105,13 @@ module.exports = async function queueBrowserSave(page, issues) {
             await form.waitFor({state: 'hidden', timeout: 20000});
             const saved = await api('/queues/' + receipt.queue_id);
             assert.equal(saved.name, receipt.marker);
-            assert.equal(saved.callback.enabled, false);
+            assert.equal(saved.callback.enabled, enabled);
             assert.equal(saved.announcements.language, language);
             assert.equal(saved.announcements.interval, 17);
             assert.equal(saved.callback.announcement.interval, 30);
             assert.deepEqual(saved.agents || [], []);
             assert.deepEqual(issues, []);
-            receipt.readbacks.push(language); persist();
+            receipt.readbacks.push({language, enabled}); persist();
         }
         // Freshly reopen the real form, not just API readback.
         await page.locator('.acdc-edit-queue[data-id="' + receipt.queue_id + '"]:visible').click();
@@ -115,14 +120,16 @@ module.exports = async function queueBrowserSave(page, issues) {
         assert.equal(await finalForm.locator('[name="announcements.language"]').inputValue(), 'es-es');
         assert.equal(await finalForm.locator('[name="announcements.interval"]').inputValue(), '17');
         assert.equal(await finalForm.locator('[name="callback.announcement.interval"]').inputValue(), '30');
+        assert.equal(await finalForm.locator('[name="callback.enabled"]').isChecked(), false);
         await finalForm.locator('.acdc-cancel').click();
+        await page.locator('.acdc-edit-queue[data-id="' + receipt.queue_id + '"]:visible').waitFor({timeout: 20000});
         const after = (await api('/queues?paginate=false')).map(queue => queue.id).sort();
         assert.deepEqual(after, [...baseline, receipt.queue_id].sort());
         assert.equal(await page.evaluate(() => monster.apps.core.request.counter), 0);
         assert.equal(await page.locator('.progress-indicator.active').count(), 0);
         assert.deepEqual(issues, []);
         receipt.status = 'PASS'; persist();
-        console.log(JSON.stringify({status: 'PASS', actual_ui_saves: 5, languages: receipt.readbacks,
+        console.log(JSON.stringify({status: 'PASS', actual_ui_saves: 6, readbacks: receipt.readbacks,
             separate_intervals: [17, 30], final_form_reopened: true, queue_id: receipt.queue_id,
             retained: 'one empty-roster, no-extension, callbacks-disabled fixture queue', evidence: dir}));
     } catch (error) {
