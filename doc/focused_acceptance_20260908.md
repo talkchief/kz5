@@ -189,6 +189,16 @@ does not reverse the separate successful registration/retry checks, but full
 returned-recording delivery remains unproven. Native listening and persisted
 language continuity also remain separate from waveform correlation.
 
+Further read-only inspection on September8 (`bc3052`) found continuous RTP
+sequence numbers across both early timestamp gaps: sequence step1, timestamp
+steps800 and320 after160-sample payloads. This is a sender timestamp
+discontinuity, not evidence of a missing captured RTP packet. The160-sample
+reference interval overlapping the phrase has decoded peak64 and RMS26.56
+on the16-bit PCM scale (`25a09d`); it is low-level leading audio, not exact
+digital silence. No claim of bit-complete delivery or native voice approval is
+made. No assertion was relaxed, no PASS receipt replaced the failed coverage
+check, and no FreeSWITCH/audio change was made without a demonstrated cause.
+
 ## Separate-host installer gates still open
 
 Passing installation on this already-provisioned development host does not
@@ -198,13 +208,22 @@ actual remote DB/broker/media integration. Explicit media connectivity must be
 required in split-host acceptance rather than relying on the installer's auto
 mode or an empty configured FreeSWITCH list.
 
-Standalone Monster UI currently delegates catalog registration when no local
-apps node exists; remote Kamailio delegates ACL/discovery without local
-eCallMgr. Those manual boundaries need review against the requested automatic
-separate-host workflow, not a blanket installation-success claim. See
-`install_kazoo5_script.md` and `monster_ui_preserving_install.md`.
+Standalone Monster UI now has explicit pinned remote catalog registration in
+pushed `e4d2226`, with actual loopback SSH/installer routing acceptance. It no
+longer silently skips catalog work. Genuine separate-host and absent-catalog
+creation acceptance remain open; see `monster_ui_remote_catalog.md`.
+Remote Kamailio still requires remote eCallMgr ACL/discovery integration;
+see `install_kazoo5_script.md` and `monster_ui_preserving_install.md`.
 
 Matching TLS private-key, remote AMQPS and designated Android/iPhone delivery
 evidence remain absent. Dashboards stay postponed. Older dated installation
 snapshots may describe superseded ACDC ownership/intercept/UI failures; they
 are historical evidence, not the current open-bug list.
+
+Current TLS readback (`35c74b`): the supplied wildcard certificate matches
+`kz5.talkchief.io` and is valid January20,2026–February20,2027. `/root/ssl`
+contains the certificate and bundle, but no private key. Its matching protected
+key path was requested; it cannot be reconstructed from the certificate.
+Designated FCM/APNs test tokens/topic/environment and a clean Rocky9 SSH target
+were also requested and remain unanswered. No production-user destinations or
+production bridge SSH authority are substituted for those test inputs.
