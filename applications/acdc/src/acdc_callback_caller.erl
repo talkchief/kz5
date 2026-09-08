@@ -12,7 +12,7 @@
 -ifdef(TEST).
 -export([confirmation_event/3, failure_message/4, owner_loss_action/1
         ,confirmation_prompt/2, ready_message/5, settlement/3, valid_start/5
-        ,ready_correlation_probe/0, returned_call_probe/5]).
+        ,ready_correlation_probe/0, returned_call_probe/5, reservation_call/2]).
 -endif.
 
 -include("acdc.hrl").
@@ -126,12 +126,21 @@ init([Owner, QueueDoc, Reservation, LeaseToken, OriginalCall]) ->
                  ,queue_doc=QueueDoc
                  ,reservation=Reservation
                  ,lease_token=LeaseToken
-                 ,original_call=OriginalCall
+                 ,original_call=reservation_call(Reservation, OriginalCall)
                  ,account_id=kz_doc:account_id(Reservation)
                  ,queue_id=kz_json:get_ne_binary_value(<<"queue_id">>, Reservation)
                  ,callback_id=CallbackId
                  ,caller_call_id=kz_json:get_ne_binary_value(<<"pvt_caller_call_id">>, Reservation)
                  }}.
+
+%% Persisted registration language survives retries, recovery and later queue
+%% edits. Older reservations without this field retain their original call.
+-spec reservation_call(kz_json:object(), kapps_call:call()) -> kapps_call:call().
+reservation_call(Reservation, Call) ->
+    case kz_json:get_ne_binary_value(<<"language">>, Reservation) of
+        'undefined' -> Call;
+        Language -> kapps_call:set_language(acdc_language:canonical(Language), Call)
+    end.
 
 -spec handle_call(term(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
 handle_call(_Request, _From, State) ->
@@ -365,8 +374,9 @@ confirmation_prompt(QueueDoc, Call) ->
                                    kz_json:get_json_value(<<"callback">>,QueueDoc,kz_json:new()));
                      Selection -> Selection
                  end,
-    Language = kz_json:get_ne_binary_value([<<"announcements">>,<<"language">>], QueueDoc,
-                                           kapps_call:language(Call)),
+    %% Queue override was applied on admission and snapshotted at registration.
+    %% Current queue edits must not switch a pending caller's response language.
+    Language = acdc_language:canonical(kapps_call:language(Call)),
     case Configured of
         {configured,Prompt} when is_binary(Prompt) ->
             %% Explicit legacy customer media is resolved separately. Built-in

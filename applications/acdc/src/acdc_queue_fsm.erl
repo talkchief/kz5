@@ -40,7 +40,7 @@
         ]).
 
 -ifdef(TEST).
--export([callback_commit/3, callback_observed_agent/3]).
+-export([callback_commit/3, callback_observed_agent/3, registration_settings/3]).
 -export([announcement_media/3
         ,announcement_event_id/1
         ,start_announcement/2
@@ -1365,13 +1365,8 @@ callback_create(AccountId, QueueId, Call, Number, Request, PauseId) ->
                     case {acdc_callback_policy:authorize_registration(AccountId, Queue, Number)
                          ,acdc_queue_member:registration_metadata(Call)} of
                         {{'ok', Authority}, {'ok', Metadata}} ->
-                            Language = kz_json:get_value([<<"announcements">>, <<"language">>], Queue, kapps_call:language(Call)),
-                            Settings = [{<<"number">>, Number}, {<<"language">>, Language}
-                                       ,{<<"max_attempts">>, kz_json:get_value([<<"callback">>, <<"max_attempts">>], Queue, 3)}
-                                       ,{<<"retry_delay">>, kz_json:get_value([<<"callback">>, <<"retry_delay">>], Queue, 60)}
-                                       ,{<<"ttl">>, kz_json:get_value([<<"callback">>, <<"ttl">>], Queue, 3600)}],
                             case acdc_callback_store:create(AccountId, QueueId, acdc_queue_member:logical_id(Call)
-                                                            ,kz_json:set_values(Settings, Metadata), Authority) of
+                                                            ,registration_settings(Queue, Number, Metadata), Authority) of
                                 {'ok', Created} ->
                                     acdc_callback_store:bind_registration(AccountId, QueueId, kz_doc:id(Created)
                                                                           ,kz_json:get_value(<<"Request-ID">>, Request)
@@ -1384,6 +1379,15 @@ callback_create(AccountId, QueueId, Call, Number, Request, PauseId) ->
             end;
         _ -> {'error', 'storage_failed'}
     end.
+
+%% Keep registration_metadata's admitted call language. Policy and retry limits
+%% use current queue settings, but a queue edit must not relocalize this caller.
+-spec registration_settings(kz_json:object(), binary(), kz_json:object()) -> kz_json:object().
+registration_settings(Queue, Number, Metadata) ->
+    kz_json:set_values([{<<"number">>, Number}
+                       ,{<<"max_attempts">>, kz_json:get_value([<<"callback">>, <<"max_attempts">>], Queue, 3)}
+                       ,{<<"retry_delay">>, kz_json:get_value([<<"callback">>, <<"retry_delay">>], Queue, 60)}
+                       ,{<<"ttl">>, kz_json:get_value([<<"callback">>, <<"ttl">>], Queue, 3600)}], Metadata).
 
 callback_number_allowed(AccountId, Queue, Call, Number) ->
     kz_json:is_true([<<"callback">>, <<"allow_alternate_number">>], Queue, 'false')

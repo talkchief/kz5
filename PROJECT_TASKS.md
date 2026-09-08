@@ -2,6 +2,16 @@
 
 ## Immediate operator follow-up — September8
 
+- **VOICE-01 callback language snapshot SOURCE FIXED:** queue edits could
+  overwrite the admitted caller language at registration and returned-call
+  confirmation. Actual-source regression reproduces EN switching to FR. The
+  fix preserves/canonicalizes admitted metadata, restores persisted language
+  per attempt and keeps confirmation on that locale. All10 language and6 caller
+  tests pass; source OpenAPI regenerated. No new audio generation or schema
+  fields. Deployment and real queue-edit acceptance pending; inheritance and
+  resumed position-worker language remain separate. See
+  `doc/acdc_callback_language_snapshot.md`.
+
 - **UI-01 focused source fix DEPLOYED / browser PASS:** Common's storage selector
   never completed its callback on404/other failures and could crash on empty
   successful data. Installer-owned patchf85bb21 fixes both, retains real

@@ -11,6 +11,40 @@ canonical_locales_are_exact_test() ->
     lists:foreach(fun(L) -> ?assertNot(acdc_language:bundled(L)) end,
                   [<<"he">>, <<"ar">>, <<"fr-ca">>, <<"de-de">>, <<>>, 123]).
 
+callback_response_keeps_admitted_language_after_queue_edit_test() ->
+    meck:new(acdc_gemini_prompts, [passthrough, no_link]),
+    try
+        meck:expect(acdc_gemini_prompts, builtin,
+                    fun(_, Language) -> {ok, <<"/installed/", Language/binary>>} end),
+        Queue = kz_json:set_value([<<"announcements">>, <<"language">>], <<"fr-fr">>, kz_json:new()),
+        lists:foreach(fun(Language) ->
+            Call = kapps_call:set_language(Language, kapps_call:new()),
+            ?assertEqual({ok, <<"/installed/", Language/binary>>},
+                         acdc_callback_caller:confirmation_prompt(Queue, Call))
+        end, [<<"en-us">>, <<"he-il">>, <<"ar-sa">>, <<"fr-fr">>, <<"es-es">>])
+    after meck:unload(acdc_gemini_prompts)
+    end.
+
+callback_reservation_restores_snapshot_not_current_call_defaults_test() ->
+    Call = kapps_call:set_language(<<"en-us">>, kapps_call:new()),
+    lists:foreach(fun(Language) ->
+        Reservation = kz_json:from_list([{<<"language">>, Language}]),
+        Restored = acdc_callback_caller:reservation_call(Reservation, Call),
+        ?assertEqual(Language, kapps_call:language(Restored))
+    end, [<<"en-us">>, <<"he-il">>, <<"ar-sa">>, <<"fr-fr">>, <<"es-es">>]),
+    ?assertEqual(Call, acdc_callback_caller:reservation_call(kz_json:new(), Call)).
+
+registration_settings_do_not_overwrite_admitted_language_test() ->
+    Queue = kz_json:from_list([{<<"announcements">>, kz_json:from_list([{<<"language">>, <<"fr-fr">>}])}]),
+    Call = kapps_call:set_call_id(<<"language-fixture">>,
+              kapps_call:set_language(<<"HE_IL">>, kapps_call:new())),
+    {ok, Metadata} = acdc_queue_member:registration_metadata(acdc_queue_member:stamp(Call, 1, 1, 0)),
+    Settings = acdc_queue_fsm:registration_settings(Queue, <<"1000">>, Metadata),
+    ?assertEqual(<<"he-il">>, kz_json:get_value(<<"language">>, Settings)),
+    ?assertEqual(<<"1000">>, kz_json:get_value(<<"number">>, Settings)),
+    ?assertEqual(3, kz_json:get_value(<<"max_attempts">>, Settings)),
+    ?assertEqual(1, kz_json:get_value(<<"enqueued_at">>, Settings)).
+
 recorded_number_groups_preserve_value_and_order_test() ->
     Numbers = lists:seq(0, 10000) ++ [101001, 1001001, 21000021, 999999999],
     lists:foreach(
@@ -142,7 +176,7 @@ callback_language_inherits_queue_and_preserves_custom_media_test() ->
                      acdc_callback_caller:confirmation_prompt(Queue, kapps_call:set_language(<<"he-il">>, Call))),
         Custom = kz_json:set_value([<<"callback">>, <<"media">>, <<"returned_confirmation">>],
                                    <<"account-custom-media">>, Queue),
-        ?assertEqual({ok, <<"prompt://system_media/account-custom-media/HE_IL">>},
+        ?assertEqual({ok, <<"prompt://system_media/account-custom-media/he-il">>},
                      acdc_callback_caller:confirmation_prompt(Custom, kapps_call:set_language(<<"he-il">>, Call)))
     after meck:unload(kz_datamgr)
     end.

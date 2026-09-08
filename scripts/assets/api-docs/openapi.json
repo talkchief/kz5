@@ -50175,7 +50175,8 @@
             "type": "integer"
           },
           "language": {
-            "type": "string"
+            "type": "string",
+            "description": "Immutable callback language captured from the admitted call after its queue language override. Later queue edits do not change this reservation language or its returned-call confirmation. Retries restore this saved language; legacy reservations without it retain the original call language. Built-in audio uses installed prerecorded assets, never runtime synthesis."
           },
           "next_attempt_at": {
             "type": "integer"

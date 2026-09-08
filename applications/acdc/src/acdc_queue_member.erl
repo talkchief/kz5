@@ -325,6 +325,6 @@ valid_callback_id(_) -> 'false'.
 callback_language(Call) ->
     case kapps_call:language(Call) of
         Language when is_binary(Language), byte_size(Language) > 0 ->
-            kz_term:to_lower_binary(Language);
+            acdc_language:canonical(Language);
         _ -> <<"en-us">>
     end.

@@ -1,5 +1,13 @@
 # Kazoo 5 — start here / engineering handoff
 
+**VOICE-01 callback language snapshot source correction ready to deploy.**
+Queue edits could switch admitted callers' callback language. A focused source
+regression reproduces this; corrected registration/restoration/confirmation
+passes10 language and6 returned-caller tests. Shared prerecorded assets are
+unchanged and no Gemini calls occurred. Generated OpenAPI documents the saved
+language contract. See `doc/acdc_callback_language_snapshot.md`; real queue-edit
+acceptance and broader account/reseller inheritance remain open.
+
 **UI-01 optional storage selector fixed / deployed-browser PASS.**
 Installer-owned patchf85bb21 completes failed reads, reports unavailable storage
 and avoids an empty-data crash without fabricating plans or hiding real errors.

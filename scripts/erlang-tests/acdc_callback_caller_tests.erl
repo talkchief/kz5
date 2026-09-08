@@ -93,7 +93,7 @@ returned_confirmation_media_is_language_safe_with_mocks() ->
         ok = meck:new(kapps_call, [passthrough, no_link]),
         try
             meck:expect(acdc_gemini_prompts, builtin, fun(_, _) -> {error,gemini_media_unavailable} end),
-            meck:expect(kapps_call,get_prompt,fun(_,<<"fr-callback-confirmation">>,<<"fr-FR">>) ->
+            meck:expect(kapps_call,get_prompt,fun(_,<<"fr-callback-confirmation">>,<<"fr-fr">>) ->
                 <<"prompt://legacy/fr-callback-confirmation/fr-fr">>
             end),
             returned_confirmation_media_is_language_safe()

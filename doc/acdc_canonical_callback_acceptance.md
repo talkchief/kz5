@@ -25,9 +25,11 @@ patches or replacing running application BEAMs.
   publishing functions or native playback execution.
   Completion is correlated; stale/foreign events cannot complete feedback.
   Failed feedback resumes the original queue instead of claiming registration.
-- `acdc_callback_caller` resolves built-in returned-call confirmation using the
-  queue language before the call's inherited language. Explicit legacy media
-  remains a separate path; malformed explicit values fail closed.
+- At the historical checkpoint below, `acdc_callback_caller` resolved returned
+  confirmation using the current queue language first. The September8 snapshot
+  correction preserves the language selected on admission across later queue
+  edits; see `acdc_callback_language_snapshot.md` for current evidence and limits.
+  Explicit legacy media remains separate; malformed explicit values fail closed.
 - `acdc_announcements` resolves callback media once before the loop, retaining
   the initial monotonic deadline and installing the manager monitor before
   preflight. Slow metadata reads do not add another initial announcement delay.

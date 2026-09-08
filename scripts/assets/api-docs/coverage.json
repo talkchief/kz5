@@ -1565,7 +1565,7 @@
     },
     {
       "file": "applications/crossbar/src/cb_apps_util.erl",
-      "sha256": "0b77f2cbd4422e61dbd448d88de5e0adfa84c485ed768f17e590dc5cf70457f0",
+      "sha256": "dddd574c99a77b671d4375fa58b566f6d42a7d1accfec050c3b3892866d6654d",
       "literal_binding_nouns": []
     },
     {
@@ -1656,7 +1656,7 @@
     },
     {
       "file": "applications/crossbar/src/modules/cb_apps_store.erl",
-      "sha256": "221357d83df2dcf0386fafcf6ecd6c2a863e0084b09e4a3a4ba2abc0b2ab4631",
+      "sha256": "d70c53aa025029235568f6faa34b7aec15f39a49e034dd7e85c6c09786ff978d",
       "literal_binding_nouns": [
         "apps_store"
       ]
@@ -1799,7 +1799,7 @@
     },
     {
       "file": "applications/crossbar/src/modules/cb_directories.erl",
-      "sha256": "7ab5a7409b35018673fa18dd4a22b09bfb8e4fb8690e85b460247c5deaa1309e",
+      "sha256": "e94ba3a41d318445185c17c3c4ff3499bb7beb59f093eff5afb5f0a4831641c7",
       "literal_binding_nouns": [
         "directories"
       ]
@@ -2237,7 +2237,7 @@
     },
     {
       "file": "applications/crossbar/src/modules/cb_vmboxes.erl",
-      "sha256": "81fb34c08ec0deaa912ec617156135ebe787886ab61a20b0f437a3dfd36968ce",
+      "sha256": "a264f1a1c23924d231674c51abb6784ab48d909cdf13e6a05104969ec0365205",
       "literal_binding_nouns": [
         "vmboxes"
       ]
@@ -2352,7 +2352,7 @@
     },
     {
       "file": "applications/acdc/src/acdc_callback_caller.erl",
-      "sha256": "251b9216e038395fd64a9b6ae35b6ca1edc1f4a8669117163fa66ba50776f93e"
+      "sha256": "b84130174125097e0fd7230c81d8cfeeb9ee2e30ecb27cd62304a22ccb4cff89"
     },
     {
       "file": "applications/acdc/src/acdc_callback_internal.erl",
@@ -2956,7 +2956,7 @@
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "e0e83cc5ea84137486d3c64dec9382d3317685987f4e07d894dcf17ddc21e6ee"
+      "sha256": "113e0650c53804a647e9c760f19960b2d58c297a8a335d287429e213d1a40570"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",
@@ -2980,7 +2980,7 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "4e3e21cc2d441e32a862aac1c03965f234712c0b5b0054bd4dddadc6769368d7"
+      "sha256": "580a0824989b41d6c326b1939f32cd0430a39536d79fd6266465244a0dd9a634"
     },
     {
       "file": "scripts/patches/blackhole-kazoo5-integration.patch",
