@@ -1,0 +1,71 @@
+diff --git a/kazoo_services/src/kz_entitlements.erl b/kazoo_services/src/kz_entitlements.erl
+index 93bc741b3..2ed4dccd3 100644
+--- a/kazoo_services/src/kz_entitlements.erl
++++ b/kazoo_services/src/kz_entitlements.erl
+@@ -23,6 +23,7 @@
+ 
+ -ifdef(TEST).
+ -export([calculate_entitlements/2]).
++-export([reseller_ancestors/1]).
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ -endif.
+@@ -56,12 +57,12 @@ entitlements(<<AccountId/binary>>) ->
+     %% none).
+     AccountEntitlements = overlay_entitlements(AccountId),
+ 
+-    ResellerTree = tl(kzd_accounts:tree(AccountId)) ++ [AccountEntitlements], % ancestor -> parent -> account
++    ResellerTree = reseller_ancestors(kzd_accounts:tree(AccountId)) ++ [AccountEntitlements], % ancestor -> parent -> account
+ 
+     calculate_entitlements(ResellerTree);
+ entitlements({ResellerId, AccountId}) ->
+     AccountEntitlements = overlay_entitlements({ResellerId, AccountId}),
+-    ResellerTree = tl(kzd_accounts:tree(AccountId)) ++ [AccountEntitlements], % ancestor -> parent -> account+overlay
++    ResellerTree = reseller_ancestors(kzd_accounts:tree(AccountId)) ++ [AccountEntitlements], % ancestor -> parent -> account+overlay
+     calculate_entitlements(ResellerTree);
+ entitlements(AccountDoc) ->
+     entitlements(kz_doc:id(AccountDoc)).
+@@ -92,7 +93,7 @@ entitlements(<<AccountId/binary>>, <<UserId/binary>>) ->
+ 
+     lager:debug("user ents: ~p", [UserEntitlements]),
+ 
+-    ResellerTree = tl(kzd_accounts:tree(AccountId)) ++ [AccountEntitlements, UserEntitlements], % ancestor -> parent -> account -> user
++    ResellerTree = reseller_ancestors(kzd_accounts:tree(AccountId)) ++ [AccountEntitlements, UserEntitlements], % ancestor -> parent -> account -> user
+ 
+     calculate_entitlements(ResellerTree);
+ entitlements({ResellerId, AccountId}, <<UserId/binary>>) ->
+@@ -102,9 +103,15 @@ entitlements({ResellerId, AccountId}, <<UserId/binary>>) ->
+ 
+     lager:debug("user ents: ~p", [UserEntitlements]),
+ 
+-    ResellerTree = tl(kzd_accounts:tree(AccountId)) ++ [AccountEntitlements, UserEntitlements], % ancestor -> parent -> account+overlay -> user
++    ResellerTree = reseller_ancestors(kzd_accounts:tree(AccountId)) ++ [AccountEntitlements, UserEntitlements], % ancestor -> parent -> account+overlay -> user
+     calculate_entitlements(ResellerTree).
+ 
++%% The master has no ancestors. System capabilities already supply the master
++%% layer; skip that first ancestor for descendants without calling tl([]).
++-spec reseller_ancestors(kz_term:ne_binaries()) -> kz_term:ne_binaries().
++reseller_ancestors([]) -> [];
++reseller_ancestors([_Master | Resellers]) -> Resellers.
++
+ -spec calculate_entitlements([kzd_entitlements:doc()] | kz_term:ne_binaries()) -> kzd_entitlements:doc().
+ calculate_entitlements(AncestryEntitlements) ->
+     calculate_entitlements(AncestryEntitlements, capabilities()).
+diff --git a/kazoo_services/test/kz_entitlements_tests.erl b/kazoo_services/test/kz_entitlements_tests.erl
+index 4cf5e7175..3966cfa7e 100644
+--- a/kazoo_services/test/kz_entitlements_tests.erl
++++ b/kazoo_services/test/kz_entitlements_tests.erl
+@@ -2,6 +2,13 @@
+ 
+ -include_lib("eunit/include/eunit.hrl").
+ 
++reseller_ancestors_test_() ->
++    [{"master has no ancestors", ?_assertEqual([], kz_entitlements:reseller_ancestors([]))}
++    ,{"direct child skips master", ?_assertEqual([], kz_entitlements:reseller_ancestors([<<"master">>]))}
++    ,{"nested resellers retain order", ?_assertEqual([<<"reseller">>, <<"parent">>],
++         kz_entitlements:reseller_ancestors([<<"master">>, <<"reseller">>, <<"parent">>]))}
++    ].
++
+ account_entitlements_test_() ->
+     CapabilityId = kz_binary:rand_hex(5),
+     SystemEntitlements = system_entitlements(CapabilityId),

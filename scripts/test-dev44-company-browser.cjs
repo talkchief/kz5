@@ -6,6 +6,7 @@ const fs = require('node:fs'), assert = require('node:assert/strict');
 const ORIGIN = 'https://kz5-dev.talkchief.io';
 const MASTER = 'adecbb84fbe9e06902a76731914d1943';
 const COMPANY = 'd8520ce3f29c5b6db692289e782c92af';
+const usersOnly = process.argv.slice(2).join(' ') === '--callflows-users';
 
 function privateText(file) {
     const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
@@ -31,7 +32,7 @@ function credentials() {
         const input = fs.readFileSync(0, 'utf8'); assert(input.length < 65536);
         result = JSON.parse(input);
     } else {
-        assert(process.argv.length === 2);
+        assert(process.argv.length === 2 || usersOnly);
         const auth = envFields(privateText('/etc/kazoo/installer-secrets.env'));
         const config = envFields(privateText('/etc/kazoo/deployment.env'));
         result = {account: Buffer.from(config.KAZOO_MASTER_ACCOUNT_NAME, 'base64').toString('utf8'),
@@ -62,6 +63,35 @@ function credentials() {
         await page.locator('button.login').click();
         await page.waitForFunction(id => window.monster && monster.apps.auth.accountId === id, MASTER, {timeout: 30000});
         await page.waitForTimeout(5000);
+        async function checkCallflowsUsers(accountId, expectedCount) {
+            phase = 'callflows-users-' + (accountId === MASTER ? 'master' : 'company');
+            await page.goto(ORIGIN + '/#/apps/callflows', {waitUntil: 'domcontentloaded'});
+            const users = page.locator('.entity-element[data-type="user"]:visible');
+            await users.waitFor({state: 'visible', timeout: 30000});
+            const entitlement = page.waitForResponse(r => new URL(r.url()).pathname ===
+                '/v2/accounts/' + accountId + '/entitlements', {timeout: 20000});
+            await users.click();
+            const response = await entitlement;
+            assert.equal(response.status(), 200);
+            const body = await response.json();
+            assert.equal(body.status, 'success');
+            assert.equal(typeof body.data.capabilities, 'object');
+            await page.locator('.entity-edition:visible').waitFor({timeout: 15000});
+            await page.waitForTimeout(2000);
+            assert.equal(await page.locator('.entity-edition .list-element[data-id]:visible').count(), expectedCount);
+            assert.equal(await page.evaluate(() => monster.apps.core.request.counter), 0);
+            assert.equal(await page.locator('.progress-indicator.active').count(), 0);
+            assert.deepEqual(issues, []);
+        }
+        if (usersOnly) {
+            const masterUsers = await page.evaluate(async id => {
+                const r = await fetch('/v2/accounts/' + id + '/users?paginate=false',
+                    {headers: {'X-Auth-Token': monster.apps.auth.getAuthToken()}});
+                if (r.status !== 200) throw Error('User collection failed');
+                return (await r.json()).data.length;
+            }, MASTER);
+            await checkCallflowsUsers(MASTER, masterUsers);
+        }
         phase = 'master-acdc';
         const masterLive = page.waitForResponse(r => new URL(r.url()).pathname === '/v2/accounts/' + MASTER + '/queues/live');
         await page.goto(ORIGIN + '/#/apps/acdc', {waitUntil: 'domcontentloaded'});
@@ -90,6 +120,15 @@ function credentials() {
             return counts;
         }, COMPANY);
         assert.deepEqual(counts, {users: 15, devices: 82, queues: 4, callflows: 89});
+        if (usersOnly) {
+            await page.route(ORIGIN + '/v2/accounts/**', route =>
+                ['GET', 'HEAD', 'OPTIONS'].includes(route.request().method()) ? route.continue() : route.abort());
+            await checkCallflowsUsers(COMPANY, counts.users);
+            console.log(JSON.stringify({status: 'PASS', callflows_users: ['master', 'copied-company'],
+                company_users: counts.users, entitlements_http: 200, inactive_global_indicator: true,
+                scope: 'actual Users clicks; private-route HTTPS; no user or entitlement writes'}));
+            return;
+        }
         for (const app of ['voip', 'acdc']) {
             phase = 'company-' + app;
             await page.goto(ORIGIN + '/#/apps/' + app, {waitUntil: 'domcontentloaded'});

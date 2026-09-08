@@ -1702,6 +1702,7 @@ ensure_kazoo_sources() {
     grep -Eq '^DEPS[[:space:]]*\?=[[:space:]]*acdc' "${KAZOO_ROOT}/make/apps.mk" || \
         die 'ACDC is not declared in make/apps.mk; use the integrated project revision'
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-jwt-malformed-input.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-entitlements-master-ancestry.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-config-startup-redaction.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-dataplan-log-redaction.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-couch-single-delete-result.patch"
@@ -3299,13 +3300,28 @@ verify_acdc_language_packs() (
 configure_kazoo_api_modules() {
     local module output
     configure_kazoo_scope_management
-    for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers cb_members; do
+    for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers cb_members cb_entitlements; do
         output=$(timeout 30 sup crossbar_maintenance start_module "$module" </dev/null) || \
             die "Could not register Kazoo Crossbar module ${module}"
         [[ $output != *'failed to start'* ]] || die "Kazoo Crossbar module ${module} failed to start"
     done
     log 'Registered and persisted ACDC and Monster UI Crossbar APIs'
+    verify_kazoo_entitlements_module
     configure_kazoo_queue_live_module
+}
+
+verify_kazoo_entitlements_module() {
+    local kind output modules
+    [[ $DRY_RUN != true ]] || return 0
+    for kind in autoload running; do
+        if [[ $kind == autoload ]]; then
+            output=$(timeout 30 sup crossbar_config autoload_modules </dev/null) || die 'Could not inspect entitlement startup registration'
+        else
+            output=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || die 'Could not inspect entitlement runtime registration'
+        fi
+        modules=$(kazoo_blackhole_module_output "$kind" "$output") || die 'Invalid Crossbar registration output'
+        [[ $'\n'"$modules"$'\n' == *$'\n'cb_entitlements$'\n'* ]] || die "cb_entitlements missing from ${kind}; install kazoo-apps"
+    done
 }
 
 configure_kazoo_scope_management() {
@@ -3477,9 +3493,10 @@ verify_kazoo_queue_live_module() {
 verify_acdc_interfaces() {
     local modules module credential_hash auth_body token account_id endpoint result
     verify_kazoo_scope_management
+    verify_kazoo_entitlements_module
     modules=$(timeout 30 sup crossbar_bindings modules_loaded </dev/null) || \
         die 'Could not inspect Crossbar module registrations'
-    for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers cb_members; do
+    for module in cb_queues cb_agents cb_acdc_call_stats cb_external_numbers cb_members cb_entitlements; do
         [[ $modules == *"$module"* ]] || die "Kazoo Crossbar module ${module} is not registered"
     done
     verify_kazoo_queue_live_module
