@@ -20,7 +20,8 @@ async function run() {
     try {
         page = await browser.newPage();
         await page.goto('https://kz5-dev.talkchief.io/',{waitUntil:'domcontentloaded',timeout:15000});
-        // No login, subscriptions, account mutations, SIP calls or provider API.
+        // No subscriptions, SIP calls or provider API. Normal signing may
+        // initialize the fixed acceptance account's missing identity secret.
         async function connect() {
             const issued = JSON.parse(rpc('issue')), tag = 'streamguard-'+randomBytes(16).toString('hex');
             await page.evaluate(async ({token,tag}) => {

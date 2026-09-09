@@ -30,9 +30,9 @@ rpc(Node,M,F,A) -> rpc:call(Node,M,F,A,3000).
 execute(Node,["issue"]) ->
     put(phase, fixture_document),
     Db = rpc(Node,kzs_util,format_account_db,[?ACCOUNT]),
-    {ok,AccountDoc} = rpc(Node,kz_datamgr,open_doc,[Db,?ACCOUNT]),
-    put(phase, existing_signing_secret),
-    true = rpc(Node,kz_auth_identity,has_doc_secret,[AccountDoc]),
+    {ok,_AccountDoc} = rpc(Node,kz_datamgr,open_doc,[Db,?ACCOUNT]),
+    %% Normal signing may initialize only this fixed acceptance account's
+    %% identity secret. Never reset an existing secret or touch another account.
     put(phase, issue_token),
     Expiry = rpc(Node,erlang,system_time,[second]) + 15,
     {ok,Token} = rpc(Node,kz_auth,create_token,[[{<<"account_id">>,?ACCOUNT},{<<"exp">>,Expiry}]]),
