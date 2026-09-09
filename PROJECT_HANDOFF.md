@@ -1,6 +1,6 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Deployment recovery: INSTALL-MODULE-SCOPE-01.** Root installer patch fixes native
+**DEPLOYED: INSTALL-MODULE-SCOPE-01.** Root installer patch fixes native
 Crossbar start/stop writing a node/zone override into cluster default. It now
 updates the effective setting's owner and preserves other scopes. Baseline6/9
 fail; candidate9/9 plus repeatable source-patch replay pass039b20. Native apps
@@ -9,10 +9,12 @@ first deployment `kz5-module-scope-install-main44-20260908` is terminal exit1
 catalog validation stopped before restart. Compilation completed. Recovery
 48eee6 restored correctly initialized -sname units; apps/eCallMgr are active.
 New source guard prevents that invalid unit write; all4 unit-runtime tests
-pass3e7c8c. Supported CLI deployment is now active as suffixed unit
-`kz5-module-scope-install-main44-20260908b`, observer71998, MainPID843103
-confirmed985cd3. Source1204df6 synced. Poll this existing job. Completion and module parity
-remain pending. Do not modify live autoload
+pass3e7c8c. Supported CLI unit `kz5-module-scope-install-main44-20260908b`
+completed successfully (71998/2796d8,11m41.477s). Loaded/disk module MD5
+adbc0d5a568c471e965e66578e6ca2c1 matches. Final41039e confirms source patch,
+active/enabled apps/eCallMgr, zero calls and successful selected CLI validation.
+Both units are terminal; do not rerun or poll. Native concurrent writers and
+custom-scope multi-host reboot are not implied. Do not modify live autoload
 overrides merely to test this. See `doc/crossbar_module_autoload_scope.md`.
 
 **UI-01 native storage registration DEPLOYED / scoped PASS.** Main f0eb1c

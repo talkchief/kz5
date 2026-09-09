@@ -2,7 +2,7 @@
 
 ## Immediate operator follow-up — September8
 
-- **INSTALL-MODULE-SCOPE-01 SOURCE FIX — deployment needs initialized CLI:** native Crossbar
+- **INSTALL-MODULE-SCOPE-01 DEPLOYED / scoped PASS:** native Crossbar
   start/stop read node/zone autoload overrides but overwrote cluster default,
   leaving their own startup list unchanged. Root-owned patch now persists to
   the setting's actual node/zone/default owner and preserves other scopes.
@@ -15,10 +15,12 @@
   48eee6 regenerated both service units with correct -sname; both remain active.
   New unit-writer guard refuses uninitialized mode before mutations (four
   baseline failures838c7f; all4 unit-runtime tests pass3e7c8c). Supported CLI
-  deployment is now active in suffixed unit `kz5-module-scope-install-main44-20260908b`,
-  observer71998, MainPID843103 confirmed985cd3, source1204df6 synced. Poll that
-  existing job; native completion/parity pending;
-  concurrent writers and real split-host reboot are not proven.
+  unit `kz5-module-scope-install-main44-20260908b` completed successfully
+  (71998/2796d8,11m41.477s,380.5MiB). Runtime/disk module MD5 matches
+  adbc0d5a568c471e965e66578e6ca2c1. Final41039e confirms patch applied,
+  apps/eCallMgr active/enabled, zero calls and all selected CLI validations
+  passed. Both jobs are terminal; reuse this evidence rather than rerunning.
+  Concurrent writers and real custom-scope split-host reboot are not proven.
   See `doc/crossbar_module_autoload_scope.md`.
 
 - **UI-01 native storage API installer gap — DEPLOYED / scoped PASS:**

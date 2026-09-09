@@ -72,14 +72,25 @@ bash /opt/kz5/scripts/install-kazoo5.sh kazoo-apps
 
 The guard passes all four unit-runtime test methods (3e7c8c,8.080s), including
 all six naming-mode subcases and existing TEST-BEAM/runtime-root protections.
-Source1204df6 is pushed/synced. The correctly initialized CLI deployment is now
-active as `kz5-module-scope-install-main44-20260908b`, observer71998;
-985cd3 confirms MainPID843103 and active/running. Protected log:
+Source1204df6 is pushed/synced. The correctly initialized CLI deployment
+`kz5-module-scope-install-main44-20260908b` completed successfully on September9,
+observer71998/2796d8: exit0 in11m41.477s,380.5MiB peak. Protected log:
 `/root/kz5-acceptance/module-scope-install-main44-20260908b.log`.
-Poll this job; the first unsuffixed job is terminal and must not be resumed.
+SHA256: `fa1d44186ed7e79b53466a6257ce59ef05d843602a572feb14259260b7185168`.
+Both deployment jobs are terminal; do not poll or repeat them.
 
-Running/disk module parity is pending. Do not label the current dev server
-fixed until a correctly initialized deployment and parity complete. The earlier storage registration
+Running/disk parity129687/737f31/9ca6bc confirms
+`/opt/kz5/applications/crossbar/ebin/crossbar_maintenance.beam`, MD5
+`adbc0d5a568c471e965e66578e6ca2c1`. The initial wrapper8873b4 failed because it
+treated SUP's nonzero typed-return exit as a command failure; the direct typed
+return and independently computed disk MD5 match. That wrapper failure is not
+a module mismatch. Final41039e also verifies exact source-patch application,
+apps/eCallMgr both active and enabled, zero calls, and the installer's final
+successful validation/saved-configuration messages. The normal installer
+verified ACDC, entitlements, storage-plan collection, Blackhole registration
+and prerecorded media; no new calls or provider-generated voices were requested.
+
+The source fix and normal main-server deployment are verified. The earlier storage registration
 on its default scope remains valid; it did not prove custom-node behavior.
 Concurrent writers changing the same module list, live zone/node failure and
 reboot acceptance on separately configured hosts remain separate release gates.
