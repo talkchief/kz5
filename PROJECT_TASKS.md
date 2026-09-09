@@ -16,9 +16,15 @@ work postponed; do not generate voices at runtime or during deployment.
   unexpired paused state and matching runtime membership. Missing/ready/
   expired/nonmember agents, mismatched replicas and incomplete snapshots refuse.
   All138 production maintenance cases pass (`/tmp/kazoo-acdc-maintenance.TvPQ6U`)
-  and16 journal/merger tests pass. This is not yet deployed: running builds12/8
-  target the earlier `e405aab`; finish/collect those exact jobs before syncing
-  or rebuilding either private checkout. Full fence/drain/cold restore remains open.
+  and16 journal/merger tests pass. Earlier normal builds12/8 on `e405aab` passed
+  and were collected. Native queue inventory then passed on both nodes (one
+  queue/three workers each): `queue-inventory-1788996716962-6fdd7ae9.json`.
+  **Current normal builds13/9 target `25be59c`**, units
+  `kz5-stage-install-kazoo-apps-13` and `kz5-stage-install-apps-peer-9`, started
+  after fresh empty-media/callback and six-ready-replica admission. Start log:
+  `paused-drain-deploy-25be59c-1788996821818.log` in the private lab directory.
+  Collect these exact jobs before native queue/agent correlation; do not
+  modify their compiling inputs. Full fence/drain/cold restore remains open.
 
 - **INST-06 / queue drain observation — source PASS, native pending:**
   Four internal read-only queue observations reject pending callback/bridge

@@ -6,6 +6,12 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Normal apps builds12/8 passed and were collected. Installed `e405aab` native
+  queue inventory PASS on both nodes, one queue/three workers each:
+  `queue-inventory-1788996716962-6fdd7ae9.json`. This does not prove full drain.
+  New normal builds13/9 target `25be59c` with paused-agent correlation; collect
+  their exact units before the next native check. See the maintenance document.
+
 - Corrected a false refusal in the new maintenance guard: paused agents also
   publish busy. Busy identities now require complete current paused-agent and
   queue-membership correlation instead of being treated as active calls.

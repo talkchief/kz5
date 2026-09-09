@@ -10,6 +10,24 @@ coordinated restart/rollback acceptance remain open.
 
 ### Latest native results
 
+Both normal `e405aab` builds12/8 passed and were collected. The pinned installed
+native queue collector passed for both nodes: one queue and three workers each,
+receipt `/var/lib/kazoo5-install-lab/queue-inventory-1788996716962-6fdd7ae9.json`.
+Collector SHA-256: `ca59f3858f5d6be9836b49720a4769a517cab2daa1a08cce4d7720479272d8a0`.
+That run used the archived matching helper at
+`/var/tmp/kz5-queue-observer-e405aab.fkrZvE/scripts/test-acdc-native-maintenance.cjs`.
+It proves the idle queue observation on `e405aab`, not the newer paused-member
+correlation, cluster admission fence or cold restart/rollback.
+
+**Current normal builds13/9** target
+`25be59c1c67a13b4a1df15b5b5e20d7a3b2a48d4`, including the busy/paused correction:
+`kz5-stage-install-kazoo-apps-13` and `kz5-stage-install-apps-peer-9`.
+Start log: `paused-drain-deploy-25be59c-1788996821818.log` in the private lab.
+Fresh admission confirmed zero media/callback work and all6 owned replicas
+ready. Collect these exact jobs before native combined queue/agent snapshots.
+Main44 `/opt/kz5` is synced; this does not deploy its main runtime. Do not change
+either private compiling checkout or start duplicate installers.
+
 Complete native agent-cohort merging passed in
 `/var/lib/kazoo5-install-lab/agent-inventory-merged-1788994874158.json`:
 all6 replicas across both expected nodes, agreeing epochs, effective states,
