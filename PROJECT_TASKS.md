@@ -7,14 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Repeated broker-failure acceptance — running:** exact existing dev44 fixture,
+- **Repeated broker-failure acceptance — native PASS:** exact existing dev44 fixture,
   three consecutive30-agent broker outages with only one initial registration
   and Login. All cycles must preserve the original applications PID and all30
   agent FSM identities, conservative busy state while evidence is unavailable,
   subsequent SIP/RTP success and full drain. Per-cycle evidence and independent
   restoration watchdogs retained. Native unit
-  `kz5-repeated-broker-30-20260909.service`, source `c8796e2`; terminal result
-  pending.18 actual parser boundaries and shell checks passed. Not a multi-node
+  `kz5-repeated-broker-30-20260909.service`, source `c8796e2`, Result=success,
+  exit0. Evidence `node-loss/20260909T155107Z/cycle-{1,2,3}`: all90 subsequent
+  caller/agent transactions succeeded,0 failures, errors0/0 and new cores0 in
+  every cycle. All9 services active and zero channels afterward.
+  18 actual parser boundaries and shell checks passed. Not a multi-node
   partition test. See `doc/acdc_native_node_loss.md`.
 
 - **Fresh SUP packaging P0 — FIXED / native rebuild and boot PASS:** the empty
@@ -72,6 +75,10 @@ work postponed; do not generate voices at runtime or during deployment.
   Pivot failure before stopping a working apps/eCallMgr role.
   The current creation path passed automatic apps guest boot in the cold fixture,
   receipt `/var/lib/kazoo5-cold-bootstrap-lab/kazoo-apps-boot-1788968490597.log`.
+  Subsequent FreeSWITCH automatic guest restart/normal verifier also passed:
+  `/var/lib/kazoo5-install-lab/freeswitch-boot-1788969733352.log`.
+  Dependent eCallMgr normal verification after that restart passed:
+  `ecallmgr-verify-1788969827870.log`. Earlier monitor failures remain retained.
 - **Earlier focused handover checkpoint:** fixes for requested points1/2/4/6 are committed in
   kz5 and deployed on main44. Final30-answered/5-queued capacity, broker recovery,
   callback edge cases and HTTP/WSS scope/revocation checks passed. All seven

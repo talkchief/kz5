@@ -4,6 +4,15 @@ This checkpoint does **not** close all four requested groups or certify a
 production release. Keep dashboard/history work postponed. Do not regenerate
 voices or repeat passing normal callback campaigns without a relevant change.
 
+Latest: three consecutive30-agent broker outages passed (`c8796e2`, native
+unit `kz5-repeated-broker-30-20260909.service`, exit0). Same apps process and
+all30 FSMs retained across all cycles,90 subsequent calls succeeded,0 failures,
+errors0/0 and new cores0 each cycle. All9 services active, zero calls afterward.
+Isolated FreeSWITCH automatic guest restart now passed, followed by successful
+dependent eCallMgr verification (`freeswitch-boot-1788969733352.log` and
+`ecallmgr-verify-1788969827870.log`). The final empty apps first-install remains
+running; its last dependency download is progressing, not a terminal failure.
+
 Continuation: the30-minute30-call hold passed natively (1800s,30/30 successes,
 zero failures/errors/cores; `20260909T145906Z`). An empty-data installation exposed
 missing helpers in the SUP archive: account creation succeeded, CLI discovery
@@ -29,7 +38,7 @@ as a complete enterprise release.
 
 | Point | Current verified work | Still open |
 | --- | --- | --- |
-| 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Corrected30-concurrent broker-loss test passed. Subsequent30-concurrent1800s hold passed:30 caller/30 agent successes,0 failures/errors/cores. | Multi-node broker partitions. Three consecutive30-agent broker failures are now under test (`kz5-repeated-broker-30-20260909.service`, `c8796e2`), not yet passed. The30-minute hold does not establish indefinite reliability. |
+| 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Three consecutive30-agent broker outages passed with unchanged apps/FSM identities and90 successful subsequent calls.30-concurrent1800s hold passed:30 caller/30 agent successes,0 failures/errors/cores. | Multi-node broker partitions. The30-minute hold does not establish indefinite reliability. |
 | 2 — Callback edge cases | Worker killed during ringing: cleanup/backoff/completed retry passed. Invalid/empty input, alternate1001, unanswered first return/completed second return passed. Alternate-disabled rejection played complete built-in audio, retained caller until caller BYE, created no ticket and left the busy conversation intact. Earlier five-language/queue-restart passes retained; no Gemini generation. | Historical ambiguous ticket stays quarantined pending operator disposition; cannot infer its old outcome from current zero channels. |
 | 4 — Installer | Required host lock, role ownership, remote-broker monitoring/private-CA and dispatcher fixes. Fresh dependencies, Pivot reservation, eCallMgr readiness, Crossbar public-API registration and SUP archive packaging fixed. All seven isolated backend roles passed normal installation. CouchDB/RabbitMQ, HAProxy, Kamailio and current cold-apps automatic guest boots passed. | Untouched final cold apps bootstrap confirmation, remaining repeat/boot matrix, cluster admission/drain and coordinated upgrade/rollback acceptance. Legacy FreeSWITCH/eCallMgr guest boot failures are retained with successful restoration, not relabeled. Separate UI/bridge provisioning was not tested in this lab. Containers are not independent-machine HA proof. |
 | 6 — API/Blackhole | Native command-auth, delivery, expiry1008, overload1013 and7 ordinary-principal HTTP/WSS scope checks passed. Cached token was revoked by exact isolated-user CAS: next event denied1008/no leak and HTTP401 before expiry. OpenAPI assets HTTPS byte-verified. | Multi-node cache-wide revocation, real slow-network load and cross-node supervision/audio-privacy acceptance. |

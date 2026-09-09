@@ -80,7 +80,14 @@ calls and a complete drain. Each fault has an independent restoration timer.
 Per-cycle evidence is retained under `cycle-1` through `cycle-3`; no earlier
 cycle's capture, counters or FSM receipts are overwritten. This is repeated
 single-broker outage acceptance, not a multi-node network partition test.
-Native result is pending; CLI boundaries and shell checks pass.
+Native unit `kz5-repeated-broker-30-20260909.service` passed with exit0 and
+Result=success at source `c8796e2`. Evidence:
+`/var/log/kazoo-acceptance/node-loss/20260909T155107Z`. Each cycle completed
+its initial30 calls and30 post-recovery calls. All90 post-recovery caller and
+agent transactions succeeded, no failures; each cycle recorded errors0/0 and
+zero new cores. Peak sampled post-recovery CPU was41%,35%,33% respectively.
+All nine main services were active and zero channels remained afterward.
+This closes the bounded repeated-failure case, not multi-node partitions.
 
 Source `ecc2e63` adds the explicit `--live --fault broker` variant. Only the two
 fixed service identities are accepted; arbitrary service names and extra CLI
