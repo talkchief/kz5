@@ -8,16 +8,21 @@ const retry=require('./assert-callback-retry.cjs');
 const {assertCaptureLog}=require('./assert-callback-offer-audio.cjs');
 const ACCOUNT='8310dc3170a18de37f205d0da172df65',IP='127.0.0.20';
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
-function scenario(source){
+function scenario(source,mediaPath){
+    assert(typeof mediaPath==='string'&&path.isAbsolute(mediaPath)&&/^[-A-Za-z0-9_./]+$/.test(mediaPath));
     const start='  <pause variable="confirm_delay_ms"/>';
     assert.equal(source.split(start).length,2);
     const head=source.slice(0,source.indexOf(start));
     assert(head.endsWith('  <nop><action><exec rtp_stream="apattern,1,0,PCMU/8000"/></action></nop>\n'));
-    return require('./callback-internal-scenarios.cjs').derive(head,'returned')+
+    // Speech is not an echo of SIPp's transmitted test pattern. File-mode
+    // silence drives native media reads; the strict received-prompt pcap gate
+    // below supplies the media assertion without a false echo-pattern failure.
+    return require('./callback-internal-scenarios.cjs').derive(head,'returned')
+        .replace('rtp_stream="apattern,1,0,PCMU/8000"','rtp_stream="'+mediaPath+',-1,0,PCMU/8000"')+
         '  <Reference variables="confirm_delay_ms,bridge_hold_ms,dtmf_payload,us,them"/>\n'+
         '  <!-- No digit and no caller-initiated hangup: Kazoo must end this attempt. -->\n'+
         '  <recv request="BYE" timeout="15000"/>\n'+
-        '  <nop><action><exec rtp_stream="pauseapattern"/></action></nop>\n'+
+        '  <nop><action><exec rtp_stream="pause"/></action></nop>\n'+
         '  <send><![CDATA[\nSIP/2.0 200 OK\n[last_Via:]\n[last_From:]\n[last_To:]\n[last_Call-ID:]\n[last_CSeq:]\nContent-Length: 0\n\n]]></send>\n'+
         '</scenario>\n';
 }
@@ -82,10 +87,13 @@ function run(action,directory){
     const pins={},read=name=>{const file=path.join(directory,name),s=fs.lstatSync(file);
         assert(s.isFile()&&!s.isSymbolicLink()&&s.uid===0&&(s.mode&511)===384&&s.size<32*1024*1024);
         const b=fs.readFileSync(file);pins[name]=sha(b);return b;},json=name=>JSON.parse(read(name));
-    const source=()=>scenario(fs.readFileSync(path.join(__dirname,'../sip-tests/callback-returned.xml'),'utf8'));
+    const silence=path.join(directory,'callback-expiry-silence.ulaw');
+    const source=()=>scenario(fs.readFileSync(path.join(__dirname,'../sip-tests/callback-returned.xml'),'utf8'),silence);
     if(action==='generate'){
+        fs.writeFileSync(silence,Buffer.alloc(8000,255),{flag:'wx',mode:384});
         fs.writeFileSync(path.join(directory,'callback-expiry.xml'),source(),{flag:'wx',mode:384});return;
     }
+    assert.deepEqual(read('callback-expiry-silence.ulaw'),Buffer.alloc(8000,255));
     assert.equal(read('callback-expiry.xml').toString(),source(),'No-confirmation scenario changed');
     const registered=json('callback-registration-evidence.json'),first=json('retry-first-attempt.json'),backoff=json('retry-backoff-evidence.json');
     const answered=json('callback-expiry-answered.json'),final=json('callback-expiry-final.json'),edit=json('callback-confirmation-deadline-edit.json');

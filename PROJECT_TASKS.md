@@ -10,6 +10,12 @@
   server BYE, durable `failed/confirmation_timeout` at attempt2, no agent offer,
   zero remaining channels and conditional queue restoration. Positive playback
   acceptance below is not rerun. Native result remains unverified until recorded.
+  First run `/var/log/kazoo-acceptance/20260909T020712Z` correctly reached
+  `failed/confirmation_timeout`, full4.331s prompt, BYE3.030839s later, no agent
+  INVITE and zero channels; timeout restored. Overall FAIL: SIPp exit253 is its
+  RTP echo-pattern check, inappropriate when hearing speech instead of echo.
+  Correct the endpoint to file-mode silence (same approach as offer acceptance),
+  keep strict received-waveform/timestamp assertions and real process-exit gate.
 
 - **CALLBACK-RTP-01 bridge identity correction — FIXED / DEPLOYED / scoped PASS:**
   Native returned-call log selected broadcast while parked, adding five read-only
