@@ -7,6 +7,7 @@
 -define(ACCOUNT, <<"8310dc3170a18de37f205d0da172df65">>).
 main(Args) ->
     try
+        put(phase, local_scope),
         true = Args =:= ["issue"] orelse (length(Args) =:= 3 andalso
             lists:member(hd(Args), ["emit", "overflow"])),
         {ok, Status} = file:read_file("/proc/self/status"),
@@ -22,17 +23,20 @@ main(Args) ->
         ok = application:set_env(kernel, inet_dist_use_interface, {127,0,0,1}),
         {ok,_} = net_kernel:start([list_to_atom("stream_probe_" ++ os:getpid() ++ "@" ++ Host),shortnames]),
         true = erlang:set_cookie(node(), binary_to_atom(Cookie,utf8)),
-        execute(Node, Args), net_kernel:stop()
-    catch _:_ -> io:put_chars("ERROR scoped stream probe refused or unverified\n"), halt(1)
+        put(phase, connected), execute(Node, Args), net_kernel:stop()
+    catch _:_ -> io:format("ERROR scoped stream probe refused: ~p~n",[get(phase)]), halt(1)
     end.
 rpc(Node,M,F,A) -> rpc:call(Node,M,F,A,3000).
 execute(Node,["issue"]) ->
+    put(phase, fixture_document),
     Db = rpc(Node,kzs_util,format_account_db,[?ACCOUNT]),
     {ok,AccountDoc} = rpc(Node,kz_datamgr,open_doc,[Db,?ACCOUNT]),
+    put(phase, existing_signing_secret),
     true = rpc(Node,kz_auth_identity,has_doc_secret,[AccountDoc]),
+    put(phase, issue_token),
     Expiry = rpc(Node,erlang,system_time,[second]) + 15,
     {ok,Token} = rpc(Node,kz_auth,create_token,[[{<<"account_id">>,?ACCOUNT},{<<"exp">>,Expiry}]]),
-    {ok,_} = rpc(Node,kz_auth,validate_token,[Token]),
+    put(phase, validate_token), {ok,_} = rpc(Node,kz_auth,validate_token,[Token]),
     %% Never run this mode uncaptured in a terminal or log.
     io:format("{\"token\":\"~s\",\"expires\":~B}~n",[Token,Expiry]);
 execute(Node,[Operation,Tag0,Marker0]) ->

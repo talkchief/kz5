@@ -13,7 +13,7 @@ function rpc(...args) {
 async function run() {
     assert.equal(process.argv.length,2);
     const {chromium} = require(process.env.KZ5_PLAYWRIGHT_ROOT);
-    const browser = await chromium.launch({headless:true,args:['--no-sandbox']});
+    const browser = await chromium.launch({headless:true,args:['--no-sandbox', '--disable-dev-shm-usage', '--host-resolver-rules=MAP kz5-dev.talkchief.io 10.1.0.44']});
     let phase = 'connect';
     let page;
     const checks = [];
