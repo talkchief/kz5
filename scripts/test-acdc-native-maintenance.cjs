@@ -37,6 +37,12 @@ function agent(entry) {
     assert.equal(d.listener_consuming, true); assert.deepEqual(d.agent_queues, [Q]);
     assert(!d.member_call_id && !d.agent_call_id);
 }
+function assertInstalledSources(primary, peer) {
+    assert(/^[a-f0-9]{40}$/.test(primary.source));
+    assert.equal(primary.source, peer.source);
+    assert.equal(primary.installedSource, primary.source, 'Primary source is not collected as installed');
+    assert.equal(peer.installedSource, peer.source, 'Peer source is not collected as installed');
+}
 function execute() {
     const lockStat = privateFile(LOCK), inherited = fs.fstatSync(3);
     assert.equal(lockStat.dev, inherited.dev); assert.equal(lockStat.ino, inherited.ino);
@@ -48,7 +54,7 @@ function execute() {
     owned(media, 'freeswitch', '172.30.253.15');
     owned(couch, 'couchdb', '172.30.253.11');
     assert.equal(primary.phase, 'installed-service-verified'); assert.equal(peer.phase, 'installed');
-    assert.equal(primary.source, peer.source);
+    assertInstalledSources(primary, peer);
     assert(!fs.existsSync('/etc/kazoo/distributed-monitor-acceptance.json'), 'Other live fixture owns calls');
     assert.equal(JSON.parse(run(['exec', media.id, '/usr/local/freeswitch/bin/fs_cli',
         '-x', 'show channels as json'])).row_count, 0);
@@ -89,7 +95,7 @@ function execute() {
     console.log(JSON.stringify({status: pass ? 'PASS' : 'FAIL', receipt: stem + '.json', cleanup_verified: cleanupVerified}));
     assert(pass, 'Native restore regression did not pass');
 }
-try {
+function main() { try {
     assert.equal(process.getuid(), 0);
     assert(Object.values(os.networkInterfaces()).flat().some(i => i.address === '10.1.0.44'));
     if (process.argv.length === 3 && process.argv[2] === '--live') {
@@ -110,4 +116,6 @@ try {
 } catch (_) {
     // Never print subprocess input, credential-bearing configuration or raw RPC errors.
     console.error('NATIVE_MAINTENANCE_REFUSED_OR_FAILED'); process.exitCode = 1;
-}
+} }
+module.exports = {assertInstalledSources};
+if (require.main === module) main();

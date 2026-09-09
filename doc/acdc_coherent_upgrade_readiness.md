@@ -120,6 +120,14 @@ force-edited during these tests; the private installed runtimes still require
 normal redeployment of this correction.
 All27 existing agent-recovery regressions also pass with the correction.
 
+Native run admission now distinguishes checkout source from successfully
+installed source. The role/peer collectors record `installedSource` only after
+the actual installer exits successfully and the service is active/enabled.
+The restore runner requires that installed revision to match both current guest
+source pins. A source sync alone cannot be counted as deployment. Three guard
+tests and the existing peer scope/reboot regressions pass. Older lab state without
+that field must complete a normal install/collection; do not fabricate the field.
+
 ### Native restart baseline: pause loss reproduced
 
 Both isolated apps installations on `b6d1a04` passed: primary

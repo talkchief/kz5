@@ -202,6 +202,7 @@ function peerOperation(action,h,kind='kazoo-apps') {
     p.exit=fields.ExecMainStatus;saveState(s);assert.equal(p.phase,'installed','Peer normal installer failed; inspect private log');
     assert.equal(podman(['exec',p.id,'systemctl','is-active',unit]),'active');
     assert.equal(podman(['exec',p.id,'systemctl','is-enabled',unit]),'enabled');
+    p.installedSource=p.source;saveState(s);
     console.log(JSON.stringify({status:'PEER_INSTALLED',source:p.source,ip:IP,log:p.log}));
 }
 module.exports={peerSettings,peerConfig,assertPrimary,peerOperation};

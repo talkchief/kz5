@@ -279,7 +279,7 @@ function installRole(role,detached=false) {
     assert.equal(r.phase,'installed','Normal installer failed; inspect private role log');
     assert.equal(podman(['exec',r.id,'systemctl','is-active',UNITS[role]+'.service']),'active');
     assert.equal(podman(['exec',r.id,'systemctl','is-enabled',UNITS[role]+'.service']),'enabled');
-    r.phase='installed-service-verified';saveState(s);
+    r.phase='installed-service-verified';r.installedSource=r.source||s.source;saveState(s);
     console.log(JSON.stringify({status:'PASS',role,attempt,source:r.source||s.source,service:UNITS[role],log}));
 }
 function separateNamespace(target,host) {
@@ -339,7 +339,7 @@ function collectRole(role) {
     assert.equal(r.phase,'installed','Detached normal installer failed; inspect private role log');
     assert.equal(podman(['exec',r.id,'systemctl','is-active',UNITS[role]+'.service']),'active');
     assert.equal(podman(['exec',r.id,'systemctl','is-enabled',UNITS[role]+'.service']),'enabled');
-    r.phase='installed-service-verified';saveState(s);console.log(JSON.stringify({status:'PASS',role,source:r.source||s.source,log:r.log}));
+    r.phase='installed-service-verified';r.installedSource=r.source||s.source;saveState(s);console.log(JSON.stringify({status:'PASS',role,source:r.source||s.source,log:r.log}));
 }
 function provisionMonitor() {
     const s=readState();ownedNetwork(s);const r=s.roles.rabbitmq;assert.equal(r?.phase,'installed-service-verified');
