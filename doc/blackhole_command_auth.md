@@ -41,6 +41,19 @@ This guard is not authorization to access another account or queue.
   assumed authentication could be absent. Its isolated fixture now uses the
   real native ping/auth binding path with an explicit token-validator double;
   no real JWT or broker acceptance is inferred from that fixture.
+- Corrected queue fixture:22 tests PASS, `/tmp/kazoo-blackhole-queue-live.XGbSGF`
+  (8ead8f). It now exercises real native ping/auth bindings rather than treating
+  a cached account/noop as authentication.
+- Frame/wire compatibility initially failed four successful-frame controls for
+  the same absent-auth fixture assumption. With an explicit controlled validator
+  and token-auth binding, all13 wire groups pass, including exact/oversized/
+  fragmented frames and normal cleanup. `/tmp/kazoo-blackhole-frames.LO3Slt`
+  (be01e3). No frame bounds or cleanup assertions were relaxed.
+- Actual main44 WSS baseline with its real administrator token: anonymous denial,
+  valid ping and cached ping passed; changed-token denial failed (44c4d3/14604c).
+  `/root/kz5-acceptance/blackhole-command-before-20260909.log`, exit1,6.858s.
+  This confirms the running old handler accepted a command with a replaced
+  invalid token after valid authentication. No subscriptions/account writes/calls.
 
 Replay:
 

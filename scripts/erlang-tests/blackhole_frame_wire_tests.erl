@@ -28,7 +28,7 @@ frames_test_() ->
 
 val(Key) -> [{Key, Value}] = ets:lookup(?TABLE, Key), Value.
 put_value(Key, Value) -> ets:insert(?TABLE, {Key, Value}).
-mocks() -> [lager, kz_nodes, kz_buckets, kapps_config, kz_app_config,
+mocks() -> [lager, kz_nodes, kz_buckets, kz_auth, kapps_config, kz_app_config,
             gen_listener, blackhole_listener, blackhole_socket_callback].
 
 setup() ->
@@ -36,7 +36,7 @@ setup() ->
     ets:insert(?TABLE, [{max_bytes, absent}, {mode, capture}, {calls, 0}, {owner, self()}]),
     ok = meck:new(lager, [non_strict, no_link]),
     lists:foreach(fun(M) -> ok = meck:new(M, [no_link]) end,
-                  [kz_nodes, kz_buckets, kapps_config, kz_app_config, gen_listener, blackhole_listener]),
+                  [kz_nodes, kz_buckets, kz_auth, kapps_config, kz_app_config, gen_listener, blackhole_listener]),
     ok = meck:new(blackhole_socket_callback, [passthrough, no_link]),
     lists:foreach(fun(Level) ->
         meck:expect(lager, Level, fun(_) -> ok end),
@@ -48,6 +48,9 @@ setup() ->
     meck:expect(lager, md, fun(Metadata) -> erlang:put(blackhole_frame_metadata, Metadata), ok end),
     meck:expect(kz_nodes, node_hostname, fun() -> <<"frame-fixture.invalid">> end),
     meck:expect(kz_buckets, consume_token, fun(<<"blackhole">>, _) -> true end),
+    meck:expect(kz_auth, validate_token, fun(<<"frame-fixture-token">>) ->
+        {ok,kz_json:from_list([{<<"account_id">>,<<"frame-fixture-account">>}])}
+    end),
     meck:expect(kapps_config, get, fun(<<"blackhole">>, <<"max_frame_size_bytes">>, 65536) ->
         case val(max_bytes) of absent -> 65536; Value -> Value end
     end),
@@ -75,6 +78,7 @@ setup() ->
     ok = blackhole_bindings:bind(<<"blackhole.session.close">>, bh_events, close),
     ok = blackhole_bindings:bind(<<"blackhole.session.close">>, ?MODULE, session_close),
     ok = blackhole_bindings:bind(<<"blackhole.command.frame">>, ?MODULE, echo),
+    ok = bh_token_auth:init(),
     {ok, Started} = application:ensure_all_started(cowboy),
     Dispatch = cowboy_router:compile([{'_', [{"/", blackhole_socket_handler, []}]}]),
     {ok, _} = cowboy:start_clear(?LISTENER,
@@ -116,6 +120,7 @@ session_open(Context) ->
     ok = blackhole_bindings:bind(<<"blackhole.event.", AMQP/binary>>, bh_events, event, Payload),
     ok = blackhole_listener:add_bindings(Listeners),
     Ctx = bh_context:setters(Context, [fun bh_context:set_authorized/1,
+        {fun bh_context:set_auth_token/2, <<"frame-fixture-token">>},
         {fun bh_context:set_auth_account_id/2, <<"frame-fixture-account">>},
         {fun bh_context:set_bindings/2, [{Client, [AMQP]}]},
         {fun bh_context:add_listeners/2, Listeners}]),

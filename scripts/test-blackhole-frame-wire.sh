@@ -30,6 +30,7 @@ blackhole_frame_sources=(
 blackhole_frame_dependencies=(
     core/kazoo_bindings/ebin/kazoo_bindings.beam
     core/kazoo_bindings/ebin/kazoo_bindings_rt.beam
+    core/kazoo_auth/ebin/kz_auth.beam
     core/kazoo_stdlib/ebin/kz_json.beam
     core/kazoo_stdlib/ebin/kz_log.beam
     core/kazoo_stdlib/ebin/kz_term.beam
