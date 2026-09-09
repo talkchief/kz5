@@ -19,7 +19,12 @@ work postponed; do not generate voices at runtime or during deployment.
   now has a fixed original-lab transport adapter: API on apps-peer20, SIP via
   Kamailio17, FS diagnostics on media15, RTP capture on the private bridge only.
   Same full before/after-DTMF audio/privacy checks; no arbitrary host option.
-  Native supervision run pending; local scope/audio regressions pass.
+  Native supervision run pending; local scope/audio regressions pass. First
+  attempt stopped during fixture authentication withHTTP429 before calls and
+  cleaned temporary users. The normal35-token login cost/100-token burst admits
+  fewer than three immediate logins; distributed harness now paces setup4s per
+  login without changing rate limits or retrying writes. Failure retained at
+  `/var/lib/kazoo5-install-lab/monitor-distributed-1.log`.
 
 - **eCallMgr automatic-boot gate — native PASS:**
   `--ecallmgr-peer` reuses only the original isolated lab's verified controller

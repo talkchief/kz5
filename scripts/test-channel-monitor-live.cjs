@@ -102,7 +102,12 @@ async function request(method,route,body,token,expected=200) {
     }
     const accepted=Array.isArray(expected)?expected:[expected];
     if(!accepted.includes(r.status)) {
-        const error=Error(`Expected HTTP${expected}, received${r.status} for ${method}`);
+        const safeRoute=route.split('?')[0];
+        assert(/^[A-Za-z0-9_/-]{1,200}$/.test(safeRoute),'Unexpected diagnostic route');
+        const retryAfter=r.headers.get('retry-after');
+        const retry=/^[0-9]{1,4}$/.test(retryAfter||'')?`; retry-after ${retryAfter}s`:'';
+        const category=/^[a-z_]{1,64}$/.test(j.message||'')?`; ${j.message}`:'';
+        const error=Error(`Expected HTTP${expected}, received${r.status} for ${method} ${safeRoute}${category}${retry}`);
         error.http_status=r.status;throw error;
     }
     if(r.status<300) assert(j.status==='success','Crossbar did not succeed');
@@ -110,6 +115,10 @@ async function request(method,route,body,token,expected=200) {
 }
 const route=(collection,id='')=>`accounts/${state.ACCEPTANCE_ACCOUNT_ID}/${collection}${id?'/'+id:''}`;
 async function login(username,password,realm,account) {
+    // Fresh distributed lab keeps the normal anti-abuse bucket: three fixture
+    // logins at35 tokens each exceed its100-token burst when sent together.
+    // Pace setup; never disable rate limiting or replay rejected mutations.
+    if(distributed)await sleep(4000);
     const j=await request('PUT','user_auth',{credentials:crypto.createHash('md5').update(username+':'+password).digest('hex'),method:'md5',realm},undefined,[200,201]);
     assert(j.data.account_id===account&&typeof j.auth_token==='string','Authentication account mismatch'); return j.auth_token;
 }
