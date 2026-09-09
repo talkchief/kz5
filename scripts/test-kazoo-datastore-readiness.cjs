@@ -47,6 +47,11 @@ verify_kazoo_current_build(){ record current-build; }
 configure_kazoo(){ record source-config; }
 install_kazoo_systemd_units(){ record units; }
 install_sup_cli(){ :; }
+install_nodejs_toolchain(){ :; }
+acdc_broker_upgrade_preflight(){ :; }
+install_call_forward_confirmation_pack(){ :; }
+install_monster_catalog_receiver(){ :; }
+wait_kazoo_bootstrap_ready(){ :; }
 service_enable_restart(){ record "restart $1"; }
 install_acdc_language_packs(){ :; }
 install_acdc_editor_capabilities(){ :; }

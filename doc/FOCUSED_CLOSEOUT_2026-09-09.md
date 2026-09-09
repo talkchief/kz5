@@ -47,7 +47,9 @@ New native fault acceptance:
   Only fixed acceptance user signing secret changed; do not restore revoked keys.
 - `12313fd` removes URI credentials from25 AMQP connection logging sites;
   actual-module AMQP/AMQPS regression passed. Normal apps+eCallMgr deployment
-  `kz5-amqp-redaction-deploy-20260909.service` is pending terminal verification.
+  `kz5-amqp-redaction-deploy-20260909.service` completed exit0, all normal checks
+  passed. All9 services active with NRestarts0, zero calls and zero error-priority
+  apps/eCallMgr journal entries since deployment start13:50:25UTC.
   Old protected logs may still contain credentials; never print them unredacted.
 
 - `kz5-acdc-broker-loss-20260909.service`, exit0 (fc13ec), evidence

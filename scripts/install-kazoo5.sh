@@ -4143,6 +4143,9 @@ register_configured_freeswitch_nodes() {
     fi
     systemctl is-active --quiet kazoo-ecallmgr.service 2>/dev/null || return 0
     command -v sup >/dev/null || die 'SUP is required to register FreeSWITCH with eCallMgr'
+    # get_fs_nodes reads saved configuration and can succeed before the media
+    # supervisor exists. Do not attempt registration until its app has started.
+    verify_erlang_applications ecallmgr ecallmgr
     deadline=$((SECONDS + KAZOO_START_TIMEOUT))
     while ((SECONDS < deadline)); do
         if configured=$(timeout --signal=KILL 30 sup -n ecallmgr \
@@ -4163,9 +4166,11 @@ register_configured_freeswitch_nodes() {
         if ! output=$(timeout --signal=KILL 60 sup -n ecallmgr \
             ecallmgr_maintenance add_fs_node "$node" </dev/null 2>&1); then
             [[ $output == *'{error,node_exists}'* ]] || \
-                die "Could not register ${node} with eCallMgr: ${output}"
+                die "Could not register ${node} with eCallMgr; inspect protected eCallMgr logs"
         fi
-        log "Registered FreeSWITCH node with eCallMgr: ${node} (${output:-ok})"
+        # A failed SUP call can include the distribution cookie in its Erlang
+        # argument dump. Never print raw success or error output here.
+        log "Registered FreeSWITCH node with eCallMgr: ${node}"
         configured+=$'\n'"$node"
     done
 }

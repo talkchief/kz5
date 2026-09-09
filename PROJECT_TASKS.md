@@ -7,7 +7,14 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Separated-role container restrictions — source fixes, native retry pending:**
+- **eCallMgr media registration startup race — source fixed, retry pending:**
+  separate eCallMgr exposed that `get_fs_nodes` can read saved config before
+  the media supervisor starts. Registration now waits for the actual eCallMgr
+  application, using the existing bounded runtime gate. Raw SUP add-node output
+  is no longer printed on success/failure because exceptions can contain the
+  distribution cookie. Actual hook regression covers admission/refusal and
+  sentinel-cookie non-disclosure; no credential or runtime guard bypass.
+- **Separated-role container restrictions — fixes deployed, retries running:**
   apps compiled successfully but its Pivot reservation service correctly refused
   a read-only container sysctl. Lab creation now reserves only the namespaced
   Pivot ports; older owned roles use a pinned, proven non-host network namespace
@@ -16,6 +23,9 @@ work postponed; do not generate voices at runtime or during deployment.
   sockets. Normal verification now retries inspection as the fixed service UID,
   retaining exact process/peer validation and requiring no extra capability.
   Bare sockets and wrong peers remain rejected. No production safety check removed.
+  Native Kamailio retry3 now passed its exact socket check; its later JWT gate
+  correctly refused because the isolated apps role was not yet running. Retry
+  after apps admission, not by disabling that check. Apps4/eCallMgr3 are running.
 - **Point1 corrected30-call broker-loss campaign — native PASS:**
   `kz5-acdc-broker-loss-30-fixed-20260909.service` completed exit0 after
   normal deployment of `b19fde3`. Evidence `node-loss/20260909T133950Z`:
@@ -41,17 +51,28 @@ work postponed; do not generate voices at runtime or during deployment.
   (`freeswitch-install-4.log`, source `d79a7d4`). Apps fresh bootstrap failed only
   without a login-home environment: two exact systemd probes reproduce failure
   without User=root and success with it. `f909ebd` fixes launcher and early build
-  preflight; apps retry3 has passed dependencies and is compiling applications.
+  preflight; apps retry3 passed dependency/production compilation before the
+  container-only reservation failure described above.
   New role creation also now syncs the current commit after loading the immutable
   base bundle, preventing reuse of old pre-fix sources on later-created roles.
-- **AMQP credential logging — SOURCE FIXED, deployment pending:** native broker
+- **AMQP credential logging — DEPLOYED / normal validation PASS:** native broker
   shutdown exposed URI credentials in connection diagnostics. All25 broker-URI
   logging sites in `kz_amqp_connection` now use the existing credential-removal
   helper. Actual blocked/unblocked/disconnected entry tests pass for AMQP/AMQPS
   while retaining the real URI in runtime connection state. Do not display raw
   existing broker logs; historical protected logs may still contain credentials.
+  Normal apps+eCallMgr unit `kz5-amqp-redaction-deploy-20260909.service` exited0,
+  all requested checks passed. All9 services active, NRestarts0, zero calls and
+  zero apps/eCallMgr error-priority journal entries since13:50:25UTC. Source
+  synced to `6eddc28` on main44 before separated-role retries began.
+- **Post-fix capacity acceptance running:** `kz5-final-capacity-20260909.service`
+  uses the existing locked isolated fixture for30 answered plus5 queued callers,
+  with180s continuously verified concurrency and normal drain/RTP/log checks.
+  No result is claimed until the terminal evidence is collected.
 
-- **Latest checkpoint — NOT all four points closed:** the30-call broker-loss
+### Earlier checkpoints (superseded by the current results above)
+
+- **Initial failed30-call checkpoint:** the30-call broker-loss
   campaign completed both30-call batches and same-FSM recovery, but failed its
   clean-log gate (4/40 new errors), unit `kz5-acdc-broker-loss-30-20260909`,
   evidence `node-loss/20260909T131334Z`. eCallMgr repeatedly rebuilt an improper
