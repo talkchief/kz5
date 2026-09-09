@@ -7,7 +7,7 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **AMQP replacement registration P0 — reproduced / source fixed, native pending:**
+- **AMQP replacement registration P0 — source fixed / native replacement PASS:**
   controller16's connection worker crashed after a snapshot-induced heartbeat
   loss at17:46:48UTC. OTP replaced it, but the new PID never registered: native
   registry empty, `is_available=false`, broker TCP up with11 channels, directory
@@ -15,8 +15,12 @@ work postponed; do not generate voices at runtime or during deployment.
   endpoint lookup timeouts after the separate SBC403 was fixed. Required core
   patch registers every supervised incarnation and preserves its zone/tags;
   three actual-module OTP regressions fail before and pass after. Normal apps and
-  eCallMgr verification now rejects an unavailable registry. Native deployment
-  and call after-tests pending; see `doc/amqp_supervised_registration.md`.
+  eCallMgr verification now rejects an unavailable registry. Both lab controller
+  normal installs PASS on `0957b33` (`ecallmgr-install-5.log`,
+  `ecallmgr-peer-install-3.log`). Native worker replacement recovered registered
+  availability with the same VM and normal verifier PASS, without fallback
+  restart: `amqp-restart-1788981250927.json`. Main44 deployment and distributed
+  call after-tests running; see `doc/amqp_supervised_registration.md`.
 
 - **Separate SBC admission P0 — reproduced, source fix under acceptance:**
   distributed monitor attempt2 registered all three devices, but the first
@@ -26,7 +30,10 @@ work postponed; do not generate voices at runtime or during deployment.
   standalone installer assumed discovery. Installer now enables and verifies
   the existing authenticated-zone discovery worker, which admits exact advertised
   listener addresses and publishes ACL reloads; no subnet-wide allow rule.
-  Native after-test pending. Receipt `monitor-distributed-2.log` remains FAILED.
+  Normal peer installer source `9c75fe8` PASS and active exact SBC ACL changed
+  false→true. Subsequent call proved proxy authorization and reached180 Ringing;
+  its directory timeout led to the separate AMQP bug above. Receipt
+  `monitor-distributed-2.log` remains FAILED; full call acceptance still pending.
 
 - **Distributed SIP/supervision acceptance fixture — native provisioning PASS:**
   original private lab only, three-agent synthetic child company and dedicated

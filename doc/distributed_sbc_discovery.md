@@ -21,4 +21,9 @@ that conflicting configuration deliberately instead of reporting readiness.
 
 Regression: `node scripts/test-ecallmgr-sbc-discovery.cjs` tests initialization,
 already-running, write failure, rejected result, start failure, effective override,
-dry run, and normal installer wiring. Native call after-test remains pending.
+dry run, and normal installer wiring. Normal peer install `9c75fe8` passed at
+`/var/lib/kazoo5-install-lab/ecallmgr-peer-install-2.log`. The active exact
+SBC ACL changed false→true and the next INVITE was accepted by FreeSWITCH,
+reaching180 Ringing. Its later directory timeout exposed the separate
+[AMQP replacement-registration bug](amqp_supervised_registration.md).
+The full distributed supervision after-test remains pending.

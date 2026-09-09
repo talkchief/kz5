@@ -34,6 +34,14 @@ availability explicitly; they never connect to a broker. Zone/tags/hidden flag
 and new-PID availability are verified. Original test evidence is retained under
 `/tmp/kazoo-amqp-supervised.icKQ4u` on the source host.
 
-Native normal deployment, real broker reconnect and subsequent SIP/RTP acceptance
-remain pending. This is not a claim about loss of the registry process itself,
+Both separate controllers passed normal installation on source `0957b33`:
+`ecallmgr-install-5.log` and `ecallmgr-peer-install-3.log` in the original lab.
+The native real-worker fault then PASSed at19:14UTC:
+`/var/lib/kazoo5-install-lab/amqp-restart-1788981250927.json`.
+The replacement registered, broker availability returned, the Erlang VM stayed
+unchanged and normal eCallMgr verification passed without a fallback restart.
+No synthetic availability notification was used in that native run.
+
+Main44 normal apps/eCallMgr deployment and subsequent distributed SIP/RTP acceptance
+are running. This is not a claim about loss of the registry process itself,
 an indefinite network partition, or a coordinated rolling upgrade.
