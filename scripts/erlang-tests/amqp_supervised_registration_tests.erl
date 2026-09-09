@@ -11,6 +11,8 @@ replacement(Zone, Tags) ->
     process_flag(trap_exit, true),
     meck:new(lager, [non_strict, no_link]),
     meck:new(kz_log, [non_strict, no_link]),
+    meck:new(amqp_connection, [non_strict, no_link]),
+    meck:expect(amqp_connection, start, fun(_) -> error(unexpected_broker_connection) end),
     meck:expect(kz_log, put_callid, fun(_) -> ok end),
     [meck:expect(lager, L, fun(_, _) -> ok end) || L <- [debug, info, warning]],
     {ok, Registry} = kz_amqp_connections:start_link(),
@@ -30,10 +32,11 @@ replacement(Zone, Tags) ->
         ?assertEqual(false, After#kz_amqp_connections.available),
         ?assertEqual(lists:member(<<"hidden">>, Tags), After#kz_amqp_connections.hidden),
         kz_amqp_connections:available(New),
-        wait_available(New, 60)
+        wait_available(New, 60),
+        ?assertEqual(0, meck:num_calls(amqp_connection, start, '_'))
     after
         gen_server:stop(Sup), gen_server:stop(Registry),
-        meck:unload(kz_log), meck:unload(lager)
+        meck:unload(amqp_connection), meck:unload(kz_log), meck:unload(lager)
     end.
 
 wait_records(_, _, _, 0) -> error(replacement_registration_missing);
