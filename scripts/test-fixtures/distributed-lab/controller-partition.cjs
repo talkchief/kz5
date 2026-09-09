@@ -28,8 +28,13 @@ class Partition {
     exec(n,...args){return this.run(['podman','exec',n.id,...args]);}
     available(n){const value=this.exec(n,'sup','-n','ecallmgr','-e','kz_amqp_connections','is_available');
         assert(['true','false'].includes(value),'Invalid native broker status');return value==='true';}
-    queryReady(n){const value=this.exec(n,'sup','-n','ecallmgr','-e','gen_listener','is_consuming','ecallmgr_fs_channels');
-        assert(['true','false'].includes(value),'Invalid native channel-consumer status');return value==='true';}
+    queryReady(n){
+        // A reconnecting listener can temporarily block its bounded status RPC.
+        // Unknown is not ready, and can never satisfy the recovery gate.
+        let value;try {value=this.exec(n,'sup','-n','ecallmgr','-e','gen_listener','is_consuming','ecallmgr_fs_channels');}
+        catch {return false;}
+        return value==='true';
+    }
     async wait(fn,seconds) {
         const end=Date.now()+seconds*1000;
         while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,200));}
