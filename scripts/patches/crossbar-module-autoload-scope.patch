@@ -19,7 +19,7 @@ index f93f1bfc..b651498c 100644
 +-spec set_effective_autoload_modules(kz_term:ne_binaries()) ->
 +          {'ok', kz_json:object()} | {'error', any()}.
 +set_effective_autoload_modules(Modules) ->
-+    case kapps_config:get_category(?CONFIG_CAT, 'false') of
++    case kz_datamgr:open_doc(?KZ_CONFIG_DB, ?CONFIG_CAT) of
 +        {'ok', Config} ->
 +            Node = kz_term:to_binary(node()),
 +            Zone = kz_term:to_binary(kz_config:zone()),

@@ -7,6 +7,14 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Confirmed fresh Crossbar registration failure — source fixed:** apps5
+  reached API registration and exposed `undef` in the earlier autoload-scope
+  change: it called private `kapps_config:get_category/2`. Replaced with public
+  uncached `kz_datamgr:open_doc/2`, preserving node/zone/default ownership.
+  Corrected the test seam that had invented the private export; mandatory fresh
+  patch and old-source transition are included in the installer. Existing
+  deployments often skipped this path because modules were already registered.
+  Native normal deployment/retry required before closure.
 - **Latest separated native results:** eCallMgr4 (`e780af1`) and Kamailio4
   (`6eddc28`) passed normal installer verification. eCallMgr reached the separate
   FreeSWITCH node with negotiated framing and native intercept inventory.

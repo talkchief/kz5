@@ -65,6 +65,14 @@ No runtime-only BEAM loading was used.
   This is a deployment window check, not a long-running crash/soak guarantee.
 
 The developer contract is in `/apis/blackhole.html` and the OpenAPI
-`x-blackhole.outbound_delivery` extension. Native token revocation propagation,
-restricted-principal scopes and cross-node supervision/audio privacy remain
-separate acceptance cases; do not relabel this fix as proof of those cases.
+`x-blackhole.outbound_delivery` extension.
+
+Subsequent September9 native acceptance passed7 ordinary-principal HTTP/WSS
+scope checks (`kz5-native-principal-20260909.service`) and4 cached-identity
+revocation checks (`kz5-native-revocation-20260909.service`). A valid event first
+warmed identity caches; exact revision-checked signing-secret rotation for the
+isolated acceptance user then denied the next event with1008/no marker leak and
+returned HTTP401 before token expiry. The old signing secret is not restored.
+These results cover one serving node, not propagation during a multi-node
+partition. Real slow-network load and cross-node supervision/audio privacy
+remain separate acceptance cases; do not relabel mailbox injection as those tests.

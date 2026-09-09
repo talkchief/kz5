@@ -32,7 +32,7 @@ run(Case) ->
     end,
     T = ets:new(module_scope_fixture, [public, set]),
     ets:insert(T, [{doc, Doc}, {writes, []}]),
-    Modules = [crossbar_init, crossbar_config, kapps_config, kz_config],
+    Modules = [crossbar_init, crossbar_config, kapps_config, kz_config, kz_datamgr],
     try
         lists:foreach(fun(M) -> meck:new(M, [non_strict, no_link]) end, Modules),
         meck:expect(crossbar_init, start_mod, fun(_) -> ok end),
@@ -41,7 +41,9 @@ run(Case) ->
         meck:expect(crossbar_config, set_default_autoload_modules,
                     fun(Value) -> save(T, <<"default">>, Value) end),
         meck:expect(kz_config, zone, fun() -> Zone end),
-        meck:expect(kapps_config, get_category, fun(<<"crossbar">>, false) ->
+        %% Mock the public uncached read, not a fabricated private config export.
+        %% The previous get_category/2 expectation hid an undef in real installs.
+        meck:expect(kz_datamgr, open_doc, fun(<<"system_config">>, <<"crossbar">>) ->
             case Case of read_failure -> {error, timeout}; missing_category -> {error, not_found}; _ -> {ok, Doc} end
         end),
         meck:expect(kapps_config, set_node, fun(<<"crossbar">>, <<"autoload_modules">>, Value, Owner) ->

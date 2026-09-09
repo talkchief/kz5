@@ -1752,6 +1752,11 @@ ensure_kazoo_sources() {
         "$SCRIPT_DIR/patches/crossbar-scope-management-guard.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
         "$SCRIPT_DIR/patches/crossbar-optional-content-defaults.patch"
+    if grep -Fq "case kapps_config:get_category(?CONFIG_CAT, 'false') of" \
+            "$KAZOO_ROOT/applications/crossbar/src/crossbar_maintenance.erl"; then
+        apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
+            "$SCRIPT_DIR/patches/crossbar-module-autoload-public-read.patch"
+    fi
     apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
         "$SCRIPT_DIR/patches/crossbar-module-autoload-scope.patch"
     apply_kazoo_integration_patch blackhole

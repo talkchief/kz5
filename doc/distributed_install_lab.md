@@ -1,7 +1,8 @@
 # Separated-role installer acceptance lab
 
-Status: isolated CouchDB and RabbitMQ normal installation/service checks passed;
-the full separated-role and recovery matrix is not complete.
+Status: CouchDB, RabbitMQ, HAProxy, FreeSWITCH, eCallMgr and Kamailio isolated
+normal installation/service checks passed. Apps retry is pending; the full
+separated-role/boot/rollback matrix is not complete.
 This is an explicitly owned lab on development host10.1.0.44, not a production
 installer option and not evidence of independent-machine HA.
 
@@ -11,6 +12,14 @@ Entry point: `bash scripts/prepare-distributed-install-lab.sh --prepare`, then
 `scripts/test-fixtures/distributed-lab/lab.cjs`; the small Containerfile builds
 a systemd PID1 image using a verified upstream Rocky9 repository digest.
 Normal Kazoo installation must subsequently use `scripts/install-kazoo5.sh`.
+For bounded detached builds use `--begin-install ROLE`, followed by
+`--collect-install ROLE` before retry/source synchronization. The retained unit
+uses `User=root` (required login environment) and `RemainAfterExit=yes` (preserved
+terminal evidence). Compilation or a booted container is not an installer pass.
+
+Install/admit data roles first, then HAProxy, apps and FreeSWITCH, then eCallMgr
+and Kamailio. Remote JWT/config services must be ready before the SBC's full
+integration verification. Dependency failures remain failures, not skipped gates.
 
 The lab refuses other hosts, tracked dirty sources, an existing state/name or
 overlapping host route. Root0700 state is at `/var/lib/kazoo5-install-lab`.
@@ -68,6 +77,26 @@ physical host/kernel failure. A booted container alone reports `installed:false`
   New random lab secrets are only in protected state/input files. Do not print
   `lab.json`, role env files or raw logs. The status command omits secrets.
 
-Repeat/guest-boot, downstream separated roles, cluster admission/drain and
-rollback remain unverified.28 pure/static lab groups and3 actual dependency
-selection groups pass; they do not replace native role evidence.
+Additional native evidence under `/var/lib/kazoo5-install-lab`:
+
+| Role | Verified result | Boundary |
+| --- | --- | --- |
+| CouchDB | install3, repeat4, guest boot | one physical host |
+| RabbitMQ | install1, repeat2, guest boot, lab-only read monitor | not a broker cluster |
+| HAProxy | install1, repeat2, verify after manually restored guest | automated guest reboot failed in Podman/conmon; not marked passed |
+| FreeSWITCH | repeat4 normal installer and enabled service | pinned Kazoo module and EI; no physical boot claim |
+| eCallMgr | install4, source `e780af1`, enabled service, separate FS connection/framing/intercept inventory | read-only native media admission, no cross-node supervision call |
+| Kamailio | install4, source `6eddc28`, enabled service, exact broker socket and JWT verification | passed after isolated apps became available |
+
+Fresh-role findings and source fixes: pinned Erlang/EI and stale out-of-tree
+configure invalidation for FreeSWITCH; explicit login environment for rebar
+bootstrap; namespaced Pivot reservation; exact Kamailio socket inspection as
+service UID without added capabilities; eCallMgr application readiness before
+node registration and cookie-safe registration diagnostics. Apps first master
+bootstrap failed; after startup a protected diagnostic succeeded. This was not
+retroactively marked a normal first-install pass. Its schema readiness barrier
+was strengthened, and normal retry is required. Lab master and transport-probe
+child are synthetic lab-only resources retained for inspection.
+
+The remaining role/boot matrix, physical-machine failures, cluster-wide drain/
+upgrade and rollback are not certified by these container results.

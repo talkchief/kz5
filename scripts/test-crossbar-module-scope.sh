@@ -4,7 +4,7 @@ set -Eeuo pipefail
 umask 077
 scope_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 scope_mode=${1:-current}
-[[ $# -le 1 && ( $scope_mode == current || $scope_mode == --baseline ) ]] || exit 64
+[[ $# -le 1 && ( $scope_mode == current || $scope_mode == --baseline || $scope_mode == --private-read-baseline ) ]] || exit 64
 scope_output=$(mktemp -d /tmp/kazoo-module-scope.XXXXXXXX)
 cd "$scope_root"
 unset ERL_AFLAGS ERL_ZFLAGS ERL_COMPILER_OPTIONS ERL_INETRC
@@ -29,6 +29,17 @@ else
     cmp "$scope_source" "$scope_output/replay/src/crossbar_maintenance.erl"
     apply_required_source_patch "$scope_output/replay" "$scope_patch"
     cmp "$scope_source" "$scope_output/replay/src/crossbar_maintenance.erl"
+    # Recreate the previously deployed private-function variant, then prove
+    # both upgrade and repeated installation converge to the fresh source.
+    scope_transition="$scope_root/scripts/patches/crossbar-module-autoload-public-read.patch"
+    git -C "$scope_output/replay" apply --reverse "$scope_transition"
+    if [[ $scope_mode == --private-read-baseline ]]; then
+        scope_source="$scope_output/replay/src/crossbar_maintenance.erl"
+    else
+        apply_required_source_patch "$scope_output/replay" "$scope_transition"
+        apply_required_source_patch "$scope_output/replay" "$scope_patch"
+        cmp "$scope_source" "$scope_output/replay/src/crossbar_maintenance.erl"
+    fi
 fi
 sha256sum "$scope_source" "$scope_patch" scripts/install-kazoo5.sh scripts/erlang-tests/crossbar_module_scope_tests.erl > "$scope_output/inputs.sha256"
 printf 'Configuration-scope evidence: %s\n' "$scope_output"
