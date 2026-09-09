@@ -71,10 +71,18 @@ function firstOffer(buffer, expected, transport='external') {
     }
     return Math.min(...found.map(packet => packet.time));
 }
-function retryTiming(first, secondAt, backoff) {
-    assert(Number.isFinite(first.offerAt) && first.cancelAt - first.offerAt >= 14
+function retryTiming(first, secondAt, backoff, workerLoss) {
+    if (workerLoss !== undefined) {
+        const killedAt = workerLoss.epoch_ms / 1000;
+        assert(workerLoss.worker_loss === true && Number.isSafeInteger(workerLoss.epoch_ms)
+            && Number.isFinite(first.offerAt) && killedAt >= first.offerAt
+            && first.cancelAt >= killedAt && first.cancelAt <= killedAt + 10,
+        'Worker loss must occur during ringing and trigger bounded native cleanup');
+    } else {
+        assert(Number.isFinite(first.offerAt) && first.cancelAt - first.offerAt >= 14
         && first.cancelAt - first.offerAt <= 26,
-    'Unanswered ringing did not respect the15s timeout plus bounded worker watchdog');
+        'Unanswered ringing did not respect the15s timeout plus bounded worker watchdog');
+    }
     assert(secondAt > first.endAt && secondAt >= first.cancelAt + 14,
         'Retry overlapped first transaction or skipped the configured backoff');
     // Durable wall-clock seconds have one-second granularity; compare directly
@@ -107,7 +115,10 @@ function registrationModeProof(mode, receipt, policy, audio, language) {
     assert.deepEqual(audio.observed_registration_digits, expected, 'Audio observed digits disagree with run mode');
     return {registration_mode: mode, expected_registration_digits: expected, observed_registration_digits: expected};
 }
-function inspect(directory, mode = 'confirm-current', transport = 'external', language) {
+function inspect(directory, mode = 'confirm-current', transport = 'external', language, fault) {
+    assert(fault === undefined || (fault === 'worker-loss' && transport === 'internal'
+        && language === 'en-us' && mode === 'entry-only'
+        && ACCOUNT === '8310dc3170a18de37f205d0da172df65'), 'Unsupported fault acceptance scope');
     require('./callback-internal-scenarios.cjs').target(transport);
     const json = name => JSON.parse(safeRead(directory, name, 128 * 1024));
     const serviceScope = json('retry-service-scope.json');
@@ -143,7 +154,12 @@ function inspect(directory, mode = 'confirm-current', transport = 'external', la
         && row.uuid !== evidence.first.caller.id && row.uuid !== evidence.registered.original_call_id),
     'First returned caller did not have independent native absence proof before retry');
     const secondCapture = safeRead(directory, 'retry-returned.pcap');
-    const timing = retryTiming(first, firstOffer(secondCapture, proof.callerCallId,transport), evidence.backoff);
+    const workerLoss = fault === 'worker-loss' ? json('retry-worker-loss.json') : undefined;
+    if (workerLoss) {
+        assert(workerLoss.callback_id === evidence.registered.id
+            && workerLoss.caller_call_id === evidence.first.caller.id, 'Worker loss belongs to another call');
+    }
+    const timing = retryTiming(first, firstOffer(secondCapture, proof.callerCallId,transport), evidence.backoff, workerLoss);
     for (const name of ['callback-original.log', 'callback-carrier.log', 'callback-agent-1.log', 'retry-busy.log']) {
         assert(!/Could not (?:bind port for|open socket for|set up media IP for) RTP streaming/i.test(safeRead(directory, name).toString()),
             'SIP success masked an RTP streaming failure');
@@ -160,14 +176,15 @@ function inspect(directory, mode = 'confirm-current', transport = 'external', la
         first_attempt: {...first, unanswered_seconds: first.cancelAt - first.offerAt},
         durable_retry_wait: true, attempts: 2, retry_delay_seconds: 15,
         measured_retry_timing: timing,
+        ...(workerLoss ? {worker_loss: workerLoss} : {}),
         first_call_release_after_confirmation_seconds: evidence.release - evidence.audio.confirmation_end_epoch_seconds,
         second_attempt: second};
 }
 module.exports = {lifecycle, retryTiming, firstOffer, inspect, registrationModeProof, GREGORIAN_UNIX_OFFSET};
 if (require.main === module) {
     try {
-        assert([3, 4, 5, 6].includes(process.argv.length), 'Usage: assert-callback-retry.cjs protected-run-directory [entry-only|confirm-current] [external|internal] [explicit-language]');
-        const result = inspect(process.argv[2], process.argv[3] || 'confirm-current', process.argv[4] || 'external', process.argv[5]);
+        assert([3, 4, 5, 6, 7].includes(process.argv.length), 'Usage: assert-callback-retry.cjs protected-run-directory [entry-only|confirm-current] [external|internal] [explicit-language] [worker-loss]');
+        const result = inspect(process.argv[2], process.argv[3] || 'confirm-current', process.argv[4] || 'external', process.argv[5], process.argv[6]);
         fs.writeFileSync(path.join(process.argv[2], 'retry-packet-evidence.json'), JSON.stringify(result, null, 2) + '\n', {mode: 0o600, flag: 'wx'});
         console.log('PASS exact busy/confirmation/retry lifecycle and phase-scoped SIP/RTP evidence; fixture retained');
     } catch (error) {console.error('Callback retry evidence FAIL: ' + error.message); process.exitCode = 1;}

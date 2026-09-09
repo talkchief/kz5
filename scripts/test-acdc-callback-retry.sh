@@ -18,6 +18,7 @@ RETRY_EDIT_PENDING_LANGUAGE=false
 RETRY_SHORT_CONFIRMATION_WINDOW=false
 RETRY_CONFIRMATION_EXPIRY=false
 RETRY_QUEUE_RESTART=false
+RETRY_WORKER_LOSS=false
 RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=false
 RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=false
 RETRY_BUSY_PID=
@@ -37,6 +38,7 @@ retry_usage() {
         '       [--short-confirmation-window] (main isolated EN fixture only; response timeout3, full existing prompt, conditional restore)' \
         '       [--confirmation-expiry] (requires short window; answer retry without digit; assert timeout and no agent call)' \
         '       [--queue-restart-during-backoff] (main isolated fixture only; restart its queue with no active legs, retain retry)' \
+        '       [--worker-loss-during-ringing] (main isolated fixture only; kill exactly its first active callback worker)' \
         '       [--fixture-account ACCOUNT_ID] (must match canonical protected isolated state)' \
         '       [--transport external|internal] (default: external; internal uses isolated1001)' \
         '       [--allow-paused-master-test-phones] (only an already inactive/dead helper)' \
@@ -73,6 +75,7 @@ retry_args() {
             --short-confirmation-window) [[ $RETRY_SHORT_CONFIRMATION_WINDOW == false ]] || die 'Repeated short-confirmation mode'; RETRY_SHORT_CONFIRMATION_WINDOW=true ;;
             --confirmation-expiry) [[ ${RETRY_CONFIRMATION_EXPIRY:-false} == false ]] || die 'Repeated confirmation-expiry mode'; RETRY_CONFIRMATION_EXPIRY=true ;;
             --queue-restart-during-backoff) [[ ${RETRY_QUEUE_RESTART:-false} == false ]] || die 'Repeated queue-restart mode'; RETRY_QUEUE_RESTART=true ;;
+            --worker-loss-during-ringing) [[ $RETRY_WORKER_LOSS == false ]] || die 'Repeated worker-loss mode'; RETRY_WORKER_LOSS=true ;;
             --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
             --allow-absent-master-test-phones) RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=true ;;
             -h|--help) retry_usage; exit 0 ;;
@@ -84,7 +87,8 @@ retry_args() {
     [[ $CALLBACK_TEST_TRANSPORT == external || $CALLBACK_TEST_TRANSPORT == internal ]] || die 'Invalid transport'
     [[ $RETRY_EDIT_PENDING_LANGUAGE != true || $RETRY_SHORT_CONFIRMATION_WINDOW != true ]] || die 'Choose only one pending queue edit case'
     [[ ${RETRY_CONFIRMATION_EXPIRY:-false} != true || $RETRY_SHORT_CONFIRMATION_WINDOW == true ]] || die 'Confirmation expiry requires explicit short confirmation window'
-    if [[ ${RETRY_QUEUE_RESTART:-false} == true ]]; then
+    [[ $RETRY_WORKER_LOSS != true || $RETRY_QUEUE_RESTART != true ]] || die 'Choose one callback fault boundary'
+    if [[ ${RETRY_QUEUE_RESTART:-false} == true || $RETRY_WORKER_LOSS == true ]]; then
         [[ $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 && $RETRY_LANGUAGE_EXPLICIT == true &&
            $RETRY_LANGUAGE == en-us && $CALLBACK_TEST_TRANSPORT == internal && $RETRY_REGISTRATION_MODE == entry-only &&
            $RETRY_EDIT_PENDING_LANGUAGE == false && ${RETRY_CONFIRMATION_EXPIRY:-false} == false &&
@@ -542,6 +546,14 @@ retry_run() {
     assert_stats 'initial busy caller' "$RUN_DIR/retry-busy-stats.csv" 1
     log 'Busy call bridged; queued callback confirmation audio proved; first call released after two-second post-proof wait'
     retry_wait_first_attempt || die 'First unanswered returned attempt lacks exact durable/native correlation'
+    if [[ $RETRY_WORKER_LOSS == true ]]; then
+        local worker_call_id
+        worker_call_id=$(jq -er '.caller.id' "$RUN_DIR/retry-first-attempt.json")
+        timeout 20 escript "$retry_script_dir/test-fixtures/callback-worker-loss.escript" \
+            --kill-fixture-worker "$CALLBACK_TICKET_ID" "$worker_call_id" \
+            > "$RUN_DIR/retry-worker-loss.json" || die 'Worker fault boundary refused or unverified; never repeat blindly'
+        log 'Exact active callback worker terminated; checking positive settlement and one retry'
+    fi
     retry_wait_checked 'deliberately unanswered first returned attempt' "$RETRY_UNANSWERED_PID"
     assert_stats 'unanswered CANCEL transaction' "$RUN_DIR/retry-unanswered-stats.csv" 1
     retry_stop_capture
@@ -581,7 +593,9 @@ retry_run() {
         assert_agent_stats callback 1 2
         retry_stop_capture
         stop_monitor
-        node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" "$CALLBACK_TEST_TRANSPORT" "${RETRY_LANGUAGE_ARGS[@]}" || die 'Strict unanswered/retry packet, media or timing gate failed'
+        local fault_args=()
+        [[ $RETRY_WORKER_LOSS != true ]] || fault_args=(worker-loss)
+        node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" "$CALLBACK_TEST_TRANSPORT" "${RETRY_LANGUAGE_ARGS[@]}" "${fault_args[@]}" || die 'Strict unanswered/retry packet, media or timing gate failed'
         if [[ $RETRY_EDIT_PENDING_LANGUAGE == true ]]; then
             node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" verify "$RUN_DIR" || die 'Returned callback did not prove admitted-language audio after queue edit'
         elif [[ $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then

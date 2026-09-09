@@ -46,6 +46,7 @@ function argsRun(options,verifiedLanguage='en-us',ambientLanguage='ar-sa'){
 CALLBACK_PREPARE=false CALLBACK_LIVE=false KEEP_FIXTURE=false RETRY_REFERENCE='' RETRY_REGISTRATION_MODE=confirm-current
 CALLBACK_TEST_TRANSPORT=external RETRY_LANGUAGE=en-us RETRY_LANGUAGE_EXPLICIT=false RETRY_LANGUAGE_ARGS=() RETRY_EDIT_PENDING_LANGUAGE=false RETRY_SHORT_CONFIRMATION_WINDOW=false
 RETRY_ACCOUNT_ID=7807ad61761269a1ccec833dde63f621 RETRY_ACCOUNT_EXPLICIT=false
+RETRY_WORKER_LOSS=false RETRY_QUEUE_RESTART=false
 retry_script_dir=/synthetic
 export KAZOO_CALLBACK_TEST_LANGUAGE=${shellQuote(ambientLanguage)}
 die(){ exit 65; }; validate_protected_file(){ :; }; node(){ printf '%s\\n' ${shellQuote(JSON.stringify({voice_family:'gemini-sulafat',language:verifiedLanguage}))}; }
@@ -71,6 +72,12 @@ assert.equal(argsRun(['--fixture-account','8310dc3170a18de37f205d0da172df65','--
 const shortArgs=['--fixture-account','8310dc3170a18de37f205d0da172df65','--language','en-us',
     '--transport','internal','--registration-mode','entry-only','--short-confirmation-window'];
 const restartArgs=shortArgs.slice(0,-1).concat('--queue-restart-during-backoff');
+const workerArgs=shortArgs.slice(0,-1).concat('--worker-loss-during-ringing');
+assert.equal(argsRun(workerArgs).status,0);
+assert.equal(argsRun(['--worker-loss-during-ringing']).status,65);
+for(const extra of ['--worker-loss-during-ringing','--queue-restart-during-backoff','--short-confirmation-window','--edit-pending-language','--confirmation-expiry'])
+    assert.equal(argsRun([...workerArgs,extra]).status,65);
+groups++;
 assert.equal(argsRun(restartArgs).status,0);
 assert.equal(argsRun(['--queue-restart-during-backoff']).status,65);
 for(const extra of ['--queue-restart-during-backoff','--short-confirmation-window','--edit-pending-language','--confirmation-expiry'])

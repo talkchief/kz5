@@ -100,6 +100,15 @@ assert.deepEqual(retryTiming(first, 145, good.backoff), {configured_backoff_seco
     second_invite_after_durable_due_seconds: 0}); checks++;
 for (const at of [130, 143, 144.9, 166]) {assert.throws(() => retryTiming(first, at, good.backoff)); checks++;}
 assert.throws(() => retryTiming(first, 145, {...good.backoff, next_attempt_at: 145})); checks++;
+const earlyCleanup = {offerAt: 125, cancelAt: 130, endAt: 131};
+assert.throws(() => retryTiming(earlyCleanup, 145, good.backoff)); checks++;
+retryTiming(earlyCleanup, 145, good.backoff, {worker_loss: true, epoch_ms: 128000}); checks++;
+for (const loss of [{worker_loss:false,epoch_ms:128000},{worker_loss:true,epoch_ms:124000},
+    {worker_loss:true,epoch_ms:131000},{worker_loss:true,epoch_ms:NaN}]) {
+    assert.throws(() => retryTiming(earlyCleanup,145,good.backoff,loss)); checks++;
+}
+assert.throws(() => retryTiming({offerAt:100,cancelAt:130,endAt:131},145,good.backoff,
+    {worker_loss:true,epoch_ms:110000})); checks++;
 const script = path.join(__dirname, 'test-acdc-callback-retry.sh');
 function shell(code) {
     const result = spawnSync('bash', ['-c', 'KAZOO_CALLBACK_RETRY_LIBRARY=true source "$1"\n' + code, 'test', script], {encoding: 'utf8'});
