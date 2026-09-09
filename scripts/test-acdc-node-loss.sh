@@ -132,6 +132,18 @@ recovery_main() {
     printf '%s\n' "$(recovery_fsm_identity "$status")" > "$RUN_DIR/fsm-after.txt"
     [[ $(systemctl show -p MainPID --value kazoo-apps.service) == "$before_apps" ]] || die 'Apps restarted during recovery'
     log 'PASS same applications node recovered agent without logout/login or FSM reset'
+    # A ready agent does not mean a newly booted media node has been admitted
+    # by Kamailio yet. Require the actual INVITE groups to become routable;
+    # merely finding a DEST entry or an active systemd process is insufficient.
+    deadline=$((SECONDS + 90))
+    local dispatcher_ready=false
+    while ((SECONDS < deadline)); do
+        if python3 -B -I "$SCRIPT_DIR/kamailio-dispatcher-ready.py" > "$RUN_DIR/dispatcher-after.json"; then
+            dispatcher_ready=true; break
+        fi
+        sleep 2
+    done
+    [[ $dispatcher_ready == true ]] || die 'Media was not re-admitted by Kamailio after node restart'
     # No login or queue restart before this second call: readiness must work.
     since=$(date +%s); cores=$(core_count)
     capture_log_baseline after-node-loss; start_monitor after-node-loss; start_rtp_capture after-node-loss

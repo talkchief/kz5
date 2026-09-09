@@ -4076,6 +4076,10 @@ verify_ecallmgr() {
     verify_ecallmgr_event_stream_framing
     verify_configured_freeswitch_nodes
     verify_ecallmgr_atomic_media
+    if systemctl is-active --quiet kazoo-kamailio.service 2>/dev/null &&
+       systemctl is-active --quiet kazoo-freeswitch.service 2>/dev/null; then
+        wait_kamailio_dispatcher_ready
+    fi
 }
 
 freeswitch_nodes_to_manage() {
@@ -5263,9 +5267,21 @@ install_kamailio() {
     verify_kamailio
 }
 
+wait_kamailio_dispatcher_ready() {
+    local deadline=$((SECONDS + KAZOO_START_TIMEOUT))
+    while ((SECONDS < deadline)); do
+        if python3 -B -I "$SCRIPT_DIR/kamailio-dispatcher-ready.py" >/dev/null 2>&1; then
+            log 'PASS active Kamailio media destination in effective INVITE groups'
+            return 0
+        fi
+        sleep 2
+    done
+    die 'Kamailio has no active destination in its effective primary/secondary INVITE groups'
+}
+
 verify_kamailio() {
     if [[ $DRY_RUN == true ]]; then log 'Would verify Kazoo Kamailio'; return 0; fi
-    local pid seconds_alive wait_seconds dispatcher deadline
+    local pid seconds_alive wait_seconds
     assert_service kazoo-kamailio.service
     /usr/sbin/kamailio -v 2>&1 | grep -F "$KAMAILIO_VERSION" >/dev/null || \
         die "Installed Kamailio is not version ${KAMAILIO_VERSION}"
@@ -5303,14 +5319,7 @@ verify_kamailio() {
         die 'Kamailio registrar has the incompatible AMQP XAVP availability guard enabled'
     if systemctl is-active --quiet kazoo-freeswitch.service 2>/dev/null && \
        systemctl is-active --quiet kazoo-ecallmgr.service 2>/dev/null; then
-        deadline=$((SECONDS + KAZOO_START_TIMEOUT))
-        while ((SECONDS < deadline)); do
-            dispatcher=$(/usr/sbin/kamcmd dispatcher.list 2>&1 || true)
-            [[ $dispatcher != *'No Destination Sets'* && $dispatcher == *'DEST'* ]] && break
-            sleep 2
-        done
-        [[ $dispatcher != *'No Destination Sets'* && $dispatcher == *'DEST'* ]] || \
-            die 'Kamailio did not discover a FreeSWITCH media destination through Kazoo'
+        wait_kamailio_dispatcher_ready
         verify_kamailio_sbc
     fi
     verify_kamailio_journal
