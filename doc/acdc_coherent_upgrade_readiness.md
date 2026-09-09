@@ -40,6 +40,24 @@ availability across replicas, and only then reopen admission. Generation/replay
 protection, full cold restart and rollback acceptance remain unfinished. These
 primitives have no public HTTP route and do not themselves supply that fence.
 
+Candidate `ed4d7be` is pushed to master and synced to dev44 `/opt/kz5`.
+Its27 existing recovery regressions also pass. Normal isolated installations
+are running as `kz5-stage-install-kazoo-apps-10` and
+`kz5-stage-install-apps-peer-6`; do not treat an in-progress build as deployed.
+The private media inventory was empty and the two baseline agent replicas were
+ready with their original queue membership and consuming listeners at admission.
+Collect these exact jobs before any further restart test.
+
+The retained baseline fixture now accepts `--live --restore` to test the new
+native primitives after those normal builds finish. It captures actual paired
+FSM/listener checkpoints, restarts only the fixed agent on both lab nodes,
+restores the original absolute pause expiry and runtime membership, then checks
+the native consumer/binding registry and unchanged deadline. The original
+`--live` mode remains the unassisted baseline; its failed receipt is unchanged.
+This finite-pause regression uses memory-only checkpoints and is not the durable
+maintenance coordinator. Run it under the host acceptance lock with independent
+zero-media/zero-callback admission; do not execute it against an active build.
+
 ### Native restart baseline: pause loss reproduced
 
 Both isolated apps installations on `b6d1a04` passed: primary

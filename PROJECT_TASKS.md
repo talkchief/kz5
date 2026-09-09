@@ -17,6 +17,13 @@ work postponed; do not generate voices at runtime or during deployment.
   reusable pause in supervisor startup arguments. The coordinated admission
   fence, protected journal, cold restore and rollback are still required before
   closing INST-06. See `doc/acdc_coherent_upgrade_readiness.md`.
+  `ed4d7be` is pushed/synced to dev44;27 recovery regressions also pass.
+  Normal private builds are running as `kz5-stage-install-kazoo-apps-10` and
+  `kz5-stage-install-apps-peer-6`. Collect these exact units before native tests.
+  The baseline fixture's new `--live --restore` mode is prepared, not yet run;
+  it verifies actual finite-pause deadline and membership after restart without
+  turning the old unassisted failure into a pass. Durable fenced cold restore
+  and rollback are still separate requirements.
 
 - **INST-06 / restart pause retention — native defect reproduced, OPEN:**
   Both normal isolated apps deployments passed on `b6d1a04`. In the explicit

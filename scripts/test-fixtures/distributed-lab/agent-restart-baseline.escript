@@ -1,6 +1,6 @@
 #!/usr/bin/env escript
 %%! +S 1:1 +SDcpu 1 +SDio 1 +A 1 -setcookie unused_restart_fixture -start_epmd false -kernel logger_level none
-%% Explicit baseline reproduction, not an upgrader. Run under the host's
+%% Explicit baseline reproduction/restore regression, not an upgrader. Run under the host's
 %% acceptance lock, after zero-media/zero-callback admission. Fixed lab agent
 %% only; finite pauses expire even if the fixture is interrupted.
 -mode(compile).
@@ -10,7 +10,7 @@
 -define(Q, <<"cabcfb72812b530ccc32ffba30ef680d">>).
 main(Args) ->
     Code=try
-        ["--live"]=Args,
+        Restore=case Args of ["--live"]->false;["--live","--restore"]->true end,
         {ok,"kz5-stage-kazoo-apps"}=inet:gethostname(),
         {ok,Ifs}=inet:getifaddrs(),true=has_ip(Ifs,{172,30,253,14}),
         {ok,#file_info{type=regular,uid=0,links=1,mode=M}}=
@@ -22,6 +22,13 @@ main(Args) ->
         Ns=['kazoo_apps@kz5-stage-kazoo-apps','kazoo_apps@kz5-stage-kazoo-apps-peer'],
         lists:foreach(fun({N,Ip}) -> admit(N,Ip) end,
                       lists:zip(Ns,[{172,30,253,14},{172,30,253,20}])),
+        case Restore of
+            true -> lists:foreach(fun(N) ->
+                true=rpc(N,erlang,function_exported,[acdc_agent_fsm,maintenance_restore,3]),
+                true=rpc(N,erlang,function_exported,[acdc_agent_listener,maintenance_restore,3])
+            end,Ns);
+            false -> ok
+        end,
         Before=[snapshot(N) || N<-Ns],
         true=lists:all(fun({_,ready,0})->true;(_)->false end,Before),
         lists:foreach(fun({N,{F,_,_}}) ->
@@ -32,6 +39,11 @@ main(Args) ->
                 true->{ok,Vs};false->retry
             end end,10),
         Started=erlang:monotonic_time(millisecond),
+        %% Memory-only regression checkpoints, captured from actual runtime.
+        %% The production maintenance coordinator still needs a protected
+        %% durable generation and a complete cluster fence/drain.
+        Checkpoints=case Restore of
+            true -> [{N,checkpoint(N)} || N<-Ns]; false -> [] end,
         io:put_chars("{\"phase\":\"paused_before_restart\",\"replicas\":2}\n"),
         lists:foreach(fun({N,{Old,paused,_}}) ->
             {Old,paused,Left}=snapshot(N),true=Left>20000,
@@ -43,12 +55,18 @@ main(Args) ->
         After=until(fun() -> Vs=[state_only(N)||N<-Ns],
             case lists:all(fun({_,S})->S=:=ready orelse S=:=paused end,Vs) of
                 true->{ok,Vs};false->retry end end,15),
-        Pass=lists:all(fun({_,S})->S=:=paused end,After),
-        States=[atom_to_list(S)||{_,S}<-After],
+        Final=case Restore of
+            true ->
+                lists:foreach(fun({N,Cp}) -> restore_checkpoint(N,Cp) end,Checkpoints),
+                [{F,S} || N<-Ns, {F,S,_}<-[snapshot(N)]];
+            false -> After
+        end,
+        Pass=lists:all(fun({_,S})->S=:=paused end,Final),
+        States=[atom_to_list(S)||{_,S}<-Final],
         Elapsed=erlang:monotonic_time(millisecond)-Started,
         true=Elapsed<20000,
-        io:format("{\"phase\":\"after_restart\",\"states\":[\"~s\",\"~s\"],\"pause_preserved\":~s,\"restart_elapsed_ms\":~p}~n",
-                  States++[atom_to_list(Pass),Elapsed]),
+        io:format("{\"phase\":\"after_restart\",\"states\":[\"~s\",\"~s\"],\"pause_preserved\":~s,\"restart_elapsed_ms\":~p,\"restore_executed\":~s}~n",
+                  States++[atom_to_list(Pass),Elapsed,atom_to_list(Restore)]),
         case Pass of true->0;false->1 end
     catch _:_ -> io:put_chars("RESTART_BASELINE_REFUSED_OR_FAILED\n"),1
     after
@@ -83,6 +101,36 @@ snapshot(N) ->
 state_only(N) ->
     F=get({owned_fsm,N}),true=is_pid(F),
     {?A,?U,S,_}=rpc(N,acdc_agent_fsm,dashboard_state,[F,2000]),{F,S}.
+checkpoint(N) ->
+    F=get({owned_fsm,N}),true=is_pid(F),
+    {ok,#{account_id:=?A,agent_id:=?U,listener:=L,state:=paused,
+          pause_until_unix_ms:=Until}}=rpc(N,acdc_agent_fsm,maintenance_state,[F,2000]),
+    {ok,#{account_id:=?A,agent_id:=?U,fsm:=F,queues:=[?Q]}}=
+        rpc(N,acdc_agent_listener,maintenance_state,[L,2000]),
+    {#{account_id=>?A,agent_id=>?U,state=>paused,pause_until_unix_ms=>Until},
+     #{account_id=>?A,agent_id=>?U,queues=>[?Q]}}.
+restore_checkpoint(N,{FsmCheckpoint,ListenerCheckpoint}) ->
+    Owned=get({owned_fsm,N}),
+    {Owned,_,_}=snapshot(N),
+    Sup=rpc(N,acdc_agents_sup,find_agent_supervisor,[?A,?U]),
+    Owned=rpc(N,acdc_agent_sup,fsm,[Sup]),L=rpc(N,acdc_agent_sup,listener,[Sup]),
+    {ok,#{state:=paused,notifications_queued:=true}}=
+        rpc(N,acdc_agent_fsm,maintenance_restore,[Owned,FsmCheckpoint,2000]),
+    {ok,#{queues:=[?Q],state:=paused,bindings_queued:=true}}=
+        rpc(N,acdc_agent_listener,maintenance_restore,[L,ListenerCheckpoint,3000]),
+    %% Queued bindings are not sufficient. Inspect the native consumer's
+    %% actual binding registry after its mailbox barrier.
+    true=rpc(N,gen_listener,is_consuming,[L]),
+    Bindings=rpc(N,gen_listener,bindings,[L]),true=is_list(Bindings),
+    [?Q]=lists:usort([proplists:get_value(queue_id,P) || {<<"acdc_queue">>,P}<-Bindings,
+        proplists:get_value(account_id,P)=:=?A,
+        lists:member(member_connect_req,proplists:get_value(restrict_to,P,[]))]),
+    {Owned,paused,Remaining}=snapshot(N),true=Remaining>10000,
+    {ok,#{pause_until_unix_ms:=ObservedUntil}}=
+        rpc(N,acdc_agent_fsm,maintenance_state,[Owned,2000]),
+    OriginalUntil=maps:get(pause_until_unix_ms,FsmCheckpoint),
+    true=ObservedUntil=<OriginalUntil,true=ObservedUntil>=OriginalUntil-20,
+    io:put_chars("{\"phase\":\"restore_verified\",\"deadline_not_extended\":true,\"runtime_membership_retained\":true}\n").
 cleanup(N) ->
     case get({owned_fsm,N}) of
         undefined -> ok;
