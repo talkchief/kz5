@@ -7,6 +7,14 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-07 same-host concurrent installer gap — SOURCE FIXED / focused PASS:**
+  Real module installation and verification now share a nonblocking host lock
+  before preflight and changes. Contention stops clearly; process failure and
+  interruption release the descriptor without deleting its stable inode.
+  Actual helper tests pass contention, interruption/failure, dry-run and unsafe
+  path cases (eef29c). See `doc/installer_host_lock.md`. This does not close
+  the distributed/rolling-upgrade/rollback matrix or fence older invocations.
+
 - **Current requested closeout — points1,2,4,6 IN PROGRESS:** user explicitly
   requested ACDC reliability, callback edge cases, distributed installation,
   and API/Blackhole/supervision gaps; no voice regeneration, bridge expansion

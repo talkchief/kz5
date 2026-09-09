@@ -6307,8 +6307,32 @@ install_requested() {
     verify_requested
 }
 
+acquire_installer_lock() {
+    # All roles share configuration, source and package/service managers. Even
+    # verification must not report a half-published installation as healthy.
+    [[ $DRY_RUN != true ]] || return 0
+    [[ $EUID == 0 ]] || die 'Run the installer as root'
+    command -v flock >/dev/null || die 'flock (util-linux) is required before installation'
+    local lock_dir=/run/kazoo5-installer lock_file
+    if [[ ! -e $lock_dir && ! -L $lock_dir ]]; then
+        mkdir -m 0700 -- "$lock_dir" 2>/dev/null || [[ -d $lock_dir ]] || die 'Cannot create installer lock directory'
+    fi
+    [[ -d $lock_dir && ! -L $lock_dir && $(stat -c '%u:%a' "$lock_dir") == 0:700 ]] || \
+        die 'Installer lock directory must be root-owned, unlinked and mode 0700'
+    lock_file=$lock_dir/host.lock
+    [[ ! -L $lock_file && ( ! -e $lock_file || ( -f $lock_file && $(stat -c '%u:%h' "$lock_file") == 0:1 ) ) ]] || \
+        die 'Unsafe installer lock file'
+    # Keep the descriptor open for the whole invocation and its running build
+    # children. Never unlink the inode: that would permit a second lock domain.
+    exec {KAZOO_INSTALL_LOCK_FD}<>"$lock_file"
+    if ! flock -n "$KAZOO_INSTALL_LOCK_FD"; then
+        die 'Another Kazoo installer or verification is running on this host; wait for it to finish'
+    fi
+}
+
 main() {
     parse_arguments "$@"
+    acquire_installer_lock
     push_bridge_preflight
     preflight
     log "Resolved components: ${!SELECTED[*]}"

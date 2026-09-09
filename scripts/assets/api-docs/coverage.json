@@ -2352,7 +2352,7 @@
     },
     {
       "file": "applications/acdc/src/acdc_callback_caller.erl",
-      "sha256": "30ed80b985b06b1909ae542a740939dc6ca0dfb364db270158e95dc157d62863"
+      "sha256": "96bc0b4bd0a9011052735c1713556e39c2a8dd9c8b3732c75b3aec11b27a3050"
     },
     {
       "file": "applications/acdc/src/acdc_callback_internal.erl",
@@ -2364,7 +2364,7 @@
     },
     {
       "file": "applications/acdc/src/acdc_callback_store.erl",
-      "sha256": "195f3cc8014cf4445216bea123b772b5e613ef4eb75aabd481b32dbc8f2bf31a"
+      "sha256": "8ea53579079c6c41fe64384e2124f17a472f42f9dc7c0c7d8f4678aa2e8934d9"
     },
     {
       "file": "applications/acdc/src/acdc_dashboard_agents.erl",
@@ -2464,7 +2464,7 @@
     },
     {
       "file": "applications/blackhole/src/blackhole_socket_callback.erl",
-      "sha256": "a05a4fd1217578ef52aa805bcee1686fea5cdd98cd3fe3c6744fe272f5e76558"
+      "sha256": "d654d79825c0febdcc0a16635544658799ad4b796c3f4d27821cb265105ba7c5"
     },
     {
       "file": "applications/blackhole/src/blackhole_socket_handler.erl",
@@ -2944,7 +2944,7 @@
     },
     {
       "file": "scripts/api-docs-blackhole.cjs",
-      "sha256": "2dc14b3460b810cb0dca25ce35e1bed655bb5646e35f90798365a8f6cae005db"
+      "sha256": "1a5fb2a32699a315b1e71cae41dadcbbe4c9a94b9b24fcfb969a6a6fbb4c500e"
     },
     {
       "file": "scripts/api-docs-call-forward-confirmation.cjs",
@@ -2980,7 +2980,11 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "08bb49f6b0679bc8cabb0609551d42d29a6b999943c640a569d83ee56c062ebd"
+      "sha256": "46522c456f1f10dce79ab2a25b50dfd3b79271e820d0a60eac31fdc47da5ab12"
+    },
+    {
+      "file": "scripts/patches/blackhole-command-auth.patch",
+      "sha256": "1d5566e51e5c6d69990ff28d1c33235cfde1dd6f8e7e072869db6b206ba09897"
     },
     {
       "file": "scripts/patches/blackhole-kazoo5-integration.patch",

@@ -56314,6 +56314,12 @@
       "description": "Blackhole protocol and Next.js frontend integration"
     },
     "x-contract-review": "source-reviewed; not live acceptance",
+    "command_authentication": {
+      "validation": "Each native command revalidates the connection token with the Kazoo token validator and requires a positive authentication-handler context. Cached account identity or HTTP101 alone cannot authorize a command. Rejected, malformed or unavailable token validation fails closed.",
+      "token_change": "Reconnect when changing tokens or login identity. A different nonempty auth_token on an established native connection is rejected; existing subscriptions are not transferred to another identity.",
+      "lifetime_limit": "This command guard does not establish periodic revalidation or termination of already subscribed generic event streams. Token/identity caches, revocation propagation, outbound event lifetime and backpressure require separate acceptance. Queue-live has its own fresh per-delivery authorization described below.",
+      "acceptance": "Source-tested command guard; deployment and real-token acceptance are recorded separately."
+    },
     "client_messages": {
       "subscribe": {
         "$ref": "#/components/schemas/BlackholeSubscribe"
