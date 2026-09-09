@@ -1,13 +1,18 @@
 # Kazoo 5 — start here / engineering handoff
 
-**September9: VOICE-01 inherited queue edit source fix, not yet deployed.**
+**September9: VOICE-01 inherited queue edit DEPLOYED / scoped PASS.**
 Baseline d5c05d shows an unrelated Save silently adopts English for an existing
 queue with omitted/unsupported language. Contract6f74ba passes preservation until
 an explicit selection; exactly five options remain, and new queues default EN.
-`scripts/test-monster-acdc-language-only.cjs --inheritance-only` adds focused
-Chromium coverage with a controlled readiness catalog and zero network/API writes.
-Run it before normal Monster deployment, then record the result below. This does
-not implement reseller-language resolution or change any account settings.
+`scripts/test-monster-acdc-language-only.cjs --inheritance-only` passes four
+Chromium cases070f42 with a controlled readiness catalog and zero network/API
+writes. It caught legacy jQuery's retained first option; source now explicitly
+sets selectedIndex=-1. Final contract296def passes. Source c009191 was pushed,
+synced and deployed through normal Monster CLI5e3115 (80.184s, exit0).
+HTTPS67b094 matches the installed JS/templates/translations and checks the
+compiled selection behavior; nginx/apps/eCallMgr are active. Both jobs are
+terminal. This does not implement reseller-language resolution or change any
+account settings, and does not certify a native API Save of legacy invalid data.
 See `doc/queue_language_inherited_edit.md`.
 
 **DEPLOYED: INSTALL-MODULE-SCOPE-01.** Root installer patch fixes native

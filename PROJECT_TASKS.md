@@ -2,18 +2,24 @@
 
 ## Immediate operator follow-up — September8
 
-- **VOICE-01 inherited queue edit — source fix, deployment pending (September9):**
+- **VOICE-01 inherited queue edit — DEPLOYED / scoped PASS (September9):**
   An existing queue without a language override, or with an unsupported legacy
   locale, was displayed and silently saved as English when the English pack
   was ready. Baseline d5c05d reproduces this; source contract6f74ba passes after
   preserving the original setting until an explicit language choice. Exactly
   five options remain; a legacy/inherited edit starts with no selected option
   and an explanatory notice, while new queues retain English. Existing supported
-  same-language built-in adoption is unchanged. A focused offline Chromium mode
-  covers actual dropdown/change/submit behavior; not yet run. No provider calls,
+  same-language built-in adoption is unchanged. Focused Chromium070f42 passes
+  four actual dropdown/change/submit cases with a controlled readiness catalog,
+  zero network requests and zero account writes. It caught the legacy jQuery
+  null-selection behavior, corrected with explicit selectedIndex=-1. Source
+  c009191 deployed through the normal Monster CLI5e3115, exit0 in80.184s.
+  HTTPS67b094 matches installed JS/templates/translations and validates the
+  compiled selection behavior; nginx/apps/eCallMgr active. No provider calls,
   media regeneration or account/reseller default changes. See
   `doc/queue_language_inherited_edit.md`. Native reseller default resolution is
-  still a separate open gap, not addressed by this UI fix.
+  still a separate open gap, not addressed by this UI fix. Both browser and
+  installer jobs are terminal; do not rerun them without a relevant change.
 
 - **INSTALL-MODULE-SCOPE-01 DEPLOYED / scoped PASS:** native Crossbar
   start/stop read node/zone autoload overrides but overwrote cluster default,
