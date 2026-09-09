@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Company reads or explicitly armed isolated queue Save. No secret argv.
 set -Eeuo pipefail
-[[ $EUID == 0 && ( $# == 0 || ( $# == 1 && ( $1 == --callflows-users || $1 == --queue-create-form || $1 == --storage-selector-check || $1 == --loading-recovery ) ) || ( $# == 2 && ( $1 == --queue-create-save || $1 == --queue-login-check ) && $2 == --allow-fixture-writes ) ) ]] || { echo 'Usage: sudo bash scripts/run-dev44-company-browser.sh [--callflows-users|--queue-create-form|--storage-selector-check|--loading-recovery|--queue-create-save --allow-fixture-writes|--queue-login-check --allow-fixture-writes]' >&2; exit 64; }
+[[ $EUID == 0 && ( $# == 0 || ( $# == 1 && ( $1 == --callflows-users || $1 == --queue-create-form || $1 == --storage-selector-check || $1 == --loading-recovery || $1 == --smartpbx-recovery ) ) || ( $# == 2 && ( $1 == --queue-create-save || $1 == --queue-login-check ) && $2 == --allow-fixture-writes ) ) ]] || { echo 'Usage: sudo bash scripts/run-dev44-company-browser.sh [--callflows-users|--queue-create-form|--storage-selector-check|--loading-recovery|--smartpbx-recovery|--queue-create-save --allow-fixture-writes|--queue-login-check --allow-fixture-writes]' >&2; exit 64; }
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 base=/usr/local/lib/kazoo5-browser-tests
 [[ -d $base && ! -L $base && $(stat -c '%u:%a' "$base") == 0:700 ]] || exit 78
