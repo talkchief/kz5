@@ -70,6 +70,13 @@ pagination, restricted access, TLS downgrade and failure before apps mutation/
 restart. These are focused regression fixtures, not split-server acceptance.
 The local main-dev broker is checked separately without restarting services.
 
+September9 evidence: source commit `3b284b0`; eleven regression groups and both
+real apps-installer abort-order checks passed (bd0b59). After master sync, executing
+`acdc_broker_upgrade_preflight` from the sourced installer using saved settings on
+10.1.0.44 returned exit0 and `{"work_queues":2,"compatible":true}` (c9cbca).
+No metadata writes or service restarts occurred. The remote reader has fixture
+coverage only, not a new separate-server acceptance claim.
+
 This is a refusal guard, **not automatic migration, distributed deployment locking,
 broker persistence or failover proof**. Two reads reduce the build-window risk but
 cannot prevent another old node from declaring a queue afterward. Operator

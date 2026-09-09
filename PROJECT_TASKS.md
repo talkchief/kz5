@@ -7,15 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **P0-06 / installer callback broker upgrade guard — source fix, validation in progress:**
+- **P0-06 / installer callback broker upgrade guard — source fixed / main44 scoped PASS:**
   Apps installation now inspects the effective broker's ACDC queue declarations
   before imports/build and immediately before restart. Legacy auto-delete work
   queues block upgrade with coordinated-drain guidance; no queue/ticket deletion.
   Local broker identity is checked; separate hosts use explicit, read-only,
   paginated management metadata with complete-inventory permissions. Missing
   access fails closed, not a false fresh-install pass. Eleven focused regression
-  groups plus real installer early/restart-abort checks pass. Main44 read-only
-  check pending; no new call campaign or runtime restart is needed for this guard.
+  groups plus real installer early/restart-abort checks pass (bd0b59). Commit
+  `3b284b0` is pushed to master and synced at main44 `/opt/kz5`. Running the actual
+  installer helper with saved main44 settings passed: two compatible work queues
+  (c9cbca), exit0. No calls, provider requests, queue writes or service restarts.
   Split-host acceptance, coordinated migration and rollback remain open. Details:
   `doc/acdc_broker_upgrade.md`.
 

@@ -4,6 +4,18 @@
 campaigns. Fix in source, validate the failing path, deploy through the installer,
 then record the actual result. Dashboard/history work remains postponed.
 
+**Latest deployment fix: callback broker upgrade guard — main44 scoped PASS.**
+Source `3b284b0` is pushed to master and synced at main44 `/opt/kz5`. The apps
+installer now checks callback queue properties before imports/build and again
+before restarting apps; incompatible legacy declarations block with coordinated
+drain guidance. No automatic queue deletion or ticket cancellation. Eleven focused
+regression groups and two real installer abort-order checks pass (bd0b59). Actual
+saved-config helper on main44 returned exit0 / two compatible work queues (c9cbca).
+No call campaign, provider request, queue write or service restart was performed.
+Separate-broker API access needs explicit monitoring credentials; real split-host
+acceptance, coordinated migration/rollback and deployment locking remain open.
+See `doc/acdc_broker_upgrade.md`; do not rerun unrelated passing campaigns.
+
 **Latest voice follow-up: VOICE-05 Hebrew returned audio — scoped PASS.**
 The old160-sample-gap capture remains failed. Main44 run20260909T043058Z now
 passes native HE retry (113c8e) and unchanged strict waveform replay (18e4df):
