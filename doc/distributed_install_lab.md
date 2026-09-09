@@ -107,6 +107,14 @@ and original failures remain recorded rather than relabeled as a cold-install pa
 The remaining role/boot matrix, physical-machine failures, cluster-wide drain/
 upgrade and rollback are not certified by these container results.
 
+For the fully installed original lab, `--drained-reboot-role ROLE` is a separate
+explicit gate: all seven backend containers must match retained ownership,
+network identity and installed status, and the owned FreeSWITCH must report zero
+channels. It then uses the same stop/start, isolation-route and normal service
+verification checks. It does not weaken `--reboot-role`'s earlier dependency
+restriction or authorize host/main-stack restart. A failed stop/start is retained
+as a failure, never treated as verified merely because a container later runs.
+
 ## Fresh bootstrap campaign
 
 Use the same entry point with `--cold-bootstrap` before the operation, starting
