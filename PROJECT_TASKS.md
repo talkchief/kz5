@@ -7,6 +7,18 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / native finite-pause restoration — PASS, full coordinator still OPEN:**
+  Both `4fac43d` normal builds11/7 passed. Native receipt
+  `agent-restore-1788994643840-7170b3ed.json` proves both paused replicas survive
+  supervisor restart plus explicit restoration, original deadlines not extended,
+  exact runtime membership retained,5094ms elapsed and independently verified
+  cleanup. Earlier failures are retained. Complete-current-agent snapshot also
+  passes for6 replicas across both nodes, `agent-inventory-1788994694953.json`.
+  Journal/merger now has12 passing tests, including pre-fence intent, verified
+  abort and stale/incomplete/conflicting snapshot rejection. Full admission
+  fence/drain, durable installer integration, whole-VM/infinite-pause/empty-queue
+  restoration and rollback acceptance still remain; do not mark INST-06 closed.
+
 - **INST-06 / current native retry — builds running, not a pass:**
   Absolute-timer correction and installed-source admission guards are pushed
   and synced as `4fac43d`. All80 maintenance cases and27 recovery cases pass;

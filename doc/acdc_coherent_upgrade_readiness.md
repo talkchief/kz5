@@ -8,11 +8,33 @@ runtime/UI hold. See `FOCUSED_CLOSEOUT_2026-09-09.md` for collected receipts.
 Admission fencing, complete cluster drain, runtime-state preservation and
 coordinated restart/rollback acceptance remain open.
 
-**Current native jobs:** source `4fac43d` (absolute deadline correction included)
-is being installed normally in the two private apps guests as
+### Latest native results
+
+Both normal `4fac43d` installations passed and were collected:
+`kazoo-apps-install-11.log` and `apps-peer-install-7.log`. The unchanged guarded
+native finite-pause restore regression now **PASSES** on both nodes, receipt
+`/var/lib/kazoo5-install-lab/agent-restore-1788994643840-7170b3ed.json`.
+Both replicas were paused before supervisor restart, both restored the original
+absolute deadline without extension and retained runtime queue membership;
+the two final states were `paused`. Restart/restore elapsed5094ms, native exit0,
+and independent cleanup verified both agents ready with original membership,
+active consumers and no reported call legs. Executed fixture SHA-256:
+`afb3445aa210b8bcaf03d3d2fc7d0b78d50335b43584fb759b467dea107915ac`.
+The two earlier failed restore receipts and unassisted pause-loss baseline remain
+failed. This passes the native finite-pause restore primitive, not whole-VM
+restart, infinite-pause/empty-membership native acceptance or the full coordinator.
+
+The complete-current-agent read-only collector also passed on both installed
+nodes: `/var/lib/kazoo5-install-lab/agent-inventory-1788994694953.json`.
+It observed all3 current workers per node (6 replicas), matching FSM/listener
+identities, runtime membership/bindings and document revisions. All were ready.
+The receipt explicitly does not claim complete cluster drain or admission fencing.
+
+**Collected native jobs:** source `4fac43d` (absolute deadline correction included)
+was installed normally in the two private apps guests as
 `kz5-stage-install-kazoo-apps-11` and `kz5-stage-install-apps-peer-7`.
-Both were confirmed running after zero private media and ready test replicas
-were checked. Collect those exact jobs before the next
+Both were started after zero private media and ready test replicas
+were checked, then collected successfully before the passing
 `node scripts/test-acdc-native-maintenance.cjs --live` attempt. Earlier builds10/6
 passed, but their two restore attempts failed as documented below. Do not confuse
 source synchronization or passing offline tests with a native restore pass.
@@ -32,8 +54,18 @@ This collector does not claim that asynchronous startup tasks have completed,
 that all queues/callbacks/media are drained, or that future admission is closed.
 Those are separate coordinator prerequisites. It explicitly returns
 `complete_cluster_drain_proven:false` and `admission_fence_proven:false`.
-Source-host invalid-argument compilation/refusal passes; installed native
-inventory collection still needs validation after the running builds finish.
+Source-host invalid-argument compilation/refusal and installed native inventory
+collection both pass; the latest receipt is recorded above.
+
+The journal now records `fencing` intent before any fence action and provides
+an explicit pre-activation abort path that requires `verified_abort` before
+reopening. Its snapshot merger requires every planned apps node, matching node
+epochs, fresh collection (no more than30seconds old or2seconds in the future),
+complete document revisions and agreement between replicas' effective states,
+memberships and document revisions. Expired pauses are compared as ready but
+their original deadlines remain in the checkpoint. It never promotes an agent
+inventory into full-drain/fence evidence. All12 journal/merger tests pass.
+This remains coordinator support code, not an integrated maintenance executor.
 
 ### Restore primitives implemented; native coordinated acceptance still open
 

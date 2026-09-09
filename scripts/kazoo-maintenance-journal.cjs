@@ -7,9 +7,12 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const transitions = Object.freeze({
-    created: ['fenced'],
-    fenced: ['checkpointed'],
-    checkpointed: ['activating'],
+    created: ['fencing'],
+    fencing: ['fenced', 'aborting'],
+    fenced: ['checkpointed', 'aborting'],
+    checkpointed: ['activating', 'aborting'],
+    aborting: ['verified_abort'],
+    verified_abort: ['reopening'],
     activating: ['restoring', 'rolling_back'],
     restoring: ['verified', 'rolling_back'],
     rolling_back: ['restoring_rollback'],
@@ -151,4 +154,45 @@ function restoreCheckpoint(root, generation, expectedRevision) {
     assert(current.checkpoint, 'Missing checkpoint');
     return current.checkpoint;
 }
-module.exports = {create, read, advance, restoreCheckpoint, validateManifest, validateAgents};
+function mergeAgentSnapshots(snapshots, manifest, now = Date.now()) {
+    validateManifest(manifest);
+    assert(Number.isSafeInteger(now) && now > 0);
+    const nodes = new Map(manifest.nodes.filter(n => n.role === 'kazoo-apps').map(n => [n.name, n]));
+    assert(Array.isArray(snapshots) && snapshots.length === nodes.size, 'Missing applications-node snapshot');
+    const seen = new Set(), cohort = new Map(), agents = [], revisions = [];
+    for (const s of snapshots) {
+        exact(s, ['schema_version', 'node', 'epoch', 'captured_at_unix_ms', 'agents',
+            'document_revisions', 'all_agent_workers_observed', 'complete_cluster_drain_proven', 'admission_fence_proven']);
+        assert.equal(s.schema_version, 1); assert(nodes.has(s.node) && !seen.has(s.node)); seen.add(s.node);
+        assert.equal(s.epoch, nodes.get(s.node).epoch, 'Node epoch changed');
+        assert(Number.isSafeInteger(s.captured_at_unix_ms) && now - s.captured_at_unix_ms <= 30000 &&
+            now - s.captured_at_unix_ms >= -2000, 'Stale snapshot or unverified clock');
+        assert.equal(s.all_agent_workers_observed, true);
+        // Agent-only collection must never be silently promoted to full drain
+        // or fence evidence by this merger.
+        assert.equal(s.complete_cluster_drain_proven, false); assert.equal(s.admission_fence_proven, false);
+        validateAgents(s.agents, manifest);
+        assert(Array.isArray(s.document_revisions) && s.document_revisions.length === s.agents.length);
+        const documents = new Map();
+        for (const d of s.document_revisions) {
+            exact(d, ['account_id', 'agent_id', 'revision']); hex(d.account_id, 32); hex(d.agent_id, 32);
+            assert(typeof d.revision === 'string' && /^[1-9][0-9]*-[a-f0-9]{32}$/.test(d.revision), 'Invalid document revision');
+            const key = d.account_id + '/' + d.agent_id;
+            assert(!documents.has(key), 'Duplicate document revision'); documents.set(key, d.revision);
+        }
+        for (const a of s.agents) {
+            assert.equal(a.node, s.node, 'Agent snapshot crosses node scope');
+            const key = a.account_id + '/' + a.agent_id;
+            assert(documents.has(key), 'Missing agent document revision');
+            const effectiveState = a.state === 'paused' && a.pause_until_unix_ms !== 'infinity' &&
+                a.pause_until_unix_ms <= now ? 'ready' : a.state;
+            const signature = {queues: [...a.queues].sort(), state: effectiveState, revision: documents.get(key)};
+            if (cohort.has(key)) assert.deepEqual(signature, cohort.get(key), 'Agent replicas disagree');
+            else cohort.set(key, signature);
+            agents.push(a); revisions.push({node: s.node, account_id: a.account_id, agent_id: a.agent_id,
+                revision: documents.get(key)});
+        }
+    }
+    return {agents, document_revisions: revisions, complete_cluster_drain_proven: false, admission_fence_proven: false};
+}
+module.exports = {create, read, advance, restoreCheckpoint, validateManifest, validateAgents, mergeAgentSnapshots};
