@@ -29,6 +29,31 @@ verify_push_bridge
 [[ $(declare -f push_bridge_fingerprint | awk '/for file in .*delivery_retry[.]py/ {n++} END {print n+0}') == 1 ]]
 [[ $(declare -f install_push_bridge | awk '/for file in .*delivery_retry[.]py/ {n++} END {print n+0}') == 2 ]]
 [[ $(declare -f verify_push_bridge | awk '/for file in .*delivery_retry[.]py/ {n++} END {print n+0}') == 1 ]]
+[[ $(declare -f push_bridge_fingerprint) == *'bridge-install-layout=venv-umask022-v1'* ]]
+[[ $(declare -f install_push_bridge) == *'push_bridge_install_venv "$release"'* ]]
+
+# Real production venv helper, synthetic commands only. Both build stages use
+#022 despite a077 caller, failures propagate even in a conditional, and the
+#caller retains077 for secrets/config writes after successful or failed builds.
+(
+    umask 077
+    run() {
+        [[ $(umask) == 0022 ]] || return 91
+        case $1 in
+            python3.11) printf '%s\n' venv; return "${venv_failure:-0}" ;;
+            /fixture/release/venv/bin/python) printf '%s\n' pip; return "${pip_failure:-0}" ;;
+            *) return 92 ;;
+        esac
+    }
+    result=$(push_bridge_install_venv /fixture/release)
+    [[ $result == $'venv\npip' && $(umask) == 0077 ]]
+    venv_failure=21
+    if result=$(push_bridge_install_venv /fixture/release); then exit 93; else [[ $? == 21 ]]; fi
+    [[ $result == venv && $(umask) == 0077 ]]
+    venv_failure=0 pip_failure=22
+    if result=$(push_bridge_install_venv /fixture/release); then exit 94; else [[ $? == 22 ]]; fi
+    [[ $result == $'venv\npip' && $(umask) == 0077 ]]
+)
 
 # The early preflight must run before generic preflight/install/save. All are
 # replaced by sentinels: this tests dispatch, not /etc or the live host.

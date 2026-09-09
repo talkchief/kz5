@@ -11,6 +11,11 @@
   idle disconnect/reconnect remains unchanged. Targeted candidate validation
   passes7105/044fc0:21 deadline/watchdog tests and27 settlement tests. Normal
   bridge SH deployment is next. No provider traffic is required.
+  Normal CLI failed before activation24aec4: root umask077 made `venv`/`bin`
+  mode0700 and the service user could not execute Python. Existing bridge
+  PID57635 stayed active, restarts0 (491c28). Installer correction builds only
+  public dependencies in a022 subshell and versions release layout to avoid
+  reusing old restrictive staging. Secrets/caller umask remain unchanged.
 
 - **CALLBACK-DEADLINE negative expiry — scoped native PASS:** focused on the reported
   callback confirmation behavior, not a general load campaign. Explicit

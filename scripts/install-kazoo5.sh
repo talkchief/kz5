@@ -6103,12 +6103,29 @@ push_bridge_preflight() {
 
 push_bridge_fingerprint() {
     local source_dir="$SCRIPT_DIR/../services/push-bridge" file
+    {
+    # Dependency layout is part of release identity. Do not reuse a previously
+    # staged root-only venv merely because its Python source bytes are equal.
+    printf '%s\n' 'bridge-install-layout=venv-umask022-v1'
     for file in bridge.py apns_sender.py delivery_settlement.py delivery_retry.py push_payload.py validate_config.py amqp_topology.py amqp_management.py freshness.py freshness_runtime.py \
         service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
         [[ -f $source_dir/$file && ! -L $source_dir/$file ]] || die 'Bridge release source is missing or linked'
         sha256sum "$source_dir/$file" | awk -v name="$file" '{ print $1 "  " name }'
-    done | sha256sum | awk '{ print $1 }'
+    done
+    } | sha256sum | awk '{ print $1 }'
 }
+
+push_bridge_install_venv() (
+    local release=$1
+    # This tree contains public program/dependency files only. Configuration and
+    # provider credentials remain protected in /etc, outside this subshell.
+    # Never change the caller's mask or recursively relax credential paths.
+    umask 022
+    run python3.11 -I -m venv "$release/venv" || return $?
+    run "$release/venv/bin/python" -I -m pip --isolated install --disable-pip-version-check \
+        --index-url https://pypi.org/simple --only-binary=:all: --require-hashes \
+        --retries 2 --timeout 30 -r "$release/requirements.lock" || return $?
+)
 
 install_push_bridge() {
     local source_dir="$SCRIPT_DIR/../services/push-bridge"
@@ -6143,10 +6160,7 @@ install_push_bridge() {
             service_launcher.py service_notify.py requirements.lock kazoo-push-bridge.service; do
             run install -o root -g root -m 0644 "$source_dir/$file" "$release/$file"
         done
-        run python3.11 -I -m venv "$release/venv"
-        run "$release/venv/bin/python" -I -m pip --isolated install --disable-pip-version-check \
-            --index-url https://pypi.org/simple --only-binary=:all: --require-hashes \
-            --retries 2 --timeout 30 -r "$release/requirements.lock"
+        push_bridge_install_venv "$release"
     fi
     run "$release/venv/bin/python" -I -m pip --isolated check
     run "$release/venv/bin/python" -B -I "$release/service_launcher.py" --check-dependencies

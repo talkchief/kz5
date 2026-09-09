@@ -43,3 +43,21 @@ bash scripts/install-kazoo5.sh push-bridge
 
 Candidate results and main-host deployment evidence will be recorded here after
 completion. Physical FCM/APNs delivery remains user-waived, not a test pass.
+
+## Installer permission correction found during deployment
+
+Normal `push-bridge` deployment under root `umask077` failed before activation
+(24aec4): venv/bin were mode0700, so the service-user prerequisite got
+`Permission denied`. Existing service PID57635 stayed active with restarts0
+(491c28). Do not call that install successful or weaken the service-user check.
+
+The installer now runs only venv/pip creation under a subshell `umask022`.
+These are public code dependencies, not credentials. Caller umask and protected
+`/etc/kazoo-push-bridge` files are unaffected. Release fingerprint includes the
+layout recipe, so the old root-only staging directory is not silently reused
+or chmodded recursively. Failed stage is retained, never activated.
+
+Actual helper regressions979dba pass: both stages see022, caller stays077,
+venv/pip errors propagate even under conditional invocation, alongside aliases,
+standalone/ALL dispatch and all seven activation/rollback cases. Native retry
+will deliberately use the same restrictive077 launch environment.
