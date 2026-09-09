@@ -1,34 +1,32 @@
 # Kazoo 5 project task register
 
+**Work-selection rule:** focus on reported bugs and deployment gaps. Each check
+must serve the current bug, its source fix, or the selected installer deployment.
+Do not repeat passed campaigns without a relevant change. Keep dashboard/history
+work postponed; do not generate voices at runtime or during deployment.
+
 ## Immediate operator follow-up — September9
 
-- **P0-06 pending-retry queue restart — native FAIL / focused fix in progress:**
-  Run20260909T032633Z (unit `kz5-callback-queue-restart-main44-20260909b`)
-  replaced the isolated queue supervisor but the saved ticket never advanced
-  beyond attempt1. Cleanup cancelled only its ticket; no calls remain.
-  Broker evidence55e55d shows the shared member queue is auto-delete: stopping
-  its last consumer deletes the delivery needed to resume the saved callback.
-  A production-listener regression fails before the fix (ae95c5). Candidate
-  explicitly disables auto-delete; isolated regression now passes345c85.
-  Normal installer deployment succeeded2b2a10 (10m51.570s); loaded/disk listener
-  MD5 matches0fcccd and both broker work queues now have auto_delete=false
-  (96e138). Native rerun20260909T035026Z still FAILED (e7991e): attempts1,
-  cleaned up to cancelled, broker messages0. Second defect found: the shared
-  listener shutdown calls basic_nack/1, but its delivery-record clause emits
-  basic.ack! Actual shutdown/frame regression7ae3cb fails before the fix;
-  candidate72f938 passes all3 cases, preserving explicit ACK/requeue policies.
-  Required root patch `scripts/patches/kazoo-amqp-basic-nack.patch` and installer
-  hook correct the helper; deployment/native validation are pending. Existing
-  broker queue properties are immutable: upgrade must drain old queues and
-  stop all their consumers together, not blindly redeclare/delete live work.
-  Explicit `--queue-restart-during-backoff` adds the existing queue-scoped
-  maintenance restart after the first attempt has ended and retry_wait is
-  durable. Requires the exact main isolated queue, zero channels, no recorded
-  legs, sufficient backoff and a one-attempt marker. Verifies changed queue PID
-  then the unchanged positive callback/retry/receipt gates. No service restart,
-  new production maintenance API or historical ticket mutation.17 boundary
-  cases and13 CLI/reference groups pass. Active-leg loss and native registry
-  expiry remain separate. See `doc/callback_originate_receipt.md`.
+- **P0-06 pending-retry queue restart — FIXED / DEPLOYED / scoped native PASS:**
+  Two source defects discarded callback work: last-consumer auto-delete and a
+  basic_nack/1 delivery handler that actually sent ACK. Commits `72591d5` and
+  `f853f47` fix both; the AMQP change is a required root-owned installer patch,
+  not a nested core commit. Three targeted regressions pass after reproducing
+  the old failure. Native runs 20260909T032633Z and 20260909T035026Z remain FAIL;
+  the latter proved retention alone was insufficient.
+  Normal apps installer deployments passed (2b2a10 / 06d171), and loaded modules
+  match their rebuilt files. Final native unit
+  `kz5-callback-requeue-case-main44-20260909` exited 0 (764dcf), 4m1.060s.
+  Run `/var/log/kazoo-acceptance/20260909T041030Z`: full registration PCM after
+  one digit6; first return unanswered; exact queue restarted once in backoff;
+  second return confirmed/bridged, same ticket completed at attempt2 with
+  originate receipt. Agent ready, caller2/0, agent2/0, fresh errors0/0, cores0;
+  services unchanged during the case and zero calls afterward (257cbd).
+  Test fixture is deliberately retained; this is not full cleanup, broker
+  failover, active-leg-loss, historical-ticket recovery or production acceptance.
+  Legacy queue properties require a drained coordinated migration; no blind
+  queue deletion or mixed v4/v5 consumers. Details, hashes and boundaries:
+  `doc/callback_originate_receipt.md`. Do not rerun this passed case unchanged.
 
 - **P0-06 durable originate receipt — DEPLOYED / scoped native PASS; old ticket OPEN:**
   exact native read6f4786 confirms the old retained cancelling ticket is unknown

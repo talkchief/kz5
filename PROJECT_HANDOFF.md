@@ -1,24 +1,27 @@
 # Kazoo 5 — start here / engineering handoff
 
-**Current focus: P0-06 callback retry lost on queue restart — native FAIL.**
-Main44 run20260909T032633Z replaced the queue supervisor but the callback stayed
-at attempt1. The shared AMQP queue defaults to auto-delete and disappears when
-all queue workers disconnect. Cleanup cancelled only the test ticket; no live
-calls remain. Candidate disables auto-delete in the root-tracked listener;
-the new production-declaration regression fails against the old code (ae95c5).
-Candidate regression passes345c85. Source72591d5 is pushed to master/main44;
-normal installer deployment succeeded2b2a10,10m51.570s. Loaded listener MD5
-matches disk and both broker work queues have auto_delete=false (96e138).
-Native rerun `kz5-callback-retention-case-main44-20260909` FAILED (e7991e),
-run20260909T035026Z, still attempt1; cleanup cancelled its ticket. Second defect:
-core basic_nack/1 emits ACK for a delivery record during shared-listener
-shutdown. Required root patch `scripts/patches/kazoo-amqp-basic-nack.patch`
-fixes that helper and is wired into the installer. Actual shutdown/frame test
-fails7ae3cb before correction; all3 targeted cases pass72f938 afterward.
-New deployment/native proof are pending. Do not mark the recovery gap closed.
-Do not upgrade legacy declarations with queued work or redeclare old immutable
-properties during a rolling upgrade. Details:
-`doc/callback_originate_receipt.md`. Unrelated campaigns remain paused.
+**User direction:** reported bugs and deployment gaps only; no unrelated test
+campaigns. Fix in source, validate the failing path, deploy through the installer,
+then record the actual result. Dashboard/history work remains postponed.
+
+**Latest focused fix: callback retry after queue restart — DEPLOYED / scoped PASS.**
+Commits `72591d5` and `f853f47` are on master and main44. They retain shared
+callback work queues and correct basic_nack/1 sending ACK during shutdown.
+The core correction lives in `scripts/patches/kazoo-amqp-basic-nack.patch` and
+is applied by the installer; ACDC remains directly tracked in the root repo.
+Three focused regressions pass; normal apps deployments passed (2b2a10 / 06d171)
+and loaded module checksums match disk. Final native unit
+`kz5-callback-requeue-case-main44-20260909` exited 0 (764dcf), 4m1.060s.
+Run `/var/log/kazoo-acceptance/20260909T041030Z` proves single6/full registration
+audio, unanswered first return, one queue restart during saved backoff, and
+confirmed second return with reciprocal bridge and persisted success receipt.
+Agent ready, caller2/0, agent2/0, fresh errors0/0 and cores0; services unchanged,
+zero calls afterward. Fixture retained: not full cleanup or production acceptance.
+Do not rerun this passing case unchanged. The old ambiguous ticket, active-leg
+failure and broker/registry-loss recovery remain separate open items. Legacy
+queue declarations need a drained coordinated upgrade, not mixed v4/v5 consumers
+or blind broker deletion. Evidence, hashes and upgrade/rollback constraints:
+`doc/callback_originate_receipt.md`. All jobs from this focused repair are terminal.
 
 **September9: P0-06 receipt source769fdb2 deployed; scoped native callback PASS.**
 The exact historical cancelling attempt still returns native unknown (6f4786)

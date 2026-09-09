@@ -147,7 +147,7 @@ fixed warning identifies an unsuccessful write; it does not turn that failure
 into proof. This is not an exactly-once guarantee, a broker-partition test,
 a native-registry restart test, or authority to clear the old ticket.
 
-## Next focused case: queue restart during saved retry backoff
+## Native queue restart during saved retry backoff
 
 `scripts/test-acdc-callback-retry.sh --queue-restart-during-backoff` adds an
 explicit native failure boundary to the existing positive retry case. It is
@@ -201,7 +201,8 @@ declaration with mocked I/O; the old declaration fails its retention assertion
 Main44 pre-upgrade read69d84a: two shared member queues, both empty; only the
 isolated acceptance account has consumers. Exact account query2ae370 returns15
 callback tickets, all terminal. FreeSWITCH row_count=0. Deployment completed
-below; the native rerun is pending. Preflight is not itself a recovery pass.
+below; subsequent native outcomes are recorded separately. Preflight is not
+itself a recovery pass.
 
 Source72591d5 was committed/pushed to master and fast-forwarded on main44.
 Normal `scripts/install-kazoo5.sh kazoo-apps` unit
@@ -241,7 +242,55 @@ only the channel command mocked. Baseline7ae3cb produces ACK101/ACK100 instead
 of NACK101/NACK100 with requeue=true (1fail/2pass). Candidate72f938 passes all3:
 shutdown requeues unfinished deliveries only, explicit ACK/NACK policies stay
 unchanged, and the shared queue remains non-auto-delete. Reverse patch check,
-shell syntax and diff checks pass7b47c8. Deployment/native rerun are pending.
+shell syntax and diff checks pass7b47c8.
+
+Source `f853f47` is pushed to master and present on main44. Normal installer unit
+`kz5-callback-nack-install-main44-20260909` exited0 (06d171),10m48.264s,
+peak368MiB. It applied the required patch through the normal source-preparation
+hook (839009). Log `/root/kz5-acceptance/callback-nack-install-main44-20260909.log`,
+SHA256 `dc2d61f7fef89d78aaaae9d5fc969e838aa802cf5d4952ef074d02bb0182b6a2`.
+The apps node's loaded `kz_amqp_util` and rebuilt disk module both have MD5
+`e7505645109485727b0aff35a39887fe` (b57ad5/5e5646). This was an apps-role
+deployment, not an all-role or production rollout. No active calls before the
+next test (8b7bff).
+
+### Final scoped native PASS with both fixes
+
+`kz5-callback-requeue-case-main44-20260909` exited 0 (764dcf), runtime4m1.060s.
+Run directory `/var/log/kazoo-acceptance/20260909T041030Z`; no service restart
+was performed during the case. Exactly one queue maintenance restart changed
+local supervisor PID1778.0 to10346.0 at04:11:55–04:11:56 UTC (f8b163).
+The callback stayed on the same ticket and enqueue identity, preserved its
+15-second backoff, and placed attempt2 1.412752 seconds after the saved due time.
+
+Packet and native evidence prove one digit6 at4.984537 seconds after answer,
+the complete5.491-second installed registration phrase before server BYE
+(PCM correlation0.999993, zero missing phrase samples), first returned call
+unanswered for14.976 seconds, then a confirmed second return. Exactly one agent
+INVITE followed confirmation digit1 by943ms; reciprocal native bridge and
+bidirectional PCMU were recorded. The two-second wait is after the proof was
+collected; measured busy-call release was5.273636 seconds after phrase completion.
+This is waveform/packet proof, not a human pronunciation-quality review.
+
+Exact ticket
+`acdc-callback-4334ae4ddf2744114893998ef82e8e28d6ff3e0486b335dea9548a97c81a4b0d`
+is still completed at attempt2 with persisted originate-success receipt and
+no reconciliation flag (6e0559 / e91f2f). Agent-ready and unchanged-service
+gates passed; summary reports caller2/0, agent2/0, fresh errors0/0, cores0.
+Fresh FreeSWITCH inventory is zero calls (257cbd); correctly named apps,
+ecallmgr, FreeSWITCH, Kamailio and HAProxy units are active (bd9051).
+The fixture remains intentionally installed (`full_cleanup_acceptance=false`).
+This closes only retry_wait recovery after a single queue supervisor restart,
+not active-leg loss, broker failover, cross-node recovery, the old retained
+ticket, full fixture cleanup, five-language release readiness or production
+acceptance. No unchanged replay of this passed case is needed.
+
+SHA256 evidence:
+
+- `retry-bridge-evidence.json`: `2e0a37a064d43ace6771160773bc7b91522f3665a4f4fc48073c06d74eba275e`
+- `retry-packet-evidence.json`: `a7e1da0fa3672297da84582b13034f3e29b7b017ad49050a1c0c7ea604280d81`
+- `callback-queue-restart.json`: `f3da49e29a739a98c7909abf802c5e2a0873b6771fc17e823e52de191feffcce`
+- `/root/kz5-acceptance/callback-requeue-case-main44-20260909.log`: `a044c63605b5d4160c8a7277478a01c165cc885afeeead3e6f852b64e34af3a9`
 
 Upgrade constraint: RabbitMQ declaration properties are immutable. A legacy
 auto-delete queue cannot be redeclared with the new property while it exists.
@@ -261,3 +310,8 @@ may an operator remove the exact empty queues for the old release to recreate.
 Neither the installer nor this acceptance case performs that deletion. A
 mixed-version rolling upgrade/rollback is not validated by this single-node
 development deployment.
+This also applies to v4/v5 coexistence: legacy v4 consumers declaring the same
+account/queue name with auto_delete=true cannot share that broker queue with
+the corrected declaration. Keep the development broker/vhost isolated; do not
+attach this release to production's shared ACDC work queues without a planned
+drained migration. This change is not evidence of v4/v5 broker compatibility.
