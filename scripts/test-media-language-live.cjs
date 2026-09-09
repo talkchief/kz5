@@ -123,6 +123,7 @@ async function main() {
     }
     state = JSON.parse(privateText(RECEIPT));
     assert.equal(state.kind, 'kazoo5-media-language-acceptance'); assert.equal(state.phase, 'prepared');
+    assert.equal(state.stage, 'native_baseline'); assert.equal(state.checks.length, 0);
     assert(/^[a-f0-9]{12}$/.test(state.nonce));
     for (const role of ['reseller', 'child']) {
         assert.equal(state[role].name, 'Kazoo5 Language ' + role + ' ' + state.nonce);
@@ -132,6 +133,7 @@ async function main() {
     assert.notEqual(state.child.id, state.reseller.id);
     assert.equal(binary('kz_services_reseller', 'get_id', [state.child.id]), state.reseller.id);
     await assertEmptyChild();
+    state.phase = 'verifying'; checkpoint('verify_owned_language');
     const map = fs.readFileSync('/opt/kz5/applications/acdc/src/acdc_gemini_map.hrl', 'utf8');
     const assets = [...map.matchAll(/\{<<"([^"]+)">>,<<"([^"]+)">>,<<"([^"]+)">>/g)];
     const term = value => '<<"' + value + '">>';

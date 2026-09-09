@@ -1,6 +1,7 @@
 # Native reseller prompt-language fallback
 
-September 9, 2026 — VOICE-01. Source verified; deployment/native fixture pending.
+September 9, 2026 — VOICE-01. Source verified; native baseline confirmed;
+normal apps deployment running, final verification pending.
 
 The native account-language resolver previously read only the account document
 and its media configuration. A child without either setting used the system
@@ -47,7 +48,7 @@ that Kazoo4 and5 can safely share writable production databases.
 - Tests control document/config reads. They do not prove native tenant creation,
   cache invalidation across multiple nodes, live call audio or pronunciation.
 
-## Focused native acceptance, pending
+## Focused native acceptance
 
 `scripts/test-media-language-live.cjs --prepare` is main-dev-only and authenticates
 using protected local installer settings. It creates a unique empty reseller
@@ -66,3 +67,25 @@ generation, production writes or full-stack reruns are involved.
 Do not blindly repeat a failed phase: inspect the protected receipt and exact
 owned account IDs first. A completed verification is terminal. Further live call
 and cross-node cache/inheritance acceptance remains a separate gate.
+
+Preparation unit `kz5-media-language-prepare-main44-20260909b` completed
+successfully (9781/cfbe01,6.429s). Native fea520 confirms:
+
+- Reseller: `6973ed5f3a10447bf8c4513ed38ef0c0`, language `he-il`.
+- Child: `3575eada00b4f501100ef1d17d47b191`, no stored language, native result
+  `en-us` before deployment. Its native reseller ID matches the owned parent.
+- Both accounts disabled; no users, devices, callflows or queues; zero calls.
+
+The initial prepare unit3000/fb4822 stopped after creating only the reseller:
+native account creation initializes pvt_enabled independently of public
+enabled:false. Readback f6f0d3 confirmed it was enabled, with no users/devices.
+The harness now disables each owned account using the supported PATCH and checks
+native `kzd_accounts:is_enabled`. An identity-checked `--resume-preparation`
+completed the same receipt; no duplicate reseller. Verification marks its phase
+before mutations, so an incomplete verify cannot silently start over.
+
+Source11030da is on master/main. Normal CLI unit
+`kz5-media-language-install-main44-20260909` is running (observer87990), with log
+`/root/kz5-acceptance/media-language-install-main44-20260909.log`. Do not start a
+second build. Native `--verify`, runtime module parity and `/apis` publication
+remain pending until this job is terminal success.

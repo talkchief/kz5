@@ -2,7 +2,7 @@
 
 ## Immediate operator follow-up — September8
 
-- **VOICE-01 reseller language fallback — SOURCE PASS, deployment pending (September9):**
+- **VOICE-01 reseller language fallback — SOURCE PASS, deployment running (September9):**
   Native `kz_media_util:prompt_language/2` omitted reseller defaults entirely.
   Root-owned installer patch now uses account media.default_language, account
   language, direct reseller media.default_language, reseller language, then the
@@ -13,7 +13,15 @@
   No database migration, regeneration or runtime Gemini dependency. OpenAPI source
   updated. `scripts/test-media-language-live.cjs` prepares two empty, disabled
   main-dev-only tenants, then verifies all five inherited locales and15 shared
-  prompt resolutions after deployment; not yet run. See
+  prompt resolutions after deployment. Preparation cfbe01 is terminal PASS:
+  reseller6973ed5f3a10447bf8c4513ed38ef0c0 is HE, its language-less child
+  3575eada00b4f501100ef1d17d47b191 resolves EN before deployment (fea520).
+  Both accounts are disabled/empty and zero calls. Initial preparation fb4822
+  stopped because native create ignores public enabled:false; explicit scoped
+  PATCH plus identity-checked resume disabled the same account, without duplicates.
+  Normal CLI unit `kz5-media-language-install-main44-20260909` is running,
+  observer87990; source11030da. Poll that handle/unit, do not start another build.
+  Verify phase and OpenAPI publication remain pending. See
   `doc/media_reseller_language.md`. The fixture is scoped; native calls/audio
   pronunciation and broader release gates remain separate.
 

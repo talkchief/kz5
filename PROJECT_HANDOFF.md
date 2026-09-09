@@ -1,15 +1,19 @@
 # Kazoo 5 — start here / engineering handoff
 
-**September9: VOICE-01 reseller fallback SOURCE PASS, not yet deployed.**
+**September9: VOICE-01 reseller fallback SOURCE PASS, deployment running.**
 Root-owned `kazoo-media-reseller-language.patch` adds direct reseller defaults
 only when account media.default_language and account language are both absent.
 Existing caller/system fallback survives missing/failed lookups; explicit queue
 and call selections are unchanged. Baseline f6b473 fails4/14; final f9bb3f passes
 all16 cases and installer patch replay twice. OpenAPI source describes precedence.
-Next: protected two-tenant native fixture `scripts/test-media-language-live.cjs
---prepare`, supported normal kazoo-apps CLI deployment, then `--verify` and `/apis`
-publication. Do not run prepare twice: its protected receipt prevents duplicate
-tenants and records any incomplete mutation. See `doc/media_reseller_language.md`.
+Preparation cfbe01 is terminal: two empty disabled tenants, reseller HE versus
+child EN before deployment, proves the native gap (fea520). Initial prepare
+fb4822 failed on account creation's enabled behavior; explicit scoped PATCH and
+identity-checked resume fixed the fixture without creating a duplicate reseller.
+Normal CLI unit `kz5-media-language-install-main44-20260909` is RUNNING,
+observer87990, source11030da. Poll it; do not restart while observation is pending.
+Then sync remaining docs/test-harness-only changes, run `--verify`, publish `/apis`
+and record runtime MD5. Do not run prepare twice. See `doc/media_reseller_language.md`.
 
 **September9: VOICE-01 inherited queue edit DEPLOYED / scoped PASS.**
 Baseline d5c05d shows an unrelated Save silently adopts English for an existing
