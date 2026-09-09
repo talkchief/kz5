@@ -167,4 +167,20 @@ fixed additional profile has separate state `/var/lib/kazoo5-cold-bootstrap-fina
 network `172.30.251.0/24`, names `kz5-final-*`, fresh random secrets and realm
 `cold-final-stage.invalid`; all admission, ownership and no-takeover gates apply.
 It does not delete or reuse either earlier lab's data. First-install result is
-pending until its normal apps attempt1 and terminal service validation pass.
+**PASS**: CouchDB, RabbitMQ and apps all completed their normal first attempts.
+Apps source `e8e3a46`, receipt
+`/var/lib/kazoo5-cold-bootstrap-final/kazoo-apps-install-1.log`.
+No manual account creation, installer restart or package-lock intervention was
+used. Readback found exactly one account, its configured master and successful
+SUP discovery (exit0, no stderr). Full prompt-byte/map and application/API
+checks passed. The acceptance watchdog alone was increased from60 to90minutes
+using a runtime unit drop-in because slow mirrors and an OS metadata job consumed
+most of the initial allowance; original installer PID79 remained unchanged.
+The source DNF coordination fix and its separate native validation are described
+in `installer_dnf_coordination.md`. Final automatic guest startup and full normal
+verification passed: `kazoo-apps-boot-1788971648675.log` in the final evidence root.
+
+Subsequent original-lab FreeSWITCH automatic guest restart passed:
+`freeswitch-boot-1788969733352.log`. Dependent eCallMgr normal verification passed
+afterward (`ecallmgr-verify-1788969827870.log`). Earlier failed attempts are
+retained; the later pass does not change their recorded outcomes.

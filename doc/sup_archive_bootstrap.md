@@ -29,6 +29,14 @@ administrator authentication/API/media verification passed. Automatic guest
 boot also passed (`kazoo-apps-boot-1788968490597.log`). Main44's source Makefile
 now has the same patch and its already-working archive passes validation.
 
+The independent final empty-data scenario subsequently passed normal apps
+attempt1 at `e8e3a46`, including automatic first-account creation and discovery.
+Receipt `/var/lib/kazoo5-cold-bootstrap-final/kazoo-apps-install-1.log`.
+Readback shows exactly one account, configured master and SUP exit0/no stderr.
+No manual bootstrap or installer retry was used. Only the harness watchdog
+allowance changed60→90minutes because of external package download/metadata
+delays; see `distributed_install_lab.md` for the full boundary.
+
 The cold lab may resume a failed post-create install only when its original
 empty baseline is retained, system_config names a valid master ID and the sole
 account exactly matches that ID and the fixed cold fixture realm. Original

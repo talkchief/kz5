@@ -7,13 +7,15 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Installer DNF metadata-lock delay — source fixed, native helper check pending:**
+- **Installer DNF metadata-lock delay — source fixed / native helper PASS:**
   final empty apps installation compiled and passed SUP validation, then waited
   behind the standard OS `dnf-makecache.service`. That job failed/released its
   lock naturally; the installer was not restarted or manually unblocked.
   New `dnf_transaction` coordinates only the known metadata job, restores its
-  timer state and promptly refuses an unrelated package-manager lock. Seven
-  private actual-helper cases pass. See `doc/installer_dnf_coordination.md`.
+  timer state and promptly refuses an unrelated package-manager lock. Eight
+  private actual-helper cases pass. Native real-cache-job pause plus cached
+  package transaction passed; timer remained active/enabled. Source `33254c0`
+  is synced to main44. See `doc/installer_dnf_coordination.md`.
 
 - **Repeated broker-failure acceptance — native PASS:** exact existing dev44 fixture,
   three consecutive30-agent broker outages with only one initial registration
@@ -40,11 +42,10 @@ work postponed; do not generate voices at runtime or during deployment.
   sole configured master with no duplicate account. Automatic cold apps guest
   boot and full verifier passed (`kazoo-apps-boot-1788968490597.log`). The main
   source Makefile is patched too, and its existing archive passes the new gate.
-  See `doc/sup_archive_bootstrap.md`. A separate final empty fixture is running
-  a complete first-attempt install; retries will not be called fresh
-  first-install passes.
-- **Cold first-install verification — in progress:** a separate three-role
-  empty-data lab is running to close the bootstrap evidence gap. New
+  See `doc/sup_archive_bootstrap.md`. The independent final empty fixture also
+  passed its complete first-attempt installation and automatic guest reboot.
+- **Cold first-install verification — first-attempt PASS:** a separate three-role
+  empty-data lab closed the first-bootstrap evidence gap. New
   network/state/secrets/realm; original lab and development data preserved.
   First apps attempt requires an authenticated no-Kazoo-databases inventory.
   Normal installer only, no diagnostic account creation. CouchDB/RabbitMQ first
@@ -53,10 +54,16 @@ work postponed; do not generate voices at runtime or during deployment.
   identity. Attempt2 (`c875758`) created the first account, then failed discovery
   because SUP lacked embedded helpers. Both pre-create admissions proved no
   Kazoo DBs. Attempt3 (`5e6f87a`) passed in `kz5-cold-kazoo-apps` with exact
-  configured-master reuse. Final fixture `kz5-final-kazoo-apps` is running normal
-  installer attempt1, unit `kz5-stage-install-kazoo-apps-1`, source `e8e3a46`;
-  its CouchDB/RabbitMQ first installs passed and monitoring credentials were
-  prepared automatically before apps admission. Original failures remain failed; see
+  configured-master reuse. Final fixture `kz5-final-kazoo-apps` normal
+  installer attempt1, unit `kz5-stage-install-kazoo-apps-1`, source `e8e3a46`,
+  completed with PASS and was collected; its CouchDB/RabbitMQ first installs
+  passed and monitoring credentials were prepared automatically before apps
+  admission. Exactly one master account, SUP exit0/no stderr, full app/API/media
+  verification passed. No manual account creation, installer retry or cache-job
+  interruption was used. Only the test watchdog allowance changed60→90minutes;
+  original installer PID79 was unchanged. Final automatic guest reboot and
+  full verifier passed: `/var/lib/kazoo5-cold-bootstrap-final/kazoo-apps-boot-1788971648675.log`.
+  Original failures remain failed; see
   `doc/distributed_install_lab.md` for the reproducible entry point.
 - **Extended30-minute call hold — native PASS:** bounded
   `--soak-seconds 1800` mode retains the actual SIP/RTP/concurrency/recovery/log
@@ -93,9 +100,9 @@ work postponed; do not generate voices at runtime or during deployment.
   isolated backend roles now passed normal installer checks. All9 main services
   active, zero calls and zero apps/eCallMgr error-priority journal entries since
   14:28UTC at final readback. Do not claim all broad release gates closed:
-  multi-node partition/revocation/supervision privacy, untouched final cold apps
-  bootstrap and remaining boot/upgrade/rollback matrix remain open. The bounded
-  30-minute hold subsequently passed; see the newer entry above.
+  multi-node partition/revocation/supervision privacy and remaining boot/upgrade/
+  rollback matrix remain open. The bounded30-minute hold and untouched final
+  cold apps bootstrap/reboot subsequently passed; see the newer entries above.
   Historical ambiguous callback remains quarantined for operator disposition.
   Authoritative evidence and boundaries: `doc/FOCUSED_CLOSEOUT_2026-09-09.md`.
 - **Confirmed fresh Crossbar registration failure — FIXED / DEPLOYED / PASS:** apps5

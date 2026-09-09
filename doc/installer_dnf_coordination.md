@@ -20,5 +20,14 @@ The wrapper covers normal package installs and Node.js module mutations.
 Eight tests execute the real helper with private adapters: active/inactive
 cache, nonstandard/multiple command refusal, package failure, cache-stop failure, timer
 restoration failure and dry-run. No real OS service is touched by those tests.
-Native helper validation is pending; do not infer it from the ongoing earlier
-installer process, which already loaded its original shell functions.
+Native helper validation passed in `kz5-cold-kazoo-apps` using the committed
+helper (`33254c0`, installer SHA256
+`96a56bc5115d8512535f4b782e1f8c3c131f06821478009cc09aafae2e077f8c`).
+With the real metadata job started immediately before the helper, its explicit
+pause message was observed; `dnf_install --cacheonly bash-completion` completed
+successfully and the timer remained active/enabled afterward. The package was
+already installed: this tests actual coordination and DNF invocation, not a new
+RPM download. A prior inactive-job native invocation passed too. The corrected
+helper is on main44 in `/opt/kz5`; no applications rebuild is required for this
+installer-only change. The final cold first install ran its original `e8e3a46`
+functions and passed without this intervention after the cache job ended itself.

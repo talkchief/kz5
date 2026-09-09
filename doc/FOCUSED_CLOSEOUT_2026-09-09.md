@@ -4,43 +4,39 @@ This checkpoint does **not** close all four requested groups or certify a
 production release. Keep dashboard/history work postponed. Do not regenerate
 voices or repeat passing normal callback campaigns without a relevant change.
 
-Latest: three consecutive30-agent broker outages passed (`c8796e2`, native
-unit `kz5-repeated-broker-30-20260909.service`, exit0). Same apps process and
-all30 FSMs retained across all cycles,90 subsequent calls succeeded,0 failures,
-errors0/0 and new cores0 each cycle. All9 services active, zero calls afterward.
-Isolated FreeSWITCH automatic guest restart now passed, followed by successful
-dependent eCallMgr verification (`freeswitch-boot-1788969733352.log` and
-`ecallmgr-verify-1788969827870.log`). The final empty apps first-install remains
-running; its last dependency download is progressing, not a terminal failure.
+Latest verified results:
 
-Continuation: the30-minute30-call hold passed natively (1800s,30/30 successes,
-zero failures/errors/cores; `20260909T145906Z`). An empty-data installation exposed
-missing helpers in the SUP archive: account creation succeeded, CLI discovery
-failed. Required source fix `5e6f87a` passed native rebuild/normal installation,
-without creating a duplicate master. Current cold apps automatic guest boot
-passed, as did original-lab HAProxy and Kamailio guest boots. Legacy eCallMgr/
-FreeSWITCH guest failures remain recorded with successful restoration. A final
-untouched apps attempt1 is running in `kz5-final-kazoo-apps`, source `e8e3a46`;
-do not label it passed until terminal collection. Details: `sup_archive_bootstrap.md`,
-`distributed_install_lab.md` and `acdc_extended_soak.md`.
+- Three consecutive30-agent broker outages passed (`c8796e2`, native unit
+  `kz5-repeated-broker-30-20260909.service`, exit0). Same apps process and all30
+  FSMs retained;90 subsequent calls succeeded,0 failures, errors0/0 and new cores0
+  each cycle. Separate30-minute30-call hold passed (`20260909T145906Z`).
+- Final empty-data CouchDB/RabbitMQ/apps first installs passed, including first
+  account creation and working SUP discovery. Apps source `e8e3a46`; receipt
+  `/var/lib/kazoo5-cold-bootstrap-final/kazoo-apps-install-1.log`. Exactly one
+  master account; no manual bootstrap, installer restart or cache intervention.
+  Slow package mirrors/OS metadata contention required only the test watchdog
+  to increase60→90minutes, keeping original PID79 and all acceptance checks.
+- That fresh apps guest automatically started after reboot and passed normal
+  verification: `kazoo-apps-boot-1788971648675.log` in the same evidence root.
+  This closes the SUP archive first-bootstrap defect, not all release gates.
+- FreeSWITCH automatic guest restart passed, followed by dependent eCallMgr
+  verification (`freeswitch-boot-1788969733352.log` and
+  `ecallmgr-verify-1788969827870.log` in `/var/lib/kazoo5-install-lab`).
+- Additional DNF coordination source fix `33254c0`:8 private cases and native
+  real metadata-job pause/cached transaction/timer restoration passed. This
+  installer-only change requires no applications rebuild; main44 has the code.
+- Main44 final readback: all9 services active, zero calls, zero apps/eCallMgr
+  error-priority journal entries since16:10UTC. No claim beyond that window.
 
-Final focused handover: source fixes are deployed and the seven isolated backend
-roles passed their normal installer checks, including apps attempt6 (`8966bd7`).
-The final capacity campaign passed with30 answered and5 queued calls and a180s
-verified concurrent hold. Corrected30-call broker recovery, callback edge cases
-and cached-identity revocation passed natively. Main44 has all nine stack services
-active, zero calls and zero apps/eCallMgr error-priority journal entries since
-14:28UTC at final readback. This supersedes pending-retry checkpoints, not the
-retained failed evidence. The apps pass was a normal retry after diagnostic lab
-bootstrap, not an untouched first-install pass. Broader release gates below remain
-explicitly open; the focused implementation work is handed over, not certified
-as a complete enterprise release.
+Details: `sup_archive_bootstrap.md`, `installer_dnf_coordination.md`,
+`distributed_install_lab.md`, `acdc_extended_soak.md` and `acdc_native_node_loss.md`.
+Earlier failed attempts remain failed; successful later runs do not erase them.
 
 | Point | Current verified work | Still open |
 | --- | --- | --- |
 | 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Three consecutive30-agent broker outages passed with unchanged apps/FSM identities and90 successful subsequent calls.30-concurrent1800s hold passed:30 caller/30 agent successes,0 failures/errors/cores. | Multi-node broker partitions. The30-minute hold does not establish indefinite reliability. |
 | 2 — Callback edge cases | Worker killed during ringing: cleanup/backoff/completed retry passed. Invalid/empty input, alternate1001, unanswered first return/completed second return passed. Alternate-disabled rejection played complete built-in audio, retained caller until caller BYE, created no ticket and left the busy conversation intact. Earlier five-language/queue-restart passes retained; no Gemini generation. | Historical ambiguous ticket stays quarantined pending operator disposition; cannot infer its old outcome from current zero channels. |
-| 4 — Installer | Required host lock, role ownership, remote-broker monitoring/private-CA and dispatcher fixes. Fresh dependencies, Pivot reservation, eCallMgr readiness, Crossbar public-API registration and SUP archive packaging fixed. All seven isolated backend roles passed normal installation. CouchDB/RabbitMQ, HAProxy, Kamailio and current cold-apps automatic guest boots passed. | Untouched final cold apps bootstrap confirmation, remaining repeat/boot matrix, cluster admission/drain and coordinated upgrade/rollback acceptance. Legacy FreeSWITCH/eCallMgr guest boot failures are retained with successful restoration, not relabeled. Separate UI/bridge provisioning was not tested in this lab. Containers are not independent-machine HA proof. |
+| 4 — Installer | Source fixes include host locking, role ownership, remote-broker monitoring/private CA, dispatcher/media readiness, fresh dependencies, Pivot ports, Crossbar registration, SUP packaging and DNF coordination. All seven backend roles passed normal installation. Independent empty-data CouchDB/RabbitMQ/apps first installs passed. Data roles, HAProxy, FreeSWITCH, Kamailio and fresh apps guest boot passed. | Remaining repeat/legacy-eCallMgr boot matrix, cluster admission/drain and coordinated upgrade/rollback acceptance. Separate UI/bridge provisioning was not tested in this lab. Containers are not independent-machine HA proof. |
 | 6 — API/Blackhole | Native command-auth, delivery, expiry1008, overload1013 and7 ordinary-principal HTTP/WSS scope checks passed. Cached token was revoked by exact isolated-user CAS: next event denied1008/no leak and HTTP401 before expiry. OpenAPI assets HTTPS byte-verified. | Multi-node cache-wide revocation, real slow-network load and cross-node supervision/audio-privacy acceptance. |
 
 Code commits include `f99ff81`, `98f3829`, `6c8d341`, `b3a67ec`, `c3f11bb`,
