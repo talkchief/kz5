@@ -1,5 +1,17 @@
 # Kazoo 5 — start here / engineering handoff
 
+**September9: bridge watchdog replay + restrictive-umask installer FIXED / DEPLOYED.**
+Sourcebd083e5 fixes owner-watchdog exit1 (unsafe automatic replay after a hard
+stall) to78/manual recovery. Baseline2fail/19pass, candidate21deadline/watchdog
++27settlement tests pass. Normal deployment exposed root077 venv permissions;
+source01e60eb fixes only public dependency creation in a022 subshell and versions
+the release recipe. Native normal `push-bridge` retryc112d9 passes under077,
+including service-user and consumer readiness. Active releasec56fa2ba135a697324a4e9ac0f92c2639cb305039e4546c93a67e6a3f99f79d1;
+PID1098394 active/restarts0. Actual installed-code watchdog in a separate
+network-isolated systemd unit exits78 and does not restart (492e8f); real bridge
+unchanged. No provider request or broker outage. See `doc/push_bridge_watchdog_replay.md`
+for receipt hashes, failed pre-activation evidence and manual-recovery limits.
+
 **September9: native returned-caller confirmation expiry — scoped PASS.**
 Source5a4d0ea on master/main adds `--confirmation-expiry` to the existing isolated
 retry harness. Final unit `kz5-callback-confirmation-expiry-main44-20260909b`

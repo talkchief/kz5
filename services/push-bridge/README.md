@@ -6,7 +6,17 @@ systemd automatic restart despite unknown dispatch/ACK state. Ordinary idle
 reconnect is unchanged. See [watchdog restart safety](../../doc/push_bridge_watchdog_replay.md)
 for regression, deployment evidence and the manual-recovery availability limit.
 
-## Current deployment checkpoint — September 8
+## Current deployment checkpoint — September 9
+
+Main normal `push-bridge` installation passesc112d9 under root umask077 after
+the tracked dependency-layout fix. Release:
+`c56fa2ba135a697324a4e9ac0f92c2639cb305039e4546c93a67e6a3f99f79d1`.
+Non-root consumer readiness and source equality passb48a07. Installed-code
+watchdog in a network-isolated systemd fixture exits78 without auto-restart;
+actual service remains active/restarts0 (492e8f). No provider request.
+See the watchdog report above for scope and unresolved manual recovery.
+
+## Historical deployment checkpoint — September 8
 
 Main-SH installation and independent verification pass74779/c9f0f1. Current
 development release is `0a3a5ba26bdf26caa9fea2343fb565c3ce218079cf976eb5be801ac9143e94da`;

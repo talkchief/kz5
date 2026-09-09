@@ -2,20 +2,29 @@
 
 ## Immediate operator follow-up — September9
 
-- **BRIDGE-WATCHDOG-01 — source correction / deployment pending:** found a
+- **BRIDGE-WATCHDOG-01 / INST-13 umask — FIXED / DEPLOYED / scoped PASS:** found a
   bypass of the existing uncertain-delivery no-replay policy: stalled owner
   watchdog exits1, which the installed `Restart=on-failure` restarts. Last
   progress time cannot prove no HTTP dispatch or ACK is pending. Baseline
   64767/0fb10a:2 new tests fail (real child exits1),19 existing/boundary tests
   pass. Correct watchdog to exit78 with a fixed manual-recovery log; normal
   idle disconnect/reconnect remains unchanged. Targeted candidate validation
-  passes7105/044fc0:21 deadline/watchdog tests and27 settlement tests. Normal
-  bridge SH deployment is next. No provider traffic is required.
+  passes7105/044fc0:21 deadline/watchdog tests and27 settlement tests.
   Normal CLI failed before activation24aec4: root umask077 made `venv`/`bin`
   mode0700 and the service user could not execute Python. Existing bridge
   PID57635 stayed active, restarts0 (491c28). Installer correction builds only
   public dependencies in a022 subshell and versions release layout to avoid
   reusing old restrictive staging. Secrets/caller umask remain unchanged.
+  Actual helper/rollback regressions979dba pass. Normal `push-bridge` retry
+  unit `kz5-bridge-watchdog-install-main44-20260909b` exits0 under the same077
+  mask (c112d9). Installed releasec56fa2ba135a697324a4e9ac0f92c2639cb305039e4546c93a67e6a3f99f79d1;
+  venv/bin755, non-root consumer PID1098394 active/restarts0, source/disk SHA
+  79ce9f1f961e253738027cd07b4de627cbed0329bcbd3b70e393f65f5054cf93
+  matches (b48a07). Installed-code network-isolated systemd watchdog fixture
+  exits78 and remains restarts0 beyond the10-second restart interval (492e8f),
+  leaving the actual bridge PID unchanged. No provider requests or real broker
+  failure injected. Manual uncertain-send recovery and broader HA remain open.
+  Details/receipts: `doc/push_bridge_watchdog_replay.md`.
 
 - **CALLBACK-DEADLINE negative expiry — scoped native PASS:** focused on the reported
   callback confirmation behavior, not a general load campaign. Explicit
