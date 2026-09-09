@@ -4297,12 +4297,15 @@ prepare_freeswitch_source() {
 }
 
 install_freeswitch_build_dependencies() {
+    # mod_kazoo links the Erlang EI client library. A standalone media host
+    # cannot rely on kazoo-apps or RabbitMQ having installed it first.
     dnf_install \
         alsa-lib-devel autoconf automake bzip2-devel cmake curl-devel \
         gcc gcc-c++ git lame-devel libedit-devel libjpeg-turbo-devel libogg-devel \
         libsndfile-devel libtiff-devel libtool libuuid-devel libvorbis-devel \
         libxml2-devel make ncurses-devel openssl-devel opus-devel pcre-devel pcre2-devel \
-        pkgconf-pkg-config speex-devel speexdsp-devel sqlite-devel yasm zlib-devel
+        pkgconf-pkg-config speex-devel speexdsp-devel sqlite-devel yasm zlib-devel \
+        "erlang-${ERLANG_VERSION}"
 }
 
 build_kazoo_freeswitch() {
