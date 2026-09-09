@@ -7,6 +7,27 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Point1 broker outage — native PASS:** unit
+  `kz5-acdc-broker-loss-20260909.service` exited0. The real queued call ended
+  while RabbitMQ was stopped; the agent stayed busy for a full reconciliation
+  interval while authoritative status was unavailable. The same FSM/apps PID
+  then recovered after broker restoration and accepted the next native SIP/RTP
+  call without another login or registration. Evidence:
+  `/var/log/kazoo-acceptance/node-loss/20260909T125202Z`. Independent restoration
+  timer and fixed-service CLI guards are retained. This is a full broker outage
+  on one development host, not a multi-node partition or30-call fault soak.
+
+- **Point4 minimal-role deployment gaps — SOURCE FIXED / native data roles PASS:**
+  fresh Rocky image exposed curl-minimal/full-curl conflict; installer now
+  preserves its installed curl provider (`90ba5ef`). First native CouchDB
+  installation exposed missing cmp; diffutils is now a base dependency
+  (`9147650`). Actual provider paths pass3 groups. CouchDB role then passed
+  normal install, authenticated health, service enable/start in its isolated
+  container. RabbitMQ separate role also passed normal installer/service/plugin/
+  vhost/listener checks. Their sources are pinned at9147650. Initial harness
+  account-name input error and two packaging failures are retained, not passes.
+  Repeat/guest-boot checks and HAProxy/downstream roles remain underway.
+
 - **Point2 invalid/alternate number — native retry PASS:** new explicit
   `invalid-alternate` retry mode is confined to the main isolated EN/internal
   fixture. It begins with nonnumeric caller ID, submits empty#, requires the

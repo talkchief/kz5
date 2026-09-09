@@ -1,11 +1,13 @@
 # Separated-role installer acceptance lab
 
-Status: bootstrap implemented; no separated-role installation acceptance yet.
+Status: isolated CouchDB and RabbitMQ normal installation/service checks passed;
+the full separated-role and recovery matrix is not complete.
 This is an explicitly owned lab on development host10.1.0.44, not a production
 installer option and not evidence of independent-machine HA.
 
 Entry point: `bash scripts/prepare-distributed-install-lab.sh --prepare`, then
-`--create ROLE` or `--status`. Source and fixed roles are in
+`--create ROLE`, `--install ROLE`, `--sync-source ROLE`, `--verify-role ROLE`,
+`--reboot-role ROLE` or `--status`. Source and fixed roles are in
 `scripts/test-fixtures/distributed-lab/lab.cjs`; the small Containerfile builds
 a systemd PID1 image using a verified upstream Rocky9 repository digest.
 Normal Kazoo installation must subsequently use `scripts/install-kazoo5.sh`.
@@ -30,6 +32,34 @@ SELinux policy. See the primary [Podman run reference](https://docs.podman.io/en
 
 `node scripts/test-fixtures/distributed-lab/lab.test.cjs` checks subnet boundaries,
 role uniqueness and static isolation guards without creating lab state.
-Installation, service enable/start, repeat/reboot, admission/drain and rollback
-still need actual evidence. A booted container is explicitly reported as
-`installed:false`.
+Only backend roles currently have installation dispatch. Provider-enabled bridge
+and separate UI provisioning must not be inferred from the role-name inventory.
+`--sync-source` requires clean tracked files and fast-forward-only advancement;
+it changes source identity, not deployed-service acceptance. `--reboot-role` is
+restricted to data roles before any dependent application/media role is created,
+then executes the normal installer verifier. It tests guest systemd boot, not
+physical host/kernel failure. A booted container alone reports `installed:false`.
+
+## Native results
+
+- Base Rocky image digest:
+  `sha256:d644d203142cd5b54ad2a83a203e1dee68af2229f8fe32f52a30c6e1d3c3a9e0`.
+- Initial image preparation failed on curl/curl-minimal conflict; normal
+  installer had the same unconditional dependency.90ba5ef preserves the minimal
+  provider; three actual helper paths pass. Corrected image preparation passed.
+- Initial CouchDB preflight rejected a lab name containing spaces. Corrected
+  the fixture input, not production validation. Next install exposed absent
+  `cmp`;9147650 adds the required diffutils package to the normal installer.
+- `kz5-distributed-couchdb-diffutils-20260909.service` exit0 (fc13ec), role
+  source9147650, native authenticated health and enabled/active service pass.
+  Private role log `/var/lib/kazoo5-install-lab/couchdb-install-3.log`.
+- Separate RabbitMQ normal installer passed3.13.7/Erlang26.2.5, exact AMQP
+  listener, vhost permissions, authentication and consistent-hash plugin.
+  Private log `/var/lib/kazoo5-install-lab/rabbitmq-install-1.log`.
+- No production/dev stack data or provider credentials were mounted/copied.
+  New random lab secrets are only in protected state/input files. Do not print
+  `lab.json`, role env files or raw logs. The status command omits secrets.
+
+Repeat/guest-boot, downstream separated roles, cluster admission/drain and
+rollback remain unverified.28 pure/static lab groups and3 actual dependency
+selection groups pass; they do not replace native role evidence.

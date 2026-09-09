@@ -187,6 +187,30 @@ function syncSource(role) {
     assert.equal(podman(['exec',r.id,'git','-C','/opt/kz5','rev-parse','HEAD']),source);
     r.source=source;saveState(s);console.log(JSON.stringify({status:'SOURCE_SYNCED',role,source,installed:false}));
 }
+function verifyRole(role,reboot=false) {
+    assert(Object.hasOwn(UNITS,role));const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r);
+    assert.equal(r.phase,'installed-service-verified');
+    const c=json(['inspect',r.id])[0];assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
+    assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],role);
+    if(reboot) {
+        assert(['couchdb','rabbitmq','haproxy'].includes(role),'Reboot acceptance limited to isolated data tier');
+        assert(!Object.keys(s.roles).some(name=>!['couchdb','rabbitmq','haproxy'].includes(name)),
+            'Do not reboot data roles after dependent role admission');
+        const before=c.State.StartedAt;
+        podman(['restart','--time','30',r.id],{timeout:90000});
+        const after=json(['inspect',r.id])[0];assert.equal(after.State.Running,true);assert.notEqual(after.State.StartedAt,before);
+    }
+    podman(['exec',r.id,'timeout','120','bash','-c',
+        'until systemctl is-active --quiet '+UNITS[role]+'.service; do sleep 1; done'],{timeout:125000});
+    const log=DIR+'/'+role+'-'+(reboot?'boot':'verify')+'-'+Date.now()+'.log',fd=fs.openSync(log,'wx',0o600);
+    let result;
+    try {result=cp.spawnSync('podman',['exec',r.id,'bash','/opt/kz5/scripts/install-kazoo5.sh','--verify-only',role],
+        {timeout:180000,stdio:['ignore',fd,fd]});}finally{fs.closeSync(fd);}
+    assert.equal(result.status,0,'Normal role verification failed; inspect private verify log');
+    assert.equal(podman(['exec',r.id,'systemctl','is-enabled',UNITS[role]+'.service']),'enabled');
+    r[reboot?'guestBootVerified':'reverified']={time:new Date().toISOString(),log};saveState(s);
+    console.log(JSON.stringify({status:'PASS',role,check:reboot?'system-container-boot':'normal-verify',log}));
+}
 module.exports={overlapsSubnet,ROLES,configFor};
 if(require.main===module) {
 try {
@@ -196,7 +220,9 @@ try {
     else if(args.length===2&&args[0]==='--create')create(args[1]);
     else if(args.length===2&&args[0]==='--install')installRole(args[1]);
     else if(args.length===2&&args[0]==='--sync-source')syncSource(args[1]);
+    else if(args.length===2&&args[0]==='--verify-role')verifyRole(args[1]);
+    else if(args.length===2&&args[0]==='--reboot-role')verifyRole(args[1],true);
     else if(args.length===1&&args[0]==='--status')status();
-    else throw Error('Usage: --prepare | --create ROLE | --install ROLE | --sync-source ROLE | --status');
+    else throw Error('Usage: --prepare | --create ROLE | --install ROLE | --sync-source ROLE | --verify-role ROLE | --reboot-role ROLE | --status');
 } catch(e) {console.error('Distributed lab refused/failed: '+e.message);process.exitCode=1;}
 }

@@ -6,9 +6,9 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 | Point | Current verified work | Still open |
 | --- | --- | --- |
-| 1 — ACDC reliability | Real eCallMgr loss/missed hangup exposed two next-call failures. Fixed routing-readiness validation and cold location-cache fallback. Normal eCallMgr deployment and native same-FSM recovery/next-call SIP/RTP passed without agent re-login or re-registration. | Broker partitions, repeated failures and routing under representative fault/load/soak. |
+| 1 — ACDC reliability | Real eCallMgr loss/missed hangup exposed two next-call failures. Fixed routing-readiness validation and cold location-cache fallback. Native same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and after a full RabbitMQ outage, without re-login or re-registration. | Multi-node broker partitions, repeated failures and routing under representative fault/load/soak. |
 | 2 — Callback edge cases | Actual callback worker killed while first return was ringing: cleanup, durable backoff and completed second return passed. Invalid caller/empty input, full invalid-entry audio, alternate1001 confirmation, unanswered first return and completed second return also passed natively. Earlier five-language and queue-restart-in-backoff passes remain valid; no Gemini generation. | Alternate-disabled rejection and the historical ambiguous ticket. Never force-clear an uncertain ticket from a zero-channel snapshot. |
-| 4 — Installer | Host lock, selected-role unit ownership, separate-broker monitoring/private-CA and effective dispatcher admission fixes are required source. Normal eCallMgr rebuild/deploy passed. | Fully separated-role matrix, cluster admission/drain, coordinated upgrades and rollback/failure recovery. A host lock is not a cluster lock. |
+| 4 — Installer | Host lock, selected-role unit ownership, separate-broker monitoring/private-CA and effective dispatcher admission fixes are required source. Native minimal-image deployment exposed and fixed curl-provider conflict and missing diffutils. Separate CouchDB and RabbitMQ container roles passed normal installation and service verification. | Complete separated-role/repeat/boot matrix, cluster admission/drain, coordinated upgrades and rollback/failure recovery. A host lock is not a cluster lock; containers are not independent-machine HA proof. |
 | 6 — API/Blackhole | Command-auth and outbound guards deployed through normal installer. Real before-test leaked an expired-token event; after-test passed valid delivery, expiry denial1008 and mailbox closure1013. Five native command regressions passed; OpenAPI published/HTTPS byte-verified. | Cache-wide revocation, real slow-network load, restricted-principal and cross-node supervision/audio-privacy acceptance. |
 
 Code commits include `f99ff81`, `98f3829`, `6c8d341`, `b3a67ec`, `c3f11bb`,
@@ -26,6 +26,10 @@ not mutated or called. Stream acceptance's normal signing may initialize this
 fixture account's missing identity secret, never reset an existing secret.
 
 New native fault acceptance:
+
+- `kz5-acdc-broker-loss-20260909.service`, exit0 (fc13ec), evidence
+  `/var/log/kazoo-acceptance/node-loss/20260909T125202Z`: native broker-outage
+  missed-hangup/same-FSM recovery and next-call SIP/RTP passed.
 
 - `kz5-callback-invalid-alternate-complete-20260909.service`, exit0 (885e00),
   evidence `/var/log/kazoo-acceptance/20260909T123654Z`. The two preceding

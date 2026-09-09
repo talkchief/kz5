@@ -68,6 +68,22 @@ same-FSM identity, dispatcher admission and the second call's SIP/RTP proof.
 The agent was not logged in again and its phone was not re-registered. No calls
 remained afterward. Source `c3f11bb` is on master and main44.
 
-This one-agent
-scenario does not establish broker partitions, all ring strategies,30-call
-fault-load behavior or long soak; those remain separate parts of point1.
+## Broker-outage variant
+
+Source `ecc2e63` adds the explicit `--live --fault broker` variant. Only the two
+fixed service identities are accepted; arbitrary service names and extra CLI
+arguments are rejected. Nine actual parser boundaries pass without writes.
+The variant retains the same fixture ownership, complete unknown-evidence busy
+interval, independent restoration watchdog, same-FSM/apps PID and subsequent
+native call gates. It does not alter the previously passed eCallMgr scenario.
+
+Native `kz5-acdc-broker-loss-20260909.service` completed exit0 (fc13ec), evidence
+`/var/log/kazoo-acceptance/node-loss/20260909T125202Z`. RabbitMQ stopped after the
+first real bridge; endpoints hung up, agent remained busy for35s with broker
+unavailable, then recovered after broker restoration. The same agent accepted
+the next native SIP/RTP call without logout/login or re-registration. The log
+records both phases; all original service-restoration guards remain in place.
+
+These one-agent scenarios do not establish multi-node broker partitions, all
+ring strategies,30-call fault-load behavior or long soak. Those remain separate
+parts of point1.
