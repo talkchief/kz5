@@ -1,6 +1,6 @@
 # Native Blackhole command authentication
 
-September9 source fix, pending deployment acceptance.
+September9 source fix deployed; focused native WSS acceptance passed.
 
 The native callback skipped authentication whenever its context already had an
 account identity. The token helper also skipped verification for a previously
@@ -54,6 +54,19 @@ This guard is not authorization to access another account or queue.
   `/root/kz5-acceptance/blackhole-command-before-20260909.log`, exit1,6.858s.
   This confirms the running old handler accepted a command with a replaced
   invalid token after valid authentication. No subscriptions/account writes/calls.
+- Normal main44 `kazoo-apps` installer completed successfully in10m55.760s
+  (c83d7b), using source98f3829. No manual BEAM loading was used.
+- After deployment, the same real HTTPS/WSS harness passed all five checks:
+  anonymous denial, valid native ping, cached valid ping, replacement-token
+  rejection and original-identity retention (38135a). Its systemd run exited0
+  in6.844s (848136). Protected log:
+  `/root/kz5-acceptance/blackhole-command-after-20260909.log`.
+- Root source6c8d341 and its committed reference assets were synced to main44.
+  The normal installer documentation helper published and verified the portal
+  (5c8244). All12 portal assets then matched repository bytes over verified
+  HTTPS at `https://kz5-dev.talkchief.io/apis/` (222514). The previous portal is
+  preserved at `/root/kz5-acceptance/apis-before-command-auth.txGISowv/previous`.
+  All nine stack services were active and FreeSWITCH reported zero calls.
 
 Replay:
 

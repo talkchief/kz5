@@ -23,8 +23,12 @@ work postponed; do not generate voices at runtime or during deployment.
   original handler fails five focused cases (abe992), patched source passes14
   public-entry tests and eight production compiles (e4e667). Installer-owned
   command-auth overlay and source-bound OpenAPI contract are added. Actual
-  deployment/WSS acceptance and generic event lifetime/backpressure are still
-  pending; this is not closure of all four requested groups.
+  native before/after WSS acceptance now passes all five checks on main44
+  (38135a/848136). Normal apps deployment exited0 in10m55.760s (c83d7b).
+  Reference assets published and all12 verified over HTTPS (222514); all nine
+  services active. Generic event lifetime/backpressure and the other groups'
+  acceptance remain open; this is not closure of all four requested groups.
+  Exact four-point handover: `doc/FOCUSED_CLOSEOUT_2026-09-09.md`.
 
 - **P0-25 SmartPBX reported loading bug — SOURCE FIXED / DEPLOYED / BROWSER PASS:**
   Baseline stalled GET reproduced counter1, active blue bar, nine locked categories,

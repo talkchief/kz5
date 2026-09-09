@@ -20,6 +20,9 @@ installer helper with only its fixed runtime path relocated into a private
 temporary directory. On September 9 it passed contention, dry-run, SIGTERM and
 failure release, stable inode, unsafe directory, symlink, hardlink and main
 preflight-order checks (eef29c). No installed service or configuration changed.
+The same fixture also passed on main44 after source sync (5c8244); the actual
+lock was subsequently held during publication of the API reference. This is
+not a second full applications installation or a distributed rollback test.
 
 This fixes same-host installer concurrency, not cluster-wide admission control,
 database rollback, crash-atomic source publication or rolling upgrades. Those
