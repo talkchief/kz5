@@ -13,6 +13,13 @@ recovery_parse --prepare-only --fault broker --concurrent 30
 [[ $RECOVERY_COUNT == 30 && $RECOVERY_SERVICE == rabbitmq-server.service ]]
 recovery_parse --live --fault broker --concurrent 30
 [[ $RECOVERY_COUNT == 30 && $RECOVERY_SERVICE == rabbitmq-server.service ]]
+recovery_parse --live --fault broker --concurrent 30 --cycles 3
+[[ $RECOVERY_CYCLES == 3 && $RECOVERY_COUNT == 30 ]]
+recovery_parse --live
+[[ $RECOVERY_CYCLES == 1 && $RECOVERY_COUNT == 1 ]]
+recovery_parse --live --fault broker --concurrent 30 --cycles 0 && exit 1
+recovery_parse --live --fault broker --concurrent 30 --cycles 30 && exit 1
+recovery_parse --live --fault broker --cycles 3 && exit 1
 recovery_parse --live --fault broker --concurrent 300 && exit 1
 recovery_parse --live --fault broker --concurrent 2 && exit 1
 recovery_parse --live --fault arbitrary.service && exit 1
@@ -20,4 +27,4 @@ recovery_parse --live --fault && exit 1
 recovery_parse --live --fault broker --extra && exit 1
 recovery_parse --unknown && exit 1
 recovery_parse && exit 1
-echo 'PASS 13 actual fault/concurrency-selection boundaries; no fixture, calls or service changes'
+echo 'PASS 18 actual fault/concurrency/cycle boundaries; no fixture, calls or service changes'

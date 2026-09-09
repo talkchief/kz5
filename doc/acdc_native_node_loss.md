@@ -70,6 +70,18 @@ remained afterward. Source `c3f11bb` is on master and main44.
 
 ## Broker-outage variant
 
+### Repeated failure acceptance
+
+`--live --fault broker --concurrent 30 --cycles 3` admits exactly three
+consecutive faults. Registration and agent login happen once before all cycles;
+their initial lifetime is2100s. Every cycle compares all30 FSM identities and
+the applications PID against the first cycle, then requires successful SIP/RTP
+calls and a complete drain. Each fault has an independent restoration timer.
+Per-cycle evidence is retained under `cycle-1` through `cycle-3`; no earlier
+cycle's capture, counters or FSM receipts are overwritten. This is repeated
+single-broker outage acceptance, not a multi-node network partition test.
+Native result is pending; CLI boundaries and shell checks pass.
+
 Source `ecc2e63` adds the explicit `--live --fault broker` variant. Only the two
 fixed service identities are accepted; arbitrary service names and extra CLI
 arguments are rejected. Nine actual parser boundaries pass without writes.

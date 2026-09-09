@@ -10,19 +10,25 @@ RECOVERY_NODE_STOPPED=false
 RECOVERY_WATCHDOG=''
 RECOVERY_SERVICE=kazoo-ecallmgr.service
 RECOVERY_COUNT=1
+RECOVERY_CYCLES=1
 
 recovery_parse() {
-    [[ $# == 1 || $# == 3 || $# == 5 ]] || return 2
+    [[ $# == 1 || $# == 3 || $# == 5 || $# == 7 ]] || return 2
     [[ $1 == --prepare-only || $1 == --live ]] || return 2
     RECOVERY_SERVICE=kazoo-ecallmgr.service
     RECOVERY_COUNT=1
+    RECOVERY_CYCLES=1
     if [[ $# -ge 3 ]]; then
         [[ $2 == --fault && $3 == broker ]] || return 2
         RECOVERY_SERVICE=rabbitmq-server.service
     fi
-    if [[ $# == 5 ]]; then
+    if [[ $# -ge 5 ]]; then
         [[ $4 == --concurrent && $5 == 30 ]] || return 2
         RECOVERY_COUNT=30
+    fi
+    if [[ $# == 7 ]]; then
+        [[ $6 == --cycles && $7 == 3 ]] || return 2
+        RECOVERY_CYCLES=3
     fi
 }
 
@@ -79,7 +85,7 @@ recovery_cleanup() {
 }
 
 recovery_main() {
-    recovery_parse "$@" || die 'Use --prepare-only or --live [--fault broker [--concurrent 30]] (dev44 isolated fixture only)'
+    recovery_parse "$@" || die 'Use --prepare-only or --live [--fault broker [--concurrent 30 [--cycles 3]]] (dev44 isolated fixture only)'
     [[ $EUID == 0 ]] || die 'Run as root'
     umask 077
     export KAZOO_CALLBACK_TEST_ACCOUNT_ID=8310dc3170a18de37f205d0da172df65
@@ -102,30 +108,44 @@ recovery_main() {
     create_run_dir
     printf '%s\n' "$RECOVERY_SERVICE" > "$RUN_DIR/fault-service.txt"
     printf '%s\n' "$RECOVERY_COUNT" > "$RUN_DIR/fault-concurrency.txt"
+    printf '%s\n' "$RECOVERY_CYCLES" > "$RUN_DIR/fault-cycles.txt"
     trap recovery_cleanup EXIT INT TERM
     local before_apps status deadline since cores index all_ready hold_ms=60000
+    local cycle run_base=$RUN_DIR registration_seconds=600
     local -A before_fsms=()
     ((RECOVERY_COUNT == 1)) || hold_ms=120000
+    ((RECOVERY_CYCLES == 1)) || registration_seconds=2100
     before_apps=$(systemctl show -p MainPID --value kazoo-apps.service)
     STATUS_AGENT_MAX=${STATE[ACCEPTANCE_AGENT_COUNT]}
     agent_status logout 1 "$STATUS_AGENT_MAX"
-    register_agents node-loss "$RECOVERY_COUNT"
-    register_caller node-loss "$CALLER_PORT"
-    start_agent_uas node-loss "$RECOVERY_COUNT"
+    register_agents node-loss "$RECOVERY_COUNT" "$registration_seconds"
+    register_caller node-loss "$CALLER_PORT" "$registration_seconds"
     agent_status login 1 "$RECOVERY_COUNT"
+    for ((cycle=1; cycle<=RECOVERY_CYCLES; cycle++)); do
+    if ((RECOVERY_CYCLES > 1)); then
+        RUN_DIR=$run_base/cycle-$cycle
+        mkdir -m 700 "$RUN_DIR"
+        head -n 1 "$run_base/summary.tsv" > "$RUN_DIR/summary.tsv"
+    fi
+    [[ $(systemctl show -p MainPID --value kazoo-apps.service) == "$before_apps" ]] || die 'Apps restarted between fault cycles'
+    start_agent_uas node-loss "$RECOVERY_COUNT"
     start_callers node-loss "$RECOVERY_COUNT" "$CALLER_PORT" "$CALLER_MEDIA_MIN" "$CALLER_MEDIA_MAX" "$hold_ms"
     wait_concurrent_call_legs node-loss "$RECOVERY_COUNT" "$RECOVERY_COUNT" || die 'Initial concurrent queued calls not connected'
     for ((index=1; index<=RECOVERY_COUNT; index++)); do
         status=$(recovery_status "$index")
         recovery_has_state answered "$status" || die 'Every agent must be answered before node loss'
-        before_fsms[$index]=$(recovery_fsm_identity "$status")
+        if ((cycle == 1)); then
+            before_fsms[$index]=$(recovery_fsm_identity "$status")
+        else
+            [[ $(recovery_fsm_identity "$status") == "${before_fsms[$index]}" ]] || die 'Agent FSM was replaced between fault cycles'
+        fi
         [[ ${before_fsms[$index]} =~ ^[0-9]+\.[0-9]+$ ]] || die 'Agent FSM identity missing'
         printf '%s\t%s\n' "$index" "${before_fsms[$index]}" >> "$RUN_DIR/fsms-before.tsv"
     done
     printf '%s\n' "${before_fsms[1]}" > "$RUN_DIR/fsm-before.txt"
     recovery_owned_pair || die 'Only answered isolated fixture pairs may exist'
     # Independent restoration survives SIGKILL or loss of the SSH/test process.
-    RECOVERY_WATCHDOG=kz5-acdc-node-loss-restore-$$
+    RECOVERY_WATCHDOG=kz5-acdc-node-loss-restore-$$-$cycle
     systemd-run --unit="$RECOVERY_WATCHDOG" --on-active=5m --timer-property=AccuracySec=1s \
         /usr/bin/systemctl start "$RECOVERY_SERVICE"
     systemctl is-active --quiet "$RECOVERY_WATCHDOG.timer"
@@ -195,6 +215,12 @@ recovery_main() {
     assert_rtp_capture after-node-loss "$RECOVERY_COUNT" "$RECOVERY_COUNT"
     wait_agents_ready "$RECOVERY_COUNT" || die 'Second calls did not return all agents to ready'
     record_stage after-node-loss "$RECOVERY_COUNT" "$RECOVERY_COUNT" "$RUN_DIR/after-node-loss-caller-stats.csv" "$RECOVERY_COUNT" "$cores" "$since"
-    log "PASS native node-loss/missed-hangup recovery and next-call SIP/RTP; evidence: $RUN_DIR"
+    recovery_channels | jq -e '.row_count==0' >/dev/null || die 'Calls remain after fault cycle'
+    systemctl stop "$RECOVERY_WATCHDOG.timer"
+    RECOVERY_WATCHDOG=''
+    log "PASS native node-loss cycle $cycle/$RECOVERY_CYCLES and next-call SIP/RTP; evidence: $RUN_DIR"
+    done
+    RUN_DIR=$run_base
+    log "PASS $RECOVERY_CYCLES native fault cycles with unchanged apps/FSM identities; evidence: $RUN_DIR"
 }
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then recovery_main "$@"; fi
