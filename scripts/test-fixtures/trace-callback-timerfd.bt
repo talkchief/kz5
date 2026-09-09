@@ -1,0 +1,90 @@
+#!/usr/bin/env bpftrace
+// CALLBACK-RTP-01, development-only numeric tracing. Invoke with the exact
+// FreeSWITCH PID as $1. The companion runner derives offsets from DWARF.
+// No packet/audio contents, identities, raw addresses or destructive probes.
+// External supervisor must bound runtime and stop this process after the case.
+#define R32(base, offset) (*(uint32 *)uptr((uint64)(base) + (offset)))
+#define R64(base, offset) (*(uint64 *)uptr((uint64)(base) + (offset)))
+BEGIN { printf("TRACE_READY\n"); }
+
+uprobe:/usr/local/freeswitch/lib/libfreeswitch.so.1:get_next_write_ts
+/pid == $1/
+{
+    @rtp[tid] = arg0;
+    @timer[tid] = arg0 + RTP_TIMER;
+    @before[tid] = R32(arg0, RTP_LAST);
+    @tick[tid] = R64(@timer[tid], TIMER_TICK);
+    @samples[tid] = R32(@timer[tid], TIMER_COUNT);
+    @start[tid] = nsecs;
+    @inside[tid] = 0; @fd[tid] = (uint32)0; @buffer[tid] = (uint64)0;
+    @reads[tid] = 0; @read_result[tid] = 0;
+    @expirations[tid] = (uint64)0; @status[tid] = (uint64)0;
+}
+
+uprobe:/usr/local/freeswitch/lib/libfreeswitch.so.1:timer_next
+/pid == $1 && @rtp[tid]/
+{
+    if (arg0 == @timer[tid]) {
+        @inside[tid] = 1;
+        @fd[tid] = R32(R64(arg0, TIMER_PRIVATE), INTERVAL_FD);
+    }
+}
+
+tracepoint:syscalls:sys_enter_read
+/pid == $1 && @inside[tid]/
+{
+    if (args.count == 8 && args.fd == @fd[tid]) {
+        @buffer[tid] = (uint64)args.buf;
+        @reads[tid] = @reads[tid] + 1;
+    }
+}
+
+tracepoint:syscalls:sys_exit_read
+/pid == $1 && @buffer[tid]/
+{
+    @read_result[tid] = args.ret;
+    if (args.ret == 8) {
+        @expirations[tid] = *(uint64 *)uptr(@buffer[tid]);
+    }
+    @buffer[tid] = (uint64)0;
+}
+
+uretprobe:/usr/local/freeswitch/lib/libfreeswitch.so.1:timer_next
+/pid == $1 && @inside[tid]/
+{
+    @status[tid] = retval;
+    @inside[tid] = 0;
+}
+
+uretprobe:/usr/local/freeswitch/lib/libfreeswitch.so.1:get_next_write_ts
+/pid == $1 && @rtp[tid]/
+{
+    $s = @rtp[tid];
+    $ts = R32($s, RTP_TS);
+    $ssrc = R32($s, RTP_SSRC);
+    $interval = R32($s, RTP_INTERVAL);
+    $delta = (uint32)($ts - @before[tid]);
+    @frames[$ssrc] = count();
+    if (@reads[tid]) { @timer_reads[$ssrc] = count(); }
+    if (@expirations[tid] > 1 || $delta != $interval) {
+        printf("RTP_TIMER mono_ns=%llu tid=%d ssrc=%u before=%u after=%u delta=%u interval=%u tick_before=%llu tick_after=%llu samples_before=%u samples_after=%u reads=%u read_result=%lld expirations=%llu timer_status=%d marker=%d duration_ns=%llu\n",
+            nsecs, tid, $ssrc, @before[tid], $ts, $delta,
+            $interval, @tick[tid], R64(@timer[tid], TIMER_TICK),
+            @samples[tid], R32(@timer[tid], TIMER_COUNT), @reads[tid],
+            @read_result[tid], @expirations[tid], @status[tid], retval,
+            nsecs - @start[tid]);
+    }
+    delete(@rtp[tid]); delete(@timer[tid]); delete(@before[tid]);
+    delete(@tick[tid]); delete(@samples[tid]); delete(@start[tid]);
+    delete(@inside[tid]); delete(@fd[tid]); delete(@buffer[tid]);
+    delete(@reads[tid]); delete(@read_result[tid]);
+    delete(@expirations[tid]); delete(@status[tid]);
+}
+
+END {
+    clear(@rtp); clear(@timer); clear(@before); clear(@tick);
+    clear(@samples); clear(@start); clear(@inside); clear(@fd);
+    clear(@buffer); clear(@reads); clear(@read_result);
+    clear(@expirations); clear(@status);
+    printf("TRACE_END\n");
+}

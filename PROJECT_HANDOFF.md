@@ -1,5 +1,17 @@
 # Kazoo 5 — start here / engineering handoff
 
+**September9: CALLBACK-RTP-01 runtime cause narrowed; still OPEN.**
+One instrumented isolated callback reproduces the strict timestamp failure while
+registration, unanswered-first retry and second bridge work. Exact SSRC/timestamp
+correlation proves timerfd reads of5 and2 expirations cause80ms/20ms extra RTP
+clock. Full EN payload survives; why the read accumulated ticks is not yet proved.
+No FreeSWITCH/voice changes or weaker gate. Case12150/f70fca terminal exit1;
+trace stopped, fixture timeout restored, zero calls and services active. Retain
+`/var/log/kazoo-acceptance/20260909T012606Z`; do not repeat without a new hypothesis.
+Numeric probe/offset runner and offline correlator are root-owned diagnostics.
+Warnings/instrumentation limits, exact hashes and next action are documented in
+`doc/callback_timerfd_runtime.md`. Dashboards remain postponed.
+
 **September9: VOICE-01 reseller fallback DEPLOYED / scoped PASS.**
 Root-owned `kazoo-media-reseller-language.patch` adds direct reseller defaults
 only when account media.default_language and account language are both absent.

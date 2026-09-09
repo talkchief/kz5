@@ -160,6 +160,14 @@
   audio. This is not captured runtime-branch proof; no global timer/RTP change
   is justified. Any further native investigation must trace that transition,
   not repeat an uninstrumented callback to hunt for a PASS.
+  September9 instrumented case12150/f70fca is terminal strict failure, with
+  working registration/unanswered-first/retry bridge and exact timeout restore.
+  Runtime/capture correlation63911/bdbdb0 now proves five/two timerfd expirations
+  caused the exact80ms/20ms RTP advances on the returned leg. Full EN payload
+  and the three-second positive response window remain verified; why the timer
+  read was delayed is not yet established. Trace stopped, zero calls, services
+  active. Diagnostic map-cleanup warnings are disclosed; not a performance PASS.
+  See `doc/callback_timerfd_runtime.md` for source, hashes and next focused action.
   See `doc/acdc_callback_language_snapshot.md` for exact receipts and limits.
 
 - **UI-01 focused source fix DEPLOYED / browser PASS:** Common's storage selector
