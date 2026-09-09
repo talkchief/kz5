@@ -19,7 +19,7 @@ const SETTINGS=settingsFor(['--cold-bootstrap','--cold-bootstrap-final'].include
 const {dir:DIR,owner:OWNER,network:NETWORK,prefix:PREFIX}=SETTINGS,SUBNET=PREFIX+'0/24';
 const ROLES=['couchdb','rabbitmq','haproxy','kazoo-apps','freeswitch','ecallmgr','kamailio','monster-ui','push-bridge'];
 const UNITS={couchdb:'couchdb',rabbitmq:'rabbitmq-server',haproxy:'haproxy','kazoo-apps':'kazoo-apps',
-    freeswitch:'kazoo-freeswitch',ecallmgr:'kazoo-ecallmgr',kamailio:'kazoo-kamailio'};
+    freeswitch:'kazoo-freeswitch',ecallmgr:'kazoo-ecallmgr',kamailio:'kazoo-kamailio','push-bridge':'kazoo-push-bridge'};
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 function command(program,args,options={}) {
     const r=cp.spawnSync(program,args,{encoding:'utf8',timeout:30000,maxBuffer:16*1024*1024,...options});
@@ -187,6 +187,7 @@ function configFor(role,secrets,settings=SETTINGS) {
 }
 function installRole(role,detached=false) {
     assert(Object.hasOwn(UNITS,role),'Role provisioning not implemented');
+    if(role==='push-bridge')assert.equal(readState().bridgeFixture?.phase,'prepared','Prepare dedicated synthetic bridge fixture first');
     if(SETTINGS.cold&&role==='kazoo-apps') {
         const before=readState();ownedNetwork(before);
         for(const dependency of ['couchdb','rabbitmq'])
@@ -384,7 +385,7 @@ function verifyRole(role,reboot=false,drained=false) {
     if(reboot) {
         if(drained) {
             if(SETTINGS.cold)assert.equal(role,'kazoo-apps','Cold reboot covers only the fresh apps bootstrap fixture');
-            const dependencies=SETTINGS.cold?['couchdb','rabbitmq','kazoo-apps']:Object.keys(UNITS);
+            const dependencies=SETTINGS.cold?['couchdb','rabbitmq','kazoo-apps']:['couchdb','rabbitmq','haproxy','kazoo-apps','freeswitch','ecallmgr','kamailio'];
             for(const dependency of dependencies) {
                 const entry=s.roles[dependency];assert.equal(entry?.phase,'installed-service-verified');
                 const live=json(['inspect',entry.id])[0];
@@ -504,6 +505,10 @@ try {
     else if(args.length===1&&args[0]==='--status')status();
     else if(args.length===1&&args[0]==='--bootstrap-status')bootstrapStatus();
     else if(args.length===1&&args[0]==='--park')parkCold();
+    else if(args.length===1&&args[0]==='--prepare-bridge') {
+        assert(!SETTINGS.cold);
+        require('./bridge.cjs').prepare({readState,saveState,ownedNetwork,json,podman,DIR});
+    }
     else if(args.length===2&&['--apps-peer','--ecallmgr-peer'].includes(args[0])) {
         assert(!SETTINGS.cold,'Peer belongs only to the original isolated lab');
         assert(['create','resume','install','collect','sync','reboot'].includes(args[1]));

@@ -27,7 +27,7 @@ for(const role of ROLES.slice(0,7)) {
     assert.equal(c.KAZOO_COUCHDB_HOST,['couchdb','rabbitmq','haproxy'].includes(role)?'172.30.253.11':'172.30.253.13');
     assert(!JSON.stringify(c).includes('10.1.0.'));
 }
-assert.throws(()=>configFor('push-bridge',testSecrets));
+assert.equal(configFor('push-bridge',testSecrets).KAZOO_PUBLIC_IP,'172.30.253.19');
 assert.throws(()=>configFor('unknown',testSecrets));
 const cold=settingsFor(true),normal=settingsFor(false);
 const final=settingsFor(true,true);

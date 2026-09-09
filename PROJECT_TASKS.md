@@ -26,11 +26,23 @@ work postponed; do not generate voices at runtime or during deployment.
   Original legacy controller remains intact. This is automatic service boot,
   not independent-machine HA or coordinated rolling-upgrade acceptance.
 
-- **Real Blackhole slow-reader acceptance — in progress:** bounded dev44-only
+- **Real Blackhole slow-reader acceptance — native PASS:** bounded dev44-only
   direct WS and verified HTTPS/WSS receive starvation, paced native emitter,
   independent responsive client and reconnect checks. At most128x256KiB per
   transport, fixed isolated fixture, no host network/configuration changes.
-  Native result pending; previous mailbox injection is not this transport test.
+  Source `c0c550c`: stalled socket processes gone after5390ms/direct and6825ms/WSS,
+  independent control ping maxima7.6/9.5ms, both reconnect checks passed before
+  token expiry. No new service fix was needed. This is bounded backpressure,
+  not prolonged network soak or broker fanout. Details and exact observations:
+  `doc/blackhole_slow_client_acceptance.md`.
+
+- **Fresh separate bridge role — provisioning acceptance in progress:** new empty
+  rootfs on the private original lab network, dedicated broker user/vhost/queue,
+  synthetic provider key and no push publishes. Uses normal `push-bridge` shell
+  installer and service verifier. This fixture covers first dependencies and
+  startup with legacy private-network transport; existing remote-TLS/quorum
+  acceptance remains separate. It does not copy production provider credentials
+  or claim physical FCM/APNs delivery. Native installation/boot pending.
 
 - **Cross-node JWT signing-secret revocation P0 — SOURCE FIXED / two-node native PASS:**
   receipt `/var/lib/kazoo5-install-lab/cluster-auth-1788973933046.json` proved
