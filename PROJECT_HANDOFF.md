@@ -1,20 +1,30 @@
 # Kazoo 5 — start here / engineering handoff
 
-**September9: callback bridge identity source fix, deployment pending.**
+**September9: callback bridge identity FIXED / DEPLOYED / scoped native PASS.**
 `ecallmgr_fs_channel:is_bridged/1` accepted self/empty peers. That can send a
 parked returned caller through broadcast's five read-only lead frames, matching
 the retained100ms playback handoff. Root-owned installer patch rejects those
 invalid peers; real bridges unchanged. Baseline01f34c fails4/8; candidateff3526
 passes8/8 with actual ETS/dialplan code and repeatable patch application.
-Normal eCallMgr deployment and strict callback acceptance are still required;
-do not claim the historical peer value was captured. See
+The exact historical peer value was not saved; the new case below proves the
+corrected playback path and strict callback acceptance. See
 `doc/ecallmgr_bridge_identity.md`.
+Normal eCallMgr CLI63457/8ce274 exited0 in4m8.648s; runtime/disk module MD5
+matches349067bcb00612035743d1f1d64b55a0. Candidate unit
+`kz5-callback-bridge-identity-case-main44-20260909` (52905/bf7220) completed
+successfully in4m2.577s, without tracing. Direct-playback335c7e confirms no
+broadcast. Full4.331s EN prompt/strict RTP continuity, digit1 within the3s window,
+unanswered-first/retry bridge, agent-ready and fresh log/core gates pass. Exact
+timeout15->3->15 restored; zero calls and services active. Retained evidence:
+`/var/log/kazoo-acceptance/20260909T014723Z`. Both jobs terminal; do not rerun.
+Negative response-expiry, split-node failure and broader release gates remain.
 
-**September9: CALLBACK-RTP-01 runtime cause narrowed; still OPEN.**
+**September9: retained pre-fix CALLBACK-RTP-01 tracing (resolved above).**
 One instrumented isolated callback reproduces the strict timestamp failure while
 registration, unanswered-first retry and second bridge work. Exact SSRC/timestamp
 correlation proves timerfd reads of5 and2 expirations cause80ms/20ms extra RTP
-clock. Full EN payload survives; why the read accumulated ticks is not yet proved.
+clock. Full EN payload survives; the later bridge-identity correction above
+removes the broadcast handoff and passes the unchanged strict gate.
 No FreeSWITCH/voice changes or weaker gate. Case12150/f70fca terminal exit1;
 trace stopped, fixture timeout restored, zero calls and services active. Retain
 `/var/log/kazoo-acceptance/20260909T012606Z`; do not repeat without a new hypothesis.
@@ -149,8 +159,8 @@ The real queue-edit retry now proves saved EN language and the complete ordered
 EN response while the queue is FR (13098/a4b1e3), followed by conditional EN
 restoration and zero calls. Its strict audio-timing run20007/e8c76b remains
 failed because of a20ms in-prompt RTP timestamp advance, with no packet sequence
-loss. Next focus is CALLBACK-RTP-01 using the retained capture, not repeated
-calls or voice generation. See `doc/acdc_callback_language_snapshot.md` for
+loss. The subsequent CALLBACK-RTP-01 correction is accepted above; this older
+run remains failed and was not rewritten. See `doc/acdc_callback_language_snapshot.md` for
 evidence. Broader account/reseller inheritance remains open.
 
 **UI-01 optional storage selector fixed / deployed-browser PASS.**

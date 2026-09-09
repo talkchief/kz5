@@ -1,16 +1,24 @@
 # Kazoo 5 project task register
 
-## Immediate operator follow-up — September8
+## Immediate operator follow-up — September9
 
-- **CALLBACK-RTP-01 bridge identity correction — SOURCE FIXED, deployment pending:**
+- **CALLBACK-RTP-01 bridge identity correction — FIXED / DEPLOYED / scoped PASS:**
   Native returned-call log selected broadcast while parked, adding five read-only
   lead frames before playback. `is_bridged/1` incorrectly accepts a self or empty
   peer ID. Root installer patch now requires a distinct nonempty peer. Production
   ETS/dialplan baseline01f34c fails4/8; candidateff3526 passes8/8 and double patch
   replay. Genuine bridges preserve broadcast. Historical ETS peer was not saved;
-  native causality/strict media acceptance still needs the same scoped case after
-  normal eCallMgr deployment. No timer/voice changes. See
+  historical peer values were not captured. The candidate native result below
+  verifies the corrected playback path and strict media gate. No timer/voice changes. See
   `doc/ecallmgr_bridge_identity.md`.
+  Normal role CLI63457/8ce274 completed in4m8.648s; runtime/disk MD5 matches
+  349067bcb00612035743d1f1d64b55a0 and services are active. Candidate unit
+  `kz5-callback-bridge-identity-case-main44-20260909` (52905/bf7220) exited0 in
+  4m2.577s without a tracer. All callback/retry/strict RTP/agent-ready/log/core
+  gates passed. Direct-playback335c7e proves no broadcast; full EN4.331s prompt
+  finishes1.146848s before digit1 inside the saved3s response window. Exact timeout
+  restore15->3->15 verified, zero calls, services active. Original failed captures
+  are unchanged. Do not rerun this passed case without a relevant code change.
 
 - **VOICE-01 reseller language fallback — DEPLOYED / scoped PASS (September9):**
   Native `kz_media_util:prompt_language/2` omitted reseller defaults entirely.
@@ -110,7 +118,8 @@
   and zero calls; do not label the whole case PASS or rerun blindly. Offline
   replay44e6d4 confirms the complete4.331s recording and digit1 received1.045s
   after completion, with a successful retry bridge and no sequence loss.
-  The separate20ms in-prompt timestamp gap remains CALLBACK-RTP-01; native
+  The separate20ms in-prompt timestamp gap was subsequently fixed and accepted
+  under CALLBACK-RTP-01 above; native
   negative response-expiry coverage remains unverified. Ordinary15-second retry
   fixtures cannot prove this case. See `doc/callback_confirmation_deadline.md`.
 
@@ -158,11 +167,11 @@
   remain separate. The resumed-worker source correction is deployed above. See
   `doc/acdc_callback_language_snapshot.md`.
 
-- **CALLBACK-RTP-01 OPEN — focused media timing diagnosis:** retained main run
+- **CALLBACK-RTP-01 historical diagnosis — resolved by bridge identity fix above:** retained main run
   `/var/log/kazoo-acceptance/20260908T220213Z` has continuous received packet
   sequence and a complete English prompt, but one20ms timestamp gap within the
   prompt (plus80ms before speech). No tcpdump kernel drops. Native retry and
-  language retention work; uninterrupted-playout/strict timing is not accepted.
+  language retention work; this historical run failed uninterrupted-playout/strict timing.
   Inspect the media playback timestamp path using this capture before any new
   live run. Do not weaken the strict checker or regenerate voices to hide it.
   Pinned-source diagnostic d0c54a now reproduces the exact extra20ms/marker

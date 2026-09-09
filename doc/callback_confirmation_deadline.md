@@ -1,6 +1,10 @@
 # Returned-caller confirmation deadline
 
-September 8, 2026 — P0-CALLBACK-CONFIRM-01, deployed; native strict-media gate failed.
+September 8–9, 2026 — P0-CALLBACK-CONFIRM-01 deployed; positive native
+short-window strict-media acceptance now passes after the bridge-identity fix.
+See `doc/ecallmgr_bridge_identity.md`:52905/bf7220 passes full prompt, strict RTP,
+confirmation1.146848s after completion, unanswered-first/retry bridge and restore.
+The older failed evidence below is unchanged. Native negative expiry is still open.
 
 The API permits `callback.confirmation_timeout=3`. The worker previously
 started that three-second timer when it submitted playback, although the

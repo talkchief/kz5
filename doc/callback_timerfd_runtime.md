@@ -1,6 +1,7 @@
 # Callback RTP timing — captured runtime evidence
 
-September 9, 2026. CALLBACK-RTP-01 remains open. Callback registration,
+September 9, 2026. Retained pre-fix CALLBACK-RTP-01 evidence; subsequent fix and
+native strict PASS are in `doc/ecallmgr_bridge_identity.md`. Callback registration,
 unanswered-first retry and the second agent bridge worked in this isolated case;
 the strict returned-audio timestamp gate still failed. No production timer,
 FreeSWITCH source, voice asset or acceptance threshold was changed.
@@ -79,7 +80,8 @@ returned timestamp gap. It refuses to overwrite its additive receipt and
 never reclassifies the original strict failure. No account writes/provider
 requests occur in offline correlation.
 
-Next focused action: inspect the returned-prompt playback transition that delays
-the timer read, especially the120ms packet interval immediately before speech
-and the subsequent two-expiration read. Preserve this captured proof; do not
-repeat the same callback without a specific new observation or candidate fix.
+Follow-up found that self/empty peer IDs incorrectly selected broadcast, whose
+five read-only lead frames account for the playback handoff. The root-owned
+eCallMgr bridge-identity patch is deployed; native52905/bf7220 passes the
+unchanged strict gate and335c7e confirms direct playback with no broadcast.
+Preserve this failed pre-fix capture; it has not been reclassified or rewritten.
