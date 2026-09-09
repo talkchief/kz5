@@ -7,6 +7,22 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Points1/4 native failure acceptance — ACTIVE:** added the real dev44
+  eCallMgr-loss/missed-hangup/next-call test with same-FSM proof and independent
+  service restoration. Initial run13eaa2 failed its next call: Kamailio returned
+  480 before ACDC admission, despite agent recovery. Found and fixed installer
+  acceptance of inactive dispatcher entries (`b3a67ec`); effective primary/
+  secondary routing groups now need an active destination. Nine source groups
+  and real RPC checks pass on main44; actual wait success/failure regression
+  also passes (14db69). Corrected rerun exited1 (ca69b3): routing admission and
+  same-FSM recovery passed, but three SUBSCRIBER_ABSENT offers never reached the
+  registered agent. Source inspection found location lookup treated a restarted
+  eCallMgr's empty registration cache as authoritative absence. Added a bounded
+  native Kamailio lookup fallback with malformed-response rejection, required
+  installer overlay and six isolated public-entry regressions. Deployment and
+  native after-test are pending; do not call point1 complete yet.
+  Details: `doc/acdc_native_node_loss.md`. Do not repeat unrelated passed tests.
+
 - **INST-07 same-host concurrent installer gap — SOURCE FIXED / focused PASS:**
   Real module installation and verification now share a nonblocking host lock
   before preflight and changes. Contention stops clearly; process failure and

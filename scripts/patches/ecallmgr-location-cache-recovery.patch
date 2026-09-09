@@ -1,0 +1,54 @@
+diff --git a/src/fetch/ecallmgr_fs_fetch_location.erl b/src/fetch/ecallmgr_fs_fetch_location.erl
+index 53135fa..aee2cc8 100644
+--- a/src/fetch/ecallmgr_fs_fetch_location.erl
++++ b/src/fetch/ecallmgr_fs_fetch_location.erl
+@@ -84,9 +84,11 @@ fetch_registration(#{fetch_id := FetchId, node := Node, payload := JObj}=Context
+ fetch_from_registrar(#{fetch_id := FetchId, node := Node, payload := JObj}=Context, AccountId, EndpointId) ->
+     case ecallmgr_registrar:lookup_proxy_path(AccountId, EndpointId) of
+         {'error', 'not_found'} ->
+-            location_not_found(Context);
++            %% This ETS cache is empty after an eCallMgr restart. Kamailio
++            %% still owns the registration; do not require another REGISTER.
++            fetch_from_proxy(Context, AccountId, EndpointId);
+         {'ok', 'undefined', _Props} ->
+-            location_not_found(Context);
++            fetch_from_proxy(Context, AccountId, EndpointId);
+         {'ok', Proxy, Props} ->
+             {'ok', Xml} = ecallmgr_fs_xml:directory_resp_location_xml(Proxy, Props, JObj),
+             lager:debug("sending directory location (~s/~s) XML to ~w for request ~s"
+@@ -102,12 +104,22 @@ fetch_from_registrar(#{fetch_id := FetchId, node := Node, payload := JObj}=Conte
+     end.
+ 
+ -spec fetch_from_proxy(map(), kz_term:ne_binary(), kz_term:ne_binary()) -> fs_handlecall_ret().
+-fetch_from_proxy(#{fetch_id := FetchId, node := Node, payload := JObj}=Context, AccountId, EndpointId) ->
++fetch_from_proxy(Context, AccountId, EndpointId) ->
+     Req = build_search_req(EndpointId, AccountId),
+-    case kz_amqp_worker:call(Req, fun kapi_registration:publish_search_req/1) of
++    case kz_amqp_worker:call(Req, fun kapi_registration:publish_search_req/1
++                           ,fun kapi_registration:search_resp_v/1, 2000) of
+         {'ok', RegObj} ->
+             AOR = kz_json:get_json_value(<<"AOR">>, RegObj),
+             Proxy = kz_json:get_ne_binary_value(<<"uri">>, AOR),
++            respond_from_proxy(Context, EndpointId, AccountId, Proxy, AOR);
++        _Else ->
++            location_not_found(Context)
++    end.
++
++respond_from_proxy(#{fetch_id := FetchId, node := Node, payload := JObj}=Context
++                   ,EndpointId, AccountId, Proxy, AOR) when is_binary(Proxy), Proxy =/= <<>> ->
++    case kz_json:get_ne_binary_value(<<"aor">>, AOR) of
++        AORUri when is_binary(AORUri), AORUri =/= <<>> ->
+             Props = proxy_props(AOR),
+             {'ok', Xml} = ecallmgr_fs_xml:directory_resp_location_xml(Proxy, Props, JObj),
+             lager:debug("sending directory location (~s/~s) XML to ~w for request ~s"
+@@ -116,7 +128,9 @@ fetch_from_proxy(#{fetch_id := FetchId, node := Node, payload := JObj}=Context,
+             freeswitch:fetch_reply(Context#{reply => iolist_to_binary(Xml)});
+         _Else ->
+             location_not_found(Context)
+-    end.
++    end;
++respond_from_proxy(Context, _EndpointId, _AccountId, _Proxy, _AOR) ->
++    location_not_found(Context).
+ 
+ build_search_req(EndpointId, AccountId) ->
+     [{<<"Token-ID">>, list_to_binary([EndpointId, "@", AccountId])}

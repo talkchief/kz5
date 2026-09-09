@@ -1747,6 +1747,8 @@ ensure_kazoo_sources() {
     apply_kazoo_integration_patch ecallmgr
     apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
         "$SCRIPT_DIR/patches/ecallmgr-bridge-peer-identity.patch"
+    apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
+        "$SCRIPT_DIR/patches/ecallmgr-location-cache-recovery.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/cdr" \
         "$SCRIPT_DIR/patches/cdr-report-timestamp-fallback.patch"
 }

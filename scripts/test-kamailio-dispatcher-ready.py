@@ -2,6 +2,8 @@
 """Offline dispatcher readiness regression; no RPC or service access."""
 import importlib.util
 from pathlib import Path
+import re
+import subprocess
 import unittest
 
 HERE = Path(__file__).resolve().parent
@@ -63,6 +65,22 @@ class Readiness(unittest.TestCase):
         self.assertIn('python3 -B -I "$SCRIPT_DIR/kamailio-dispatcher-ready.py"', installer)
         self.assertNotIn("$dispatcher == *'DEST'*", installer)
         self.assertIn('"$SCRIPT_DIR/kamailio-dispatcher-ready.py"', (HERE / "test-acdc-node-loss.sh").read_text())
+
+    def test_actual_installer_wait_success_and_timeout(self):
+        source = (HERE / "install-kazoo5.sh").read_text()
+        function = re.search(r"^wait_kamailio_dispatcher_ready\(\) \{\n[\s\S]*?^\}", source, re.M)[0]
+        for code in (0, 1):
+            script = "set -Eeuo pipefail\nSCRIPT_DIR=/fixture\nKAZOO_START_TIMEOUT=10\n"
+            script += 'log(){ echo "$*"; }; die(){ echo "$*" >&2; exit 1; }\n'
+            script += 'python3(){ [[ $* == "-B -I /fixture/kamailio-dispatcher-ready.py" ]] || exit 99; return %s; }\n' % code
+            script += 'sleep(){ SECONDS=1000; }\n' + function + '\nwait_kamailio_dispatcher_ready\n'
+            result = subprocess.run(["bash", "-s"], input=script, text=True, capture_output=True, timeout=3)
+            self.assertEqual(result.returncode, code)
+            if code:
+                self.assertNotIn("PASS", result.stdout)
+                self.assertIn("no active destination", result.stderr)
+            else:
+                self.assertIn("PASS active Kamailio", result.stdout)
 
 
 if __name__ == "__main__":
