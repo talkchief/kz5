@@ -1,7 +1,12 @@
 # Native broker/WSS fanout soak
 
-Status: offline framing/identity guards pass; native pilot and full soak pending.
+Status: offline framing/identity guards pass; corrected native pilot/full soak pending.
 This does not close the fanout release gate until the full retained receipt passes.
+First native pilot correctly rejected the runner changing a connected socket's
+authentication token (`638d9d38f451af33e3a26af04275a5ab` receipt, refresh-auth,
+zero events published, all client sockets closed). Native policy requires
+reconnect to change token and is not relaxed. The corrected harness issues one
+45-minute synthetic fixture token and retains the same sockets throughout.
 
 Explicit development44-only commands:
 
@@ -17,7 +22,8 @@ plus one other-call control connection,60 batches of60 events at2 events/second
 periodically delay actual network reads; every subscriber must receive every
 numbered event exactly once within the bounded drain window. The other-call
 subscription must receive none. The control connection pings during publication.
-Short-lived fixture tokens are refreshed between batches, never printed.
+The single45-minute fixture token is never printed. Each batch verifies native
+authenticated commands without replacing the token or reconnecting sockets.
 
 Publication uses actual `kapi_call` validation, AMQP worker publication, pooled
 call-event handling and native Blackhole subscription fanout over
@@ -27,7 +33,7 @@ nonexistent call in fixed acceptance company8310dc3170a18de37f205d0da172df65 are
 permitted. No dial/originate, service restart, database write or real-call action.
 
 Full acceptance must last at least30minutes. Per-batch broker process startup,
-authentication refresh and read-lag drain add wall time. Native VM memory and
+authenticated checks and read-lag drain add wall time. Native VM memory and
 process counts are sampled with bounded growth assertions, along with responsive
 control pings. This is a defined traffic envelope, not indefinite scalability,
 media-server failover or30 calls-per-second evidence. Retain failed receipts.

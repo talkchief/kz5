@@ -24,6 +24,13 @@ main(Args) ->
         execute(N,Args),net_kernel:stop()
     catch _:_ -> io:format("Scoped fanout helper refused: ~p~n",[get(phase)]),halt(1) end.
 rpc(N,M,F,A)->rpc:call(N,M,F,A,5000).
+execute(N,["issue"]) ->
+    %% One bounded fixture token keeps the same sockets alive for the soak.
+    %% Native Blackhole intentionally requires reconnect to change a token.
+    put(phase,issue),Expiry=rpc(N,erlang,system_time,[second])+2700,
+    {ok,Token}=rpc(N,kz_auth,create_token,[[{<<"account_id">>,?ACCOUNT},{<<"exp">>,Expiry}]]),
+    {ok,_}=rpc(N,kz_auth,validate_token,[Token]),
+    io:format("{\"token\":\"~s\",\"expires\":~B}~n",[Token,Expiry]);
 execute(N,["sample"]) ->
     put(phase,sample),
     Memory=rpc(N,erlang,memory,[total]),Processes=rpc(N,erlang,system_info,[process_count]),

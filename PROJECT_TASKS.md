@@ -11,9 +11,12 @@ work postponed; do not generate voices at runtime or during deployment.
   `scripts/test-blackhole-fanout.py` adds a4-client pilot and32-client, at least
   30-minute acceptance using real AMQP call-event publication/native subscription
   delivery over verified WSS. Exact sequence/account/call checks, lagged readers,
-  isolated control subscription, token refresh, resource bounds and cleanup.
+  isolated control subscription, authenticated checks, resource bounds and cleanup.
   Four new receiver guards plus four existing framing guards pass. Native pilot
-  and full soak remain required; see `doc/blackhole_fanout_acceptance.md`.
+  and full soak remain required. First pilot rejected an in-socket token change
+  before publishing; all sockets closed. Runner now keeps one bounded45-minute
+  fixture token and the same sockets; native reconnect-required auth policy is
+  unchanged. See `doc/blackhole_fanout_acceptance.md`.
 
 - **Queued apps-node partition acceptance — native run5 PASS:**
   `kz5-stage-queue-partition-5` exited0 on runner `0ac6fb9`, production ACDC

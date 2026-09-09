@@ -128,14 +128,15 @@ def run(pilot):
         baseline = helper('sample')
         result['phase'] = 'subscribe'
         save()
-        token = transport.rpc('issue-load')['token']  # Private capture, never a log or argument.
+        token = helper('issue')['token']  # Private 45-minute fixture token; never logged.
         for i in range(count):
             clients.append(Client(token, tag, delayed=i % 4 == 0))
         control = Client(token, secrets.token_hex(16), control=True)
         for batch in range(batches):
-            result['phase'] = 'refresh-auth'
+            result['phase'] = 'verify-auth'
             save()
-            token = transport.rpc('issue-load')['token']
+            # Keep the same sockets/token: native authentication changes require
+            # reconnect. Every command/event still undergoes native validation.
             for client in clients + [control]:
                 pings.append(client.request('ping', token))
             first = batch * batch_size + 1
@@ -173,8 +174,13 @@ def run(pilot):
                       peak_processes=max(s['processes'] for s in samples),
                       max_delivery_latency_ms=round(max(v for c in clients for v in c.latencies), 1),
                       other_call_leaks=0, baseline=baseline)
-    except BaseException:
+    except BaseException as error:
         result['status'] = 'FAIL'
+        safe_reasons = {'Scoped native fanout helper failed', 'Fanout observation deadline',
+                        'Native subscription/authentication refused',
+                        'WSS frame, identity, isolation, duplicate or connection failure',
+                        'Responsive control/auth commands stalled'}
+        result['failure_reason'] = str(error) if str(error) in safe_reasons else 'Acceptance assertion failed'
         raise
     finally:
         closed = True
