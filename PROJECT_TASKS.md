@@ -7,6 +7,18 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Installer persisted private management CA — fixed / scoped native PASS:**
+  `KAZOO_RABBITMQ_API_CA_FILE` is saved/reloaded with deployment settings, validated
+  as a protected root-owned certificate-only PEM, and applied only inside the
+  broker preflight subshell. Malformed/unsafe files and CA-plus-HTTP are rejected.
+  Actual saved-config test and13 focused groups plus abort-order checks pass.
+  Native879796 uses the real shell helper with no child extra-CA override: initial
+  pass, legacy rejection, retained pass, conditional cleanup/final pass. Test broker
+  stopped; normal RabbitPID2355/restarts0 unchanged (824236). Earlier eede49/769c9b
+  fixture cleanup failures remain failed and retained; no production bug is inferred
+  from them. Full split-stack apps deployment and migration/rollback remain open.
+  Proof, CA setup and boundaries: `doc/acdc_broker_upgrade.md`.
+
 - **P0-06 / installer remote broker permission gap — fixed, native preflight PASS:**
   Actual monitoring identity on isolated RabbitMQ3.13.7 got401 from the guard's
   single-vhost details GET (a357d7/4e7227). Replaced that admin-only probe with a
@@ -18,8 +30,8 @@ work postponed; do not generate voices at runtime or during deployment.
   providers or runtime installs. Test broker stopped; normal RabbitPID2355/restarts0
   unchanged (ce25fc). This is remote preflight proof, not whole split-stack acceptance.
   Preserve receipt/hash and instructions in `doc/acdc_broker_upgrade.md`. Private
-  management CA currently needs launch-time `NODE_EXTRA_CA_CERTS`; persisted scoped
-  CA configuration remains an installer follow-up. Migration/rollback remains open.
+  management CA initially needed launch-time `NODE_EXTRA_CA_CERTS`; the persisted
+  scoped-CA follow-up above closes that input gap. Migration/rollback remains open.
 
 - **P0-06 / installer callback broker upgrade guard — source fixed / main44 scoped PASS:**
   Apps installation now inspects the effective broker's ACDC queue declarations

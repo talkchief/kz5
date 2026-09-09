@@ -4,6 +4,18 @@
 campaigns. Fix in source, validate the failing path, deploy through the installer,
 then record the actual result. Dashboard/history work remains postponed.
 
+**Private-CA installer follow-up — persisted / scoped native PASS.**
+The saved `KAZOO_RABBITMQ_API_CA_FILE` now survives later installer invocations;
+it is validated as protected certificate-only trust and scoped to broker HTTPS.
+Thirteen focused regression groups plus apps abort-order checks pass. Native879796
+replays the real saved configuration with no child `NODE_EXTRA_CA_CERTS`: empty
+pass, legacy rejection, retained pass and conditional cleanup/final pass. Test
+broker stopped; normal RabbitPID2355/restarts0 unchanged (824236). Earlier failed
+fixture-cleanup receipts remain failed and are retained, with their limits stated.
+See `doc/acdc_broker_upgrade.md` for hashes, CA setup and replay instructions.
+This closes management-CA persistence only, not runtime AMQPS setup, full split
+apps installation, coordinated migration or rollback. No unrelated campaigns.
+
 **Remote installer follow-up: monitoring permissions — fixed / native PASS.**
 The actual separate-broker check exposed401 on RabbitMQ3.13's admin-only vhost
 details GET. The guard now reads the scoped built-in default exchange instead;
@@ -14,7 +26,7 @@ isolated .44 HTTPS: empty pass, legacy auto-delete rejection, retained pass, the
 conditional owned cleanup and final pass. No messages/provider calls/runtime
 installs. Test broker stopped; normal RabbitPID2355/restarts0 unchanged (ce25fc).
 See `doc/acdc_broker_upgrade.md` for receipt, hashes and exact limits. Full split
-apps install, migration/rollback and persistent private-CA input remain open;
+apps install and migration/rollback remain open; private-CA input is covered above;
 do not call this a full platform release pass or rerun unrelated call campaigns.
 
 **Latest deployment fix: callback broker upgrade guard — main44 scoped PASS.**

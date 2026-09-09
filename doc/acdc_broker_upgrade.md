@@ -33,10 +33,22 @@ protected installer environment/config mechanism, not command-line secrets:
   `administrator` tag and visibility of the configured vhost. The normal Kazoo
   AMQP service user may not have a management tag; the installer does not grant
   privileges automatically. Prefer a dedicated monitoring identity.
+- `KAZOO_RABBITMQ_API_CA_FILE`: optional absolute path to a private management CA
+  PEM file on the apps server. Requires an HTTPS management origin. The installer
+  saves this path and reloads it on later runs; no one-off `NODE_EXTRA_CA_CERTS`
+  override is needed. File and every parent directory must be root-owned,
+  non-writable by group/others and not symlinks. The file must be1byte–1MiB and
+  contain only valid CA certificates, never a private key. Copy the public CA
+  certificate to a stable protected path such as `/etc/kazoo/rabbitmq-ca.pem`
+  before installation. The installer does not download or invent trust anchors.
 
 The operator must point the management origin at the same broker/cluster as the
 AMQP endpoint. Do not point it at a different RabbitMQ instance on that host.
-TLS certificates are verified; use trusted internal certificates when applicable.
+TLS certificates are verified; use the optional CA input for private authorities.
+The helper validates it before loading additional trust, then scopes Node's
+extra-CA environment to the preflight subshell. It does not alter system-wide
+trust or the calling shell. This setting covers management HTTPS only, not Kazoo's
+AMQPS/Erlang runtime TLS configuration.
 Management credentials are persisted with the other root-only deployment inputs.
 They are not passed in process arguments or printed on API/CLI failure.
 
@@ -114,6 +126,9 @@ provide a trusted CA file to Node before launching the installer. This environme
 input is not persisted by the installer; a reusable CA-input option remains a
 separate deployment improvement, not something this run proves.
 
+That historical launch-time limitation is closed by the persisted-CA follow-up
+below; the original proof is retained unchanged.
+
 Receipt: `/var/log/kazoo-acceptance/acdc-broker-preflight.3FZ8FO/receipt.json` on
 the original dev client; also retained on main44 as
 `/root/kz5-acceptance/acdc-broker-preflight-3FZ8FO.json`.
@@ -126,6 +141,37 @@ This proves the remote **preflight** path and declaration discrimination, not a
 fresh remote apps deployment, AMQPS consumer connection, full migration/rollback
 or real callback failover. Earlier fixture-only status is superseded only for
 the exact metadata cases above.
+
+### Persisted private CA follow-up
+
+The updated runner saves its isolated settings with the real installer, removes
+all `KAZOO_*` overrides and `NODE_EXTRA_CA_CERTS` from the child environment, then
+loads the protected deployment file for each actual shell-helper invocation.
+Native879796 passed all four cases, with `persisted_ca_input=true`,
+`child_extra_ca_environment=false`, cleanup complete, no messages, providers or
+runtime installs. The runner itself still uses its existing test CA for setup
+HTTPS; that environment does not reach the installer child.
+
+Receipt `/var/log/kazoo-acceptance/acdc-broker-preflight.ehsvDX/receipt.json`;
+main44 copy `/root/kz5-acceptance/acdc-broker-preflight-ehsvDX.json`.
+SHA256 `5c57da1901db90c7cee4d2fdb4b1ad7abfa334320645d7eaaa3930f06c2921ea`.
+The receipt pins source hashes at the native run. A subsequent one-line guard
+also rejects a CA setting paired with plaintext management HTTP; this invalid
+input is covered by the focused regression suite, not an additional native run.
+Thirteen regression groups cover saved-config replay, scoped trust, malformed/
+unsafe CA inputs and prior broker checks; both apps abort-order checks also pass.
+
+Earlier receipts `acdc-broker-preflight.xS7lxN` (eede49) and
+`acdc-broker-preflight.nEsbAo` (769c9b) remain failed. Both had already passed
+saved-CA initial access and legacy rejection; the latter localizes failure to
+`remove_legacy`, with final cleanup complete. Cleanup now requests direct queue
+metadata with `disable_stats=true`, preserving name/vhost/ownership/property
+checks and broker-conditional empty/unused deletion. Later comparisons of the
+statistics and direct views both matched: a statistics timing issue is an
+inference, **not a proven root cause** of the earlier assertion. Failed receipts
+are retained on main44 with corresponding `-xS7lxN.json`/`-nEsbAo.json` names.
+No failed result was relabeled as passing. Normal RabbitMQ stayed PID2355,
+restarts0; test broker is inactive/PID0 and35671 absent (824236).
 
 This is a refusal guard, **not automatic migration, distributed deployment locking,
 broker persistence or failover proof**. Two reads reduce the build-window risk but

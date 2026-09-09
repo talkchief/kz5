@@ -4,6 +4,31 @@ const assert = require('node:assert/strict');
 const dns = require('node:dns').promises;
 const os = require('node:os');
 const {execFileSync} = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const {X509Certificate} = require('node:crypto');
+
+function validateManagementCA(file, io = fs) {
+    assert(typeof file === 'string' && path.isAbsolute(file) && path.normalize(file) === file,
+        'Management CA requires an absolute normalized path');
+    let current = file;
+    while (true) {
+        const stat = io.lstatSync(current);
+        assert(stat.uid === 0 && !(stat.mode & 0o022) &&
+            (current === file ? stat.isFile() : stat.isDirectory()),
+        'Management CA and parent directories must be root-owned, non-writable by others and not symlinks');
+        if (current === file) assert(stat.size > 0 && stat.size <= 1024 * 1024, 'Management CA size is invalid');
+        if (current === '/') break;
+        current = path.dirname(current);
+    }
+    const pem = io.readFileSync(file, 'utf8');
+    const certificates = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g);
+    assert(certificates?.length && pem.replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g, '').trim() === '',
+        'Management CA must contain only PEM certificates, never private keys');
+    for (const certificate of certificates) assert(new X509Certificate(certificate).ca,
+        'Management trust file contains a non-CA certificate');
+    return true;
+}
 
 function endpoint(raw) {
     const u = new URL(raw);
@@ -62,6 +87,7 @@ function management(ep, env) {
     assert(['https:', 'http:'].includes(u.protocol) && !u.username && !u.password &&
         !u.search && !u.hash && u.pathname === '/' &&
         u.hostname.replace(/^\[|\]$/g, '') === ep.host &&
+        (!env.KAZOO_RABBITMQ_API_CA_FILE || u.protocol === 'https:') &&
         (ep.protocol !== 'amqp/ssl' || u.protocol === 'https:'),
     'Management origin must match the AMQP host, without credentials/path or TLS downgrade');
     const user = env.KAZOO_RABBITMQ_API_USER || ep.user;
@@ -136,10 +162,17 @@ async function run(env = process.env) {
     console.log('PASS ACDC broker upgrade preflight ' + JSON.stringify(inspect(rows)));
 }
 
-module.exports = {endpoint, inspect, localEndpoint, listenerMatches, management, remoteInventory, run};
+module.exports = {endpoint, inspect, localEndpoint, listenerMatches, management, remoteInventory, run, validateManagementCA};
 if (require.main === module) {
     // Never print external exceptions: HTTP/CLI/parser errors may contain credentials.
-    run().catch(error => {
+    Promise.resolve().then(() => {
+        if (process.argv.length === 3 && process.argv[2] === '--validate-management-ca') {
+            validateManagementCA(process.env.KAZOO_RABBITMQ_API_CA_FILE);
+            return;
+        }
+        assert(process.argv.length === 2, 'Unknown broker preflight arguments');
+        return run();
+    }).catch(error => {
         console.error(error.code === 'ERR_ASSERTION' ? error.message.split('\n')[0] :
             'ACDC broker metadata check failed; verify configured broker access (details suppressed).');
         process.exitCode = 1;
