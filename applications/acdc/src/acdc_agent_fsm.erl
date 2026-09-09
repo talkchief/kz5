@@ -426,8 +426,15 @@ maintenance_restore_plan(#{account_id := AccountId, agent_id := AgentId,
   when map_size(Checkpoint) =:= 4, is_integer(Deadline), Deadline > 0 ->
     case Deadline - erlang:system_time('millisecond') of
         Left when Left =< 0 -> {'ok', 'ready', 'undefined'};
-        Left ->
-            try erlang:start_timer(Left, self(), ?PAUSE_MESSAGE) of
+        _Left ->
+            %% A relative timer adds the time spent between reading system
+            %% time and allocating the timer to the deadline. Map the saved
+            %% wall-clock deadline to absolute monotonic time instead, using
+            %% native precision before rounding down to milliseconds.
+            AbsoluteNative = erlang:convert_time_unit(Deadline, 'millisecond', 'native')
+                - erlang:time_offset(),
+            Absolute = erlang:convert_time_unit(AbsoluteNative, 'native', 'millisecond'),
+            try erlang:start_timer(Absolute, self(), ?PAUSE_MESSAGE, [{'abs', 'true'}]) of
                 Ref -> {'ok', 'paused', Ref}
             catch error:badarg -> {'error', 'invalid_pause_deadline'} end
     end;

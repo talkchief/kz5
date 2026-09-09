@@ -98,6 +98,28 @@ consuming listeners and no reported call legs. Executed fixture hash
 Safe fixed-step diagnostics have been added to identify the failing peer phase;
 no raw call data or RPC results are printed. The failed receipt remains unchanged.
 
+The diagnostic repeat also **FAILED**, receipt
+`agent-restore-1788993306307-5648da06.json`, at the primary `deadline_check`;
+both replicas again passed independent cleanup. A new500-iteration production
+FSM regression reproduces a saved deadline being extended by the relative-timer
+implementation: the full suite reports79 passes/1 failure, and the isolated
+`deadline_sampling` case fails independently against the retained old production
+BEAM in `/tmp/kazoo-acdc-maintenance.eIdqXk`.
+
+The source fix maps the saved Unix deadline to absolute monotonic time using the
+native-precision time offset, rounds down only after conversion, and uses an
+absolute timer. This avoids adding the time spent between calculating a relative
+delay and starting it. See the official
+[Erlang absolute timer contract](https://www.erlang.org/docs/27/apps/erts/erlang.html#start_timer/4).
+The unchanged native deadline check must still pass after normal deployment;
+the offline reproduction alone does not close the native restart gate.
+After the absolute-timer correction, all80 production observation/restore cases
+pass, including the new500-iteration regression. Evidence:
+`/tmp/kazoo-acdc-maintenance.ivmQWs`. No running BEAM was hot-loaded or state
+force-edited during these tests; the private installed runtimes still require
+normal redeployment of this correction.
+All27 existing agent-recovery regressions also pass with the correction.
+
 ### Native restart baseline: pause loss reproduced
 
 Both isolated apps installations on `b6d1a04` passed: primary

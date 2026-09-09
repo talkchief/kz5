@@ -73,8 +73,9 @@ main(Args) ->
         Failure=case Reason of {badmatch,{error,E}} when is_atom(E)->E;
                                {badmatch,_}->unexpected_result;
                                E when is_atom(E)->E;_->unclassified end,
-        io:format("{\"phase\":\"failure\",\"step\":\"~p\",\"node_scope\":\"~p\",\"class\":\"~p\",\"reason\":\"~p\"}~n",
-                  [get(restore_step),get(restore_node),Class,Failure]),
+        Delta=case get(deadline_delta_ms) of D when is_integer(D)->D;_->null end,
+        io:format("{\"phase\":\"failure\",\"step\":\"~p\",\"node_scope\":\"~p\",\"class\":\"~p\",\"reason\":\"~p\",\"deadline_delta_ms\":~p}~n",
+                  [get(restore_step),get(restore_node),Class,Failure,Delta]),
         io:put_chars("RESTART_BASELINE_REFUSED_OR_FAILED\n"),1
     after
         %% Never stop calls, re-login, or change an unknown replacement FSM.
@@ -143,6 +144,7 @@ restore_checkpoint(N,{FsmCheckpoint,ListenerCheckpoint}) ->
         rpc(N,acdc_agent_fsm,maintenance_state,[Owned,2000]),
     OriginalUntil=maps:get(pause_until_unix_ms,FsmCheckpoint),
     put(restore_step,deadline_check),
+    put(deadline_delta_ms,ObservedUntil-OriginalUntil),
     true=ObservedUntil=<OriginalUntil,true=ObservedUntil>=OriginalUntil-20,
     io:put_chars("{\"phase\":\"restore_verified\",\"deadline_not_extended\":true,\"runtime_membership_retained\":true}\n").
 cleanup(N) ->

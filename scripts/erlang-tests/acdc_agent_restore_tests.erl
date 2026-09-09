@@ -10,6 +10,7 @@ restore_test_() ->
         ,{"ready checkpoint cancels existing finite timer", fun resume/0}
         ,{"notification failure preserves local pause", fun notification_failure/0}
         ,{"restored timer expires in real FSM", fun timer_expiry/0}
+        ,{"repeated native deadline sampling cannot extend pause", fun deadline_sampling/0}
         ] ++
         [{"reject active "++atom_to_list(Name),fun() ->
              with_fsm(Name,#{},fun(Pid) -> refused(Pid,infinite_checkpoint(),agent_not_drained) end)
@@ -97,6 +98,16 @@ timer_expiry() ->
         {ok,#{state:=paused}}=restore(Pid,(base(paused))#{pause_until_unix_ms=>Until}),
         timer:sleep(400),
         ?assertEqual(ready,maps:get(state,observe(Pid)))
+    end).
+deadline_sampling() ->
+    with_fsm(ready,#{},fun(Pid) ->
+        Until=erlang:system_time(millisecond)+10000,
+        C=(base(paused))#{pause_until_unix_ms=>Until},
+        lists:foreach(fun(_) ->
+            {ok,_}=restore(Pid,C),
+            Observed=maps:get(pause_until_unix_ms,observe(Pid)),
+            ?assert(Observed=<Until)
+        end,lists:seq(1,500))
     end).
 
 refused(Pid,C,Reason) ->

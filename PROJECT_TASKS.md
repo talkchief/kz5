@@ -34,6 +34,13 @@ work postponed; do not generate voices at runtime or during deployment.
   after primary verification, before peer verification; receipt
   `agent-restore-1788993197384-eb7e2734.json`, cleanup verified for both replicas.
   Fixed-step diagnostics added; native gate remains open, failed receipt retained.
+  Diagnostic repeat `agent-restore-1788993306307-5648da06.json` failed the
+  primary deadline check; cleanup again passed. A500-iteration production FSM
+  regression reproduces relative-timer deadline extension (79 passed/1 failed;
+  isolated new case fails too). Source now uses absolute monotonic deadlines;
+  retain both failed native receipts and require a new installed-code pass.
+  After correction all80 maintenance cases pass, retained at
+  `/tmp/kazoo-acdc-maintenance.ivmQWs`; installed-code retest is still due.
 
 - **INST-06 / restart pause retention — native defect reproduced, OPEN:**
   Both normal isolated apps deployments passed on `b6d1a04`. In the explicit
