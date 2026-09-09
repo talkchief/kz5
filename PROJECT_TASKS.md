@@ -7,7 +7,10 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Blackhole prolonged broker/WSS fanout — harness prepared, native pending:**
+- **Blackhole prolonged broker/WSS fanout — native pilot PASS, full soak pending:**
+  Receipt `ab89346f96fd41d9ec09e4f1b2911bd3` on dev44:3 broker events,
+  12/12 deliveries over4 verified WSS sockets, zero other-call leaks, control
+  ping at most7.2ms, latency11.7ms, all sockets closed. Full30-minute run next.
   `scripts/test-blackhole-fanout.py` adds a4-client pilot and32-client, at least
   30-minute acceptance using real AMQP call-event publication/native subscription
   delivery over verified WSS. Exact sequence/account/call checks, lagged readers,
@@ -23,9 +26,11 @@ work postponed; do not generate voices at runtime or during deployment.
   source `2e91984`. Evidence `/var/log/kazoo-monitor-acceptance-aKrXXe` on dev44.
   Both real queued calls/audio, both unchanged FSM replicas, missed hangup
   during apps14 broker partition, ready recovery, no re-login/re-registration
-  and scoped cleanup passed. Main44 normal runtime deployment is running as
+  and scoped cleanup passed. Main44 normal runtime deployment completed as
   `kz5-acdc-replica-deploy-20260909` on `58c0194`, zero main44 channels verified
-  before starting. Collect the existing job; runtime after-checks still required.
+  before starting. Exit0 and final installer validations passed; all9 services
+  active, zero channels, error-priority apps/eCallMgr journal entries0 since
+ 21:00:05UTC at readback.
   Native run3 exposed same-agent replica answered/ready disagreement while a
   real queue call was bridged. Both replicas originated the same offer. Root
   ACDC source now selects one originating process per agent and publishes its

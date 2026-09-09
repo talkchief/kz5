@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Opt-in actual broker -> native Blackhole -> verified WSS fanout acceptance."""
 import concurrent.futures
+import hashlib
 import importlib.util
 import json
 import os
@@ -120,6 +121,13 @@ def run(pilot):
     result = {'status': 'RUNNING', 'pilot': pilot, 'subscribers': count, 'published': 0,
               'phase': 'native-admission',
               'path': 'kapi_call AMQP -> native call-event subscription -> certificate-verified WSS'}
+    inputs = [Path(__file__), ROOT / 'test-blackhole-slow-client.py',
+              ROOT / 'test-fixtures/blackhole-fanout-rpc.escript']
+
+    def hashes():
+        return {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
+
+    result['source_sha256'] = hashes()
 
     def save():
         receipt.write_text(json.dumps(result, indent=2) + '\n')
@@ -135,6 +143,7 @@ def run(pilot):
             clients.append(Client(token, tag, delayed=i % 4 == 0))
         control = Client(token, secrets.token_hex(16), control=True)
         for batch in range(batches):
+            assert hashes() == result['source_sha256'], 'Acceptance sources changed during run'
             result['phase'] = 'verify-auth'
             save()
             # Keep the same sockets/token: native authentication changes require
@@ -170,6 +179,7 @@ def run(pilot):
         if not pilot:
             assert elapsed >= 1800
         assert all(not c.error for c in clients + [control])
+        assert hashes() == result['source_sha256'], 'Acceptance sources changed during run'
         result.update(status='PASS', max_control_ping_ms=round(max(pings), 1),
                       phase='complete',
                       peak_vm_bytes=max(s['vm_bytes'] for s in samples),

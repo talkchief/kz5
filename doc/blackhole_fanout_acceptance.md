@@ -1,7 +1,10 @@
 # Native broker/WSS fanout soak
 
-Status: offline framing/identity guards pass; corrected native pilot/full soak pending.
+Status: corrected native pilot PASS; full soak remains pending.
 This does not close the fanout release gate until the full retained receipt passes.
+Pilot receipt `/var/log/kazoo-blackhole-fanout-ab89346f96fd41d9ec09e4f1b2911bd3.json`
+on dev44 verifies3 real broker events,12/12 deliveries, zero other-call leaks,
+maximum control ping7.2ms, maximum delivery latency11.7ms and all sockets closed.
 First native pilot correctly rejected the runner changing a connected socket's
 authentication token (`638d9d38f451af33e3a26af04275a5ab` receipt, refresh-auth,
 zero events published, all client sockets closed). Native policy requires
@@ -48,7 +51,8 @@ permitted. No dial/originate, service restart, database write or real-call actio
 Full acceptance must last at least30minutes. Per-batch broker process startup,
 authenticated checks and read-lag drain add wall time. Native VM memory and
 process counts are sampled with bounded growth assertions, along with responsive
-control pings. This is a defined traffic envelope, not indefinite scalability,
+control pings. Runner/transport/producer input hashes are retained and checked
+throughout to refuse mixed-version evidence. This is a defined traffic envelope, not indefinite scalability,
 media-server failover or30 calls-per-second evidence. Retain failed receipts.
 
 The shared root0600 acceptance lock prevents concurrent call/stream tests.

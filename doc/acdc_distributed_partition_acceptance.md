@@ -12,10 +12,12 @@ through apps14-only broker loss and recovered ready without re-login or SIP
 re-registration. The second call connected using those same registrations.
 Independent route restoration and scoped call/user/contact/pause cleanup passed.
 This covers that bounded apps-node broker partition, not arbitrary media-node
-failure or indefinite availability. Main44 normal runtime deployment is running:
+failure or indefinite availability. Main44 normal runtime deployment PASS:
 `kz5-acdc-replica-deploy-20260909`, source `58c0194`, protected log
 `/var/log/kazoo-acdc-replica-deploy-20260909.log`. Zero main44 media channels were
-verified before starting. Collect this existing job; do not start another.
+verified before starting. The unit completed exit0; normal installer checks,
+all9 active services, zero media channels and zero error-priority apps/eCallMgr
+journal entries since21:00:05UTC passed at readback.
 
 Native run1 failed its direct-call-based ownership observation before fault
 injection, despite a bridged queued call. Evidence
@@ -77,8 +79,8 @@ origination remains limited to one call; receiver timeout, exact ownership,
 audio/bridge checks and scoped cleanup remain unchanged. Calls, registrations,
 temporary users and alternate-agent pauses were cleaned up. A new run requires
 explicit preparation of that logged-out synthetic agent, not relogin during the
-recovery measurement. The main dev44 applications service has not received this
-new replica fix yet; its root source checkout does not imply running-code deployment.
+recovery measurement. Main dev44 subsequently received the fix through the
+normal deployment recorded above; source checkout alone was not counted.
 
 Explicit command on the admitted private dev44 lab:
 

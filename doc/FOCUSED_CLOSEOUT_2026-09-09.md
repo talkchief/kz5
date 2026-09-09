@@ -12,8 +12,10 @@ Latest verified results:
   directional audio; both original FSMs recovered after missed hangup during
   apps14-only AMQP loss, with no re-login/re-registration. Scoped cleanup passed.
   Production source `2e91984`, runner `0ac6fb9`; main44 normal deployment is
-  running as `kz5-acdc-replica-deploy-20260909` on `58c0194`. No main44 calls
-  were active at admission. Its final result and after-checks remain pending.
+  PASS as `kz5-acdc-replica-deploy-20260909` on `58c0194`, exit0. No main44 calls
+  were active at admission. Final installer validations, all9 active services,
+  zero media channels and zero error-priority apps/eCallMgr journal entries
+  since21:00:05UTC passed at readback.
 
 - Queued multi-node acceptance exposed a genuine same-agent replica discrepancy
   before fault injection: primary answered, peer ready. Both listeners/bindings
