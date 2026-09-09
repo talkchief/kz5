@@ -86,6 +86,18 @@ node epochs and the real fence before restoring, and retain the full drain/actio
 receipts. Do not treat an accepted JSON document or a green journal test as native
 cluster upgrade/rollback acceptance.
 
+Both normal `ed4d7be` builds have now passed and were collected:
+`kazoo-apps-install-10.log` and `apps-peer-install-6.log` in the protected lab
+directory. The first actual restore regression **FAILED**, receipt
+`/var/lib/kazoo5-install-lab/agent-restore-1788993197384-eb7e2734.json`:
+both replicas were paused, the primary restore/deadline/membership check passed,
+but no second restore verification was recorded. Native exit1; independent
+cleanup checks confirm both fixture replicas ready with original membership,
+consuming listeners and no reported call legs. Executed fixture hash
+`9d796bc0fdd014c57422717a1540501d8ae2d6e4e3298fc201773788907f6369`.
+Safe fixed-step diagnostics have been added to identify the failing peer phase;
+no raw call data or RPC results are printed. The failed receipt remains unchanged.
+
 ### Native restart baseline: pause loss reproduced
 
 Both isolated apps installations on `b6d1a04` passed: primary

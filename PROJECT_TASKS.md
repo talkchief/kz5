@@ -30,6 +30,10 @@ work postponed; do not generate voices at runtime or during deployment.
   holds the shared acceptance lock and checks owned guests, completed builds,
   empty media/callback inventory and ready replicas before the native regression.
   Do not count either helper as the complete cluster admission fence.
+  Both normal builds subsequently passed. First native restore attempt FAILED
+  after primary verification, before peer verification; receipt
+  `agent-restore-1788993197384-eb7e2734.json`, cleanup verified for both replicas.
+  Fixed-step diagnostics added; native gate remains open, failed receipt retained.
 
 - **INST-06 / restart pause retention — native defect reproduced, OPEN:**
   Both normal isolated apps deployments passed on `b6d1a04`. In the explicit

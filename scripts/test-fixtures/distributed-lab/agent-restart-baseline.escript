@@ -68,7 +68,14 @@ main(Args) ->
         io:format("{\"phase\":\"after_restart\",\"states\":[\"~s\",\"~s\"],\"pause_preserved\":~s,\"restart_elapsed_ms\":~p,\"restore_executed\":~s}~n",
                   States++[atom_to_list(Pass),Elapsed,atom_to_list(Restore)]),
         case Pass of true->0;false->1 end
-    catch _:_ -> io:put_chars("RESTART_BASELINE_REFUSED_OR_FAILED\n"),1
+    catch Class:Reason ->
+        %% Phase labels are fixed atoms, not call data or raw RPC results.
+        Failure=case Reason of {badmatch,{error,E}} when is_atom(E)->E;
+                               {badmatch,_}->unexpected_result;
+                               E when is_atom(E)->E;_->unclassified end,
+        io:format("{\"phase\":\"failure\",\"step\":\"~p\",\"node_scope\":\"~p\",\"class\":\"~p\",\"reason\":\"~p\"}~n",
+                  [get(restore_step),get(restore_node),Class,Failure]),
+        io:put_chars("RESTART_BASELINE_REFUSED_OR_FAILED\n"),1
     after
         %% Never stop calls, re-login, or change an unknown replacement FSM.
         %% Only resume the exact finite pause introduced into this ready agent.
@@ -110,25 +117,32 @@ checkpoint(N) ->
     {#{account_id=>?A,agent_id=>?U,state=>paused,pause_until_unix_ms=>Until},
      #{account_id=>?A,agent_id=>?U,queues=>[?Q]}}.
 restore_checkpoint(N,{FsmCheckpoint,ListenerCheckpoint}) ->
+    put(restore_node,case N of 'kazoo_apps@kz5-stage-kazoo-apps'->primary;_->peer end),
+    put(restore_step,pre_restore_snapshot),
     Owned=get({owned_fsm,N}),
     {Owned,_,_}=snapshot(N),
     Sup=rpc(N,acdc_agents_sup,find_agent_supervisor,[?A,?U]),
     Owned=rpc(N,acdc_agent_sup,fsm,[Sup]),L=rpc(N,acdc_agent_sup,listener,[Sup]),
+    put(restore_step,fsm_restore),
     {ok,#{state:=paused,notifications_queued:=true}}=
         rpc(N,acdc_agent_fsm,maintenance_restore,[Owned,FsmCheckpoint,2000]),
+    put(restore_step,listener_restore),
     {ok,#{queues:=[?Q],state:=paused,bindings_queued:=true}}=
         rpc(N,acdc_agent_listener,maintenance_restore,[L,ListenerCheckpoint,3000]),
     %% Queued bindings are not sufficient. Inspect the native consumer's
     %% actual binding registry after its mailbox barrier.
+    put(restore_step,consumer_binding_check),
     true=rpc(N,gen_listener,is_consuming,[L]),
     Bindings=rpc(N,gen_listener,bindings,[L]),true=is_list(Bindings),
     [?Q]=lists:usort([proplists:get_value(queue_id,P) || {<<"acdc_queue">>,P}<-Bindings,
         proplists:get_value(account_id,P)=:=?A,
         lists:member(member_connect_req,proplists:get_value(restrict_to,P,[]))]),
+    put(restore_step,restored_snapshot),
     {Owned,paused,Remaining}=snapshot(N),true=Remaining>10000,
     {ok,#{pause_until_unix_ms:=ObservedUntil}}=
         rpc(N,acdc_agent_fsm,maintenance_state,[Owned,2000]),
     OriginalUntil=maps:get(pause_until_unix_ms,FsmCheckpoint),
+    put(restore_step,deadline_check),
     true=ObservedUntil=<OriginalUntil,true=ObservedUntil>=OriginalUntil-20,
     io:put_chars("{\"phase\":\"restore_verified\",\"deadline_not_extended\":true,\"runtime_membership_retained\":true}\n").
 cleanup(N) ->
