@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const {overlapsSubnet,ROLES}=require('./lab.cjs');
+for(const dst of ['default',undefined,'10.1.0.0/16','172.30.252.0/24','172.30.254.0/24','46.225.31.248/32'])assert.equal(overlapsSubnet(dst),false);
+for(const dst of ['172.30.253.0/24','172.30.253.12/32','172.30.252.0/23','172.16.0.0/12','0.0.0.0/0'])assert.equal(overlapsSubnet(dst),true);
+for(const dst of ['172.30.253.0/33','bad/24','172.300.0.0/16','172.30.0.0/2.5'])assert.throws(()=>overlapsSubnet(dst));
+assert.equal(new Set(ROLES).size,9);
+const src=fs.readFileSync(__dirname+'/lab.cjs','utf8');
+assert(!src.includes("'--privileged'")&&!src.includes("'--network=host'")&&!src.includes("'--publish'"));
+assert(src.indexOf('saveState(s);\n    podman')<src.indexOf("['network','create'"));
+assert(src.includes("'blackhole','10.1.0.0/16'"));
+console.log('PASS 19 distributed-lab subnet, role and isolation checks; no containers or credentials created');

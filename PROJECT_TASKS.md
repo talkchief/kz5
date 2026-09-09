@@ -7,7 +7,7 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Point2 invalid/alternate number — native case IN PROGRESS:** new explicit
+- **Point2 invalid/alternate number — native retry PASS:** new explicit
   `invalid-alternate` retry mode is confined to the main isolated EN/internal
   fixture. It begins with nonnumeric caller ID, submits empty#, requires the
   complete prerecorded invalid-entry response, then confirms1001 and retains
@@ -24,7 +24,23 @@ work postponed; do not generate voices at runtime or during deployment.
   Added an explicit exact-committed-asset auxiliary matcher; the success minimum
   remains unchanged. Failure retained at `20260909T123304Z`; replay required
   before another full retry run.
-  No provider generation, imported-company traffic or runtime code hot-loading.
+  Read-only replay passed after the exact auxiliary-reference fix. The complete
+  native unit `kz5-callback-invalid-alternate-complete-20260909.service` then
+  exited0: full invalid-entry and confirmation audio, unanswered first return,
+  durable retry_wait, and second reciprocal SIP/RTP bridge. Evidence:
+  `/var/log/kazoo-acceptance/20260909T123654Z`.103 retry,14 language/scope and84
+  audio groups pass. Fixture retained; this is not full cleanup or production
+  acceptance. Alternate-disabled rejection and the historical uncertain ticket
+  remain separate. No provider generation, imported-company traffic or runtime
+  code hot-loading.
+
+- **Point4 separated-role lab — PREPARATION only:** Podman installed on main44.
+  New explicit development-only system-container bootstrap pins base-image digest
+  and repository commit, uses separate network/PID1/filesystems without host data
+  mounts or published ports, rejects subnet collisions and preserves partial
+  state.19 static/pure checks pass. Role installation and failure-recovery matrix
+  have NOT passed merely because the bootstrap exists. Existing stack data and
+  credentials are not reused. See `doc/distributed_install_lab.md`.
 
 - **Point2 active callback worker loss — native PASS:** fixture-only worker
   terminated while its first returned call was ringing; real confirmation audio,
