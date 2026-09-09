@@ -7,7 +7,8 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 function expectedDigits(mode) {
-    assert(['entry-only', 'confirm-current'].includes(mode), 'Invalid registration mode');
+    assert(['entry-only', 'confirm-current', 'invalid-alternate'].includes(mode), 'Invalid registration mode');
+    if (mode === 'invalid-alternate') return [6, 11, 1, 0, 0, 1, 11, 1];
     return mode === 'entry-only' ? [6] : [6, 1];
 }
 function scenarios(root = path.join(__dirname, '..', 'sip-tests'), mode = 'confirm-current') {
@@ -18,12 +19,17 @@ function scenarios(root = path.join(__dirname, '..', 'sip-tests'), mode = 'confi
     // first event. The received-packet gate, not this pause alone, proves5s.
     request = request.replace('<pause milliseconds="4000"/>',
         '<!-- 4200ms + pinned SIPp ~780ms DTMF warmup targets actual entry at5s. -->\n  <pause milliseconds="4200"/>');
-    if (mode === 'entry-only') {
+    if (mode === 'entry-only' || mode === 'invalid-alternate') {
         const extraConfirmation = '  <pause milliseconds="2500"/>\n'
             + '  <nop><action><exec play_dtmf="1,200"/></action></nop>\n  <pause milliseconds="1000"/>';
         assert.equal(request.split(extraConfirmation).length, 2, 'Expected exact historical registration confirmation block');
-        request = request.replace(extraConfirmation,
-            '  <!-- entry-only: no registration digit1; receive the server BYE after full success audio. -->');
+        request = request.replace(extraConfirmation, mode === 'entry-only' ?
+            '  <!-- entry-only: no registration digit1; receive the server BYE after full success audio. -->' :
+            '  <!-- Invalid caller ID: reject empty #, then explicitly confirm alternate1001. -->\n'
+            + '  <pause milliseconds="2500"/>\n  <nop><action><exec play_dtmf="#,200"/></action></nop>\n'
+            + '  <pause milliseconds="4500"/>\n'
+            + '  <nop><action><exec play_dtmf="1001#,200"/></action></nop>\n'
+            + '  <pause milliseconds="10000"/>\n  <nop><action><exec play_dtmf="1,200"/></action></nop>');
     }
     request = request.replace('<label id="menu"/>', '<label id="menu"/>\n  <!-- registration-mode: ' + mode + ' -->');
     for (const action of ['apattern,1,0,PCMU/8000', 'pauseapattern']) {
@@ -61,7 +67,7 @@ function modeReceipt(mode = 'confirm-current') {
         '../test-acdc-callback-calls.sh', '../test-acdc-callback-retry.sh', '../test-acdc-callback-fixture.sh',
         '../sip-tests/callback-request.xml', '../sip-tests/caller-to-queue.xml'];
     return {schema_version: 1, registration_mode: mode, expected_registration_digits: expectedDigits(mode),
-        allow_alternate_number: false, scenario_sha256: Object.fromEntries(
+        allow_alternate_number: mode === 'invalid-alternate', scenario_sha256: Object.fromEntries(
             Object.entries(scenarios(undefined, mode)).map(([name, source]) => [name, sha(source)])),
         input_sha256: Object.fromEntries(sources.map(name => [name, sha(fs.readFileSync(path.join(__dirname, name)))]))};
 }

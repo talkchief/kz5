@@ -64,6 +64,14 @@ fixture_die() { printf '[kazoo-callback-fixture] ERROR stage=%s: %s\n' "${FIXTUR
 fixture_log() { printf '[kazoo-callback-fixture] %s\n' "$*"; }
 
 parse_fixture_args() {
+    case ${KAZOO_CALLBACK_TEST_ALTERNATE_NUMBER:-false} in
+        false) ;;
+        true)
+            [[ ( ${1:-} == setup-retry || ${1:-} == verify ) &&
+               ${KAZOO_CALLBACK_TEST_ACCOUNT_ID:-} == 8310dc3170a18de37f205d0da172df65 &&
+               ${KAZOO_CALLBACK_TEST_LANGUAGE:-} == en-us ]] || fixture_die 'Alternate-number fixture scope refused' ;;
+        *) fixture_die 'Invalid alternate-number fixture selection' ;;
+    esac
     if [[ -n ${KAZOO_CALLBACK_TEST_LANGUAGE:-} ]]; then
         case $KAZOO_CALLBACK_TEST_LANGUAGE in en-us|he-il|fr-fr|es-es|ar-sa) ;; *) fixture_die 'Unsupported explicit callback fixture language' ;; esac
         [[ ${1:-} == setup-retry || ${1:-} == verify ]] || fixture_die 'Explicit language only applies to owned retry setup/verification'
@@ -258,7 +266,8 @@ configure_acceptance_queue() {
     fi
     callback=$(jq -cn --arg authority "$ACCEPTANCE_CALLER_DEVICE_ID" --arg cid "$OUTBOUND_CALLER_ID" \
         --argjson attempts "$attempts" --argjson ring_timeout "$ring_timeout" \
-        '{enabled:true,entry_key:"6",allow_alternate_number:false,use_local_resources:true,
+        --argjson alternate "${KAZOO_CALLBACK_TEST_ALTERNATE_NUMBER:-false}" \
+        '{enabled:true,entry_key:"6",allow_alternate_number:$alternate,use_local_resources:true,
           outbound_authority:{id:$authority,type:"device"},
           outbound_caller_id:{number:$cid,name:"Kazoo Callback Acceptance"},
           menu_timeout_ms:30000,success_timeout_ms:15000,ttl:600,max_attempts:$attempts,
@@ -326,8 +335,9 @@ verify_fixture() {
     done
     response=$(api_request GET "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID")
     jq -e --arg authority "$ACCEPTANCE_CALLER_DEVICE_ID" --arg cid "$OUTBOUND_CALLER_ID" \
+        --argjson alternate "${KAZOO_CALLBACK_TEST_ALTERNATE_NUMBER:-false}" \
         '.data.callback.enabled == true and .data.callback.entry_key == "6" and
-         .data.callback.allow_alternate_number == false and .data.callback.use_local_resources == true and
+         .data.callback.allow_alternate_number == $alternate and .data.callback.use_local_resources == true and
          .data.callback.outbound_authority == {id:$authority,type:"device"} and
          .data.callback.outbound_caller_id.number == $cid' <<<"$response" >/dev/null || \
         fixture_die 'Acceptance queue callback configuration verification failed'

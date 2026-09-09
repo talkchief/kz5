@@ -161,7 +161,7 @@ groups++;
 const retrySource=read('test-acdc-callback-retry.sh'),fixtureSource=read('test-acdc-callback-fixture.sh');
 for(const gate of ['--keep-fixture is mandatory','flock -n','retry_busy_pair','retry_clear_busy','retry_wait_backoff','retry_wait_bridge','retry-service-after.txt'])assert(retrySource.includes(gate));
 assert(fixtureSource.indexOf('Explicit language is confined to the isolated retry account before fixture writes')<fixtureSource.indexOf('    FIXTURE_STAGE=setup-scope'));
-assert(retrySource.includes('KAZOO_CALLBACK_TEST_LANGUAGE=$RETRY_LANGUAGE callback_fixture verify'));groups++;
+assert(retrySource.includes('KAZOO_CALLBACK_TEST_LANGUAGE=$RETRY_LANGUAGE KAZOO_CALLBACK_TEST_ALTERNATE_NUMBER=$alternate callback_fixture verify'));groups++;
 const interfaces={eth1:[{family:'IPv4',address:'10.1.0.44'}],empty:undefined};
 assert.equal(refs.localMediaHost('localhost',{}),'127.0.0.1');
 assert.equal(refs.localMediaHost('127.0.0.1',{}),'127.0.0.1');

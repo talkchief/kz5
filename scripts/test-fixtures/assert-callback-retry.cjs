@@ -108,14 +108,21 @@ function registrationModeProof(mode, receipt, policy, audio, language) {
     const expected = expectedDigits(mode);
     assert.deepEqual(receipt, modeReceipt(mode), 'Registration mode or source inputs changed since scenario creation');
     assert.deepEqual(policy, {registration_mode: mode, account_id: ACCOUNT, entry_key: '6',
-        allow_alternate_number: false, fixture_verified: true, ...(language === undefined ? {} : {language})}, 'Registration fixture policy does not match explicit mode');
+        allow_alternate_number: mode === 'invalid-alternate', fixture_verified: true, ...(language === undefined ? {} : {language})}, 'Registration fixture policy does not match explicit mode');
     assert.equal(audio.result, 'PASS', 'Registration audio was not accepted');
     assert.equal(audio.registration_mode, mode, 'Registration audio belongs to another mode');
     assert.deepEqual(audio.expected_registration_digits, expected, 'Audio expected digits disagree with run mode');
     assert.deepEqual(audio.observed_registration_digits, expected, 'Audio observed digits disagree with run mode');
+    if (mode === 'invalid-alternate') {
+        assert.equal(audio.original_number,'invalid-caller'); assert.equal(audio.alternate_number,'1001');
+        assert.equal(audio.invalid_entry?.result,'PASS');
+        assert.equal(audio.invalid_entry.complete_after_empty_entry_before_number,true);
+    }
     return {registration_mode: mode, expected_registration_digits: expected, observed_registration_digits: expected};
 }
 function inspect(directory, mode = 'confirm-current', transport = 'external', language, fault) {
+    if (mode === 'invalid-alternate') assert(transport === 'internal' && language === 'en-us' &&
+        ACCOUNT === '8310dc3170a18de37f205d0da172df65' && fault === undefined, 'Unsupported alternate-number acceptance scope');
     assert(fault === undefined || (fault === 'worker-loss' && transport === 'internal'
         && language === 'en-us' && mode === 'entry-only'
         && ACCOUNT === '8310dc3170a18de37f205d0da172df65'), 'Unsupported fault acceptance scope');

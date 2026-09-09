@@ -7,6 +7,14 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Point2 invalid/alternate number — native case IN PROGRESS:** new explicit
+  `invalid-alternate` retry mode is confined to the main isolated EN/internal
+  fixture. It begins with nonnumeric caller ID, submits empty#, requires the
+  complete prerecorded invalid-entry response, then confirms1001 and retains
+  the strict unanswered-first/second-return SIP/RTP contract.103 retry groups,
+  14 language/scope groups and79 existing audio gates pass; native result pending.
+  No provider generation, imported-company traffic or runtime code hot-loading.
+
 - **Point2 active callback worker loss — native PASS:** fixture-only worker
   terminated while its first returned call was ringing; real confirmation audio,
   settled cleanup, durable15s backoff and distinct second-attempt reciprocal

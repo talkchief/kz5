@@ -32,6 +32,24 @@ assert(entryOnly['callback-retry-request.xml'].includes('milliseconds="4200"'));
 assert(entryOnly['callback-retry-request.xml'].includes('<recv request="BYE" timeout="30000"'));
 assert.equal(entryOnly['callback-busy-caller.xml'], generated['callback-busy-caller.xml']); checks++;
 assert.throws(() => scenarios(undefined, 'auto')); checks++;
+{
+    const mode='invalid-alternate', xml=scenarios(undefined,mode)['callback-retry-request.xml'];
+    assert.deepEqual(expectedDigits(mode),[6,11,1,0,0,1,11,1]);
+    assert.equal((xml.match(/play_dtmf=/g)||[]).length,4);
+    assert(xml.includes('play_dtmf="1001#,200"') && xml.includes('milliseconds="10000"'));
+    assert.equal(scenarios(undefined,mode)['callback-busy-caller.xml'],generated['callback-busy-caller.xml']);
+    const receipt=modeReceipt(mode), policy={registration_mode:mode,account_id:account,entry_key:'6',allow_alternate_number:true,fixture_verified:true};
+    const audio={result:'PASS',registration_mode:mode,expected_registration_digits:expectedDigits(mode),
+        observed_registration_digits:expectedDigits(mode),original_number:'invalid-caller',alternate_number:'1001',
+        invalid_entry:{result:'PASS',complete_after_empty_entry_before_number:true}};
+    registrationModeProof(mode,receipt,policy,audio); checks++;
+    for(const mutate of [x=>x.policy.allow_alternate_number=false,x=>x.audio.invalid_entry.result='FAIL',
+        x=>delete x.audio.invalid_entry,x=>x.audio.invalid_entry.complete_after_empty_entry_before_number=false,
+        x=>x.audio.original_number='1001',x=>x.audio.alternate_number='1002',x=>x.audio.observed_registration_digits=[6,1]]) {
+        const x=structuredClone({receipt,policy,audio});mutate(x);
+        assert.throws(()=>registrationModeProof(mode,x.receipt,x.policy,x.audio));checks++;
+    }
+}
 for (const mode of ['entry-only', 'confirm-current']) {
     const receipt = modeReceipt(mode), policy = {registration_mode: mode, account_id: account,
         entry_key: '6', allow_alternate_number: false, fixture_verified: true};

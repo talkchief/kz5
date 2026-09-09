@@ -90,6 +90,8 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
     }
     const answer = unique(messages.filter(m => incoming(m) && /^SIP\/2\.0 200 /.test(m.first) && m.method === 'INVITE'), 'INVITE answer');
     const offer = unique(messages.filter(m => outgoing(m) && m.first.startsWith('INVITE ') && m.cseq === answer.cseq), 'answered INVITE offer');
+    if (mode === 'invalid-alternate') assert(/^<sip:invalid-caller@/.test(offer.headers.from[0]),
+        'Alternate-number test must begin with the exact invalid caller identity');
     const ack = unique(messages.filter(m => outgoing(m) && m.first.startsWith('ACK ') && m.cseq === answer.cseq), 'answer ACK');
     const bye = unique(messages.filter(m => incoming(m) && m.first.startsWith('BYE ')), 'server BYE');
     const byeAck = unique(messages.filter(m => outgoing(m) && /^SIP\/2\.0 200 /.test(m.first) && m.method === 'BYE' && m.cseq === bye.cseq), 'BYE acknowledgement');
@@ -165,6 +167,20 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
     assert(start >= digits[digits.length - 1].end && end <= bye.time && bye.time - end <= 2,
         'Full registration success was not received after selection and before server BYE');
     assert(Math.abs((end - start) - reference.length / 8000) <= 0.25, 'Success RTP wall-clock duration does not match complete phrase');
+    let invalidEntry;
+    if (mode === 'invalid-alternate') {
+        const gemini = require('./callback-gemini-reference.cjs');
+        const invalid = gemini.ulaw(gemini.assetFor('acdc-callback-invalid-entry', 'en-us').bytes);
+        const found = fullPhrase(audio, invalid);
+        assert.equal(found.length, 1, 'Expected exactly one complete prerecorded invalid-entry response');
+        const sample = found[0].sample, last = sample + invalid.length;
+        assert(present.subarray(sample,last).every(Boolean), 'Invalid-entry audio contains uncaptured samples');
+        const invalidStart = times[sample], invalidEnd = times[last-1] + 1/8000;
+        assert(invalidStart >= digits[1].end && invalidEnd <= digits[2].start,
+            'Empty-entry feedback must finish before entering the alternate number');
+        invalidEntry = {result:'PASS',reference_sha256:crypto.createHash('sha256').update(invalid).digest('hex'),
+            complete_after_empty_entry_before_number:true,correlation:found[0].correlation};
+    }
     return {result: 'PASS', proof_kind: 'installed_prompt_pcm_delivery_not_human_transcription',
         registration_mode: mode, expected_registration_digits: expected,
         observed_registration_digits: digits.map(digit => digit.event),
@@ -174,7 +190,8 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
         entry_after_answer_seconds: Number((digits[0].start - answer.time).toFixed(6)),
         confirmation_start_epoch_seconds: start, confirmation_end_epoch_seconds: end,
         original_bye_epoch_seconds: bye.time, original_bye_ack_epoch_seconds: byeAck.time,
-        complete_phrase_before_server_bye: true, missing_phrase_samples: 0, received_pcmu_packets: received.length};
+        complete_phrase_before_server_bye: true, missing_phrase_samples: 0, received_pcmu_packets: received.length,
+        ...(invalidEntry ? {invalid_entry:invalidEntry,original_number:'invalid-caller',alternate_number:'1001'} : {})};
 }
 module.exports = {inspect, fullPhrase, sip, unique, rtp};
 if (require.main === module) {

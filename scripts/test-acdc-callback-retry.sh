@@ -32,7 +32,8 @@ retry_usage() {
     printf '%s\n' \
         'Usage: test-acdc-callback-retry.sh --prepare-only --confirmation-reference FILE' \
         '       test-acdc-callback-retry.sh --live --keep-fixture --confirmation-reference FILE' \
-        '       [--registration-mode entry-only|confirm-current] (default: confirm-current)' \
+        '       [--registration-mode entry-only|confirm-current|invalid-alternate] (default: confirm-current)' \
+        '       invalid-alternate: main EN/internal fixture only; invalid caller ID, empty entry, then alternate1001' \
         '       [--language en-us|he-il|fr-fr|es-es|ar-sa] (explicit owned queue language; absent preserves queue)' \
         '       [--edit-pending-language] (main isolated fixture only; EN admission then FR queue edit and conditional restore)' \
         '       [--short-confirmation-window] (main isolated EN fixture only; response timeout3, full existing prompt, conditional restore)' \
@@ -54,6 +55,7 @@ retry_args() {
     # Clear inherited overrides before preflight, setup, evidence or cleanup.
     unset -v KAZOO_CALLBACK_TEST_LANGUAGE || die 'Cannot isolate callback fixture language environment'
     unset -v KAZOO_CALLBACK_TEST_ACCOUNT_ID || die 'Cannot isolate callback fixture account environment'
+    unset -v KAZOO_CALLBACK_TEST_ALTERNATE_NUMBER || die 'Cannot isolate alternate-number fixture environment'
     while (($#)); do
         case $1 in
             --prepare-only) CALLBACK_PREPARE=true ;;
@@ -83,7 +85,13 @@ retry_args() {
         esac
         shift
     done
-    [[ $RETRY_REGISTRATION_MODE == entry-only || $RETRY_REGISTRATION_MODE == confirm-current ]] || die 'Invalid registration mode'
+    [[ $RETRY_REGISTRATION_MODE == entry-only || $RETRY_REGISTRATION_MODE == confirm-current || $RETRY_REGISTRATION_MODE == invalid-alternate ]] || die 'Invalid registration mode'
+    if [[ $RETRY_REGISTRATION_MODE == invalid-alternate ]]; then
+        [[ $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 && $RETRY_LANGUAGE_EXPLICIT == true &&
+           $RETRY_LANGUAGE == en-us && $CALLBACK_TEST_TRANSPORT == internal &&
+           $RETRY_EDIT_PENDING_LANGUAGE == false && $RETRY_SHORT_CONFIRMATION_WINDOW == false &&
+           $RETRY_QUEUE_RESTART == false && $RETRY_WORKER_LOSS == false ]] || die 'Alternate-number test requires the unmodified main EN/internal fixture'
+    fi
     [[ $CALLBACK_TEST_TRANSPORT == external || $CALLBACK_TEST_TRANSPORT == internal ]] || die 'Invalid transport'
     [[ $RETRY_EDIT_PENDING_LANGUAGE != true || $RETRY_SHORT_CONFIRMATION_WINDOW != true ]] || die 'Choose only one pending queue edit case'
     [[ ${RETRY_CONFIRMATION_EXPIRY:-false} != true || $RETRY_SHORT_CONFIRMATION_WINDOW == true ]] || die 'Confirmation expiry requires explicit short confirmation window'
@@ -246,7 +254,11 @@ retry_start_busy() {
 
 retry_start_original() {
     local csv=$RUN_DIR/callback-original-input.csv
-    write_callback_request_csv "$csv"
+    if [[ $RETRY_REGISTRATION_MODE == invalid-alternate ]]; then
+        CALLBACK_NUMBER=invalid-caller write_callback_request_csv "$csv"
+    else
+        write_callback_request_csv "$csv"
+    fi
     sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
         -sf "$RUN_DIR/callback-retry-request.xml" -inf "$csv" -i "$LOCAL_IP" -p "$CALLER_PORT" \
         -mi "$LOCAL_IP" -min_rtp_port "$CALLBACK_ORIGINAL_MEDIA_PORT" -max_rtp_port "$((CALLBACK_ORIGINAL_MEDIA_PORT + 3))" \
@@ -478,7 +490,8 @@ retry_wait_checked() {
 }
 
 retry_run() {
-    local since cores before snapshot
+    local since cores before snapshot alternate=false
+    [[ $RETRY_REGISTRATION_MODE != invalid-alternate ]] || alternate=true
     callback_fixture preflight || die 'Callback SUP prerequisite failed before fixture or agent writes'
     snapshot=$(retry_snapshot) || die 'Native channel inventory unavailable'
     jq -e '.row_count==0' <<<"$snapshot" >/dev/null || die 'Live retry requires zero active calls at entry'
@@ -487,8 +500,8 @@ retry_run() {
     node "$retry_script_dir/test-fixtures/callback-retry-service-scope.cjs" "$RUN_DIR/retry-service-before.txt" \
         "$RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES" "$RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES" > "$RUN_DIR/retry-service-scope.json" || die 'Required service state failed strict scope validation'
     if [[ $RETRY_LANGUAGE_EXPLICIT == true ]]; then
-        KAZOO_CALLBACK_TEST_LANGUAGE=$RETRY_LANGUAGE callback_fixture setup-retry
-        KAZOO_CALLBACK_TEST_LANGUAGE=$RETRY_LANGUAGE callback_fixture verify
+        KAZOO_CALLBACK_TEST_LANGUAGE=$RETRY_LANGUAGE KAZOO_CALLBACK_TEST_ALTERNATE_NUMBER=$alternate callback_fixture setup-retry
+        KAZOO_CALLBACK_TEST_LANGUAGE=$RETRY_LANGUAGE KAZOO_CALLBACK_TEST_ALTERNATE_NUMBER=$alternate callback_fixture verify
     else
         callback_fixture setup-retry
         callback_fixture verify
@@ -499,10 +512,10 @@ retry_run() {
             > "$RUN_DIR/internal-request-probe.txt" || die 'Internal native endpoint preflight failed'
     fi
     # verify_fixture reads the actual queue and fails unless callback is enabled,
-    # entry_key is6, alternatives are false, and tenant/authority/routing match.
+    # entry_key is6, the explicit alternative policy and tenant/authority/routing match.
     jq -n --arg mode "$RETRY_REGISTRATION_MODE" --arg account "$RETRY_ACCOUNT_ID" \
-        --arg language "${RETRY_LANGUAGE_ARGS[0]:-}" \
-        '{registration_mode:$mode,account_id:$account,entry_key:"6",allow_alternate_number:false,fixture_verified:true}
+        --arg language "${RETRY_LANGUAGE_ARGS[0]:-}" --argjson alternate "$alternate" \
+        '{registration_mode:$mode,account_id:$account,entry_key:"6",allow_alternate_number:$alternate,fixture_verified:true}
          + (if $language=="" then {} else {language:$language} end)' \
         > "$RUN_DIR/retry-registration-policy.json"
     FIXTURE_CREATED=true
