@@ -60,9 +60,10 @@ module.exports = async function(page, origin, account) {
         assert(release);
         fault = null;
         await page.locator('.left-menu #devices').click();
-        await idle();
+        await page.locator('#devices_container:visible').waitFor({timeout: 10000});
         const content = await page.locator('.right-content').innerHTML();
         await release(); release = null; await page.waitForTimeout(750);
+        await idle();
         assert.equal(await page.locator('.right-content').innerHTML(), content);
         assert.equal(await page.locator('#myoffice_container').count(), 0);
         checks.push('late-dashboard-read-cannot-overwrite-devices-navigation');
