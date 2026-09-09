@@ -4,6 +4,13 @@ This checkpoint does **not** close all four requested groups or certify a
 production release. Keep dashboard/history work postponed. Do not regenerate
 voices or repeat passing normal callback campaigns without a relevant change.
 
+Continuation after that handover: empty-data apps bootstrap and a30-minute
+30-call hold are currently running (not yet passed). Cold CouchDB/RabbitMQ
+first installs passed. HAProxy automatic guest boot/normal verification passed
+in the original lab; legacy eCallMgr/FreeSWITCH guest failures were retained and
+the services restored/verified. See the current task-register entries and
+`distributed_install_lab.md` / `acdc_extended_soak.md` for exact live handles.
+
 Final focused handover: source fixes are deployed and the seven isolated backend
 roles passed their normal installer checks, including apps attempt6 (`8966bd7`).
 The final capacity campaign passed with30 answered and5 queued calls and a180s

@@ -116,6 +116,11 @@ restriction or authorize host/main-stack restart. A failed stop/start is retaine
 as a failure, never treated as verified merely because a container later runs.
 
 September9 HAProxy drained guest reboot passed (`haproxy-boot-1788966152367.log`).
+Kamailio guest reboot passed (`kamailio-boot-1788966720687.log`). FreeSWITCH's
+stop command lost its Podman monitor (exit125, missing exit receipt); the exact
+stopped guest was started again, and normal FreeSWITCH/eCallMgr verification
+passed (`freeswitch-verify-1788966601223.log`, `ecallmgr-verify-1788966645818.log`).
+That restoration is not relabeled a clean automated guest reboot.
 The retained eCallMgr guest then failed automatic admission: its old Podman
 creation command lacks the namespaced reserved-port setting and the reservation
 service cannot write the container's read-only sysctl mount after a reboot.

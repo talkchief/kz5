@@ -8,7 +8,7 @@ work postponed; do not generate voices at runtime or during deployment.
 ## Immediate operator follow-up — September9
 
 - **Cold first-install verification — in progress:** a separate three-role
-  empty-data lab is being prepared to close the bootstrap evidence gap. New
+  empty-data lab is running to close the bootstrap evidence gap. New
   network/state/secrets/realm; original lab and development data preserved.
   First apps attempt requires an authenticated no-Kazoo-databases inventory.
   Normal installer only, no diagnostic account creation. CouchDB/RabbitMQ first
@@ -18,7 +18,6 @@ work postponed; do not generate voices at runtime or during deployment.
   in `kz5-cold-kazoo-apps`, source `c875758`. Both admissions proved no Kazoo DBs.
   Original failure remains failed. Cold bootstrap result pending; see
   `doc/distributed_install_lab.md` for the reproducible entry point.
-- **Final focused handover:** fixes for requested points1/2/4/6 are committed in
 - **Extended30-minute call hold — running, native result pending:** bounded
   `--soak-seconds 1800` mode retains the actual SIP/RTP/concurrency/recovery/log
   gates and derives endpoint lifetime/timeouts. No queued excess or queue-policy
@@ -30,9 +29,16 @@ work postponed; do not generate voices at runtime or during deployment.
 - **Separated guest reboot matrix — continuing:** explicit all-owned/drained
   admission added. HAProxy automatic guest stop/start and normal verifier passed,
   receipt `/var/lib/kazoo5-install-lab/haproxy-boot-1788966152367.log`; earlier
-  failed Podman runs remain retained. Remaining media/apps guest checks running
-  independently of the main call soak. No physical-host reboot claim.
-- **Final focused handover:** fixes for requested points1/2/4/6 are committed in
+  failed Podman runs remain retained. Retained eCallMgr failed automatic boot
+  because its original container lacked persistent reserved-port configuration;
+  safely restored and normal verification passed. FreeSWITCH stop lost its Podman
+  monitor (exit125); exact stopped guest was restored, and FreeSWITCH/eCallMgr
+  normal verifiers passed. These restorations are not clean reboot passes.
+  Kamailio automatic guest boot/normal verification passed, receipt
+  `/var/lib/kazoo5-install-lab/kamailio-boot-1788966720687.log`. No physical-host
+  reboot claim. Current creation/reboot admission now prevents the known legacy
+  Pivot failure before stopping a working apps/eCallMgr role.
+- **Earlier focused handover checkpoint:** fixes for requested points1/2/4/6 are committed in
   kz5 and deployed on main44. Final30-answered/5-queued capacity, broker recovery,
   callback edge cases and HTTP/WSS scope/revocation checks passed. All seven
   isolated backend roles now passed normal installer checks. All9 main services
