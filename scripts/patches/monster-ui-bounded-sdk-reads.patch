@@ -1,0 +1,17 @@
+diff --git a/src/js/lib/jquery.kazoosdk.js b/src/js/lib/jquery.kazoosdk.js
+index a26316e..47b05ab 100644
+--- a/src/js/lib/jquery.kazoosdk.js
++++ b/src/js/lib/jquery.kazoosdk.js
+@@ -770,6 +770,12 @@
+ 			rurlData = /{([^}]+)}/g,
+ 			data = $.extend({}, options.data);
+ 
++		// Bound reads so an unreachable API cannot leave the global loader active.
++		// Mutations retain their existing semantics: no timeout or automatic replay.
++		if (settings.type.toLowerCase() === 'get') {
++			settings.timeout = 15000;
++		}
++
+ 		if (options.hasOwnProperty('uploadProgress')) {
+ 			settings.xhr = function() {
+ 				var xhr = new window.XMLHttpRequest();

@@ -1,0 +1,328 @@
+diff --git a/app.js b/app.js
+index 1319596..a8cf061 100644
+--- a/app.js
++++ b/app.js
+@@ -77,23 +77,34 @@ define(function(require) {
+ 		render: function(container) {
+ 			var self = this,
+ 				parent = container || $('#monster_content'),
++				accountId = self.accountId,
++				initialState = $('<div class="smartpbx-load-state" role="status"></div>'),
+ 				template = $(self.getTemplate({
+ 					name: 'app'
+ 				}));
+ 
+ 			self.appFlags.common.hasProvisioner = _.isString(monster.config.api.provisioner);
+ 
+-			self.loadGlobalData(function() {
++			self.bindEvents(template);
++			template.find('.right-content').append(initialState);
++			parent.empty().append(template);
++
++			self.loadGlobalData(function(error) {
++				if (accountId !== self.accountId || !$.contains(document.documentElement, template[0])
++					|| initialState.parent()[0] !== template.find('.right-content')[0]) {
++					return;
++				}
++				if (error) {
++					self.smartpbxRenderLoadError(template.find('.right-content'), function() {
++						self.render(parent);
++					});
++					return;
++				}
+ 				/* On first Load, load my office */
+ 				template.find('.category#myOffice').addClass('active');
+ 				monster.pub('voip.myOffice.render', { parent: template.find('.right-content') });
+ 			});
+ 
+-			self.bindEvents(template);
+-
+-			parent
+-				.empty()
+-				.append(template);
+ 		},
+ 
+ 		formatData: function(data) {
+@@ -118,29 +129,48 @@ define(function(require) {
+ 							resource: 'services.listAvailable',
+ 							data: {
+ 								accountId: self.accountId,
++								generateError: false,
+ 								filters: {
+ 									paginate: false,
+ 									'filter_merge.strategy': 'cumulative'
+ 								}
+ 							},
+-							success: function(data, status) {
+-								var formattedData = _.keyBy(data.data, 'id');
++								success: function(data, status) {
++									var formattedData = _.keyBy(data.data, 'id');
+ 
+-								callback(null, formattedData);
+-							}
++									callback(null, formattedData);
++								},
++								error: function() {
++									callback(new Error('SmartPBX service plans unavailable'));
++								}
+ 						});
+ 					} else {
+ 						callback(null, {});
+ 					}
+ 				}
+ 			}, function(err, results) {
++				if (err) {
++					callback && callback(err);
++					return;
++				}
+ 				self.appFlags.global.servicePlansRole = results.servicePlansRole;
+ 				self.appFlags.global.showUserTypes = !_.isEmpty(results.servicePlansRole);
+ 
+-				callback && callback(self.appFlags.global);
++				callback && callback(null, self.appFlags.global);
+ 			});
+ 		},
+ 
++		smartpbxRenderLoadError: function(parent, retry) {
++			var labels = this.i18n.active().loadingError;
++			parent.empty().append($('<div class="alert alert-error" role="alert"></div>')
++				.text(labels.message));
++			$('<button type="button" class="monster-button smartpbx-load-retry"></button>')
++				.text(labels.retry).appendTo(parent).one('click', function() {
++					$(this).prop('disabled', true);
++					retry();
++				});
++		},
++
+ 		bindEvents: function(parent) {
+ 			var self = this,
+ 				container = parent.find('.right-content');
+diff --git a/i18n/en-US.json b/i18n/en-US.json
+index 5574362..b362eb3 100644
+--- a/i18n/en-US.json
++++ b/i18n/en-US.json
+@@ -1,4 +1,8 @@
+ {
++	"loadingError": {
++		"message": "SmartPBX could not load the requested data. Check your connection and try again.",
++		"retry": "Retry"
++	},
+ 	"callerId": "Caller-ID",
+ 	"e911": "E911",
+ 	"failover": "Failover",
+diff --git a/submodules/myOffice/myOffice.js b/submodules/myOffice/myOffice.js
+index 88264b1..a59ebf7 100644
+--- a/submodules/myOffice/myOffice.js
++++ b/submodules/myOffice/myOffice.js
+@@ -42,9 +42,24 @@ define(function(require) {
+ 		myOfficeRender: function(args) {
+ 			var self = this,
+ 				parent = args.parent || $('.right-content'),
+-				callback = args.callback;
+-
+-			self.myOfficeLoadData(function(myOfficeData) {
++				callback = args.callback,
++				accountId = self.accountId,
++				state = $('<div class="smartpbx-load-state" role="status" aria-live="polite"></div>');
++
++			parent.empty().append(state);
++			self.myOfficeLoadData(function(error, myOfficeData) {
++				// Navigation or account switching owns a different render now.
++				if (accountId !== self.accountId || state.parent()[0] !== parent[0]
++					|| !$.contains(document.documentElement, parent[0])) {
++					return;
++				}
++				if (error) {
++					self.smartpbxRenderLoadError(state, function() {
++						self.myOfficeRender(args);
++					});
++					callback && callback();
++					return;
++				}
+ 				var dataTemplate = {
+ 						isCnamEnabled: monster.util.isNumberFeatureEnabled('cnam'),
+ 						account: myOfficeData.account,
+@@ -195,142 +210,47 @@ define(function(require) {
+ 		},
+ 
+ 		myOfficeLoadData: function(callback) {
+-			var self = this;
+-
+-			monster.parallel({
+-				account: function(parallelCallback) {
+-					self.callApi({
+-						resource: 'account.get',
+-						data: {
+-							accountId: self.accountId
+-						},
+-						success: function(dataAccount) {
+-							parallelCallback && parallelCallback(null, dataAccount.data);
+-						}
+-					});
+-				},
+-				mainVoicemailBox: _.bind(self.getOrCreateMainVMBox, self),
+-				users: function(parallelCallback) {
+-					self.callApi({
+-						resource: 'user.list',
+-						data: {
+-							accountId: self.accountId,
+-							filters: {
+-								paginate: 'false'
+-							}
+-						},
+-						success: function(dataUsers) {
+-							parallelCallback && parallelCallback(null, dataUsers.data);
+-						}
+-					});
+-				},
+-				devices: function(parallelCallback) {
+-					self.callApi({
+-						resource: 'device.list',
+-						data: {
+-							accountId: self.accountId,
+-							filters: {
+-								with_status: 'true',
+-								paginate: 'false'
+-							}
+-						},
+-						success: function(data) {
+-							parallelCallback && parallelCallback(null, data.data);
+-						}
+-					});
+-				},
+-				numbers: function(parallelCallback) {
+-					self.callApi({
+-						resource: 'numbers.list',
+-						data: {
+-							accountId: self.accountId,
+-							filters: {
+-								paginate: 'false'
+-							}
+-						},
+-						success: function(data) {
+-							parallelCallback && parallelCallback(null, data.data.numbers);
+-						}
+-					});
+-				},
+-				channels: function(parallelCallback) {
+-					self.callApi({
+-						resource: 'channel.list',
+-						data: {
+-							accountId: self.accountId,
+-							filters: {
+-								paginate: 'false'
+-							}
+-						},
+-						success: function(data) {
+-							parallelCallback && parallelCallback(null, data.data);
+-						}
+-					});
+-				},
+-				callflows: function(parallelCallback) {
+-					self.callApi({
+-						resource: 'callflow.list',
+-						data: {
+-							filters: {
+-								has_type: 'type',
+-								paginate: 'false'
+-							},
+-							accountId: self.accountId
+-						},
+-						success: function(data) {
+-							parallelCallback && parallelCallback(null, data.data);
+-						}
+-					});
+-				},
+-				classifiers: function(parallelCallback) {
+-					self.callApi({
+-						resource: 'numbers.listClassifiers',
+-						data: {
+-							accountId: self.accountId
+-						},
+-						success: function(data) {
+-							parallelCallback && parallelCallback(null, data.data);
+-						}
+-					});
+-				},
+-				directory: function(parallelCallback) {
+-					self.callApi({
+-						resource: 'directory.list',
+-						data: {
+-							accountId: self.accountId
+-						},
+-						success: function(data, status) {
+-							var mainDirectory = _.find(data.data, function(val) {
+-								return val.name === 'SmartPBX Directory';
+-							});
+-							if (mainDirectory) {
+-								self.callApi({
+-									resource: 'directory.get',
+-									data: {
+-										accountId: self.accountId,
+-										directoryId: mainDirectory.id,
+-										filters: {
+-											paginate: false
+-										}
+-									},
+-									success: function(data, status) {
+-										parallelCallback && parallelCallback(null, data.data);
+-									},
+-									error: function(data, status) {
+-										parallelCallback && parallelCallback(null, {});
+-									}
+-								});
+-							} else {
+-								parallelCallback && parallelCallback(null, {});
+-							}
+-						},
+-						error: function(data, status) {
+-							parallelCallback && parallelCallback(null, {});
+-						}
++			var self = this,
++				accountId = self.accountId,
++				tasks = {};
++
++			// Dashboard reads must settle on failure, never impersonate empty data.
++			// Main voicemail creation belongs to its setup flow, not opening a view.
++			function read(resource, data, next) {
++				var complete = _.once(next);
++				self.callApi({
++					resource: resource,
++					data: _.assign({ accountId: accountId, generateError: false }, data),
++					success: function(response) { complete(null, response.data); },
++					error: function() { complete(new Error('SmartPBX dashboard read failed')); }
++				});
++			}
++			_.each({
++				account: ['account.get', {}],
++				users: ['user.list', { filters: { paginate: false } }],
++				devices: ['device.list', { filters: { paginate: false, with_status: true } }],
++				numbers: ['numbers.list', { filters: { paginate: false } }],
++				channels: ['channel.list', { filters: { paginate: false } }],
++				callflows: ['callflow.list', { filters: { paginate: false, has_type: 'type' } }],
++				classifiers: ['numbers.listClassifiers', {}]
++			}, function(spec, name) {
++				tasks[name] = function(next) {
++					read(spec[0], spec[1], function(error, data) {
++						next(error, !error && name === 'numbers' ? data.numbers : data);
+ 					});
+-				}
+-			}, function(error, results) {
+-				callback && callback(self.myOfficeFormatData(results));
++				};
++			});
++			tasks.directory = function(next) {
++				read('directory.list', {}, function(error, directories) {
++					if (error) { next(error); return; }
++					var directory = _.find(directories, { name: 'SmartPBX Directory' });
++					if (!directory) { next(null, {}); return; }
++					read('directory.get', { directoryId: directory.id, filters: { paginate: false } }, next);
++				});
++			};
++			monster.parallel(tasks, function(error, results) {
++				if (error) { callback(error); return; }
++				callback(null, self.myOfficeFormatData(results));
+ 			});
+ 		},
+ 
+

@@ -5376,6 +5376,7 @@ monster_ui_build_fingerprint() {
         monster-ui-websocket-subscription-lifecycle.patch:patches/monster-ui-websocket-subscription-lifecycle.patch
         monster-ui-dialog-resize-lifecycle.patch:patches/monster-ui-dialog-resize-lifecycle.patch
         monster-ui-request-indicator-lifecycle.patch:patches/monster-ui-request-indicator-lifecycle.patch
+        monster-ui-bounded-sdk-reads.patch:patches/monster-ui-bounded-sdk-reads.patch
         monster-ui-optional-integrations.patch:patches/monster-ui-optional-integrations.patch
         monster-ui-storage-selector-errors.patch:patches/monster-ui-storage-selector-errors.patch
         monster-ui-isolated-minify.patch:patches/monster-ui-isolated-minify.patch
@@ -5408,6 +5409,9 @@ monster_ui_build_fingerprint() {
         inputs+=(callflows_acdc_queue_patch:patches/monster-ui-callflows-acdc-queue.patch
                  callflows_confirmation_patch:patches/monster-ui-call-forward-confirmation.patch
                  callflows_css_nesting_patch:patches/monster-ui-callflows-css-nesting.patch)
+    fi
+    if [[ ",${MONSTER_UI_APPS_LIST}," == *',voip,'* ]]; then
+        inputs+=(smartpbx_loading_recovery_patch:patches/monster-ui-smartpbx-loading-recovery.patch)
     fi
     for entry in "${inputs[@]}"; do
         digest=$(sha256sum "$SCRIPT_DIR/${entry#*:}") || die "Cannot fingerprint ${entry%%:*}"
@@ -5483,6 +5487,7 @@ sync_monster_ui_sources() {
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-websocket-subscription-lifecycle.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-dialog-resize-lifecycle.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-request-indicator-lifecycle.patch"
+    apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-bounded-sdk-reads.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-optional-integrations.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-storage-selector-errors.patch"
     apply_required_source_patch "$source_dir" "$SCRIPT_DIR/patches/monster-ui-isolated-minify.patch"
@@ -5512,6 +5517,10 @@ sync_monster_ui_sources() {
                 die "Monster UI app ${app} has no metadata/app.json"
         fi
     done
+    if [[ ",${MONSTER_UI_APPS_LIST}," == *',voip,'* ]]; then
+        apply_required_source_patch "$source_dir/src/apps/voip" \
+            "$SCRIPT_DIR/patches/monster-ui-smartpbx-loading-recovery.patch"
+    fi
     if [[ ",${MONSTER_UI_APPS_LIST}," == *',callflows,'* ]]; then
         callflows_patch="$SCRIPT_DIR/patches/monster-ui-callflows-css-nesting.patch"
         [[ -f $callflows_patch ]] || \
