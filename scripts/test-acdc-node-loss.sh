@@ -6,6 +6,17 @@ recovery_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 KAZOO_CALLS_LIBRARY=true source "$recovery_script_dir/test-kazoo-calls.sh"
 RECOVERY_NODE_STOPPED=false
 RECOVERY_WATCHDOG=''
+RECOVERY_SERVICE=kazoo-ecallmgr.service
+
+recovery_parse() {
+    [[ $# == 1 || $# == 3 ]] || return 2
+    [[ $1 == --prepare-only || $1 == --live ]] || return 2
+    RECOVERY_SERVICE=kazoo-ecallmgr.service
+    if [[ $# == 3 ]]; then
+        [[ $2 == --fault && $3 == broker ]] || return 2
+        RECOVERY_SERVICE=rabbitmq-server.service
+    fi
+}
 
 recovery_status() {
     timeout 8 sup -n kazoo_apps -t 5 acdc_agent_maintenance agent_status \
@@ -45,11 +56,11 @@ recovery_cleanup() {
     local rc=$?
     trap - EXIT INT TERM
     if [[ $RECOVERY_NODE_STOPPED == true ]]; then
-        if ! timeout 90 systemctl start kazoo-ecallmgr.service; then
-            warn 'eCallMgr restoration failed; operator recovery required'; rc=1
+        if ! timeout 90 systemctl start "$RECOVERY_SERVICE"; then
+            warn 'Selected fault service restoration failed; operator recovery required'; rc=1
         fi
     fi
-    if [[ -n $RECOVERY_WATCHDOG ]] && systemctl is-active --quiet kazoo-ecallmgr.service; then
+    if [[ -n $RECOVERY_WATCHDOG ]] && systemctl is-active --quiet "$RECOVERY_SERVICE"; then
         systemctl stop "$RECOVERY_WATCHDOG.timer" || rc=1
     fi
     cleanup || rc=1
@@ -57,7 +68,7 @@ recovery_cleanup() {
 }
 
 recovery_main() {
-    [[ $# == 1 && ( $1 == --prepare-only || $1 == --live ) ]] || die 'Use --prepare-only or --live (dev44 isolated fixture only)'
+    recovery_parse "$@" || die 'Use --prepare-only or --live [--fault broker] (dev44 isolated fixture only)'
     [[ $EUID == 0 ]] || die 'Run as root'
     umask 077
     export KAZOO_CALLBACK_TEST_ACCOUNT_ID=8310dc3170a18de37f205d0da172df65
@@ -71,11 +82,13 @@ recovery_main() {
     ensure_sipp; validate_scenarios; resolve_local_ip
     systemctl is-active --quiet kazoo-apps.service
     systemctl is-active --quiet kazoo-ecallmgr.service
+    systemctl is-active --quiet "$RECOVERY_SERVICE"
     recovery_channels | jq -e '.row_count==0' >/dev/null || die 'Requires no active channels'
     [[ $1 == --live ]] || { log 'PASS node-loss fixture preflight; no calls or service changes'; return; }
     LIVE=true
     RUN_ROOT=/var/log/kazoo-acceptance/node-loss
     create_run_dir
+    printf '%s\n' "$RECOVERY_SERVICE" > "$RUN_DIR/fault-service.txt"
     trap recovery_cleanup EXIT INT TERM
     local before_apps before_fsm status deadline since cores
     before_apps=$(systemctl show -p MainPID --value kazoo-apps.service)
@@ -96,13 +109,13 @@ recovery_main() {
     # Independent restoration survives SIGKILL or loss of the SSH/test process.
     RECOVERY_WATCHDOG=kz5-acdc-node-loss-restore-$$
     systemd-run --unit="$RECOVERY_WATCHDOG" --on-active=5m --timer-property=AccuracySec=1s \
-        /usr/bin/systemctl start kazoo-ecallmgr.service
+        /usr/bin/systemctl start "$RECOVERY_SERVICE"
     systemctl is-active --quiet "$RECOVERY_WATCHDOG.timer"
     # Mark BEFORE the stop so every error path attempts restoration.
     RECOVERY_NODE_STOPPED=true
-    timeout 90 systemctl stop kazoo-ecallmgr.service
-    [[ $(systemctl is-active kazoo-ecallmgr.service || true) == inactive ]] || die 'Node did not stop'
-    log 'eCallMgr stopped after real bridge; waiting for SIP endpoints to hang up'
+    timeout 90 systemctl stop "$RECOVERY_SERVICE"
+    [[ $(systemctl is-active "$RECOVERY_SERVICE" || true) == inactive ]] || die 'Selected fault service did not stop'
+    log "$RECOVERY_SERVICE stopped after real bridge; waiting for SIP endpoints to hang up"
     wait_checked 'node-loss caller' "$CALLER_PID"
     wait_agents_checked node-loss
     assert_stats 'node-loss caller' "$RUN_DIR/node-loss-caller-stats.csv" 1
@@ -118,8 +131,8 @@ recovery_main() {
         sleep 1
     done
     log 'PASS ended call remained conservatively busy while node evidence was unavailable'
-    timeout 90 systemctl start kazoo-ecallmgr.service
-    systemctl is-active --quiet kazoo-ecallmgr.service
+    timeout 90 systemctl start "$RECOVERY_SERVICE"
+    systemctl is-active --quiet "$RECOVERY_SERVICE"
     RECOVERY_NODE_STOPPED=false
     deadline=$((SECONDS + 90))
     while ((SECONDS < deadline)); do
@@ -160,4 +173,4 @@ recovery_main() {
     record_stage after-node-loss 1 1 "$RUN_DIR/after-node-loss-caller-stats.csv" 1 "$cores" "$since"
     log "PASS native node-loss/missed-hangup recovery and next-call SIP/RTP; evidence: $RUN_DIR"
 }
-recovery_main "$@"
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then recovery_main "$@"; fi

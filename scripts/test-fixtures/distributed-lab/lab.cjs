@@ -114,7 +114,7 @@ function configFor(role,secrets) {
         KAZOO_WEBSOCKET_UPSTREAM:'http://172.30.253.14:5555/websocket',KAZOO_START_TIMEOUT:'180',
         KAZOO_REQUIRE_MEDIA_CONNECTION:role==='ecallmgr'?'true':'false',
         KAZOO_FREESWITCH_NODES:role==='ecallmgr'?'freeswitch@kz5-stage-freeswitch':'',
-        KAZOO_MASTER_ACCOUNT_NAME:'Isolated installer acceptance',KAZOO_MASTER_ACCOUNT_REALM:'installer-stage.invalid',
+        KAZOO_MASTER_ACCOUNT_NAME:'IsolatedInstallerAcceptance',KAZOO_MASTER_ACCOUNT_REALM:'installer-stage.invalid',
         KAZOO_MASTER_ADMIN_USER:'admin',KAMAILIO_CHILDREN:'2',KAMAILIO_TCP_CHILDREN:'2',
         KAMAILIO_AMQP_CONSUMERS:'1',KAMAILIO_AMQP_WORKERS:'2'};
 }
@@ -127,15 +127,25 @@ function installRole(role) {
     assert.equal(c.State.Running,true);assert.equal(c.NetworkSettings.Networks[NETWORK].IPAddress,r.ip);
     assert.equal(podman(['exec',r.id,'git','-C','/opt/kz5','rev-parse','HEAD']),s.source);
     if(!s.secrets) {s.secrets={rabbit:crypto.randomBytes(32).toString('hex'),couch:crypto.randomBytes(32).toString('hex'),cookie:crypto.randomBytes(32).toString('hex')};saveState(s);}
+    const cfg=Object.entries(configFor(role,s.secrets)).map(([k,v])=>k+'='+Buffer.from(v).toString('base64')).join('\n')+'\n';
+    const config=DIR+'/'+role+'.env',cookie=DIR+'/'+role+'.cookie';
     if(!r.configured) {
         assert.equal(r.phase,'booted-source-ready');
-        const cfg=Object.entries(configFor(role,s.secrets)).map(([k,v])=>k+'='+Buffer.from(v).toString('base64')).join('\n')+'\n';
-        const config=DIR+'/'+role+'.env',cookie=DIR+'/'+role+'.cookie';
         fs.writeFileSync(config,cfg,{mode:0o600,flag:'wx'});fs.writeFileSync(cookie,s.secrets.cookie+'\n',{mode:0o600,flag:'wx'});
         podman(['exec',r.id,'install','-d','-m','0755','/etc/kazoo']);
         podman(['cp',config,r.id+':/etc/kazoo/deployment.env']);podman(['cp',cookie,r.id+':/etc/kazoo/.erlang.cookie']);
         podman(['exec',r.id,'chmod','0600','/etc/kazoo/deployment.env','/etc/kazoo/.erlang.cookie']);
         r.configured=true;saveState(s);
+    } else if(r.phase==='install-failed') {
+        // A failed first preflight can be retried after correcting lab inputs,
+        // but never replace independently edited container configuration.
+        const prior=fs.readFileSync(config,'utf8');
+        assert.equal(podman(['exec',r.id,'cat','/etc/kazoo/deployment.env']),prior.trim(),'Container inputs drifted; inspect before retry');
+        if(prior!==cfg) {
+            fs.writeFileSync(config,cfg,{mode:0o600});
+            podman(['cp',config,r.id+':/etc/kazoo/deployment.env']);
+            podman(['exec',r.id,'chmod','0600','/etc/kazoo/deployment.env']);
+        }
     }
     const attempt=(r.attempts||0)+1,log=DIR+'/'+role+'-install-'+attempt+'.log';
     const fd=fs.openSync(log,'wx',0o600);r.attempts=attempt;r.phase='installing';r.log=log;saveState(s);
