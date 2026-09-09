@@ -220,10 +220,17 @@ function registration(e,expiry) {
         registered.add(e.role);
     } else registered.delete(e.role);
 }
+function phoneCallLimit(role) {
+    // SIPp counts an automatically answered out-of-dialog OPTIONS as an
+    // incoming call. A receiver with -m 1 then refuses the real INVITE.
+    // Keep receivers available for bounded keepalives; exact call ownership,
+    // active-leg counts, the 150s deadline and scoped cleanup remain enforced.
+    return role==='customer'?'1':'100';
+}
 function spawnPhone(e,scenario,csv) {
     const args=['-ci','127.0.0.1',...(e.role==='customer'?[state.ACCEPTANCE_SIP_PROXY_HOST+':5060']:[]),'-sf',path.join(SCENARIOS,scenario),'-inf',csv,
         '-i',audio.IP,'-p',String(e.port),'-mi',audio.IP,'-mp',String(e.rtp),'-min_rtp_port',String(e.rtp),'-max_rtp_port',String(e.rtp+1),
-        '-m','1','-l','1','-nostdin','-aa','-timeout','150s','-timeout_error',
+        '-m',phoneCallLimit(e.role),'-l','1','-nostdin','-aa','-timeout','150s','-timeout_error',
         '-trace_shortmsg','-shortmessage_file',csv.replace(/\.csv$/,'-sip.tsv')];
     const child=cp.spawn('sipp',args,{stdio:'ignore'});children.add(child);child.once('exit',()=>children.delete(child));return child;
 }
@@ -492,5 +499,5 @@ async function main(args) {
         log((queuePartitionEnabled?'Queued applications-partition recovery passed.':'All four modes passed.')+' Private synthetic evidence: '+runDir);
     } finally {lock.stdin.end();terminate(lock);}
 }
-module.exports={baseState,endpoints,validFixture,ownedChannel,ownedUser,ringingEvidence,MASTER,OWNER};
+module.exports={baseState,endpoints,validFixture,ownedChannel,ownedUser,ringingEvidence,phoneCallLimit,MASTER,OWNER};
 if(require.main===module)main(process.argv.slice(2)).catch(e=>{console.error('[monitor-acceptance] FAIL: '+e.message);process.exitCode=1;});

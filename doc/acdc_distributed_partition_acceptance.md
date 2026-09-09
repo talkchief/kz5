@@ -1,7 +1,8 @@
 # Queued-call applications-node broker partition
 
 Status: native test exposed replica selection/synchronization defects; source
-fix and108 Erlang regression tests pass. Normal rebuild/native after-test pending.
+fix and108 Erlang regression tests pass. Both normal lab rebuilds passed;
+native after-test run4 failed at the second test phone; corrected runner pending.
 This closes no release gate until the retained native receipt passes.
 
 Native run1 failed its direct-call-based ownership observation before fault
@@ -39,18 +40,31 @@ ordinary bridge proof, ring-all losers and no broadcast-loopback dependency.
 This is not yet a native after-pass or a completed partition gate.
 
 Source `2e91984` is pushed to master and synced to main dev44 `/opt/kz5` and both
-private apps guests. Normal installer rebuilds were started and verified still
-running at this checkpoint: primary `kz5-stage-install-kazoo-apps-8` (PID225405),
-peer `kz5-stage-install-apps-peer-4` (PID86326). Both reached actual make/Erlang
-compilation. Re-poll the existing jobs; do not start duplicate installations.
+private apps guests. Both normal installer rebuilds completed and their collected
+receipts report PASS: primary `kz5-stage-install-kazoo-apps-8`, peer
+`kz5-stage-install-apps-peer-4`. Logs are `kazoo-apps-install-8.log` and
+`apps-peer-install-4.log` under `/var/lib/kazoo5-install-lab` on dev44.
 
 ```sh
 bash scripts/prepare-distributed-install-lab.sh --collect-install kazoo-apps
 bash scripts/prepare-distributed-install-lab.sh --apps-peer collect
 ```
 
-Only after both return installed success, rerun the guarded native queued-call
-partition command. The main dev44 applications service has not received this
+Native after-test `kz5-stage-queue-partition-4` failed, with evidence retained at
+`/var/log/kazoo-monitor-acceptance-g8fTGc`. Its first actual
+queued call passed the exact bridge, both answered replica correlations and
+two-way audio gates. Apps14 remained conservatively answered during a39-second
+broker partition; both original FSMs recovered ready afterward. The second SIPp
+receiver answered an OPTIONS health check, exhausted its `-m 1` call budget and
+ignored subsequent actual INVITEs. The platform did send three ringing attempts;
+the unattended synthetic agent was then logged out. This is not a delivery-loss
+diagnosis. A native loopback regression reproduces the old limit rejecting the
+INVITE and verifies the corrected bounded receiver accepting it. Customer
+origination remains limited to one call; receiver timeout, exact ownership,
+audio/bridge checks and scoped cleanup remain unchanged. Calls, registrations,
+temporary users and alternate-agent pauses were cleaned up. A new run requires
+explicit preparation of that logged-out synthetic agent, not relogin during the
+recovery measurement. The main dev44 applications service has not received this
 new replica fix yet; its root source checkout does not imply running-code deployment.
 
 Explicit command on the admitted private dev44 lab:

@@ -24,8 +24,11 @@ work postponed; do not generate voices at runtime or during deployment.
   source regressions fail before the fix;34 strategy,26 recovery and48 broader
   ACDC cases pass afterward. Source `2e91984` pushed and synced to dev44 and both
   lab apps guests. Normal rebuild units `kz5-stage-install-kazoo-apps-8` and
-  `kz5-stage-install-apps-peer-4` were verified running/compiling. Collect their
-  existing receipts, then perform the native after-test; main44 runtime still
+  `kz5-stage-install-apps-peer-4` both completed with collected PASS receipts.
+  Native run4 passed first-call audio and same-FSM partition recovery, but its
+  second SIPp receiver consumed its one-call budget on OPTIONS and ignored real
+  INVITEs. Native loopback before-fail/after-pass regression validates the runner
+  correction; a full native rerun remains required. Main44 runtime still
   needs this fix after staging acceptance. The explicit guarded
   `--distributed --queue-partition --live` now tracks both native ACDC replicas,
   real two-way queued-call audio, missed hangup while one apps node loses AMQP,

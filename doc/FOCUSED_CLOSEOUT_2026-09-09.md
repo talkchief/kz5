@@ -11,7 +11,10 @@ Latest verified results:
   were live. Root ACDC source now chooses one originate owner per agent and
   broadcasts its shared identity on bridge-first completion too. Original-source
   regressions fail;34 strategy and26 recovery tests pass after correction.
-  Normal rebuild/native after-test pending; point1 remains open. See
+  Both normal lab rebuilds passed. Native run4 passed first-call audio and
+  same-FSM recovery, but the second test phone refused INVITEs after OPTIONS
+  exhausted its one-call budget. Native loopback regression validates a runner
+  fix; full after-test remains pending. Point1 remains open. See
   `acdc_distributed_partition_acceptance.md`.
 
 - All four monitoring modes now also pass real active-call controller broker
