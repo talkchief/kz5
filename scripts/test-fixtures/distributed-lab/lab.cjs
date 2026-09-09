@@ -3,8 +3,16 @@
 // host networking, public published ports, broad deletion or automatic takeover.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const cp=require('node:child_process'),assert=require('node:assert/strict'),os=require('node:os');
-const ROOT=path.resolve(__dirname,'../../..'),DIR='/var/lib/kazoo5-install-lab';
-const OWNER='distributed-install-v1',NETWORK='kz5-install-stage',SUBNET='172.30.253.0/24';
+const ROOT=path.resolve(__dirname,'../../..');
+function settingsFor(cold=false) {
+    assert.equal(typeof cold,'boolean');
+    return cold?{cold,dir:'/var/lib/kazoo5-cold-bootstrap-lab',owner:'distributed-install-v1-cold',
+        network:'kz5-cold-stage',prefix:'172.30.252.',name:'kz5-cold-',realm:'cold-installer-stage.invalid'}:
+        {cold,dir:'/var/lib/kazoo5-install-lab',owner:'distributed-install-v1',
+            network:'kz5-install-stage',prefix:'172.30.253.',name:'kz5-stage-',realm:'installer-stage.invalid'};
+}
+const SETTINGS=settingsFor(process.argv[2]==='--cold-bootstrap');
+const {dir:DIR,owner:OWNER,network:NETWORK,prefix:PREFIX}=SETTINGS,SUBNET=PREFIX+'0/24';
 const ROLES=['couchdb','rabbitmq','haproxy','kazoo-apps','freeswitch','ecallmgr','kamailio','monster-ui','push-bridge'];
 const UNITS={couchdb:'couchdb',rabbitmq:'rabbitmq-server',haproxy:'haproxy','kazoo-apps':'kazoo-apps',
     freeswitch:'kazoo-freeswitch',ecallmgr:'kazoo-ecallmgr',kamailio:'kazoo-kamailio'};
@@ -30,13 +38,14 @@ function saveState(state) {
     const f=DIR+'/lab.json',temp=f+'.'+crypto.randomBytes(8).toString('hex');
     fs.writeFileSync(temp,JSON.stringify(state)+'\n',{mode:0o600,flag:'wx'});fs.renameSync(temp,f);
 }
-function overlapsSubnet(destination) {
+function overlapsSubnet(destination,prefix=PREFIX) {
     if(!destination || destination==='default')return false;
-    const [ip,prefix='32']=destination.split('/'),mask=Number(prefix);
+    const [ip,bits='32']=destination.split('/'),mask=Number(bits);
     assert(/^\d+\.\d+\.\d+\.\d+$/.test(ip)&&ip.split('.').every(v=>Number(v)<=255));
     assert(Number.isInteger(mask)&&mask>=0&&mask<=32);
     const num=s=>s.split('.').reduce((n,v)=>(n*256+Number(v))>>>0,0);
-    const start=num('172.30.253.0'),size=2**(32-mask),low=Math.floor(num(ip)/size)*size;
+    assert(['172.30.253.','172.30.252.'].includes(prefix));
+    const start=num(prefix+'0'),size=2**(32-mask),low=Math.floor(num(ip)/size)*size;
     return !(start+255<low||start>low+size-1);
 }
 function prepare() {
@@ -44,15 +53,29 @@ function prepare() {
     assert.equal(command('git',['-C',ROOT,'status','--porcelain','--untracked-files=no']),'','Commit tracked changes before pinning lab source');
     const source=command('git',['-C',ROOT,'rev-parse','HEAD']);
     const recipe=hash(fs.readFileSync(__dirname+'/Containerfile'));
+    let digest,image;
+    if(SETTINGS.cold) {
+        // Reuse only the verified immutable base image, never a provisioned role
+        // image, its filesystem, database or credentials from the earlier lab.
+        const f='/var/lib/kazoo5-install-lab/lab.json',st=fs.lstatSync(f);
+        assert(st.isFile()&&!st.isSymbolicLink()&&st.uid===0&&st.nlink===1&&(st.mode&0o777)===0o600);
+        const prior=JSON.parse(fs.readFileSync(f));
+        assert.equal(prior.owner,'distributed-install-v1');assert.equal(prior.phase,'prepared');
+        assert.equal(prior.recipe,recipe);image=json(['image','inspect',prior.image])[0];
+        assert.equal(image.Labels['io.talkchief.kazoo.acceptance'],'distributed-install-v1');
+        digest=prior.base_digest;
+        assert(/^docker.io\/library\/rockylinux@sha256:[a-f0-9]{64}$/.test(digest));
+    } else {
     podman(['pull','--tls-verify=true','docker.io/library/rockylinux:9'],{timeout:300000,stdio:'inherit'});
     const upstream=json(['image','inspect','docker.io/library/rockylinux:9'])[0];
-    const digest=upstream.RepoDigests.find(d=>/^docker.io\/library\/rockylinux@sha256:[a-f0-9]{64}$/.test(d));
+    digest=upstream.RepoDigests.find(d=>/^docker.io\/library\/rockylinux@sha256:[a-f0-9]{64}$/.test(d));
     assert(digest,'Verified repository digest required');
     const tag='localhost/kz5-install-lab:'+recipe.slice(0,16);
     podman(['build','--pull=never','--build-arg','BASE_IMAGE='+digest,'--tag',tag,'--file',__dirname+'/Containerfile',__dirname],
         {timeout:900000,stdio:'inherit'});
-    const image=json(['image','inspect',tag])[0];
+    image=json(['image','inspect',tag])[0];
     assert.equal(image.Labels['io.talkchief.kazoo.acceptance'],OWNER);
+    }
     const networks=json(['network','ls','--format','json']);
     assert(!networks.some(n=>n.name===NETWORK),'Refusing existing network name');
     // Fail before network creation if any current host route overlaps our /24.
@@ -62,7 +85,7 @@ function prepare() {
     // Record partial progress before creating persistent network/bundle resources.
     // Failures are retained for inspection; a repeated prepare never takes over.
     saveState(s);
-    podman(['network','create','--subnet',SUBNET,'--gateway','172.30.253.1','--label','io.talkchief.kazoo.acceptance='+OWNER,NETWORK]);
+    podman(['network','create','--subnet',SUBNET,'--gateway',PREFIX+'1','--label','io.talkchief.kazoo.acceptance='+OWNER,NETWORK]);
     const network=json(['network','inspect',NETWORK])[0];
     assert.equal(network.labels['io.talkchief.kazoo.acceptance'],OWNER);
     s.network=network.id;s.phase='network-ready';saveState(s);
@@ -78,9 +101,10 @@ function ownedNetwork(s) {
 }
 function create(role) {
     assert(ROLES.includes(role),'Unknown role');const s=readState();ownedNetwork(s);
+    if(SETTINGS.cold)assert(['couchdb','rabbitmq','kazoo-apps'].includes(role),'Cold bootstrap scope is three fresh roles');
     assert.equal(s.phase,'prepared','Partial preparation requires inspection');
     assert(!s.roles[role],'Role already recorded; inspect it instead of replacing it');
-    const name='kz5-stage-'+role,ip='172.30.253.'+(11+ROLES.indexOf(role));
+    const name=SETTINGS.name+role,ip=PREFIX+(11+ROLES.indexOf(role));
     assert(!json(['ps','--all','--format','json']).some(c=>c.Names?.includes(name)),'Existing container name refused');
     const memory=['kazoo-apps','ecallmgr','freeswitch'].includes(role)?'6g':'1g';
     const id=podman(['run','--detach','--name',name,'--hostname',name,'--network',NETWORK,'--ip',ip,
@@ -105,7 +129,8 @@ function create(role) {
 }
 function status() {
     const s=readState();if(s.network)ownedNetwork(s);
-    console.log(JSON.stringify({owner:s.owner,phase:s.phase,source:s.source,base_digest:s.base_digest,roles:s.roles}));
+    console.log(JSON.stringify({owner:s.owner,phase:s.phase,source:s.source,base_digest:s.base_digest,
+        coldBootstrapBaseline:s.coldBootstrapBaseline,roles:s.roles}));
 }
 function hardenContainer(id) {
     podman(['cp',__dirname+'/kazoo-stage-isolation.service',id+':/etc/systemd/system/kazoo-stage-isolation.service']);
@@ -113,23 +138,23 @@ function hardenContainer(id) {
     podman(['exec',id,'systemctl','enable','--now','kazoo-stage-isolation.service']);
     assert.equal(podman(['exec',id,'systemctl','is-active','kazoo-stage-isolation.service']),'active');
 }
-function configFor(role,secrets) {
+function configFor(role,secrets,settings=SETTINGS) {
     assert(Object.hasOwn(UNITS,role),'Role provisioning not implemented');
-    const ip='172.30.253.'+(11+ROLES.indexOf(role));
-    const proxy=!['couchdb','rabbitmq','haproxy'].includes(role);
-    return {KAZOO_ROOT:'/opt/kz5',KAZOO_AMQP_HOST:'172.30.253.12',KAZOO_AMQP_PORT:'5672',
+    const prefix=settings.prefix,ip=prefix+(11+ROLES.indexOf(role));
+    const proxy=!settings.cold&&!['couchdb','rabbitmq','haproxy'].includes(role);
+    return {KAZOO_ROOT:'/opt/kz5',KAZOO_AMQP_HOST:prefix+'12',KAZOO_AMQP_PORT:'5672',
         KAZOO_RABBITMQ_USER:'kazoo',KAZOO_RABBITMQ_PASSWORD:secrets.rabbit,KAZOO_RABBITMQ_VHOST:'/',
-        KAZOO_RABBITMQ_API_URL:'http://172.30.253.12:15672/',
+        KAZOO_RABBITMQ_API_URL:'http://'+prefix+'12:15672/',
         KAZOO_RABBITMQ_API_USER:secrets.monitor?'kz5_install_monitor':'',KAZOO_RABBITMQ_API_PASSWORD:secrets.monitor||'',
-        KAZOO_COUCHDB_HOST:proxy?'172.30.253.13':'172.30.253.11',KAZOO_COUCHDB_PORT:proxy?'15984':'5984',
+        KAZOO_COUCHDB_HOST:prefix+(proxy?'13':'11'),KAZOO_COUCHDB_PORT:proxy?'15984':'5984',
         KAZOO_COUCHDB_ADMIN_PORT:proxy?'15986':'5984',KAZOO_COUCHDB_USER:'admin',KAZOO_COUCHDB_PASSWORD:secrets.couch,
         KAZOO_RABBITMQ_BIND:ip,KAZOO_COUCHDB_BIND:ip,KAZOO_HAPROXY_BIND:ip,KAZOO_PUBLIC_IP:ip,
         KAZOO_ERLANG_DIST_IP:ip,KAZOO_COOKIE_FILE:'/etc/kazoo/.erlang.cookie',KAZOO_MAKE_JOBS:'2',
-        KAZOO_API_URL:'http://172.30.253.18/v2/',KAZOO_API_UPSTREAM:'http://172.30.253.14:8000/v2/',
-        KAZOO_WEBSOCKET_UPSTREAM:'http://172.30.253.14:5555/websocket',KAZOO_START_TIMEOUT:'180',
+        KAZOO_API_URL:'http://'+prefix+(settings.cold?'14:8000':'18')+'/v2/',KAZOO_API_UPSTREAM:'http://'+prefix+'14:8000/v2/',
+        KAZOO_WEBSOCKET_UPSTREAM:'http://'+prefix+'14:5555/websocket',KAZOO_START_TIMEOUT:'180',
         KAZOO_REQUIRE_MEDIA_CONNECTION:role==='ecallmgr'?'true':'false',
-        KAZOO_FREESWITCH_NODES:role==='ecallmgr'?'freeswitch@kz5-stage-freeswitch':'',
-        KAZOO_MASTER_ACCOUNT_NAME:'IsolatedInstallerAcceptance',KAZOO_MASTER_ACCOUNT_REALM:'installer-stage.invalid',
+        KAZOO_FREESWITCH_NODES:role==='ecallmgr'?'freeswitch@'+settings.name+'freeswitch':'',
+        KAZOO_MASTER_ACCOUNT_NAME:'IsolatedInstallerAcceptance',KAZOO_MASTER_ACCOUNT_REALM:settings.realm,
         KAZOO_MASTER_ADMIN_USER:'admin',KAMAILIO_CHILDREN:'2',KAMAILIO_TCP_CHILDREN:'2',
         KAMAILIO_AMQP_CONSUMERS:'1',KAMAILIO_AMQP_WORKERS:'2'};
 }
@@ -174,6 +199,16 @@ function installRole(role,detached=false) {
         }
     }
     const attempt=(r.attempts||0)+1,log=DIR+'/'+role+'-install-'+attempt+'.log';
+    if(SETTINGS.cold&&role==='kazoo-apps'&&attempt===1) {
+        for(const dependency of ['couchdb','rabbitmq'])
+            assert.equal(s.roles[dependency]?.phase,'installed-service-verified');
+        const couch=s.roles.couchdb;
+        const config='url = "http://'+couch.ip+':5984/_all_dbs"\nuser = "admin:'+s.secrets.couch+'"\n';
+        const databases=JSON.parse(podman(['exec','-i',couch.id,'curl','--fail','--silent','--show-error','--config','-'],{input:config}));
+        assertFreshDatabases(databases);
+        assert(!s.coldBootstrapBaseline,'Refusing to replace the original cold baseline');
+        s.coldBootstrapBaseline={time:new Date().toISOString(),databases,source:r.source||s.source,attempt};saveState(s);
+    }
     if(detached) {
         assert(!r.installUnit,'Collect the previous detached installer first');
         const unit='kz5-stage-install-'+role+'-'+attempt,inside='/var/lib/kazoo-stage/'+role+'-install-'+attempt+'.log';
@@ -315,11 +350,16 @@ function verifyRole(role,reboot=false) {
     r[reboot?'guestBootVerified':'reverified']={time:new Date().toISOString(),log};saveState(s);
     console.log(JSON.stringify({status:'PASS',role,check:reboot?'system-container-boot':'normal-verify',log}));
 }
-module.exports={overlapsSubnet,ROLES,configFor,separateNamespace};
+function assertFreshDatabases(databases) {
+    assert(Array.isArray(databases),'Database inventory must be an array');
+    assert(databases.every(name=>['_users','_replicator','_global_changes'].includes(name)),
+        'Cold bootstrap requires a fresh CouchDB with no Kazoo databases');
+}
+module.exports={overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases};
 if(require.main===module) {
 try {
     assert.equal(process.getuid(),0);assert(Object.values(os.networkInterfaces()).flat().some(n=>n.address==='10.1.0.44'),'Only development44 allowed');
-    const args=process.argv.slice(2);
+    const args=process.argv.slice(SETTINGS.cold?3:2);
     if(args.length===1&&args[0]==='--prepare')prepare();
     else if(args.length===2&&args[0]==='--create')create(args[1]);
     else if(args.length===2&&args[0]==='--install')installRole(args[1]);

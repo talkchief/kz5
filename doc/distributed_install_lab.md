@@ -106,3 +106,19 @@ and original failures remain recorded rather than relabeled as a cold-install pa
 
 The remaining role/boot matrix, physical-machine failures, cluster-wide drain/
 upgrade and rollback are not certified by these container results.
+
+## Fresh bootstrap campaign
+
+Use the same entry point with `--cold-bootstrap` before the operation, starting
+with `--cold-bootstrap --prepare`. This fixed scenario creates only fresh
+CouchDB, RabbitMQ and apps roles on a different network (`172.30.252.0/24`),
+with separate root-only state `/var/lib/kazoo5-cold-bootstrap-lab`, container
+names, role labels, generated credentials and realm `cold-installer-stage.invalid`.
+It reuses the verified immutable Rocky base image, not a provisioned container.
+Apps connects directly to its new remote CouchDB/RabbitMQ. Immediately before
+apps attempt1, an authenticated database inventory must contain only CouchDB
+system databases (or be empty); the inventory/time/source receipt is retained.
+No manual account creation is part of this scenario. An installer retry must
+never be relabeled a first-attempt success. Existing labs/data are not deleted.
+
+Status: scenario guards tested offline; native first-attempt result pending.

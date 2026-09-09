@@ -7,6 +7,12 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Cold first-install verification — in progress:** a separate three-role
+  empty-data lab is being prepared to close the bootstrap evidence gap. New
+  network/state/secrets/realm; original lab and development data preserved.
+  First apps attempt requires an authenticated no-Kazoo-databases inventory.
+  Normal installer only, no diagnostic account creation. Result pending; see
+  `doc/distributed_install_lab.md` for the reproducible entry point.
 - **Final focused handover:** fixes for requested points1/2/4/6 are committed in
   kz5 and deployed on main44. Final30-answered/5-queued capacity, broker recovery,
   callback edge cases and HTTP/WSS scope/revocation checks passed. All seven

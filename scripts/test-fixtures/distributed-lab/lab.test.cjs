@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs');
-const {overlapsSubnet,ROLES,configFor,separateNamespace}=require('./lab.cjs');
+const {overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases}=require('./lab.cjs');
 assert.throws(()=>separateNamespace({dev:1,ino:2},{dev:1,ino:2}));
 separateNamespace({dev:1,ino:3},{dev:1,ino:2});
 separateNamespace({dev:2,ino:2},{dev:1,ino:2});
@@ -29,4 +29,20 @@ for(const role of ROLES.slice(0,7)) {
 }
 assert.throws(()=>configFor('push-bridge',testSecrets));
 assert.throws(()=>configFor('unknown',testSecrets));
-console.log('PASS 28 distributed-lab subnet, role, configuration and isolation groups; no containers or credentials created');
+const cold=settingsFor(true),normal=settingsFor(false);
+for(const field of ['dir','owner','network','prefix','name','realm'])assert.notEqual(cold[field],normal[field]);
+assert.throws(()=>settingsFor('anything'));
+assert.equal(overlapsSubnet('172.30.253.0/24',cold.prefix),false);
+assert.equal(overlapsSubnet('172.30.252.0/24',cold.prefix),true);
+for(const role of ['couchdb','rabbitmq','kazoo-apps']) {
+    const c=configFor(role,testSecrets,cold);
+    assert.equal(c.KAZOO_COUCHDB_HOST,'172.30.252.11');
+    assert.equal(c.KAZOO_COUCHDB_PORT,'5984');
+    assert.equal(c.KAZOO_AMQP_HOST,'172.30.252.12');
+    assert.equal(c.KAZOO_MASTER_ACCOUNT_REALM,'cold-installer-stage.invalid');
+    assert(!JSON.stringify(c).includes('172.30.253.'));
+}
+assertFreshDatabases([]);assertFreshDatabases(['_users','_replicator']);
+for(const dbs of [null,{},['_users','accounts'],['system_config'],['account%2Ftest']])
+    assert.throws(()=>assertFreshDatabases(dbs));
+console.log('PASS distributed-lab subnet, role, configuration, namespace and cold-bootstrap isolation guards; no containers or credentials created');
