@@ -108,7 +108,11 @@ async function request(method,route,body,token,expected=200) {
         const retryAfter=r.headers.get('retry-after');
         const retry=/^[0-9]{1,4}$/.test(retryAfter||'')?`; retry-after ${retryAfter}s`:'';
         const category=/^[a-z_]{1,64}$/.test(j.message||'')?`; ${j.message}`:'';
-        const error=Error(`Expected HTTP${expected}, received${r.status} for ${method} ${safeRoute}${category}${retry}`);
+        const monitorReasons=['channel ownership could not be verified','monitor execution could not be submitted',
+            'live target or supervisor route could not be verified','supervisor termination could not be verified'];
+        const reason=monitorReasons.includes(j.data?.message)?`; ${j.data.message}`:'';
+        const requestId=/^[a-f0-9]{32}$/.test(j.request_id||'')?`; request ${j.request_id}`:'';
+        const error=Error(`Expected HTTP${expected}, received${r.status} for ${method} ${safeRoute}${category}${retry}${reason}${requestId}`);
         error.http_status=r.status;throw error;
     }
     if(r.status<300) assert(j.status==='success','Crossbar did not succeed');

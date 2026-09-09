@@ -53,7 +53,16 @@ AMQP loss with media preserved; it is not FreeSWITCH loss or call migration.
 
 Ownership, exact-route, watchdog ordering, restoration and invalid native-status
 guards pass in `controller-partition.test.cjs` without executing live commands.
-Native partition run pending; the healthy distributed pass above is separate.
+Native partition run1 FAILED after Listen/eavesdrop broker recovery: the first
+supervisor stop returned503. Cleanup subsequently succeeded without broad call
+termination, and the exact route was restored. Evidence
+`/var/log/kazoo-monitor-acceptance-sUXwor`, terminal log
+`/var/lib/kazoo5-install-lab/monitor-partition-1.log`. Independent analysis of its
+retained synthetic capture passes listen audio/privacy within the actual
+partition window, including keypad3; same-controller-VM broker registration
+recovered. This partial audio result does not convert the failed stop into a
+full pass. The failing503 phase must be identified before changing recovery
+semantics or declaring this gate closed. No blind API replay was added.
 
 On 2026-09-06, guarded session `94674` passed the fixture ownership/security
 checks, synthetic directional-audio checks for all four modes (including
