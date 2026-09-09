@@ -7,6 +7,16 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **VOICE-05 Hebrew returned-confirmation coverage — focused verification in progress:**
+  Retained September8 HE audio failed strict RTP coverage by160 samples; do not
+  relabel it as passed. The subsequent bridge-peer playback fix was deployed and
+  verified for EN, but HE coverage remains open. Main44 currently has the fixed
+  eCallMgr module and a verified saved Hebrew registration reference. The additive
+  waveform checker now uses explicit fixture-account selection rather than the
+  old host's hard-coded account, preserving pinned evidence and all strict audio
+  checks. Next: one isolated HE retry and additive full returned-phrase replay,
+  using existing WAVs only. No voice generation or unrelated campaign.
+
 - **P0-06 pending-retry queue restart — FIXED / DEPLOYED / scoped native PASS:**
   Two source defects discarded callback work: last-consumer auto-delete and a
   basic_nack/1 delivery handler that actually sent ACK. Commits `72591d5` and

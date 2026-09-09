@@ -29,6 +29,24 @@ function scenario(options={}){
     return fixtures.capture(records.sort((a,b)=>a.time-b.time),options.link||276,options.little!==false);
 }
 let groups=0;
+// Replay must use explicitly selected fixture scope, never adopt the account
+// from a captured receipt. Both original and main development hosts are valid.
+for(const [selected,saved,accepted] of [
+    [undefined,'7807ad61761269a1ccec833dde63f621',true],
+    ['8310dc3170a18de37f205d0da172df65','8310dc3170a18de37f205d0da172df65',true],
+    ['8310dc3170a18de37f205d0da172df65','7807ad61761269a1ccec833dde63f621',false],
+    [undefined,'8310dc3170a18de37f205d0da172df65',false],
+    ['d8520ce3f29c5b6db692289e782c92af','d8520ce3f29c5b6db692289e782c92af',false],
+    ['adecbb84fbe9e06902a76731914d1943','adecbb84fbe9e06902a76731914d1943',false],
+    ['302ae5a70c403124f764cbc54229cfcd','302ae5a70c403124f764cbc54229cfcd',false],
+    ['invalid','invalid',false]
+]){
+    const env={PATH:process.env.PATH};
+    if(selected!==undefined)env.KAZOO_CALLBACK_TEST_ACCOUNT_ID=selected;
+    const code=`require(${JSON.stringify(path.join(__dirname,'assert-callback-returned-audio.cjs'))}).accountScope({account_id:${JSON.stringify(saved)}})`;
+    const result=require('node:child_process').spawnSync(process.execPath,['-e',code],{env,timeout:5000,maxBuffer:16384});
+    assert(!result.error);assert.equal(result.status===0,accepted);
+}groups++;
 for(const transport of ['external','internal'])for(const link of [1,113,276])for(const little of [true,false]){
     const result=inspect(scenario({transport,link,little}),reference,fixtures.proof,101,transport,deps);
     assert.equal(result.returned_confirmation_verified,true);assert.equal(result.phrase_samples,reference.length);

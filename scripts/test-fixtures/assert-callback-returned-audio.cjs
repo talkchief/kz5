@@ -2,7 +2,11 @@
 // Additive offline replay. Does not modify or replace an earlier PASS receipt.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const reference=require('./callback-returned-reference.cjs');
-const ACCOUNT='7807ad61761269a1ccec833dde63f621';
+const ACCOUNT=require('./callback-fixture-account.cjs').selectedAccount();
+function accountScope(saved){
+    assert(saved&&saved.account_id===ACCOUNT,'Replay account differs from explicit acceptance scope');
+    return ACCOUNT;
+}
 function dependencies(root){assert(path.isAbsolute(root)&&fs.realpathSync(root)===root);return {media:require(path.join(root,'scripts/test-fixtures/assert-callback-confirmation-pcap.cjs')),
     phrase:require(path.join(root,'scripts/test-fixtures/assert-callback-registration-audio.cjs')).fullPhrase,
     retry:require(path.join(root,'scripts/test-fixtures/assert-callback-retry.cjs')),
@@ -80,7 +84,8 @@ function replay(run,runPin,language,referenceDirectory,referencePin,output,sourc
     const read=(name,limit=128*1024)=>{const b=reference.read(path.join(run,name),limit);pins[name]=reference.sha(b);contents[name]=b;return b;};
     const json=name=>JSON.parse(read(name));
     const saved=json('retry-packet-evidence.json');assert.equal(pins['retry-packet-evidence.json'],runPin);
-    assert(saved.scenario==='busy-agent-unanswered-first-callback-retry'&&saved.account_id===ACCOUNT
+    accountScope(saved);
+    assert(saved.scenario==='busy-agent-unanswered-first-callback-retry'
         &&saved.attempts===2&&saved.durable_retry_wait===true&&saved.retained_fixture===true&&saved.full_cleanup_acceptance===false
         &&(saved.confirmation_language===language||language==='en-us'&&saved.confirmation_language===undefined)
         &&saved.confirmation_prompt_id.startsWith(language+'/acdc-callback-success-gemini-sulafat-'));
@@ -105,7 +110,7 @@ function replay(run,runPin,language,referenceDirectory,referencePin,output,sourc
         observed_at:new Date().toISOString()};
     deps.probe.createEvidence(output,Buffer.from(JSON.stringify(result,null,2)+'\n'));return result;
 }
-module.exports={inspect,replay,dependencies,rtp,sip};
+module.exports={inspect,replay,dependencies,rtp,sip,accountScope};
 if(require.main===module){try{
     const [action,run,pin,language,refdir,refpin,output,sourceRoot]=process.argv.slice(2);
     assert(action==='replay'&&[9,10].includes(process.argv.length));
