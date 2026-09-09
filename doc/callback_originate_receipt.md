@@ -172,7 +172,45 @@ marker. SUP prints an external PID such as `<10623.1778.0>`, not a local
 `<0.N.S>` PID; the old guard rejected it. The corrected guard accepts the remote
 form but compares only the target-local ID/serial, not the ephemeral SUP VM's
 node index. Updated17 boundary cases pass25c932, including a changed client
-node index with unchanged target PID being rejected. Native rerun is pending;
+node index with unchanged target PID being rejected. Native rerun failed below;
 the original failed run is not relabeled as a pass.
 This tests losing a worker while a callback is waiting, **not** losing an
 active returned leg, registry expiry, broker failover or the historical ticket.
+
+### Confirmed failure: last-consumer auto-delete
+
+Second unit `kz5-callback-queue-restart-main44-20260909b` failed (081b66),
+run `/var/log/kazoo-acceptance/20260909T032633Z`. The queue supervisor changed
+from local PID1778.0 to32710.0 at03:27:55–03:27:57 UTC. The exact callback
+`acdc-callback-bfbd63a243e828bdc9983afc01bc10d047a437f79cca10832682f3cfce869fe4`
+was durably retry_wait/attempt1, due03:28:09, with no live channels. No second
+attempt occurred within the existing75-second deadline. Cleanup then cancelled
+that ticket; the final uncached document still has attempts1 (61ca8d). No
+unrelated or historical callback document was modified.
+
+Broker read55e55d: shared queue
+`acdc.queue.8310dc3170a18de37f205d0da172df65.67c5f3fb115bdd1dd574d6a604a7d29f`
+has auto_delete=true, durable=false. `acdc_queue_shared` omits auto_delete;
+`kz_amqp_util:new_queue/2` defaults it to true. Stopping every worker deletes
+the shared queue and its unacked delivery. The document survives in CouchDB,
+but recovery depends on redelivery. Candidate explicitly sets auto_delete=false
+without changing names, acknowledgement, prefetch, priority, TTL or length.
+`scripts/test-acdc-queue-shared-options.sh` exercises the production start_link
+declaration with mocked I/O; the old declaration fails its retention assertion
+(ae95c5). Candidate regression passes345c85; syntax/diff checks pass.
+Main44 pre-upgrade read69d84a: two shared member queues, both empty; only the
+isolated acceptance account has consumers. Exact account query2ae370 returns15
+callback tickets, all terminal. FreeSWITCH row_count=0. Deployment/native rerun
+are pending; these checks are not themselves a recovery pass.
+
+Upgrade constraint: RabbitMQ declaration properties are immutable. A legacy
+auto-delete queue cannot be redeclared with the new property while it exists.
+Drain affected queues/callbacks, prevent new ingress, and stop **all** legacy
+consumers together so the empty old queues auto-delete before starting the new
+release. Never delete a queue containing work or force-cancel tickets as an
+upgrade shortcut. In a split/multi-node deployment, restarting only one apps
+node is insufficient. Fresh installations use the new declaration directly.
+Retained empty queues after business-queue deletion require explicit operator
+cleanup; this patch does not automatically delete broker resources. Queues
+remain non-durable and messages retain their existing one-day TTL: broker
+restart/failover and prolonged outage recovery are NOT covered by this fix.

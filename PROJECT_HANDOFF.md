@@ -1,5 +1,16 @@
 # Kazoo 5 — start here / engineering handoff
 
+**Current focus: P0-06 callback retry lost on queue restart — native FAIL.**
+Main44 run20260909T032633Z replaced the queue supervisor but the callback stayed
+at attempt1. The shared AMQP queue defaults to auto-delete and disappears when
+all queue workers disconnect. Cleanup cancelled only the test ticket; no live
+calls remain. Candidate disables auto-delete in the root-tracked listener;
+the new production-declaration regression fails against the old code (ae95c5).
+Candidate regression now passes345c85; deployment/native rerun are pending.
+Do not restart with queued
+work or redeclare old immutable properties during a rolling upgrade. Details:
+`doc/callback_originate_receipt.md`. Unrelated campaigns remain paused.
+
 **September9: P0-06 receipt source769fdb2 deployed; scoped native callback PASS.**
 The exact historical cancelling attempt still returns native unknown (6f4786)
 and is untouched. New callback SUCCESS events persist a private exact-attempt

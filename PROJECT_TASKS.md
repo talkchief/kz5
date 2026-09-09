@@ -2,7 +2,17 @@
 
 ## Immediate operator follow-up — September9
 
-- **P0-06 pending-retry queue restart — guard PASS / native check pending:**
+- **P0-06 pending-retry queue restart — native FAIL / focused fix in progress:**
+  Run20260909T032633Z (unit `kz5-callback-queue-restart-main44-20260909b`)
+  replaced the isolated queue supervisor but the saved ticket never advanced
+  beyond attempt1. Cleanup cancelled only its ticket; no calls remain.
+  Broker evidence55e55d shows the shared member queue is auto-delete: stopping
+  its last consumer deletes the delivery needed to resume the saved callback.
+  A production-listener regression fails before the fix (ae95c5). Candidate
+  explicitly disables auto-delete; isolated regression now passes345c85.
+  Deployment/native rerun are pending. Existing
+  broker queue properties are immutable: upgrade must drain old queues and
+  stop all their consumers together, not blindly redeclare/delete live work.
   Explicit `--queue-restart-during-backoff` adds the existing queue-scoped
   maintenance restart after the first attempt has ended and retry_wait is
   durable. Requires the exact main isolated queue, zero channels, no recorded

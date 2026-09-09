@@ -45,6 +45,13 @@
                              ]}
         ,{'basic_qos', 1}
         ,{'queue_options', [{'exclusive', 'false'}
+                           %% This delivery is also the recovery trigger for a
+                           %% saved callback. A queue supervisor restart stops
+                           %% every consumer; auto-delete would discard even
+                           %% unacked work before replacement workers attach.
+                           %% Existing auto-delete queues require a drained,
+                           %% coordinated upgrade (see callback recovery docs).
+                           ,{'auto_delete', 'false'}
                            ,{'arguments', [{<<"x-message-ttl">>, ?MILLISECONDS_IN_DAY}
                                           ,{<<"x-max-length">>, 1000}
                                           ,{<<"x-max-priority">>, Priority}
