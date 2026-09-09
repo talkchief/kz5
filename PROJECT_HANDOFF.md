@@ -1,5 +1,15 @@
 # Kazoo 5 — start here / engineering handoff
 
+**September9: callback bridge identity source fix, deployment pending.**
+`ecallmgr_fs_channel:is_bridged/1` accepted self/empty peers. That can send a
+parked returned caller through broadcast's five read-only lead frames, matching
+the retained100ms playback handoff. Root-owned installer patch rejects those
+invalid peers; real bridges unchanged. Baseline01f34c fails4/8; candidateff3526
+passes8/8 with actual ETS/dialplan code and repeatable patch application.
+Normal eCallMgr deployment and strict callback acceptance are still required;
+do not claim the historical peer value was captured. See
+`doc/ecallmgr_bridge_identity.md`.
+
 **September9: CALLBACK-RTP-01 runtime cause narrowed; still OPEN.**
 One instrumented isolated callback reproduces the strict timestamp failure while
 registration, unanswered-first retry and second bridge work. Exact SSRC/timestamp

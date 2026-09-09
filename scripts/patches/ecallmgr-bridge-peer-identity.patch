@@ -1,0 +1,16 @@
+diff --git a/src/ecallmgr_fs_channel.erl b/src/ecallmgr_fs_channel.erl
+--- a/src/ecallmgr_fs_channel.erl
++++ b/src/ecallmgr_fs_channel.erl
+@@ -140,7 +140,11 @@ is_bridged(UUID) ->
+                 ],
+     case ets:select(?CHANNELS_TBL, MatchSpec) of
+         ['undefined'] -> lager:debug("channel is not bridged"), 'false';
+-        [Bin] when is_binary(Bin) -> lager:debug("is bridged to: ~s", [Bin]), 'true';
++        %% Originate events may expose origination_uuid as Other-Leg-Call-ID.
++        %% That can name this very channel, not a bridged partner. Neither a
++        %% self-reference nor an empty legacy value establishes a bridge.
++        [Bin] when is_binary(Bin), byte_size(Bin) > 0, Bin =/= UUID ->
++            lager:debug("is bridged to: ~s", [Bin]), 'true';
+         _E -> lager:debug("not bridged: ~p", [_E]), 'false'
+     end.
+ 

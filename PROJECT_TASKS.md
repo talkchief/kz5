@@ -2,6 +2,16 @@
 
 ## Immediate operator follow-up — September8
 
+- **CALLBACK-RTP-01 bridge identity correction — SOURCE FIXED, deployment pending:**
+  Native returned-call log selected broadcast while parked, adding five read-only
+  lead frames before playback. `is_bridged/1` incorrectly accepts a self or empty
+  peer ID. Root installer patch now requires a distinct nonempty peer. Production
+  ETS/dialplan baseline01f34c fails4/8; candidateff3526 passes8/8 and double patch
+  replay. Genuine bridges preserve broadcast. Historical ETS peer was not saved;
+  native causality/strict media acceptance still needs the same scoped case after
+  normal eCallMgr deployment. No timer/voice changes. See
+  `doc/ecallmgr_bridge_identity.md`.
+
 - **VOICE-01 reseller language fallback — DEPLOYED / scoped PASS (September9):**
   Native `kz_media_util:prompt_language/2` omitted reseller defaults entirely.
   Root-owned installer patch now uses account media.default_language, account
