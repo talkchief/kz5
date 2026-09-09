@@ -6,6 +6,14 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- All four monitoring modes now also pass real active-call controller broker
+  partition/recovery (roughly14seconds per interruption). Unit
+  `kz5-stage-monitor-partition-3` exited0, evidence
+  `/var/log/kazoo-monitor-acceptance-o7yewF`. Native Join specifically observed
+  broker-ready/query-consumer-not-ready, then passed after consumer recovery.
+  Installer source now checks that readiness phase. Audio/privacy, same VMs,
+  supervisor-only stop202, original bridge survival and scoped cleanup pass.
+  See `ecallmgr_query_readiness.md`; not media-node failover or indefinite soak.
 - All four distributed supervision modes passed real SIP/RTP audio routing,
   privacy, authorization and supervisor-only stop: native unit
   `kz5-stage-monitor-distributed-5`, exit0; evidence
@@ -83,7 +91,7 @@ Earlier failed attempts remain failed; successful later runs do not erase them.
 | 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Three consecutive30-agent broker outages passed with unchanged apps/FSM identities and90 successful subsequent calls.30-concurrent1800s hold passed:30 caller/30 agent successes,0 failures/errors/cores. | Multi-node broker partitions. The30-minute hold does not establish indefinite reliability. |
 | 2 — Callback edge cases | Worker killed during ringing: cleanup/backoff/completed retry passed. Invalid/empty input, alternate1001, unanswered first return/completed second return passed. Alternate-disabled rejection played complete built-in audio, retained caller until caller BYE, created no ticket and left the busy conversation intact. Earlier five-language/queue-restart passes retained; no Gemini generation. | Historical ambiguous ticket stays quarantined pending operator disposition; cannot infer its old outcome from current zero channels. |
 | 4 — Installer | Source fixes include host locking, role ownership, remote-broker monitoring/private CA, dispatcher/media readiness, fresh dependencies, Pivot ports, Crossbar registration, SUP packaging and DNF coordination. All seven backend roles passed normal installation. Independent empty-data CouchDB/RabbitMQ/apps first installs passed. Data roles, HAProxy, FreeSWITCH, Kamailio, fresh apps and normally installed eCallMgr peer guest boot passed. Fresh separate bridge install/boot and exact remote SBC admission with real calls pass; earlier separate UI install is documented in fresh_host_tls_acceptance_20260908.md. Main44 latest apps/eCallMgr normal deployment passed. | Cluster admission/drain and coordinated upgrade/rollback acceptance. Separate UI was not repeated in this lab. Containers are not independent-machine HA proof. |
-| 6 — API/Blackhole | Native command-auth, delivery, expiry1008, overload1013 and7 ordinary-principal HTTP/WSS scope checks passed. Two-node signing-secret revocation now passes both healthy and peer-only broker-partition modes, with HTTP401/401 and WS1008/no leak before expiry. Main44 normal deployment and four HTTPS/WSS after-checks passed. Bounded real WS/WSS slow-reader cleanup, unaffected control client and reconnect passed. Distributed Listen/eavesdrop, Whisper, Barge and Join audio/privacy and authorization passed in real SIP/RTP calls. | Prolonged network/fanout soak and failover during active supervision remain beyond these bounded healthy-call and slow-reader results. |
+| 6 — API/Blackhole | Native command-auth, delivery, expiry1008, overload1013 and7 ordinary-principal HTTP/WSS scope checks passed. Two-node signing-secret revocation now passes both healthy and peer-only broker-partition modes, with HTTP401/401 and WS1008/no leak before expiry. Main44 normal deployment and four HTTPS/WSS after-checks passed. Bounded real WS/WSS slow-reader cleanup, unaffected control client and reconnect passed. Distributed Listen/eavesdrop, Whisper, Barge and Join audio/privacy and authorization passed in real SIP/RTP calls, including active-call controller broker partition, same-VM recovery and supervisor-only stop. | Prolonged network/fanout soak remains open. Controller AMQP recovery does not claim media-node failover or indefinite reliability. |
 
 Code commits include `f99ff81`, `98f3829`, `6c8d341`, `b3a67ec`, `c3f11bb`,
 `3125096`, `f88b306`, `7d036fc`, `75f2517`, pushed to kz5 master and synced

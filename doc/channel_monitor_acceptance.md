@@ -2,6 +2,16 @@
 
 ## Latest actual distributed-call result — September 9, 2026
 
+**Additional active-call fault acceptance PASS:** all four modes also pass a
+controller16 broker-only partition, retaining controller21 and the media node.
+Native `kz5-stage-monitor-partition-3` exited0 on runner `5554a11`; private
+evidence `/var/log/kazoo-monitor-acceptance-o7yewF`. Audio/privacy is verified
+inside the actual disconnected interval, then native broker/query-consumer
+recovery with unchanged controller VMs, stop202 and original bridge survival.
+Owned calls/users/registrations were cleaned up and both exact routes restored.
+See `ecallmgr_query_readiness.md` for the readiness correction and retained
+failed attempts. This is controller AMQP recovery, not media-node failover.
+
 All four modes **PASS**: Listen/eavesdrop, Whisper, Barge and Join. Native unit
 `kz5-stage-monitor-distributed-5` exited0. Private synthetic evidence on dev44:
 `/var/log/kazoo-monitor-acceptance-6xZDTb`; terminal log
@@ -22,8 +32,9 @@ passed installation on `0957b33`. Controller-peer automatic guest boot then
 passed (`ecallmgr-peer-boot-1788981642738.log`). Failed attempts remain failed.
 See `distributed_sbc_discovery.md` and `amqp_supervised_registration.md`.
 
-This closes distributed supervision/audio-privacy acceptance, not failover
-during an ongoing supervision session or indefinite production reliability.
+This closes healthy distributed supervision/audio-privacy acceptance. The
+additional broker-partition result above covers that specific active-session
+fault, not media-node failover or indefinite production reliability.
 Developer instructions have separate Whisper, Barge, Join and Listen sections
 at `/apis/supervision.html`, also embedded in the OpenAPI operation. These use
 the real shared POST channel endpoint; no nonexistent feature-specific routes
@@ -61,8 +72,11 @@ termination, and the exact route was restored. Evidence
 retained synthetic capture passes listen audio/privacy within the actual
 partition window, including keypad3; same-controller-VM broker registration
 recovered. This partial audio result does not convert the failed stop into a
-full pass. The failing503 phase must be identified before changing recovery
-semantics or declaring this gate closed. No blind API replay was added.
+full pass. The failing503 phase was the read-only ownership query. The normal
+installer and harness now require native query-consumer readiness in addition
+to broker registration. Run2 exposed a transient status-RPC handling gap and
+required subsequent guarded cleanup. Run3 passes after bounded unready handling;
+see `ecallmgr_query_readiness.md`. No blind API replay was added.
 
 On 2026-09-06, guarded session `94674` passed the fixture ownership/security
 checks, synthetic directional-audio checks for all four modes (including

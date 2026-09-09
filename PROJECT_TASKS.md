@@ -7,7 +7,7 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Active supervision controller partition — run1 FAILED at recovery stop:**
+- **Active supervision controller partition — run3 PASS after readiness fix:**
   fixed lab controller16 AMQP route only; controller21 remains healthy, original
   three-leg SIP/RTP bridge retained. Tests real broker unavailability, audio
   privacy inside the interruption, same-VM recovery and supervisor-only stop.
@@ -18,7 +18,19 @@ work postponed; do not generate voices at runtime or during deployment.
   cleanup/network restoration succeeded. Evidence
   `/var/log/kazoo-monitor-acceptance-sUXwor`; investigating the precise503 phase,
   not weakening authorization or replaying ambiguous commands. See
-  `doc/channel_monitor_acceptance.md`; full failure case remains open.
+  `doc/channel_monitor_acceptance.md`; these failed attempts remain retained.
+  Precise503 reason was the read-only channel-ownership phase. Installer source
+  `a7c8b28` now requires native channel-query consumption as well as registered
+  broker availability; actual extracted-function regression, modular suite and
+  main44 native check pass. Run2 failed on a transient status-RPC exception and
+  retained scoped cleanup; later ordinary guarded cleanup completed after both
+  consumers recovered without restart. Runner `5554a11` waits boundedly on
+  unavailable consumer status; native unit `kz5-stage-monitor-partition-3` is
+  now exited0: all four modes pass real audio/privacy during partition, same-VM
+  recovery, supervisor-only stop202 and original bridge survival. Evidence
+  `/var/log/kazoo-monitor-acceptance-o7yewF`. Both exact routes restored, query
+  consumers true, zero lab calls, owned users/registrations removed; all9 main44
+  services remain active. See `doc/ecallmgr_query_readiness.md`.
 
 - **Distributed call supervision — actual SIP/RTP PASS; named documentation:**
   native run5 passed Listen/eavesdrop, Whisper, Barge and Join with before/after
@@ -28,7 +40,8 @@ work postponed; do not generate voices at runtime or during deployment.
   Separate named how-to sections, requests and stop instructions now derive from
   one source for OpenAPI and `/apis/supervision.html`. The normal installer ships
   and verifies this page; Join is explicitly the same audio mode as Barge.
-  Ongoing-call failover is not established by this successful healthy-cluster run.
+  The additional run3 above proves active-session controller broker recovery;
+  media-node failover and indefinite production load are not established.
   See `doc/channel_monitor_acceptance.md`.
   Named guides deployed from `ce41c0a` with the normal installer's guarded static
   docs function. All13 public assets (including manifest) matched source bytes
