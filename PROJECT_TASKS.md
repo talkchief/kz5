@@ -7,6 +7,16 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Repeated broker-failure acceptance — running:** exact existing dev44 fixture,
+  three consecutive30-agent broker outages with only one initial registration
+  and Login. All cycles must preserve the original applications PID and all30
+  agent FSM identities, conservative busy state while evidence is unavailable,
+  subsequent SIP/RTP success and full drain. Per-cycle evidence and independent
+  restoration watchdogs retained. Native unit
+  `kz5-repeated-broker-30-20260909.service`, source `c8796e2`; terminal result
+  pending.18 actual parser boundaries and shell checks passed. Not a multi-node
+  partition test. See `doc/acdc_native_node_loss.md`.
+
 - **Fresh SUP packaging P0 — FIXED / native rebuild and boot PASS:** the empty
   fixture's first account creation succeeded, but discovery failed because the
   freshly packaged SUP omitted `props.beam` (`undefined function props:get_value/2`,
@@ -68,8 +78,9 @@ work postponed; do not generate voices at runtime or during deployment.
   isolated backend roles now passed normal installer checks. All9 main services
   active, zero calls and zero apps/eCallMgr error-priority journal entries since
   14:28UTC at final readback. Do not claim all broad release gates closed:
-  multi-node partition/revocation/supervision privacy, extended soak, untouched
-  cold apps bootstrap and remaining boot/upgrade/rollback matrix remain open.
+  multi-node partition/revocation/supervision privacy, untouched final cold apps
+  bootstrap and remaining boot/upgrade/rollback matrix remain open. The bounded
+  30-minute hold subsequently passed; see the newer entry above.
   Historical ambiguous callback remains quarantined for operator disposition.
   Authoritative evidence and boundaries: `doc/FOCUSED_CLOSEOUT_2026-09-09.md`.
 - **Confirmed fresh Crossbar registration failure — FIXED / DEPLOYED / PASS:** apps5
