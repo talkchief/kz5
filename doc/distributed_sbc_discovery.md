@@ -11,8 +11,9 @@ and the running process. The worker uses native Kazoo Proxy advertisements to
 maintain exact listener ACLs and publish media reloads. This also handles an SBC
 installed after its controller. No entire private subnet is admitted.
 
-The zone's AMQP credentials are a trust boundary: only authorized Kazoo services
-may publish node advertisements. Native discovery also maintains media ACLs.
+AMQP credentials and federation are a trust boundary: only authorized Kazoo
+services may publish node advertisements. Native `with_role(Role, true)` includes
+advertised remote zones, not only the local zone. Discovery also maintains media ACLs.
 Do not share broker credentials or a writable configuration database with an
 untrusted deployment. Existing operator ACL entries are retained by discovery.
 A node-specific override disabling discovery causes verification to fail; resolve
