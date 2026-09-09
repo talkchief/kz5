@@ -24,6 +24,12 @@ work postponed; do not generate voices at runtime or during deployment.
   it verifies actual finite-pause deadline and membership after restart without
   turning the old unassisted failure into a pass. Durable fenced cold restore
   and rollback are still separate requirements.
+  Durable generation/phase journal implemented with8 passing persistence and
+  stale-replay/rollback sequencing tests; not yet integrated into the installer.
+  Repeatable fixed-lab wrapper `scripts/test-acdc-native-maintenance.cjs --live`
+  holds the shared acceptance lock and checks owned guests, completed builds,
+  empty media/callback inventory and ready replicas before the native regression.
+  Do not count either helper as the complete cluster admission fence.
 
 - **INST-06 / restart pause retention — native defect reproduced, OPEN:**
   Both normal isolated apps deployments passed on `b6d1a04`. In the explicit

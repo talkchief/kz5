@@ -58,6 +58,34 @@ This finite-pause regression uses memory-only checkpoints and is not the durable
 maintenance coordinator. Run it under the host acceptance lock with independent
 zero-media/zero-callback admission; do not execute it against an active build.
 
+The repeatable host wrapper is `node scripts/test-acdc-native-maintenance.cjs
+--live`. It only admits dev44's owned private guests, verifies both builds have
+been collected successfully, holds the existing shared acceptance lock throughout,
+requires zero private media/callback tickets and ready fixture agent replicas,
+and keeps its native output and result in private `agent-restore-*` receipts.
+It does not mutate production or the imported company, nor claim a full fence.
+Source-host invalid arguments refuse before any remote work. The inherited-file-
+descriptor lock was tested against an independent competing lock acquisition.
+
+`scripts/kazoo-maintenance-journal.cjs` supplies the coordinator's durable phase
+journal. It stores exclusive, fsynced, owner-only append-only revisions in a
+private generation directory, validates the manifest and actual-agent checkpoint
+shape, and verifies the previous-record hash chain on read. Incomplete writes,
+revision gaps, unsafe file permissions/links, stale revision requests and invalid
+phase transitions refuse; an interrupted write is not deleted or silently
+replaced. Finite absolute deadlines and infinite pauses survive serialization.
+Restoration is allowed by this journal only in `restoring` or
+`restoring_rollback`, never after verification/reopening/completion. Rollback
+requires its own verification phase. Eight isolated filesystem/state-machine
+tests pass via `node --test scripts/test-kazoo-maintenance-journal.cjs`.
+
+This journal is a library, not yet wired into the installer. Receipt hashes
+identify external evidence; they do not prove that admission is closed. The
+coordinator must hold its external lock throughout each action, validate current
+node epochs and the real fence before restoring, and retain the full drain/action
+receipts. Do not treat an accepted JSON document or a green journal test as native
+cluster upgrade/rollback acceptance.
+
 ### Native restart baseline: pause loss reproduced
 
 Both isolated apps installations on `b6d1a04` passed: primary
