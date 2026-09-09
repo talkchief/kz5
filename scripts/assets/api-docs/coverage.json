@@ -2456,7 +2456,7 @@
     },
     {
       "file": "applications/blackhole/src/blackhole_data_emitter.erl",
-      "sha256": "c1f1c300522470ebe2cbefa8cda8652c90d20ac64e2489430e2ac59155e20018"
+      "sha256": "54c8f44bde8988b897f6ab59bb3d681d8bc831b7b76b483ae154d5557f0ebae4"
     },
     {
       "file": "applications/blackhole/src/blackhole_init.erl",
@@ -2468,7 +2468,7 @@
     },
     {
       "file": "applications/blackhole/src/blackhole_socket_handler.erl",
-      "sha256": "69311f0fa12d34f04d6db756f7abb09a60600e588b05c504c6ac54931b5b7bd5"
+      "sha256": "1fb6fd91ce286b3c65e7d2ba5bf9c1ce137bf8b2f8081d231b7442fe29a7684c"
     },
     {
       "file": "applications/blackhole/src/modules/bh_authz_subscribe.erl",
@@ -2944,7 +2944,7 @@
     },
     {
       "file": "scripts/api-docs-blackhole.cjs",
-      "sha256": "1a5fb2a32699a315b1e71cae41dadcbbe4c9a94b9b24fcfb969a6a6fbb4c500e"
+      "sha256": "30fc8258b6a66266efe3441c63103b6b2a664fe5b47f733043788d787a9f5e61"
     },
     {
       "file": "scripts/api-docs-call-forward-confirmation.cjs",
@@ -2980,7 +2980,11 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "46522c456f1f10dce79ab2a25b50dfd3b79271e820d0a60eac31fdc47da5ab12"
+      "sha256": "f464831c4ebdfb169261f0dfe4884762e9f4ce706bf111f4b75c998ebe43dd12"
+    },
+    {
+      "file": "scripts/patches/blackhole-before-stream-guard.patch",
+      "sha256": "24bd4269df0b4a3abb0d3890059167eccb7f37a2eafb4cc53ded9649bf5d5293"
     },
     {
       "file": "scripts/patches/blackhole-command-auth.patch",
@@ -2988,7 +2992,11 @@
     },
     {
       "file": "scripts/patches/blackhole-kazoo5-integration.patch",
-      "sha256": "24bd4269df0b4a3abb0d3890059167eccb7f37a2eafb4cc53ded9649bf5d5293"
+      "sha256": "cb9ab103015018da975abddf697f8688c71001358ef6bf4d39f0625bce1c7c46"
+    },
+    {
+      "file": "scripts/patches/blackhole-outbound-guard.patch",
+      "sha256": "a44b07bac7fe9e3aeb48fc7df64bcb42cb0574c0d02012a02089a5d317a524e4"
     },
     {
       "file": "scripts/patches/blackhole-pre-queue-live-integration.patch",
@@ -3001,6 +3009,10 @@
     {
       "file": "scripts/patches/blackhole-redaction-to-integration.patch",
       "sha256": "357169d423fb45443491894797fd67af0628b98762971d3e9b97950b10fd9e28"
+    },
+    {
+      "file": "scripts/patches/blackhole-stream-guard-transition.patch",
+      "sha256": "88d41f462282dde73a3c01e23541ad1cfc5f2cf8adecf120a22d75f4383806ef"
     },
     {
       "file": "scripts/patches/blackhole-token-redaction.patch",

@@ -29,6 +29,8 @@ transition_fixture_inputs=(
     "$transition_fixture_patches/blackhole-binding-cleanup.patch"
     "$transition_fixture_patches/blackhole-pre-queue-live-integration.patch"
     "$transition_fixture_patches/blackhole-queue-live.patch"
+    "$transition_fixture_patches/blackhole-before-stream-guard.patch"
+    "$transition_fixture_patches/blackhole-stream-guard-transition.patch"
     "$transition_fixture_patches/ecallmgr-kazoo5-integration.patch"
     "$transition_fixture_patches/ecallmgr-kazoo5-before-atomic.patch"
     "$transition_fixture_patches/ecallmgr-atomic-answer-runtime.patch"
@@ -202,6 +204,10 @@ new_case() {
         pre-queue)
             [[ $app == blackhole ]] || fail 'pre-queue state is Blackhole only'
             git -C "$source_dir" apply "$script_dir/patches/blackhole-pre-queue-live-integration.patch"
+            ;;
+        pre-stream)
+            [[ $app == blackhole ]] || fail 'pre-stream state is Blackhole only'
+            git -C "$source_dir" apply "$script_dir/patches/blackhole-before-stream-guard.patch"
             ;;
         pre-icon)
             [[ $app == crossbar ]] || fail 'pre-icon state is Crossbar only'
@@ -596,6 +602,9 @@ for app in blackhole crossbar ecallmgr; do
 done
 
 select_app blackhole
+new_case previous-complete-pre-stream pre-stream
+expect_success previous-complete-pre-stream
+
 new_case previous-frame-integration legacy
 git -C "$source_dir" apply "$script_dir/patches/$step_patch"
 expect_success previous-frame-integration
@@ -667,6 +676,6 @@ replace_once "$script_dir/patches/blackhole-pre-queue-live-integration.patch" \
     '+    lager:debug("fixture-inconsistent-pre-queue-baseline"),'
 expect_rejection wrong-pre-queue-baseline
 
-[[ $transition_fixture_count == 110 ]] || fail "unexpected case count: $transition_fixture_count"
+[[ $transition_fixture_count == 111 ]] || fail "unexpected case count: $transition_fixture_count"
 printf 'PASS all %s bounded source-transition cases (no builds, services or network)\n' "$transition_fixture_count" \
     | tee -a "$transition_fixture_output/results.log"

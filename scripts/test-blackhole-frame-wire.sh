@@ -72,6 +72,7 @@ blackhole_frame_other_inputs=(
     scripts/erlang-tests/blackhole_frame_wire_tests.erl
     scripts/patches/blackhole-kazoo5-integration.patch
     scripts/patches/blackhole-command-auth.patch
+    scripts/patches/blackhole-outbound-guard.patch
     scripts/install-kazoo5.sh
     scripts/patches/crossbar-kazoo5-integration.patch
     applications/crossbar/priv/couchdb/schemas/system_config.blackhole.json
@@ -153,6 +154,7 @@ git -C "$blackhole_frame_repo" archive "$blackhole_frame_ref" \
 git -C "$blackhole_frame_replay" apply --check "$blackhole_frame_patch"
 git -C "$blackhole_frame_replay" apply "$blackhole_frame_patch"
 git -C "$blackhole_frame_replay" apply --reverse --check "$blackhole_frame_patch"
+git -C "$blackhole_frame_replay" apply "$blackhole_frame_root/scripts/patches/blackhole-outbound-guard.patch"
 git -C "$blackhole_frame_replay" apply --check "$blackhole_frame_root/scripts/patches/blackhole-command-auth.patch"
 git -C "$blackhole_frame_replay" apply "$blackhole_frame_root/scripts/patches/blackhole-command-auth.patch"
 git -C "$blackhole_frame_replay" apply --reverse --check "$blackhole_frame_root/scripts/patches/blackhole-command-auth.patch"

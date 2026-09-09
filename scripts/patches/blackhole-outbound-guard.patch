@@ -1,0 +1,89 @@
+diff --git a/src/blackhole_data_emitter.erl b/src/blackhole_data_emitter.erl
+index 2189fcd..5e135f7 100644
+--- a/src/blackhole_data_emitter.erl
++++ b/src/blackhole_data_emitter.erl
+@@ -14,6 +14,7 @@
+ -export([event/4]).
+ -export([reply/3, reply/4]).
+ -export([send/2]).
++-export([guard/2]).
+ 
+ -define(MAX_QUEUED_MESSAGES, kapps_config:get_integer(?CONFIG_CAT, <<"max_queued_messages">>, 50)).
+ 
+@@ -40,7 +41,7 @@ reply(SessionPid, RequestId, Data) ->
+ 
+ -spec reply(pid(), kz_term:ne_binary(), kz_term:api_ne_binary(), kz_json:object()) -> 'ok'.
+ reply(SessionPid, RequestId, Status, Data) ->
+-    lager:debug("sending reply data: ~s : ~s : ~p", [RequestId, Status, Data]),
++    lager:debug("sending websocket reply"),
+     Msg = [{<<"action">>, <<"reply">>}
+           ,{<<"request_id">>, RequestId}
+           ,{<<"status">>, Status}
+@@ -58,10 +59,66 @@ maybe_send(SessionPid, Data) ->
+ maybe_send(SessionPid, Data, {'message_queue_len', QueueLen}) ->
+     maybe_send(SessionPid, Data, QueueLen, ?MAX_QUEUED_MESSAGES);
+ maybe_send(_SessionPid, _Data, 'undefined') ->
+-    lager:info("failed to find session ~p, dropping data").
++    lager:info("websocket session is gone, dropping data").
+ 
+ maybe_send(SessionPid, _Data, QueueLen, MaxLen) when QueueLen > MaxLen ->
+     lager:error("~p queue length ~p (max: ~p), dropping event", [SessionPid, QueueLen, MaxLen]);
+ maybe_send(SessionPid, Data, _QueueLen, _MaxLen) ->
+     SessionPid ! {'send_data', Data},
+     'ok'.
++
++%% Called by the socket immediately before delivery. The existing producer
++%% drops above its mailbox threshold; the consumer must close and require a
++%% resync rather than silently continue an incomplete stream.
++-spec guard(any(), bh_context:context()) -> 'pass' | {'close', integer(), binary()}.
++guard(Info, Context) ->
++    Max = case ?MAX_QUEUED_MESSAGES of
++        N when is_integer(N), N > 0, N =< 1000 -> N;
++        _ -> 50
++    end,
++    case process_info(self(), 'message_queue_len') of
++        {'message_queue_len', Count} when Count >= Max ->
++            {'close', 1013, <<"stream overloaded; reconnect and resync">>};
++        _ -> guard_event(Info, Context)
++    end.
++
++guard_event({'send_data', Data}, Context) ->
++    case kz_json:get_ne_binary_value(<<"action">>, Data) of
++        <<"event">> ->
++            case current_identity(Context) of
++                'true' -> 'pass';
++                'false' -> {'close', 1008, <<"authentication expired or unavailable; reconnect">>}
++            end;
++        _ -> 'pass'
++    end;
++guard_event(_, _) -> 'pass'.
++
++current_identity(Context) ->
++    Token = bh_context:auth_token(Context), Account = bh_context:auth_account_id(Context),
++    case is_binary(Token) andalso Token =/= <<>> andalso is_binary(Account) andalso Account =/= <<>> of
++        'false' -> 'false';
++        'true' -> bounded_identity(Token, Account)
++    end.
++
++bounded_identity(Token, Account) ->
++    Parent = self(), Tag = make_ref(),
++    {Worker, Monitor} = spawn_monitor(fun() ->
++        %% The independent deadline also removes an in-flight validator if
++        %% the socket itself disappears before its receive timeout runs.
++        {ok, Deadline} = timer:kill_after(3000),
++        Valid = try kz_auth:validate_token(Token) of
++            {'ok', Claims} -> kz_json:get_ne_binary_value(<<"account_id">>, Claims) =:= Account;
++            _ -> 'false'
++        catch _:_ -> 'false'
++        end,
++        _ = timer:cancel(Deadline),
++        Parent ! {Tag, Valid}
++    end),
++    receive
++        {Tag, Valid} -> demonitor(Monitor, ['flush']), Valid;
++        {'DOWN', Monitor, 'process', Worker, _} -> 'false'
++    after 3000 ->
++        exit(Worker, 'kill'), demonitor(Monitor, ['flush']),
++        receive {Tag, _} -> 'ok' after 0 -> 'ok' end,
++        'false'
++    end.

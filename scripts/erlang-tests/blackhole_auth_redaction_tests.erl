@@ -24,7 +24,49 @@ redaction_test_() ->
       {"valid handshake preserves account and authorization", fun successful_handshake/0},
       {"unsupported binary frame contents are not logged", fun unsupported_frame/0},
       {"empty context token still reaches the validator", fun empty_token/0},
-      {"early termination does not log arbitrary close reasons", fun early_close_reason/0}]}.
+      {"early termination does not log arbitrary close reasons", fun early_close_reason/0},
+      {"native outbound events require fresh matching identity", fun outbound_valid/0},
+      {"rejected or changed event identity closes without payload", fun outbound_denied/0},
+      {"event validator timeout is bounded and worker removed", fun outbound_timeout/0},
+      {"mailbox overflow closes and requires resync", fun outbound_overload/0}]}.
+
+event_frame() ->
+    {send_data, kz_json:from_list([{<<"action">>, <<"event">>},
+                                 {<<"data">>, <<"PRIVATE_EVENT_FIXTURE">>}])}.
+outbound_valid() ->
+    configure({ok, claims()}), Context = cached_context(),
+    {reply, {text, Encoded}, Context} = blackhole_socket_handler:websocket_info(event_frame(), Context),
+    ?assertEqual(<<"PRIVATE_EVENT_FIXTURE">>, kz_json:get_value(<<"data">>, kz_json:decode(Encoded))),
+    ?assertEqual(1, meck:num_calls(kz_auth, validate_token, '_')).
+outbound_denied() ->
+    lists:foreach(fun(Result) ->
+        configure(Result), Context = cached_context(),
+        {reply, {close, 1008, Reason}, Context} = blackhole_socket_handler:websocket_info(event_frame(), Context),
+        ?assertEqual(nomatch, binary:match(Reason, <<"PRIVATE_EVENT_FIXTURE">>)),
+        ?assertEqual(1, meck:num_calls(kz_auth, validate_token, '_'))
+    end, [{error, token_expired}, {ok, kz_json:from_list([{<<"account_id">>, <<"other">>}])},
+          {ok, kz_json:new()}]),
+    Context = context(),
+    ?assertMatch({reply,{close,1008,_},Context}, blackhole_socket_handler:websocket_info(event_frame(),Context)).
+outbound_timeout() ->
+    configure({ok, claims()}), Parent = self(), Context = cached_context(),
+    meck:expect(kz_auth, validate_token, fun(_) -> Parent ! {validator, self()}, receive never -> ok end end),
+    Start = erlang:monotonic_time(millisecond),
+    ?assertMatch({reply,{close,1008,_},Context}, blackhole_socket_handler:websocket_info(event_frame(),Context)),
+    Elapsed = erlang:monotonic_time(millisecond) - Start,
+    ?assert(Elapsed >= 2900 andalso Elapsed < 4500),
+    receive {validator, Worker} ->
+        Ref = monitor(process, Worker),
+        receive {'DOWN',Ref,process,Worker,_} -> ok after 500 -> ?assert(false) end
+    after 0 -> ?assert(false)
+    end.
+outbound_overload() ->
+    configure({ok, claims()}), Context = cached_context(), Tag = make_ref(),
+    lists:foreach(fun(_) -> self() ! Tag end, lists:seq(1,50)),
+    try
+        ?assertMatch({reply,{close,1013,_},Context}, blackhole_socket_handler:websocket_info(event_frame(),Context)),
+        ?assertEqual(0, meck:num_calls(kz_auth, validate_token, '_'))
+    after lists:foreach(fun(_) -> receive Tag -> ok after 0 -> ok end end, lists:seq(1,50)) end.
 
 mocks() -> [lager, kz_auth, kz_nodes, kz_buckets, kapps_config, cowboy_req,
             blackhole_tracking, blackhole_bindings].

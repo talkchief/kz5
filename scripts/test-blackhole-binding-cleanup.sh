@@ -33,6 +33,7 @@ cleanup_inputs=(scripts/test-blackhole-binding-cleanup.sh
     scripts/erlang-tests/blackhole_binding_cleanup_tests.erl
     scripts/patches/blackhole-kazoo5-integration.patch scripts/patches/blackhole-binding-cleanup.patch
     scripts/patches/blackhole-queue-live.patch
+    scripts/patches/blackhole-outbound-guard.patch scripts/patches/blackhole-stream-guard-transition.patch
     scripts/install-kazoo5.sh applications/blackhole/src/blackhole.hrl
     core/kazoo_amqp/src/api/kapi_websockets.hrl
     core/kazoo_stdlib/include/kz_types.hrl core/kazoo_stdlib/include/kz_records.hrl
@@ -65,12 +66,15 @@ git -C "$cleanup_repo" archive "$cleanup_ref" "${cleanup_archive_sources[@]}" sr
 git -C "$cleanup_replay" apply --check "$cleanup_patch"
 git -C "$cleanup_replay" apply "$cleanup_patch"
 git -C "$cleanup_replay" apply --reverse --check "$cleanup_patch"
+git -C "$cleanup_replay" apply "$cleanup_root/scripts/patches/blackhole-outbound-guard.patch"
 # The older cleanup hunk shares context with the new private session field.
 # Verify its retained predecessor after reversing only the queue-live delta,
 # then restore the complete candidate before equality/pins/compilation.
+git -C "$cleanup_replay" apply --reverse "$cleanup_root/scripts/patches/blackhole-stream-guard-transition.patch"
 git -C "$cleanup_replay" apply --reverse "$cleanup_root/scripts/patches/blackhole-queue-live.patch"
 git -C "$cleanup_replay" apply --reverse --check "$cleanup_root/scripts/patches/blackhole-binding-cleanup.patch"
 git -C "$cleanup_replay" apply "$cleanup_root/scripts/patches/blackhole-queue-live.patch"
+git -C "$cleanup_replay" apply "$cleanup_root/scripts/patches/blackhole-stream-guard-transition.patch"
 cleanup_compile_sources=()
 cleanup_replay_inputs=()
 for cleanup_source in "${cleanup_replay_sources[@]}" src/blackhole.hrl; do

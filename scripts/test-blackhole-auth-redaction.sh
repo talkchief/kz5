@@ -2,7 +2,7 @@
 # Offline public-entry-point redaction checks; no JWT/live socket proof.
 set -Eeuo pipefail
 umask 077
-[[ $# == 0 || ( $# == 1 && $1 == --baseline-command-auth ) ]] || { printf 'Usage: %s [--baseline-command-auth]\n' "$0" >&2; exit 2; }
+[[ $# == 0 || ( $# == 1 && ( $1 == --baseline-command-auth || $1 == --baseline-outbound ) ) ]] || { printf 'Usage: %s [--baseline-command-auth|--baseline-outbound]\n' "$0" >&2; exit 2; }
 blackhole_command_baseline=${1:-}
 blackhole_test_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 blackhole_test_output=$(mktemp -d /tmp/kazoo-blackhole-redaction.XXXXXX)
@@ -62,6 +62,8 @@ blackhole_test_other_inputs=(
     scripts/erlang-tests/blackhole_auth_redaction_tests.erl
     scripts/patches/blackhole-kazoo5-integration.patch
     scripts/patches/blackhole-command-auth.patch
+    scripts/patches/blackhole-outbound-guard.patch
+    scripts/patches/blackhole-stream-guard-transition.patch
     scripts/install-kazoo5.sh
     applications/blackhole/src/blackhole.hrl
     core/kazoo_stdlib/include/kz_types.hrl
@@ -138,6 +140,7 @@ git -C "$blackhole_test_repo" archive "$blackhole_test_ref" \
 git -C "$blackhole_test_replay" apply --check "$blackhole_test_patch"
 git -C "$blackhole_test_replay" apply "$blackhole_test_patch"
 git -C "$blackhole_test_replay" apply --reverse --check "$blackhole_test_patch"
+git -C "$blackhole_test_replay" apply "$blackhole_test_root/scripts/patches/blackhole-outbound-guard.patch"
 git -C "$blackhole_test_replay" apply --check "$blackhole_test_root/scripts/patches/blackhole-command-auth.patch"
 git -C "$blackhole_test_replay" apply "$blackhole_test_root/scripts/patches/blackhole-command-auth.patch"
 git -C "$blackhole_test_replay" apply --reverse --check "$blackhole_test_root/scripts/patches/blackhole-command-auth.patch"
@@ -154,6 +157,11 @@ if [[ $blackhole_command_baseline == --baseline-command-auth ]]; then
     git -C "$blackhole_test_repo" show "$blackhole_test_ref:src/blackhole_socket_callback.erl" | \
         cmp - "$blackhole_test_replay/src/blackhole_socket_callback.erl"
     printf 'BASELINE command authentication callback restored in private replay only\n'
+fi
+if [[ $blackhole_command_baseline == --baseline-outbound ]]; then
+    git -C "$blackhole_test_replay" apply --reverse "$blackhole_test_root/scripts/patches/blackhole-stream-guard-transition.patch"
+    git -C "$blackhole_test_replay" apply --reverse "$blackhole_test_root/scripts/patches/blackhole-outbound-guard.patch"
+    printf 'BASELINE outbound handler/emitter restored only in private replay\n'
 fi
 sha256sum "${blackhole_test_replayed_sources[@]}" "$blackhole_test_replay/src/blackhole.hrl" \
     >"$blackhole_test_output/replay-pins.sha256"

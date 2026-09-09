@@ -41,6 +41,9 @@ function applyBlackhole({spec, root}) {
     const files = ['scripts/api-docs-blackhole.cjs', 'scripts/install-kazoo5.sh',
         'scripts/patches/blackhole-kazoo5-integration.patch',
         'scripts/patches/blackhole-command-auth.patch',
+        'scripts/patches/blackhole-outbound-guard.patch',
+        'scripts/patches/blackhole-before-stream-guard.patch',
+        'scripts/patches/blackhole-stream-guard-transition.patch',
         'scripts/patches/blackhole-token-redaction.patch',
         'scripts/patches/blackhole-redaction-to-integration.patch',
         'scripts/patches/blackhole-queue-live.patch',
@@ -103,8 +106,13 @@ function applyBlackhole({spec, root}) {
         command_authentication: {
             validation: 'Each native command revalidates the connection token with the Kazoo token validator and requires a positive authentication-handler context. Cached account identity or HTTP101 alone cannot authorize a command. Rejected, malformed or unavailable token validation fails closed.',
             token_change: 'Reconnect when changing tokens or login identity. A different nonempty auth_token on an established native connection is rejected; existing subscriptions are not transferred to another identity.',
-            lifetime_limit: 'This command guard does not establish periodic revalidation or termination of already subscribed generic event streams. Token/identity caches, revocation propagation, outbound event lifetime and backpressure require separate acceptance. Queue-live has its own fresh per-delivery authorization described below.',
+            lifetime_limit: 'For already subscribed generic event streams, each outbound native event now requires fresh matching token/account validation before emission. Rejected or unavailable validation closes with1008; the per-event validator has a3-second deadline. There is no idle-socket expiry timer or instant global cache-revocation guarantee. Queue-live retains its separate resource-scope authorization.',
             acceptance: 'Source-tested command guard; deployment and real-token acceptance are recorded separately.'
+        },
+        outbound_delivery: {
+            authentication: 'Native event delivery validates the current connection token and requires the same authenticated account. Timeout, failure, missing identity or changed account emits no event payload and closes with1008. One bounded validator per socket delivery; no parallel validator fanout within a socket.',
+            overload: 'A socket mailbox at its configured max_queued_messages threshold closes with1013 and requires reconnect plus an authorized snapshot resync. Default50; invalid/out-of-range consumer limits fall back to50. This is mailbox-pressure protection, not durable event replay or a guarantee about operating-system send buffers.',
+            acceptance: 'Source regression and deployment-specific WSS acceptance are recorded separately. No instant cross-node revocation or slow-network soak claim.'
         },
         client_messages: {subscribe: ref('BlackholeSubscribe'), unsubscribe: ref('BlackholeUnsubscribe'), ping: ref('BlackholePing')},
         server_messages: {reply: ref('BlackholeReply'), event: ref('BlackholeEvent')},

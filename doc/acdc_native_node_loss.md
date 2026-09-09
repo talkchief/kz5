@@ -59,7 +59,14 @@ native token-scoped Kamailio search API on cache miss/missing proxy. It retains
 warm-cache behavior, uses a bounded2s validated response, and rejects incomplete
 AOR replies. Public production-entry tests reproduce the cache-miss failure and
 cover warm cache, missing proxy, timeout, malformed response and WebRTC flags.
-Native after-deployment acceptance remains pending.
+Native after-deployment acceptance **passed**: normal installer unit
+`kz5-location-recovery-deploy-20260909.service` exited0, compiled/deployed the
+required source overlay and passed eCallMgr validation. The unchanged native
+scenario then passed in `kz5-node-loss-location-after-20260909.service`, exit0
+(1bd8da). Evidence directory20260909T113605Z under the node-loss root includes
+same-FSM identity, dispatcher admission and the second call's SIP/RTP proof.
+The agent was not logged in again and its phone was not re-registered. No calls
+remained afterward. Source `c3f11bb` is on master and main44.
 
 This one-agent
 scenario does not establish broker partitions, all ring strategies,30-call

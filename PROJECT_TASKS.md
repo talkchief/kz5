@@ -7,6 +7,26 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Point2 active callback worker loss — native PASS:** fixture-only worker
+  terminated while its first returned call was ringing; real confirmation audio,
+  settled cleanup, durable15s backoff and distinct second-attempt reciprocal
+  SIP/RTP bridge passed. Unit `kz5-callback-worker-loss-native-20260909.service`
+  exited0 (3d4e5c); evidence `/var/log/kazoo-acceptance/20260909T114942Z`.
+  Earlier two guard failures remain failed: the systemd environment lacked USER;
+  the guard now verifies kernel UIDs (`f88b306`). Their tickets settled cancelled,
+  not force-cleared. Offline target guard,95 retry groups and14 language/scope
+  groups pass. Invalid/alternate-number paths and old ambiguous ticket remain
+  separate; ordinary successful five-language campaigns were not repeated.
+
+- **Point6 outbound stream guard — SOURCE FIXED / native acceptance pending:**
+  generic native events now validate matching token/account before delivery,
+  with a3s worker deadline and1008 denial. Mailbox pressure closes1013 requiring
+  resync instead of silently continuing a lossy stream. Four cases fail on the
+  old handler/emitter; all18 public-entry tests,22 queue-live tests and13 frame/
+  wire tests pass after the fix. Source transition exercised111 cases, including
+  old-to-new and idempotence; runner's stale110-case total was corrected. Required
+  installer patches and OpenAPI are updated. See `doc/blackhole_outbound_delivery.md`.
+
 - **Points1/4 native failure acceptance — ACTIVE:** added the real dev44
   eCallMgr-loss/missed-hangup/next-call test with same-FSM proof and independent
   service restoration. Initial run13eaa2 failed its next call: Kamailio returned
@@ -20,7 +40,11 @@ work postponed; do not generate voices at runtime or during deployment.
   eCallMgr's empty registration cache as authoritative absence. Added a bounded
   native Kamailio lookup fallback with malformed-response rejection, required
   installer overlay and six isolated public-entry regressions. Deployment and
-  native after-test are pending; do not call point1 complete yet.
+  native after-test now passed: normal eCallMgr installer exited0; unit
+  `kz5-node-loss-location-after-20260909.service` exited0 (1bd8da) with same FSM,
+  no re-login/re-registration, subsequent call SIP/RTP and final ready state.
+  Evidence `/var/log/kazoo-acceptance/node-loss/20260909T113605Z`. Code `c3f11bb`
+  pushed/deployed on main44. Broader broker/fault-load scenarios remain separate.
   Details: `doc/acdc_native_node_loss.md`. Do not repeat unrelated passed tests.
 
 - **INST-07 same-host concurrent installer gap — SOURCE FIXED / focused PASS:**

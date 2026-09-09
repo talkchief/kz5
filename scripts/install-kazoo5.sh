@@ -1742,6 +1742,8 @@ ensure_kazoo_sources() {
     apply_kazoo_integration_patch blackhole
     apply_required_source_patch "$KAZOO_ROOT/applications/blackhole" \
         "$SCRIPT_DIR/patches/blackhole-command-auth.patch"
+    apply_required_source_patch "$KAZOO_ROOT/applications/blackhole" \
+        "$SCRIPT_DIR/patches/blackhole-outbound-guard.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"
     apply_kazoo_integration_patch ecallmgr
@@ -1770,6 +1772,7 @@ apply_kazoo_integration_patch() (
     local transition_source transition_relative transition_path
     local transition_state transition_stage transition_intercept='' transition_cleanup=''
     local transition_pre_queue='' transition_queue_live=''
+    local transition_stream_old='' transition_stream_delta=''
     local transition_pre_catalog='' transition_catalog=''
     local transition_format='' transition_unformat=false
     local transition_apply=()
@@ -1787,6 +1790,8 @@ apply_kazoo_integration_patch() (
             transition_cleanup=blackhole-binding-cleanup.patch
             transition_pre_queue=blackhole-pre-queue-live-integration.patch
             transition_queue_live=blackhole-queue-live.patch
+            transition_stream_old=blackhole-before-stream-guard.patch
+            transition_stream_delta=blackhole-stream-guard-transition.patch
             transition_created_files=(src/modules/bh_queue_live.erl)
             ;;
         crossbar)
@@ -1849,6 +1854,8 @@ apply_kazoo_integration_patch() (
     [[ ! $transition_cleanup ]] || transition_cleanup="$SCRIPT_DIR/patches/$transition_cleanup"
     [[ ! $transition_pre_queue ]] || transition_pre_queue="$SCRIPT_DIR/patches/$transition_pre_queue"
     [[ ! $transition_queue_live ]] || transition_queue_live="$SCRIPT_DIR/patches/$transition_queue_live"
+    [[ ! $transition_stream_old ]] || transition_stream_old="$SCRIPT_DIR/patches/$transition_stream_old"
+    [[ ! $transition_stream_delta ]] || transition_stream_delta="$SCRIPT_DIR/patches/$transition_stream_delta"
     [[ ! $transition_pre_catalog ]] || transition_pre_catalog="$SCRIPT_DIR/patches/$transition_pre_catalog"
     [[ ! $transition_catalog ]] || transition_catalog="$SCRIPT_DIR/patches/$transition_catalog"
     [[ ! $transition_format ]] || transition_format="$SCRIPT_DIR/patches/$transition_format"
@@ -1904,6 +1911,8 @@ PY
         [[ ! $transition_cleanup ]] || transition_safe_file "$transition_cleanup"
         [[ ! $transition_pre_queue ]] || transition_safe_file "$transition_pre_queue"
         [[ ! $transition_queue_live ]] || transition_safe_file "$transition_queue_live"
+        [[ ! $transition_stream_old ]] || transition_safe_file "$transition_stream_old"
+        [[ ! $transition_stream_delta ]] || transition_safe_file "$transition_stream_delta"
         [[ ! $transition_pre_catalog ]] || transition_safe_file "$transition_pre_catalog"
         [[ ! $transition_catalog ]] || transition_safe_file "$transition_catalog"
         [[ ! $transition_format ]] || transition_safe_file "$transition_format"
@@ -1956,6 +1965,8 @@ PY
         transition_check_inventory "$transition_pre_queue" "${transition_files[@]:0:5}"
         transition_check_inventory "$transition_queue_live" src/bh_context.erl src/blackhole_socket_handler.erl \
             src/blackhole.hrl src/modules/bh_queue_live.erl
+        transition_check_inventory "$transition_stream_old" "${transition_files[@]}"
+        transition_check_inventory "$transition_stream_delta" src/blackhole_socket_handler.erl
     fi
     if [[ $transition_intercept ]]; then
         transition_check_inventory "$transition_intercept" kazoo_intercept.h kazoo_dptools.c mod_kazoo.h mod_kazoo.c
@@ -2064,6 +2075,7 @@ PY
         die 'Cannot retain integration patch hashes'
     if [[ $transition_cleanup ]]; then
         sha256sum "$transition_cleanup" "$transition_pre_queue" "$transition_queue_live" \
+            "$transition_stream_old" "$transition_stream_delta" \
             >>"$transition_stage/patch-pins.sha256" ||
             die 'Cannot retain Blackhole transition patch hashes'
     fi
@@ -2076,6 +2088,7 @@ PY
             die 'Cannot retain catalog transition patch hashes'
     fi
     if [[ $transition_app == blackhole && $transition_state == previous ]]; then
+      if ! git -C "$transition_stage/desired" apply --reverse --check "$transition_stream_old" 2>/dev/null; then
         if ! git -C "$transition_stage/desired" apply --reverse --check "$transition_pre_queue" 2>/dev/null; then
             for transition_path in "$transition_delta" "$transition_cleanup"; do
                 if git -C "$transition_stage/desired" apply --check "$transition_path" 2>/dev/null; then
@@ -2094,6 +2107,14 @@ PY
         git -C "$transition_stage/desired" apply "$transition_queue_live" ||
             die 'Cannot apply queue-live transition to private source copies'
         transition_apply+=("$transition_queue_live")
+      fi
+        git -C "$transition_stage/desired" apply --reverse --check "$transition_stream_old" ||
+            die 'Previous Blackhole source is not the complete pre-stream integration'
+        git -C "$transition_stage/desired" apply --check "$transition_stream_delta" ||
+            die 'Stream guard transition cannot apply to the previous Blackhole integration'
+        git -C "$transition_stage/desired" apply "$transition_stream_delta" ||
+            die 'Cannot apply stream guard transition to private source copies'
+        transition_apply+=("$transition_stream_delta")
     elif [[ $transition_app == crossbar && $transition_state == previous ]]; then
         if ! transition_exact_json_bytes "$transition_stage/desired" raw; then
             transition_exact_json_bytes "$transition_stage/desired" formatted ||

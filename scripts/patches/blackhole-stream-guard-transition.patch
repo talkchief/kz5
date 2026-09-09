@@ -1,0 +1,27 @@
+diff --git a/src/blackhole_socket_handler.erl b/src/blackhole_socket_handler.erl
+--- a/src/blackhole_socket_handler.erl
++++ b/src/blackhole_socket_handler.erl
+@@ -218,6 +218,12 @@
+           {'ok', bh_context:context()} |
+           {'reply', {'text', binary()} | 'pong', bh_context:context()}.
+ websocket_info(Info, Context) ->
++    case blackhole_data_emitter:guard(Info, Context) of
++        pass -> dispatch_info(Info, Context);
++        {close, Code, Reason} -> {'reply', {'close', Code, Reason}, Context}
++    end.
++
++dispatch_info(Info, Context) ->
+     case bh_queue_live:info(Info,Context) of
+         pass -> native_info(Info,Context);
+         Result -> Result
+@@ -232,8 +238,8 @@
+ native_info('keep_alive', Context) ->
+     erlang:send_after(1 * ?MILLISECONDS_IN_MINUTE, self(), 'keep_alive'),
+     {'reply', 'ping', Context};
+-native_info(Info, Context) ->
+-    lager:info("unhandled websocket info: ~p", [Info]),
++native_info(_Info, Context) ->
++    lager:info("unhandled websocket notification"),
+     {'ok', Context}.
+ 
+ -spec session_id(cowboy_req:req()) -> binary().

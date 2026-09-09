@@ -188,7 +188,7 @@ index 204e2d6..0ca9069 100644
      end.
  
 diff --git a/src/blackhole_socket_handler.erl b/src/blackhole_socket_handler.erl
-index 85a4bd8..c96971d 100644
+index 85a4bd8..821ecff 100644
 --- a/src/blackhole_socket_handler.erl
 +++ b/src/blackhole_socket_handler.erl
 @@ -21,6 +21,8 @@
@@ -251,7 +251,7 @@ index 85a4bd8..c96971d 100644
  
  -spec websocket_init(blackhole_init()) -> {'ok', bh_context:context()}.
  websocket_init(Context) ->
-@@ -148,38 +160,86 @@ websocket_init(Context) ->
+@@ -148,37 +160,79 @@ websocket_init(Context) ->
      {'ok', _NewContext} = blackhole_socket_callback:open(Ctx).
  
  -spec websocket_handle(any(), bh_context:context()) ->
@@ -325,12 +325,6 @@ index 85a4bd8..c96971d 100644
            {'reply', {'text', binary()} | 'pong', bh_context:context()}.
 -websocket_info({'$gen_cast', _}, Context) ->
 +websocket_info(Info, Context) ->
-+    case blackhole_data_emitter:guard(Info, Context) of
-+        pass -> dispatch_info(Info, Context);
-+        {close, Code, Reason} -> {'reply', {'close', Code, Reason}, Context}
-+    end.
-+
-+dispatch_info(Info, Context) ->
 +    case bh_queue_live:info(Info,Context) of
 +        pass -> native_info(Info,Context);
 +        Result -> Result
@@ -349,12 +343,10 @@ index 85a4bd8..c96971d 100644
      erlang:send_after(1 * ?MILLISECONDS_IN_MINUTE, self(), 'keep_alive'),
      {'reply', 'ping', Context};
 -websocket_info(Info, Context) ->
--    lager:info("unhandled websocket info: ~p", [Info]),
-+native_info(_Info, Context) ->
-+    lager:info("unhandled websocket notification"),
++native_info(Info, Context) ->
+     lager:info("unhandled websocket info: ~p", [Info]),
      {'ok', Context}.
  
- -spec session_id(cowboy_req:req()) -> binary().
 diff --git a/src/modules/bh_token_auth.erl b/src/modules/bh_token_auth.erl
 index 26b80d0..72f6a61 100644
 --- a/src/modules/bh_token_auth.erl
