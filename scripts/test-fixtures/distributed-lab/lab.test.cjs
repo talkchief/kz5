@@ -8,7 +8,9 @@ assert.equal(new Set(ROLES).size,9);
 const src=fs.readFileSync(__dirname+'/lab.cjs','utf8');
 assert(!src.includes("'--privileged'")&&!src.includes("'--network=host'")&&!src.includes("'--publish'"));
 assert(src.indexOf('saveState(s);\n    podman')<src.indexOf("['network','create'"));
-assert(src.includes("'blackhole','10.1.0.0/16'"));
+const isolation=fs.readFileSync(__dirname+'/kazoo-stage-isolation.service','utf8');
+assert(isolation.includes('route replace blackhole 10.1.0.0/16'));
+assert(isolation.includes('Before=network-pre.target network.target network-online.target'));
 const testSecrets={rabbit:'test-rabbit',couch:'test-couch'};
 for(const role of ROLES.slice(0,7)) {
     const c=configFor(role,testSecrets);

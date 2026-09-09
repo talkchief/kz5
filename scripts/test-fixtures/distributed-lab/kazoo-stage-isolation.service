@@ -1,0 +1,15 @@
+[Unit]
+Description=Block existing Talkchief networks from isolated installer acceptance
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target network.target network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip route replace blackhole 10.1.0.0/16
+ExecStart=/usr/sbin/ip route replace blackhole 46.225.31.248/32
+ExecStart=/usr/sbin/ip route replace blackhole 91.99.188.145/32
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

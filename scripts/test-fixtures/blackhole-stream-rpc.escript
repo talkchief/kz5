@@ -5,10 +5,11 @@
 -compile(warnings_as_errors).
 -include_lib("kernel/include/file.hrl").
 -define(ACCOUNT, <<"8310dc3170a18de37f205d0da172df65">>).
+-define(USER, <<"10cbff5eb98c9c7e4231b7156b15a3fd">>).
 main(Args) ->
     try
         put(phase, local_scope),
-        true = Args =:= ["issue"] orelse (length(Args) =:= 3 andalso
+        true = Args =:= ["issue"] orelse Args =:= ["issue-user"] orelse (length(Args) =:= 3 andalso
             lists:member(hd(Args), ["emit", "overflow"])),
         {ok, Status} = file:read_file("/proc/self/status"),
         match = re:run(Status, <<"^Uid:[ \\t]+0[ \\t]+0[ \\t]+0[ \\t]+0$">>, [multiline,{capture,none}]),
@@ -27,6 +28,18 @@ main(Args) ->
     catch _:_ -> io:format("ERROR scoped stream probe refused: ~p~n",[get(phase)]), halt(1)
     end.
 rpc(Node,M,F,A) -> rpc:call(Node,M,F,A,3000).
+execute(Node,["issue-user"]) ->
+    put(phase, fixture_user),
+    Db = rpc(Node,kzs_util,format_account_db,[?ACCOUNT]),
+    {ok,Doc} = rpc(Node,kz_datamgr,open_doc,[Db,?USER]),
+    <<"user">> = rpc(Node,kz_json,get_ne_binary_value,[<<"pvt_type">>,Doc]),
+    <<"user">> = rpc(Node,kz_json,get_ne_binary_value,[<<"priv_level">>,Doc,<<"user">>]),
+    true = rpc(Node,kz_json,is_true,[<<"enabled">>,Doc,true]),
+    Expiry = rpc(Node,erlang,system_time,[second]) + 60,
+    {ok,Token} = rpc(Node,kz_auth,create_token,[[{<<"account_id">>,?ACCOUNT},
+        {<<"owner_id">>,?USER},{<<"method">>,<<"cb_user_auth">>},{<<"exp">>,Expiry}]]),
+    {ok,_} = rpc(Node,kz_auth,validate_token,[Token]),
+    io:format("{\"token\":\"~s\",\"expires\":~B}~n",[Token,Expiry]);
 execute(Node,["issue"]) ->
     put(phase, fixture_document),
     Db = rpc(Node,kzs_util,format_account_db,[?ACCOUNT]),

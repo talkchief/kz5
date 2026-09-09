@@ -11,7 +11,12 @@ const UNITS={couchdb:'couchdb',rabbitmq:'rabbitmq-server',haproxy:'haproxy','kaz
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 function command(program,args,options={}) {
     const r=cp.spawnSync(program,args,{encoding:'utf8',timeout:30000,maxBuffer:16*1024*1024,...options});
-    if(r.status!==0||r.error)throw Error('Failed '+path.basename(program)+' operation; inspect protected staging logs');
+    if(r.status!==0||r.error) {
+        const diagnostic=DIR+'/operation-failure-'+Date.now()+'-'+crypto.randomBytes(4).toString('hex')+'.json';
+        fs.writeFileSync(diagnostic,JSON.stringify({program:path.basename(program),status:r.status,
+            error:r.error?.code,stderr:r.stderr||''})+'\n',{mode:0o600,flag:'wx'});
+        throw Error('Failed '+path.basename(program)+' operation; private diagnostic '+diagnostic);
+    }
     return (r.stdout||'').trim();
 }
 const podman=(args,options)=>command('podman',args,options);
@@ -85,9 +90,7 @@ function create(role) {
     assert(/^[a-f0-9]{64}$/.test(id));
     // Record ownership before subsequent checks so a partial boot is retained.
     s.roles[role]={id,name,ip,phase:'created'};saveState(s);
-    podman(['exec',id,'ip','route','add','blackhole','10.1.0.0/16']);
-    podman(['exec',id,'ip','route','add','blackhole','46.225.31.248/32']);
-    podman(['exec',id,'ip','route','add','blackhole','91.99.188.145/32']);
+    hardenContainer(id);
     podman(['exec',id,'install','-d','-m','0700','/var/lib/kazoo-stage']);
     podman(['cp',DIR+'/source.bundle',id+':/var/lib/kazoo-stage/source.bundle']);
     podman(['exec',id,'git','clone','/var/lib/kazoo-stage/source.bundle','/opt/kz5'],{timeout:180000});
@@ -99,6 +102,12 @@ function create(role) {
 function status() {
     const s=readState();if(s.network)ownedNetwork(s);
     console.log(JSON.stringify({owner:s.owner,phase:s.phase,source:s.source,base_digest:s.base_digest,roles:s.roles}));
+}
+function hardenContainer(id) {
+    podman(['cp',__dirname+'/kazoo-stage-isolation.service',id+':/etc/systemd/system/kazoo-stage-isolation.service']);
+    podman(['exec',id,'systemctl','daemon-reload']);
+    podman(['exec',id,'systemctl','enable','--now','kazoo-stage-isolation.service']);
+    assert.equal(podman(['exec',id,'systemctl','is-active','kazoo-stage-isolation.service']),'active');
 }
 function configFor(role,secrets) {
     assert(Object.hasOwn(UNITS,role),'Role provisioning not implemented');
@@ -196,12 +205,19 @@ function verifyRole(role,reboot=false) {
         assert(['couchdb','rabbitmq','haproxy'].includes(role),'Reboot acceptance limited to isolated data tier');
         assert(!Object.keys(s.roles).some(name=>!['couchdb','rabbitmq','haproxy'].includes(name)),
             'Do not reboot data roles after dependent role admission');
+        hardenContainer(r.id);
         const before=c.State.StartedAt;
         podman(['restart','--time','30',r.id],{timeout:90000});
         const after=json(['inspect',r.id])[0];assert.equal(after.State.Running,true);assert.notEqual(after.State.StartedAt,before);
     }
     podman(['exec',r.id,'timeout','120','bash','-c',
         'until systemctl is-active --quiet '+UNITS[role]+'.service; do sleep 1; done'],{timeout:125000});
+    if(reboot) {
+        assert.equal(podman(['exec',r.id,'systemctl','is-active','kazoo-stage-isolation.service']),'active');
+        const routes=JSON.parse(podman(['exec',r.id,'ip','-j','route']));
+        for(const dst of ['10.1.0.0/16','46.225.31.248','91.99.188.145'])
+            assert(routes.some(route=>route.type==='blackhole'&&(route.dst===dst||route.dst===dst+'/32')),'Isolation route missing after boot');
+    }
     const log=DIR+'/'+role+'-'+(reboot?'boot':'verify')+'-'+Date.now()+'.log',fd=fs.openSync(log,'wx',0o600);
     let result;
     try {result=cp.spawnSync('podman',['exec',r.id,'bash','/opt/kz5/scripts/install-kazoo5.sh','--verify-only',role],
