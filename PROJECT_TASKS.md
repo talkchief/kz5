@@ -7,7 +7,7 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Fresh SUP packaging P0 — source fixed, native rebuild running:** the empty
+- **Fresh SUP packaging P0 — FIXED / native rebuild and boot PASS:** the empty
   fixture's first account creation succeeded, but discovery failed because the
   freshly packaged SUP omitted `props.beam` (`undefined function props:get_value/2`,
   exit127). Exactly one account and its configured master ID exist; no duplicate
@@ -15,9 +15,12 @@ work postponed; do not generate voices at runtime or during deployment.
   and makes embedded helpers explicit prerequisites. Installer now verifies
   archive modules without distribution before bootstrap. Old native archive
   fails the new gate; working archive and isolated Makefile regressions pass.
-  Cold attempt3 is running with guarded existing-master reuse. See
-  `doc/sup_archive_bootstrap.md`. A separate final empty fixture is being
-  prepared for a complete first-attempt run; retries will not be called fresh
+  Cold attempt3 passed the normal installer; SUP now exits0 and discovers the
+  sole configured master with no duplicate account. Automatic cold apps guest
+  boot and full verifier passed (`kazoo-apps-boot-1788968490597.log`). The main
+  source Makefile is patched too, and its existing archive passes the new gate.
+  See `doc/sup_archive_bootstrap.md`. A separate final empty fixture is running
+  a complete first-attempt install; retries will not be called fresh
   first-install passes.
 - **Cold first-install verification — in progress:** a separate three-role
   empty-data lab is running to close the bootstrap evidence gap. New
@@ -26,16 +29,23 @@ work postponed; do not generate voices at runtime or during deployment.
   Normal installer only, no diagnostic account creation. CouchDB/RabbitMQ first
   installs passed. Apps attempt1 refused missing lab monitor credentials before
   account creation; corrected lab setup automatically provisions the read-only
-  identity. Attempt2 is running as container unit `kz5-stage-install-kazoo-apps-2`
-  in `kz5-cold-kazoo-apps`, source `c875758`. Both admissions proved no Kazoo DBs.
-  Original failure remains failed. Cold bootstrap result pending; see
+  identity. Attempt2 (`c875758`) created the first account, then failed discovery
+  because SUP lacked embedded helpers. Both pre-create admissions proved no
+  Kazoo DBs. Attempt3 (`5e6f87a`) passed in `kz5-cold-kazoo-apps` with exact
+  configured-master reuse. Final fixture `kz5-final-kazoo-apps` is running normal
+  installer attempt1, unit `kz5-stage-install-kazoo-apps-1`, source `e8e3a46`;
+  its CouchDB/RabbitMQ first installs passed and monitoring credentials were
+  prepared automatically before apps admission. Original failures remain failed; see
   `doc/distributed_install_lab.md` for the reproducible entry point.
-- **Extended30-minute call hold — running, native result pending:** bounded
+- **Extended30-minute call hold — native PASS:** bounded
   `--soak-seconds 1800` mode retains the actual SIP/RTP/concurrency/recovery/log
   gates and derives endpoint lifetime/timeouts. No queued excess or queue-policy
   changes in extended mode. Main44 unit `kz5-extended-soak-20260909.service`,
-  started14:58:59UTC, was verified running with30 connected calls; holds the
-  shared fixture lock. Do not restart main services while this run is active.
+  started14:58:59UTC, completed with Result=success/exit0 and cleanup. Evidence
+  `20260909T145906Z`:30 caller/30 agent successes,0 failures, full1800s verified
+  hold, errors0/0, new cores0, peak CPU72%, minimum available memory17476668KiB.
+  All calls ended. The harness memory cap was raised2GiB→4GiB only after calls
+  ended, to analyze its2.6GiB capture; call-phase measurements were unchanged.
   Protected log `/root/kz5-acceptance/extended-soak-20260909.log`.
   Details: `doc/acdc_extended_soak.md`.
 - **Separated guest reboot matrix — continuing:** explicit all-owned/drained
@@ -50,6 +60,8 @@ work postponed; do not generate voices at runtime or during deployment.
   `/var/lib/kazoo5-install-lab/kamailio-boot-1788966720687.log`. No physical-host
   reboot claim. Current creation/reboot admission now prevents the known legacy
   Pivot failure before stopping a working apps/eCallMgr role.
+  The current creation path passed automatic apps guest boot in the cold fixture,
+  receipt `/var/lib/kazoo5-cold-bootstrap-lab/kazoo-apps-boot-1788968490597.log`.
 - **Earlier focused handover checkpoint:** fixes for requested points1/2/4/6 are committed in
   kz5 and deployed on main44. Final30-answered/5-queued capacity, broker recovery,
   callback edge cases and HTTP/WSS scope/revocation checks passed. All seven

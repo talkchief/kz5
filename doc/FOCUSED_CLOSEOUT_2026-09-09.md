@@ -4,12 +4,16 @@ This checkpoint does **not** close all four requested groups or certify a
 production release. Keep dashboard/history work postponed. Do not regenerate
 voices or repeat passing normal callback campaigns without a relevant change.
 
-Continuation after that handover: empty-data apps bootstrap and a30-minute
-30-call hold are currently running (not yet passed). Cold CouchDB/RabbitMQ
-first installs passed. HAProxy automatic guest boot/normal verification passed
-in the original lab; legacy eCallMgr/FreeSWITCH guest failures were retained and
-the services restored/verified. See the current task-register entries and
-`distributed_install_lab.md` / `acdc_extended_soak.md` for exact live handles.
+Continuation: the30-minute30-call hold passed natively (1800s,30/30 successes,
+zero failures/errors/cores; `20260909T145906Z`). An empty-data installation exposed
+missing helpers in the SUP archive: account creation succeeded, CLI discovery
+failed. Required source fix `5e6f87a` passed native rebuild/normal installation,
+without creating a duplicate master. Current cold apps automatic guest boot
+passed, as did original-lab HAProxy and Kamailio guest boots. Legacy eCallMgr/
+FreeSWITCH guest failures remain recorded with successful restoration. A final
+untouched apps attempt1 is running in `kz5-final-kazoo-apps`, source `e8e3a46`;
+do not label it passed until terminal collection. Details: `sup_archive_bootstrap.md`,
+`distributed_install_lab.md` and `acdc_extended_soak.md`.
 
 Final focused handover: source fixes are deployed and the seven isolated backend
 roles passed their normal installer checks, including apps attempt6 (`8966bd7`).
@@ -25,7 +29,7 @@ as a complete enterprise release.
 
 | Point | Current verified work | Still open |
 | --- | --- | --- |
-| 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Corrected30-concurrent broker-loss test:30 caller/30 agent successes,0 failures,0 new errors/cores. | Multi-node broker partitions, repeated failures and extended fault/load/soak. |
+| 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Corrected30-concurrent broker-loss test passed. Subsequent30-concurrent1800s hold passed:30 caller/30 agent successes,0 failures/errors/cores. | Multi-node broker partitions and repeated-failure acceptance. The30-minute hold does not establish indefinite reliability. |
 | 2 — Callback edge cases | Worker killed during ringing: cleanup/backoff/completed retry passed. Invalid/empty input, alternate1001, unanswered first return/completed second return passed. Alternate-disabled rejection played complete built-in audio, retained caller until caller BYE, created no ticket and left the busy conversation intact. Earlier five-language/queue-restart passes retained; no Gemini generation. | Historical ambiguous ticket stays quarantined pending operator disposition; cannot infer its old outcome from current zero channels. |
 | 4 — Installer | Required host lock, role ownership, remote-broker monitoring/private-CA and dispatcher fixes. Fresh dependencies, Pivot reservation, eCallMgr readiness and Crossbar public-API registration fixed. All seven isolated backend roles passed normal installation: CouchDB, RabbitMQ, HAProxy, FreeSWITCH, eCallMgr, Kamailio and apps. CouchDB/RabbitMQ guest boot passed. | Untouched cold apps bootstrap confirmation, remaining repeat/boot matrix, cluster admission/drain and coordinated upgrade/rollback acceptance. HAProxy automated guest reboot failed; manual recovery/verification passed. Separate UI/bridge provisioning was not tested in this lab. Containers are not independent-machine HA proof. |
 | 6 — API/Blackhole | Native command-auth, delivery, expiry1008, overload1013 and7 ordinary-principal HTTP/WSS scope checks passed. Cached token was revoked by exact isolated-user CAS: next event denied1008/no leak and HTTP401 before expiry. OpenAPI assets HTTPS byte-verified. | Multi-node cache-wide revocation, real slow-network load and cross-node supervision/audio-privacy acceptance. |

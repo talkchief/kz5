@@ -20,7 +20,14 @@ this before installing the CLI/creating an account, so a broken archive cannot
 be mistaken for a datastore/bootstrap problem. `test-sup-archive-order.cjs`
 reproduces the old missing-helper archive and checks corrected parallel/repeated
 Makefile ordering using private compiler/archive adapters and real BEAM contents.
-Full native package rebuild/deployment verification is still required.
+Native package rebuilding through normal cold installer attempt3 passed at
+`5e6f87a`; log `/var/lib/kazoo5-cold-bootstrap-lab/kazoo-apps-install-3.log`.
+The old installed archive failed the new gate; the rebuilt one passed. Native
+SUP changed from exit127/no result to exit0/expected master result; the account
+view still contains exactly one account and no duplicate was created. Normal
+administrator authentication/API/media verification passed. Automatic guest
+boot also passed (`kazoo-apps-boot-1788968490597.log`). Main44's source Makefile
+now has the same patch and its already-working archive passes validation.
 
 The cold lab may resume a failed post-create install only when its original
 empty baseline is retained, system_config names a valid master ID and the sole

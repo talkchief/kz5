@@ -156,7 +156,8 @@ failed preflight is retained, not called a successful first installation. The la
 now creates/authenticates its own read-only monitor before copying app inputs.
 Every pre-success apps admission requires an empty Kazoo database inventory;
 original and subsequent admission receipts are retained. No diagnostic account
-creation is allowed. Native cold account bootstrap result is pending.
+creation is allowed. The native account was created on attempt2, but the
+installer failed post-create discovery; see the packaging defect below.
 
 The original cold run subsequently exposed the SUP packaging defect documented
 in `sup_archive_bootstrap.md`. Its account was created successfully, but the CLI
