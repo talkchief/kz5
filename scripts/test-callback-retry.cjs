@@ -33,6 +33,13 @@ assert(entryOnly['callback-retry-request.xml'].includes('<recv request="BYE" tim
 assert.equal(entryOnly['callback-busy-caller.xml'], generated['callback-busy-caller.xml']); checks++;
 assert.throws(() => scenarios(undefined, 'auto')); checks++;
 {
+    const xml=scenarios(undefined,'invalid-reject')['callback-retry-request.xml'];
+    assert.deepEqual(expectedDigits('invalid-reject'),[6]);
+    assert.equal(modeReceipt('invalid-reject').allow_alternate_number,false);
+    assert(xml.includes('start_txn="caller_bye"')&&xml.includes('milliseconds="12000"'));
+    assert(!xml.includes('<recv request="BYE"'));checks++;
+}
+{
     const mode='invalid-alternate', xml=scenarios(undefined,mode)['callback-retry-request.xml'];
     assert.deepEqual(expectedDigits(mode),[6,11,1,0,0,1,11,1]);
     assert.equal((xml.match(/play_dtmf=/g)||[]).length,4);

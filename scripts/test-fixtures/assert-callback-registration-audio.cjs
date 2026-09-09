@@ -59,9 +59,9 @@ function decode(byte) {
     return value & 128 ? 132 - sample : sample - 132;
 }
 function fullPhrase(audio, reference, kind = 'success') {
-    if (kind === 'invalid-entry') {
+    if (kind === 'invalid-entry' || kind === 'unavailable') {
         const gemini = require('./callback-gemini-reference.cjs');
-        assert(reference.equals(gemini.ulaw(gemini.assetFor('acdc-callback-invalid-entry','en-us').bytes)),
+        assert(reference.equals(gemini.ulaw(gemini.assetFor('acdc-callback-'+kind,'en-us').bytes)),
             'Invalid-entry reference must equal the complete committed EN asset');
         assert(reference.length >= 24000 && reference.length <= 80000, 'Invalid-entry reference outside bounded clip range');
     } else {
@@ -84,6 +84,11 @@ function fullPhrase(audio, reference, kind = 'success') {
 }
 function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, mediaPort = LOCAL.rtp, mode = 'confirm-current') {
     const expected = require('./create-callback-retry-scenarios.cjs').expectedDigits(mode);
+    const rejected=mode==='invalid-reject';
+    if(rejected) {
+        const gemini=require('./callback-gemini-reference.cjs');
+        reference=gemini.ulaw(gemini.assetFor('acdc-callback-unavailable','en-us').bytes);
+    }
     assert(ip === LOCAL.ip && sipPort === LOCAL.sip && mediaPort === LOCAL.rtp
         && /^1-[1-9][0-9]*@127\.0\.0\.20$/.test(callId), 'Not the exact original synthetic callback endpoint');
     assert(buffer.length <= 64 * 1024 * 1024, 'Oversized original capture');
@@ -98,23 +103,23 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
     }
     const answer = unique(messages.filter(m => incoming(m) && /^SIP\/2\.0 200 /.test(m.first) && m.method === 'INVITE'), 'INVITE answer');
     const offer = unique(messages.filter(m => outgoing(m) && m.first.startsWith('INVITE ') && m.cseq === answer.cseq), 'answered INVITE offer');
-    if (mode === 'invalid-alternate') assert(/^<sip:invalid-caller@/.test(offer.headers.from[0]),
+    if (mode === 'invalid-alternate' || rejected) assert(/^<sip:invalid-caller@/.test(offer.headers.from[0]),
         'Alternate-number test must begin with the exact invalid caller identity');
     const ack = unique(messages.filter(m => outgoing(m) && m.first.startsWith('ACK ') && m.cseq === answer.cseq), 'answer ACK');
-    const bye = unique(messages.filter(m => incoming(m) && m.first.startsWith('BYE ')), 'server BYE');
-    const byeAck = unique(messages.filter(m => outgoing(m) && /^SIP\/2\.0 200 /.test(m.first) && m.method === 'BYE' && m.cseq === bye.cseq), 'BYE acknowledgement');
+    const bye = unique(messages.filter(m => (rejected?outgoing:incoming)(m) && m.first.startsWith('BYE ')), 'expected BYE');
+    const byeAck = unique(messages.filter(m => (rejected?incoming:outgoing)(m) && /^SIP\/2\.0 200 /.test(m.first) && m.method === 'BYE' && m.cseq === bye.cseq), 'BYE acknowledgement');
     assert(offer.fromTag && answer.toTag && answer.fromTag === offer.fromTag
         && ack.fromTag === answer.fromTag && ack.toTag === answer.toTag
-        && bye.fromTag === answer.toTag && bye.toTag === answer.fromTag
+        && bye.fromTag === (rejected?answer.fromTag:answer.toTag) && bye.toTag === (rejected?answer.toTag:answer.fromTag)
         && byeAck.fromTag === bye.fromTag && byeAck.toTag === bye.toTag, 'Original SIP dialog tags differ');
     assert(offer.dst === answer.src && offer.dport === answer.sport
         && ack.dst === answer.src && ack.dport === answer.sport
-        && bye.src === answer.src && bye.sport === answer.sport
-        && byeAck.dst === answer.src && byeAck.dport === answer.sport, 'Original SIP peer changed');
+        && (rejected?bye.dst:bye.src) === answer.src && (rejected?bye.dport:bye.sport) === answer.sport
+        && (rejected?byeAck.src:byeAck.dst) === answer.src && (rejected?byeAck.sport:byeAck.dport) === answer.sport, 'Original SIP peer changed');
     assert(offer.time < answer.time && answer.time <= ack.time && ack.time < bye.time
         && bye.time <= byeAck.time && byeAck.time - bye.time <= 2 && bye.time - answer.time <= 45,
     'Original answer/ACK/server BYE order or deadline failed');
-    assert(!messages.some(m => outgoing(m) && m.first.startsWith('BYE ')), 'Original caller ended itself');
+    assert(!messages.some(m => (rejected?incoming:outgoing)(m) && m.first.startsWith('BYE ')), 'Unexpected party ended original call');
     const local = audioSdp(offer), remote = audioSdp(answer);
     assert(local.ip === ip && local.port === mediaPort && local.payload === remote.payload, 'Original SDP endpoint or DTMF negotiation mismatch');
     for (const message of [offer, answer]) {
@@ -167,12 +172,13 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
             if (!present[index]) {audio[index] = packet.payload[i]; present[index] = 1; times[index] = packet.time + i / 8000;}
         }
     }
-    const matches = fullPhrase(audio, reference);
+    const matches = fullPhrase(audio, reference,rejected?'unavailable':'success');
     assert(matches.length === 1, 'Expected exactly one complete registered-success prompt');
     const match = matches[0], endSample = match.sample + reference.length;
     assert(present.subarray(match.sample, endSample).every(Boolean), 'Success audio contains uncaptured samples');
     const start = times[match.sample], end = times[endSample - 1] + 1 / 8000;
-    assert(start >= digits[digits.length - 1].end && end <= bye.time && bye.time - end <= 2,
+    assert(start >= digits[digits.length - 1].end && end <= bye.time &&
+        (rejected?bye.time-end>=2:bye.time-end<=2),
         'Full registration success was not received after selection and before server BYE');
     assert(Math.abs((end - start) - reference.length / 8000) <= 0.25, 'Success RTP wall-clock duration does not match complete phrase');
     let invalidEntry;
@@ -198,7 +204,8 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
         entry_after_answer_seconds: Number((digits[0].start - answer.time).toFixed(6)),
         confirmation_start_epoch_seconds: start, confirmation_end_epoch_seconds: end,
         original_bye_epoch_seconds: bye.time, original_bye_ack_epoch_seconds: byeAck.time,
-        complete_phrase_before_server_bye: true, missing_phrase_samples: 0, received_pcmu_packets: received.length,
+        complete_phrase_before_server_bye: !rejected, missing_phrase_samples: 0, received_pcmu_packets: received.length,
+        ...(rejected?{callback_rejected:true,caller_remained_after_response_seconds:bye.time-end,server_bye_absent:true}:{}),
         ...(invalidEntry ? {invalid_entry:invalidEntry,original_number:'invalid-caller',alternate_number:'1001'} : {})};
 }
 module.exports = {inspect, fullPhrase, sip, unique, rtp};

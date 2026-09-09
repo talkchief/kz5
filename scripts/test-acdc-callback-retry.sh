@@ -32,8 +32,9 @@ retry_usage() {
     printf '%s\n' \
         'Usage: test-acdc-callback-retry.sh --prepare-only --confirmation-reference FILE' \
         '       test-acdc-callback-retry.sh --live --keep-fixture --confirmation-reference FILE' \
-        '       [--registration-mode entry-only|confirm-current|invalid-alternate] (default: confirm-current)' \
+        '       [--registration-mode entry-only|confirm-current|invalid-alternate|invalid-reject] (default: confirm-current)' \
         '       invalid-alternate: main EN/internal fixture only; invalid caller ID, empty entry, then alternate1001' \
+        '       invalid-reject: main EN/internal fixture only; alternate disabled, full unavailable audio, stay on line, no ticket' \
         '       [--language en-us|he-il|fr-fr|es-es|ar-sa] (explicit owned queue language; absent preserves queue)' \
         '       [--edit-pending-language] (main isolated fixture only; EN admission then FR queue edit and conditional restore)' \
         '       [--short-confirmation-window] (main isolated EN fixture only; response timeout3, full existing prompt, conditional restore)' \
@@ -85,8 +86,8 @@ retry_args() {
         esac
         shift
     done
-    [[ $RETRY_REGISTRATION_MODE == entry-only || $RETRY_REGISTRATION_MODE == confirm-current || $RETRY_REGISTRATION_MODE == invalid-alternate ]] || die 'Invalid registration mode'
-    if [[ $RETRY_REGISTRATION_MODE == invalid-alternate ]]; then
+    [[ $RETRY_REGISTRATION_MODE == entry-only || $RETRY_REGISTRATION_MODE == confirm-current || $RETRY_REGISTRATION_MODE == invalid-alternate || $RETRY_REGISTRATION_MODE == invalid-reject ]] || die 'Invalid registration mode'
+    if [[ $RETRY_REGISTRATION_MODE == invalid-alternate || $RETRY_REGISTRATION_MODE == invalid-reject ]]; then
         [[ $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 && $RETRY_LANGUAGE_EXPLICIT == true &&
            $RETRY_LANGUAGE == en-us && $CALLBACK_TEST_TRANSPORT == internal &&
            $RETRY_EDIT_PENDING_LANGUAGE == false && $RETRY_SHORT_CONFIRMATION_WINDOW == false &&
@@ -254,7 +255,7 @@ retry_start_busy() {
 
 retry_start_original() {
     local csv=$RUN_DIR/callback-original-input.csv
-    if [[ $RETRY_REGISTRATION_MODE == invalid-alternate ]]; then
+    if [[ $RETRY_REGISTRATION_MODE == invalid-alternate || $RETRY_REGISTRATION_MODE == invalid-reject ]]; then
         CALLBACK_NUMBER=invalid-caller write_callback_request_csv "$csv"
     else
         write_callback_request_csv "$csv"
@@ -530,7 +531,11 @@ retry_run() {
         register_caller callback "$CALLER_PORT" 600
     fi
     register_agents callback 1 600
-    start_agent_uas callback 1 1
+    if [[ $RETRY_REGISTRATION_MODE == invalid-reject ]]; then
+        start_agent_uas callback 1 0
+    else
+        start_agent_uas callback 1 1
+    fi
     agent_status login 1 1
     retry_start_busy
     retry_wait_busy || die 'Initial call did not prove an exact native agent bridge'
@@ -540,6 +545,24 @@ retry_run() {
     retry_start_original
     retry_wait_checked 'retry original registration/menu' "$CALLBACK_ORIGINAL_PID"
     assert_stats 'retry original registration/menu' "$RUN_DIR/callback-original-stats.csv" 1
+    if [[ $RETRY_REGISTRATION_MODE == invalid-reject ]]; then
+        retry_stop_capture
+        node "$retry_script_dir/test-fixtures/assert-callback-registration-audio.cjs" \
+            "$RUN_DIR/retry-original.pcap" "$RETRY_REFERENCE" "$CALLBACK_ORIGINAL_CALL_ID" "$LOCAL_IP" "$CALLER_PORT" "$CALLBACK_ORIGINAL_MEDIA_PORT" "$RETRY_REGISTRATION_MODE" \
+            > "$RUN_DIR/retry-rejection-audio.json" || die 'Complete unavailable audio / retained original call unproven'
+        callback_fixture evidence | jq -e --arg call "$CALLBACK_ORIGINAL_CALL_ID" \
+            '[.[] | select(.original_call_id==$call)] | length==0' > "$RUN_DIR/retry-rejection-no-ticket.json" || die 'Rejected callback created a ticket'
+        retry_busy_pair > "$RUN_DIR/retry-busy-before-release.json" || die 'Existing conversation changed during rejection'
+        retry_clear_busy || die 'Cannot release exact busy fixture'
+        retry_wait_checked 'busy caller after rejection' "$RETRY_BUSY_PID"
+        wait_agents_checked callback
+        assert_agent_stats callback 1 1
+        wait_agent_ready 1 || die 'Busy agent did not recover'
+        stop_monitor
+        record_stage callback 1 1 "$RUN_DIR/callback-original-stats.csv" 1 "$cores" "$since" "$RUN_DIR/retry-busy-stats.csv"
+        log "PASS unavailable audio, caller remains on line, no callback ticket; retained fixture: $RUN_DIR"
+        return
+    fi
     wait_callback_registered || die 'Busy-agent callback did not remain queued with zero attempts'
     if [[ $RETRY_EDIT_PENDING_LANGUAGE == true ]]; then
         node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" edit "$RUN_DIR" || die 'Pending callback language edit failed'

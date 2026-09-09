@@ -118,4 +118,28 @@ assert.throws(() => inspect(capture(records()).subarray(0, -1), reference, callI
     assert.throws(()=>fullPhrase(stream,bad,'invalid-entry'));count++;
     assert.throws(()=>fullPhrase(stream,auxiliary,'custom'));count++;
 }
-console.log('PASS ' + count + ' registration audio gates: full installed-reference delivery, exact SDP/dialog/DTMF scope, five-second entry, complete success before server BYE, missing/truncated/corrupt audio fail closed');
+{
+    const g=require('./callback-gemini-reference.cjs'),unavailable=g.ulaw(g.assetFor('acdc-callback-unavailable','en-us').bytes);
+    const audio=Buffer.alloc(15*8000,255);unavailable.copy(audio,6*8000);
+    function rejection() {
+        const r=records('entry-only').filter(p=>!sipIs(p,'BYE ')&&
+            !(sipIs(p,'SIP/2.0 200 OK')&&p.sport===15064));
+        for(const p of r) {
+            if(incomingAudio(p)) {const start=p.payload.readUInt32BE(4);audio.copy(p.payload,12,start,start+160);}
+            else if(sipIs(p,'INVITE '))p.payload=Buffer.from(p.payload.toString().replace('sip:fixture@','sip:invalid-caller@'));
+        }
+        r.push(signalling(115,message('BYE sip:queue@127.0.0.1 SIP/2.0','BYE','',false,3),true),
+            signalling(115.001,message('SIP/2.0 200 OK','BYE','',false,3)));
+        return r.sort((a,b)=>a.time-b.time);
+    }
+    const check=r=>inspect(capture(r),reference,callId,local,15064,43000,'invalid-reject');
+    const result=check(rejection());assert.equal(result.callback_rejected,true);
+    assert.equal(result.server_bye_absent,true);assert(result.caller_remained_after_response_seconds>=2);count++;
+    for(const change of [
+        r=>r.filter(p=>!incomingAudio(p)),
+        r=>r.filter(p=>!dtmf(p)),
+        r=>{r.find(p=>sipIs(p,'INVITE ')).payload=Buffer.from(r.find(p=>sipIs(p,'INVITE ')).payload.toString().replace('invalid-caller','1001'));return r;},
+        r=>{r.push(signalling(113,message('BYE sip:fixture@127.0.0.20 SIP/2.0','BYE','',true,4)));return r.sort((a,b)=>a.time-b.time);}
+    ]) {assert.throws(()=>check(change(rejection())));count++;}
+}
+console.log('PASS ' + count + ' registration audio gates: complete success/rejection media, exact SIP/DTMF scope and rejection retains caller; missing/truncated/corrupt audio fail closed');

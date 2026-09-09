@@ -7,9 +7,9 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 function expectedDigits(mode) {
-    assert(['entry-only', 'confirm-current', 'invalid-alternate'].includes(mode), 'Invalid registration mode');
+    assert(['entry-only', 'confirm-current', 'invalid-alternate', 'invalid-reject'].includes(mode), 'Invalid registration mode');
     if (mode === 'invalid-alternate') return [6, 11, 1, 0, 0, 1, 11, 1];
-    return mode === 'entry-only' ? [6] : [6, 1];
+    return ['entry-only','invalid-reject'].includes(mode) ? [6] : [6, 1];
 }
 function scenarios(root = path.join(__dirname, '..', 'sip-tests'), mode = 'confirm-current') {
     expectedDigits(mode);
@@ -19,11 +19,11 @@ function scenarios(root = path.join(__dirname, '..', 'sip-tests'), mode = 'confi
     // first event. The received-packet gate, not this pause alone, proves5s.
     request = request.replace('<pause milliseconds="4000"/>',
         '<!-- 4200ms + pinned SIPp ~780ms DTMF warmup targets actual entry at5s. -->\n  <pause milliseconds="4200"/>');
-    if (mode === 'entry-only' || mode === 'invalid-alternate') {
+    if (mode !== 'confirm-current') {
         const extraConfirmation = '  <pause milliseconds="2500"/>\n'
             + '  <nop><action><exec play_dtmf="1,200"/></action></nop>\n  <pause milliseconds="1000"/>';
         assert.equal(request.split(extraConfirmation).length, 2, 'Expected exact historical registration confirmation block');
-        request = request.replace(extraConfirmation, mode === 'entry-only' ?
+        request = request.replace(extraConfirmation, mode !== 'invalid-alternate' ?
             '  <!-- entry-only: no registration digit1; receive the server BYE after full success audio. -->' :
             '  <!-- Invalid caller ID: reject empty #, then explicitly confirm alternate1001. -->\n'
             // The fixed EN enter-number clip is7.171s. Let it finish before
@@ -33,6 +33,26 @@ function scenarios(root = path.join(__dirname, '..', 'sip-tests'), mode = 'confi
             + '  <pause milliseconds="4500"/>\n'
             + '  <nop><action><exec play_dtmf="1001#,200"/></action></nop>\n'
             + '  <pause milliseconds="10000"/>\n  <nop><action><exec play_dtmf="1,200"/></action></nop>');
+    }
+    if (mode === 'invalid-reject') {
+        const start=request.indexOf('  <!-- Registration is successful only'),end=request.indexOf('  <ResponseTimeRepartition',start);
+        assert(start>0&&end>start);
+        request=request.slice(0,start)+`  <!-- Rejection must retain the call; only this caller hangs up. -->
+  <pause milliseconds="12000"/>
+  <send retrans="500" start_txn="caller_bye"><![CDATA[
+      BYE [next_url] SIP/2.0
+      Via: SIP/2.0/[transport] [local_ip]:[local_port];branch=[branch]
+      [routes]
+      Max-Forwards: 70
+      From: <sip:[field4]@[field2]>;tag=[pid]callback[call_number]
+      To: <sip:[field3]@[field2]>[peer_tag_param]
+      Call-ID: [call_id]
+      CSeq: 3 BYE
+      Content-Length: 0
+  ]]></send>
+  <recv response="200" response_txn="caller_bye"/>
+
+`+request.slice(end);
     }
     request = request.replace('<label id="menu"/>', '<label id="menu"/>\n  <!-- registration-mode: ' + mode + ' -->');
     for (const action of ['apattern,1,0,PCMU/8000', 'pauseapattern']) {

@@ -174,7 +174,7 @@ function installRole(role,detached=false) {
         const unit='kz5-stage-install-'+role+'-'+attempt,inside='/var/lib/kazoo-stage/'+role+'-install-'+attempt+'.log';
         podman(['exec',r.id,'install','-m','0600','/dev/null',inside]);
         r.attempts=attempt;r.phase='installing';r.log=log;r.installUnit=unit;r.insideLog=inside;saveState(s);
-        podman(['exec',r.id,'systemd-run','--unit',unit,'--property=User=root','--property=RuntimeMaxSec=3600',
+        podman(['exec',r.id,'systemd-run','--unit',unit,'--property=User=root','--property=RemainAfterExit=yes','--property=RuntimeMaxSec=3600',
             '--property=TasksMax=2048','--property=StandardOutput=append:'+inside,'--property=StandardError=append:'+inside,
             '/usr/bin/bash','/opt/kz5/scripts/install-kazoo5.sh',role]);
         console.log(JSON.stringify({status:'INSTALLING',role,source:r.source||s.source,unit,log:inside}));return;
@@ -194,10 +194,11 @@ function installRole(role,detached=false) {
 function collectRole(role) {
     assert(Object.hasOwn(UNITS,role));const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r?.installUnit);
     const c=json(['inspect',r.id])[0];assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
-    const details=podman(['exec',r.id,'systemctl','show','-p','ActiveState','-p','Result','-p','ExecMainStatus',
+    const details=podman(['exec',r.id,'systemctl','show','-p','ActiveState','-p','SubState','-p','Result','-p','ExecMainStatus',
         '-p','ExecMainStartTimestamp',r.installUnit+'.service']);
     const fields=Object.fromEntries(details.split('\n').map(line=>{const p=line.indexOf('=');return [line.slice(0,p),line.slice(p+1)];}));
-    if(['active','activating','deactivating'].includes(fields.ActiveState)) {
+    if(['activating','deactivating'].includes(fields.ActiveState)||
+        (fields.ActiveState==='active'&&fields.SubState!=='exited')) {
         console.log(JSON.stringify({status:'INSTALLING',role,unit:r.installUnit}));return;
     }
     podman(['cp',r.id+':'+r.insideLog,r.log]);fs.chmodSync(r.log,0o600);

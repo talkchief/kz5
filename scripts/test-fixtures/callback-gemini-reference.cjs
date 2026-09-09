@@ -15,7 +15,7 @@ function language(value = 'en-us') {
 function assetFor(prompt, locale = 'en-us') {
     language(locale);
     assert(['acdc-callback-success', 'acdc-callback-offer-6', 'acdc-queue-your-current-position-is',
-        'acdc-callback-invalid-entry', 'acdc-callback-enter-number'].includes(prompt),
+        'acdc-callback-invalid-entry', 'acdc-callback-enter-number', 'acdc-callback-unavailable'].includes(prompt),
         'Unexpected acceptance prompt');
     if (!inventory.has(locale)) inventory.set(locale, importer.loadPlan(path.join(root, 'scripts/assets/acdc-gemini-fixed-20260905'),
         path.join(root, 'scripts/assets/acdc-gemini-completion-20260905'), [locale],
