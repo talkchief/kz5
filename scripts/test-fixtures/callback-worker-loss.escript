@@ -18,6 +18,8 @@ main(["--self-test"]) ->
     end, [{owner, undefined}, {account_id, <<"other">>}, {queue_id, <<"other">>},
           {callback_id, <<"other">>}, {caller_call_id, <<"other">>},
           {stage, confirming}, {executed, false}, {answered, true}, {destroyed, true}]),
+    true = root_uid(<<"Name: fixture\nUid:\t0\t0\t0\t0\n">>),
+    false = root_uid(<<"Uid:\t1000\t0\t0\t0\n">>),
     io:put_chars("PASS exact worker target and nine refusals; no cookie or connection\n");
 main(["--kill-fixture-worker", Ticket0, Call0]) ->
     run(kill, Ticket0, Call0);
@@ -28,7 +30,10 @@ main(_) -> io:put_chars("Use --self-test or explicit fixture-worker mode CALLBAC
 run(Operation, Ticket0, Call0) ->
     put(stage, local_scope),
     try
-        true = os:getenv("USER") =:= "root",
+        %% System services need not export USER. Verify kernel UIDs, not an
+        %% ambient environment variable which is neither reliable nor proof.
+        {ok, ProcessStatus} = file:read_file("/proc/self/status"),
+        true = root_uid(ProcessStatus),
         {ok, Ifs} = inet:getifaddrs(),
         true = lists:any(fun({_, Values}) -> lists:member({addr,{10,1,0,44}}, Values) end, Ifs),
         Ticket = list_to_binary(Ticket0), Call = list_to_binary(Call0),
@@ -85,6 +90,10 @@ run(Operation, Ticket0, Call0) ->
     end.
 
 rpc(Node, M, F, Args) -> rpc:call(Node, M, F, Args, 3000).
+
+root_uid(Status) ->
+    re:run(Status, <<"^Uid:[ \\t]+0[ \\t]+0[ \\t]+0[ \\t]+0$">>,
+           [multiline,{capture,none}]) =:= match.
 
 record_layout(Node, M) ->
     Path = rpc(Node, code, which, [M]),
