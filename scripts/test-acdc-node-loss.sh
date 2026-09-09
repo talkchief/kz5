@@ -15,6 +15,10 @@ recovery_has_state() {
     grep -Eq "(^|[[:space:]])state:[[:space:]]*$1([[:space:]]|$)" <<<"$2"
 }
 
+recovery_fsm_identity() {
+    sed -nE 's/^[[:space:]]*FSM: <[0-9]+\.([0-9]+\.[0-9]+)>[[:space:]]*$/\1/p' <<<"$1"
+}
+
 recovery_channels() {
     timeout 5 /usr/local/freeswitch/bin/fs_cli -x 'show channels as json' |
         jq -ce 'if .row_count==0 then .rows=[] else . end |
@@ -69,7 +73,7 @@ recovery_main() {
     RUN_ROOT=/var/log/kazoo-acceptance/node-loss
     create_run_dir
     trap recovery_cleanup EXIT INT TERM
-    local before_apps status deadline since cores
+    local before_apps before_fsm status deadline since cores
     before_apps=$(systemctl show -p MainPID --value kazoo-apps.service)
     STATUS_AGENT_MAX=${STATE[ACCEPTANCE_AGENT_COUNT]}
     agent_status logout 1 "$STATUS_AGENT_MAX"
@@ -81,6 +85,9 @@ recovery_main() {
     wait_concurrent_call_legs node-loss 1 1 || die 'Initial queued call not connected'
     status=$(recovery_status)
     recovery_has_state answered "$status" || die 'Agent must be answered before node loss'
+    before_fsm=$(recovery_fsm_identity "$status")
+    [[ $before_fsm =~ ^[0-9]+\.[0-9]+$ ]] || die 'Agent FSM identity missing'
+    printf '%s\n' "$before_fsm" > "$RUN_DIR/fsm-before.txt"
     recovery_owned_pair || die 'Only the two answered isolated fixture legs may exist'
     # Mark BEFORE the stop so every error path attempts restoration.
     RECOVERY_NODE_STOPPED=true
@@ -98,6 +105,7 @@ recovery_main() {
     while ((SECONDS < deadline)); do
         status=$(recovery_status)
         recovery_has_state answered "$status" || die 'Agent became available without channel evidence'
+        [[ $(recovery_fsm_identity "$status") == "$before_fsm" ]] || die 'Agent FSM was replaced during node loss'
         sleep 1
     done
     log 'PASS ended call remained conservatively busy while node evidence was unavailable'
@@ -111,6 +119,8 @@ recovery_main() {
         sleep 1
     done
     recovery_has_state ready "$status" || die 'Ended call did not recover after eCallMgr reconnect'
+    [[ $(recovery_fsm_identity "$status") == "$before_fsm" ]] || die 'A replacement FSM is not recovery proof'
+    printf '%s\n' "$(recovery_fsm_identity "$status")" > "$RUN_DIR/fsm-after.txt"
     [[ $(systemctl show -p MainPID --value kazoo-apps.service) == "$before_apps" ]] || die 'Apps restarted during recovery'
     log 'PASS same applications node recovered agent without logout/login or FSM reset'
     # No login or queue restart before this second call: readiness must work.
