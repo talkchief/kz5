@@ -7,6 +7,14 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Distributed SIP/supervision acceptance fixture — preparation in progress:**
+  original private lab only, three-agent synthetic child company and dedicated
+  root0600 state. Uses the existing reviewed provisioning library after host
+  admission of all seven owned roles and zero media calls; no imported-company
+  data, production configuration, provider or external calls. API Login and
+  provisioning are not SIP/RTP or cross-node supervision proof. The real call
+  tests and ownership/audio privacy checks remain open.
+
 - **eCallMgr automatic-boot gate — native PASS:**
   `--ecallmgr-peer` reuses only the original isolated lab's verified controller
   filesystem with new IP172.30.253.21, distinct node name and persistent Pivot

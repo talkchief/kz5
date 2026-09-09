@@ -509,6 +509,10 @@ try {
         assert(!SETTINGS.cold);
         require('./bridge.cjs').prepare({readState,saveState,ownedNetwork,json,podman,DIR});
     }
+    else if(args.length===2&&args[0]==='--call-fixture') {
+        assert(!SETTINGS.cold);assert(['start','collect'].includes(args[1]));
+        require('./calls.cjs').operation(args[1],{readState,saveState,ownedNetwork,json,podman,DIR,ROOT});
+    }
     else if(args.length===2&&['--apps-peer','--ecallmgr-peer'].includes(args[0])) {
         assert(!SETTINGS.cold,'Peer belongs only to the original isolated lab');
         assert(['create','resume','install','collect','sync','reboot'].includes(args[1]));

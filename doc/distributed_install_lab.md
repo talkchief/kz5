@@ -50,8 +50,9 @@ SELinux policy. See the primary [Podman run reference](https://docs.podman.io/en
 
 `node scripts/test-fixtures/distributed-lab/lab.test.cjs` checks subnet boundaries,
 role uniqueness and static isolation guards without creating lab state.
-Only backend roles currently have installation dispatch. Provider-enabled bridge
-and separate UI provisioning must not be inferred from the role-name inventory.
+Backend roles and an explicitly prepared synthetic bridge have installation
+dispatch. Separate UI provisioning and real provider delivery must not be
+inferred from the role-name inventory.
 `--sync-source` requires clean tracked files and fast-forward-only advancement;
 it changes source identity, not deployed-service acceptance. `--reboot-role` is
 restricted to data roles before any dependent application/media role is created,
@@ -173,6 +174,28 @@ park completed bootstrap fixtures using `--cold-bootstrap --park` and
 roles with completed apps boot evidence qualify. Stop order is apps, broker,
 CouchDB; containers, private data and receipts remain available for later use.
 Parking is not another boot test and is never applied to the main stack.
+
+## Fresh bridge and distributed-call fixtures
+
+`--create push-bridge`, `--prepare-bridge`, `--begin-install push-bridge` and
+`--collect-install push-bridge` exercise the normal service installer in a new
+rootfs at172.30.253.19. The fixture creates only a dedicated lab broker vhost,
+least-privilege user and exact queue/exchange permission. It generates an
+invented provider identity; no real key/device token is copied and no push is
+published. Partial preparation is retained, never silently retried/replaced.
+This particular fixture uses legacy transport on the private network: it is not
+a remote-TLS/quorum or provider-delivery proof. Those tests remain separately
+identified rather than being inferred from an active consumer.
+
+`--call-fixture start|collect` prepares a new isolated three-agent company using
+the reviewed normal provisioning library inside the apps-only role. Host-side
+admission requires all seven owned roles and zero media calls. It does not use
+the all-in-one provisioner's local FS/Kamailio check on an apps-only server.
+Only fixture-in-process SIP destination points at the separate Kamailio.17;
+deployment configuration is unchanged. Credentials stay in the primary apps
+guest's `/etc/kazoo/distributed-acceptance-secrets.env` (root0600). The retained
+private log is `/var/lib/kazoo5-install-lab/provision-calls.log`. A provisioned
+fixture is not a live call, cross-node owner recovery or audio-privacy pass.
 
 ## Fresh bootstrap campaign details
 
