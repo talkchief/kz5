@@ -51,7 +51,7 @@ test('management origin rejects credential redirection and TLS downgrade', () =>
     assert.throws(() => management(ep, {}), /Remote broker requires/);
 });
 
-function mock(pages, who = {tags: ['monitoring']}, vhost = '/') {
+function mock(pages, who = {tags: ['monitoring']}, vhost = '/', exchangeOverride = {}) {
     const calls = [];
     return {calls, request: async (url, opts) => {
         calls.push(url);
@@ -60,7 +60,13 @@ function mock(pages, who = {tags: ['monitoring']}, vhost = '/') {
         assert(opts.signal);
         let data;
         if (url.endsWith('/api/whoami')) data = who;
-        else if (url.includes('/api/vhosts/')) data = {name: vhost};
+        // RabbitMQ 3.13.7 reserves single-vhost details for administrators,
+        // even when this monitoring identity can read all scoped queues.
+        else if (url.includes('/api/vhosts/')) return new Response('{}', {status: 401});
+        else if (url.includes('/api/exchanges/')) {
+            assert(url.endsWith('/api/exchanges/%2F/amq.default?disable_stats=true'));
+            data = {name: '', vhost, type: 'direct', ...exchangeOverride};
+        }
         else {
             assert(url.includes('/api/queues/%2F?'));
             data = pages[Number(new URL(url).searchParams.get('page')) - 1];
@@ -85,7 +91,8 @@ test('remote reader obtains every page and enforces work-queue properties', asyn
     assert.throws(() => inspect(rows), /incompatible/);
 });
 test('restricted identity and unconfirmed vhost cannot claim empty inventory success', async () => {
-    for (const m of [mock([page([])], {tags: 'management'}), mock([page([])], {tags: 'administrator'}, 'other')]) {
+    for (const m of [mock([page([])], {tags: 'management'}), mock([page([])], {tags: 'administrator'}, 'other'),
+        mock([page([])], undefined, '/', {name: 'another'}), mock([page([])], undefined, '/', {type: 'topic'})]) {
         await assert.rejects(remoteInventory(ep, env, m.request));
     }
 });

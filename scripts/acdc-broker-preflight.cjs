@@ -94,8 +94,13 @@ async function remoteInventory(ep, env, request = fetch) {
     const tags = Array.isArray(who.tags) ? who.tags : String(who.tags || '').split(',');
     assert(tags.some(t => ['administrator', 'monitoring'].includes(t)),
         'Management identity must see the complete broker inventory (monitoring/admin tag)');
-    const scoped = '/api/vhosts/' + encodeURIComponent(ep.vhost);
-    assert.equal((await get(scoped)).name, ep.vhost, 'Configured vhost not confirmed');
+    // Single-vhost details require administrator privileges in RabbitMQ 3.13.
+    // Its built-in default exchange proves vhost existence using read access,
+    // including when no ACDC queues exist yet. Never declare it as a probe.
+    const scoped = '/api/exchanges/' + encodeURIComponent(ep.vhost) + '/amq.default?disable_stats=true';
+    const exchange = await get(scoped);
+    assert(exchange.vhost === ep.vhost && exchange.name === '' && exchange.type === 'direct',
+        'Configured vhost default exchange not confirmed');
     const rows = [];
     let expected;
     for (let page = 1; page <= 100; page++) {

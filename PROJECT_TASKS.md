@@ -7,6 +7,20 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **P0-06 / installer remote broker permission gap — fixed, native preflight PASS:**
+  Actual monitoring identity on isolated RabbitMQ3.13.7 got401 from the guard's
+  single-vhost details GET (a357d7/4e7227). Replaced that admin-only probe with a
+  scoped read of the built-in default exchange; no privilege grants. Regression
+  failed3 groups before the fix (ba89ac), then all11 groups and both real installer
+  abort-order checks passed (7837a1). Native actual shell helper from.26 to isolated
+  .44 HTTPS broker passed empty inventory, rejected old auto-delete queue, accepted
+  retained queue and passed after owned conditional cleanup (24bfc5). No messages,
+  providers or runtime installs. Test broker stopped; normal RabbitPID2355/restarts0
+  unchanged (ce25fc). This is remote preflight proof, not whole split-stack acceptance.
+  Preserve receipt/hash and instructions in `doc/acdc_broker_upgrade.md`. Private
+  management CA currently needs launch-time `NODE_EXTRA_CA_CERTS`; persisted scoped
+  CA configuration remains an installer follow-up. Migration/rollback remains open.
+
 - **P0-06 / installer callback broker upgrade guard — source fixed / main44 scoped PASS:**
   Apps installation now inspects the effective broker's ACDC queue declarations
   before imports/build and immediately before restart. Legacy auto-delete work

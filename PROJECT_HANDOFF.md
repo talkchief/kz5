@@ -4,6 +4,19 @@
 campaigns. Fix in source, validate the failing path, deploy through the installer,
 then record the actual result. Dashboard/history work remains postponed.
 
+**Remote installer follow-up: monitoring permissions — fixed / native PASS.**
+The actual separate-broker check exposed401 on RabbitMQ3.13's admin-only vhost
+details GET. The guard now reads the scoped built-in default exchange instead;
+monitoring identity retains sufficient read access without privilege escalation.
+Three regression groups failed before the fix; all11 plus two installer abort
+checks pass after. Native24bfc5 executes the real installer helper from.26 against
+isolated .44 HTTPS: empty pass, legacy auto-delete rejection, retained pass, then
+conditional owned cleanup and final pass. No messages/provider calls/runtime
+installs. Test broker stopped; normal RabbitPID2355/restarts0 unchanged (ce25fc).
+See `doc/acdc_broker_upgrade.md` for receipt, hashes and exact limits. Full split
+apps install, migration/rollback and persistent private-CA input remain open;
+do not call this a full platform release pass or rerun unrelated call campaigns.
+
 **Latest deployment fix: callback broker upgrade guard — main44 scoped PASS.**
 Source `3b284b0` is pushed to master and synced at main44 `/opt/kz5`. The apps
 installer now checks callback queue properties before imports/build and again

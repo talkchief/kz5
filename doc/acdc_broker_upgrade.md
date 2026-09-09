@@ -40,13 +40,21 @@ TLS certificates are verified; use trusted internal certificates when applicable
 Management credentials are persisted with the other root-only deployment inputs.
 They are not passed in process arguments or printed on API/CLI failure.
 
-The remote reader checks identity and vhost, then GETs paginated, name-filtered
+The remote reader checks identity and the configured vhost's built-in default
+exchange, then GETs paginated, name-filtered
 queue metadata for that vhost only. It requests no message bodies. Redirects,
 partial/changing counts, duplicate queues and foreign vhosts fail closed. Limits:
 100 pages of100 queues, 4MiB per response,15s per request and60s metadata budget;
 the shell bounds the whole helper to90s. If a limit is reached, upgrade is blocked,
 not certified safe. API shape/reference:
 [RabbitMQ HTTP API](https://www.rabbitmq.com/docs/http-api-reference).
+
+The default-exchange check deliberately avoids `GET /api/vhosts/{vhost}`:
+RabbitMQ3.13.7 makes that endpoint administrator-only, including GET. Its scoped
+exchange GET uses vhost authorization and works with monitoring access. This was
+confirmed against the installed broker (401 versus200), not inferred from mocks.
+Source: [vhost authorization](https://github.com/rabbitmq/rabbitmq-server/blob/v3.13.7/deps/rabbitmq_management/src/rabbit_mgmt_wm_vhost.erl),
+[exchange authorization](https://github.com/rabbitmq/rabbitmq-server/blob/v3.13.7/deps/rabbitmq_management/src/rabbit_mgmt_wm_exchange.erl).
 
 ## An old declaration was found
 
@@ -74,8 +82,50 @@ September9 evidence: source commit `3b284b0`; eleven regression groups and both
 real apps-installer abort-order checks passed (bd0b59). After master sync, executing
 `acdc_broker_upgrade_preflight` from the sourced installer using saved settings on
 10.1.0.44 returned exit0 and `{"work_queues":2,"compatible":true}` (c9cbca).
-No metadata writes or service restarts occurred. The remote reader has fixture
-coverage only, not a new separate-server acceptance claim.
+No metadata writes or service restarts occurred in that local check.
+
+### Separate-server metadata acceptance — September9
+
+The first real remote check failed (a357d7): a monitoring user could read the
+queues but received401 from the single-vhost details request. Diagnostic4e7227
+confirmed the exact isolated broker and permissions. The regression reproduces
+this (ba89ac: three failed groups before correction); all11 groups and both real
+installer abort-order checks pass after the default-exchange correction (7837a1).
+
+`scripts/accept-acdc-broker-preflight.cjs --run-development-remote-preflight`
+then exercised the **actual shell installer helper** from10.1.0.26 against the
+existing isolated RabbitMQ3.13.7 instance on10.1.0.44, with certificate-verified
+HTTPS on35672 and its monitoring identity. This runner is explicitly fixed to
+that development fixture and refuses general/production destinations.
+
+Native result24bfc5, exit0:
+
+- Initial inventory accepted with no ACDC work queues.
+- One fresh UUID-owned classic queue with `auto_delete=true` correctly blocked
+  the real installer guard, despite being empty and having no consumers.
+- After broker-conditional removal of that exact empty queue, its retained
+  `auto_delete=false` replacement passed.
+- Exact owned queue removed with `if-empty` and `if-unused`; final inventory
+  passed. No messages published, provider calls or runtime installations.
+
+TLS used the existing short-lived test CA through `NODE_EXTRA_CA_CERTS`; no TLS
+verification was disabled or certificate generated. For a private management CA,
+provide a trusted CA file to Node before launching the installer. This environment
+input is not persisted by the installer; a reusable CA-input option remains a
+separate deployment improvement, not something this run proves.
+
+Receipt: `/var/log/kazoo-acceptance/acdc-broker-preflight.3FZ8FO/receipt.json` on
+the original dev client; also retained on main44 as
+`/root/kz5-acceptance/acdc-broker-preflight-3FZ8FO.json`.
+SHA256: `2b91dffb2c64e0e619b0cdeb2cad15c19d32c72e32ffb96db3356c1ddc4df3eb`.
+Helper SHA256: `3249377ba05632d073702337cd6720a993c5bae03c03059a7ca38610b1ae11ca`.
+Normal RabbitMQ remained PID2355/restarts0. The isolated broker was stopped
+afterward and35671 had no listener (ce25fc). No production broker was accessed.
+
+This proves the remote **preflight** path and declaration discrimination, not a
+fresh remote apps deployment, AMQPS consumer connection, full migration/rollback
+or real callback failover. Earlier fixture-only status is superseded only for
+the exact metadata cases above.
 
 This is a refusal guard, **not automatic migration, distributed deployment locking,
 broker persistence or failover proof**. Two reads reduce the build-window risk but
