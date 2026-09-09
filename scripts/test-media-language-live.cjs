@@ -59,6 +59,13 @@ async function owned(role) {
     assert.equal(response.data.id, entry.id); assert.equal(response.data.name, entry.name);
     assert.equal(response.data.realm, entry.realm); return response;
 }
+async function disableOwned(role) {
+    await owned(role);
+    // Native account creation initializes pvt_enabled independently of the
+    // request's public enabled field. Use the supported update afterward.
+    await api('PATCH', 'accounts/' + state[role].id, {enabled: false});
+    assert.equal(rpc('kzd_accounts', 'is_enabled', [state[role].id]), 'false');
+}
 async function create(role, parent) {
     const name = 'Kazoo5 Language ' + role + ' ' + state.nonce;
     const realm = 'language-' + role + '-' + state.nonce + '.invalid';
@@ -67,7 +74,7 @@ async function create(role, parent) {
     const response = await api('PUT', 'accounts/' + parent, data);
     const id = response.data.id; assert(/^[a-f0-9]{32}$/.test(id) && id !== MASTER);
     state[role] = {id, name, realm}; save();
-    const current = await owned(role); assert.equal(current.metadata.enabled, false);
+    await disableOwned(role);
     return id;
 }
 async function assertEmptyChild() {
@@ -77,7 +84,7 @@ async function assertEmptyChild() {
     }
 }
 async function main() {
-    assert(process.argv.length === 3 && ['--prepare', '--verify'].includes(mode));
+    assert(process.argv.length === 3 && ['--prepare', '--resume-preparation', '--verify'].includes(mode));
     assert(process.getuid() === 0 && os.hostname() === 'dev-testing');
     const dir = fs.lstatSync('/root/kz5-acceptance'); assert(dir.isDirectory() && !dir.isSymbolicLink() && dir.uid === 0 && !(dir.mode & 0o022));
     stage = 'private_auth';
@@ -87,13 +94,23 @@ async function main() {
     const auth = await api('PUT', 'user_auth', {account_name: 'KazooMaster', method: 'md5',
         credentials: crypto.createHash('md5').update('admin:' + secrets.KAZOO_MASTER_ADMIN_PASSWORD).digest('hex')});
     assert.equal(auth.data.account_id, MASTER); assert(auth.auth_token); token = auth.auth_token;
-    if (mode === '--prepare') {
-        state = {kind: 'kazoo5-media-language-acceptance', nonce: crypto.randomBytes(6).toString('hex'),
-            phase: 'preparing', created_at: new Date().toISOString(), checks: []}; save(true);
-        const parent = await create('reseller', MASTER);
+    if (mode === '--prepare' || mode === '--resume-preparation') {
+        if (mode === '--prepare') {
+            state = {kind: 'kazoo5-media-language-acceptance', nonce: crypto.randomBytes(6).toString('hex'),
+                phase: 'preparing', created_at: new Date().toISOString(), checks: []}; save(true);
+        } else {
+            state = JSON.parse(privateText(RECEIPT));
+            assert.equal(state.kind, 'kazoo5-media-language-acceptance'); assert.equal(state.phase, 'preparing');
+            assert.equal(state.stage, 'create_reseller'); assert(state.reseller && !state.child);
+            assert(/^[a-f0-9]{12}$/.test(state.nonce));
+            assert.equal(state.reseller.name, 'Kazoo5 Language reseller ' + state.nonce);
+            assert.equal(state.reseller.realm, 'language-reseller-' + state.nonce + '.invalid');
+            await disableOwned('reseller');
+        }
+        const parent = state.reseller ? state.reseller.id : await create('reseller', MASTER);
         checkpoint('promote_owned_reseller'); await owned('reseller');
         await api('PUT', 'accounts/' + parent + '/reseller', {});
-        assert.equal((await owned('reseller')).metadata.is_reseller, true);
+        await owned('reseller'); assert.equal(rpc('kz_services_reseller', 'is_reseller', [parent]), 'true');
         await create('child', parent);
         checkpoint('native_baseline'); await assertEmptyChild();
         assert.equal(binary('kz_services_reseller', 'get_id', [state.child.id]), parent);
@@ -110,7 +127,7 @@ async function main() {
     for (const role of ['reseller', 'child']) {
         assert.equal(state[role].name, 'Kazoo5 Language ' + role + ' ' + state.nonce);
         assert.equal(state[role].realm, 'language-' + role + '-' + state.nonce + '.invalid');
-        assert.equal((await owned(role)).metadata.enabled, false);
+        await owned(role); assert.equal(rpc('kzd_accounts', 'is_enabled', [state[role].id]), 'false');
     }
     assert.notEqual(state.child.id, state.reseller.id);
     assert.equal(binary('kz_services_reseller', 'get_id', [state.child.id]), state.reseller.id);
@@ -143,7 +160,9 @@ async function main() {
     await owned('reseller'); await api('PATCH', 'accounts/' + state.reseller.id, {language: 'he-il'});
     assert.equal(binary('kz_media_util', 'prompt_language', [state.child.id]), 'es-es');
     await assertEmptyChild();
-    for (const role of ['reseller', 'child']) assert.equal((await owned(role)).metadata.enabled, false);
+    for (const role of ['reseller', 'child']) {
+        await owned(role); assert.equal(rpc('kzd_accounts', 'is_enabled', [state[role].id]), 'false');
+    }
     state.phase = 'verified'; state.verified_at = new Date().toISOString(); save();
     console.log(JSON.stringify({result: 'PASS', receipt: RECEIPT, inherited_locales: LOCALES, shared_prompt_reads: 15,
         explicit_child_override: true, retained_disabled_accounts: [state.reseller.id, state.child.id],
