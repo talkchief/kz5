@@ -7,6 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / coordinated maintenance — runtime observation primitives tested:**
+  Added read-only native agent FSM/listener maintenance observations in root
+  ACDC source. They retain finite/infinite pause information and actual runtime
+  membership, refusing active calls, pending transitions/probes and ambiguous
+  timer/membership state.43 checks pass against privately compiled production
+  modules; FSM checks use real OTP processes and assert unchanged state/timers.
+  Evidence `/tmp/kazoo-acdc-maintenance.iUgeHD`. No native snapshot rollout or
+  coordinated restart/rollback is claimed yet. Remaining work: full admission
+  fence and work inventory, protected runtime-state checkpoint, coordinated
+  activation/restore and actual private-cluster before/after call acceptance.
+  Do not treat these read-only observations as a fence or silently resume a
+  paused agent. Details: `doc/acdc_coherent_upgrade_readiness.md`.
+
 - **Blackhole prolonged broker/WSS fanout — native pilot PASS, full soak running:**
   Receipt `ab89346f96fd41d9ec09e4f1b2911bd3` on dev44:3 broker events,
   12/12 deliveries over4 verified WSS sockets, zero other-call leaks, control

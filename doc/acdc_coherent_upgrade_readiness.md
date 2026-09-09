@@ -1,4 +1,52 @@
-# ACDC/backend and UI upgrade readiness — 2026-09-06
+# ACDC/backend and UI upgrade readiness
+
+## Current maintenance gap — 2026-09-09
+
+The September6 installed-code observations below are historical, not the
+current deployment state. Normal deployments since then superseded that old
+runtime/UI hold. See `FOCUSED_CLOSEOUT_2026-09-09.md` for collected receipts.
+Admission fencing, complete cluster drain, runtime-state preservation and
+coordinated restart/rollback acceptance remain open.
+
+Native `acdc_agent_fsm:maintenance_state(Pid, Timeout)` now returns either an
+error or an allowlisted observation containing account/agent/listener identity,
+ready/paused state and the remaining pause in milliseconds. Finite pauses also
+include `pause_until_unix_ms`; expired timers refuse observation until the FSM
+processes their transition. Infinite pauses remain explicit `infinity`.
+Active states, residual call/offer IDs, outbound calls, monitoring ownership,
+pending state updates/recovery probes and sync/wrapup timers refuse readiness.
+No call metadata, endpoints or private record contents are returned.
+
+`acdc_agent_listener:maintenance_state(Pid, Timeout)` independently observes
+the current runtime queue membership and matching FSM identity. It refuses
+residual listener calls/originates, pending synchronization and malformed or
+duplicate memberships. Saved user rosters and supervisor startup arguments are
+not substituted for runtime membership. Empty membership is preserved as empty.
+
+These are read-only native primitives, **not an admission fence, public HTTP
+API, durable checkpoint, restore operation or restart authorization**. They do
+not claim the pause has survived a cold restart. A caller must establish the
+whole-cluster fence, match both observations to the same live supervisor/FSM/
+listener, prove the complete work inventory is drained, and keep admission
+closed through preservation, activation and post-checks. Capture timestamps
+require verified host clocks; a future restore must subtract elapsed time and
+must not restart a full finite pause from its original remaining duration.
+Never reuse a snapshot after work has resumed. Existing recurring call-check
+timers are housekeeping, not work; an in-flight recovery probe is work.
+
+Guarded production compilation without `TEST` and43 isolated checks passed:
+27 real `gen_statem` observations (exact state/timer-reference preservation),
+plus16 production listener callback checks (exact returned state unchanged).
+Evidence: `/tmp/kazoo-acdc-maintenance.iUgeHD` on the source host. This is not
+native broker/startup or cluster restart acceptance; deployment is pending.
+
+```sh
+bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 \
+  --runtime-sec 120 -- /usr/bin/unshare --net -- \
+  /usr/bin/bash /opt/kz5/scripts/test-acdc-agent-maintenance.sh
+```
+
+## Historical pre-deployment investigation — 2026-09-06
 
 The current source and freshly tested Monster bundle are not yet a deployed,
 coherent release. Read-only probe `29950` confirmed unchanged service identities

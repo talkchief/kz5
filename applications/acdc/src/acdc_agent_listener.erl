@@ -33,6 +33,7 @@
         ,send_sync_req/1
         ,send_sync_resp/3, send_sync_resp/4
         ,config/1, refresh_config/3
+        ,maintenance_state/2
         ,send_status_resume/1
         ,add_acdc_queue/3
         ,rm_acdc_queue/2
@@ -286,6 +287,11 @@ send_sync_resp(Srv, Status, ReqJObj, Options) ->
 -spec config(pid()) -> config().
 config(Srv) -> gen_listener:call(Srv, 'config').
 
+%% Paired with the FSM's observation under an external admission fence. Do not
+%% use saved user-document queues or supervisor startup args as runtime truth.
+-spec maintenance_state(pid(), pos_integer()) -> {'ok', map()} | {'error', atom()}.
+maintenance_state(Srv, Timeout) -> gen_listener:call(Srv, 'maintenance_state', Timeout).
+
 -spec refresh_config(pid(), kz_term:api_ne_binaries(), fsm_state_name()) -> 'ok'.
 refresh_config(_, 'undefined', _) -> 'ok';
 refresh_config(Srv, Qs, StateName) ->
@@ -385,6 +391,8 @@ handle_call('presence_id', _, #state{agent_presence_id=PresenceId}=State) ->
     {'reply', PresenceId, State, 'hibernate'};
 handle_call('queues', _, #state{agent_queues=Queues}=State) ->
     {'reply', Queues, State, 'hibernate'};
+handle_call('maintenance_state', _, State) ->
+    {'reply', maintenance_snapshot(State), State};
 handle_call('my_id', _, #state{agent_id=AgentId}=State) ->
     {'reply', AgentId, State, 'hibernate'};
 handle_call({'agent_info', Field}, _, #state{agent=Agent}=State) ->
@@ -397,6 +405,21 @@ handle_call('config', _From, #state{acct_id=AcctId
 handle_call(_Request, _From, #state{}=State) ->
     lager:debug("unhandled call from ~p: ~p", [_From, _Request]),
     {'reply', {'error', 'unhandled_call'}, State}.
+
+maintenance_snapshot(#state{call='undefined', acdc_queue_id='undefined'
+                            ,msg_queue_id='undefined', agent_call_ids=[]
+                            ,timer_ref='undefined', sync_resp='undefined'
+                            ,is_thief='false', acct_id=AccountId, agent_id=AgentId
+                            ,fsm_pid=Fsm, agent_queues=Queues})
+  when is_binary(AccountId), byte_size(AccountId) > 0,
+       is_binary(AgentId), byte_size(AgentId) > 0, is_pid(Fsm), is_list(Queues) ->
+    case lists:all(fun(Q) -> is_binary(Q) andalso byte_size(Q) > 0 end, Queues)
+        andalso length(lists:usort(Queues)) =:= length(Queues) of
+        'true' -> {'ok', #{account_id => AccountId, agent_id => AgentId
+                          ,fsm => Fsm, queues => Queues}};
+        'false' -> {'error', 'agent_membership_inconsistent'}
+    end;
+maintenance_snapshot(_) -> {'error', 'agent_listener_not_drained'}.
 
 %%------------------------------------------------------------------------------
 %% @doc Handling cast messages.

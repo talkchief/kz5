@@ -41,6 +41,7 @@
         ,current_call/1
         ,status/1
         ,dashboard_state/2
+        ,maintenance_state/2
 
         ,new_endpoint/2
         ,edited_endpoint/2
@@ -380,6 +381,49 @@ status(ServerRef) -> gen_statem:call(ServerRef, 'status').
 -spec dashboard_state(pid(), pos_integer()) -> {binary(), binary(), atom(), pid() | undefined}.
 dashboard_state(ServerRef, Timeout) -> gen_statem:call(ServerRef, 'dashboard_state', Timeout).
 
+%% Native maintenance observation only: NOT an admission fence or permission
+%% to restart. Read membership separately from the listener, under a cluster
+%% fence, and require both identities/observations to remain stable.
+-spec maintenance_state(pid(), pos_integer()) -> {'ok', map()} | {'error', atom()}.
+maintenance_state(ServerRef, Timeout) -> gen_statem:call(ServerRef, 'maintenance_state', Timeout).
+
+maintenance_reply(From, StateName, State) ->
+    {'keep_state', State, [{'reply', From, maintenance_snapshot(StateName, State)}]}.
+
+maintenance_snapshot(StateName, #state{account_id=AccountId, agent_id=AgentId
+                                      ,agent_listener=Listener
+                                      ,member_call='undefined', member_call_id='undefined'
+                                      ,member_call_queue_id='undefined', member_call_start='undefined'
+                                      ,agent_call_id='undefined', outbound_call_ids=[]
+                                      ,member_connect_id='undefined', monitoring='false'
+                                      ,agent_state_updates=[], call_check='undefined'
+                                      ,sync_ref='undefined', wrapup_ref='undefined'
+                                      ,pause_ref=PauseRef})
+  when (StateName =:= 'ready' orelse StateName =:= 'paused'),
+       is_binary(AccountId), byte_size(AccountId) > 0,
+       is_binary(AgentId), byte_size(AgentId) > 0, is_pid(Listener) ->
+    case maintenance_pause(StateName, PauseRef) of
+        {'ok', Pause} ->
+            {'ok', Pause#{account_id => AccountId, agent_id => AgentId
+                         ,listener => Listener, state => StateName}};
+        Error -> Error
+    end;
+maintenance_snapshot(_, _) -> {'error', 'agent_not_drained'}.
+
+maintenance_pause('ready', 'undefined') -> {'ok', #{pause_remaining_ms => 0}};
+maintenance_pause('paused', 'infinity') -> {'ok', #{pause_remaining_ms => 'infinity'}};
+maintenance_pause('paused', Ref) when is_reference(Ref) ->
+    %% Sample wall time first so this cannot extend a finite pause. Expired
+    %% timers are pending transitions, not permission to restore an agent as
+    %% ready. Retry observation after the FSM processes its timer message.
+    Now = erlang:system_time('millisecond'),
+    case erlang:read_timer(Ref) of
+        Left when is_integer(Left), Left > 0 ->
+            {'ok', #{pause_remaining_ms => Left, pause_until_unix_ms => Now + Left}};
+        _ -> {'error', 'agent_pause_transition_pending'}
+    end;
+maintenance_pause(_, _) -> {'error', 'agent_pause_state_inconsistent'}.
+
 -spec dashboard_reply(gen_statem:from(), atom(), state()) -> kz_types:handle_fsm_ret(state()).
 dashboard_reply(From, StateName, #state{account_id=AccountId,agent_id=AgentId,agent_listener=Listener}=State) ->
     {'next_state',StateName,State,{'reply',From,{AccountId,AgentId,StateName,Listener}}}.
@@ -513,6 +557,7 @@ wait('cast', 'send_sync_event', State) ->
 wait('cast', Evt, State) ->
     handle_event(Evt, 'wait', State);
 wait({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,wait,State);
+wait({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,wait,State);
 wait({'call', From}, 'status', State) ->
     {'next_state', 'wait', State, {'reply', From, [{'state', <<"wait">>}]}};
 wait({'call', From}, 'current_call', State) ->
@@ -571,6 +616,7 @@ sync('cast', {'member_connect_req', _}, State) ->
 sync('cast', Evt, State) ->
     handle_event(Evt, 'sync', State);
 sync({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,sync,State);
+sync({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,sync,State);
 sync({'call', From}, 'status', State) ->
     {'next_state', 'sync', State, {'reply', From, [{'state', <<"sync">>}]}};
 sync({'call', From}, 'current_call', State) ->
@@ -739,6 +785,7 @@ ready('cast', {'originate_failed', _E}, State) ->
 ready('cast', Evt, State) ->
     handle_event(Evt, 'ready', State);
 ready({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,ready,State);
+ready({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,ready,State);
 ready({'call', From}, 'status', State) ->
     {'next_state', 'ready', State, {'reply', From, [{'state', <<"ready">>}]}};
 ready({'call', From}, 'current_call', State) ->
@@ -899,6 +946,7 @@ ringing('cast', {'usurp_control', _CallId}, State) ->
 ringing('cast', Evt, State) ->
     handle_event(Evt, 'ringing', State);
 ringing({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,ringing,State);
+ringing({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,ringing,State);
 ringing({'call', From}, 'status', #state{member_call_id=MemberCallId
                                         ,agent_call_id=ACallId
                                         }=State) ->
@@ -1193,6 +1241,7 @@ answered('cast', {'usurp_control', _CallId}, State) ->
 answered('cast', Evt, State) ->
     handle_event(Evt, 'answered', State);
 answered({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,answered,State);
+answered({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,answered,State);
 answered({'call', From}, 'status', #state{member_call_id=MemberCallId
                                          ,agent_call_id=ACallId
                                          }=State) ->
@@ -1321,6 +1370,7 @@ wrapup('cast', {'originate_resp', _}, State) ->
 wrapup('cast', Evt, State) ->
     handle_event(Evt, 'wrapup', State);
 wrapup({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,wrapup,State);
+wrapup({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,wrapup,State);
 wrapup({'call', From}, 'status', #state{wrapup_ref=Ref}=State) ->
     {'next_state', 'wrapup', State
     ,{'reply', From, [{'state', <<"wrapup">>}
@@ -1380,6 +1430,7 @@ paused('cast', {'originate_failed', _E}, State) ->
 paused('cast', Evt, State) ->
     handle_event(Evt, 'paused', State);
 paused({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,paused,State);
+paused({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,paused,State);
 paused({'call', From}, 'status', #state{pause_ref=Ref}=State) ->
     {'next_state', 'paused', State
     ,{'reply', From, [{'state', <<"paused">>}
@@ -1455,6 +1506,7 @@ outbound('cast', {'usurp_control', _CallId}, State) ->
 outbound('cast', Evt, State) ->
     handle_event(Evt, 'outbound', State);
 outbound({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,outbound,State);
+outbound({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,outbound,State);
 outbound({'call', From}, 'status', #state{wrapup_ref=Ref
                                          ,outbound_call_ids=OutboundCallIds
                                          }=State) ->
