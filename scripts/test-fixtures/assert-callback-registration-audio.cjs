@@ -58,8 +58,16 @@ function decode(byte) {
     const value = (~byte) & 255, sample = (((value & 15) << 3) + 132) << ((value >> 4) & 7);
     return value & 128 ? 132 - sample : sample - 132;
 }
-function fullPhrase(audio, reference) {
-    assert(reference.length >= 32000 && reference.length <= 160000, 'Expected complete 4..20 second success reference');
+function fullPhrase(audio, reference, kind = 'success') {
+    if (kind === 'invalid-entry') {
+        const gemini = require('./callback-gemini-reference.cjs');
+        assert(reference.equals(gemini.ulaw(gemini.assetFor('acdc-callback-invalid-entry','en-us').bytes)),
+            'Invalid-entry reference must equal the complete committed EN asset');
+        assert(reference.length >= 24000 && reference.length <= 80000, 'Invalid-entry reference outside bounded clip range');
+    } else {
+        assert.equal(kind,'success','Unknown phrase kind');
+        assert(reference.length >= 32000 && reference.length <= 160000, 'Expected complete 4..20 second success reference');
+    }
     const candidates = phraseMatches(audio, reference.subarray(0, 24000)), matches = [];
     for (const candidate of candidates) {
         if (candidate.sample + reference.length > audio.length) continue;
@@ -171,7 +179,7 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
     if (mode === 'invalid-alternate') {
         const gemini = require('./callback-gemini-reference.cjs');
         const invalid = gemini.ulaw(gemini.assetFor('acdc-callback-invalid-entry', 'en-us').bytes);
-        const found = fullPhrase(audio, invalid);
+        const found = fullPhrase(audio, invalid, 'invalid-entry');
         assert.equal(found.length, 1, 'Expected exactly one complete prerecorded invalid-entry response');
         const sample = found[0].sample, last = sample + invalid.length;
         assert(present.subarray(sample,last).every(Boolean), 'Invalid-entry audio contains uncaptured samples');

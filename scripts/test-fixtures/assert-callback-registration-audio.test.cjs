@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict'), {spawnSync} = require('node:child_process');
-const {inspect} = require('./assert-callback-registration-audio.cjs');
+const {inspect,fullPhrase} = require('./assert-callback-registration-audio.cjs');
 const {capture, sdp} = require('./assert-callback-confirmation-pcap.test.cjs');
 const wav = require('node:path').resolve(__dirname, '../assets/acdc-callback-prompts/en-us/acdc-callback-success.wav');
 const converted = spawnSync('sox', [wav, '-t', 'raw', '-r', '8000', '-c', '1', '-e', 'mu-law', '-']);
@@ -107,4 +107,15 @@ for (const mode of ['confirm-current', 'entry-only']) for (const [index, alter] 
 assert.throws(() => inspect(capture(records()), reference.subarray(0, 24000), callId)); count++;
 assert.throws(() => inspect(capture(records()), reference, '1-999@127.0.0.40')); count++;
 assert.throws(() => inspect(capture(records()).subarray(0, -1), reference, callId)); count++;
+{
+    const g=require('./callback-gemini-reference.cjs');
+    const auxiliary=g.ulaw(g.assetFor('acdc-callback-invalid-entry','en-us').bytes);
+    const stream=Buffer.concat([Buffer.alloc(8000,255),auxiliary,Buffer.alloc(8000,255)]);
+    assert.equal(fullPhrase(stream,auxiliary,'invalid-entry').length,1);count++;
+    assert.throws(()=>fullPhrase(stream,auxiliary));count++;
+    assert.throws(()=>fullPhrase(stream,auxiliary.subarray(0,-160),'invalid-entry'));count++;
+    const bad=Buffer.from(auxiliary);bad[8000]^=127;
+    assert.throws(()=>fullPhrase(stream,bad,'invalid-entry'));count++;
+    assert.throws(()=>fullPhrase(stream,auxiliary,'custom'));count++;
+}
 console.log('PASS ' + count + ' registration audio gates: full installed-reference delivery, exact SDP/dialog/DTMF scope, five-second entry, complete success before server BYE, missing/truncated/corrupt audio fail closed');

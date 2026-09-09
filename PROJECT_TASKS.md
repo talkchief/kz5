@@ -19,6 +19,11 @@ work postponed; do not generate voices at runtime or during deployment.
   premature number digits were consumed during feedback. The test now waits for
   the7.171s fixed enter-number clip; no production timeout/guard is relaxed.
   Evidence retained at `/var/log/kazoo-acceptance/20260909T122848Z`; rerun pending.
+  The corrected timing run reached durable registration/server BYE but its
+  checker rejected the3.931s invalid-entry clip against a success-only4s minimum.
+  Added an explicit exact-committed-asset auxiliary matcher; the success minimum
+  remains unchanged. Failure retained at `20260909T123304Z`; replay required
+  before another full retry run.
   No provider generation, imported-company traffic or runtime code hot-loading.
 
 - **Point2 active callback worker loss — native PASS:** fixture-only worker
