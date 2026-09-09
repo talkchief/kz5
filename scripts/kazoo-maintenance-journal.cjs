@@ -195,4 +195,62 @@ function mergeAgentSnapshots(snapshots, manifest, now = Date.now()) {
     }
     return {agents, document_revisions: revisions, complete_cluster_drain_proven: false, admission_fence_proven: false};
 }
-module.exports = {create, read, advance, restoreCheckpoint, validateManifest, validateAgents, mergeAgentSnapshots};
+function mergeQueueSnapshots(queueSnapshots, agentSnapshots, manifest, now = Date.now()) {
+    const merged = mergeAgentSnapshots(agentSnapshots, manifest, now);
+    const nodes = new Map(manifest.nodes.filter(n => n.role === 'kazoo-apps').map(n => [n.name, n]));
+    assert(Array.isArray(queueSnapshots) && queueSnapshots.length === nodes.size, 'Missing queue-node snapshot');
+    const seen = new Set(), queues = [], cohort = new Map(), agents = new Map();
+    for (const a of merged.agents) {
+        const key = a.account_id + '/' + a.agent_id;
+        if (!agents.has(key)) agents.set(key, []);
+        agents.get(key).push(a);
+    }
+    for (const s of queueSnapshots) {
+        exact(s, ['schema_version', 'node', 'epoch', 'captured_at_unix_ms', 'queues',
+            'all_queue_workers_observed', 'complete_cluster_drain_proven', 'admission_fence_proven']);
+        assert.equal(s.schema_version, 1); assert(nodes.has(s.node) && !seen.has(s.node)); seen.add(s.node);
+        assert.equal(s.epoch, nodes.get(s.node).epoch, 'Queue node epoch changed');
+        assert(Number.isSafeInteger(s.captured_at_unix_ms) && now - s.captured_at_unix_ms <= 30000 &&
+            now - s.captured_at_unix_ms >= -2000, 'Stale queue snapshot or unverified clock');
+        assert.equal(s.all_queue_workers_observed, true);
+        assert.equal(s.complete_cluster_drain_proven, false); assert.equal(s.admission_fence_proven, false);
+        assert(Array.isArray(s.queues) && s.queues.length <= 5000);
+        const identities = new Set(); let workers = 0;
+        for (const q of s.queues) {
+            exact(q, ['account_id', 'queue_id', 'document_revision', 'worker_count', 'broker_queues', 'busy_agents']);
+            hex(q.account_id, 32); hex(q.queue_id, 32);
+            const key = q.account_id + '/' + q.queue_id;
+            assert(!identities.has(key), 'Duplicate queue replica'); identities.add(key);
+            assert(typeof q.document_revision === 'string' && /^[1-9][0-9]*-[a-f0-9]{32}$/.test(q.document_revision));
+            assert(Number.isSafeInteger(q.worker_count) && q.worker_count > 0);
+            workers += q.worker_count; assert(workers <= 5000, 'Queue worker bound exceeded');
+            assert(Array.isArray(q.broker_queues) && q.broker_queues.length > 0 && q.broker_queues.length <= 20000);
+            assert(q.broker_queues.every(b => typeof b === 'string' && Buffer.byteLength(b) <= 255 &&
+                b.length > 0 && !/[\x00-\x1f\x7f]/.test(b)), 'Invalid broker queue name');
+            assert.equal(new Set(q.broker_queues).size, q.broker_queues.length);
+            assert(Array.isArray(q.busy_agents) && q.busy_agents.length <= 5000);
+            assert.equal(new Set(q.busy_agents).size, q.busy_agents.length);
+            for (const id of q.busy_agents) {
+                hex(id, 32);
+                const replicas = agents.get(q.account_id + '/' + id);
+                // Manager busy also represents intentional pause. Never let
+                // that flag alone certify drain: correlate every actual replica.
+                assert(replicas?.length && replicas.every(a => a.state === 'paused' &&
+                    (a.pause_until_unix_ms === 'infinity' || a.pause_until_unix_ms > now) &&
+                    a.queues.includes(q.queue_id)), 'Busy queue member lacks a current paused agent checkpoint');
+            }
+            const signature = {revision: q.document_revision, busy_agents: [...q.busy_agents].sort()};
+            if (cohort.has(key)) assert.deepEqual(signature, cohort.get(key), 'Queue replicas disagree');
+            else cohort.set(key, signature);
+            queues.push({node: s.node, ...q});
+        }
+    }
+    for (const a of merged.agents) for (const q of a.queues) {
+        assert(cohort.has(a.account_id + '/' + q), 'Runtime agent membership has no observed queue');
+    }
+    // Broker counters, durable callbacks, other producers, media and a real
+    // admission fence are independent prerequisites, never inferred here.
+    return {...merged, queues};
+}
+module.exports = {create, read, advance, restoreCheckpoint, validateManifest, validateAgents,
+    mergeAgentSnapshots, mergeQueueSnapshots};

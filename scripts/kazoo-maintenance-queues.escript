@@ -51,8 +51,9 @@ queue(N,Sup) ->
     2=length(Original),
     Manager=rpc(N,acdc_queue_sup,manager,[Sup]),true=is_pid(Manager),
     WorkerSup=rpc(N,acdc_queue_sup,workers_sup,[Sup]),true=is_pid(WorkerSup),
-    {ok,#{account_id:=A,queue_id:=Q,supervisor:=Sup}}=
+    {ok,#{account_id:=A,queue_id:=Q,supervisor:=Sup,busy_agents:=Busy0}}=
         rpc(N,acdc_queue_manager,maintenance_state,[Manager,2000]),hex_id(A),hex_id(Q),
+    lists:foreach(fun hex_id/1,Busy0),Busy=lists:sort(Busy0),
     Workers=children(N,WorkerSup,acdc_queue_worker_sup),
     true=length(Workers)>0,
     BrokerQueues=lists:usort(listener_queues(N,Manager)++lists:append([worker(N,W,Manager,A,Q)||W<-Workers])),
@@ -63,10 +64,12 @@ queue(N,Sup) ->
     match=re:run(Revision,<<"^[1-9][0-9]*-[a-f0-9]{32}$">>,[{capture,none}]),
     Workers=children(N,WorkerSup,acdc_queue_worker_sup),
     Original=rpc(N,supervisor,which_children,[Sup]),
-    {ok,#{account_id:=A,queue_id:=Q,supervisor:=Sup}}=
+    {ok,#{account_id:=A,queue_id:=Q,supervisor:=Sup,busy_agents:=Busy1}}=
         rpc(N,acdc_queue_manager,maintenance_state,[Manager,2000]),
+    Busy=lists:sort(Busy1),
     [{<<"account_id">>,A},{<<"queue_id">>,Q},{<<"document_revision">>,Revision},
-     {<<"worker_count">>,length(Workers)},{<<"broker_queues">>,BrokerQueues}].
+     {<<"worker_count">>,length(Workers)},{<<"broker_queues">>,BrokerQueues},
+     {<<"busy_agents">>,Busy}].
 worker(N,W,Manager,A,Q) ->
     Budget=get(worker_budget),true=Budget>0,put(worker_budget,Budget-1),
     Original=rpc(N,supervisor,which_children,[W]),true=is_list(Original),3=length(Original),

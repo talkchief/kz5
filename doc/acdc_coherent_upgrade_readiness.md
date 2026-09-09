@@ -18,11 +18,29 @@ or complete cluster drain.
 
 ### Queue drain observations — source tested; native acceptance pending
 
+**Latest correction:** paused agents also publish the manager's busy flag.
+Rejecting every busy flag incorrectly blocks maintenance of intentionally paused
+queues. The focused test fails against retained production
+`/tmp/kazoo-acdc-maintenance.fLiIkJ/acdc_queue_manager.beam` and passes with the
+correction. All138 production observation/restore tests now pass in
+`/tmp/kazoo-acdc-maintenance.TvPQ6U`;16 journal/merger cases pass.
+
+The manager now returns `busy_agents` as unresolved identities, never an active
+call or safe-pause assertion. `mergeQueueSnapshots` correlates the complete
+same-epoch queue and agent inventories: each busy member must have observed
+paused replicas with unexpired finite or infinite pause and actual membership
+in that queue. Missing/ready/expired/nonmember agents are refused. Queue document
+revisions and busy membership must agree across replicas; malformed, stale,
+incomplete and false-fence snapshots refuse. This still does not prove broker,
+durable callback, producer/media drain or admission closure. Builds12/8 target
+the earlier `e405aab`; do not change their compiling inputs to this correction.
+
 Internal `maintenance_state/2` covers the queue FSM, private listener, shared
 listener and manager. Ready FSMs must have no call/winner, outstanding timer,
 pending options, callback context, attempted agents or bridge proof. Private
 and shared listeners must hold no call/delivery ownership. Managers must have
-no current members, announcements, cancellation ownership or ringing/busy flags.
+no current members, announcements, cancellation ownership or ringing flags;
+busy flags require the independent actual-agent correlation described above.
 Missing identities/processes are refused. These operations never clear state,
 acknowledge work, publish events or expose call payloads. A regression proves
 that ready/current_call=undefined alone does not certify drain.

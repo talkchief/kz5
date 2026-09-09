@@ -142,3 +142,51 @@ test('snapshot merger refuses missing revisions and conflicting replica state or
     const changed = snapshots(); changed[1].document_revisions[0].revision = '2-' + 'e'.repeat(32);
     assert.throws(() => j.mergeAgentSnapshots(changed, manifest));
 });
+
+function queueSnapshots() {
+    return manifest.nodes.map(n => ({schema_version: 1, node: n.name, epoch: n.epoch,
+        captured_at_unix_ms: Date.now(), all_queue_workers_observed: true,
+        complete_cluster_drain_proven: false, admission_fence_proven: false,
+        queues: [{account_id: agent.account_id, queue_id: agent.queues[0],
+            document_revision: '1-' + 'f'.repeat(32), worker_count: 3,
+            broker_queues: ['acdc.queue.fixture', 'private-' + n.name], busy_agents: [agent.agent_id]}]}));
+}
+test('queue busy flags are accepted only with complete current paused agent evidence', () => {
+    const a = snapshots(), q = queueSnapshots();
+    for (const s of a) s.agents[0].pause_until_unix_ms = 'infinity';
+    const result = j.mergeQueueSnapshots(q, a, manifest);
+    assert.equal(result.queues.length, 2); assert.equal(result.agents.length, 2);
+    assert.equal(result.admission_fence_proven, false); assert.equal(result.complete_cluster_drain_proven, false);
+    assert.deepEqual(q, queueSnapshots().map((s,i) => ({...s, captured_at_unix_ms:q[i].captured_at_unix_ms})));
+});
+test('queue merger refuses busy flags for missing, ready, expired or nonmember agents', () => {
+    for (const extra of [{state:'ready',pause_until_unix_ms:0},
+        {pause_until_unix_ms:Date.now()-1000}, {queues:[]}]) {
+        const a=snapshots(); a.forEach(s => Object.assign(s.agents[0],extra));
+        assert.throws(() => j.mergeQueueSnapshots(queueSnapshots(),a,manifest), /Busy queue member/);
+    }
+    const missing=snapshots(); missing.forEach(s=>{s.agents=[];s.document_revisions=[];});
+    assert.throws(() => j.mergeQueueSnapshots(queueSnapshots(),missing,manifest), /Busy queue member/);
+});
+test('queue merger refuses incomplete nodes, changed epochs, stale clocks and false fence claims', () => {
+    assert.throws(() => j.mergeQueueSnapshots(queueSnapshots().slice(0,1),snapshots(),manifest));
+    for (const extra of [{node:'foreign'},{epoch:'new'}, {captured_at_unix_ms:Date.now()-31000},
+        {captured_at_unix_ms:Date.now()+5000},{all_queue_workers_observed:false},
+        {complete_cluster_drain_proven:true},{admission_fence_proven:true}]) {
+        const q=queueSnapshots();Object.assign(q[1],extra);
+        assert.throws(() => j.mergeQueueSnapshots(q,snapshots(),manifest));
+    }
+});
+test('queue merger refuses ambiguous inventories, mismatched revisions and absent runtime queues', () => {
+    for (const extra of [{document_revision:'invalid'}, {document_revision:'2-'+'e'.repeat(32)},
+        {worker_count:0},{worker_count:5001},{broker_queues:[]},{broker_queues:['x','x']},
+        {broker_queues:['control\nname']},{busy_agents:['4'.repeat(32)]},
+        {busy_agents:[agent.agent_id,agent.agent_id]},{busy_agents:[]},{credential:'forbidden'}]) {
+        const q=queueSnapshots();Object.assign(q[1].queues[0],extra);
+        assert.throws(() => j.mergeQueueSnapshots(q,snapshots(),manifest));
+    }
+    const empty=queueSnapshots();empty.forEach(s=>s.queues=[]);
+    assert.throws(() => j.mergeQueueSnapshots(empty,snapshots(),manifest), /no observed queue/);
+    const dup=queueSnapshots();dup[0].queues.push(dup[0].queues[0]);
+    assert.throws(() => j.mergeQueueSnapshots(dup,snapshots(),manifest), /Duplicate queue/);
+});

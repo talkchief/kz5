@@ -7,6 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / paused-agent drain correlation — source regression fixed:**
+  The new queue manager guard incorrectly treated all busy flags as active
+  calls, but intentional pauses publish busy too. The focused case fails
+  against the retained earlier production BEAM and passes after the source
+  correction. Manager observations now retain busy identities; the complete
+  queue/agent snapshot merger requires every such member to have current,
+  unexpired paused state and matching runtime membership. Missing/ready/
+  expired/nonmember agents, mismatched replicas and incomplete snapshots refuse.
+  All138 production maintenance cases pass (`/tmp/kazoo-acdc-maintenance.TvPQ6U`)
+  and16 journal/merger tests pass. This is not yet deployed: running builds12/8
+  target the earlier `e405aab`; finish/collect those exact jobs before syncing
+  or rebuilding either private checkout. Full fence/drain/cold restore remains open.
+
 - **INST-06 / queue drain observation — source PASS, native pending:**
   Four internal read-only queue observations reject pending callback/bridge
   work, timers, held deliveries, announcement jobs and cancellation ownership,

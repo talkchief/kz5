@@ -6,6 +6,13 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Corrected a false refusal in the new maintenance guard: paused agents also
+  publish busy. Busy identities now require complete current paused-agent and
+  queue-membership correlation instead of being treated as active calls.
+  Before-fail/after-pass regression,138 production maintenance tests and16
+  journal/merger tests pass. The correction is not deployed yet; current
+  private normal builds12/8 still target the earlier `e405aab`.
+
 - Queue work-drain observations added in source with134 passing maintenance
   cases (54 queue cases), evidence `/tmp/kazoo-acdc-maintenance.fLiIkJ`.
   Read-only queue inventory checks paired workers, residual callback/timer/

@@ -626,14 +626,20 @@ maintenance_snapshot(#state{account_id=AccountId, queue_id=QueueId,
                             supervisor=Supervisor, current_member_calls=[],
                             announcements_pids=Announcements,
                             ignored_member_calls=Ignored,
-                            strategy_state=#strategy_state{ringing_agents=[], busy_agents=[]}})
+                            strategy_state=#strategy_state{ringing_agents=[], busy_agents=Busy}})
   when is_binary(AccountId), byte_size(AccountId)>0,
        is_binary(QueueId), byte_size(QueueId)>0, is_pid(Supervisor),
-       is_map(Announcements), map_size(Announcements)=:=0 ->
+       is_map(Announcements), map_size(Announcements)=:=0, is_list(Busy) ->
     %% A leftover cancellation may still suppress a queued broker delivery.
     %% Do not discard it or expose its call identifiers just to pass the gate.
-    case catch dict:size(Ignored) of
-        0 -> {'ok', #{account_id=>AccountId, queue_id=>QueueId, supervisor=>Supervisor}};
+    %% Paused agents deliberately publish busy, too. Report these identities
+    %% for correlation with the complete agent checkpoint; do not interpret
+    %% busy as either an active call or a safe pause without that observation.
+    ValidBusy = length(Busy)=:=length(lists:usort(Busy))
+        andalso lists:all(fun(B)->is_binary(B) andalso byte_size(B)>0 end,Busy),
+    case {catch dict:size(Ignored), ValidBusy} of
+        {0, 'true'} -> {'ok', #{account_id=>AccountId, queue_id=>QueueId,
+                                supervisor=>Supervisor, busy_agents=>Busy}};
         _ -> {'error', 'queue_manager_not_drained'}
     end;
 maintenance_snapshot(_) -> {'error', 'queue_manager_not_drained'}.

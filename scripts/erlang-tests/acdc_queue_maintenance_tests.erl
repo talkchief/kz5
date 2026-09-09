@@ -45,7 +45,8 @@ queue_maintenance_test_() ->
           ,{member_call_queue,<<"held-queue">>}, {account_id,undefined}, {queue_id,<<>>}
           ,{mgr_pid,undefined}, {fsm_pid,undefined}, {shared_pid,undefined}, {my_q,<<>>}]] ++
     [{"drained manager observes without changing strategy",fun() ->
-         ?assertEqual({ok,#{account_id=><<"account">>,queue_id=><<"queue">>,supervisor=>self()}},manager(#{}))
+         ?assertEqual({ok,#{account_id=><<"account">>,queue_id=><<"queue">>,
+                           supervisor=>self(),busy_agents=>[]}},manager(#{}))
       end}] ++
     [{"refuse manager residual "++atom_to_list(K),fun() ->
          ?assertEqual({error,queue_manager_not_drained},manager(#{K=>V}))
@@ -56,7 +57,16 @@ queue_maintenance_test_() ->
     [{"refuse manager outstanding "++atom_to_list(K),fun() ->
          SS=record(acdc_queue_manager,strategy_state,#{K=>[<<"private">>]}),
          ?assertEqual({error,queue_manager_not_drained},manager(#{strategy_state=>SS}))
-      end} || K <- [ringing_agents,busy_agents]] ++
+      end} || K <- [ringing_agents]] ++
+    [{"busy may mean paused; retain identities for complete agent correlation",fun() ->
+         SS=record(acdc_queue_manager,strategy_state,#{busy_agents=>[<<"paused-agent">>]}),
+         ?assertEqual({ok,#{account_id=><<"account">>,queue_id=><<"queue">>,
+                           supervisor=>self(),busy_agents=>[<<"paused-agent">>]}},manager(#{strategy_state=>SS}))
+      end}] ++
+    [{"reject malformed busy-agent inventory",fun() ->
+         SS=record(acdc_queue_manager,strategy_state,#{busy_agents=>Busy}),
+         ?assertEqual({error,queue_manager_not_drained},manager(#{strategy_state=>SS}))
+      end} || Busy <- [undefined,[<<>>],[42],[<<"duplicate">>,<<"duplicate">>]]] ++
     [{"drained shared listener exposes paired FSM only",fun() ->
          ?assertEqual({ok,#{fsm=>self()}},shared(#{}))
       end}] ++
