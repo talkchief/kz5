@@ -97,7 +97,10 @@ function create(role) {
     assert.equal(podman(['exec',id,'git','-C','/opt/kz5','rev-parse','HEAD']),s.source);
     assert.equal(podman(['exec',id,'cat','/proc/1/comm']),'systemd');
     s.roles[role].phase='booted-source-ready';saveState(s);
-    console.log(JSON.stringify({status:'BOOTED',role,ip,source:s.source,installed:false}));
+    // The lab image/base bundle remains immutable; new roles must nevertheless
+    // exercise current fixes, not the old commit used to prepare the network.
+    syncSource(role);
+    console.log(JSON.stringify({status:'BOOTED',role,ip,source:readState().roles[role].source,installed:false}));
 }
 function status() {
     const s=readState();if(s.network)ownedNetwork(s);

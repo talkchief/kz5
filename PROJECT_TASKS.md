@@ -7,6 +7,41 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Point1 corrected30-call broker-loss campaign — native PASS:**
+  `kz5-acdc-broker-loss-30-fixed-20260909.service` completed exit0 after
+  normal deployment of `b19fde3`. Evidence `node-loss/20260909T133950Z`:
+  same30 FSMs recovered, next batch30 caller/30 agent successes,0 failures,
+  post-recovery errors0/0,0 new cores, peak sampled CPU43%, minimum available
+  memory19549760KiB. This is fault recovery, not an extended production soak.
+- **Point2 alternate-disabled invalid number — native PASS:**
+  `kz5-callback-invalid-reject-20260909.service` exit0, evidence
+  `/var/log/kazoo-acceptance/20260909T134742Z`: complete committed unavailable
+  audio after6, caller stayed on the line and ended itself, no callback ticket,
+  existing agent conversation unaffected.104 retry,14 locale/scope and89 audio
+  checks pass. Historical uncertain ticket remains quarantined pending the
+  operator's disposition; never marked successful or blindly cleared.
+- **Point6 cached identity revocation — native PASS:**
+  `kz5-native-revocation-20260909.service` exit0. Valid event first warmed the
+  cache; exact isolated user signing-secret CAS revoked its test token. Next
+  event denied with1008/no leak and HTTP401 before token expiry. Four checks,
+  same-node scope only. That test user's revoked signing secret is not restored.
+- **Installer retry findings:** `ef49b89` installs standalone FreeSWITCH Erlang/EI;
+  `1ce8158` invalidates stale out-of-tree configure results. FreeSWITCH install3
+  completed all normal checks, but the lab lost terminal unit metadata to systemd
+  garbage collection. Repeat4 with retained exit evidence passed and was collected
+  (`freeswitch-install-4.log`, source `d79a7d4`). Apps fresh bootstrap failed only
+  without a login-home environment: two exact systemd probes reproduce failure
+  without User=root and success with it. `f909ebd` fixes launcher and early build
+  preflight; apps retry3 has passed dependencies and is compiling applications.
+  New role creation also now syncs the current commit after loading the immutable
+  base bundle, preventing reuse of old pre-fix sources on later-created roles.
+- **AMQP credential logging — SOURCE FIXED, deployment pending:** native broker
+  shutdown exposed URI credentials in connection diagnostics. All25 broker-URI
+  logging sites in `kz_amqp_connection` now use the existing credential-removal
+  helper. Actual blocked/unblocked/disconnected entry tests pass for AMQP/AMQPS
+  while retaining the real URI in runtime connection state. Do not display raw
+  existing broker logs; historical protected logs may still contain credentials.
+
 - **Latest checkpoint — NOT all four points closed:** the30-call broker-loss
   campaign completed both30-call batches and same-FSM recovery, but failed its
   clean-log gate (4/40 new errors), unit `kz5-acdc-broker-loss-30-20260909`,

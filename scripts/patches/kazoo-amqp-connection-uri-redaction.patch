@@ -1,0 +1,199 @@
+diff --git a/kazoo_amqp/src/kz_amqp_connection.erl b/kazoo_amqp/src/kz_amqp_connection.erl
+index fb5091e4f..584943bb6 100644
+--- a/kazoo_amqp/src/kz_amqp_connection.erl
++++ b/kazoo_amqp/src/kz_amqp_connection.erl
+@@ -243,7 +243,7 @@ handle_info({'DOWN', Ref, 'process', _Pid, ?SERVER_REPLY_NOT_FOUND}
+                                ,broker=_Broker
+                                }=Connection
+            ) ->
+-    lager:debug("command channel (~p) to ~s (~p) died with server not_found",[_Pid, _Broker, _ConnectionPid]),
++    lager:debug("command channel (~p) to ~s (~p) died with server not_found",[_Pid, kz_amqp_util:normalize_amqp_uri(_Broker), _ConnectionPid]),
+     {'noreply', create_control_channel(Connection), 'hibernate'};
+ handle_info({'DOWN', Ref, 'process', _Pid, _Reason}
+            ,#kz_amqp_connection{available='true'
+@@ -253,7 +253,7 @@ handle_info({'DOWN', Ref, 'process', _Pid, _Reason}
+                                }=Connection
+            ) ->
+     lager:warning("command channel (~p) to the AMQP broker ~s (~p) died: ~p"
+-                 ,[_Pid, _Broker, _ConnectionPid, _Reason]
++                 ,[_Pid, kz_amqp_util:normalize_amqp_uri(_Broker), _ConnectionPid, _Reason]
+                  ),
+     {'noreply', create_control_channel(Connection), 'hibernate'};
+ handle_info({'DOWN', Ref, 'process', _Pid, _Reason}
+@@ -263,7 +263,7 @@ handle_info({'DOWN', Ref, 'process', _Pid, _Reason}
+                                }=Connection
+            ) ->
+     lager:critical("connection to the AMQP broker ~s (~p) died: ~p"
+-                  ,[_Broker, _Pid, _Reason]
++                  ,[kz_amqp_util:normalize_amqp_uri(_Broker), _Pid, _Reason]
+                   ),
+     {'noreply', disconnected(Connection), 'hibernate'};
+ handle_info({'connect', Timeout}
+@@ -276,14 +276,14 @@ handle_info(#'basic.cancel_ok'{}=_Cancel, Connection) ->
+     {'noreply', Connection};
+ handle_info(#'connection.blocked'{reason=_Reason}, #kz_amqp_connection{broker=_Broker, connection=_ConnectionPid}=Connection) ->
+     lager:warning("connection ~s (~p) is being blocked on the server, check broker health: ~s"
+-                 ,[_Broker, _ConnectionPid, _Reason]
++                 ,[kz_amqp_util:normalize_amqp_uri(_Broker), _ConnectionPid, _Reason]
+                  ),
+     {'noreply', Connection};
+ handle_info(#'connection.unblocked'{}, #kz_amqp_connection{broker=_Broker, connection=_ConnectionPid}=Connection) ->
+-    lager:notice("connection ~s (~p) is unblocked on the broker", [_Broker, _ConnectionPid]),
++    lager:notice("connection ~s (~p) is unblocked on the broker", [kz_amqp_util:normalize_amqp_uri(_Broker), _ConnectionPid]),
+     {'noreply', Connection};
+ handle_info(_Info, #kz_amqp_connection{broker=_Broker, connection=_ConnectionPid}=Connection) ->
+-    lager:debug("connection ~s (~p) unhandled message: ~p", [_Broker, _ConnectionPid, _Info]),
++    lager:debug("connection ~s (~p) unhandled message: ~p", [kz_amqp_util:normalize_amqp_uri(_Broker), _ConnectionPid, _Info]),
+     {'noreply', Connection, 'hibernate'}.
+ 
+ %%------------------------------------------------------------------------------
+@@ -296,7 +296,7 @@ handle_info(_Info, #kz_amqp_connection{broker=_Broker, connection=_ConnectionPid
+ -spec terminate(any(), kz_amqp_connection()) -> any().
+ terminate(_Reason, #kz_amqp_connection{broker=_Broker, connection=_ConnectionPid}=Connection) ->
+     lager:debug("connection to amqp broker ~s (~p) terminated: ~p"
+-               ,[_Broker, _ConnectionPid, _Reason]
++               ,[kz_amqp_util:normalize_amqp_uri(_Broker), _ConnectionPid, _Reason]
+                ),
+     disconnected(Connection).
+ 
+@@ -341,7 +341,7 @@ connected(#kz_amqp_connection{prechannels_initialized='false'}=Connection) ->
+             connected(Success)
+     end;
+ connected(#kz_amqp_connection{broker=_Broker,connection=_Pid}=Connection) ->
+-    lager:info("successfully connected to ~s(~p)", [_Broker, _Pid]),
++    lager:info("successfully connected to ~s(~p)", [kz_amqp_util:normalize_amqp_uri(_Broker), _Pid]),
+     Connection.
+ 
+ %%------------------------------------------------------------------------------
+@@ -440,19 +440,19 @@ maybe_connect(#kz_amqp_connection{broker=_Broker
+     try amqp_connection:start(Params) of
+         {'error', 'auth_failure'} ->
+             lager:warning("amqp authentication failure with '~s', will retry"
+-                         ,[_Broker]
++                         ,[kz_amqp_util:normalize_amqp_uri(_Broker)]
+                          ),
+             disconnected(Connection, Timeout);
+         {'error', 'econnrefused'} ->
+-            lager:warning("connection refused to ~s (check that the broker is running)", [_Broker]),
++            lager:warning("connection refused to ~s (check that the broker is running)", [kz_amqp_util:normalize_amqp_uri(_Broker)]),
+             disconnected(Connection, Timeout);
+         {'error', _Reason} ->
+             lager:warning("failed to connect to '~s' will retry: ~p"
+-                         ,[_Broker, _Reason]
++                         ,[kz_amqp_util:normalize_amqp_uri(_Broker), _Reason]
+                          ),
+             disconnected(Connection, Timeout);
+         {'ok', Pid} ->
+-            lager:info("new connection to ~s (~p)", [_Broker, Pid]),
++            lager:info("new connection to ~s (~p)", [kz_amqp_util:normalize_amqp_uri(_Broker), Pid]),
+             Ref = erlang:monitor('process', Pid),
+             _ = amqp_connection:register_blocked_handler(Pid, self()),
+             connected(Connection#kz_amqp_connection{connection=Pid
+@@ -460,13 +460,13 @@ maybe_connect(#kz_amqp_connection{broker=_Broker
+                                                    });
+         _E ->
+             lager:critical("unhandled case on connect to '~s' will retry: ~p"
+-                          ,[_Broker, _E]
++                          ,[kz_amqp_util:normalize_amqp_uri(_Broker), _E]
+                           ),
+             disconnected(Connection, Timeout)
+     catch
+         _E:_R:_ST ->
+             lager:warning("exception connecting to '~s' will retry: ~s: ~p"
+-                         ,[_Broker, _E, _R]
++                         ,[kz_amqp_util:normalize_amqp_uri(_Broker), _E, _R]
+                          ),
+             disconnected(Connection, Timeout)
+     end.
+@@ -488,11 +488,11 @@ create_control_channel(#kz_amqp_connection{broker=Broker, connection = _Connecti
+     case open_channel(Connection) of
+         {'error', _R} ->
+             lager:critical("unable to establish command channel to ~s (~p), assuming connection is invalid: ~p"
+-                          ,[Broker, _ConnectionPid, _R]
++                          ,[kz_amqp_util:normalize_amqp_uri(Broker), _ConnectionPid, _R]
+                           ),
+             disconnected(Connection);
+         {'ok', Pid} ->
+-            lager:debug("created command channel ~p to ~s (~p)", [Pid, Broker, _ConnectionPid]),
++            lager:debug("created command channel ~p to ~s (~p)", [Pid, kz_amqp_util:normalize_amqp_uri(Broker), _ConnectionPid]),
+             Ref = erlang:monitor('process', Pid),
+             Connection#kz_amqp_connection{channel=Pid
+                                          ,channel_ref=Ref
+@@ -527,12 +527,12 @@ establish_prechannel(#kz_amqp_connection{broker=Broker
+     case open_channel(Connection) of
+         {'error', 'out_of_channel_numbers'} ->
+             lager:warning("unable to establish prechannel to ~s, out_of_channel_numbers: keeping connection"
+-                         ,[Broker]
++                         ,[kz_amqp_util:normalize_amqp_uri(Broker)]
+                          ),
+             Connection;
+         {'error', _R} ->
+             lager:critical("unable to establish prechannel to ~s, assuming connection is invalid: ~p"
+-                          ,[Broker, _R]
++                          ,[kz_amqp_util:normalize_amqp_uri(Broker), _R]
+                           ),
+             disconnected(Connection);
+         {'ok', Pid} ->
+@@ -633,7 +633,7 @@ amqp_declare_exchange(#kz_amqp_connection{broker=_Broker
+             lager:debug("declared ~s exchange ~s on ~s via ~p"
+                        ,[Exchange#'exchange.declare'.type
+                         ,ExchangeName
+-                        ,_Broker
++                        ,kz_amqp_util:normalize_amqp_uri(_Broker)
+                         ,Channel
+                         ]),
+             maybe_cache_exchange(Exchange, Connection);
+@@ -641,7 +641,7 @@ amqp_declare_exchange(#kz_amqp_connection{broker=_Broker
+             lager:debug("failed to declare ~s passive exchange ~s on ~s via ~p: ~p"
+                        ,[Exchange#'exchange.declare'.type
+                         ,Exchange#'exchange.declare'.exchange
+-                        ,_Broker
++                        ,kz_amqp_util:normalize_amqp_uri(_Broker)
+                         ,Channel
+                         ,_Else
+                         ]),
+@@ -650,7 +650,7 @@ amqp_declare_exchange(#kz_amqp_connection{broker=_Broker
+             lager:critical("failed to declare ~s exchange ~s on ~s via ~p: ~p"
+                           ,[Exchange#'exchange.declare'.type
+                            ,Exchange#'exchange.declare'.exchange
+-                           ,_Broker
++                           ,kz_amqp_util:normalize_amqp_uri(_Broker)
+                            ,Channel
+                            ,_Else
+                            ]),
+@@ -663,7 +663,7 @@ amqp_declare_exchange(#kz_amqp_connection{broker=_Broker
+             lager:critical("exception while declaring ~s exchange ~s on ~s via ~p: ~p"
+                           ,[Exchange#'exchange.declare'.type
+                            ,Exchange#'exchange.declare'.exchange
+-                           ,_Broker
++                           ,kz_amqp_util:normalize_amqp_uri(_Broker)
+                            ,Channel
+                            ,_R
+                            ]),
+@@ -723,7 +723,7 @@ amqp_exchange_bind(#kz_amqp_connection{broker=_Broker
+                        ,[Binding#'exchange.bind'.destination
+                         ,Binding#'exchange.bind'.source
+                         ,Binding#'exchange.bind'.routing_key
+-                        ,_Broker
++                        ,kz_amqp_util:normalize_amqp_uri(_Broker)
+                         ,Channel
+                         ]),
+             ExchangeName = Binding#'exchange.bind'.destination,
+@@ -734,7 +734,7 @@ amqp_exchange_bind(#kz_amqp_connection{broker=_Broker
+                           ,[Binding#'exchange.bind'.destination
+                            ,Binding#'exchange.bind'.source
+                            ,Binding#'exchange.bind'.routing_key
+-                           ,_Broker
++                           ,kz_amqp_util:normalize_amqp_uri(_Broker)
+                            ,Channel
+                            ,_Else
+                            ]),
+@@ -745,7 +745,7 @@ amqp_exchange_bind(#kz_amqp_connection{broker=_Broker
+                           ,[Binding#'exchange.bind'.destination
+                            ,Binding#'exchange.bind'.source
+                            ,Binding#'exchange.bind'.routing_key
+-                           ,_Broker
++                           ,kz_amqp_util:normalize_amqp_uri(_Broker)
+                            ,Channel
+                            ,_R
+                            ]),
