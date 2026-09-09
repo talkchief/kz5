@@ -1,5 +1,34 @@
 # Opt-in call monitoring acceptance
 
+## Latest actual distributed-call result — September 9, 2026
+
+All four modes **PASS**: Listen/eavesdrop, Whisper, Barge and Join. Native unit
+`kz5-stage-monitor-distributed-5` exited0. Private synthetic evidence on dev44:
+`/var/log/kazoo-monitor-acceptance-6xZDTb`; terminal log
+`/var/lib/kazoo5-install-lab/monitor-distributed-5.log`.
+
+This run used real SIP calls and RTP tones through separate applications,
+Kamailio, FreeSWITCH and controller guests, not mocked HTTP acknowledgements.
+Each mode checked permitted routing and forbidden audio leakage before/after
+keypad3, cross-account/non-admin denials, stale targets, forbidden route fields,
+supervisor-only stop and survival of the original two-way bridge. Exact temporary
+registrations and owned web users were cleaned up. No production/user audio was
+recorded; the imported company was untouched.
+
+Two real setup defects were found before this pass: remote SBC ACL discovery
+was disabled, and a restarted AMQP connection worker was not registered. Both
+are fixed in root kz5 source and normal installer handling; both controllers
+passed installation on `0957b33`. Controller-peer automatic guest boot then
+passed (`ecallmgr-peer-boot-1788981642738.log`). Failed attempts remain failed.
+See `distributed_sbc_discovery.md` and `amqp_supervised_registration.md`.
+
+This closes distributed supervision/audio-privacy acceptance, not failover
+during an ongoing supervision session or indefinite production reliability.
+Developer instructions have separate Whisper, Barge, Join and Listen sections
+at `/apis/supervision.html`, also embedded in the OpenAPI operation. These use
+the real shared POST channel endpoint; no nonexistent feature-specific routes
+are advertised. Join currently has the same full-audio semantics as Barge.
+
 ## Current offline regression checkpoint
 
 On 2026-09-06, guarded session `94674` passed the fixture ownership/security

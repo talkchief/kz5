@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Distributed call supervision — actual SIP/RTP PASS; named documentation:**
+  native run5 passed Listen/eavesdrop, Whisper, Barge and Join with before/after
+  keypad3 audio privacy, authorization negatives and supervisor-only stop while
+  preserving the original bridge. Unit `kz5-stage-monitor-distributed-5` exited0;
+  evidence `/var/log/kazoo-monitor-acceptance-6xZDTb`. No production audio/accounts.
+  Separate named how-to sections, requests and stop instructions now derive from
+  one source for OpenAPI and `/apis/supervision.html`. The normal installer ships
+  and verifies this page; Join is explicitly the same audio mode as Barge.
+  Ongoing-call failover is not established by this successful healthy-cluster run.
+  See `doc/channel_monitor_acceptance.md`.
+
 - **AMQP replacement registration P0 — source fixed / native replacement PASS:**
   controller16's connection worker crashed after a snapshot-induced heartbeat
   loss at17:46:48UTC. OTP replaced it, but the new PID never registered: native
@@ -19,8 +30,11 @@ work postponed; do not generate voices at runtime or during deployment.
   normal installs PASS on `0957b33` (`ecallmgr-install-5.log`,
   `ecallmgr-peer-install-3.log`). Native worker replacement recovered registered
   availability with the same VM and normal verifier PASS, without fallback
-  restart: `amqp-restart-1788981250927.json`. Main44 deployment and distributed
-  call after-tests running; see `doc/amqp_supervised_registration.md`.
+  restart: `amqp-restart-1788981250927.json`. Main44 normal deployment `ae12cbf`
+  passed (native unit `kz5-amqp-registration-deploy-20260909`, exit0), all9 services
+  active, zero calls and zero error-priority apps/eCallMgr entries since19:14UTC
+  at readback. Distributed call after-tests passed; see
+  `doc/amqp_supervised_registration.md`.
 
 - **Separate SBC admission P0 — reproduced, source fix under acceptance:**
   distributed monitor attempt2 registered all three devices, but the first
@@ -33,7 +47,8 @@ work postponed; do not generate voices at runtime or during deployment.
   Normal peer installer source `9c75fe8` PASS and active exact SBC ACL changed
   false→true. Subsequent call proved proxy authorization and reached180 Ringing;
   its directory timeout led to the separate AMQP bug above. Receipt
-  `monitor-distributed-2.log` remains FAILED; full call acceptance still pending.
+  `monitor-distributed-2.log` remains FAILED; full call acceptance now PASSes in
+  run5. Updated peer boot PASS: `ecallmgr-peer-boot-1788981642738.log`.
 
 - **Distributed SIP/supervision acceptance fixture — native provisioning PASS:**
   original private lab only, three-agent synthetic child company and dedicated
@@ -41,13 +56,13 @@ work postponed; do not generate voices at runtime or during deployment.
   admission of all seven owned roles and zero media calls; no imported-company
   data, production configuration, provider or external calls. API Login and
   provisioning are not SIP/RTP or cross-node supervision proof. The real call
-  tests and ownership/audio privacy checks remain open. Normal fixture creation
+  tests and ownership/audio privacy checks now pass in run5. Normal fixture creation
   completed on source `35250c3`, private receipt
   `/var/lib/kazoo5-install-lab/provision-calls.log`. The opt-in supervision harness
   now has a fixed original-lab transport adapter: API on apps-peer20, SIP via
   Kamailio17, FS diagnostics on media15, RTP capture on the private bridge only.
   Same full before/after-DTMF audio/privacy checks; no arbitrary host option.
-  Native supervision run pending; local scope/audio regressions pass. First
+  Native supervision run5 PASS; local scope/audio regressions pass. First
   attempt stopped during fixture authentication withHTTP429 before calls and
   cleaned temporary users. The normal35-token login cost/100-token burst admits
   fewer than three immediate logins; distributed harness now paces setup4s per

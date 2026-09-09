@@ -100,7 +100,7 @@ function readSources() {
 async function build(output) {
     const source = path.join(root, 'applications/crossbar/priv/oas3');
     const inputs = [];
-    for (const file of ['scripts/build-api-docs.cjs', 'scripts/api-docs-overlays.cjs', 'scripts/api-docs-queue-editor.cjs',
+    for (const file of ['scripts/build-api-docs.cjs', 'scripts/api-docs-overlays.cjs', 'scripts/api-docs-supervision.cjs', 'scripts/api-docs-queue-editor.cjs',
         'scripts/api-docs-tooling/package.json', 'scripts/api-docs-tooling/package-lock.json']) {
         if (fs.existsSync(path.join(root, file))) inputs.push({file, sha256: sha(fs.readFileSync(path.join(root, file)))});
     }
@@ -222,12 +222,13 @@ async function build(output) {
     write('planned.openapi.json', planned);
     const templateRoot = path.join(__dirname, 'api-docs-tooling/portal');
     for (const name of fs.readdirSync(templateRoot).sort()) fs.copyFileSync(path.join(templateRoot, name), path.join(output, name));
+    fs.writeFileSync(path.join(output, 'supervision.html'), require('./api-docs-supervision.cjs').html());
     const vendor = path.join(__dirname, 'api-docs-tooling/node_modules/swagger-ui-dist');
     const vendorFiles = ['swagger-ui-bundle.js', 'swagger-ui.css', 'LICENSE', 'NOTICE'];
     fs.mkdirSync(path.join(output, 'vendor'), {recursive: true});
     for (const name of vendorFiles) fs.copyFileSync(path.join(vendor, name), path.join(output, 'vendor', name));
     const pkg = JSON.parse(fs.readFileSync(path.join(vendor, 'package.json')));
-    const assetFiles = ['openapi.json', 'coverage.json', 'planned.openapi.json', ...fs.readdirSync(templateRoot), ...vendorFiles.map(n => 'vendor/' + n)].sort();
+    const assetFiles = ['openapi.json', 'coverage.json', 'planned.openapi.json', 'supervision.html', ...fs.readdirSync(templateRoot), ...vendorFiles.map(n => 'vendor/' + n)].sort();
     write('manifest.json', {format_version: 1, swagger_ui: {version: pkg.version, license: pkg.license, package: 'swagger-ui-dist', lock_file: 'scripts/api-docs-tooling/package-lock.json'},
         files: assetFiles.map(file => ({file, bytes: fs.statSync(path.join(output, file)).size, sha256: sha(fs.readFileSync(path.join(output, file)))}))});
     // These contain public documentation only. Do not inherit a root shell's

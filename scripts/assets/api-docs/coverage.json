@@ -2956,7 +2956,7 @@
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "ad05f6ca31b2c945b4c0eb1143e239db6026752a01bb189284b5714a01214bfc"
+      "sha256": "6c743c01eafd03861892ead87c1ee3c7532bbb93b3217adce9612511a41823be"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",
@@ -2965,6 +2965,10 @@
     {
       "file": "scripts/api-docs-queue-live.cjs",
       "sha256": "ee62c13962e65c70bd359c6cf6743d8fd4fec002669a4021f1dc5ff5888facf6"
+    },
+    {
+      "file": "scripts/api-docs-supervision.cjs",
+      "sha256": "e740cc73397b4290eef0e8c117883e4c7da846dac08f87649af9459094ba2b6d"
     },
     {
       "file": "scripts/api-docs-tooling/package-lock.json",
@@ -2976,11 +2980,11 @@
     },
     {
       "file": "scripts/build-api-docs.cjs",
-      "sha256": "bd2c48c5ed1825720a62b95bcc7ac9dbf5953e153832eda931c3429e50223e3c"
+      "sha256": "6492d09152c61c7fe8387161c0fd2c72b899fce4a396cbb8d2ffc8703c0cd89e"
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "cf48f4e72c6357b3c4949d8bb4bf37d61fb446b947f4e7e23d343b0599096e59"
+      "sha256": "56876baeac6b85a2ed5e0c20e806dadd5542d00fd5d5ec9ebf6a2cdafd20256c"
     },
     {
       "file": "scripts/patches/blackhole-before-stream-guard.patch",

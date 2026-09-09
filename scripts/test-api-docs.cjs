@@ -26,6 +26,18 @@ async function offline() {
     const channel = spec.paths['/accounts/{ACCOUNT_ID}/channels/{UUID}'].post;
     assert.equal(channel['x-contract-review'], 'source-reviewed');
     assert.deepEqual(channel.security, [{CrossbarToken: []}]);
+    const guide = fs.readFileSync(path.join(committed, 'supervision.html'), 'utf8');
+    for (const name of ['Whisper', 'Barge', 'Join', 'Listen']) {
+        assert(channel.description.includes('## ' + name + '\n'));
+        assert(guide.includes('<h2>' + name + '</h2>'));
+        assert(guide.includes('How to call ' + name));
+        assert(guide.includes('How to stop ' + name));
+        assert(fs.readFileSync(path.join(committed, 'index.html'), 'utf8').includes('./supervision.html#' + name.toLowerCase()));
+    }
+    assert(channel.description.includes('same audio mode as Barge'));
+    assert(channel.description.includes('not the top-level HTTP request_id'));
+    assert(channel.description.includes('Actual distributed SIP/RTP acceptance passed on 2026-09-09'));
+    assert(!/<script\b|\son\w+\s*=|javascript:/i.test(guide), 'Supervision guide must not execute calls');
     assert.equal(spec.components.schemas.MonitorStart.properties.timeout.default, 20);
     for (const status of ['202', '400', '401', '403', '404', '409', '503']) assert(channel.responses[status]);
     const ajv = new Ajv({strict: false, validateFormats: false});
@@ -72,7 +84,8 @@ async function offline() {
     assert.equal(spec['x-blackhole'].inbound_limits.maximum_configured_bytes, 1048576);
     assert.deepEqual(Object.keys(spec['x-blackhole'].inbound_limits.close_codes).sort(), ['1003', '1007', '1009']);
     assert(spec.components.schemas.BlackholeSubscribe.properties.data.properties.binding.description.includes('never a queue or agent ID'));
-    assert(wsPage.includes('cached') || wsPage.includes('caches authenticated'));
+    assert(wsPage.includes('native commands revalidate the connection token'));
+    assert(wsPage.includes('matching token/account validation before delivery'));
     assert(wsPage.includes('best effort'));
     assert(!/<script\b|\son\w+\s*=|javascript:/i.test(wsPage), 'Protocol reference must not execute scripts or open sockets');
     assert(fs.readFileSync(path.join(committed, 'index.html'), 'utf8').includes('./blackhole.html'));
@@ -289,6 +302,7 @@ async function browser() {
         await page.locator('.opblock-tag').filter({hasText: 'Blackhole WebSocket'}).click();
         const upgrade = page.locator('.opblock-get').filter({hasText: 'Upgrade to the native Blackhole WebSocket transport'});
         await upgrade.locator('.opblock-summary').click();
+        await upgrade.getByText('101', {exact: true}).waitFor({state: 'visible'});
         assert((await upgrade.innerText()).includes('101'));
         await page.getByRole('link', {name: 'Blackhole / Next.js integration', exact: true}).click();
         await page.waitForURL(origin + '/apis/blackhole.html');
@@ -298,6 +312,15 @@ async function browser() {
         assert((await page.locator('body').innerText()).includes('planned, not callable'));
         assert.equal(await page.locator('script').count(), 0);
         assert((await page.locator('body').innerText()).includes('best effort'));
+        await page.goto(origin + '/apis/');
+        await page.getByRole('link', {name: 'Whisper', exact: true}).click();
+        await page.waitForURL(origin + '/apis/supervision.html#whisper');
+        for (const name of ['Whisper', 'Barge', 'Join', 'Listen']) {
+            assert.equal(await page.getByRole('heading', {name, exact: true}).count(), 1);
+            assert.equal(await page.getByRole('heading', {name: 'How to call ' + name, exact: true}).count(), 1);
+            assert.equal(await page.getByRole('heading', {name: 'How to stop ' + name, exact: true}).count(), 1);
+        }
+        assert.equal(await page.locator('script').count(), 0);
         assert.deepEqual(denied, []);
         assert.deepEqual(errors, []);
         assert(requests.every(line => !line.includes('/v2/')));

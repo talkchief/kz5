@@ -42,6 +42,10 @@ The replacement registered, broker availability returned, the Erlang VM stayed
 unchanged and normal eCallMgr verification passed without a fallback restart.
 No synthetic availability notification was used in that native run.
 
-Main44 normal apps/eCallMgr deployment and subsequent distributed SIP/RTP acceptance
-are running. This is not a claim about loss of the registry process itself,
+Main44 normal apps/eCallMgr deployment on `ae12cbf` passed: native unit
+`kz5-amqp-registration-deploy-20260909` exited0, terminal normal installer checks
+passed, all nine services active, zero calls and zero error-priority apps/eCallMgr
+journal entries since19:14UTC at readback. Distributed SIP/RTP supervision then
+passed all four modes (`monitor-distributed-5.log`); peer automatic boot passed
+(`ecallmgr-peer-boot-1788981642738.log`). This is not a claim about loss of the registry process itself,
 an indefinite network partition, or a coordinated rolling upgrade.

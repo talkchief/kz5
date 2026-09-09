@@ -26,4 +26,7 @@ dry run, and normal installer wiring. Normal peer install `9c75fe8` passed at
 SBC ACL changed false→true and the next INVITE was accepted by FreeSWITCH,
 reaching180 Ringing. Its later directory timeout exposed the separate
 [AMQP replacement-registration bug](amqp_supervised_registration.md).
-The full distributed supervision after-test remains pending.
+The full distributed supervision after-test now passes all four modes with
+actual SIP/RTP: `monitor-distributed-5.log`, evidence
+`/var/log/kazoo-monitor-acceptance-6xZDTb`. Updated peer automatic guest boot
+also passes (`ecallmgr-peer-boot-1788981642738.log`).

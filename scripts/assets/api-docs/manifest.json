@@ -14,18 +14,18 @@
     },
     {
       "file": "coverage.json",
-      "bytes": 137075,
-      "sha256": "ccdaf5affc3f89bb1ab3d74e443f2dbcd596279ad4e8dbacbb67092e4c0f85a7"
+      "bytes": 137221,
+      "sha256": "15bc130d0fa58aba5e0a713d6c760ab2414bfda352fe839ed844a965cee8e6c1"
     },
     {
       "file": "index.html",
-      "bytes": 1450,
-      "sha256": "ebadfa37172bc2d7fedcd6087d28300113e9d48cd05d258326f2331bc76fabfa"
+      "bytes": 1679,
+      "sha256": "a8eaa2db4bb24c7996bedd2e41f33e62d35a245e51166036a898409ff1e2e639"
     },
     {
       "file": "openapi.json",
-      "bytes": 1832021,
-      "sha256": "41b60d309dbc9259b2c116e2f53c736e0a8a83f800f869b592ed0da7cbcfb71a"
+      "bytes": 1841625,
+      "sha256": "70fa180ceeee9ec0d05210e03ddcb44d6d87c27f9527cb36c55c8b4baf01d8ce"
     },
     {
       "file": "planned.openapi.json",
@@ -41,6 +41,11 @@
       "file": "portal.js",
       "bytes": 2466,
       "sha256": "91eec91476cee37209d704a994ba96485c6170d582aa646513acbc3048008390"
+    },
+    {
+      "file": "supervision.html",
+      "bytes": 12023,
+      "sha256": "796333e00f1af57241987532f69a4f8d33f88fa06d5c80d1a0b011f0cbe5d44f"
     },
     {
       "file": "vendor/LICENSE",

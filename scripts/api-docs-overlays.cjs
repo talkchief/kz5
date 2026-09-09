@@ -90,7 +90,8 @@ function applyOverlays(spec, root) {
     schemas.MonitorAccepted = object({status: {type: 'string', enum: ['accepted']}, action: {type: 'string', enum: ['eavesdrop', 'whisper', 'barge', 'join', 'stop_monitoring']}, request_id: hex, target_call_id: text, supervisor_call_id: text}, ['status', 'action', 'request_id', 'target_call_id', 'supervisor_call_id']);
     const channels = '/accounts/{ACCOUNT_ID}/channels/{UUID}';
     const channel = operation(channels, 'post', 'Listen, whisper, barge, join, or stop supervision', monitorSource, {
-        description: 'For start actions UUID is the original target leg; choose the agent leg for whisper. The authenticated account must exactly equal ACCOUNT_ID and the user must be an account administrator, including for resellers. device_id must identify an enabled account-owned sip_device or softphone using the account SIP realm. The server builds the registrar-resolved route; extra endpoints, dial strings, IP routes, headers, FreeSWITCH node names and raw commands are rejected. Cluster ownership discovery is fail-closed and must be corroborated by the live media worker. HTTP 202 means accepted, not that the supervisor answered or audio connected. For stop_monitoring use the returned supervisor_call_id as UUID plus the same request_id: it cannot stop the original agent/customer leg. No DTMF escalation is enabled. All four modes passed isolated same-host synthetic SIP/RTP and authorization checks on 2026-09-05; cross-node failover and production traffic are not certified by those tests. The same POST endpoint also accepts legacy non-monitoring actions; those remain a separate, incompletely typed contract.',
+        description: require('./api-docs-supervision.cjs').description(),
+        externalDocs: {description: 'Whisper, Barge, Join and Listen — step-by-step instructions', url: './supervision.html'},
         requestBody: request({oneOf: [ref('MonitorStart'), ref('MonitorStop'), ref('LegacyChannelAction')]}),
         responses: {200: response('Legacy action response; not a monitoring acknowledgement'), 202: response('Monitoring request accepted; connection not confirmed', envelope(ref('MonitorAccepted'))),
             400: response('Invalid fields, identifiers, timeout, or supervisor device', ref('CrossbarError')), 401: defaultErrors[401],
@@ -102,10 +103,10 @@ function applyOverlays(spec, root) {
     schemas.LegacyChannelAction = object({action: {type: 'string', enum: ['transfer', 'hangup', 'break', 'callflow', 'intercept', 'move', 'start_record', 'stop_record']}}, ['action']);
     schemas.LegacyChannelAction.description = 'Only the action selector is catalogued here; additional per-action fields and privileges require the legacy cb_channels source contract. This schema is intentionally permissive and not a complete validation contract.';
     channel.requestBody.content['application/json'].examples = {
-        listen: {summary: 'Listen only (eavesdrop)', value: {data: {action: 'eavesdrop', device_id: '00000000000000000000000000000000', timeout: 20}}},
-        whisper: {summary: 'Whisper to targeted agent', value: {data: {action: 'whisper', device_id: '00000000000000000000000000000000'}}},
-        barge: {summary: 'Speak to both parties', value: {data: {action: 'barge', device_id: '00000000000000000000000000000000'}}},
-        join: {summary: 'Join both parties (same full-audio mode as barge)', value: {data: {action: 'join', device_id: '00000000000000000000000000000000'}}},
+        listen: {summary: 'Listen', value: {data: {action: 'eavesdrop', device_id: '00000000000000000000000000000000', timeout: 20}}},
+        whisper: {summary: 'Whisper', value: {data: {action: 'whisper', device_id: '00000000000000000000000000000000'}}},
+        barge: {summary: 'Barge', value: {data: {action: 'barge', device_id: '00000000000000000000000000000000'}}},
+        join: {summary: 'Join', value: {data: {action: 'join', device_id: '00000000000000000000000000000000'}}},
         stop: {summary: 'Use supervisor_call_id in path; never the original leg', value: {data: {action: 'stop_monitoring', request_id: '00000000000000000000000000000000'}}}
     };
     for (const url of ['/user_auth', '/api_auth']) {

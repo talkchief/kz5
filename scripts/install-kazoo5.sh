@@ -5899,7 +5899,7 @@ install_api_developer_docs() {
     run chmod 0755 "$MONSTER_UI_WEB_ROOT/apis" "$MONSTER_UI_WEB_ROOT/apis/vendor"
     local docs_asset
     for docs_asset in index.html portal.js portal.css openapi.json planned.openapi.json \
-        blackhole.html coverage.json manifest.json vendor/LICENSE vendor/NOTICE \
+        blackhole.html supervision.html coverage.json manifest.json vendor/LICENSE vendor/NOTICE \
         vendor/swagger-ui-bundle.js vendor/swagger-ui.css; do
         run chmod 0644 "$MONSTER_UI_WEB_ROOT/apis/$docs_asset"
     done
