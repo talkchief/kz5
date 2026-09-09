@@ -20,9 +20,11 @@ unchanged; unavailable packs cannot be activated.
 No new API request, schema, migration, account setting or audio is introduced.
 All recordings remain checked-in artifacts; Gemini is not called. This fix
 preserves existing inheritance, not a new reseller-default implementation.
-Native `kz_media_util:prompt_language/2` currently consults the account document
-and account media configuration, not reseller configuration; broader reseller
-and new-tenant inheritance acceptance remains open.
+At the time of this UI correction, native `kz_media_util:prompt_language/2`
+consulted the account document and account media configuration, not reseller
+configuration. The later deployed follow-up in `media_reseller_language.md`
+adds direct reseller fallback and records fresh-tenant native verification.
+Cross-node cache propagation and actual inherited live-call audio remain open.
 
 ## Verification and deployment
 

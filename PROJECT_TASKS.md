@@ -2,7 +2,7 @@
 
 ## Immediate operator follow-up — September8
 
-- **VOICE-01 reseller language fallback — SOURCE PASS, deployment running (September9):**
+- **VOICE-01 reseller language fallback — DEPLOYED / scoped PASS (September9):**
   Native `kz_media_util:prompt_language/2` omitted reseller defaults entirely.
   Root-owned installer patch now uses account media.default_language, account
   language, direct reseller media.default_language, reseller language, then the
@@ -19,9 +19,16 @@
   Both accounts are disabled/empty and zero calls. Initial preparation fb4822
   stopped because native create ignores public enabled:false; explicit scoped
   PATCH plus identity-checked resume disabled the same account, without duplicates.
-  Normal CLI unit `kz5-media-language-install-main44-20260909` is running,
-  observer87990; source11030da. Poll that handle/unit, do not start another build.
-  Verify phase and OpenAPI publication remain pending. See
+  Normal CLI unit `kz5-media-language-install-main44-20260909` completed
+  successfully87990/7dd90b (11m46.774s,382.2MiB). Native43356/3d60a1 passes
+  all five inherited locales,15 account-scoped shared prompt resolutions and
+  explicit child-language precedence. Both retained fixtures remain disabled
+  and empty; no calls or voice generation. eCallMgr still held the older shared
+  module after the apps-only CLI; scoped restart/verification/mapping refresh
+  2382/7b2519 completed in59.720s without another build. Final79407f proves
+  both running/disk MD5s match a3a2e5921dbed0ed2a973e3362d93de4, `/apis` contains
+  the precedence guidance, services active and zero calls. All jobs terminal.
+  Reuse this evidence; cross-node cache propagation/live audio remain separate. See
   `doc/media_reseller_language.md`. The fixture is scoped; native calls/audio
   pronunciation and broader release gates remain separate.
 
@@ -40,8 +47,8 @@
   HTTPS67b094 matches installed JS/templates/translations and validates the
   compiled selection behavior; nginx/apps/eCallMgr active. No provider calls,
   media regeneration or account/reseller default changes. See
-  `doc/queue_language_inherited_edit.md`. Native reseller default resolution is
-  still a separate open gap, not addressed by this UI fix. Both browser and
+  `doc/queue_language_inherited_edit.md`. The native reseller fallback follow-up
+  is deployed in the row above; it is not part of this UI fix. Both browser and
   installer jobs are terminal; do not rerun them without a relevant change.
 
 - **INSTALL-MODULE-SCOPE-01 DEPLOYED / scoped PASS:** native Crossbar

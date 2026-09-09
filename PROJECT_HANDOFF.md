@@ -1,6 +1,6 @@
 # Kazoo 5 — start here / engineering handoff
 
-**September9: VOICE-01 reseller fallback SOURCE PASS, deployment running.**
+**September9: VOICE-01 reseller fallback DEPLOYED / scoped PASS.**
 Root-owned `kazoo-media-reseller-language.patch` adds direct reseller defaults
 only when account media.default_language and account language are both absent.
 Existing caller/system fallback survives missing/failed lookups; explicit queue
@@ -10,10 +10,17 @@ Preparation cfbe01 is terminal: two empty disabled tenants, reseller HE versus
 child EN before deployment, proves the native gap (fea520). Initial prepare
 fb4822 failed on account creation's enabled behavior; explicit scoped PATCH and
 identity-checked resume fixed the fixture without creating a duplicate reseller.
-Normal CLI unit `kz5-media-language-install-main44-20260909` is RUNNING,
-observer87990, source11030da. Poll it; do not restart while observation is pending.
-Then sync remaining docs/test-harness-only changes, run `--verify`, publish `/apis`
-and record runtime MD5. Do not run prepare twice. See `doc/media_reseller_language.md`.
+Normal CLI unit `kz5-media-language-install-main44-20260909` completed successfully
+(87990/7dd90b,11m46.774s,382.2MiB). Native43356/3d60a1 passes all five inherited
+locales,15 shared prompt resolutions and explicit child-language precedence.
+The two fixture accounts remain empty/disabled; receipt phase is verified.
+An apps-only deployment left eCallMgr's old shared module loaded (5c3149).
+Scoped restart, verification and mapping refresh2382/7b2519 completed in59.720s,
+without another build, and published `/apis`. Final79407f matches both node/disk
+MD5s a3a2e5921dbed0ed2a973e3362d93de4 and verifies HTTPS docs, active services and
+zero calls. All jobs are terminal; do not rerun prepare/verify/build. Cross-node
+cache propagation and actual inherited live-call audio remain separate gates.
+See `doc/media_reseller_language.md`.
 
 **September9: VOICE-01 inherited queue edit DEPLOYED / scoped PASS.**
 Baseline d5c05d shows an unrelated Save silently adopts English for an existing
