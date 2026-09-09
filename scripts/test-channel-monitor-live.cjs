@@ -11,6 +11,7 @@ let AUTH='/etc/kazoo/installer-secrets.env', MASTER='302ae5a70c403124f764cbc5422
 const OWNER='kazoo5-isolated-monitor-acceptance', ID=/^[a-f0-9]{32}$/, CALL=/^[A-Za-z0-9_.:@-]{1,128}$/;
 const SCENARIOS=path.join(__dirname,'sip-tests'), FSCLI='/usr/local/freeswitch/bin/fs_cli';
 let state, fixture, masterToken, adminToken, userToken, runDir, current, cleaning=false;
+let partitionEnabled=false, controllerFault=null;
 const children=new Set(), registered=new Set();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const hex=()=>crypto.randomBytes(16).toString('hex');
@@ -323,13 +324,33 @@ async function stage(mode) {
     current.supervisor_id=accepted.supervisor_call_id;current.request_id=accepted.request_id;saveFixture();
     await until(()=>{const c=channel(current.supervisor_id);return c&&monitorMatches(c)&&c.answered;});
     await request('POST',route('channels',target.id),{action:'stop_monitoring',request_id:current.request_id},adminToken,403);
+    if(partitionEnabled) {
+        originalAlive();assert(monitorMatches(channel(current.supervisor_id)));
+        assert.equal(JSON.parse(command(FSCLI,['-x','show channels as json'])).row_count,3,
+            'Controller fault requires exactly the three owned synthetic legs');
+        controllerFault=require('./test-fixtures/distributed-lab/controller-partition.cjs').prepare();
+        await controllerFault.start();
+        log(mode+' controller16 broker partition verified; controller21 remains available');
+    }
     await sleep(12500);originalAlive();
+    let partitionProof;
+    if(controllerFault) {
+        assert(monitorMatches(channel(current.supervisor_id)),'Supervisor lost during broker partition');
+        partitionProof=await controllerFault.restore();
+        writePrivate(mode+'-partition.json',JSON.stringify(partitionProof,null,2)+'\n');controllerFault=null;
+    }
     const stopped=await stopSupervisor(true);originalAlive();await sleep(2500);originalAlive();
     terminate(tcpdump);await until(()=>tcpdump.exitCode!==null,5);fs.chmodSync(capture,384);
     const buffer=fs.readFileSync(capture), ps=audio.packets(buffer);
     const digit=ps.find(p=>p.source===audio.IP&&p.sp===49004&&p.pt===96&&p.payload[0]===3);
     assert(digit,'No explicit keypad escalation packet observed');
+    if(partitionEnabled) {
+        assert(partitionProof?.disconnected_registry_verified&&partitionProof.registered_broker_recovered&&partitionProof.same_controller_vms);
+        assert(digit.time+2>=partitionProof.started&&digit.time+5<=partitionProof.restored,
+            'Post-keypad audio evidence must be entirely inside the verified broker partition');
+    }
     const proof=audio.inspect(buffer,mode,[{start:digit.time-3,end:digit.time-1},{start:digit.time+2,end:digit.time+5}]);
+    if(partitionProof)proof.controller_broker_partition=partitionProof;
     proof.authorization_negatives=['cross_account403','non_admin403','stale404','extra_route400','stop_original403'];
     proof.call_ids={account_id:state.ACCEPTANCE_ACCOUNT_ID,...current};
     proof.supervisor_stop_http_status=stopped;
@@ -343,6 +364,10 @@ async function stage(mode) {
 }
 async function cleanup() {
     if(cleaning)return;cleaning=true;let complete=true;
+    if(controllerFault) {
+        try {await controllerFault.restore();controllerFault=null;}
+        catch {complete=false;log('Controller broker restoration incomplete; independent watchdog retained');}
+    }
     try {await clearStage();}catch(error){complete=false;log('Scoped call cleanup incomplete: '+error.message+'; protected recovery state retained');}
     for(const child of children)terminate(child);
     if(state&&runDir)for(const e of endpoints(state))if(registered.has(e.role)) {
@@ -381,6 +406,7 @@ function prepare() {
 async function main(args) {
     if(args[0]==='--distributed') {
         args=args.slice(1);
+        if(args[0]==='--broker-partition') {partitionEnabled=true;args=args.slice(1);}
         assert(args.length===1&&['--prepare-only','--live','--cleanup'].includes(args[0]),'Invalid distributed monitor mode');
         distributed=require('./test-fixtures/distributed-lab/monitor-profile.cjs').prepare();
         API=distributed.api;BASE=distributed.base;AUTH=distributed.auth;FILE=distributed.file;MASTER=distributed.master;

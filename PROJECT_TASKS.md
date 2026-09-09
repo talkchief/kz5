@@ -7,6 +7,14 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Active supervision controller partition — prepared, native acceptance pending:**
+  fixed lab controller16 AMQP route only; controller21 remains healthy, original
+  three-leg SIP/RTP bridge retained. Tests real broker unavailability, audio
+  privacy inside the interruption, same-VM recovery and supervisor-only stop.
+  Independent3-minute route-restoration watchdog; no production/main44 faults.
+  Unit ownership/restoration guards and existing scope/audio regressions pass.
+  See `doc/channel_monitor_acceptance.md`; no new native PASS claimed yet.
+
 - **Distributed call supervision — actual SIP/RTP PASS; named documentation:**
   native run5 passed Listen/eavesdrop, Whisper, Barge and Join with before/after
   keypad3 audio privacy, authorization negatives and supervisor-only stop while

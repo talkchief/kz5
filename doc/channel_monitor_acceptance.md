@@ -36,6 +36,25 @@ timed out and is not counted as a successful reachability check.
 
 ## Current offline regression checkpoint
 
+### Opt-in active supervision broker partition
+
+`node scripts/test-channel-monitor-live.cjs --distributed --broker-partition --live`
+adds a bounded controller16-only broker interruption after the real supervisor
+leg answers. It admits the exact owned private lab controllers16/21 and requires
+exactly the three owned synthetic legs. A3-minute independent systemd watchdog
+removes only the added broker `/32` blackhole route if the harness is interrupted.
+The test kills only controller16's existing TCP connections to lab RabbitMQ5672,
+requires its native registered broker to become unavailable while controller21
+stays available, and measures the post-keypad privacy window entirely during
+that partition. It restores the route, requires registered availability with
+unchanged controller VMs, then verifies supervisor-only stop and original bridge
+survival. No main44 or production service/route is changed. This tests controller
+AMQP loss with media preserved; it is not FreeSWITCH loss or call migration.
+
+Ownership, exact-route, watchdog ordering, restoration and invalid native-status
+guards pass in `controller-partition.test.cjs` without executing live commands.
+Native partition run pending; the healthy distributed pass above is separate.
+
 On 2026-09-06, guarded session `94674` passed the fixture ownership/security
 checks, synthetic directional-audio checks for all four modes (including
 keypad-3 escalation and forbidden leakage), and all three SIPp scenario parses
