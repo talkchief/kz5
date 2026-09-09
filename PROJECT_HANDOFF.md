@@ -1,6 +1,6 @@
 # Kazoo 5 — start here / engineering handoff
 
-**September9: P0-06 durable originate receipt source fix; deployment pending.**
+**September9: P0-06 receipt source769fdb2 deployed; scoped native callback PASS.**
 The exact historical cancelling attempt still returns native unknown (6f4786)
 and is untouched. New callback SUCCESS events persist a private exact-attempt
 receipt without blocking speech. Recovery may use it after registry expiry,
@@ -8,6 +8,15 @@ never instead of fresh channel-down/ownership evidence or over a timeout or
 conflicting native result. This does not retroactively resolve the old ticket.
 See `doc/callback_originate_receipt.md` for source, validation and deployment
 steps. Current work is restricted to this reported callback recovery gap.
+Main44 normal apps deployment finished successfully13bf59/553c04; three loaded
+module MD5s matchdiskc5591d. Native unit `kz5-callback-receipt-case-main44-20260909`
+finished exit0 (9b2067),4m2.886s. Run20260909T030420Z: single6 and full response,
+unanswered first return, backoff, second confirmation1/reciprocal bridge and
+exact persisted receipttrue on completed attempt2. Agent ready, caller2/0
+agent2/0, errors0/0 and cores0; zero calls, services active, timeout15->3->15
+restored. Jobs/session58191 are terminal. Do not repeat this passed case
+without a relevant change. Native worker/registry-loss recovery is unverified;
+the old ticket remains OPEN without retroactively manufactured proof.
 
 **September9: bridge watchdog replay + restrictive-umask installer FIXED / DEPLOYED.**
 Sourcebd083e5 fixes owner-watchdog exit1 (unsafe automatic replay after a hard

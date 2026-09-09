@@ -1,6 +1,7 @@
 # P0-06: durable callback originate success evidence
 
-September 9, 2026. Source correction; native deployment/acceptance pending.
+September 9, 2026. Source correction committed/pushed as `769fdb2` to master.
+Native deployment and the scoped positive callback acceptance passed.
 This does **not** close the retained historical ticket or the broader HA gate.
 
 ## Reported failure and current evidence
@@ -87,6 +88,58 @@ Deploy through the normal apps installer on `10.1.0.44:/opt/kz5`, verify loaded
 module identity, then run one positive callback retry case on the canonical
 isolated account. Do not mutate the imported Talkchief account or rerun the
 unrelated voice generation/load campaigns.
+
+Deployment completed through normal `kazoo-apps` CLI in unit
+`kz5-callback-receipt-install-main44-20260909`: successful deactivation at
+03:03:02 UTC (13bf59/553c04), approximately10m52s wall time,377MiB peak memory.
+Its final result reports all selected components passed validation, including
+administrator login, ACDC and entitlement/storage APIs and installed media.
+Protected log: `/root/kz5-acceptance/callback-receipt-install-main44-20260909.log`.
+SHA256: `117c930b7f54b983a3c56953bf3d79d02006d0690465491ad18c2b04dd3ce96d`.
+Main repository was clean and fast-forwarded to769fdb2; native entry inventory
+was zero calls. Native loaded/disk MD5 matches (c5591d):
+
+- `acdc_callback_store`: `5745bac222d4365d2b9b100220dccfcd`
+- `acdc_callback_caller`: `523a419461779c4acc3f00b0cc45e444`
+- `acdc_callback_recovery_io`: `b51f4d167aca9033f40fae4076c8f7db`
+
+Live unit `kz5-callback-receipt-case-main44-20260909` completed exit0 (9b2067),
+4m2.886s wall time and101.8MiB peak memory. The waiting SSH/tool session58191
+is terminal; do not relaunch the passed case without a relevant change.
+Log: `/root/kz5-acceptance/callback-receipt-case-main44-20260909.log`.
+The existing positive retry CLI used the main isolated account, internal1001,
+entry-only6, explicit EN and short confirmation window, with no installed
+master test-phone helper. Run: `/var/log/kazoo-acceptance/20260909T030420Z`.
+
+Native results (d07fa9/31a6ad/7680cf/12427c):
+
+- The caller sent only6,4.986s after answer. The entire5.491s registration
+  confirmation recording arrived before server BYE; no missing phrase samples.
+- The first returned attempt was unanswered. Durable retry_wait retained the
+  configured15s backoff; the second INVITE arrived1.0846s after the durable due time.
+- The second returned caller heard the full4.331s confirmation with strict RTP
+  continuity and correlation0.999995. Digit1 arrived1.1459s after completion,
+  within the configured3s response window, followed by one agent INVITE and
+  reciprocal bridge with bidirectional audio.
+- Exact ticket `acdc-callback-1981138f7edfe548ec2e6a60452a50c22140c225ac9825490bc933b4a687f661`
+  is completed at attempt2 with `originate_success_recorded:true` and no
+  reconciliation flag. This field checks all receipt/document identities.
+- Agent returned ready. Caller2/0 and agent2/0 successful/failed, fresh journal
+  and file error counts0/0, new cores0. Native post-run inventory is zero calls;
+  apps, eCallMgr, FreeSWITCH, Kamailio and bridge are active. Services used by
+  the case did not restart during it. The exact queue timeout restored15->3->15.
+
+Evidence SHA256:
+
+- `retry-bridge-evidence.json`: `50455cd8e917c943152c87816eafd77339d438b9c0e66fea07b0c117d97d032e`
+- `retry-packet-evidence.json`: `83633af836407fd9672f06fa3b6079e3db53dc7a62889d693338420e75afb7bf`
+- `callback-confirmation-deadline-edit.json`: `d802605d2519e3c4f16a76d107b1a351c66f06f9d6e185eabe865c94c6f40c2c`
+- Protected native case log: `a72fba4f9230f58a20add60154aa7198a2b7887c782ba350caa4f1bb58145ebe`
+
+This verifies actual receipt creation and no regression of the reported callback
+flow. Worker-loss/registry-expiry fallback has isolated regression coverage;
+controlled native failure/recovery remains unverified. The historical ticket
+is still retained and P0-06 remains open for that unresolved evidence gap.
 
 Limits: a database conflict/failure or node crash before receipt commit still
 requires native evidence and can remain ambiguous after registry expiry. A

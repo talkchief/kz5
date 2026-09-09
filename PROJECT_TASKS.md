@@ -2,7 +2,7 @@
 
 ## Immediate operator follow-up — September9
 
-- **P0-06 durable originate receipt — SOURCE FIX / native deployment pending:**
+- **P0-06 durable originate receipt — DEPLOYED / scoped native PASS; old ticket OPEN:**
   exact native read6f4786 confirms the old retained cancelling ticket is unknown
   in the current registry epoch. No forced settlement or document deletion.
   Successful callback originates now persist a private, exact-attempt receipt
@@ -11,7 +11,18 @@
   and existing ownership/CAS checks remain mandatory. Old tickets without a
   receipt remain open. Candidate27 store +18 recovery-I/O +9 caller tests pass;
   13 cleanup +12 retry-harness groups and shell syntax also pass. Existing native
-  retry now requires the exact persisted receipt; native acceptance pending.
+  retry now requires the exact persisted receipt.
+  Source769fdb2 committed/pushed to master and fast-forwarded on main44. Normal
+  apps deployment unit `kz5-callback-receipt-install-main44-20260909` completed
+  successfully13bf59/553c04; all three loaded/disk module MD5s matchc5591d.
+  Native positive callback/retry unit `kz5-callback-receipt-case-main44-20260909`
+  completed exit0 (9b2067),4m2.886s. Run20260909T030420Z proves single6/full
+  registration audio, first unanswered attempt/backoff, full returned prompt,
+  digit1 and reciprocal bridge; exact completed attempt2 has saved receipttrue.
+  Agent ready, caller2/0 agent2/0, fresh errors0/0, cores0, no service restarts;
+  timeout15->3->15 restored and zero calls (31a6ad/12427c). All jobs terminal.
+  Native registry/worker failure remains unverified; old ambiguous ticket stays
+  OPEN, not forcibly settled or retroactively covered by the new receipt.
   No unrelated campaigns. Details and next steps:
   `doc/callback_originate_receipt.md`.
 
@@ -1837,7 +1848,7 @@ See `doc/callflows_users_entitlements_fix.md` for source, deployment and replay.
 | P0-11 | DEPLOYED — focused regression verified; broader acceptance open | Announcement worker mailbox starvation: elapsed deadlines run before another receive; bounded pre-playback drains stop the temporary worker after256 handled events plus one overflow probe. Two regressions fail before the fix; all12 scheduler/worker tests pass afterward. Fresh production/loaded MD5 parity0ad7ce proves current acdc_announcements is deployed. Actual EN offers pass c88ff7/d9b680 at3/15-second settings over silence hold. This does not close real MOH, all-language, overload or actual30-second acceptance. See doc/acdc_announcement_mailbox_fairness.md and doc/callback_media_runtime_parity.md. |
 | P0-12 | DEPLOYED — canonical regression/runtime parity verified | Removed synchronous auxiliary metadata lookup from timed unavailable/retry/alternate branches. Built-in preflight retains its three auxiliary paths from42 reads; legacy custom menus preflight three optional assets before queue entry. Missing cache fails quietly without fallback or false registration. Full87 tests pass fada33/fee8c1, including poisoned datastore/resolver access,30ms budgets and21s ownership/completion cases. Fresh production/loaded MD5 parity0ad7ce proves this callback cohort is deployed. Actual EN offer and6+1 retry slices pass; arbitrary synchronous publishing, native audio alternatives and all-language/failure acceptance are not implied. See doc/callback_media_runtime_parity.md. |
 | P0-05 | OPEN — ACDC | Agent stability: one answered call must not log unrelated agents out. Test failed ringing, reconnect, queue-specific logout, pause/resume and reboot recovery. |
-| P0-06 | OPEN — ACDC | Resolve retained ambiguous callback cleanup/reconciliation ticket without losing evidence or falsely marking a live leg settled. |
+| P0-06 | OPEN — historical ticket / native failure recovery | Exact-attempt success receipt769fdb2 deployed; normal callback/retry and persisted receipt pass native20260909T030420Z. Historical ticket still lacks definitive evidence; no forced settlement. Native worker/registry-loss acceptance remains open. See doc/callback_originate_receipt.md. |
 | P0-10 | DEPLOYED — single-key success/retry PASS; fallback variants remain open | Original badarg fallback crash has typed/lazy lookup fix and 17 feedback regressions (baseline22426, fixed9643). Later deployed single-key6 runs prove durable registration, complete prerecorded success audio before BYE, unanswered first callback, persisted retry and second native bridge: EN1297/784164, HE8443/53f15d, FR15515/f1b8d1, ES37303/93b8d4, AR56725/d5de4c. This supersedes the old claim that deployment and every live path remain untested. It does not prove every invalid-number/unavailable branch or settle historical ambiguous tickets. See doc/callback_feedback_request_crash.md and doc/focused_acceptance_20260908.md. |
 | P0-07 | ACTIVE — staging acceptance | Team recovery fix `d69cf04` merged in `8548b98`; combined 174 tests and 63 production-module compile passed. Bounded reconciliation must now be validated with actual lost/late hangups, multiple direct calls and node reconnect. Never mark an agent available while another tracked call is active; preserve pause/logout and membership. SIP registration alone is not recovery proof. |
 | P0-08 | ACTIVE — staging acceptance | Team AMQP recovery fix merged and covered by the combined offline checkpoint. Actual broker interruption, lost acknowledgements/redelivery and node failures remain untested: prove no permanently stuck ringing state, duplicate bridge, stolen call or unrelated agent/roster mutation. Broker acceptance alone must not count as completed state recovery. |
