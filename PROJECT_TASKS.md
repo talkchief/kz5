@@ -2,6 +2,16 @@
 
 ## Immediate operator follow-up — September9
 
+- **P0-06 pending-retry queue restart — guard PASS / native check pending:**
+  Explicit `--queue-restart-during-backoff` adds the existing queue-scoped
+  maintenance restart after the first attempt has ended and retry_wait is
+  durable. Requires the exact main isolated queue, zero channels, no recorded
+  legs, sufficient backoff and a one-attempt marker. Verifies changed queue PID
+  then the unchanged positive callback/retry/receipt gates. No service restart,
+  new production maintenance API or historical ticket mutation.17 boundary
+  cases and13 CLI/reference groups pass. Active-leg loss and native registry
+  expiry remain separate. See `doc/callback_originate_receipt.md`.
+
 - **P0-06 durable originate receipt — DEPLOYED / scoped native PASS; old ticket OPEN:**
   exact native read6f4786 confirms the old retained cancelling ticket is unknown
   in the current registry epoch. No forced settlement or document deletion.

@@ -146,3 +146,25 @@ requires native evidence and can remain ambiguous after registry expiry. A
 fixed warning identifies an unsuccessful write; it does not turn that failure
 into proof. This is not an exactly-once guarantee, a broker-partition test,
 a native-registry restart test, or authority to clear the old ticket.
+
+## Next focused case: queue restart during saved retry backoff
+
+`scripts/test-acdc-callback-retry.sh --queue-restart-during-backoff` adds an
+explicit native failure boundary to the existing positive retry case. It is
+allowed only with the canonical main isolated account/queue, EN, internal1001
+and entry-only6. It cannot combine with language edits, a short response window
+or confirmation-expiry mode. No service or FreeSWITCH restart is performed.
+
+After the unanswered first attempt settles into durable retry_wait, it requires
+zero native channels, no recorded legs and more than eight seconds before the
+saved due time. It writes an attempt marker, invokes the existing
+`acdc_maintenance:queue_restart/2` exactly once for that queue and verifies a
+different queue supervisor PID. Timeout/error/unchanged PID fails the case;
+the marker prevents blind re-execution. Normal callback evidence must then
+prove the same ticket/order/backoff, second confirmation, receipt and bridge,
+without a third attempt or a Kazoo service restart.
+
+Guard results: 17 actual-shell boundary cases and13 CLI/reference groups pass
+(e1d377/065885), plus shell syntax and diff checks. Native execution is pending.
+This tests losing a worker while a callback is waiting, **not** losing an
+active returned leg, registry expiry, broker failover or the historical ticket.

@@ -17,6 +17,7 @@ RETRY_LANGUAGE_ARGS=()
 RETRY_EDIT_PENDING_LANGUAGE=false
 RETRY_SHORT_CONFIRMATION_WINDOW=false
 RETRY_CONFIRMATION_EXPIRY=false
+RETRY_QUEUE_RESTART=false
 RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=false
 RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=false
 RETRY_BUSY_PID=
@@ -35,6 +36,7 @@ retry_usage() {
         '       [--edit-pending-language] (main isolated fixture only; EN admission then FR queue edit and conditional restore)' \
         '       [--short-confirmation-window] (main isolated EN fixture only; response timeout3, full existing prompt, conditional restore)' \
         '       [--confirmation-expiry] (requires short window; answer retry without digit; assert timeout and no agent call)' \
+        '       [--queue-restart-during-backoff] (main isolated fixture only; restart its queue with no active legs, retain retry)' \
         '       [--fixture-account ACCOUNT_ID] (must match canonical protected isolated state)' \
         '       [--transport external|internal] (default: external; internal uses isolated1001)' \
         '       [--allow-paused-master-test-phones] (only an already inactive/dead helper)' \
@@ -70,6 +72,7 @@ retry_args() {
             --edit-pending-language) [[ $RETRY_EDIT_PENDING_LANGUAGE == false ]] || die 'Repeated pending-language mode'; RETRY_EDIT_PENDING_LANGUAGE=true ;;
             --short-confirmation-window) [[ $RETRY_SHORT_CONFIRMATION_WINDOW == false ]] || die 'Repeated short-confirmation mode'; RETRY_SHORT_CONFIRMATION_WINDOW=true ;;
             --confirmation-expiry) [[ ${RETRY_CONFIRMATION_EXPIRY:-false} == false ]] || die 'Repeated confirmation-expiry mode'; RETRY_CONFIRMATION_EXPIRY=true ;;
+            --queue-restart-during-backoff) [[ ${RETRY_QUEUE_RESTART:-false} == false ]] || die 'Repeated queue-restart mode'; RETRY_QUEUE_RESTART=true ;;
             --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
             --allow-absent-master-test-phones) RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=true ;;
             -h|--help) retry_usage; exit 0 ;;
@@ -81,6 +84,12 @@ retry_args() {
     [[ $CALLBACK_TEST_TRANSPORT == external || $CALLBACK_TEST_TRANSPORT == internal ]] || die 'Invalid transport'
     [[ $RETRY_EDIT_PENDING_LANGUAGE != true || $RETRY_SHORT_CONFIRMATION_WINDOW != true ]] || die 'Choose only one pending queue edit case'
     [[ ${RETRY_CONFIRMATION_EXPIRY:-false} != true || $RETRY_SHORT_CONFIRMATION_WINDOW == true ]] || die 'Confirmation expiry requires explicit short confirmation window'
+    if [[ ${RETRY_QUEUE_RESTART:-false} == true ]]; then
+        [[ $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 && $RETRY_LANGUAGE_EXPLICIT == true &&
+           $RETRY_LANGUAGE == en-us && $CALLBACK_TEST_TRANSPORT == internal && $RETRY_REGISTRATION_MODE == entry-only &&
+           $RETRY_EDIT_PENDING_LANGUAGE == false && ${RETRY_CONFIRMATION_EXPIRY:-false} == false &&
+           $RETRY_SHORT_CONFIRMATION_WINDOW == false ]] || die 'Queue restart requires the unedited main isolated EN/internal/entry-only fixture'
+    fi
     if [[ $RETRY_EDIT_PENDING_LANGUAGE == true || $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then
         [[ $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 && $RETRY_LANGUAGE_EXPLICIT == true &&
            $RETRY_LANGUAGE == en-us && $CALLBACK_TEST_TRANSPORT == internal && $RETRY_REGISTRATION_MODE == entry-only ]] ||
@@ -330,6 +339,42 @@ retry_wait_bridge() {
     return 1
 }
 
+# Fault injection is opt-in, queue-scoped and attempted at most once. Never
+# restart services or infer that a timeout means the restart did not happen.
+retry_restart_queue_in_backoff() {
+    local doc snapshot before after queue now
+    [[ ${RETRY_QUEUE_RESTART:-false} == true && $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 &&
+       ${STATE[ACCEPTANCE_ACCOUNT_ID]} == "$RETRY_ACCOUNT_ID" &&
+       ! -e $RUN_DIR/callback-queue-restart-started.json ]] || return 1
+    queue=${STATE[ACCEPTANCE_QUEUE_ID]}
+    [[ $queue == 67c5f3fb115bdd1dd574d6a604a7d29f ]] || return 1
+    doc=$(callback_document) || return 1
+    snapshot=$(retry_snapshot) || return 1
+    now=$(date +%s) || return 1
+    jq -e --argjson registered "$CALLBACK_REGISTRATION_EVIDENCE" --argjson now "$now" \
+        --arg account "$RETRY_ACCOUNT_ID" --arg queue "$queue" '
+        .account_id==$account and .queue_id==$queue and
+        .id==$registered.id and .account_id==$registered.account_id and .queue_id==$registered.queue_id and
+        .original_call_id==$registered.original_call_id and .status=="retry_wait" and .attempts==1 and
+        .caller_call_id==null and .agent_call_id==null and .reconciliation_required!=true and
+        .next_attempt_at>($now+62167219200+8)' <<<"$doc" >/dev/null || return 1
+    jq -e '.row_count==0' <<<"$snapshot" >/dev/null || return 1
+    before=$(sup -n kazoo_apps -t 5 acdc_queues_sup find_queue_supervisor "$RETRY_ACCOUNT_ID" "$queue") || return 1
+    [[ $before =~ ^\<0\.[0-9]+\.[0-9]+\>$ ]] || return 1
+    jq -n --arg account "$RETRY_ACCOUNT_ID" --arg queue "$queue" --arg supervisor "$before" \
+        --argjson doc "$doc" --argjson snapshot "$snapshot" --argjson started "$now" \
+        '{account_id:$account,queue_id:$queue,supervisor_before:$supervisor,started_at:$started,
+          callback:$doc,channels:$snapshot,restart_requests:1}' > "$RUN_DIR/callback-queue-restart-started.json" || return 1
+    sup -n kazoo_apps -t 10 acdc_maintenance queue_restart "$RETRY_ACCOUNT_ID" "$queue" \
+        > "$RUN_DIR/callback-queue-restart-command.txt" || return 1
+    after=$(sup -n kazoo_apps -t 5 acdc_queues_sup find_queue_supervisor "$RETRY_ACCOUNT_ID" "$queue") || return 1
+    [[ $after =~ ^\<0\.[0-9]+\.[0-9]+\>$ && $after != "$before" ]] || return 1
+    jq --arg supervisor "$after" --argjson finished "$(date +%s)" \
+        '. + {supervisor_after:$supervisor,finished_at:$finished,replacement_verified:true}' \
+        "$RUN_DIR/callback-queue-restart-started.json" > "$RUN_DIR/callback-queue-restart.json" || return 1
+    log 'Isolated queue supervisor replaced during durable retry_wait; no services restarted'
+}
+
 # The first attempt is still unanswered. Only the returned second attempt is
 # changed: answer, receive the full prompt, send no confirmation and await BYE.
 retry_start_expiry_carrier() {
@@ -506,6 +551,9 @@ retry_run() {
         start_returned_carrier
     fi
     retry_wait_backoff || die 'First unanswered attempt did not durably enter retry_wait with positive settlement'
+    if [[ $RETRY_QUEUE_RESTART == true ]]; then
+        retry_restart_queue_in_backoff || die 'Queue restart boundary failed; never blindly repeat a possibly completed restart'
+    fi
     if [[ $RETRY_CONFIRMATION_EXPIRY == true ]]; then
         retry_wait_expiry || die 'No-confirmation retry did not cleanly expire without an agent leg'
         retry_wait_checked 'second returned caller without confirmation' "$CARRIER_PID"

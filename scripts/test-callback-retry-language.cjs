@@ -70,6 +70,12 @@ assert.equal(argsRun(['--fixture-account','8310dc3170a18de37f205d0da172df65','--
     '--transport','internal','--registration-mode','entry-only','--edit-pending-language','--edit-pending-language']).status,65);groups++;
 const shortArgs=['--fixture-account','8310dc3170a18de37f205d0da172df65','--language','en-us',
     '--transport','internal','--registration-mode','entry-only','--short-confirmation-window'];
+const restartArgs=shortArgs.slice(0,-1).concat('--queue-restart-during-backoff');
+assert.equal(argsRun(restartArgs).status,0);
+assert.equal(argsRun(['--queue-restart-during-backoff']).status,65);
+for(const extra of ['--queue-restart-during-backoff','--short-confirmation-window','--edit-pending-language','--confirmation-expiry'])
+    assert.equal(argsRun([...restartArgs,extra]).status,65);
+groups++;
 assert.equal(argsRun(['--short-confirmation-window']).status,65);
 assert.equal(argsRun(shortArgs).status,0);
 assert.equal(argsRun(['--confirmation-expiry']).status,65);
