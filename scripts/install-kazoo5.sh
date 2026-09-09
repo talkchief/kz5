@@ -763,8 +763,34 @@ sync_git() {
     fi
 }
 
+# Metadata refresh is safe to pause; arbitrary DNF/RPM transactions are not.
+# Restore the timer's active state even when installation or a signal fails.
+dnf_transaction() (
+    [[ $DRY_RUN != true ]] || { run dnf "$@"; return; }
+    local timer_state cache_state cache_command restore_timer=false
+    trap 'rc=$?; trap - EXIT; if [[ $restore_timer == true ]]; then timeout 60 systemctl start dnf-makecache.timer || rc=1; fi; exit "$rc"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    timer_state=$(systemctl show --value -p ActiveState dnf-makecache.timer) || return 1
+    if [[ $timer_state == active || $timer_state == activating ]]; then
+        restore_timer=true
+        timeout 60 systemctl stop dnf-makecache.timer || return 1
+    fi
+    cache_state=$(systemctl show --value -p ActiveState dnf-makecache.service) || return 1
+    if [[ $cache_state == active || $cache_state == activating ]]; then
+        cache_command=$(systemctl show --value -p ExecStart dnf-makecache.service) || return 1
+        [[ $cache_command == *'path=/usr/bin/dnf ; argv[]=/usr/bin/dnf makecache --timer ;'* ]] ||
+            die 'Nonstandard dnf-makecache service; refusing to interrupt an unknown package operation'
+        log 'Pausing the OS metadata refresh while installing packages; its timer will be restored' >&2
+        timeout 60 systemctl stop dnf-makecache.service || return 1
+    fi
+    # A different package manager owner is not ours to terminate. Refuse its
+    # lock promptly instead of waiting indefinitely behind an unknown writer.
+    run dnf --setopt=exit_on_lock=True "$@"
+)
+
 dnf_install() {
-    run dnf install -y "$@"
+    dnf_transaction install -y "$@"
 }
 
 service_local_addresses() {
@@ -3285,7 +3311,7 @@ install_acdc_language_packs() (
     install_nodejs_toolchain
     # The source verifier replays the pinned resampling recipe offline. Apps
     # build dependencies are installed later, so clean hosts need SoX here.
-    run dnf -y install sox || die 'Could not install prerecorded audio verification dependency: sox'
+    dnf_install sox || die 'Could not install prerecorded audio verification dependency: sox'
     receipt=$(mktemp /tmp/kazoo-acdc-gemini-media.XXXXXX)
     trap 'rm -f -- "$receipt"' EXIT
     # Verify every checked-in source before any database or application effect.
@@ -5520,9 +5546,9 @@ install_nodejs_toolchain() {
         <<<"$module_inventory")
     if [[ $enabled_stream != "$MONSTER_UI_NODE_MAJOR" ]]; then
         if [[ -n $enabled_stream ]]; then
-            run dnf module switch-to -y "nodejs:${MONSTER_UI_NODE_MAJOR}/common"
+            dnf_transaction module switch-to -y "nodejs:${MONSTER_UI_NODE_MAJOR}/common"
         else
-            run dnf module enable -y "nodejs:${MONSTER_UI_NODE_MAJOR}"
+            dnf_transaction module enable -y "nodejs:${MONSTER_UI_NODE_MAJOR}"
         fi
     fi
     dnf_install nodejs npm

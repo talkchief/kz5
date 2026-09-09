@@ -7,6 +7,14 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Installer DNF metadata-lock delay — source fixed, native helper check pending:**
+  final empty apps installation compiled and passed SUP validation, then waited
+  behind the standard OS `dnf-makecache.service`. That job failed/released its
+  lock naturally; the installer was not restarted or manually unblocked.
+  New `dnf_transaction` coordinates only the known metadata job, restores its
+  timer state and promptly refuses an unrelated package-manager lock. Seven
+  private actual-helper cases pass. See `doc/installer_dnf_coordination.md`.
+
 - **Repeated broker-failure acceptance — native PASS:** exact existing dev44 fixture,
   three consecutive30-agent broker outages with only one initial registration
   and Login. All cycles must preserve the original applications PID and all30
