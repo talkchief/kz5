@@ -4,20 +4,21 @@ This checkpoint does **not** close all four requested groups or certify a
 production release. Keep dashboard/history work postponed. Do not regenerate
 voices or repeat passing normal callback campaigns without a relevant change.
 
-Latest:30-call broker recovery completed both batches but **failed** fresh-error
-checks (`20260909T131334Z`). Required patch `b19fde3` addresses repeated secondary
-queue registration/corrupt binding state; focused regression passed, normal
-deployment and native retry pending. FreeSWITCH-only missing Erlang/EI is fixed
-in `ef49b89`, installer retry pending. Apps-only rebar bootstrap failure remains
-under investigation. Ordinary-user native HTTP/WSS scope checks passed7 cases.
-The task register above its earlier entries carries the latest role/boot detail.
+Latest: the corrected30-call broker recovery campaign **passed**, including the
+clean-log gate (`20260909T133950Z`). Normal deployment of required patch `b19fde3`
+fixed duplicate secondary consumers and corrupt binding state. Invalid-number
+callback rejection and cached-identity revocation also passed natively. Standalone
+FreeSWITCH repeat4 passed. Apps fresh dependencies/production compilation passed;
+remaining container prerequisite and Kamailio inspection fixes are in `58436d9`,
+native installer retries pending. This supersedes earlier failed-run checkpoints,
+which remain retained as evidence, not relabeled as passes.
 
 | Point | Current verified work | Still open |
 | --- | --- | --- |
-| 1 — ACDC reliability | Real eCallMgr loss/missed hangup exposed two next-call failures. Fixed routing-readiness validation and cold location-cache fallback. Native same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and after a full RabbitMQ outage, without re-login or re-registration. | Multi-node broker partitions, repeated failures and routing under representative fault/load/soak. |
-| 2 — Callback edge cases | Actual callback worker killed while first return was ringing: cleanup, durable backoff and completed second return passed. Invalid caller/empty input, full invalid-entry audio, alternate1001 confirmation, unanswered first return and completed second return also passed natively. Earlier five-language and queue-restart-in-backoff passes remain valid; no Gemini generation. | Alternate-disabled rejection and the historical ambiguous ticket. Never force-clear an uncertain ticket from a zero-channel snapshot. |
-| 4 — Installer | Host lock, selected-role unit ownership, separate-broker monitoring/private-CA and effective dispatcher admission fixes are required source. Native minimal-image deployment exposed and fixed curl-provider conflict and missing diffutils. Separate CouchDB and RabbitMQ container roles passed normal installation and service verification. | Complete separated-role/repeat/boot matrix, cluster admission/drain, coordinated upgrades and rollback/failure recovery. A host lock is not a cluster lock; containers are not independent-machine HA proof. |
-| 6 — API/Blackhole | Command-auth and outbound guards deployed through normal installer. Real before-test leaked an expired-token event; after-test passed valid delivery, expiry denial1008 and mailbox closure1013. Five native command regressions passed; OpenAPI published/HTTPS byte-verified. | Cache-wide revocation, real slow-network load, restricted-principal and cross-node supervision/audio-privacy acceptance. |
+| 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Corrected30-concurrent broker-loss test:30 caller/30 agent successes,0 failures,0 new errors/cores. | Multi-node broker partitions, repeated failures and extended fault/load/soak. |
+| 2 — Callback edge cases | Worker killed during ringing: cleanup/backoff/completed retry passed. Invalid/empty input, alternate1001, unanswered first return/completed second return passed. Alternate-disabled rejection played complete built-in audio, retained caller until caller BYE, created no ticket and left the busy conversation intact. Earlier five-language/queue-restart passes retained; no Gemini generation. | Historical ambiguous ticket stays quarantined pending operator disposition; cannot infer its old outcome from current zero channels. |
+| 4 — Installer | Required host lock, role ownership, remote-broker monitoring/private-CA and dispatcher fixes. Fresh curl/diffutils/Erlang-EI/out-of-tree configure/login-environment gaps fixed. CouchDB/RabbitMQ install/repeat/guest-boot passed; HAProxy install/repeat passed; standalone FreeSWITCH repeat4 passed. | Apps/eCallMgr/Kamailio separated-role retries and remaining repeat/boot matrix, cluster admission/drain, coordinated upgrade/rollback acceptance. Containers are not independent-machine HA proof. |
+| 6 — API/Blackhole | Native command-auth, delivery, expiry1008, overload1013 and7 ordinary-principal HTTP/WSS scope checks passed. Cached token was revoked by exact isolated-user CAS: next event denied1008/no leak and HTTP401 before expiry. OpenAPI assets HTTPS byte-verified. | Multi-node cache-wide revocation, real slow-network load and cross-node supervision/audio-privacy acceptance. |
 
 Code commits include `f99ff81`, `98f3829`, `6c8d341`, `b3a67ec`, `c3f11bb`,
 `3125096`, `f88b306`, `7d036fc`, `75f2517`, pushed to kz5 master and synced
@@ -34,6 +35,20 @@ not mutated or called. Stream acceptance's normal signing may initialize this
 fixture account's missing identity secret, never reset an existing secret.
 
 New native fault acceptance:
+
+- `kz5-acdc-broker-loss-30-fixed-20260909.service`, exit0, evidence
+  `/var/log/kazoo-acceptance/node-loss/20260909T133950Z`. Both30-call batches
+  completed; same FSMs recovered after missed hangups during broker loss.
+  Post-recovery error counts0/0, new cores0. Peak sampled CPU43%; this is not soak.
+- `kz5-callback-invalid-reject-20260909.service`, exit0, evidence
+  `/var/log/kazoo-acceptance/20260909T134742Z`; full immutable unavailable audio,
+  no callback ticket, caller-controlled hangup. Existing conversation unaffected.
+- `kz5-native-revocation-20260909.service`, exit0,4 native checks passed.
+  Only fixed acceptance user signing secret changed; do not restore revoked keys.
+- `12313fd` removes URI credentials from25 AMQP connection logging sites;
+  actual-module AMQP/AMQPS regression passed. Normal apps+eCallMgr deployment
+  `kz5-amqp-redaction-deploy-20260909.service` is pending terminal verification.
+  Old protected logs may still contain credentials; never print them unredacted.
 
 - `kz5-acdc-broker-loss-20260909.service`, exit0 (fc13ec), evidence
   `/var/log/kazoo-acceptance/node-loss/20260909T125202Z`: native broker-outage
