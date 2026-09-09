@@ -6,6 +6,17 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Native Blackhole fanout soak PASS: unit
+  `kz5-blackhole-fanout-soak-20260909`, exit0, receipt
+  `/var/log/kazoo-blackhole-fanout-6f4ed2b1f3bd165f0a2c551ddd4d4595.json`.
+  32 subscribers,3600 broker events,115200 exact deliveries,60 batches,
+  1901seconds, zero other-call leaks and clean socket shutdown. Three source
+  hashes unchanged throughout. Max control ping580.1ms, peak native memory
+  156285952bytes, peak processes3315. Main44 all9 services active, zero media
+  channels and zero apps/eCallMgr error-priority journal entries in the final
+  35-minute readback. The defined fanout gate is closed; no indefinite-scale
+  or media-failover claim. See `blackhole_fanout_acceptance.md`.
+
 - Queued applications-node broker partition run5 PASS: native unit
   `kz5-stage-queue-partition-5` exited0, evidence
   `/var/log/kazoo-monitor-acceptance-aKrXXe`. Both actual queued calls carried
@@ -113,7 +124,7 @@ Earlier failed attempts remain failed; successful later runs do not erase them.
 | 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Three consecutive30-agent broker outages passed with unchanged apps/FSM identities and90 successful subsequent calls.30-concurrent1800s hold passed:30 caller/30 agent successes,0 failures/errors/cores. Multi-apps-node broker partition now also passed both queued calls/audio and unchanged replica recovery; source fix deployed normally on main44. | Defined recovery gates passed. These bounded tests do not establish indefinite reliability or physical media-node HA. |
 | 2 — Callback edge cases | Worker killed during ringing: cleanup/backoff/completed retry passed. Invalid/empty input, alternate1001, unanswered first return/completed second return passed. Alternate-disabled rejection played complete built-in audio, retained caller until caller BYE, created no ticket and left the busy conversation intact. Earlier five-language/queue-restart passes retained; no Gemini generation. | Historical ambiguous ticket stays quarantined pending operator disposition; cannot infer its old outcome from current zero channels. |
 | 4 — Installer | Source fixes include host locking, role ownership, remote-broker monitoring/private CA, dispatcher/media readiness, fresh dependencies, Pivot ports, Crossbar registration, SUP packaging and DNF coordination. All seven backend roles passed normal installation. Independent empty-data CouchDB/RabbitMQ/apps first installs passed. Data roles, HAProxy, FreeSWITCH, Kamailio, fresh apps and normally installed eCallMgr peer guest boot passed. Fresh separate bridge install/boot and exact remote SBC admission with real calls pass; earlier separate UI install is documented in fresh_host_tls_acceptance_20260908.md. Main44 latest apps/eCallMgr normal deployment passed. | Cluster admission/drain and coordinated upgrade/rollback acceptance. Separate UI was not repeated in this lab. Containers are not independent-machine HA proof. |
-| 6 — API/Blackhole | Native command-auth, delivery, expiry1008, overload1013 and7 ordinary-principal HTTP/WSS scope checks passed. Two-node signing-secret revocation now passes both healthy and peer-only broker-partition modes, with HTTP401/401 and WS1008/no leak before expiry. Main44 normal deployment and four HTTPS/WSS after-checks passed. Bounded real WS/WSS slow-reader cleanup, unaffected control client and reconnect passed. Distributed Listen/eavesdrop, Whisper, Barge and Join audio/privacy and authorization passed in real SIP/RTP calls, including active-call controller broker partition, same-VM recovery and supervisor-only stop. Native AMQP-to-WSS fanout pilot passed12/12 deliveries with no other-call leak. | Full32-subscriber30-minute soak is active as `kz5-blackhole-fanout-soak-20260909`; its terminal receipt remains required. Controller AMQP recovery does not claim media-node failover or indefinite reliability. |
+| 6 — API/Blackhole | Native command-auth, delivery, expiry1008, overload1013 and7 ordinary-principal HTTP/WSS scope checks passed. Two-node signing-secret revocation passes healthy and peer-only broker-partition modes, with HTTP401/401 and WS1008/no leak before expiry. Main44 deployment and HTTPS/WSS after-checks passed. Bounded real WS/WSS slow-reader cleanup, control client and reconnect passed. Distributed Listen/eavesdrop, Whisper, Barge and Join audio/privacy and authorization passed in actual SIP/RTP calls, including controller broker partition, same-VM recovery and supervisor-only stop. Full native AMQP-to-WSS soak passed115200/115200 deliveries across32 subscribers over1901seconds with zero other-call leaks and clean socket shutdown. | Defined API/Blackhole gates passed. These bounded checks do not claim media-node failover or indefinite reliability/scalability. |
 
 Code commits include `f99ff81`, `98f3829`, `6c8d341`, `b3a67ec`, `c3f11bb`,
 `3125096`, `f88b306`, `7d036fc`, `75f2517`, pushed to kz5 master and synced

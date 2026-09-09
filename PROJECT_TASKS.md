@@ -19,26 +19,35 @@ work postponed; do not generate voices at runtime or during deployment.
   activation/restore and actual private-cluster before/after call acceptance.
   Do not treat these read-only observations as a fence or silently resume a
   paused agent. Details: `doc/acdc_coherent_upgrade_readiness.md`.
-  `b6d1a04` pushed/synced to main44. Normal private primary/peer builds are
-  running as `kz5-stage-install-kazoo-apps-9` and
-  `kz5-stage-install-apps-peer-5`; collect those units before native acceptance.
+  `b6d1a04` pushed/synced to main44. Normal private primary installation
+  passed as `kz5-stage-install-kazoo-apps-9`; all3 actual fixture agents then
+  passed installed-code read-only state/membership observations, receipt
+  `/var/lib/kazoo5-install-lab/agent-maintenance-primary-1788990470794.json`.
+  Peer `kz5-stage-install-apps-peer-5` is still running; collect that existing unit.
   A fixed-scope read-only native adapter is prepared at
   `scripts/test-fixtures/distributed-lab/agent-maintenance-rpc.escript`.
 
-- **Blackhole prolonged broker/WSS fanout — native pilot PASS, full soak running:**
+- **Blackhole prolonged broker/WSS fanout — full native soak PASS:**
+  Unit `kz5-blackhole-fanout-soak-20260909` exited0; root0600 receipt
+  `6f4ed2b1f3bd165f0a2c551ddd4d4595` on dev44. All60 batches passed:
+  3600 publications,115200/115200 deliveries across32 subscribers over1901s,
+  zero other-call leaks, all sockets closed and all three input hashes stable.
+  Max control ping580.1ms, max delivery latency1035.8ms with deliberately
+  lagged readers. Native VM memory146658752→156285952bytes peak;
+  processes3249→3315 peak. All9 main services active afterward, zero channels,
+  apps/eCallMgr error-priority journal entries0 over the checked35-minute window.
+  The specified fanout gate is closed; this is not unbounded scalability proof.
+  Retained pilot evidence follows:
   Receipt `ab89346f96fd41d9ec09e4f1b2911bd3` on dev44:3 broker events,
   12/12 deliveries over4 verified WSS sockets, zero other-call leaks, control
-  ping at most7.2ms, latency11.7ms, all sockets closed. Full run is active as
-  `kz5-blackhole-fanout-soak-20260909` on dev44, runner `7f3df3c`. First two
-  batches passed120 publications/3840 deliveries; not a completed soak.
-  Collect the same unit and `/var/log/kazoo-blackhole-fanout-soak-20260909.log`;
-  do not restart services or change its three pinned source inputs during it.
+  ping at most7.2ms, latency11.7ms, all sockets closed. Full run started on
+  runner `7f3df3c`; terminal log is
+  `/var/log/kazoo-blackhole-fanout-soak-20260909.log`.
   `scripts/test-blackhole-fanout.py` adds a4-client pilot and32-client, at least
   30-minute acceptance using real AMQP call-event publication/native subscription
   delivery over verified WSS. Exact sequence/account/call checks, lagged readers,
   isolated control subscription, authenticated checks, resource bounds and cleanup.
-  Four new receiver guards plus four existing framing guards pass. Full soak
-  remains required. First pilot rejected an in-socket token change
+  Four new receiver guards plus four existing framing guards pass. First pilot rejected an in-socket token change
   before publishing; all sockets closed. Runner now keeps one bounded45-minute
   fixture token and the same sockets; native reconnect-required auth policy is
   unchanged. See `doc/blackhole_fanout_acceptance.md`.

@@ -38,14 +38,18 @@ Guarded production compilation without `TEST` and43 isolated checks passed:
 27 real `gen_statem` observations (exact state/timer-reference preservation),
 plus16 production listener callback checks (exact returned state unchanged).
 Evidence: `/tmp/kazoo-acdc-maintenance.iUgeHD` on the source host. This is not
-native broker/startup or cluster restart acceptance; deployment is pending.
+native broker/startup or cluster restart acceptance.
 
-Source `b6d1a04` is pushed and synced to dev44 `/opt/kz5`. Normal installation
-of that source in the original isolated apps guests is running as
-`kz5-stage-install-kazoo-apps-9` and `kz5-stage-install-apps-peer-5`. Collect
-their existing handles; do not start replacement jobs on an observation timeout.
+Source `b6d1a04` was pushed and synced to dev44 `/opt/kz5`. Normal primary
+installation passed as `kz5-stage-install-kazoo-apps-9`, protected log
+`/var/lib/kazoo5-install-lab/kazoo-apps-install-9.log`. Installed-code read-only
+observations then passed for all3 actual fixture agents: matching FSM/listener
+identities, ready state, zero pause and exact runtime membership. Receipt:
+`/var/lib/kazoo5-install-lab/agent-maintenance-primary-1788990470794.json`.
+This does not test pause restoration. Peer `kz5-stage-install-apps-peer-5` is
+still running; collect that existing handle, never restart on observation timeout.
 Private media was verified at zero channels before these jobs. Main44 services
-are unchanged and its existing Blackhole soak is a separate running job.
+are unchanged; its separate Blackhole soak has completed successfully.
 
 The read-only native adapter for the next installed-code observation is
 `scripts/test-fixtures/distributed-lab/agent-maintenance-rpc.escript`. Copy it
@@ -55,7 +59,8 @@ company and an enabled regular user inside it. It matches supervisor/FSM/
 listener identities and consumer readiness, and emits only allowlisted JSON.
 It has no restart/pause/restore operation and explicitly reports
 `admission_fence_proven:false`. Source-host invalid-argument execution compiles
-and refuses without connecting; actual installed-node observation remains due.
+and refuses without connecting. Native primary observation passed as above;
+peer observation and fenced restart/restore acceptance remain due.
 
 ```sh
 bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 \
