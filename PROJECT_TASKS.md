@@ -7,6 +7,14 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Blackhole prolonged broker/WSS fanout — harness prepared, native pending:**
+  `scripts/test-blackhole-fanout.py` adds a4-client pilot and32-client, at least
+  30-minute acceptance using real AMQP call-event publication/native subscription
+  delivery over verified WSS. Exact sequence/account/call checks, lagged readers,
+  isolated control subscription, token refresh, resource bounds and cleanup.
+  Four new receiver guards plus four existing framing guards pass. Native pilot
+  and full soak remain required; see `doc/blackhole_fanout_acceptance.md`.
+
 - **Queued apps-node partition acceptance — source fix, native after pending:**
   Native run3 exposed same-agent replica answered/ready disagreement while a
   real queue call was bridged. Both replicas originated the same offer. Root
