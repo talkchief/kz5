@@ -138,6 +138,21 @@ current creation path instead of pretending a temporary repair was persistent.
 
 ## Fresh bootstrap campaign
 
+## Second applications node for cluster acceptance
+
+The original lab supports `--apps-peer create`, `--apps-peer install` and
+`--apps-peer collect`. It uses only the original lab's data/broker and fixed
+peer `kz5-stage-kazoo-apps-peer` at172.30.253.20. A private paused snapshot
+reuses the installed primary's build files and cluster credentials; never push
+that image or call this a clean bootstrap. A unit condition blocks startup with
+the copied primary bind IP; normal installation renders the new peer service
+environment before it can start. The peer cannot bootstrap a master account.
+The operation retains source, image and installer receipts in protected lab
+state. No main development company or production endpoint is used. Native
+cross-node acceptance remains pending until explicitly recorded.
+
+## Fresh bootstrap campaign details
+
 Use the same entry point with `--cold-bootstrap` before the operation, starting
 with `--cold-bootstrap --prepare`. This fixed scenario creates only fresh
 CouchDB, RabbitMQ and apps roles on a different network (`172.30.252.0/24`),

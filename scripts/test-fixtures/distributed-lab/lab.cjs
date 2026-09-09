@@ -473,6 +473,12 @@ try {
     else if(args.length===2&&args[0]==='--repair-legacy-pivot')repairLegacyPivot(args[1]);
     else if(args.length===1&&args[0]==='--status')status();
     else if(args.length===1&&args[0]==='--bootstrap-status')bootstrapStatus();
+    else if(args.length===2&&args[0]==='--apps-peer') {
+        assert(!SETTINGS.cold,'Peer belongs only to the original isolated lab');
+        assert(['create','install','collect'].includes(args[1]));
+        require('./peer.cjs').peerOperation(args[1],{readState,saveState,ownedNetwork,json,podman,
+            command,configFor,hardenContainer,DIR,ROOT});
+    }
     else throw Error('Usage: --prepare | --create ROLE | --install ROLE | --sync-source ROLE | --verify-role ROLE | --reboot-role ROLE | --status');
 } catch(e) {console.error('Distributed lab refused/failed: '+e.message);process.exitCode=1;}
 }

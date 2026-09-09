@@ -7,6 +7,16 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Cross-node API/revocation acceptance — preparing second isolated apps node:**
+  new `--apps-peer create|install|collect` lab operation shares only the original
+  lab's CouchDB/RabbitMQ. A private paused snapshot reuses build files, not a
+  clean-install claim. Fixed peer IP172.30.253.20, unique hostname and a service
+  admission condition prevent activation with the primary bind configuration.
+  Normal installer renders the peer before activation; master bootstrap is
+  disabled. Snapshot/source/installer receipts are retained; no production or
+  main44 company configuration is copied. Scope/configuration tests pass.
+  Native preparation and cross-node acceptance are not yet passed.
+
 - **Installer DNF metadata-lock delay — source fixed / native helper PASS:**
   final empty apps installation compiled and passed SUP validation, then waited
   behind the standard OS `dnf-makecache.service`. That job failed/released its
