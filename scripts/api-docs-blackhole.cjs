@@ -113,7 +113,8 @@ function applyBlackhole({spec, root}) {
         outbound_delivery: {
             authentication: 'Native event delivery validates the current connection token and requires the same authenticated account. Timeout, failure, missing identity or changed account emits no event payload and closes with1008. One bounded validator per socket delivery; no parallel validator fanout within a socket.',
             overload: 'A socket mailbox at its configured max_queued_messages threshold closes with1013 and requires reconnect plus an authorized snapshot resync. Default50; invalid/out-of-range consumer limits fall back to50. This is mailbox-pressure protection, not durable event replay or a guarantee about operating-system send buffers.',
-            acceptance: 'Source regression and deployment-specific WSS acceptance are recorded separately. No instant cross-node revocation or slow-network soak claim.'
+            transport_loss: 'A receive-starved client may not receive the close frame before its transport is closed. Reconnect with bounded backoff and refetch authorized snapshots on every transport loss, including abnormal1006, not only1013. Never infer complete event delivery from a clean close or restore a stale snapshot as current.',
+            acceptance: 'Source regression and deployment-specific WSS acceptance are recorded separately. Development44 passed bounded real WS/WSS receive-starvation cleanup, unaffected control-client pings and reconnection. This is not prolonged slow-network/fanout soak, durable replay or instant atomic cross-node revocation.'
         },
         client_messages: {subscribe: ref('BlackholeSubscribe'), unsubscribe: ref('BlackholeUnsubscribe'), ping: ref('BlackholePing')},
         server_messages: {reply: ref('BlackholeReply'), event: ref('BlackholeEvent')},

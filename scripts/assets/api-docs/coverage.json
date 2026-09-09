@@ -2944,7 +2944,7 @@
     },
     {
       "file": "scripts/api-docs-blackhole.cjs",
-      "sha256": "a4f38941cd1e4fb09d24f1a2b574967e99700c150719a7159cd62ac254926382"
+      "sha256": "1ee8021c3633ef77db484f4727588d8c7ebeebc67d5c759fdadb75a94c48215a"
     },
     {
       "file": "scripts/api-docs-call-forward-confirmation.cjs",
