@@ -6,6 +6,13 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Queued applications-node broker partition run5 PASS: native unit
+  `kz5-stage-queue-partition-5` exited0, evidence
+  `/var/log/kazoo-monitor-acceptance-aKrXXe`. Both actual queued calls carried
+  directional audio; both original FSMs recovered after missed hangup during
+  apps14-only AMQP loss, with no re-login/re-registration. Scoped cleanup passed.
+  Production source `2e91984`, runner `0ac6fb9`; main44 deployment is next.
+
 - Queued multi-node acceptance exposed a genuine same-agent replica discrepancy
   before fault injection: primary answered, peer ready. Both listeners/bindings
   were live. Root ACDC source now chooses one originate owner per agent and
@@ -14,7 +21,7 @@ Latest verified results:
   Both normal lab rebuilds passed. Native run4 passed first-call audio and
   same-FSM recovery, but the second test phone refused INVITEs after OPTIONS
   exhausted its one-call budget. Native loopback regression validates a runner
-  fix; full after-test remains pending. Point1 remains open. See
+  fix; run5 subsequently passed the full after-test. See
   `acdc_distributed_partition_acceptance.md`.
 
 - All four monitoring modes now also pass real active-call controller broker

@@ -1,9 +1,18 @@
 # Queued-call applications-node broker partition
 
-Status: native test exposed replica selection/synchronization defects; source
-fix and108 Erlang regression tests pass. Both normal lab rebuilds passed;
-native after-test run4 failed at the second test phone; corrected runner pending.
-This closes no release gate until the retained native receipt passes.
+Status: native run5 PASS, after source fixes and108 Erlang regression passes.
+Both normal lab rebuilds passed on source `2e91984`; runner `0ac6fb9` completed
+as `kz5-stage-queue-partition-5`, exit0. Evidence on dev44:
+`/var/log/kazoo-monitor-acceptance-aKrXXe`; terminal log
+`/var/lib/kazoo5-install-lab/queue-partition-5.log`.
+
+Two actual queued SIP/RTP calls passed directional audio and exact ownership.
+Both original agent FSMs agreed on the answered call, retained their identity
+through apps14-only broker loss and recovered ready without re-login or SIP
+re-registration. The second call connected using those same registrations.
+Independent route restoration and scoped call/user/contact/pause cleanup passed.
+This covers that bounded apps-node broker partition, not arbitrary media-node
+failure or indefinite availability. Main44 runtime deployment is next.
 
 Native run1 failed its direct-call-based ownership observation before fault
 injection, despite a bridged queued call. Evidence

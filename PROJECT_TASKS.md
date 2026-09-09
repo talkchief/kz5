@@ -15,7 +15,12 @@ work postponed; do not generate voices at runtime or during deployment.
   Four new receiver guards plus four existing framing guards pass. Native pilot
   and full soak remain required; see `doc/blackhole_fanout_acceptance.md`.
 
-- **Queued apps-node partition acceptance — source fix, native after pending:**
+- **Queued apps-node partition acceptance — native run5 PASS:**
+  `kz5-stage-queue-partition-5` exited0 on runner `0ac6fb9`, production ACDC
+  source `2e91984`. Evidence `/var/log/kazoo-monitor-acceptance-aKrXXe` on dev44.
+  Both real queued calls/audio, both unchanged FSM replicas, missed hangup
+  during apps14 broker partition, ready recovery, no re-login/re-registration
+  and scoped cleanup passed. Main44 normal runtime deployment remains next.
   Native run3 exposed same-agent replica answered/ready disagreement while a
   real queue call was bridged. Both replicas originated the same offer. Root
   ACDC source now selects one originating process per agent and publishes its
@@ -28,13 +33,13 @@ work postponed; do not generate voices at runtime or during deployment.
   Native run4 passed first-call audio and same-FSM partition recovery, but its
   second SIPp receiver consumed its one-call budget on OPTIONS and ignored real
   INVITEs. Native loopback before-fail/after-pass regression validates the runner
-  correction; a full native rerun remains required. Main44 runtime still
+  correction; run5 subsequently passed the full native rerun. Main44 runtime still
   needs this fix after staging acceptance. The explicit guarded
   `--distributed --queue-partition --live` now tracks both native ACDC replicas,
   real two-way queued-call audio, missed hangup while one apps node loses AMQP,
   same-FSM recovery and a second call without re-registration/re-login. Offline
   ownership, audio and watchdog gates pass. See
-  `doc/acdc_distributed_partition_acceptance.md`. No native PASS claimed yet.
+  `doc/acdc_distributed_partition_acceptance.md`. Earlier failures remain retained.
 
 - **Active supervision controller partition — run3 PASS after readiness fix:**
   fixed lab controller16 AMQP route only; controller21 remains healthy, original
