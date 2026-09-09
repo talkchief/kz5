@@ -4191,6 +4191,7 @@ verify_ecallmgr() {
     verify_erlang_node kazoo-ecallmgr.service ecallmgr
     verify_erlang_applications ecallmgr ecallmgr
     verify_kazoo_amqp_ready ecallmgr
+    verify_ecallmgr_query_listener
     verify_ecallmgr_dialplan_applications
     verify_ecallmgr_callback_cleanup
     verify_ecallmgr_event_stream_framing
@@ -4201,6 +4202,22 @@ verify_ecallmgr() {
        systemctl is-active --quiet kazoo-freeswitch.service 2>/dev/null; then
         wait_kamailio_dispatcher_ready
     fi
+}
+
+verify_ecallmgr_query_listener() {
+    local consuming deadline
+    [[ $DRY_RUN != true ]] || return 0
+    deadline=$((SECONDS + KAZOO_START_TIMEOUT))
+    while ((SECONDS < deadline)); do
+        consuming=$(timeout --signal=KILL 15 sup -n ecallmgr -e \
+            gen_listener is_consuming ecallmgr_fs_channels </dev/null 2>/dev/null) || consuming=false
+        if [[ $consuming == true ]]; then
+            log 'PASS eCallMgr channel-query listener is consuming AMQP requests'
+            return 0
+        fi
+        sleep 2
+    done
+    die 'eCallMgr channel-query listener is not consuming AMQP requests'
 }
 
 verify_kazoo_amqp_ready() {

@@ -21,6 +21,7 @@ async function test() {
         if(c.includes('systemctl is-active'))return 'active';
         if(c.includes('MainPID'))return target?'100':'200';
         if(c.includes('is_available'))return target&&blocked&&killed?'false':'true';
+        if(c.includes('is_consuming'))return target&&blocked&&killed?'false':'true';
         if(c.includes('ip -j route'))return blocked?'[{"type":"blackhole","dst":"172.30.253.12"}]':'[]';
         if(c.includes('route add')){assert(armed);blocked=true;return '';}
         if(c.includes('route del')){blocked=false;return '';}
@@ -29,7 +30,7 @@ async function test() {
         throw Error('Unexpected fixture command');
     };
     const p=new Partition(admit(s,inspect),run);await p.start();assert(blocked&&armed);
-    const proof=await p.restore();assert(!blocked&&!armed);assert(proof.same_controller_vms&&proof.registered_broker_recovered);
+    const proof=await p.restore();assert(!blocked&&!armed);assert(proof.same_controller_vms&&proof.registered_broker_recovered&&proof.query_consumers_recovered);
     assert(calls.filter(a=>a.includes('add')||a.includes('del')).every(a=>a.includes('172.30.253.12/32')));
     await p.restore();
     const bad=new Partition(admit(s,inspect),()=>'{badrpc,timeout}');assert.throws(()=>bad.available(bad.nodes[0]));

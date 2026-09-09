@@ -110,7 +110,8 @@ async function request(method,route,body,token,expected=200) {
         const category=/^[a-z_]{1,64}$/.test(j.message||'')?`; ${j.message}`:'';
         const monitorReasons=['channel ownership could not be verified','monitor execution could not be submitted',
             'live target or supervisor route could not be verified','supervisor termination could not be verified'];
-        const reason=monitorReasons.includes(j.data?.message)?`; ${j.data.message}`:'';
+        const reasonText=[j.data?.message,j.message].find(v=>monitorReasons.includes(v));
+        const reason=reasonText?`; ${reasonText}`:'';
         const requestId=/^[a-f0-9]{32}$/.test(j.request_id||'')?`; request ${j.request_id}`:'';
         const error=Error(`Expected HTTP${expected}, received${r.status} for ${method} ${safeRoute}${category}${retry}${reason}${requestId}`);
         error.http_status=r.status;throw error;

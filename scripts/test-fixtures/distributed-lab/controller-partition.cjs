@@ -28,6 +28,8 @@ class Partition {
     exec(n,...args){return this.run(['podman','exec',n.id,...args]);}
     available(n){const value=this.exec(n,'sup','-n','ecallmgr','-e','kz_amqp_connections','is_available');
         assert(['true','false'].includes(value),'Invalid native broker status');return value==='true';}
+    queryReady(n){const value=this.exec(n,'sup','-n','ecallmgr','-e','gen_listener','is_consuming','ecallmgr_fs_channels');
+        assert(['true','false'].includes(value),'Invalid native channel-consumer status');return value==='true';}
     async wait(fn,seconds) {
         const end=Date.now()+seconds*1000;
         while(Date.now()<end){if(fn())return;await new Promise(r=>setTimeout(r,200));}
@@ -39,7 +41,7 @@ class Partition {
         for(const n of this.nodes) {
             assert.equal(this.exec(n,'systemctl','is-active','kazoo-ecallmgr'),'active');
             n.pid=this.exec(n,'systemctl','show','--value','-p','MainPID','kazoo-ecallmgr');
-            assert(/^[1-9][0-9]*$/.test(n.pid));assert(this.available(n));
+            assert(/^[1-9][0-9]*$/.test(n.pid));assert(this.available(n));assert(this.queryReady(n));
         }
         assert.deepEqual(JSON.parse(this.exec(target,'ip','-j','route','show','exact',BROKER+'/32')),[]);
         this.watchdog='kz5-monitor-partition-restore-'+process.pid+'-'+Date.now();
@@ -67,6 +69,12 @@ class Partition {
             this.routeAdded=false;
             await this.wait(()=>this.available(target),45);
             assert(this.available(peer));
+            this.proof.query_consumer_at_broker_recovery=this.queryReady(target);
+            // Broker registration precedes listener queue/binding recovery.
+            // Require the installer's consumer readiness before a single stop;
+            // never retry an ambiguous mutation.
+            await this.wait(()=>this.queryReady(target)&&this.queryReady(peer),45);
+            this.proof.query_consumers_recovered=true;
             for(const n of this.nodes)assert.equal(this.exec(n,'systemctl','show','--value','-p','MainPID','kazoo-ecallmgr'),n.pid);
             this.proof.same_controller_vms=true;this.proof.registered_broker_recovered=true;
         }
