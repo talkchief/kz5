@@ -17,6 +17,24 @@ were checked. Collect those exact jobs before the next
 passed, but their two restore attempts failed as documented below. Do not confuse
 source synchronization or passing offline tests with a native restore pass.
 
+The local-node read-only collector is
+`escript scripts/kazoo-maintenance-snapshot.escript --snapshot LOCAL_BIND_IPV4`.
+It uses the local protected cookie and installer-standard short node name,
+requires a local bind address, and observes every current agent supervisor
+(maximum5000,120-second aggregate collection deadline). Each entry requires
+matching drained FSM/listener identity, active consumption, exact runtime queue
+bindings and a readable saved user-document revision. Stable worker inventory
+and process/creation node epoch are rechecked at the end. Output contains only
+checkpoint fields and document revisions, not user documents, call records or
+credentials; retain it in private coordinator storage.
+
+This collector does not claim that asynchronous startup tasks have completed,
+that all queues/callbacks/media are drained, or that future admission is closed.
+Those are separate coordinator prerequisites. It explicitly returns
+`complete_cluster_drain_proven:false` and `admission_fence_proven:false`.
+Source-host invalid-argument compilation/refusal passes; installed native
+inventory collection still needs validation after the running builds finish.
+
 ### Restore primitives implemented; native coordinated acceptance still open
 
 The production FSM now exposes the internal `maintenance_restore/3` operation.

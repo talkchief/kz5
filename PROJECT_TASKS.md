@@ -18,6 +18,10 @@ work postponed; do not generate voices at runtime or during deployment.
   native restore receipts remain failed. No main44 runtime hot-load occurred.
   Complete cluster fence/drain, durable coordinator integration and cold
   restart/rollback acceptance are still open; the journal alone does not close them.
+  Local-node complete-current-agent snapshot helper prepared at
+  `scripts/kazoo-maintenance-snapshot.escript`: paired runtime identities,
+  exact memberships/bindings, document revisions and stable worker/node epoch.
+  Read-only, bounded, no full-drain/fence claim; native validation is next.
 
 - **INST-06 / pause and membership restore — source tests PASS, native gate OPEN:**
   Internal production FSM/listener restore operations now preserve absolute
