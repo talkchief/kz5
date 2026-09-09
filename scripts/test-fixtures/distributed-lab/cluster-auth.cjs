@@ -51,8 +51,9 @@ async function main() {
         const status=n=>fetch('http://'+n.ip+':8000/v2/accounts/'+issued.account+'/users/'+issued.user,
             {headers:{'X-Auth-Token':issued.token},redirect:'error',signal:AbortSignal.timeout(7000)}).then(r=>r.status);
         result.phase='warm-both-caches';
+        result.httpBefore=[];
         for(const n of nodes) {
-            assert.equal(await status(n),200);
+            const initial=await status(n);result.httpBefore.push(initial);save();assert.equal(initial,200);
             const tag='cluster-auth-'+crypto.randomBytes(16).toString('hex');
             const w={socket:new WebSocket('ws://'+n.ip+':5555/websocket'),tag,events:[],closed:null};sockets.push(w);
             w.socket.onmessage=e=>{try{w.events.push(JSON.parse(e.data));}catch(_){}};
@@ -84,7 +85,9 @@ async function main() {
         // Capture both delivery outcomes before evaluating, retaining actual
         // leak/close evidence even if HTTP already exposed stale authorization.
         result.phase='revoked-delivery-both-nodes';
-        for(let i=0;i<nodes.length;i++)rpc(nodes[i],'emit',sockets[i].tag,'after-revocation');
+        for(let i=0;i<nodes.length;i++) {
+            if(sockets[i].closed===null)rpc(nodes[i],'emit',sockets[i].tag,'after-revocation');
+        }
         await new Promise(r=>setTimeout(r,4000));
         result.deliveryAfter=sockets.map(w=>({closeCode:w.closed,leaked:w.events.some(e=>e.data==='after-revocation')}));save();
         assert(Date.now()<issued.expires*1000);
