@@ -37,6 +37,10 @@ reset_case; cache_exec='{ path=/usr/bin/dnf ; argv[]=/usr/bin/dnf upgrade -y ; }
 if dnf_install bash-completion >/dev/null 2>&1; then exit 1; fi
 if grep -Eq '^dnf |^stop dnf-makecache.service$' "$trace"; then exit 1; fi
 [[ $(tail -n 1 "$trace") == 'start dnf-makecache.timer' ]]
+reset_case; cache_exec+=' { path=/usr/bin/dnf ; argv[]=/usr/bin/dnf upgrade -y ; }'
+if dnf_install bash-completion >/dev/null 2>&1; then exit 1; fi
+if grep -Eq '^dnf |^stop dnf-makecache.service$' "$trace"; then exit 1; fi
+[[ $(tail -n 1 "$trace") == 'start dnf-makecache.timer' ]]
 reset_case; dnf_status=7
 rc=0; dnf_install bash-completion >/dev/null 2>&1 || rc=$?
 [[ $rc == 7 && $(tail -n 1 "$trace") == 'start dnf-makecache.timer' ]]
@@ -49,4 +53,4 @@ if dnf_install bash-completion >/dev/null 2>&1; then exit 1; fi
 reset_case; DRY_RUN=true
 dnf_install bash-completion >/dev/null 2>&1
 [[ ! -s $trace ]]
-echo 'PASS 7 actual DNF coordination cases; no packages, timers or services touched'
+echo 'PASS 8 actual DNF coordination cases; no packages, timers or services touched'

@@ -17,8 +17,8 @@ transaction finishes. SIGKILL cannot run shell cleanup; if the installer itself
 is forcibly killed, check and restore the previously active metadata timer.
 
 The wrapper covers normal package installs and Node.js module mutations.
-Seven tests execute the real helper with private adapters: active/inactive
-cache, nonstandard command refusal, package failure, cache-stop failure, timer
+Eight tests execute the real helper with private adapters: active/inactive
+cache, nonstandard/multiple command refusal, package failure, cache-stop failure, timer
 restoration failure and dry-run. No real OS service is touched by those tests.
 Native helper validation is pending; do not infer it from the ongoing earlier
 installer process, which already loaded its original shell functions.

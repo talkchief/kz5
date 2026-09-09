@@ -779,7 +779,8 @@ dnf_transaction() (
     cache_state=$(systemctl show --value -p ActiveState dnf-makecache.service) || return 1
     if [[ $cache_state == active || $cache_state == activating ]]; then
         cache_command=$(systemctl show --value -p ExecStart dnf-makecache.service) || return 1
-        [[ $cache_command == *'path=/usr/bin/dnf ; argv[]=/usr/bin/dnf makecache --timer ;'* ]] ||
+        [[ $cache_command == '{ path=/usr/bin/dnf ; argv[]=/usr/bin/dnf makecache --timer ; '* &&
+           ${cache_command#*'{ path='} != *'{ path='* ]] ||
             die 'Nonstandard dnf-makecache service; refusing to interrupt an unknown package operation'
         log 'Pausing the OS metadata refresh while installing packages; its timer will be restored' >&2
         timeout 60 systemctl stop dnf-makecache.service || return 1
