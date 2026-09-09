@@ -42,6 +42,7 @@
         ,status/1
         ,dashboard_state/2
         ,maintenance_state/2
+        ,maintenance_restore/3
 
         ,new_endpoint/2
         ,edited_endpoint/2
@@ -387,6 +388,67 @@ dashboard_state(ServerRef, Timeout) -> gen_statem:call(ServerRef, 'dashboard_sta
 -spec maintenance_state(pid(), pos_integer()) -> {'ok', map()} | {'error', atom()}.
 maintenance_state(ServerRef, Timeout) -> gen_statem:call(ServerRef, 'maintenance_state', Timeout).
 
+%% Internal planned-maintenance primitive. The coordinator MUST keep cluster
+%% admission fenced and own the current checkpoint generation until after
+%% verification. This is not a public API or authorization to replay old state.
+-spec maintenance_restore(pid(), map(), pos_integer()) -> {'ok', map()} | {'error', atom()}.
+maintenance_restore(ServerRef, Checkpoint, Timeout) ->
+    gen_statem:call(ServerRef, {'maintenance_restore', Checkpoint}, Timeout).
+
+maintenance_restore_reply(From, Checkpoint, StateName, State) ->
+    case maintenance_snapshot(StateName, State) of
+        {'error', _}=Error -> {'keep_state', State, [{'reply', From, Error}]};
+        {'ok', #{account_id := AccountId, agent_id := AgentId}} ->
+            case maintenance_restore_plan(Checkpoint, AccountId, AgentId) of
+                {'error', _}=Error -> {'keep_state', State, [{'reply', From, Error}]};
+                {'ok', Target, PauseRef} ->
+                    %% Allocate/validate the new timer before cancelling the
+                    %% old one. Neither an invalid checkpoint nor a rejected
+                    %% timer can remove an existing pause.
+                    maybe_stop_timer(State#state.pause_ref),
+                    NewState = State#state{pause_ref=PauseRef},
+                    Queued = maintenance_restore_notify(Target, NewState),
+                    {'next_state', Target, NewState,
+                     [{'reply', From, {'ok', #{state => Target, notifications_queued => Queued}}}]}
+            end
+    end.
+
+maintenance_restore_plan(#{account_id := AccountId, agent_id := AgentId,
+                           state := 'ready'}=Checkpoint, AccountId, AgentId)
+  when map_size(Checkpoint) =:= 3 -> {'ok', 'ready', 'undefined'};
+maintenance_restore_plan(#{account_id := AccountId, agent_id := AgentId,
+                           state := 'paused', pause_until_unix_ms := 'infinity'}=Checkpoint,
+                         AccountId, AgentId)
+  when map_size(Checkpoint) =:= 4 -> {'ok', 'paused', 'infinity'};
+maintenance_restore_plan(#{account_id := AccountId, agent_id := AgentId,
+                           state := 'paused', pause_until_unix_ms := Deadline}=Checkpoint,
+                         AccountId, AgentId)
+  when map_size(Checkpoint) =:= 4, is_integer(Deadline), Deadline > 0 ->
+    case Deadline - erlang:system_time('millisecond') of
+        Left when Left =< 0 -> {'ok', 'ready', 'undefined'};
+        Left ->
+            try erlang:start_timer(Left, self(), ?PAUSE_MESSAGE) of
+                Ref -> {'ok', 'paused', Ref}
+            catch error:badarg -> {'error', 'invalid_pause_deadline'} end
+    end;
+maintenance_restore_plan(_, _, _) -> {'error', 'invalid_agent_checkpoint'}.
+
+maintenance_restore_notify(Target, #state{account_id=AccountId, agent_id=AgentId
+                                          ,agent_listener=Listener, pause_ref=PauseRef}) ->
+    %% Notifications are asynchronous, as with normal pause/resume. A delivery
+    %% failure must not crash the FSM or discard the restored local pause.
+    %% The coordinator must verify consumers/availability before unfencing.
+    try
+        acdc_agent_listener:presence_update(Listener,
+            case Target of 'ready' -> ?PRESENCE_GREEN; 'paused' -> ?PRESENCE_RED_FLASH end),
+        acdc_agent_listener:send_availability_update(Listener, Target),
+        case Target of
+            'ready' -> acdc_agent_stats:agent_ready(AccountId, AgentId);
+            'paused' -> acdc_agent_stats:agent_paused(AccountId, AgentId, time_left(PauseRef))
+        end,
+        'true'
+    catch _:_ -> 'false' end.
+
 maintenance_reply(From, StateName, State) ->
     {'keep_state', State, [{'reply', From, maintenance_snapshot(StateName, State)}]}.
 
@@ -558,6 +620,8 @@ wait('cast', Evt, State) ->
     handle_event(Evt, 'wait', State);
 wait({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,wait,State);
 wait({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,wait,State);
+wait({'call', From}, {'maintenance_restore', Checkpoint}, State) ->
+    maintenance_restore_reply(From,Checkpoint,wait,State);
 wait({'call', From}, 'status', State) ->
     {'next_state', 'wait', State, {'reply', From, [{'state', <<"wait">>}]}};
 wait({'call', From}, 'current_call', State) ->
@@ -617,6 +681,8 @@ sync('cast', Evt, State) ->
     handle_event(Evt, 'sync', State);
 sync({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,sync,State);
 sync({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,sync,State);
+sync({'call', From}, {'maintenance_restore', Checkpoint}, State) ->
+    maintenance_restore_reply(From,Checkpoint,sync,State);
 sync({'call', From}, 'status', State) ->
     {'next_state', 'sync', State, {'reply', From, [{'state', <<"sync">>}]}};
 sync({'call', From}, 'current_call', State) ->
@@ -788,6 +854,8 @@ ready('cast', Evt, State) ->
     handle_event(Evt, 'ready', State);
 ready({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,ready,State);
 ready({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,ready,State);
+ready({'call', From}, {'maintenance_restore', Checkpoint}, State) ->
+    maintenance_restore_reply(From,Checkpoint,ready,State);
 ready({'call', From}, 'status', State) ->
     {'next_state', 'ready', State, {'reply', From, [{'state', <<"ready">>}]}};
 ready({'call', From}, 'current_call', State) ->
@@ -949,6 +1017,8 @@ ringing('cast', Evt, State) ->
     handle_event(Evt, 'ringing', State);
 ringing({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,ringing,State);
 ringing({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,ringing,State);
+ringing({'call', From}, {'maintenance_restore', Checkpoint}, State) ->
+    maintenance_restore_reply(From,Checkpoint,ringing,State);
 ringing({'call', From}, 'status', #state{member_call_id=MemberCallId
                                         ,agent_call_id=ACallId
                                         }=State) ->
@@ -1244,6 +1314,8 @@ answered('cast', Evt, State) ->
     handle_event(Evt, 'answered', State);
 answered({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,answered,State);
 answered({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,answered,State);
+answered({'call', From}, {'maintenance_restore', Checkpoint}, State) ->
+    maintenance_restore_reply(From,Checkpoint,answered,State);
 answered({'call', From}, 'status', #state{member_call_id=MemberCallId
                                          ,agent_call_id=ACallId
                                          }=State) ->
@@ -1373,6 +1445,8 @@ wrapup('cast', Evt, State) ->
     handle_event(Evt, 'wrapup', State);
 wrapup({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,wrapup,State);
 wrapup({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,wrapup,State);
+wrapup({'call', From}, {'maintenance_restore', Checkpoint}, State) ->
+    maintenance_restore_reply(From,Checkpoint,wrapup,State);
 wrapup({'call', From}, 'status', #state{wrapup_ref=Ref}=State) ->
     {'next_state', 'wrapup', State
     ,{'reply', From, [{'state', <<"wrapup">>}
@@ -1433,6 +1507,8 @@ paused('cast', Evt, State) ->
     handle_event(Evt, 'paused', State);
 paused({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,paused,State);
 paused({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,paused,State);
+paused({'call', From}, {'maintenance_restore', Checkpoint}, State) ->
+    maintenance_restore_reply(From,Checkpoint,paused,State);
 paused({'call', From}, 'status', #state{pause_ref=Ref}=State) ->
     {'next_state', 'paused', State
     ,{'reply', From, [{'state', <<"paused">>}
@@ -1509,6 +1585,8 @@ outbound('cast', Evt, State) ->
     handle_event(Evt, 'outbound', State);
 outbound({'call', From}, 'dashboard_state', State) -> dashboard_reply(From,outbound,State);
 outbound({'call', From}, 'maintenance_state', State) -> maintenance_reply(From,outbound,State);
+outbound({'call', From}, {'maintenance_restore', Checkpoint}, State) ->
+    maintenance_restore_reply(From,Checkpoint,outbound,State);
 outbound({'call', From}, 'status', #state{wrapup_ref=Ref
                                          ,outbound_call_ids=OutboundCallIds
                                          }=State) ->

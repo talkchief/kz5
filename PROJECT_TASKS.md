@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / pause and membership restore — source tests PASS, native gate OPEN:**
+  Internal production FSM/listener restore operations now preserve absolute
+  finite-pause expiry, infinite pauses and actual runtime queue membership.
+  Empty membership does not log out the agent. Invalid or active-call state is
+  refused; partial external effects are reported as uncertain, not success.
+  All79 guarded production observation/restore cases pass; evidence
+  `/tmp/kazoo-acdc-maintenance.lpGiPi`. No public API, automatic stale replay or
+  reusable pause in supervisor startup arguments. The coordinated admission
+  fence, protected journal, cold restore and rollback are still required before
+  closing INST-06. See `doc/acdc_coherent_upgrade_readiness.md`.
+
 - **INST-06 / restart pause retention — native defect reproduced, OPEN:**
   Both normal isolated apps deployments passed on `b6d1a04`. In the explicit
   fixed-agent baseline, both45-second-paused replicas returned ready after

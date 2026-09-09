@@ -34,6 +34,7 @@
         ,send_sync_resp/3, send_sync_resp/4
         ,config/1, refresh_config/3
         ,maintenance_state/2
+        ,maintenance_restore/3
         ,send_status_resume/1
         ,add_acdc_queue/3
         ,rm_acdc_queue/2
@@ -292,6 +293,11 @@ config(Srv) -> gen_listener:call(Srv, 'config').
 -spec maintenance_state(pid(), pos_integer()) -> {'ok', map()} | {'error', atom()}.
 maintenance_state(Srv, Timeout) -> gen_listener:call(Srv, 'maintenance_state', Timeout).
 
+%% Internal fenced-maintenance operation, not a user queue-login action.
+-spec maintenance_restore(pid(), map(), pos_integer()) -> {'ok', map()} | {'error', atom()}.
+maintenance_restore(Srv, Checkpoint, Timeout) ->
+    gen_listener:call(Srv, {'maintenance_restore', Checkpoint}, Timeout).
+
 -spec refresh_config(pid(), kz_term:api_ne_binaries(), fsm_state_name()) -> 'ok'.
 refresh_config(_, 'undefined', _) -> 'ok';
 refresh_config(Srv, Qs, StateName) ->
@@ -393,6 +399,8 @@ handle_call('queues', _, #state{agent_queues=Queues}=State) ->
     {'reply', Queues, State, 'hibernate'};
 handle_call('maintenance_state', _, State) ->
     {'reply', maintenance_snapshot(State), State};
+handle_call({'maintenance_restore', Checkpoint}, _, State) ->
+    maintenance_restore_reply(Checkpoint, State);
 handle_call('my_id', _, #state{agent_id=AgentId}=State) ->
     {'reply', AgentId, State, 'hibernate'};
 handle_call({'agent_info', Field}, _, #state{agent=Agent}=State) ->
@@ -420,6 +428,65 @@ maintenance_snapshot(#state{call='undefined', acdc_queue_id='undefined'
         'false' -> {'error', 'agent_membership_inconsistent'}
     end;
 maintenance_snapshot(_) -> {'error', 'agent_listener_not_drained'}.
+
+maintenance_restore_reply(Checkpoint, State) ->
+    case maintenance_snapshot(State) of
+        {'error', _}=Error -> {'reply', Error, State};
+        {'ok', #{account_id := AccountId, agent_id := AgentId}} ->
+            case maintenance_membership(Checkpoint, AccountId, AgentId) of
+                {'error', _}=Error -> {'reply', Error, State};
+                {'ok', Queues} -> maintenance_restore_queues(Queues, State)
+            end
+    end.
+
+maintenance_membership(#{account_id := AccountId, agent_id := AgentId,
+                         queues := Queues}=Checkpoint, AccountId, AgentId)
+  when map_size(Checkpoint) =:= 3, is_list(Queues) ->
+    case lists:all(fun(Q) -> is_binary(Q) andalso byte_size(Q) > 0 end, Queues)
+        andalso length(lists:usort(Queues)) =:= length(Queues) of
+        'true' -> {'ok', Queues};
+        'false' -> {'error', 'invalid_membership_checkpoint'}
+    end;
+maintenance_membership(_, _, _) -> {'error', 'invalid_membership_checkpoint'}.
+
+maintenance_restore_queues(Queues, #state{fsm_pid=Fsm, acct_id=AccountId,
+                                         agent_id=AgentId, agent_queues=Previous}=State) ->
+    %% Restore the FSM first, then obtain its actual availability. Never accept
+    %% a caller-supplied ready flag, and never call rm_acdc_queue: removing the
+    %% last queue there logs out/stops the agent. Empty runtime membership here
+    %% must preserve the supervisor and its finite/infinite pause.
+    Observation = try acdc_agent_fsm:maintenance_state(Fsm, 1000)
+                  catch _:_ -> {'error', 'agent_observation_unavailable'} end,
+    case Observation of
+        {'ok', #{account_id := AccountId, agent_id := AgentId,
+                 listener := Listener, state := Mode}}
+          when Listener =:= self(), (Mode =:= 'ready' orelse Mode =:= 'paused') ->
+            try
+                Removed = Previous -- Queues,
+                _ = [gen_listener:rm_binding(self(), 'acdc_queue',
+                         maintenance_queue_binding(AccountId, Q)) || Q <- Removed],
+                %% Reassert retained bindings too. A queued cast is not broker
+                %% delivery proof; the coordinator must check consumers/bindings
+                %% before it reopens admission.
+                _ = [gen_listener:add_binding(self(), 'acdc_queue',
+                         maintenance_queue_binding(AccountId, Q)) || Q <- Queues],
+                _ = [send_agent_unavailable(AccountId, AgentId, Q) || Q <- Removed],
+                _ = [do_send_availability_update(Q, Mode, State) || Q <- Queues],
+                {'reply', {'ok', #{queues => Queues, state => Mode,
+                                   bindings_queued => 'true'}},
+                 State#state{agent_queues=Queues}}
+            catch _:_ ->
+                %% External effects may be partial. Do not report success or
+                %% silently un-fence/retry; the coordinator must recover under
+                %% its existing fence using the protected checkpoint.
+                {'reply', {'error', 'membership_restore_uncertain'}, State}
+            end;
+        _ -> {'reply', {'error', 'agent_fsm_not_drained'}, State}
+    end.
+
+maintenance_queue_binding(AccountId, QueueId) ->
+    [{'restrict_to', ['member_connect_req', 'started_notif']}
+    ,{'queue_id', QueueId}, {'account_id', AccountId}].
 
 %%------------------------------------------------------------------------------
 %% @doc Handling cast messages.

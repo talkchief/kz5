@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compile production FSM privately and exercise read-only real OTP observations.
+# Compile production modules privately; exercise observations and fenced restore primitives.
 set -Eeuo pipefail
 umask 077
 maintenance_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
@@ -16,6 +16,8 @@ maintenance_inputs=(applications/acdc/src/acdc_agent_fsm.erl
     applications/acdc/src/acdc_agent_listener.erl
     scripts/erlang-tests/acdc_agent_maintenance_tests.erl
     scripts/erlang-tests/acdc_listener_maintenance_tests.erl
+    scripts/erlang-tests/acdc_agent_restore_tests.erl
+    scripts/erlang-tests/acdc_listener_restore_tests.erl
     scripts/test-acdc-agent-maintenance.sh)
 sha256sum "${maintenance_inputs[@]}" > "$maintenance_output/source.sha256"
 erlc -Werror +debug_info -I applications/acdc/src -I applications/acdc/include \
@@ -23,14 +25,16 @@ erlc -Werror +debug_info -I applications/acdc/src -I applications/acdc/include \
     applications/acdc/src/acdc_agent_fsm.erl \
     applications/acdc/src/acdc_agent_listener.erl \
     scripts/erlang-tests/acdc_agent_maintenance_tests.erl \
-    scripts/erlang-tests/acdc_listener_maintenance_tests.erl
+    scripts/erlang-tests/acdc_listener_maintenance_tests.erl \
+    scripts/erlang-tests/acdc_agent_restore_tests.erl \
+    scripts/erlang-tests/acdc_listener_restore_tests.erl
 erl -pa "$maintenance_output" -noshell -eval '
     {module,acdc_agent_fsm} = code:ensure_loaded(acdc_agent_fsm),
     {module,acdc_agent_listener} = code:ensure_loaded(acdc_agent_listener),
     false = erlang:function_exported(acdc_agent_fsm,strategy_test_state,1),
     false = erlang:function_exported(acdc_agent_listener,maybe_connect_to_agent,7),
-    case eunit:test([acdc_agent_maintenance_tests,acdc_listener_maintenance_tests],[verbose]) of
+    case eunit:test([acdc_agent_maintenance_tests,acdc_listener_maintenance_tests,acdc_agent_restore_tests,acdc_listener_restore_tests],[verbose]) of
         ok -> halt(0); _ -> halt(1)
     end.'
 sha256sum -c "$maintenance_output/source.sha256"
-printf 'PASS: production FSM maintenance observation; evidence %s\n' "$maintenance_output"
+printf 'PASS: production maintenance observation/restore primitives; evidence %s\n' "$maintenance_output"

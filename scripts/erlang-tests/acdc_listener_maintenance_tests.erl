@@ -1,5 +1,6 @@
 %% Exact production listener callback, no broker operations or test exports.
 -module(acdc_listener_maintenance_tests).
+-export([state/1]).
 -include_lib("eunit/include/eunit.hrl").
 
 listener_maintenance_test_() ->

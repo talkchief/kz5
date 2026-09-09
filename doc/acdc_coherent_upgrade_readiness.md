@@ -8,6 +8,38 @@ runtime/UI hold. See `FOCUSED_CLOSEOUT_2026-09-09.md` for collected receipts.
 Admission fencing, complete cluster drain, runtime-state preservation and
 coordinated restart/rollback acceptance remain open.
 
+### Restore primitives implemented; native coordinated acceptance still open
+
+The production FSM now exposes the internal `maintenance_restore/3` operation.
+It accepts only an identity-matched ready checkpoint or a paused checkpoint
+with an absolute Unix-millisecond expiry (or explicit `infinity`). It refuses
+active/residual work and malformed checkpoints without changing state or timers.
+Expired pauses restore ready; repeated restoration cannot extend the original
+deadline. A notification failure retains the local restored pause and reports
+`notifications_queued:false`; this is not permission to reopen admission.
+
+The listener's internal `maintenance_restore/3` accepts identity-matched runtime
+queue membership. It checks the paired, drained FSM and derives availability
+from its actual state. It restores empty membership without the ordinary
+last-queue logout, reasserts retained bindings, and avoids fabricated workforce
+login/logout events. Bindings are asynchronous: `bindings_queued:true` is not
+broker acknowledgement. A partial binding/publication failure explicitly returns
+`membership_restore_uncertain`; retain the fence and recover from the protected
+checkpoint, never assume rollback or blindly retry/un-fence.
+
+Source-host guarded production compilation and all79 observation/restore cases
+passed, evidence `/tmp/kazoo-acdc-maintenance.lpGiPi`. This includes43 observation
+cases,26 real FSM/timer restore cases and10 production listener callback cases
+(external FSM/broker interactions mocked). Earlier FSM-only69-case evidence is
+`/tmp/kazoo-acdc-maintenance.cJLp7K`. These are not native restart results.
+
+Required coordinator ordering remains: close all admission, prove complete drain,
+durably capture actual per-node agent inventory/membership and absolute pauses,
+activate the matching release, restore FSM then listener, verify bindings and
+availability across replicas, and only then reopen admission. Generation/replay
+protection, full cold restart and rollback acceptance remain unfinished. These
+primitives have no public HTTP route and do not themselves supply that fence.
+
 ### Native restart baseline: pause loss reproduced
 
 Both isolated apps installations on `b6d1a04` passed: primary
