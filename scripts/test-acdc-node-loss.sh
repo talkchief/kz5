@@ -5,6 +5,7 @@ set -Eeuo pipefail
 recovery_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 KAZOO_CALLS_LIBRARY=true source "$recovery_script_dir/test-kazoo-calls.sh"
 RECOVERY_NODE_STOPPED=false
+RECOVERY_WATCHDOG=''
 
 recovery_status() {
     timeout 8 sup -n kazoo_apps -t 5 acdc_agent_maintenance agent_status \
@@ -48,6 +49,9 @@ recovery_cleanup() {
             warn 'eCallMgr restoration failed; operator recovery required'; rc=1
         fi
     fi
+    if [[ -n $RECOVERY_WATCHDOG ]] && systemctl is-active --quiet kazoo-ecallmgr.service; then
+        systemctl stop "$RECOVERY_WATCHDOG.timer" || rc=1
+    fi
     cleanup || rc=1
     exit "$rc"
 }
@@ -89,6 +93,11 @@ recovery_main() {
     [[ $before_fsm =~ ^[0-9]+\.[0-9]+$ ]] || die 'Agent FSM identity missing'
     printf '%s\n' "$before_fsm" > "$RUN_DIR/fsm-before.txt"
     recovery_owned_pair || die 'Only the two answered isolated fixture legs may exist'
+    # Independent restoration survives SIGKILL or loss of the SSH/test process.
+    RECOVERY_WATCHDOG=kz5-acdc-node-loss-restore-$$
+    systemd-run --unit="$RECOVERY_WATCHDOG" --on-active=5m --timer-property=AccuracySec=1s \
+        /usr/bin/systemctl start kazoo-ecallmgr.service
+    systemctl is-active --quiet "$RECOVERY_WATCHDOG.timer"
     # Mark BEFORE the stop so every error path attempts restoration.
     RECOVERY_NODE_STOPPED=true
     timeout 90 systemctl stop kazoo-ecallmgr.service
