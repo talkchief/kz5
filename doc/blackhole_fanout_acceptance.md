@@ -9,8 +9,11 @@ reconnect to change token and is not relaxed. The corrected harness issues one
 45-minute synthetic fixture token and retains the same sockets throughout.
 Second pilot (`5af423da05ef9f3bb603cda25881b231`) reached broker publication but
 native event validation rejected missing Msg-ID before any publication. The
-producer now obtains complete headers from the installed `kz_api:default_headers/4`
-instead of constructing an incomplete header subset. All client sockets closed.
+producer now obtains header seeds from installed `kz_api:default_headers/4`
+and explicitly supplies Msg-ID before its pre-publication validation (the normal
+publisher would otherwise add it later). Third pilot
+`ddc05e6d3b34fff44771cf25b99e25dc` confirmed the seed helper alone does not add
+Msg-ID. Both attempts failed before publication; all client sockets closed.
 
 Explicit development44-only commands:
 
