@@ -76,3 +76,10 @@ returned HTTP401 before token expiry. The old signing secret is not restored.
 These results cover one serving node, not propagation during a multi-node
 partition. Real slow-network load and cross-node supervision/audio privacy
 remain separate acceptance cases; do not relabel mailbox injection as those tests.
+
+The subsequent two-node test **failed** before the authoritative identity-read
+fix: the primary denied a revoked JWT, but the peer accepted HTTP and delivered
+an event using its cached signing secret. See
+[cluster identity revocation](cluster_identity_revocation.md) for the required
+root source patch, database-failure policy, before/after regressions and native
+acceptance status. The original single-node pass is not cluster-wide proof.

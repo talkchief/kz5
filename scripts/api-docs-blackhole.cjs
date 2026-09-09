@@ -42,6 +42,7 @@ function applyBlackhole({spec, root}) {
         'scripts/patches/blackhole-kazoo5-integration.patch',
         'scripts/patches/blackhole-command-auth.patch',
         'scripts/patches/blackhole-outbound-guard.patch',
+        'scripts/patches/kazoo-identity-authoritative-read.patch',
         'scripts/patches/blackhole-before-stream-guard.patch',
         'scripts/patches/blackhole-stream-guard-transition.patch',
         'scripts/patches/blackhole-token-redaction.patch',
@@ -106,7 +107,7 @@ function applyBlackhole({spec, root}) {
         command_authentication: {
             validation: 'Each native command revalidates the connection token with the Kazoo token validator and requires a positive authentication-handler context. Cached account identity or HTTP101 alone cannot authorize a command. Rejected, malformed or unavailable token validation fails closed.',
             token_change: 'Reconnect when changing tokens or login identity. A different nonempty auth_token on an established native connection is rejected; existing subscriptions are not transferred to another identity.',
-            lifetime_limit: 'For already subscribed generic event streams, each outbound native event now requires fresh matching token/account validation before emission. Rejected or unavailable validation closes with1008; the per-event validator has a3-second deadline. There is no idle-socket expiry timer or instant global cache-revocation guarantee. Queue-live retains its separate resource-scope authorization.',
+            lifetime_limit: 'For already subscribed generic event streams, each outbound native event requires fresh matching token/account validation before emission. Rejected or unavailable validation closes with1008; the per-event validator has a3-second deadline. Kazoo user/device/account signing-secret validation reads the authoritative datastore rather than the node-local identity cache, including when broker invalidation messages cannot arrive. Datastore failure denies delivery, with no cached-secret fallback. This adds a datastore read per identity validation. There is no idle-socket expiry timer or atomic revocation of requests already validated before an update; CouchDB replica conflicts and provider-wide secret rotation are separate concerns. Queue-live retains its separate resource-scope authorization.',
             acceptance: 'Source-tested command guard; deployment and real-token acceptance are recorded separately.'
         },
         outbound_delivery: {

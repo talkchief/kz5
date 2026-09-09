@@ -24,10 +24,13 @@ start limit (`Result=start-limit-hit`) despite successful package transactions.
 The failed receipt remains `/var/lib/kazoo5-install-lab/apps-peer-install-1.log`.
 The corrected batch boundary preserves the timer with only one stop/start for
 ten nested package calls. Standalone helper use still acquires its own guard.
-Nine tests execute the real helper with private adapters: active/inactive
+Ten tests execute the real helper with private adapters: active/inactive
 cache, nonstandard/multiple command refusal, package failure, cache-stop failure, timer
-restoration failure, dry-run and nested batches. No real OS service is touched
-by those tests. The corrected full peer installation is pending.
+restoration failure, dry-run, nested batches and resolved-config persistence.
+No real OS service is touched by those tests. The corrected full peer installation
+passed on source `9764bc2`, receipt
+`/var/lib/kazoo5-install-lab/apps-peer-install-2.log`; the metadata timer was
+active/enabled with Result=success after normal installer completion.
 Native helper validation passed in `kz5-cold-kazoo-apps` using the committed
 helper (`33254c0`, installer SHA256
 `96a56bc5115d8512535f4b782e1f8c3c131f06821478009cc09aafae2e077f8c`).

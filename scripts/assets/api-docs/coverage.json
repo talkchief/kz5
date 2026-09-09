@@ -2944,7 +2944,7 @@
     },
     {
       "file": "scripts/api-docs-blackhole.cjs",
-      "sha256": "30fc8258b6a66266efe3441c63103b6b2a664fe5b47f733043788d787a9f5e61"
+      "sha256": "a4f38941cd1e4fb09d24f1a2b574967e99700c150719a7159cd62ac254926382"
     },
     {
       "file": "scripts/api-docs-call-forward-confirmation.cjs",
@@ -2980,7 +2980,7 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "f464831c4ebdfb169261f0dfe4884762e9f4ce706bf111f4b75c998ebe43dd12"
+      "sha256": "cf48f4e72c6357b3c4949d8bb4bf37d61fb446b947f4e7e23d343b0599096e59"
     },
     {
       "file": "scripts/patches/blackhole-before-stream-guard.patch",
@@ -3029,6 +3029,10 @@
     {
       "file": "scripts/patches/crossbar-kazoo5-integration.patch",
       "sha256": "ed8a3fd44cd970a17252067bfbf5037d8bb7fb0f4ce96d945556900c0a9b2ac6"
+    },
+    {
+      "file": "scripts/patches/kazoo-identity-authoritative-read.patch",
+      "sha256": "49955b2ac811c08ee0500002bb49878a8f372df3d7ea839a790b6f24d4a8a5dd"
     }
   ]
 }

@@ -46,6 +46,8 @@ assert(applied.inputs.some(x => x.file.endsWith('/blackhole-command-auth.patch')
 assert(spec['x-blackhole'].command_authentication.token_change.includes('Reconnect'));
 assert(spec['x-blackhole'].command_authentication.lifetime_limit.includes('already subscribed'));
 assert(applied.inputs.some(x => x.file.endsWith('/blackhole-outbound-guard.patch')));
+assert(applied.inputs.some(x => x.file.endsWith('/kazoo-identity-authoritative-read.patch')));
+assert(spec['x-blackhole'].command_authentication.lifetime_limit.includes('authoritative datastore'));
 assert(spec['x-blackhole'].outbound_delivery.authentication.includes('1008'));
 assert(spec['x-blackhole'].outbound_delivery.overload.includes('1013'));
 assert(applied.inputs.some(x => x.file.endsWith('/acdc_live_auth.erl')));

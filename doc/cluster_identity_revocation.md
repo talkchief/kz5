@@ -28,6 +28,11 @@ Verification:
 - `bash scripts/test-identity-revocation.sh`: six actual-production-module
   regressions with a deliberately stale cache and rotated authoritative value;
   user/device/account keys and not-found/timeout/connection failures covered.
+- `bash scripts/test-identity-revocation-install.sh`: all six fail against the
+  pinned pristine core and pass after the real installer applies its required
+  patch. Reapplication is unchanged and missing source is rejected. Receipt:
+  `/tmp/kazoo-identity-install.kRUz6o` on the source host. This private test does
+  not contact a live database or application node.
 - `bash scripts/run-cluster-auth-native.sh --revocation`: fixed isolated lab
   only, both nodes warmed, exact fixture-user CAS, HTTP and WS checks before JWT
   expiry. Tokens and signatures stay in captured private memory.
