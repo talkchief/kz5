@@ -132,6 +132,28 @@ function status() {
     console.log(JSON.stringify({owner:s.owner,phase:s.phase,source:s.source,base_digest:s.base_digest,
         coldBootstrapBaseline:s.coldBootstrapBaseline,coldBootstrapAdmissions:s.coldBootstrapAdmissions,roles:s.roles}));
 }
+function bootstrapStatus() {
+    assert(SETTINGS.cold,'Only the isolated cold bootstrap fixture may be inspected');
+    const s=readState();ownedNetwork(s);const couch=s.roles.couchdb,apps=s.roles['kazoo-apps'];
+    assert(couch&&apps);
+    for(const [role,r] of [['couchdb',couch],['kazoo-apps',apps]]) {
+        const c=json(['inspect',r.id])[0];
+        assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
+        assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],role);
+    }
+    const get=p=>JSON.parse(podman(['exec','-i',couch.id,'curl','--silent','--show-error','--config','-'],
+        {input:'url = "http://'+couch.ip+':5984/'+p+'"\nuser = "admin:'+s.secrets.couch+'"\n'}));
+    const dbs=get('_all_dbs'),cfg=get('system_config/accounts'),rows=get('accounts/_design/accounts/_view/listing_by_id');
+    const probe=cp.spawnSync('podman',['exec',apps.id,'timeout','10','sup','kapps_util','get_master_account_id'],
+        {encoding:'utf8',timeout:12000,maxBuffer:65536});
+    // No account documents, credentials or raw SUP exception output is exposed.
+    console.log(JSON.stringify({accountDbCount:dbs.filter(n=>n.startsWith('account/')).length,
+        configExists:!cfg.error,defaultMasterConfigured:!!cfg.default?.master_account_id,
+        accountViewRows:rows.rows?.length,accountViewError:rows.error||null,
+        sup:{exit:probe.status,stdoutBytes:(probe.stdout||'').length,
+            startsOk:(probe.stdout||'').startsWith('{ok,'),containsOk:(probe.stdout||'').includes('{ok,'),
+            stderrBytes:(probe.stderr||'').length}}));
+}
 function hardenContainer(id) {
     podman(['cp',__dirname+'/kazoo-stage-isolation.service',id+':/etc/systemd/system/kazoo-stage-isolation.service']);
     podman(['exec',id,'systemctl','daemon-reload']);
@@ -433,6 +455,7 @@ try {
     else if(args.length===2&&args[0]==='--drained-reboot-role')verifyRole(args[1],true,true);
     else if(args.length===2&&args[0]==='--repair-legacy-pivot')repairLegacyPivot(args[1]);
     else if(args.length===1&&args[0]==='--status')status();
+    else if(args.length===1&&args[0]==='--bootstrap-status')bootstrapStatus();
     else throw Error('Usage: --prepare | --create ROLE | --install ROLE | --sync-source ROLE | --verify-role ROLE | --reboot-role ROLE | --status');
 } catch(e) {console.error('Distributed lab refused/failed: '+e.message);process.exitCode=1;}
 }
