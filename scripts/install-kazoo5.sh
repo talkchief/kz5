@@ -3179,7 +3179,6 @@ install_kazoo_prompts() (
         return 0
     fi
     verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
-    verify_kazoo_amqp_ready kazoo_apps
     [[ -d $source_dir ]] || die 'Pinned Kazoo English-US prompts are missing'
     # ACDC defaults use separately imported immutable Gemini IDs. Ship this
     # change with that resolver; never regenerate canonical synthetic media.
@@ -3916,6 +3915,7 @@ verify_kazoo_apps() {
     verify_kazoo_production_beams
     verify_erlang_node kazoo-apps.service kazoo_apps
     verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
+    verify_kazoo_amqp_ready kazoo_apps
     verify_acdc_stats_ready
     deadline=$((SECONDS + KAZOO_START_TIMEOUT))
     while ((SECONDS < deadline)); do
