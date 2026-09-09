@@ -6,6 +6,13 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- eCallMgr peer normal installation and automatic guest boot passed on source
+  `7b206fc`: `ecallmgr-peer-install-1.log` and
+  `ecallmgr-peer-boot-1788977215685.log` in `/var/lib/kazoo5-install-lab`.
+  Normal verification includes reconnection to the separate FreeSWITCH role.
+  Initial PID1 startup failure was host inotify exhaustion, not Kazoo; completed
+  cold fixtures were parked without deleting data/evidence and the retained
+  stopped peer resumed. Lab tooling now checks headroom before creating guests.
 - Cross-node signing-secret revocation P0 fixed in required root source patch
   `8fffdd2`; six pristine before-fail/after-pass regressions, repeat-patch and
   missing-source rejection pass. Both normal lab rebuilds passed (`b8523ec`).
@@ -49,7 +56,7 @@ Earlier failed attempts remain failed; successful later runs do not erase them.
 | --- | --- | --- |
 | 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Three consecutive30-agent broker outages passed with unchanged apps/FSM identities and90 successful subsequent calls.30-concurrent1800s hold passed:30 caller/30 agent successes,0 failures/errors/cores. | Multi-node broker partitions. The30-minute hold does not establish indefinite reliability. |
 | 2 — Callback edge cases | Worker killed during ringing: cleanup/backoff/completed retry passed. Invalid/empty input, alternate1001, unanswered first return/completed second return passed. Alternate-disabled rejection played complete built-in audio, retained caller until caller BYE, created no ticket and left the busy conversation intact. Earlier five-language/queue-restart passes retained; no Gemini generation. | Historical ambiguous ticket stays quarantined pending operator disposition; cannot infer its old outcome from current zero channels. |
-| 4 — Installer | Source fixes include host locking, role ownership, remote-broker monitoring/private CA, dispatcher/media readiness, fresh dependencies, Pivot ports, Crossbar registration, SUP packaging and DNF coordination. All seven backend roles passed normal installation. Independent empty-data CouchDB/RabbitMQ/apps first installs passed. Data roles, HAProxy, FreeSWITCH, Kamailio and fresh apps guest boot passed. | Remaining repeat/legacy-eCallMgr boot matrix, cluster admission/drain and coordinated upgrade/rollback acceptance. Separate UI/bridge provisioning was not tested in this lab. Containers are not independent-machine HA proof. |
+| 4 — Installer | Source fixes include host locking, role ownership, remote-broker monitoring/private CA, dispatcher/media readiness, fresh dependencies, Pivot ports, Crossbar registration, SUP packaging and DNF coordination. All seven backend roles passed normal installation. Independent empty-data CouchDB/RabbitMQ/apps first installs passed. Data roles, HAProxy, FreeSWITCH, Kamailio, fresh apps and normally installed eCallMgr peer guest boot passed. | Cluster admission/drain and coordinated upgrade/rollback acceptance. Separate UI/bridge provisioning was not tested in this lab. Containers are not independent-machine HA proof. |
 | 6 — API/Blackhole | Native command-auth, delivery, expiry1008, overload1013 and7 ordinary-principal HTTP/WSS scope checks passed. Two-node signing-secret revocation now passes both healthy and peer-only broker-partition modes, with HTTP401/401 and WS1008/no leak before expiry. Main44 normal deployment and four HTTPS/WSS after-checks passed; updated OpenAPI HTTPS byte-verified. | Real slow-network load and cross-node supervision/audio-privacy acceptance. |
 
 Code commits include `f99ff81`, `98f3829`, `6c8d341`, `b3a67ec`, `c3f11bb`,

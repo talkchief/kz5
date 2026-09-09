@@ -7,7 +7,7 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Remaining eCallMgr automatic-boot gate — current guest being provisioned:**
+- **eCallMgr automatic-boot gate — native PASS:**
   `--ecallmgr-peer` reuses only the original isolated lab's verified controller
   filesystem with new IP172.30.253.21, distinct node name and persistent Pivot
   reservation. Normal installer required before boot acceptance; old fixture
@@ -18,7 +18,19 @@ work postponed; do not generate voices at runtime or during deployment.
   it creates no watches and changes no host limits. Completed cold-bootstrap
   fixtures can be explicitly parked without deleting data/evidence. Guarded
   resumption requires an authoritatively stopped, owned pre-configuration peer.
-  Boot success and full normal installer receipt are still pending.
+  Both completed cold fixtures were parked without deletion; headroom passed.
+  The retained peer resumed without replacement. Normal installer source
+  `7b206fc` passed (`ecallmgr-peer-install-1.log`), then automatic guest startup
+  and the normal media-connection verifier passed
+  (`ecallmgr-peer-boot-1788977215685.log`), both in the original lab evidence root.
+  Original legacy controller remains intact. This is automatic service boot,
+  not independent-machine HA or coordinated rolling-upgrade acceptance.
+
+- **Real Blackhole slow-reader acceptance — in progress:** bounded dev44-only
+  direct WS and verified HTTPS/WSS receive starvation, paced native emitter,
+  independent responsive client and reconnect checks. At most128x256KiB per
+  transport, fixed isolated fixture, no host network/configuration changes.
+  Native result pending; previous mailbox injection is not this transport test.
 
 - **Cross-node JWT signing-secret revocation P0 — SOURCE FIXED / two-node native PASS:**
   receipt `/var/lib/kazoo5-install-lab/cluster-auth-1788973933046.json` proved

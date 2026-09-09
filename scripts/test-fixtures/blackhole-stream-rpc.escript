@@ -9,8 +9,8 @@
 main(Args) ->
     try
         put(phase, local_scope),
-        true = Args =:= ["issue"] orelse Args =:= ["issue-user"] orelse (length(Args) =:= 3 andalso
-            lists:member(hd(Args), ["emit", "overflow", "revoke-user"])),
+        true = Args =:= ["issue"] orelse Args =:= ["issue-load"] orelse Args =:= ["issue-user"] orelse (length(Args) =:= 3 andalso
+            lists:member(hd(Args), ["emit", "overflow", "revoke-user", "transport-load"])),
         {ok, Status} = file:read_file("/proc/self/status"),
         match = re:run(Status, <<"^Uid:[ \\t]+0[ \\t]+0[ \\t]+0[ \\t]+0$">>, [multiline,{capture,none}]),
         {ok, Ifs} = inet:getifaddrs(),
@@ -64,18 +64,41 @@ execute(Node,["revoke-user",Tag0,Revision0]) ->
     PublicBefore = rpc(Node,kz_json,delete_keys,[[<<"_rev">>,<<"pvt_signature_secret">>],Doc]),
     PublicBefore = rpc(Node,kz_json,delete_keys,[[<<"_rev">>,<<"pvt_signature_secret">>],Saved]),
     io:put_chars("PASS exact fixture user signature rotated by revision CAS; other fields unchanged\n");
-execute(Node,["issue"]) ->
+execute(Node,[Issue]) when Issue =:= "issue"; Issue =:= "issue-load" ->
     put(phase, fixture_document),
     Db = rpc(Node,kzs_util,format_account_db,[?ACCOUNT]),
     {ok,_AccountDoc} = rpc(Node,kz_datamgr,open_doc,[Db,?ACCOUNT]),
     %% Normal signing may initialize only this fixed acceptance account's
     %% identity secret. Never reset an existing secret or touch another account.
     put(phase, issue_token),
-    Expiry = rpc(Node,erlang,system_time,[second]) + 15,
+    TTL = case Issue of "issue-load" -> 120; "issue" -> 15 end,
+    Expiry = rpc(Node,erlang,system_time,[second]) + TTL,
     {ok,Token} = rpc(Node,kz_auth,create_token,[[{<<"account_id">>,?ACCOUNT},{<<"exp">>,Expiry}]]),
     put(phase, validate_token), {ok,_} = rpc(Node,kz_auth,validate_token,[Token]),
     %% Never run this mode uncaptured in a terminal or log.
     io:format("{\"token\":\"~s\",\"expires\":~B}~n",[Token,Expiry]);
+execute(Node,["transport-load",Tag0,"bounded"]) ->
+    put(phase, exact_slow_socket),
+    Tag = list_to_binary(Tag0),
+    match = re:run(Tag, <<"^streamguard-[a-f0-9]{32}$">>, [{capture,none}]),
+    Contexts = rpc(Node,blackhole_tracking,get_contexts_by_account_id,[?ACCOUNT]),
+    true = is_list(Contexts) andalso length(Contexts) =< 100,
+    [Context] = [C || C <- Contexts, rpc(Node,bh_context,req_id,[C]) =:= Tag],
+    Pid = rpc(Node,bh_context,websocket_pid,[Context]),
+    true = is_pid(Pid) andalso node(Pid) =:= Node,
+    Token = rpc(Node,bh_context,auth_token,[Context]),
+    {ok,Claims} = rpc(Node,kz_auth,validate_token,[Token]),
+    ?ACCOUNT = rpc(Node,kz_json,get_ne_binary_value,[<<"account_id">>,Claims]),
+    %% Pace through the real emitter: never suspend a process or inject a
+    %% mailbox burst. Network receive starvation is imposed by the client.
+    Data = rpc(Node,kz_json,from_list,[[{<<"action">>,<<"event">>},
+        {<<"name">>,<<"transport-fixture">>},{<<"data">>,binary:copy(<<"s">>,262144)}]]),
+    Start = erlang:monotonic_time(millisecond),
+    {Sent,Memory,Queue} = transport_load(Node,Pid,Data,0,0,0),
+    Gone = await_gone(Node,Pid,100),
+    io:format("{\"sent\":~B,\"payload_bytes\":262144,\"peak_process_bytes\":~B,"
+              "\"peak_mailbox\":~B,\"socket_process_gone\":~s,\"elapsed_ms\":~B}~n",
+              [Sent,Memory,Queue,atom_to_list(Gone),erlang:monotonic_time(millisecond)-Start]);
 execute(Node,[Operation,Tag0,Marker0]) ->
     Tag = list_to_binary(Tag0), Marker = list_to_binary(Marker0),
     match = re:run(Tag, <<"^streamguard-[a-f0-9]{32}$">>, [{capture,none}]),
@@ -95,3 +118,19 @@ execute(Node,[Operation,Tag0,Marker0]) ->
             lists:foreach(fun(_) -> Pid ! {send_data,Data} end, lists:seq(1,100))
     end,
     io:put_chars("PASS exact owned socket injected\n").
+
+transport_load(_Node,_Pid,_Data,128,Memory,Queue) -> {128,Memory,Queue};
+transport_load(Node,Pid,Data,Count,Memory,Queue) ->
+    case rpc(Node,erlang,process_info,[Pid,[memory,message_queue_len]]) of
+        undefined -> {Count,Memory,Queue};
+        [{memory,M},{message_queue_len,Q}] ->
+            ok = rpc(Node,blackhole_data_emitter,send,[Pid,Data]),
+            timer:sleep(50),
+            transport_load(Node,Pid,Data,Count+1,max(Memory,M),max(Queue,Q))
+    end.
+await_gone(_Node,_Pid,0) -> false;
+await_gone(Node,Pid,Left) ->
+    case rpc(Node,erlang,is_process_alive,[Pid]) of
+        false -> true;
+        true -> timer:sleep(100), await_gone(Node,Pid,Left-1)
+    end.
