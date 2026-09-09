@@ -2855,7 +2855,9 @@ wait_kazoo_bootstrap_ready() {
     verify_cookie_copy "$KAZOO_RUNTIME_COOKIE_FILE" kazoo
     # Crossbar starts its binding modules asynchronously. Datastore readiness
     # and even an HTTP listener alone do not mean account/user routes are ready.
-    rpc='try M = crossbar_bindings:modules_loaded(), case lists:keymember(crossbar, 1, application:which_applications()) andalso lists:all(fun(A) -> lists:member(A, M) end, [cb_accounts, cb_users]) of true -> ready; false -> not_ready end catch _:_ -> not_ready end.'
+    # create_account constructs schema defaults before its own prechecks. Wait
+    # for their read-only loads before allowing any initial account mutation.
+    rpc='try M = crossbar_bindings:modules_loaded(), Schemas = lists:all(fun(S) -> case kz_json_schema:load(S) of {ok, _} -> true; _ -> false end end, [<<"accounts">>, <<"users">>, <<"profile">>]), case Schemas andalso lists:keymember(crossbar, 1, application:which_applications()) andalso lists:all(fun(A) -> lists:member(A, M) end, [cb_accounts, cb_users]) of true -> ready; false -> not_ready end catch _:_ -> not_ready end.'
     deadline=$((SECONDS + KAZOO_START_TIMEOUT))
     while ((SECONDS < deadline)); do
         if output=$(timeout --signal=KILL 10 runuser --user kazoo -- "$erl_call_bin" \

@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Latest separated native results:** eCallMgr4 (`e780af1`) and Kamailio4
+  (`6eddc28`) passed normal installer verification. eCallMgr reached the separate
+  FreeSWITCH node with negotiated framing and native intercept inventory.
+  Apps4 failed its first master bootstrap; a bounded diagnostic after startup
+  successfully created the isolated lab master, and the normal protected RPC
+  also created a lab-only transport-probe child. No existing development company
+  was touched. The first failure's exact cause was not preserved by the deliberately
+  secret-suppressing RPC. Its readiness barrier now additionally requires the
+  accounts/users/profile schemas (constructed before native maintenance prechecks).
+  Six actual Erlang readiness states and protected-RPC tests pass. Apps normal
+  retry remains required; do not relabel the original cold bootstrap as passed.
 - **eCallMgr media registration startup race — source fixed, retry pending:**
   separate eCallMgr exposed that `get_fs_nodes` can read saved config before
   the media supervisor starts. Registration now waits for the actual eCallMgr
@@ -65,10 +76,12 @@ work postponed; do not generate voices at runtime or during deployment.
   all requested checks passed. All9 services active, NRestarts0, zero calls and
   zero apps/eCallMgr error-priority journal entries since13:50:25UTC. Source
   synced to `6eddc28` on main44 before separated-role retries began.
-- **Post-fix capacity acceptance running:** `kz5-final-capacity-20260909.service`
+- **Post-fix capacity acceptance — native PASS:** `kz5-final-capacity-20260909.service`
   uses the existing locked isolated fixture for30 answered plus5 queued callers,
   with180s continuously verified concurrency and normal drain/RTP/log checks.
-  No result is claimed until the terminal evidence is collected.
+  Completed exit0, SIP/RTP and drain checks passed. Evidence:
+  `/var/log/kazoo-acceptance/20260909T140415Z`; this bounded180s concurrency
+  acceptance is not an extended production soak or multi-node partition test.
 
 ### Earlier checkpoints (superseded by the current results above)
 
