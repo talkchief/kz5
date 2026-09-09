@@ -12,9 +12,10 @@ spec.loader.exec_module(fanout)
 
 class FanoutChecks(unittest.TestCase):
     def message(self, **data):
-        return {'action': 'event', 'data': {'Call-ID': 'fanout-' + 'a' * 32, 'Event-Name': 'CHANNEL_HOLD',
-                'Custom-Channel-Vars': {'Account-ID': fanout.ACCOUNT, 'KZ5-Fixture-Sequence': 1,
-                                       'KZ5-Fixture-Sent-Ms': 100}, **data}}
+        return {'action': 'event', 'name': 'CHANNEL_HOLD',
+                'data': {'call_id': 'fanout-' + 'a' * 32,
+                         'custom_channel_vars': {'account_id': fanout.ACCOUNT, 'kz5_fixture_sequence': 1,
+                                                 'kz5_fixture_sent_ms': 100}, **data}}
 
     def receive(self, messages, control=False):
         c = object.__new__(fanout.Client)
@@ -40,8 +41,8 @@ class FanoutChecks(unittest.TestCase):
         self.assertIsNone(c.error)
 
     def test_wrong_identity_or_call(self):
-        for message in [self.message(**{'Call-ID': 'other'}), self.message(**{'Event-Name': 'OTHER'}),
-                        self.message(**{'Custom-Channel-Vars': {'Account-ID': 'other'}})]:
+        for message in [self.message(call_id='other'), {**self.message(), 'name': 'OTHER'},
+                        self.message(custom_channel_vars={'account_id': 'other'})]:
             self.assertIsNotNone(self.receive([message]).error)
 
     def test_duplicates_and_control_leaks(self):

@@ -53,13 +53,15 @@ class Client:
                     if message.get('action') == 'event':
                         assert not self.control, 'Other-call subscription received fixture traffic'
                         data = message['data']
-                        ccv = data['Custom-Channel-Vars']
-                        assert data['Call-ID'] == self.call and ccv['Account-ID'] == ACCOUNT
-                        assert data['Event-Name'] == 'CHANNEL_HOLD'
-                        sequence = ccv['KZ5-Fixture-Sequence']
+                        # bh_events:event/3 removes private API headers and
+                        # normalizes public keys; the event type is envelope.name.
+                        ccv = data['custom_channel_vars']
+                        assert data['call_id'] == self.call and ccv['account_id'] == ACCOUNT
+                        assert message['name'] == 'CHANNEL_HOLD'
+                        sequence = ccv['kz5_fixture_sequence']
                         assert isinstance(sequence, int) and sequence not in self.events
                         self.events.append(sequence)
-                        self.latencies.append(time.time() * 1000 - ccv['KZ5-Fixture-Sent-Ms'])
+                        self.latencies.append(time.time() * 1000 - ccv['kz5_fixture_sent_ms'])
                     else:
                         self.replies[message['request_id']] = message
                     self.cv.notify_all()

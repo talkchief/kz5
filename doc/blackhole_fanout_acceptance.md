@@ -14,6 +14,12 @@ and explicitly supplies Msg-ID before its pre-publication validation (the normal
 publisher would otherwise add it later). Third pilot
 `ddc05e6d3b34fff44771cf25b99e25dc` confirmed the seed helper alone does not add
 Msg-ID. Both attempts failed before publication; all client sockets closed.
+Fourth pilot (`91bfa389685f66386503d941b220dc9e`) published the3 broker events,
+then the receiver rejected their native normalized envelope. `bh_events:event/3`
+exposes the type as top-level `name`, with lowercase/underscore public data keys;
+it does not forward the original internal AMQP shape. The receiver and its
+regression fixtures now validate that actual contract. This earlier attempt
+remains failed, not a fanout pass; its sockets were closed.
 
 Explicit development44-only commands:
 
