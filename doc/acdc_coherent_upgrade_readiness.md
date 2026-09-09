@@ -40,6 +40,23 @@ plus16 production listener callback checks (exact returned state unchanged).
 Evidence: `/tmp/kazoo-acdc-maintenance.iUgeHD` on the source host. This is not
 native broker/startup or cluster restart acceptance; deployment is pending.
 
+Source `b6d1a04` is pushed and synced to dev44 `/opt/kz5`. Normal installation
+of that source in the original isolated apps guests is running as
+`kz5-stage-install-kazoo-apps-9` and `kz5-stage-install-apps-peer-5`. Collect
+their existing handles; do not start replacement jobs on an observation timeout.
+Private media was verified at zero channels before these jobs. Main44 services
+are unchanged and its existing Blackhole soak is a separate running job.
+
+The read-only native adapter for the next installed-code observation is
+`scripts/test-fixtures/distributed-lab/agent-maintenance-rpc.escript`. Copy it
+outside a compiling checkout to `/var/lib/kazoo-stage/` in the exact owned apps
+guests. It only admits those two guest hostname/IP pairs, the fixed synthetic
+company and an enabled regular user inside it. It matches supervisor/FSM/
+listener identities and consumer readiness, and emits only allowlisted JSON.
+It has no restart/pause/restore operation and explicitly reports
+`admission_fence_proven:false`. Source-host invalid-argument execution compiles
+and refuses without connecting; actual installed-node observation remains due.
+
 ```sh
 bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 \
   --runtime-sec 120 -- /usr/bin/unshare --net -- \

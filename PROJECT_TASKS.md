@@ -19,6 +19,11 @@ work postponed; do not generate voices at runtime or during deployment.
   activation/restore and actual private-cluster before/after call acceptance.
   Do not treat these read-only observations as a fence or silently resume a
   paused agent. Details: `doc/acdc_coherent_upgrade_readiness.md`.
+  `b6d1a04` pushed/synced to main44. Normal private primary/peer builds are
+  running as `kz5-stage-install-kazoo-apps-9` and
+  `kz5-stage-install-apps-peer-5`; collect those units before native acceptance.
+  A fixed-scope read-only native adapter is prepared at
+  `scripts/test-fixtures/distributed-lab/agent-maintenance-rpc.escript`.
 
 - **Blackhole prolonged broker/WSS fanout — native pilot PASS, full soak running:**
   Receipt `ab89346f96fd41d9ec09e4f1b2911bd3` on dev44:3 broker events,
