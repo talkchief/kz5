@@ -13,8 +13,12 @@ work postponed; do not generate voices at runtime or during deployment.
   ACDC source now selects one originating process per agent and publishes its
   exact shared leg on either bridge-first or originate-first completion.
   Monitoring replicas cannot issue duplicate acceptance/statistics. Two original
-  source regressions fail before the fix;34 strategy and26 recovery cases pass
-  afterward. Normal deployment/native after-test still required. The explicit guarded
+  source regressions fail before the fix;34 strategy,26 recovery and48 broader
+  ACDC cases pass afterward. Source `2e91984` pushed and synced to dev44 and both
+  lab apps guests. Normal rebuild units `kz5-stage-install-kazoo-apps-8` and
+  `kz5-stage-install-apps-peer-4` were verified running/compiling. Collect their
+  existing receipts, then perform the native after-test; main44 runtime still
+  needs this fix after staging acceptance. The explicit guarded
   `--distributed --queue-partition --live` now tracks both native ACDC replicas,
   real two-way queued-call audio, missed hangup while one apps node loses AMQP,
   same-FSM recovery and a second call without re-registration/re-login. Offline

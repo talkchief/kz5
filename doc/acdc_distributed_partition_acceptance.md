@@ -1,7 +1,7 @@
 # Queued-call applications-node broker partition
 
 Status: native test exposed replica selection/synchronization defects; source
-fix and60 Erlang regression tests pass. Normal rebuild/native after-test pending.
+fix and108 Erlang regression tests pass. Normal rebuild/native after-test pending.
 This closes no release gate until the retained native receipt passes.
 
 Native run1 failed its direct-call-based ownership observation before fault
@@ -33,10 +33,25 @@ acceptance or connection statistics.
 
 Before-fix tests reproduce both defects: actual original queue FSM retains3
 process winners for2 users; bridge-first publication count0 instead of1.
-After fix:34 strategy tests and26 agent recovery tests pass, including the real
+After fix:34 strategy tests,26 agent recovery tests and48 broader ACDC tests pass, including the real
 queue-selection path, exact shared correlation, monitor-only behavior, callbacks,
 ordinary bridge proof, ring-all losers and no broadcast-loopback dependency.
 This is not yet a native after-pass or a completed partition gate.
+
+Source `2e91984` is pushed to master and synced to main dev44 `/opt/kz5` and both
+private apps guests. Normal installer rebuilds were started and verified still
+running at this checkpoint: primary `kz5-stage-install-kazoo-apps-8` (PID225405),
+peer `kz5-stage-install-apps-peer-4` (PID86326). Both reached actual make/Erlang
+compilation. Re-poll the existing jobs; do not start duplicate installations.
+
+```sh
+bash scripts/prepare-distributed-install-lab.sh --collect-install kazoo-apps
+bash scripts/prepare-distributed-install-lab.sh --apps-peer collect
+```
+
+Only after both return installed success, rerun the guarded native queued-call
+partition command. The main dev44 applications service has not received this
+new replica fix yet; its root source checkout does not imply running-code deployment.
 
 Explicit command on the admitted private dev44 lab:
 
