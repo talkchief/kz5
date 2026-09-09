@@ -236,8 +236,21 @@ function installRole(role,detached=false) {
         const couch=s.roles.couchdb;
         const config='url = "http://'+couch.ip+':5984/_all_dbs"\nuser = "admin:'+s.secrets.couch+'"\n';
         const databases=JSON.parse(podman(['exec','-i',couch.id,'curl','--fail','--silent','--show-error','--config','-'],{input:config}));
-        assertFreshDatabases(databases);
-        const admission={time:new Date().toISOString(),databases,source:r.source||s.source,attempt};
+        let existingMaster=false;
+        if(databases.some(name=>!['_users','_replicator','_global_changes'].includes(name))) {
+            // A failed post-create discovery must not trigger duplicate account
+            // creation. Resume only the exact already-configured cold master.
+            const get=p=>JSON.parse(podman(['exec','-i',couch.id,'curl','--fail','--silent','--show-error','--config','-'],
+                {input:'url = "http://'+couch.ip+':5984/'+p+'"\nuser = "admin:'+s.secrets.couch+'"\n'}));
+            const config=get('system_config/accounts'),id=config.default?.master_account_id;
+            assert(/^[a-f0-9]{32}$/.test(id||''));
+            const account=get('accounts/'+id),listing=get('accounts/_design/accounts/_view/listing_by_id');
+            assert.equal(account.realm,SETTINGS.realm);assert.equal(account._id,id);
+            assert.equal(listing.rows?.length,1);assert.equal(listing.rows[0].id,id);
+            assert(s.coldBootstrapBaseline,'Existing master without original empty baseline refused');
+            existingMaster=true;
+        } else assertFreshDatabases(databases);
+        const admission={time:new Date().toISOString(),databases,source:r.source||s.source,attempt,existingMaster};
         if(!s.coldBootstrapBaseline)s.coldBootstrapBaseline=admission;
         s.coldBootstrapAdmissions=[...(s.coldBootstrapAdmissions||[]),admission];saveState(s);
     }

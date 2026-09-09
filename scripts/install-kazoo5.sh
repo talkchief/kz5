@@ -1737,6 +1737,7 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-playback-file-timeout.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-sup-audit-redaction.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-sup-completion-local-build.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-sup-archive-order.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-call-forward-confirmation.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-media-scoped-migration.patch"
     # One patch per overlapping source stack makes reinstallation idempotent:
@@ -2647,6 +2648,8 @@ install_sup_cli() {
     log 'Installing the Kazoo SUP administration command and Bash completion'
     [[ $DRY_RUN == true || -x ${KAZOO_ROOT}/core/sup/sup ]] || \
         die 'The SUP executable was not produced by the Kazoo build'
+    run env -u ERL_FLAGS -u ERL_AFLAGS -u ERL_ZFLAGS -u ERL_LIBS \
+        escript "$SCRIPT_DIR/verify-sup-archive.escript" "$KAZOO_ROOT/core/sup/sup"
     if [[ $DRY_RUN == true ]]; then
         run make -C "$KAZOO_ROOT" sup_completion
     else

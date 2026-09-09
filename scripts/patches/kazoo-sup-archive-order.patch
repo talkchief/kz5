@@ -1,0 +1,33 @@
+diff --git a/sup/Makefile b/sup/Makefile
+--- a/sup/Makefile
++++ b/sup/Makefile
+@@ -7,6 +7,11 @@ ZIP_CMD ?= zip  # unless 7z is available
+ 
+ DEPS = getopt zucchini lager
+ 
++# Staging, archive creation and cleanup share ebin/. Keep them ordered even
++# when the parent build uses -j, and always restage embedded Kazoo modules.
++.NOTPARALLEL:
++.PHONY: kz_stdlib
++
+ all: compile $(ESCRIPT) cleanup-after
+ 
+ $(PROJECT).d:: kz_stdlib
+@@ -27,7 +32,7 @@ app-build: compile
+ clean-escript:
+ 	@rm -f $(ESCRIPT)
+ 
+-escript: clean-escript $(ESCRIPT) cleanup-after
++escript: compile clean-escript $(ESCRIPT) cleanup-after
+ 
+ .PHONY: cleanup-after
+ cleanup-after:
+@@ -39,7 +44,7 @@ cleanup-after:
+ 	@rm -f ebin/kazoo_config_init.beam
+ 	@rm -f ebin/kz_config.beam
+ 
+-$(ESCRIPT): ebin/sup.beam
++$(ESCRIPT): ebin/sup.beam kz_stdlib
+ 	$(MAKE) -f $(ROOT)/erlang.mk \
+ 		DEPS_DIR="$(DEPS_DIR)" \
+ 		DEPS="$(DEPS)" \
