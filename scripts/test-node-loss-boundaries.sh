@@ -9,9 +9,15 @@ for action in --prepare-only --live; do
     recovery_parse "$action" --fault broker
     [[ $RECOVERY_SERVICE == rabbitmq-server.service ]]
 done
+recovery_parse --prepare-only --fault broker --concurrent 30
+[[ $RECOVERY_COUNT == 30 && $RECOVERY_SERVICE == rabbitmq-server.service ]]
+recovery_parse --live --fault broker --concurrent 30
+[[ $RECOVERY_COUNT == 30 && $RECOVERY_SERVICE == rabbitmq-server.service ]]
+recovery_parse --live --fault broker --concurrent 300 && exit 1
+recovery_parse --live --fault broker --concurrent 2 && exit 1
 recovery_parse --live --fault arbitrary.service && exit 1
 recovery_parse --live --fault && exit 1
 recovery_parse --live --fault broker --extra && exit 1
 recovery_parse --unknown && exit 1
 recovery_parse && exit 1
-echo 'PASS 9 actual fault-selection boundaries; no fixture, calls or service changes'
+echo 'PASS 13 actual fault/concurrency-selection boundaries; no fixture, calls or service changes'

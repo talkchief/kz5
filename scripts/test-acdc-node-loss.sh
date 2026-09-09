@@ -1,26 +1,36 @@
 #!/usr/bin/env bash
 # Real dev44-only queued call: lose eCallMgr before BYE, retain busy while
 # evidence is unavailable, recover after reconnect, accept the next call.
+# Shared-library globals are consumed by test-kazoo-calls.sh helpers.
+# shellcheck disable=SC2034
 set -Eeuo pipefail
 recovery_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 KAZOO_CALLS_LIBRARY=true source "$recovery_script_dir/test-kazoo-calls.sh"
 RECOVERY_NODE_STOPPED=false
 RECOVERY_WATCHDOG=''
 RECOVERY_SERVICE=kazoo-ecallmgr.service
+RECOVERY_COUNT=1
 
 recovery_parse() {
-    [[ $# == 1 || $# == 3 ]] || return 2
+    [[ $# == 1 || $# == 3 || $# == 5 ]] || return 2
     [[ $1 == --prepare-only || $1 == --live ]] || return 2
     RECOVERY_SERVICE=kazoo-ecallmgr.service
-    if [[ $# == 3 ]]; then
+    RECOVERY_COUNT=1
+    if [[ $# -ge 3 ]]; then
         [[ $2 == --fault && $3 == broker ]] || return 2
         RECOVERY_SERVICE=rabbitmq-server.service
+    fi
+    if [[ $# == 5 ]]; then
+        [[ $4 == --concurrent && $5 == 30 ]] || return 2
+        RECOVERY_COUNT=30
     fi
 }
 
 recovery_status() {
+    local index=${1:-1} key
+    key=ACCEPTANCE_AGENT_${index}_USER_ID
     timeout 8 sup -n kazoo_apps -t 5 acdc_agent_maintenance agent_status \
-        "${STATE[ACCEPTANCE_ACCOUNT_ID]}" "${STATE[ACCEPTANCE_AGENT_1_USER_ID]}" 2>/dev/null
+        "${STATE[ACCEPTANCE_ACCOUNT_ID]}" "${STATE[$key]}" 2>/dev/null
 }
 
 recovery_has_state() {
@@ -41,7 +51,8 @@ recovery_channels() {
 recovery_owned_pair() {
     local snapshot id
     snapshot=$(recovery_channels) || return 1
-    jq -e '.row_count==2 and ([.rows[].uuid]|unique|length)==2' <<<"$snapshot" >/dev/null || return 1
+    jq -e --argjson count "$((RECOVERY_COUNT * 2))" \
+        '.row_count==$count and ([.rows[].uuid]|unique|length)==$count' <<<"$snapshot" >/dev/null || return 1
     while read -r id; do
         [[ $id =~ ^[A-Za-z0-9@._:-]{1,128}$ ]] || return 1
         timeout 5 /usr/local/freeswitch/bin/fs_cli -x "uuid_dump $id json" |
@@ -68,7 +79,7 @@ recovery_cleanup() {
 }
 
 recovery_main() {
-    recovery_parse "$@" || die 'Use --prepare-only or --live [--fault broker] (dev44 isolated fixture only)'
+    recovery_parse "$@" || die 'Use --prepare-only or --live [--fault broker [--concurrent 30]] (dev44 isolated fixture only)'
     [[ $EUID == 0 ]] || die 'Run as root'
     umask 077
     export KAZOO_CALLBACK_TEST_ACCOUNT_ID=8310dc3170a18de37f205d0da172df65
@@ -78,6 +89,7 @@ recovery_main() {
     ip -o -4 addr show | grep -Eq '[[:space:]]10\.1\.0\.44/' || die 'Only main development host10.1.0.44 is allowed'
     load_state; validate_state
     [[ ${STATE[ACCEPTANCE_ACCOUNT_ID]} == "$KAZOO_CALLBACK_TEST_ACCOUNT_ID" ]] || die 'Wrong isolated account'
+    ((STATE[ACCEPTANCE_AGENT_COUNT] >= RECOVERY_COUNT)) || die 'Insufficient isolated fixture agents'
     INSTALL_DEPS=false
     ensure_sipp; validate_scenarios; resolve_local_ip
     systemctl is-active --quiet kazoo-apps.service
@@ -89,23 +101,29 @@ recovery_main() {
     RUN_ROOT=/var/log/kazoo-acceptance/node-loss
     create_run_dir
     printf '%s\n' "$RECOVERY_SERVICE" > "$RUN_DIR/fault-service.txt"
+    printf '%s\n' "$RECOVERY_COUNT" > "$RUN_DIR/fault-concurrency.txt"
     trap recovery_cleanup EXIT INT TERM
-    local before_apps before_fsm status deadline since cores
+    local before_apps status deadline since cores index all_ready hold_ms=60000
+    local -A before_fsms=()
+    ((RECOVERY_COUNT == 1)) || hold_ms=120000
     before_apps=$(systemctl show -p MainPID --value kazoo-apps.service)
     STATUS_AGENT_MAX=${STATE[ACCEPTANCE_AGENT_COUNT]}
     agent_status logout 1 "$STATUS_AGENT_MAX"
-    register_agents node-loss 1
+    register_agents node-loss "$RECOVERY_COUNT"
     register_caller node-loss "$CALLER_PORT"
-    start_agent_uas node-loss 1
-    agent_status login 1 1
-    start_callers node-loss 1 "$CALLER_PORT" "$CALLER_MEDIA_MIN" "$CALLER_MEDIA_MAX" 60000
-    wait_concurrent_call_legs node-loss 1 1 || die 'Initial queued call not connected'
-    status=$(recovery_status)
-    recovery_has_state answered "$status" || die 'Agent must be answered before node loss'
-    before_fsm=$(recovery_fsm_identity "$status")
-    [[ $before_fsm =~ ^[0-9]+\.[0-9]+$ ]] || die 'Agent FSM identity missing'
-    printf '%s\n' "$before_fsm" > "$RUN_DIR/fsm-before.txt"
-    recovery_owned_pair || die 'Only the two answered isolated fixture legs may exist'
+    start_agent_uas node-loss "$RECOVERY_COUNT"
+    agent_status login 1 "$RECOVERY_COUNT"
+    start_callers node-loss "$RECOVERY_COUNT" "$CALLER_PORT" "$CALLER_MEDIA_MIN" "$CALLER_MEDIA_MAX" "$hold_ms"
+    wait_concurrent_call_legs node-loss "$RECOVERY_COUNT" "$RECOVERY_COUNT" || die 'Initial concurrent queued calls not connected'
+    for ((index=1; index<=RECOVERY_COUNT; index++)); do
+        status=$(recovery_status "$index")
+        recovery_has_state answered "$status" || die 'Every agent must be answered before node loss'
+        before_fsms[$index]=$(recovery_fsm_identity "$status")
+        [[ ${before_fsms[$index]} =~ ^[0-9]+\.[0-9]+$ ]] || die 'Agent FSM identity missing'
+        printf '%s\t%s\n' "$index" "${before_fsms[$index]}" >> "$RUN_DIR/fsms-before.tsv"
+    done
+    printf '%s\n' "${before_fsms[1]}" > "$RUN_DIR/fsm-before.txt"
+    recovery_owned_pair || die 'Only answered isolated fixture pairs may exist'
     # Independent restoration survives SIGKILL or loss of the SSH/test process.
     RECOVERY_WATCHDOG=kz5-acdc-node-loss-restore-$$
     systemd-run --unit="$RECOVERY_WATCHDOG" --on-active=5m --timer-property=AccuracySec=1s \
@@ -118,16 +136,18 @@ recovery_main() {
     log "$RECOVERY_SERVICE stopped after real bridge; waiting for SIP endpoints to hang up"
     wait_checked 'node-loss caller' "$CALLER_PID"
     wait_agents_checked node-loss
-    assert_stats 'node-loss caller' "$RUN_DIR/node-loss-caller-stats.csv" 1
-    assert_agent_stats node-loss 1 1
+    assert_stats 'node-loss caller' "$RUN_DIR/node-loss-caller-stats.csv" "$RECOVERY_COUNT"
+    assert_agent_stats node-loss "$RECOVERY_COUNT" "$RECOVERY_COUNT"
     recovery_channels | jq -e '.row_count==0' >/dev/null || die 'Native calls have not ended'
     # Cover one complete production30s reconciliation interval while no node
     # can supply authoritative status. Unknown evidence must not free the agent.
     deadline=$((SECONDS + 35))
     while ((SECONDS < deadline)); do
-        status=$(recovery_status)
-        recovery_has_state answered "$status" || die 'Agent became available without channel evidence'
-        [[ $(recovery_fsm_identity "$status") == "$before_fsm" ]] || die 'Agent FSM was replaced during node loss'
+        for ((index=1; index<=RECOVERY_COUNT; index++)); do
+            status=$(recovery_status "$index")
+            recovery_has_state answered "$status" || die 'Agent became available without channel evidence'
+            [[ $(recovery_fsm_identity "$status") == "${before_fsms[$index]}" ]] || die 'Agent FSM was replaced during node loss'
+        done
         sleep 1
     done
     log 'PASS ended call remained conservatively busy while node evidence was unavailable'
@@ -136,13 +156,17 @@ recovery_main() {
     RECOVERY_NODE_STOPPED=false
     deadline=$((SECONDS + 90))
     while ((SECONDS < deadline)); do
-        status=$(recovery_status)
-        if recovery_has_state ready "$status"; then break; fi
+        all_ready=true
+        for ((index=1; index<=RECOVERY_COUNT; index++)); do
+            status=$(recovery_status "$index")
+            [[ $(recovery_fsm_identity "$status") == "${before_fsms[$index]}" ]] || die 'A replacement FSM is not recovery proof'
+            recovery_has_state ready "$status" || all_ready=false
+        done
+        [[ $all_ready != true ]] || break
         sleep 1
     done
-    recovery_has_state ready "$status" || die 'Ended call did not recover after eCallMgr reconnect'
-    [[ $(recovery_fsm_identity "$status") == "$before_fsm" ]] || die 'A replacement FSM is not recovery proof'
-    printf '%s\n' "$(recovery_fsm_identity "$status")" > "$RUN_DIR/fsm-after.txt"
+    [[ $all_ready == true ]] || die 'Not all ended calls recovered after service reconnect'
+    printf '%s\n' "${before_fsms[1]}" > "$RUN_DIR/fsm-after.txt"
     [[ $(systemctl show -p MainPID --value kazoo-apps.service) == "$before_apps" ]] || die 'Apps restarted during recovery'
     log 'PASS same applications node recovered agent without logout/login or FSM reset'
     # A ready agent does not mean a newly booted media node has been admitted
@@ -160,17 +184,17 @@ recovery_main() {
     # No login or queue restart before this second call: readiness must work.
     since=$(date +%s); cores=$(core_count)
     capture_log_baseline after-node-loss; start_monitor after-node-loss; start_rtp_capture after-node-loss
-    start_agent_uas after-node-loss 1
-    start_callers after-node-loss 1 "$CALLER_PORT" "$CALLER_MEDIA_MIN" "$CALLER_MEDIA_MAX" 30000
-    wait_agent_observed_answer after-node-loss 1 || die 'Recovered agent did not answer the next call'
+    start_agent_uas after-node-loss "$RECOVERY_COUNT"
+    start_callers after-node-loss "$RECOVERY_COUNT" "$CALLER_PORT" "$CALLER_MEDIA_MIN" "$CALLER_MEDIA_MAX" 30000
+    wait_concurrent_call_legs after-node-loss "$RECOVERY_COUNT" "$RECOVERY_COUNT" || die 'Recovered agents did not accept concurrent calls'
     wait_checked 'after-node-loss caller' "$CALLER_PID"
     wait_agents_checked after-node-loss
     stop_rtp_capture; stop_monitor
-    assert_stats 'after-node-loss caller' "$RUN_DIR/after-node-loss-caller-stats.csv" 1
-    assert_agent_stats after-node-loss 1 1
-    assert_rtp_capture after-node-loss 1 1
-    wait_agent_ready 1 || die 'Second call did not return agent to ready'
-    record_stage after-node-loss 1 1 "$RUN_DIR/after-node-loss-caller-stats.csv" 1 "$cores" "$since"
+    assert_stats 'after-node-loss caller' "$RUN_DIR/after-node-loss-caller-stats.csv" "$RECOVERY_COUNT"
+    assert_agent_stats after-node-loss "$RECOVERY_COUNT" "$RECOVERY_COUNT"
+    assert_rtp_capture after-node-loss "$RECOVERY_COUNT" "$RECOVERY_COUNT"
+    wait_agents_ready "$RECOVERY_COUNT" || die 'Second calls did not return all agents to ready'
+    record_stage after-node-loss "$RECOVERY_COUNT" "$RECOVERY_COUNT" "$RUN_DIR/after-node-loss-caller-stats.csv" "$RECOVERY_COUNT" "$cores" "$since"
     log "PASS native node-loss/missed-hangup recovery and next-call SIP/RTP; evidence: $RUN_DIR"
 }
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then recovery_main "$@"; fi
