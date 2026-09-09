@@ -28,6 +28,11 @@ Developer instructions have separate Whisper, Barge, Join and Listen sections
 at `/apis/supervision.html`, also embedded in the OpenAPI operation. These use
 the real shared POST channel endpoint; no nonexistent feature-specific routes
 are advertised. Join currently has the same full-audio semantics as Barge.
+Documentation release `ce41c0a` is deployed on dev44. All13 served assets matched
+source bytes over certificate-verified HTTPS using the local nginx listener;
+the browser exercised the named guide and OpenAPI with zero console errors,
+external requests or API executions. Source-host public-IP access separately
+timed out and is not counted as a successful reachability check.
 
 ## Current offline regression checkpoint
 

@@ -17,6 +17,13 @@ work postponed; do not generate voices at runtime or during deployment.
   and verifies this page; Join is explicitly the same audio mode as Barge.
   Ongoing-call failover is not established by this successful healthy-cluster run.
   See `doc/channel_monitor_acceptance.md`.
+  Named guides deployed from `ce41c0a` with the normal installer's guarded static
+  docs function. All13 public assets (including manifest) matched source bytes
+  over certificate-verified HTTPS through dev44's local nginx listener. Browser
+  rendering passed:653 operations, zero console errors/external requests/API
+  executions; deterministic regeneration, schema negatives and installer asset
+  permission checks passed. Public-IP reachability from the source host timed
+  out separately; local TLS readback does not establish that network path.
 
 - **AMQP replacement registration P0 — source fixed / native replacement PASS:**
   controller16's connection worker crashed after a snapshot-induced heartbeat
