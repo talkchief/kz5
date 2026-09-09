@@ -17,17 +17,24 @@ work postponed; do not generate voices at runtime or during deployment.
   not force-cleared. Offline target guard,95 retry groups and14 language/scope
   groups pass. Invalid/alternate-number paths and old ambiguous ticket remain
   separate; ordinary successful five-language campaigns were not repeated.
+  Details and measured settlement/backoff: `doc/callback_active_worker_loss.md`.
 
-- **Point6 outbound stream guard — SOURCE FIXED / native acceptance pending:**
+- **Point6 outbound stream guard — SOURCE FIXED / DEPLOYED / native PASS:**
   generic native events now validate matching token/account before delivery,
   with a3s worker deadline and1008 denial. Mailbox pressure closes1013 requiring
   resync instead of silently continuing a lossy stream. Four cases fail on the
   old handler/emitter; all18 public-entry tests,22 queue-live tests and13 frame/
-  wire tests pass after the fix. Source transition exercised111 cases, including
-  old-to-new and idempotence; runner's stale110-case total was corrected. Required
-  installer patches and OpenAPI are updated. See `doc/blackhole_outbound_delivery.md`.
+  wire tests pass after the fix. Source transition now exits0 with all111 cases
+  (0b5bab), including old-to-new and idempotence. Native baseline confirmed a
+  post-expiry event leak (caebc8); normal apps deployment exited0 (053096).
+  Native after-test passes valid delivery, expired-token denial1008 and mailbox
+  closure1013 (711103). Five native command regressions also pass (d8cad3).
+  Required installer patches and OpenAPI are updated; all12 reference assets
+  HTTPS byte-verified. Nine services active and zero calls. Cache-wide revocation,
+  transport soak and supervision privacy remain separate release acceptance.
+  See `doc/blackhole_outbound_delivery.md`.
 
-- **Points1/4 native failure acceptance — ACTIVE:** added the real dev44
+- **Points1/4 eCallMgr-loss acceptance — SOURCE FIXED / DEPLOYED / native PASS:** added the real dev44
   eCallMgr-loss/missed-hangup/next-call test with same-FSM proof and independent
   service restoration. Initial run13eaa2 failed its next call: Kamailio returned
   480 before ACDC admission, despite agent recovery. Found and fixed installer
@@ -66,8 +73,8 @@ work postponed; do not generate voices at runtime or during deployment.
   native before/after WSS acceptance now passes all five checks on main44
   (38135a/848136). Normal apps deployment exited0 in10m55.760s (c83d7b).
   Reference assets published and all12 verified over HTTPS (222514); all nine
-  services active. Generic event lifetime/backpressure and the other groups'
-  acceptance remain open; this is not closure of all four requested groups.
+  services active. Generic outbound identity/mailbox checks subsequently passed
+  above; the broader release gates are not closed by these focused passes.
   Exact four-point handover: `doc/FOCUSED_CLOSEOUT_2026-09-09.md`.
 
 - **P0-25 SmartPBX reported loading bug — SOURCE FIXED / DEPLOYED / BROWSER PASS:**

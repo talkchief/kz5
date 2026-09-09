@@ -4,6 +4,22 @@
 campaigns. Fix in source, validate the failing path, deploy through the installer,
 then record the actual result. Dashboard/history work remains postponed.
 
+**September9 focused closeout — latest entry.** Real eCallMgr loss/missed
+hangup/next-call and active callback-worker-loss acceptances now PASS. The former
+exposed and fixed both effective dispatcher admission and cold eCallMgr location
+cache recovery through required installer source patches. Native same-agent
+next-call succeeds without re-login/re-registration. The latter proves a killed
+first-return worker settles before a durable-backoff second return bridges.
+See `doc/FOCUSED_CLOSEOUT_2026-09-09.md` for exact evidence and remaining gates.
+Blackhole's new outbound guard reproduced an actual post-expiry WSS leak; source
+regressions, normal apps deployment and all three native after-checks now PASS.
+Five command-auth WSS regressions also PASS. All111 source-transition cases pass.
+All nine services active/zero calls; all12 `/apis/` assets HTTPS byte-verified.
+Exact evidence: `doc/blackhole_outbound_delivery.md` and
+`doc/callback_active_worker_loss.md`. Broader release gates remain explicit in
+the closeout table; these passes do not certify all four groups or production HA.
+Older entries below are dated evidence, not overrides of this latest checkpoint.
+
 **Standalone installer unit scope — fixed / focused PASS.**
 Normal apps/eCallMgr entry points now generate only their own service definition
 and role-specific log directory, preserving the unselected counterpart. The unit
