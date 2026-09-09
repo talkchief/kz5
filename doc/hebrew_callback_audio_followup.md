@@ -25,3 +25,17 @@ that reference. This is not regeneration, a provider request, a human listening
 approval or a five-language release claim. Preserve failed evidence separately.
 Only the existing isolated account `8310dc3170a18de37f205d0da172df65` is allowed
 for the native case. Main/production customer accounts remain untouched.
+
+Checker validation54a412 passes four groups, including explicit main/legacy
+scope, receipt-account mismatch, forbidden master/imported accounts and the
+unchanged strict waveform cases. Source `ce7487e` is on main44.
+
+First reference-capture unit `kz5-he-returned-reference-main44-20260909` failed
+before HTTP (da5883). Main's configured CouchDB host is its own10.1.0.44 address;
+the old helper accepted only literal localhost/127.0.0.1. Source asset lookup
+succeeded separately (8d5d2a). The helper now accepts IPv4 addresses present on
+the local host's interfaces, but still sends credentials only to127.0.0.1.
+No DNS-based or remote database target is added. Three reference-validation
+groups pass1c9ee9, including rejection of remote addresses, deceptive hostnames,
+malformed settings and unowned addresses. Failed capture remains failed;
+replacement capture and the native audio case are pending.

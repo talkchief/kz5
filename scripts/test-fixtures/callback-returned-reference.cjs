@@ -5,6 +5,12 @@ const {spawnSync}=require('node:child_process');
 const LOCALES=['en-us','he-il','fr-fr','es-es','ar-sa'],CANONICAL='acdc-callback-returned-confirmation';
 const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
 const root=()=>path.resolve(__dirname,'../..');
+function localDatabaseHost(host,interfaces=require('node:os').networkInterfaces()){
+    if(['localhost','127.0.0.1'].includes(host))return true;
+    return typeof host==='string'&&require('node:net').isIP(host)===4
+        &&Object.values(interfaces).some(rows=>Array.isArray(rows)&&rows.some(row=>row
+            &&(row.family==='IPv4'||row.family===4)&&row.address===host));
+}
 function locale(value){assert(typeof value==='string'&&LOCALES.includes(value),'Unsupported explicit locale');return value;}
 function read(file,limit=4*1024*1024){
     assert(path.isAbsolute(file)&&path.resolve(file)===file&&fs.realpathSync(file)===file,'Noncanonical evidence');
@@ -62,7 +68,9 @@ async function capture(directory,language,sourceRoot=root()){
         assert(bytes.toString('base64')===encoded&&!/[\r\n]/.test(bytes.toString()));env[key]=bytes.toString();
     }
     const port=Number(env.KAZOO_COUCHDB_PORT||5984);
-    assert(['localhost','127.0.0.1'].includes(env.KAZOO_COUCHDB_HOST)&&Number.isInteger(port)&&port>0&&port<65536
+    // Accept a configured address owned by this host, but still send credentials
+    // only to loopback. Remote database hosts are not a reference-capture target.
+    assert(localDatabaseHost(env.KAZOO_COUCHDB_HOST)&&Number.isInteger(port)&&port>0&&port<65536
         &&env.KAZOO_COUCHDB_USER&&!env.KAZOO_COUCHDB_USER.includes(':')&&env.KAZOO_COUCHDB_PASSWORD);
     const url='http://127.0.0.1:'+port+'/system_media/'+encodeURIComponent(a.id)+'?attachments=true&conflicts=true';
     const headers={accept:'application/json',authorization:'Basic '+Buffer.from(env.KAZOO_COUCHDB_USER+':'+env.KAZOO_COUCHDB_PASSWORD).toString('base64')};
@@ -91,7 +99,7 @@ function load(directory,digest,language,sourceRoot=root()){
     assert.equal(sha(bytes),digest);const receipt=JSON.parse(bytes),raw=read(path.join(directory,'returned-confirmation.ulaw'));
     verify(receipt,raw,asset(language,sourceRoot));return {receipt,raw};
 }
-module.exports={LOCALES,CANONICAL,sha,locale,read,asset,convert,verify,capture,load};
+module.exports={LOCALES,CANONICAL,sha,locale,read,asset,convert,verify,capture,load,localDatabaseHost};
 if(require.main===module)(async()=>{
     const [action,directory,language,sourceRoot]=process.argv.slice(2);
     assert(action==='capture'&&[5,6].includes(process.argv.length));

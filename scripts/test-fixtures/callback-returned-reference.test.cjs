@@ -9,6 +9,13 @@ new Function('require','module','exports','__filename','__dirname',fs.readFileSy
     moduleFixture,moduleFixture.exports,file,__dirname);
 const refs=moduleFixture.exports,sha=b=>crypto.createHash('sha256').update(b).digest('hex'),wav=Buffer.alloc(100,29);
 let groups=0;
+const interfaces={lo:[{family:'IPv4',address:'127.0.0.1'}],eth0:[{family:'IPv4',address:'10.1.0.44'}]};
+for(const host of ['localhost','127.0.0.1','10.1.0.44'])assert.equal(refs.localDatabaseHost(host,interfaces),true);
+for(const host of [undefined,null,{},'10.1.0.10','10.1.0.28','database.example','10.1.0.44.evil',
+    '10.1.0.44\n','http://10.1.0.44','127.0.0.1:5984','::1'])assert.equal(refs.localDatabaseHost(host,interfaces),false);
+assert.equal(refs.localDatabaseHost('10.1.0.44',{}),false);
+assert.equal(refs.localDatabaseHost('10.1.0.44',{eth0:[{family:4,address:'10.1.0.44'}]}),true);
+groups++;
 for(const language of refs.LOCALES){
     const prompt=refs.CANONICAL+'-gemini-sulafat-'+sha(wav).slice(0,16);
     const a={locale:language,canonical_id:refs.CANONICAL,id:language+'/'+prompt,attachment:prompt+'.wav',sha256:sha(wav),transcript_sha256:sha(language),bytes:wav};
