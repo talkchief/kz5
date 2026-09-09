@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **AMQP replacement registration P0 — reproduced / source fixed, native pending:**
+  controller16's connection worker crashed after a snapshot-induced heartbeat
+  loss at17:46:48UTC. OTP replaced it, but the new PID never registered: native
+  registry empty, `is_available=false`, broker TCP up with11 channels, directory
+  listener blocked waiting for assignment. This explains distributed monitor3/4
+  endpoint lookup timeouts after the separate SBC403 was fixed. Required core
+  patch registers every supervised incarnation and preserves its zone/tags;
+  three actual-module OTP regressions fail before and pass after. Normal apps and
+  eCallMgr verification now rejects an unavailable registry. Native deployment
+  and call after-tests pending; see `doc/amqp_supervised_registration.md`.
+
 - **Separate SBC admission P0 — reproduced, source fix under acceptance:**
   distributed monitor attempt2 registered all three devices, but the first
   INVITE was authorized by Kamailio then rejected403 by media15. Exact

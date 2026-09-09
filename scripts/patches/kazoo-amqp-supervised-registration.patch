@@ -1,0 +1,87 @@
+diff --git a/kazoo_amqp/src/kz_amqp_connection.erl b/kazoo_amqp/src/kz_amqp_connection.erl
+index 584943b..f00d77b 100644
+--- a/kazoo_amqp/src/kz_amqp_connection.erl
++++ b/kazoo_amqp/src/kz_amqp_connection.erl
+@@ -12,7 +12,7 @@
+ -module(kz_amqp_connection).
+ -behaviour(gen_server).
+ 
+--export([start_link/1]).
++-export([start_link/1, start_link/2]).
+ -export([get_connection/1]).
+ -export([declare_exchange/2, declare_exchange/3]).
+ -export([exchange_bind/2, exchange_bind/3]).
+@@ -55,7 +55,11 @@
+ %%------------------------------------------------------------------------------
+ -spec start_link(kz_amqp_connection()) -> kz_types:startlink_ret().
+ start_link(#kz_amqp_connection{}=Connection) ->
+-    gen_server:start_link(?SERVER, [Connection], []).
++    start_link(Connection, 'local').
++
++-spec start_link(kz_amqp_connection(), atom()) -> kz_types:startlink_ret().
++start_link(#kz_amqp_connection{}=Connection, Zone) when is_atom(Zone) ->
++    gen_server:start_link(?SERVER, [Connection, Zone], []).
+ 
+ -spec get_connection(pid()) -> kz_amqp_connection().
+ get_connection(Srv) ->
+@@ -125,9 +129,14 @@ zone(#kz_amqp_connections{zone=Zone}) ->
+ %%------------------------------------------------------------------------------
+ -spec init(list()) -> {'ok', kz_amqp_connection()}.
+ init([#kz_amqp_connection{}=Connection]) ->
++    init([Connection, 'local']);
++init([#kz_amqp_connection{broker=Broker, tags=Tags}=Connection, Zone]) ->
+     _ = process_flag('trap_exit', 'true'),
+     kz_log:put_callid(?DEFAULT_LOG_SYSTEM_ID),
+-
++    %% The supervisor retains Zone in its start arguments. Every replacement
++    %% PID must register itself before publishing availability; registering
++    %% only in the external add/2 caller strands automatically restarted children.
++    gen_server:cast('kz_amqp_connections', {'new_connection', self(), Broker, Zone, Tags}),
+     {'ok', disconnected(Connection#kz_amqp_connection{manager=self()})}.
+ 
+ %%------------------------------------------------------------------------------
+diff --git a/kazoo_amqp/src/kz_amqp_connection_sup.erl b/kazoo_amqp/src/kz_amqp_connection_sup.erl
+index 081aeb8..9eba594 100644
+--- a/kazoo_amqp/src/kz_amqp_connection_sup.erl
++++ b/kazoo_amqp/src/kz_amqp_connection_sup.erl
+@@ -12,7 +12,7 @@
+ -behaviour(supervisor).
+ 
+ -export([start_link/0]).
+--export([add/1]).
++-export([add/1, add/2]).
+ -export([remove/1]).
+ -export([init/1]).
+ 
+@@ -36,7 +36,11 @@ start_link() ->
+ 
+ -spec add(kz_amqp_connection()) -> kz_types:sup_startchild_ret().
+ add(#kz_amqp_connection{}=Connection) ->
+-    supervisor:start_child(?SERVER, [Connection]).
++    add(Connection, 'local').
++
++-spec add(kz_amqp_connection(), atom()) -> kz_types:sup_startchild_ret().
++add(#kz_amqp_connection{}=Connection, Zone) when is_atom(Zone) ->
++    supervisor:start_child(?SERVER, [Connection, Zone]).
+ 
+ -spec remove(pid()) -> 'ok' | {'error', any()}.
+ remove(Connection) when is_pid(Connection) ->
+diff --git a/kazoo_amqp/src/kz_amqp_connections.erl b/kazoo_amqp/src/kz_amqp_connections.erl
+index 6e65e0c..4ad4e16 100644
+--- a/kazoo_amqp/src/kz_amqp_connections.erl
++++ b/kazoo_amqp/src/kz_amqp_connections.erl
+@@ -108,11 +108,10 @@ add(Broker) -> add(Broker, 'local').
+ -spec add(kz_amqp_connection() | kz_term:text(), kz_term:text()) ->
+           kz_amqp_connection() |
+           {'error', any()}.
+-add(#kz_amqp_connection{broker=Broker, tags=Tags}=Connection, Zone) ->
+-    case kz_amqp_connection_sup:add(Connection) of
++add(#kz_amqp_connection{broker=Broker}=Connection, Zone) ->
++    case kz_amqp_connection_sup:add(Connection, Zone) of
+         {'ok', Pid} ->
+             lager:info("new connection proc ~p for ~s", [Pid, Broker]),
+-            gen_server:cast(?SERVER, {'new_connection', Pid, Broker, Zone, Tags}),
+             Connection;
+         {'error', Reason} = Error ->
+             lager:warning("unable to start amqp connection to '~s': ~p"
+

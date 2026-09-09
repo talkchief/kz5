@@ -1,0 +1,39 @@
+# Broker connection replacement must register its new PID
+
+## Reproduced failure
+
+The separate controller16 lost its broker heartbeat while a lab snapshot paused
+the guest. At17:46:48UTC its connection worker crashed during a `channel_max`
+query. OTP restarted that worker and RabbitMQ later showed a running TCP
+connection with11 channels, but `kz_amqp_connections:connections/0` was empty and
+`is_available/0` was false. The directory fetch listener waited indefinitely for
+an AMQP assignment. The healthy controller21 could authenticate the call, but a
+round-robin directory request sent to16 timed out after3100ms. No endpoint INVITE
+was sent. Native monitor attempts3/4 remain FAILED, not supervision passes.
+
+## Source correction
+
+The old external `add/2` call registered the first worker PID only. An automatic
+supervisor replacement never called it. The required core integration patch now
+passes the zone in the supervisor's retained start arguments and registers each
+worker from its own initialization, before that worker publishes availability.
+Existing one-argument entry points retain the local-zone default. No record
+layout changes or broad forced application restarts are introduced by the patch.
+
+Normal apps/eCallMgr verification now requires native registered-broker
+availability, not merely an active service, a TCP socket or connected media node.
+Failures are bounded and do not print broker credentials.
+
+## Evidence and limits
+
+`bash scripts/test-amqp-supervised-registration.sh` compiles the actual three
+production modules privately, without overwriting runtime BEAMs. Three real OTP
+supervised-child replacements fail on preceding source and pass after the patch:
+local, remote zone, and hidden remote broker. Tests mock logging and announce
+availability explicitly; they never connect to a broker. Zone/tags/hidden flag
+and new-PID availability are verified. Original test evidence is retained under
+`/tmp/kazoo-amqp-supervised.icKQ4u` on the source host.
+
+Native normal deployment, real broker reconnect and subsequent SIP/RTP acceptance
+remain pending. This is not a claim about loss of the registry process itself,
+an indefinite network partition, or a coordinated rolling upgrade.

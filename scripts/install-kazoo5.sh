@@ -1765,6 +1765,7 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-amqp-originate-reconcile.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-amqp-basic-nack.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-amqp-connection-uri-redaction.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-amqp-supervised-registration.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-listener-secondary-queue-recovery.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-registration-collection.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-channel-monitoring.patch"
@@ -3178,6 +3179,7 @@ install_kazoo_prompts() (
         return 0
     fi
     verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
+    verify_kazoo_amqp_ready kazoo_apps
     [[ -d $source_dir ]] || die 'Pinned Kazoo English-US prompts are missing'
     # ACDC defaults use separately imported immutable Gemini IDs. Ship this
     # change with that resolver; never regenerate canonical synthetic media.
@@ -4188,6 +4190,7 @@ verify_ecallmgr() {
     verify_kazoo_production_beams
     verify_erlang_node kazoo-ecallmgr.service ecallmgr
     verify_erlang_applications ecallmgr ecallmgr
+    verify_kazoo_amqp_ready ecallmgr
     verify_ecallmgr_dialplan_applications
     verify_ecallmgr_callback_cleanup
     verify_ecallmgr_event_stream_framing
@@ -4198,6 +4201,23 @@ verify_ecallmgr() {
        systemctl is-active --quiet kazoo-freeswitch.service 2>/dev/null; then
         wait_kamailio_dispatcher_ready
     fi
+}
+
+verify_kazoo_amqp_ready() {
+    local node_prefix=$1 available deadline
+    [[ $DRY_RUN != true ]] || return 0
+    [[ $node_prefix == ecallmgr || $node_prefix == kazoo_apps ]] || die 'Invalid AMQP readiness node'
+    deadline=$((SECONDS + KAZOO_START_TIMEOUT))
+    while ((SECONDS < deadline)); do
+        available=$(timeout --signal=KILL 15 sup -n "$node_prefix" -e \
+            kz_amqp_connections is_available </dev/null 2>/dev/null) || available=false
+        if [[ $available == true ]]; then
+            log "PASS ${node_prefix} has an available registered AMQP broker"
+            return 0
+        fi
+        sleep 2
+    done
+    die "${node_prefix} has no available registered AMQP broker"
 }
 
 freeswitch_nodes_to_manage() {
