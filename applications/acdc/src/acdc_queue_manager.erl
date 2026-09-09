@@ -30,6 +30,7 @@
         ,has_agents/1
         ,handle_config_change/2
         ,queue_size/1
+        ,maintenance_state/2
         ,should_ignore_member_call/3, should_ignore_member_call/4
         ,up_next/2
         ,ensure_member/2
@@ -276,6 +277,11 @@ handle_config_change(Srv, JObj) ->
 queue_size(Srv) ->
     gen_listener:call(Srv, 'queue_size').
 
+%% Queue size alone excludes neither announcement jobs nor pending cancellation
+%% ownership. This local observation never asserts a cluster/broker fence.
+-spec maintenance_state(pid(), pos_integer()) -> {'ok', map()} | {'error', atom()}.
+maintenance_state(Srv, Timeout) -> gen_listener:call(Srv, 'maintenance_state', Timeout).
+
 -spec should_ignore_member_call(kz_types:server_ref(), kapps_call:call(), kz_json:object()) -> boolean().
 should_ignore_member_call(Srv, Call, CallJObj) ->
     should_ignore_member_call(Srv
@@ -432,6 +438,8 @@ init([Super, AccountId, QueueId]) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), mgr_state()) -> kz_types:handle_call_ret_state(mgr_state()).
+handle_call('maintenance_state', _, State) ->
+    {'reply', maintenance_snapshot(State), State};
 handle_call('queue_size', _, #state{current_member_calls=Calls}=State) ->
     {'reply', length(Calls), State};
 handle_call('ready_agent_count', _, State) ->
@@ -613,6 +621,22 @@ handle_call({'remove_diagnostics_receiver', Receiver}, _, State) ->
 
 handle_call(_Request, _From, State) ->
     {'reply', 'ok', State}.
+
+maintenance_snapshot(#state{account_id=AccountId, queue_id=QueueId,
+                            supervisor=Supervisor, current_member_calls=[],
+                            announcements_pids=Announcements,
+                            ignored_member_calls=Ignored,
+                            strategy_state=#strategy_state{ringing_agents=[], busy_agents=[]}})
+  when is_binary(AccountId), byte_size(AccountId)>0,
+       is_binary(QueueId), byte_size(QueueId)>0, is_pid(Supervisor),
+       is_map(Announcements), map_size(Announcements)=:=0 ->
+    %% A leftover cancellation may still suppress a queued broker delivery.
+    %% Do not discard it or expose its call identifiers just to pass the gate.
+    case catch dict:size(Ignored) of
+        0 -> {'ok', #{account_id=>AccountId, queue_id=>QueueId, supervisor=>Supervisor}};
+        _ -> {'error', 'queue_manager_not_drained'}
+    end;
+maintenance_snapshot(_) -> {'error', 'queue_manager_not_drained'}.
 
 %%------------------------------------------------------------------------------
 %% @doc Handling cast messages.

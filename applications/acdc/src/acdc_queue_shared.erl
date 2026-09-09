@@ -18,6 +18,7 @@
         ,ack/2
         ,nack/2
         ,deliveries/1
+        ,maintenance_state/2
         ]).
 
 %% gen_server callbacks
@@ -102,6 +103,11 @@ nack(Srv, Delivery) ->
 deliveries(Srv) ->
     gen_listener:call(Srv, 'deliveries').
 
+%% A broker delivery can be held here before the FSM sees its member_call.
+%% Report only the paired FSM identity; never return delivery payloads.
+-spec maintenance_state(pid(), pos_integer()) -> {'ok', map()} | {'error', atom()}.
+maintenance_state(Srv, Timeout) -> gen_listener:call(Srv, 'maintenance_state', Timeout).
+
 %%%=============================================================================
 %%% gen_server callbacks
 %%%=============================================================================
@@ -123,6 +129,10 @@ init([WorkerSup]) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
+handle_call('maintenance_state', _From, #state{deliveries=[],fsm_pid=Fsm}=State) when is_pid(Fsm) ->
+    {'reply', {'ok', #{fsm=>Fsm}}, State};
+handle_call('maintenance_state', _From, State) ->
+    {'reply', {'error', 'queue_shared_not_drained'}, State};
 handle_call('deliveries', _From, #state{deliveries=Ds}=State) ->
     {'reply', Ds, State};
 handle_call(_Request, _From, State) ->

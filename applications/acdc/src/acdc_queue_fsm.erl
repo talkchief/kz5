@@ -26,6 +26,7 @@
         ,refresh/2
         ,current_call/1
         ,status/1
+        ,maintenance_state/2
 
          %% Accessors
         ,cdr_url/1
@@ -214,6 +215,13 @@ current_call(ServerRef) ->
 -spec status(pid()) -> kz_term:proplist().
 status(ServerRef) ->
     gen_statem:call(ServerRef, 'status').
+
+%% Internal read-only drain observation. A ready label/current_call response
+%% alone does not exclude an outstanding callback write, bridge probe or timer.
+%% This is not an admission fence, broker drain or durable callback inventory.
+-spec maintenance_state(pid(), pos_integer()) -> {'ok', map()} | {'error', atom()}.
+maintenance_state(ServerRef, Timeout) ->
+    gen_statem:call(ServerRef, 'maintenance_state', Timeout).
 
 -spec cdr_url(pid()) -> kz_term:api_binary().
 cdr_url(ServerRef) ->
@@ -751,6 +759,9 @@ handle_event(_Event, StateName, State) ->
 -spec handle_sync_event(any(), From :: pid(), StateName :: atom(), state()) ->
           {'next_state', StateName :: atom(), state()
           ,{'reply', From :: pid(), any()}}.
+handle_sync_event('maintenance_state', From, StateName, State) ->
+    {'next_state', StateName, State,
+     {'reply', From, maintenance_snapshot(StateName, State)}};
 handle_sync_event('cdr_url', From, StateName, #state{cdr_url=Url}=State) ->
     {'next_state', StateName, State
     ,{'reply', From, Url}
@@ -761,6 +772,25 @@ handle_sync_event(_Event, From, StateName, State) ->
     {'next_state', StateName, State
     ,{'reply', From, Reply}
     }.
+
+maintenance_snapshot('ready',
+                     #state{account_id=AccountId, queue_id=QueueId,
+                            listener_proc=Listener, manager_proc=Manager,
+                            connect_resps=[], connect_wins=[], collect_ref='undefined',
+                            timer_ref='undefined', connection_timer_ref='undefined',
+                            agent_ring_timer_ref='undefined', member_call='undefined',
+                            member_call_start='undefined', member_call_winners=[],
+                            announce_played='false', announce_id='undefined',
+                            announce_timer_ref='undefined', pending_queue_opts=[],
+                            callback_ctx=Callback, attempted_agents=[], bridge_ctx=Bridge})
+  when is_binary(AccountId), byte_size(AccountId)>0,
+       is_binary(QueueId), byte_size(QueueId)>0,
+       is_pid(Listener), is_pid(Manager),
+       is_map(Callback), map_size(Callback)=:=0,
+       is_map(Bridge), map_size(Bridge)=:=0 ->
+    {'ok', #{account_id=>AccountId, queue_id=>QueueId, state=>'ready',
+             listener=>Listener, manager=>Manager}};
+maintenance_snapshot(_, _) -> {'error', 'queue_worker_not_drained'}.
 
 %%------------------------------------------------------------------------------
 %% @doc This function is called by a `gen_statem' when it is about to

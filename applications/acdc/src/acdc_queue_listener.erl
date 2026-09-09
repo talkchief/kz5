@@ -38,6 +38,7 @@
         ,config/1
 
         ,delivery/1
+        ,maintenance_state/2
         ,replace_callback_call/5
         ,retire_callback_member/2
         ]).
@@ -189,6 +190,12 @@ config(Srv) ->
 delivery(Srv) ->
     gen_listener:call(Srv, 'delivery').
 
+%% No call records or broker delivery payloads escape this observation.
+%% Consumption, actual bindings and broker in-flight deliveries must still be
+%% checked separately by the fenced cluster coordinator.
+-spec maintenance_state(pid(), pos_integer()) -> {'ok', map()} | {'error', atom()}.
+maintenance_state(Srv, Timeout) -> gen_listener:call(Srv, 'maintenance_state', Timeout).
+
 %%%=============================================================================
 %%% gen_listener callbacks
 %%%=============================================================================
@@ -213,6 +220,8 @@ init([WorkerSup, MgrPid, AccountId, QueueId]) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_call(any(), kz_term:pid_ref(), state()) -> kz_types:handle_call_ret_state(state()).
+handle_call('maintenance_state', _From, State) ->
+    {'reply', maintenance_snapshot(State), State};
 handle_call('delivery', _From, #state{delivery=D}=State) ->
     {'reply', D, State};
 handle_call({'retire_callback_member', _CallbackId}, _From, #state{call='undefined'}=State) ->
@@ -257,6 +266,18 @@ handle_call('config', _From, #state{account_id=AccountId
 handle_call(_Request, _From, State) ->
     lager:debug("unhandled call from ~p: ~p", [_From, _Request]),
     {'reply', {'error', 'unhandled_call'}, State}.
+
+maintenance_snapshot(#state{account_id=AccountId, queue_id=QueueId,
+                            mgr_pid=Manager, fsm_pid=Fsm, shared_pid=Shared,
+                            my_q=Queue, call='undefined', agent_id='undefined',
+                            delivery='undefined', member_call_queue='undefined'})
+  when is_binary(AccountId), byte_size(AccountId)>0,
+       is_binary(QueueId), byte_size(QueueId)>0,
+       is_pid(Manager), is_pid(Fsm), is_pid(Shared),
+       is_binary(Queue), byte_size(Queue)>0 ->
+    {'ok', #{account_id=>AccountId, queue_id=>QueueId, manager=>Manager,
+             fsm=>Fsm, shared_listener=>Shared, broker_queue=>Queue}};
+maintenance_snapshot(_) -> {'error', 'queue_listener_not_drained'}.
 
 %%------------------------------------------------------------------------------
 %% @doc Handling cast messages.

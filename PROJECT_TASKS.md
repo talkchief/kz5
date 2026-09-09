@@ -7,6 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / queue drain observation — source PASS, native pending:**
+  Four internal read-only queue observations reject pending callback/bridge
+  work, timers, held deliveries, announcement jobs and cancellation ownership,
+  even when ordinary queue status says ready. All134 production maintenance
+  tests pass, including54 queue cases; `/tmp/kazoo-acdc-maintenance.fLiIkJ`.
+  Bounded collector `scripts/kazoo-maintenance-queues.escript` enumerates actual
+  children without silently omitting restarting workers. Native runner:
+  `node scripts/test-acdc-native-maintenance.cjs --queue-inventory`, after
+  normal deployment/collection on both private apps nodes. Full admission
+  fence, broker/durable-callback drain, cold restore and rollback remain open.
+  Complete native agent-cohort merging also passed:
+  `agent-inventory-merged-1788994874158.json` (6 agreeing replicas).
+
 - **INST-06 / native finite-pause restoration — PASS, full coordinator still OPEN:**
   Both `4fac43d` normal builds11/7 passed. Native receipt
   `agent-restore-1788994643840-7170b3ed.json` proves both paused replicas survive
@@ -19,7 +32,9 @@ work postponed; do not generate voices at runtime or during deployment.
   fence/drain, durable installer integration, whole-VM/infinite-pause/empty-queue
   restoration and rollback acceptance still remain; do not mark INST-06 closed.
 
-- **INST-06 / current native retry — builds running, not a pass:**
+### Earlier implementation checkpoints (historical; superseded by the results above)
+
+- **INST-06 / earlier native retry — builds were running:**
   Absolute-timer correction and installed-source admission guards are pushed
   and synced as `4fac43d`. All80 maintenance cases and27 recovery cases pass;
   journal8 and installed-source3 guard tests pass. After empty-media/ready-agent

@@ -43,7 +43,7 @@ function assertInstalledSources(primary, peer) {
     assert.equal(primary.installedSource, primary.source, 'Primary source is not collected as installed');
     assert.equal(peer.installedSource, peer.source, 'Peer source is not collected as installed');
 }
-function execute() {
+function execute(mode = 'restore') {
     const lockStat = privateFile(LOCK), inherited = fs.fstatSync(3);
     assert.equal(lockStat.dev, inherited.dev); assert.equal(lockStat.ino, inherited.ino);
     privateFile(DIR + '/lab.json');
@@ -66,6 +66,7 @@ function execute() {
         '--show-error', '--connect-timeout', '5', '--max-time', '15', '--config', '-'], config));
     assert.deepEqual(tickets.rows, [], 'Private fixture has callback work');
     agent(primary); agent(peer);
+    if (mode === 'queue-inventory') return queueInventory(primary, peer);
     const source = ROOT + '/scripts/test-fixtures/distributed-lab/agent-restart-baseline.escript';
     const sha = crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex');
     const stem = DIR + '/agent-restore-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex');
@@ -95,23 +96,63 @@ function execute() {
     console.log(JSON.stringify({status: pass ? 'PASS' : 'FAIL', receipt: stem + '.json', cleanup_verified: cleanupVerified}));
     assert(pass, 'Native restore regression did not pass');
 }
+function queueInventory(primary, peer) {
+    const source = ROOT + '/scripts/kazoo-maintenance-queues.escript';
+    const sha = crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex');
+    const stem = DIR + '/queue-inventory-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex');
+    const snapshots = [];
+    let pass = false;
+    try {
+        for (const [entry, ip] of [[primary, '172.30.253.14'], [peer, '172.30.253.20']]) {
+            run(['cp', source, entry.id + ':/var/lib/kazoo-stage/maintenance-queues.escript']);
+            run(['exec', entry.id, 'chmod', '0600', '/var/lib/kazoo-stage/maintenance-queues.escript']);
+            const fd = fs.openSync(stem + '-' + ip + '.log', 'wx', 0o600);
+            let result;
+            try {
+                result = cp.spawnSync('podman', ['exec', entry.id, 'escript',
+                    '/var/lib/kazoo-stage/maintenance-queues.escript', '--snapshot', ip],
+                    {timeout: 135000, stdio: ['ignore', fd, fd]});
+            } finally { fs.closeSync(fd); }
+            assert(result.status === 0 && !result.error, 'Native queue inventory refused');
+            const data = JSON.parse(fs.readFileSync(stem + '-' + ip + '.log', 'utf8'));
+            assert(data.schema_version === 1 && data.all_queue_workers_observed === true);
+            assert(data.complete_cluster_drain_proven === false && data.admission_fence_proven === false);
+            assert.equal(data.queues.length, 1, 'Unexpected fixture queue inventory');
+            assert.equal(data.queues[0].account_id, A); assert.equal(data.queues[0].queue_id, Q);
+            assert(Number.isSafeInteger(data.queues[0].worker_count) && data.queues[0].worker_count > 0);
+            snapshots.push(data);
+        }
+        assert.notEqual(snapshots[0].node, snapshots[1].node);
+        assert.equal(snapshots[0].queues[0].document_revision, snapshots[1].queues[0].document_revision);
+        pass = true;
+    } finally {
+        fs.writeFileSync(stem + '.json', JSON.stringify({status: pass ? 'PASS' : 'FAIL',
+            production_source: primary.source, collector_sha256: sha, snapshots,
+            complete_cluster_fence_proven: false, durable_cold_restart_proven: false}) + '\n',
+            {mode: 0o600, flag: 'wx'});
+        console.log(JSON.stringify({status: pass ? 'PASS' : 'FAIL', receipt: stem + '.json',
+            nodes_observed: snapshots.length}));
+    }
+}
 function main() { try {
     assert.equal(process.getuid(), 0);
     assert(Object.values(os.networkInterfaces()).flat().some(i => i.address === '10.1.0.44'));
-    if (process.argv.length === 3 && process.argv[2] === '--live') {
+    if (process.argv.length === 3 && ['--live', '--queue-inventory'].includes(process.argv[2])) {
         privateFile(LOCK);
         const fd = fs.openSync(LOCK, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW);
         let child;
         try {
             const locked = cp.spawnSync('flock', ['-n', '3'], {stdio: ['ignore', 'pipe', 'pipe', fd]});
             assert(locked.status === 0 && !locked.error, 'Acceptance lock unavailable');
-            child = cp.spawnSync(process.execPath, [__filename, '--locked'],
+            child = cp.spawnSync(process.execPath, [__filename,
+                process.argv[2] === '--live' ? '--locked' : '--locked-queue-inventory'],
                 {stdio: ['ignore', 'inherit', 'inherit', fd]});
         }
         finally { fs.closeSync(fd); }
         process.exitCode = child.status === 0 && !child.error ? 0 : 1;
     } else {
-        assert.deepEqual(process.argv.slice(2), ['--locked']); execute();
+        assert(process.argv.length === 3 && ['--locked', '--locked-queue-inventory'].includes(process.argv[2]));
+        execute(process.argv[2] === '--locked' ? 'restore' : 'queue-inventory');
     }
 } catch (_) {
     // Never print subprocess input, credential-bearing configuration or raw RPC errors.

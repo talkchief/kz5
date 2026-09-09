@@ -6,6 +6,18 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Queue work-drain observations added in source with134 passing maintenance
+  cases (54 queue cases), evidence `/tmp/kazoo-acdc-maintenance.fLiIkJ`.
+  Read-only queue inventory checks paired workers, residual callback/timer/
+  delivery work, announcements and manager cancellation ownership; ordinary
+  ready/current_call status is insufficient. Native deployment/collection is
+  still pending. Full cluster admission fence/drain and cold restore/rollback
+  remain open; see `acdc_coherent_upgrade_readiness.md`.
+- Native full agent-cohort merger PASS:
+  `agent-inventory-merged-1788994874158.json`,6 replicas with agreeing epochs,
+  memberships, effective states and document revisions. This is an inventory
+  result, not complete cluster fence/drain evidence.
+
 - Installer maintenance baseline now reproduces pause loss on actual nodes:
   both45-second-paused agent replicas returned ready after supervisor restart,
   within5597ms of host admission. Private baseline receipt

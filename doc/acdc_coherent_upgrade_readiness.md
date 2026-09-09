@@ -10,6 +10,49 @@ coordinated restart/rollback acceptance remain open.
 
 ### Latest native results
 
+Complete native agent-cohort merging passed in
+`/var/lib/kazoo5-install-lab/agent-inventory-merged-1788994874158.json`:
+all6 replicas across both expected nodes, agreeing epochs, effective states,
+memberships and document revisions. It explicitly reports no admission fence
+or complete cluster drain.
+
+### Queue drain observations — source tested; native acceptance pending
+
+Internal `maintenance_state/2` covers the queue FSM, private listener, shared
+listener and manager. Ready FSMs must have no call/winner, outstanding timer,
+pending options, callback context, attempted agents or bridge proof. Private
+and shared listeners must hold no call/delivery ownership. Managers must have
+no current members, announcements, cancellation ownership or ringing/busy flags.
+Missing identities/processes are refused. These operations never clear state,
+acknowledge work, publish events or expose call payloads. A regression proves
+that ready/current_call=undefined alone does not certify drain.
+
+All134 guarded production maintenance cases pass, including54 new queue cases,
+retained at `/tmp/kazoo-acdc-maintenance.fLiIkJ`. FSM checks run real OTP
+processes; listener/manager/shared checks exercise production callbacks with
+no external effects. Source hashes remained unchanged throughout.
+
+`escript scripts/kazoo-maintenance-queues.escript --snapshot LOCAL_BIND_IPV4`
+collects all current queue supervisors/workers with strict paired identities,
+drained observations, consuming listeners, broker queue names and document
+revisions. It refuses incomplete/restarting children instead of filtering them
+out, requires no announcement children, and rechecks supervisor inventories
+and node epochs. Aggregate collection is bounded to120seconds and5000 workers.
+It uses the protected local cookie; output belongs in private journal storage.
+Invalid arguments compile and refuse without establishing distribution.
+
+The repeatable private-lab native check is
+`node scripts/test-acdc-native-maintenance.cjs --queue-inventory`. It uses the
+same owned-guest, shared acceptance lock and collected installed-source checks
+as the finite-pause test, without making calls or restarting services. Each
+attempt retains private success/failure receipts and logs. Run only after both
+normal builds are collected. Native acceptance is pending. Neither collector
+proves broker ready/unacked counts, durable callback completion, asynchronous
+startup/producer completion or future admission closure; these and coordinated
+cold restore/rollback are still required.
+
+### Completed finite-pause native checkpoint
+
 Both normal `4fac43d` installations passed and were collected:
 `kazoo-apps-install-11.log` and `apps-peer-install-7.log`. The unchanged guarded
 native finite-pause restore regression now **PASSES** on both nodes, receipt
