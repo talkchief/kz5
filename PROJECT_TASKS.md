@@ -7,6 +7,16 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Separate SBC admission P0 — reproduced, source fix under acceptance:**
+  distributed monitor attempt2 registered all three devices, but the first
+  INVITE was authorized by Kamailio then rejected403 by media15. Exact
+  Kamailio17 address fails the active authoritative ACL. Both native discovery
+  configuration and its supervised process were disabled/absent, although the
+  standalone installer assumed discovery. Installer now enables and verifies
+  the existing authenticated-zone discovery worker, which admits exact advertised
+  listener addresses and publishes ACL reloads; no subnet-wide allow rule.
+  Native after-test pending. Receipt `monitor-distributed-2.log` remains FAILED.
+
 - **Distributed SIP/supervision acceptance fixture — native provisioning PASS:**
   original private lab only, three-agent synthetic child company and dedicated
   root0600 state. Uses the existing reviewed provisioning library after host
@@ -61,7 +71,9 @@ work postponed; do not generate voices at runtime or during deployment.
   installer and service verifier. This fixture covers first dependencies and
   startup with legacy private-network transport; existing remote-TLS/quorum
   acceptance remains separate. It does not copy production provider credentials
-  or claim physical FCM/APNs delivery. Native installation/boot pending.
+  or claim physical FCM/APNs delivery. Normal installation source `9b151d2`
+  and automatic guest startup both PASS: `push-bridge-install-1.log` and
+  `push-bridge-boot-1788979389226.log` in the original lab evidence root.
 
 - **Cross-node JWT signing-secret revocation P0 — SOURCE FIXED / two-node native PASS:**
   receipt `/var/lib/kazoo5-install-lab/cluster-auth-1788973933046.json` proved

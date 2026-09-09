@@ -3732,6 +3732,7 @@ install_ecallmgr() {
         configure_ecallmgr_dialplan_applications
         configure_ecallmgr_callback_cleanup
         configure_ecallmgr_event_stream_framing
+        configure_ecallmgr_sbc_discovery
         register_configured_freeswitch_nodes
         verify_ecallmgr
     fi
@@ -4000,6 +4001,40 @@ verify_sup_cli() {
     log "PASS SUP controller/config command checks (configured kapps: ${configured_apps})"
 }
 
+configure_ecallmgr_sbc_discovery() {
+    local output current
+    [[ $DRY_RUN != true ]] || return 0
+    # Standalone Kamailio advertises exact Proxy listener addresses on the
+    # authenticated zone broker. Native discovery persists these authoritative
+    # ACL entries and reloads media ACLs, including SBCs installed later.
+    output=$(timeout --signal=KILL 30 sup -n ecallmgr -e kapps_config set_default \
+        '<<"ecallmgr">>' '<<"enable_discovery_server">>' true </dev/null 2>/dev/null) ||
+        die 'Could not persist eCallMgr SBC discovery'
+    [[ $output == \{ok,* ]] || die 'eCallMgr rejected SBC discovery configuration'
+    current=$(timeout --signal=KILL 30 sup -n ecallmgr -e erlang whereis \
+        ecallmgr_discovery </dev/null 2>/dev/null) || die 'Could not inspect SBC discovery'
+    if [[ $current == undefined ]]; then
+        output=$(timeout --signal=KILL 30 sup -n ecallmgr -e supervisor restart_child \
+            ecallmgr_auxiliary_sup ecallmgr_discovery </dev/null 2>/dev/null) ||
+            die 'Could not start supervised SBC discovery'
+        [[ $output == '{ok,<'* ]] || die 'Supervised SBC discovery did not start'
+    fi
+    verify_ecallmgr_sbc_discovery
+}
+
+verify_ecallmgr_sbc_discovery() {
+    local configured current
+    [[ $DRY_RUN != true ]] || return 0
+    configured=$(timeout --signal=KILL 30 sup -n ecallmgr -e kz_app_config is_true \
+        '<<"ecallmgr">>' '<<"enable_discovery_server">>' </dev/null 2>/dev/null) ||
+        die 'Could not read effective SBC discovery configuration'
+    [[ $configured == true ]] || die 'Effective SBC discovery is disabled'
+    current=$(timeout --signal=KILL 30 sup -n ecallmgr -e erlang whereis \
+        ecallmgr_discovery </dev/null 2>/dev/null) || die 'Could not inspect SBC discovery process'
+    [[ $current =~ ^\<[0-9]+\.[0-9]+\.[0-9]+\>$ ]] || die 'SBC discovery process is not running'
+    log 'PASS supervised eCallMgr discovery for authenticated zone SBC advertisements'
+}
+
 configure_ecallmgr_dialplan_applications() {
     local application output
     if [[ $DRY_RUN == true ]]; then
@@ -4156,6 +4191,7 @@ verify_ecallmgr() {
     verify_ecallmgr_dialplan_applications
     verify_ecallmgr_callback_cleanup
     verify_ecallmgr_event_stream_framing
+    verify_ecallmgr_sbc_discovery
     verify_configured_freeswitch_nodes
     verify_ecallmgr_atomic_media
     if systemctl is-active --quiet kazoo-kamailio.service 2>/dev/null &&
