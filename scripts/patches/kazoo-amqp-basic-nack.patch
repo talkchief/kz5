@@ -1,0 +1,12 @@
+diff --git a/kazoo_amqp/src/kz_amqp_util.erl b/kazoo_amqp/src/kz_amqp_util.erl
+--- a/kazoo_amqp/src/kz_amqp_util.erl
++++ b/kazoo_amqp/src/kz_amqp_util.erl
+@@ -1468,7 +1468,7 @@
+ basic_nack(#'basic.nack'{} = Cmd) ->
+     kz_amqp_channel:command(Cmd);
+ basic_nack(#'basic.deliver'{delivery_tag=DTag}) ->
+-    kz_amqp_channel:command(#'basic.ack'{delivery_tag=DTag}).
++    basic_nack(DTag, 'true').
+ 
+ -spec basic_nack(integer() | basic_deliver(), boolean()) -> 'ok'.
+ basic_nack(#'basic.deliver'{delivery_tag=DTag}, Requeue) ->

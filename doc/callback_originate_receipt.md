@@ -200,8 +200,48 @@ declaration with mocked I/O; the old declaration fails its retention assertion
 (ae95c5). Candidate regression passes345c85; syntax/diff checks pass.
 Main44 pre-upgrade read69d84a: two shared member queues, both empty; only the
 isolated acceptance account has consumers. Exact account query2ae370 returns15
-callback tickets, all terminal. FreeSWITCH row_count=0. Deployment/native rerun
-are pending; these checks are not themselves a recovery pass.
+callback tickets, all terminal. FreeSWITCH row_count=0. Deployment completed
+below; the native rerun is pending. Preflight is not itself a recovery pass.
+
+Source72591d5 was committed/pushed to master and fast-forwarded on main44.
+Normal `scripts/install-kazoo5.sh kazoo-apps` unit
+`kz5-callback-retention-install-main44-20260909` exited0 (2b2a10), runtime
+10m51.570s, peak379.9MiB. Log:
+`/root/kz5-acceptance/callback-retention-install-main44-20260909.log`, SHA256
+`d6f02d4fc2f94021a7d089240441e86f7c81882d0c7534f7113c29e1f1ed3461`.
+Loaded and disk `acdc_queue_shared` MD5 both
+`0bd48a1aca96386718c85bcf95ed052f` (c97bcb/0fcccd).
+Post-restart broker read96e138 confirms both isolated member queues have
+auto_delete=false, messages0 and their1/30 consumers restored; no explicit
+broker deletion was performed. Login/ACDC/entitlements/storage readiness passed.
+The existing voice gate still reports no full-position/native release readiness;
+this callback change does not override that separate limitation.
+Native unit `kz5-callback-retention-case-main44-20260909` FAILED (e7991e),
+runtime3m4.276s, run `/var/log/kazoo-acceptance/20260909T035026Z`.
+It restarted the queue but the ticket still remained at attempt1. Final
+uncached read99439b: ticket
+`acdc-callback-634575cfdb423c2751ce5f9b9479c721e7db95f5d729c7789420e5173c3df65b`
+is cancelled by test cleanup, attempts1, no runtime legs or reconciliation
+flag. Broker has messages0 and30 consumers. Queue retention alone is not a
+recovery pass.
+
+### Second defect: NACK helper acknowledges unfinished work
+
+`acdc_queue_shared:terminate/2` calls `kz_amqp_util:basic_nack/1` for its unacked
+deliveries. The helper's basic.deliver clause incorrectly emits basic.ack.
+This drops the recovery delivery even when auto-delete is disabled. Correct
+the helper to delegate to basic_nack(Tag, true), keeping explicit /2 and /3
+requeue/multiple policies and actual basic_ack unchanged. The fix is maintained
+in the root-owned `scripts/patches/kazoo-amqp-basic-nack.patch`, applied by
+`scripts/install-kazoo5.sh` to the pinned core tree; no nested core commit.
+
+The focused `scripts/test-acdc-queue-shared-options.sh` now compiles both real
+modules into a temporary directory and tests production listener shutdown with
+only the channel command mocked. Baseline7ae3cb produces ACK101/ACK100 instead
+of NACK101/NACK100 with requeue=true (1fail/2pass). Candidate72f938 passes all3:
+shutdown requeues unfinished deliveries only, explicit ACK/NACK policies stay
+unchanged, and the shared queue remains non-auto-delete. Reverse patch check,
+shell syntax and diff checks pass7b47c8. Deployment/native rerun are pending.
 
 Upgrade constraint: RabbitMQ declaration properties are immutable. A legacy
 auto-delete queue cannot be redeclared with the new property while it exists.
@@ -214,3 +254,10 @@ Retained empty queues after business-queue deletion require explicit operator
 cleanup; this patch does not automatically delete broker resources. Queues
 remain non-durable and messages retain their existing one-day TTL: broker
 restart/failover and prolonged outage recovery are NOT covered by this fix.
+Rollback to a release that declares auto_delete=true also needs a coordinated
+drain: retained queues do not disappear when the last new consumer stops.
+Only after verifying no pending tickets, ready/unacked messages or consumers
+may an operator remove the exact empty queues for the old release to recreate.
+Neither the installer nor this acceptance case performs that deletion. A
+mixed-version rolling upgrade/rollback is not validated by this single-node
+development deployment.

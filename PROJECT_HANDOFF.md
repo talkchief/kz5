@@ -6,9 +6,18 @@ at attempt1. The shared AMQP queue defaults to auto-delete and disappears when
 all queue workers disconnect. Cleanup cancelled only the test ticket; no live
 calls remain. Candidate disables auto-delete in the root-tracked listener;
 the new production-declaration regression fails against the old code (ae95c5).
-Candidate regression now passes345c85; deployment/native rerun are pending.
-Do not restart with queued
-work or redeclare old immutable properties during a rolling upgrade. Details:
+Candidate regression passes345c85. Source72591d5 is pushed to master/main44;
+normal installer deployment succeeded2b2a10,10m51.570s. Loaded listener MD5
+matches disk and both broker work queues have auto_delete=false (96e138).
+Native rerun `kz5-callback-retention-case-main44-20260909` FAILED (e7991e),
+run20260909T035026Z, still attempt1; cleanup cancelled its ticket. Second defect:
+core basic_nack/1 emits ACK for a delivery record during shared-listener
+shutdown. Required root patch `scripts/patches/kazoo-amqp-basic-nack.patch`
+fixes that helper and is wired into the installer. Actual shutdown/frame test
+fails7ae3cb before correction; all3 targeted cases pass72f938 afterward.
+New deployment/native proof are pending. Do not mark the recovery gap closed.
+Do not upgrade legacy declarations with queued work or redeclare old immutable
+properties during a rolling upgrade. Details:
 `doc/callback_originate_receipt.md`. Unrelated campaigns remain paused.
 
 **September9: P0-06 receipt source769fdb2 deployed; scoped native callback PASS.**

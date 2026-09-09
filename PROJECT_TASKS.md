@@ -10,7 +10,15 @@
   its last consumer deletes the delivery needed to resume the saved callback.
   A production-listener regression fails before the fix (ae95c5). Candidate
   explicitly disables auto-delete; isolated regression now passes345c85.
-  Deployment/native rerun are pending. Existing
+  Normal installer deployment succeeded2b2a10 (10m51.570s); loaded/disk listener
+  MD5 matches0fcccd and both broker work queues now have auto_delete=false
+  (96e138). Native rerun20260909T035026Z still FAILED (e7991e): attempts1,
+  cleaned up to cancelled, broker messages0. Second defect found: the shared
+  listener shutdown calls basic_nack/1, but its delivery-record clause emits
+  basic.ack! Actual shutdown/frame regression7ae3cb fails before the fix;
+  candidate72f938 passes all3 cases, preserving explicit ACK/requeue policies.
+  Required root patch `scripts/patches/kazoo-amqp-basic-nack.patch` and installer
+  hook correct the helper; deployment/native validation are pending. Existing
   broker queue properties are immutable: upgrade must drain old queues and
   stop all their consumers together, not blindly redeclare/delete live work.
   Explicit `--queue-restart-during-backoff` adds the existing queue-scoped
