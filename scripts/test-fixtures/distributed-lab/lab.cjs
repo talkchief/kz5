@@ -86,6 +86,7 @@ function create(role) {
     const id=podman(['run','--detach','--name',name,'--hostname',name,'--network',NETWORK,'--ip',ip,
         '--label','io.talkchief.kazoo.acceptance='+OWNER,'--label','io.talkchief.kazoo.role='+role,
         '--systemd=always','--security-opt','label=disable','--cap-add=NET_ADMIN','--memory',memory,
+        '--sysctl','net.ipv4.ip_local_reserved_ports=34512-34513',
         '--memory-swap',memory,'--pids-limit','4096',s.image]);
     assert(/^[a-f0-9]{64}$/.test(id));
     // Record ownership before subsequent checks so a partial boot is retained.
@@ -140,6 +141,7 @@ function installRole(role,detached=false) {
     assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],role);
     assert.equal(c.State.Running,true);assert.equal(c.NetworkSettings.Networks[NETWORK].IPAddress,r.ip);
     assert.equal(podman(['exec',r.id,'git','-C','/opt/kz5','rev-parse','HEAD']),r.source||s.source);
+    if(['kazoo-apps','ecallmgr'].includes(role))reservePivotNamespace(c);
     if(!s.secrets) {s.secrets={rabbit:crypto.randomBytes(32).toString('hex'),couch:crypto.randomBytes(32).toString('hex'),cookie:crypto.randomBytes(32).toString('hex')};saveState(s);}
     const cfg=Object.entries(configFor(role,s.secrets)).map(([k,v])=>k+'='+Buffer.from(v).toString('base64')).join('\n')+'\n';
     const config=DIR+'/'+role+'.env',cookie=DIR+'/'+role+'.cookie';
@@ -193,6 +195,26 @@ function installRole(role,detached=false) {
     assert.equal(podman(['exec',r.id,'systemctl','is-enabled',UNITS[role]+'.service']),'enabled');
     r.phase='installed-service-verified';saveState(s);
     console.log(JSON.stringify({status:'PASS',role,attempt,source:r.source||s.source,service:UNITS[role],log}));
+}
+function separateNamespace(target,host) {
+    assert(target.dev!==host.dev||target.ino!==host.ino,'Refusing the host network namespace');
+}
+function reservePivotNamespace(container) {
+    // Older owned lab containers predate --sysctl at creation. Retain their
+    // compiled files/data; only enter the pinned network namespace, not mounts,
+    // PID or user namespaces. No privileged container or host sysctl changes.
+    assert.equal(container.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
+    assert.equal(container.State.Running,true);
+    const pid=container.State.Pid;assert(Number.isSafeInteger(pid)&&pid>1);
+    const fd=fs.openSync('/proc/'+pid+'/ns/net','r');
+    const kernel='/proc/sys/net/ipv4/ip_local_reserved_ports';
+    const before=fs.readFileSync(kernel,'utf8');
+    try {
+        separateNamespace(fs.fstatSync(fd),fs.statSync('/proc/self/ns/net'));
+        command('nsenter',['--net=/proc/self/fd/3','--','python3',ROOT+'/scripts/reserve-kazoo-pivot-ports.py','--apply'],
+            {stdio:['ignore','pipe','pipe',fd]});
+        assert.equal(fs.readFileSync(kernel,'utf8'),before,'Host port reservations unexpectedly changed');
+    } finally {fs.closeSync(fd);}
 }
 function collectRole(role) {
     assert(Object.hasOwn(UNITS,role));const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r?.installUnit);
@@ -293,7 +315,7 @@ function verifyRole(role,reboot=false) {
     r[reboot?'guestBootVerified':'reverified']={time:new Date().toISOString(),log};saveState(s);
     console.log(JSON.stringify({status:'PASS',role,check:reboot?'system-container-boot':'normal-verify',log}));
 }
-module.exports={overlapsSubnet,ROLES,configFor};
+module.exports={overlapsSubnet,ROLES,configFor,separateNamespace};
 if(require.main===module) {
 try {
     assert.equal(process.getuid(),0);assert(Object.values(os.networkInterfaces()).flat().some(n=>n.address==='10.1.0.44'),'Only development44 allowed');

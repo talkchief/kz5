@@ -5245,6 +5245,15 @@ verify_kamailio_amqp_connection() {
     while ((SECONDS < deadline)); do
         connections=$(ss -H -tnp state established \
             "( dport = :${port} )" 2>/dev/null || true)
+        # Confined root can see sockets but lack permission to inspect another
+        # UID's /proc descriptors. Inspect as the fixed service user instead;
+        # still require the exact Kamailio process and effective broker peer.
+        # This grants no extra capability and never accepts a bare TCP socket.
+        if [[ $EUID == 0 && $connections != *'("kamailio",'* ]] && \
+                command -v runuser >/dev/null 2>&1 && id kamailio >/dev/null 2>&1; then
+            connections=$(runuser -u kamailio -- ss -H -tnp state established \
+                "( dport = :${port} )" 2>/dev/null || true)
+        fi
         for address in "${broker_addresses[@]}"; do
             # ss omits the state column when a state filter is supplied; peer
             # is field four. Literal comparison avoids regex/address ambiguity.

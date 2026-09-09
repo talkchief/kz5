@@ -66,6 +66,11 @@ die() { printf 'FAIL %s\\n' "$*" >&2; exit 1; }
 log() { printf '%s\\n' "$*"; }
 getent() { [[ $1 == ahosts && $2 == "$F_HOST" ]] || die 'wrong effective host'; printf '%s\\n' "$F_ADDRESSES"; }
 ss() { [[ $* == *"dport = :$F_PORT"* ]] || die 'wrong effective port'; printf '%s\\n' "$F_SS"; }
+id() { [[ $* == kamailio ]]; }
+runuser() {
+    [[ $* == "-u kamailio -- ss -H -tnp state established ( dport = :$F_PORT )" ]] || die 'unexpected privilege change';
+    printf '%s\\n' "$F_SS_USER";
+}
 systemctl() { [[ $* == 'is-active --quiet rabbitmq-server.service' ]] || die 'unexpected systemctl'; [[ $F_ACTIVE == true ]]; }
 ip() { [[ $* == '-j address show' ]] || die 'unexpected ip'; printf '%s\\n' "$F_LOCAL"; }
 rabbitmq-diagnostics() { printf 'LISTENERS\\n' >&2; printf '%s\\n' "$F_LISTENERS"; }
@@ -85,7 +90,7 @@ function run(name, changes = {}, success = true, queues = true, message = '') {
         KAZOO_AMQP_HOST: 'wrong.example.net', KAZOO_AMQP_PORT: '5672', KAZOO_RABBITMQ_VHOST: '/',
         KAZOO_HOSTNAME: 'sbc.example.net', KAZOO_START_TIMEOUT: '1',
         F_HOST: '127.0.0.1', F_PORT: '5679', F_VHOST: 'team/voice',
-        F_ADDRESSES: '127.0.0.1 STREAM broker', F_SS: connection(), F_ACTIVE: 'true',
+        F_ADDRESSES: '127.0.0.1 STREAM broker', F_SS: connection(), F_SS_USER: '', F_ACTIVE: 'true',
         F_LOCAL: JSON.stringify([{addr_info: [{local: '127.0.0.1'}, {local: '10.0.0.2'}, {local: '::1'}]}]),
         F_LISTENERS: JSON.stringify(listener()), F_QUEUES: 'kamailio@sbc.example.net-consumer', ...changes};
     const child = spawnSync('/bin/bash', ['--noprofile', '--norc', '-c', fixture],
@@ -99,6 +104,9 @@ function run(name, changes = {}, success = true, queues = true, message = '') {
     checks++;
 }
 run('effective URI host, nonstandard port and decoded nondefault vhost');
+run('confined root inspects as service UID', {F_SS: '0 0 127.0.0.1:40300 127.0.0.1:5679', F_SS_USER: connection()});
+run('bare socket remains insufficient', {F_SS: '', F_SS_USER: '0 0 127.0.0.1:40300 127.0.0.1:5679'}, false, false);
+run('service UID wrong peer remains rejected', {F_SS: '', F_SS_USER: connection('127.0.0.2:5679')}, false, false);
 run('empty vhost remains empty', {KAZOO_AMQP_URI: 'amqp://user:sentinel-secret@127.0.0.1:5679/', F_VHOST: ''});
 run('remote broker ignores active unrelated local RabbitMQ', {
     KAZOO_AMQP_URI: 'amqp://user:sentinel-secret@mq.example.net:5679/team%2Fvoice', F_HOST: 'mq.example.net',

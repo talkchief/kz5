@@ -26,6 +26,14 @@ The isolated bridge is172.30.253.0/24. Each role must receive newly generated
 lab-only credentials; never reuse or copy the existing development configuration
 or imported customer data. Container limits are not a claim of physical HA.
 
+Creation reserves Pivot ports34512-34513 with the namespaced Podman `--sysctl`
+option. Older retained containers use a pinned network-namespace descriptor and
+the normal additive reservation helper before apps/eCallMgr installation. The
+host namespace is explicitly refused and host reservations checked unchanged.
+No procfs unmasking or privileged-container workaround is used. Confined socket
+inspection runs as the service UID when root cannot inspect another UID's file
+descriptors; the normal installer still requires exact Kamailio process ownership.
+
 Podman's documented systemd mode supplies the required runtime mounts; scoped
 container SELinux labeling is disabled for this lab without changing global
 SELinux policy. See the primary [Podman run reference](https://docs.podman.io/en/latest/markdown/podman-run.1.html).

@@ -7,6 +7,15 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Separated-role container restrictions — source fixes, native retry pending:**
+  apps compiled successfully but its Pivot reservation service correctly refused
+  a read-only container sysctl. Lab creation now reserves only the namespaced
+  Pivot ports; older owned roles use a pinned, proven non-host network namespace
+  and the same additive helper, retaining all compiled files and data. Kamailio
+  did connect to RabbitMQ, but confined root could not inspect its process-owned
+  sockets. Normal verification now retries inspection as the fixed service UID,
+  retaining exact process/peer validation and requiring no extra capability.
+  Bare sockets and wrong peers remain rejected. No production safety check removed.
 - **Point1 corrected30-call broker-loss campaign — native PASS:**
   `kz5-acdc-broker-loss-30-fixed-20260909.service` completed exit0 after
   normal deployment of `b19fde3`. Evidence `node-loss/20260909T133950Z`:
