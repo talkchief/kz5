@@ -136,8 +136,6 @@ scenario also permits `--cold-bootstrap --drained-reboot-role kazoo-apps` after
 successful normal installation; it has no media role or calls. This tests the
 current creation path instead of pretending a temporary repair was persistent.
 
-## Fresh bootstrap campaign
-
 ## Second applications node for cluster acceptance
 
 The original lab supports `--apps-peer create`, `--apps-peer install` and
