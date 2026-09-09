@@ -1080,7 +1080,15 @@ validate_monster_endpoints() {
     esac
 }
 
+validate_build_login_environment() {
+    [[ $DRY_RUN != true && $VERIFY_ONLY != true ]] || return 0
+    [[ ${SELECTED[kazoo-apps]:-} || ${SELECTED[ecallmgr]:-} ]] || return 0
+    [[ ${HOME:-} == /* && -d ${HOME:-} ]] ||
+        die 'Erlang source builds require a login home; use sudo -i or systemd-run --property=User=root. No installation changes were made.'
+}
+
 preflight() {
+    validate_build_login_environment
     [[ -r /etc/os-release ]] || die '/etc/os-release is missing'
     # shellcheck disable=SC1091
     source /etc/os-release

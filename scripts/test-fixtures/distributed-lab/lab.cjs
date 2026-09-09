@@ -174,7 +174,7 @@ function installRole(role,detached=false) {
         const unit='kz5-stage-install-'+role+'-'+attempt,inside='/var/lib/kazoo-stage/'+role+'-install-'+attempt+'.log';
         podman(['exec',r.id,'install','-m','0600','/dev/null',inside]);
         r.attempts=attempt;r.phase='installing';r.log=log;r.installUnit=unit;r.insideLog=inside;saveState(s);
-        podman(['exec',r.id,'systemd-run','--unit',unit,'--property=RuntimeMaxSec=3600',
+        podman(['exec',r.id,'systemd-run','--unit',unit,'--property=User=root','--property=RuntimeMaxSec=3600',
             '--property=TasksMax=2048','--property=StandardOutput=append:'+inside,'--property=StandardError=append:'+inside,
             '/usr/bin/bash','/opt/kz5/scripts/install-kazoo5.sh',role]);
         console.log(JSON.stringify({status:'INSTALLING',role,source:r.source||s.source,unit,log:inside}));return;

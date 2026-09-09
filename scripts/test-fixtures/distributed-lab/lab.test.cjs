@@ -6,6 +6,7 @@ for(const dst of ['172.30.253.0/24','172.30.253.12/32','172.30.252.0/23','172.16
 for(const dst of ['172.30.253.0/33','bad/24','172.300.0.0/16','172.30.0.0/2.5'])assert.throws(()=>overlapsSubnet(dst));
 assert.equal(new Set(ROLES).size,9);
 const src=fs.readFileSync(__dirname+'/lab.cjs','utf8');
+assert(src.includes("'--property=User=root'"),'Detached builds require the root login environment');
 assert(!src.includes("'--privileged'")&&!src.includes("'--network=host'")&&!src.includes("'--publish'"));
 assert(src.indexOf('saveState(s);\n    podman')<src.indexOf("['network','create'"));
 const isolation=fs.readFileSync(__dirname+'/kazoo-stage-isolation.service','utf8');
