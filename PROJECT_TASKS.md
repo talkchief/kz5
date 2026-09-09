@@ -7,13 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **P0-25 browser outage recovery — focused acceptance in progress:**
-  Added explicit `--loading-recovery` to the main44 browser harness. It injects
-  failed/stalled GET responses in that browser only, uses real admin login and
-  successful API reads, and blocks account writes. Planned checks: ACDC visible
-  retry, bounded timeout, late-response isolation and global-indicator recovery;
-  SmartPBX failed-read indicator and navigation recovery. Server APIs/services
-  stay running. No pass or runtime fix is claimed until the actual run completes.
+- **P0-25 browser outage recovery — six focused checks PASS; remaining gaps open:**
+  Main44 `--loading-recovery` run passed ACDC503 visible Retry and idle indicator,
+  successful Retry, stalled-read watchdog, late-delivery isolation after recovery,
+  SmartPBX503 idle global indicator, and successful navigation recovery. Unit
+  `kz5-loading-recovery-main44-20260909.service` exited0 in22.222s (0e8b76);
+  `/root/kz5-acceptance/loading-recovery-main44-20260909.log` contains the six-check
+  PASS (ffe0c1). This injected browser-only GET failures/stall with real login and
+  successful API reads, blocked account writes, and caused no server outage.
+  Harness commit `1225cc1` adds acceptance coverage, not another runtime fix.
+  SmartPBX indefinitely stalled reads, its local menu loading/error lifecycle,
+  and never-settling AMD construction are NOT closed by this run. Work stopped
+  at the user's explicit wrap-up instruction before extending those checks.
+  Handover and next focused action: `doc/FOCUSED_HANDOVER_2026-09-09.md`.
 
 - **INST-07 standalone service-unit scope — source fixed / focused PASS:**
   Apps-only and eCallMgr-only installs previously rewrote both service definitions
