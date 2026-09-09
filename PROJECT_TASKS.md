@@ -7,16 +7,20 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Blackhole prolonged broker/WSS fanout — native pilot PASS, full soak pending:**
+- **Blackhole prolonged broker/WSS fanout — native pilot PASS, full soak running:**
   Receipt `ab89346f96fd41d9ec09e4f1b2911bd3` on dev44:3 broker events,
   12/12 deliveries over4 verified WSS sockets, zero other-call leaks, control
-  ping at most7.2ms, latency11.7ms, all sockets closed. Full30-minute run next.
+  ping at most7.2ms, latency11.7ms, all sockets closed. Full run is active as
+  `kz5-blackhole-fanout-soak-20260909` on dev44, runner `7f3df3c`. First two
+  batches passed120 publications/3840 deliveries; not a completed soak.
+  Collect the same unit and `/var/log/kazoo-blackhole-fanout-soak-20260909.log`;
+  do not restart services or change its three pinned source inputs during it.
   `scripts/test-blackhole-fanout.py` adds a4-client pilot and32-client, at least
   30-minute acceptance using real AMQP call-event publication/native subscription
   delivery over verified WSS. Exact sequence/account/call checks, lagged readers,
   isolated control subscription, authenticated checks, resource bounds and cleanup.
-  Four new receiver guards plus four existing framing guards pass. Native pilot
-  and full soak remain required. First pilot rejected an in-socket token change
+  Four new receiver guards plus four existing framing guards pass. Full soak
+  remains required. First pilot rejected an in-socket token change
   before publishing; all sockets closed. Runner now keeps one bounded45-minute
   fixture token and the same sockets; native reconnect-required auth policy is
   unchanged. See `doc/blackhole_fanout_acceptance.md`.
@@ -30,7 +34,7 @@ work postponed; do not generate voices at runtime or during deployment.
   `kz5-acdc-replica-deploy-20260909` on `58c0194`, zero main44 channels verified
   before starting. Exit0 and final installer validations passed; all9 services
   active, zero channels, error-priority apps/eCallMgr journal entries0 since
- 21:00:05UTC at readback.
+  21:00:05UTC at readback.
   Native run3 exposed same-agent replica answered/ready disagreement while a
   real queue call was bridged. Both replicas originated the same offer. Root
   ACDC source now selects one originating process per agent and publishes its
@@ -43,8 +47,8 @@ work postponed; do not generate voices at runtime or during deployment.
   Native run4 passed first-call audio and same-FSM partition recovery, but its
   second SIPp receiver consumed its one-call budget on OPTIONS and ignored real
   INVITEs. Native loopback before-fail/after-pass regression validates the runner
-  correction; run5 subsequently passed the full native rerun. Main44 runtime still
-  needs this fix after staging acceptance. The explicit guarded
+  correction; run5 subsequently passed the full native rerun and the main44
+  deployment above passed. The explicit guarded
   `--distributed --queue-partition --live` now tracks both native ACDC replicas,
   real two-way queued-call audio, missed hangup while one apps node loses AMQP,
   same-FSM recovery and a second call without re-registration/re-login. Offline

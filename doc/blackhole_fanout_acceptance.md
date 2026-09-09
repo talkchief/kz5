@@ -1,10 +1,16 @@
 # Native broker/WSS fanout soak
 
-Status: corrected native pilot PASS; full soak remains pending.
+Status: corrected native pilot PASS; full soak is running.
 This does not close the fanout release gate until the full retained receipt passes.
 Pilot receipt `/var/log/kazoo-blackhole-fanout-ab89346f96fd41d9ec09e4f1b2911bd3.json`
 on dev44 verifies3 real broker events,12/12 deliveries, zero other-call leaks,
 maximum control ping7.2ms, maximum delivery latency11.7ms and all sockets closed.
+Full unit `kz5-blackhole-fanout-soak-20260909` is active on runner `7f3df3c`.
+First two batches passed120 broker events/3840 deliveries in64.7seconds.
+This intermediate checkpoint is not a30-minute PASS. Poll the same unit and
+`/var/log/kazoo-blackhole-fanout-soak-20260909.log`; do not repeat admission or
+restart services while it is active. The final receipt must pass all60 batches,
+duration, isolation, source identity, resource bounds and socket cleanup.
 First native pilot correctly rejected the runner changing a connected socket's
 authentication token (`638d9d38f451af33e3a26af04275a5ab` receipt, refresh-auth,
 zero events published, all client sockets closed). Native policy requires
