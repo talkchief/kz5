@@ -1,6 +1,7 @@
 # Queued-call applications-node broker partition
 
-Status: harness and offline ownership/audio gates pass; native acceptance pending.
+Status: native test exposed replica selection/synchronization defects; source
+fix and60 Erlang regression tests pass. Normal rebuild/native after-test pending.
 This closes no release gate until the retained native receipt passes.
 
 Native run1 failed its direct-call-based ownership observation before fault
@@ -14,6 +15,28 @@ Run2 passed the exact queue-leg bridge gate, then timed out waiting for both FSM
 to report answered; scoped cleanup completed. Evidence
 `/var/log/kazoo-monitor-acceptance-kqJbJ4`. The next runner retains the actual
 replica states on that failure, rather than treating a media bridge as FSM proof.
+
+Run3 retained `/var/log/kazoo-monitor-acceptance-yVv098`: primary FSM answered,
+peer FSM ready, same synthetic agent/call. Both native listeners were consuming,
+enrolled in the same queue and had broker connect-win/shared-event bindings.
+Protected log analysis showed both nodes originated for the same agent. The
+queue advertised all responding replica process IDs as originators; the loser
+could return ready while its peer remained answered. Source now selects one
+originating process per agent and retains its exact process/server/offer identity
+for callback and ordinary acceptance. Other replicas take the monitoring path.
+
+The correlated CHANNEL_BRIDGE can also arrive before originate_resp. Previously
+that first event transitioned locally without broadcasting the winning leg;
+the later response was ignored in answered state. Publication now happens at
+the owner transition itself; monitoring replicas do not issue duplicate queue
+acceptance or connection statistics.
+
+Before-fix tests reproduce both defects: actual original queue FSM retains3
+process winners for2 users; bridge-first publication count0 instead of1.
+After fix:34 strategy tests and26 agent recovery tests pass, including the real
+queue-selection path, exact shared correlation, monitor-only behavior, callbacks,
+ordinary bridge proof, ring-all losers and no broadcast-loopback dependency.
+This is not yet a native after-pass or a completed partition gate.
 
 Explicit command on the admitted private dev44 lab:
 

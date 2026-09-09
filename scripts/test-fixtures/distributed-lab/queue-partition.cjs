@@ -86,7 +86,8 @@ function context(h) {
             h.command('podman',['cp',path.join(__dirname,'queue-agent-rpc.escript'),n.id+':/var/lib/kazoo-stage/queue-agent-rpc.escript']);
             h.command('podman',['exec',n.id,'chmod','0600','/var/lib/kazoo-stage/queue-agent-rpc.escript']);
         }
-        pinned=nodes.map(n=>{const v=probe(n,agent);assert.equal(v.state,'ready');return v.fsm;});
+        pinned=nodes.map(n=>{const v=probe(n,agent);assert.equal(v.state,'ready');
+            assert.equal(v.listener_consuming,true);assert(v.agent_queues.includes(q.id));return v.fsm;});
         assert(!h.fixture.queue_paused?.length,'Previous paused-agent cleanup required');
         h.fixture.queue_paused=[];h.saveFixture();
         for(const i of [2,3]) {

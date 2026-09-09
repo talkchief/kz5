@@ -7,6 +7,37 @@ j(P) -> kz_json:from_list(P).
 r(Id, P, Idle) -> j([{<<"Agent-ID">>, Id}, {<<"Process-ID">>, P}, {<<"Idle-Time">>, Idle}]).
 r(Id) -> r(Id, <<Id/binary, "-process">>, 0).
 ids(Rs) -> lists:usort([kz_json:get_value(<<"Agent-ID">>, R) || R <- Rs]).
+
+one_originator_per_agent_replica_group_test() ->
+    A=kz_json:set_value(<<"Msg-ID">>,<<"offer-a">>,r(<<"a">>,<<"a1">>,10)),
+    A2=r(<<"a">>,<<"a2">>,9), B=r(<<"b">>,<<"b1">>,1),
+    [WA,WB]=acdc_queue_strategy:offers([A,A2,B,A]),
+    ?assertEqual([<<"a">>,<<"b">>],ids([WA,WB])),
+    ?assertEqual([<<"a1">>],kz_json:get_value(<<"Agent-Process-IDs">>,WA)),
+    ?assertEqual([<<"b1">>],kz_json:get_value(<<"Agent-Process-IDs">>,WB)),
+    ?assertEqual(<<"offer-a">>,kz_api:msg_id(WA)),
+    ?assert(is_binary(kz_api:msg_id(WB))),
+    ?assertEqual([],acdc_queue_strategy:offers([])).
+
+real_queue_selection_restricts_originators_test() -> with_mocks(fun() ->
+    meck:new(acdc_queue_manager,[non_strict,no_link]),
+    try
+        A=r(<<"a">>,<<"a1">>,10),A2=r(<<"a">>,<<"a2">>,9),B=r(<<"b">>),
+        meck:expect(acdc_queue_manager,should_ignore_member_call,fun(_,_,_,_)->false end),
+        meck:expect(acdc_queue_manager,pick_winner,fun(_,_,_)->{[A,A2,B],[],[]} end),
+        meck:expect(acdc_queue_listener,member_connect_win,fun(_,_,_)->ok end),
+        Ref=make_ref(),Call=kapps_call:set_call_id(<<"caller">>,kapps_call:new()),
+        S=qstate([{collect_ref,Ref},{connect_resps,[A,A2,B]},{member_call,Call},
+                  {agent_ring_timeout,20},{listener_proc,self()},{manager_proc,self()}]),
+        {next_state,connecting,N}=acdc_queue_fsm:connect_req(info,{timeout,Ref,collect_timer_expired},S),
+        Wins=qfield(connect_wins,N),
+        ?assertEqual(2,length(Wins)),?assertEqual(Wins,qfield(member_call_winners,N)),
+        ?assertEqual(2,meck:num_calls(acdc_queue_listener,member_connect_win,'_')),
+        lists:foreach(fun(W)->?assertEqual([kz_json:get_value(<<"Process-ID">>,W)],
+                                         kz_json:get_value(<<"Agent-Process-IDs">>,W)) end,Wins),
+        erlang:cancel_timer(qfield(agent_ring_timer_ref,N))
+    after meck:unload(acdc_queue_manager) end
+end).
 qstate(Props) -> acdc_queue_fsm:callback_test_state(Props).
 qfield(Name, S) -> acdc_queue_fsm:callback_test_field(Name, S).
 

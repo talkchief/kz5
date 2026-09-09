@@ -6,6 +6,14 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Queued multi-node acceptance exposed a genuine same-agent replica discrepancy
+  before fault injection: primary answered, peer ready. Both listeners/bindings
+  were live. Root ACDC source now chooses one originate owner per agent and
+  broadcasts its shared identity on bridge-first completion too. Original-source
+  regressions fail;34 strategy and26 recovery tests pass after correction.
+  Normal rebuild/native after-test pending; point1 remains open. See
+  `acdc_distributed_partition_acceptance.md`.
+
 - All four monitoring modes now also pass real active-call controller broker
   partition/recovery (roughly14seconds per interruption). Unit
   `kz5-stage-monitor-partition-3` exited0, evidence

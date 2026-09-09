@@ -1051,15 +1051,6 @@ maybe_delay_connect_re_req(#state{listener_proc=ListenerSrv
 accept_is_for_call(AcceptJObj, Call) ->
     kz_json:get_value(<<"Call-ID">>, AcceptJObj) =:= kapps_call:call_id(Call).
 
--spec update_agent(kz_json:object(), kz_json:objects()) -> kz_json:object().
-update_agent(Agent, Winners) ->
-    AgentId = kz_json:get_value(<<"Agent-ID">>, Agent),
-    AgentProcessIDs = lists:usort([ProcessId || Winner <- Winners
-                                ,kz_json:get_value(<<"Agent-ID">>, Winner) =:= AgentId
-                                ,ProcessId <- [kz_json:get_ne_binary_value(<<"Process-ID">>, Winner)]
-                                ,ProcessId =/= 'undefined']),
-    kz_json:set_value(<<"Agent-Process-IDs">>, AgentProcessIDs, Agent).
-
 -spec handle_agent_responses(state()) -> kz_types:handle_fsm_ret(state()).
 handle_agent_responses(#state{collect_ref=Ref
                              ,manager_proc=MgrSrv
@@ -1102,12 +1093,12 @@ maybe_pick_winner(#state{connect_resps=CRs
                           ,{<<"Notifications">>, Notifications}
                           ]),
 
-            ConnectWins = [update_agent(Winner, Winners) || Winner <- Winners],
+            ConnectWins = acdc_queue_strategy:offers(Winners),
             callback_prepare_winners(
               State#state{connect_resps=[]
                          ,connect_wins=ConnectWins
                          ,collect_ref='undefined'
-                         ,member_call_winners=Winners
+                         ,member_call_winners=ConnectWins
                          ,pending_queue_opts=QueueOpts
                          ,attempted_agents=Attempted
                          });

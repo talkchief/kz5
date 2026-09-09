@@ -7,7 +7,14 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Queued apps-node partition acceptance — native pending:** explicit guarded
+- **Queued apps-node partition acceptance — source fix, native after pending:**
+  Native run3 exposed same-agent replica answered/ready disagreement while a
+  real queue call was bridged. Both replicas originated the same offer. Root
+  ACDC source now selects one originating process per agent and publishes its
+  exact shared leg on either bridge-first or originate-first completion.
+  Monitoring replicas cannot issue duplicate acceptance/statistics. Two original
+  source regressions fail before the fix;34 strategy and26 recovery cases pass
+  afterward. Normal deployment/native after-test still required. The explicit guarded
   `--distributed --queue-partition --live` now tracks both native ACDC replicas,
   real two-way queued-call audio, missed hangup while one apps node loses AMQP,
   same-FSM recovery and a second call without re-registration/re-login. Offline

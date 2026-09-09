@@ -865,8 +865,6 @@ ringing('cast', {'originate_resp', JObj}, State) ->
         'false' -> {'next_state', 'ringing', State};
         'true' ->
             ACallId = call_id(JObj),
-            %% Local completion must not depend on receiving our own broadcast.
-            publish_shared_call_id(ACallId, State),
             agent_bridge_connected(State#state{agent_call_id=ACallId})
     end;
 ringing('cast', {'shared_failure', JObj}, #state{monitoring=Monitoring
@@ -1075,10 +1073,19 @@ agent_bridge_leg(Event, #state{account_id=AccountId
         _ -> 'undefined'
     end.
 
+agent_bridge_connected(#state{monitoring='true', agent_listener=Listener, agent_call_id=AgentCallId}=State) ->
+    %% A monitoring replica must not submit a second queue acceptance or
+    %% duplicate connection statistics when its bridge event arrives first.
+    acdc_agent_listener:monitor_connect_accepted(Listener, AgentCallId),
+    {'next_state', 'answered', State#state{connect_failures=0}};
 agent_bridge_connected(#state{member_call_id=MemberCallId, agent_call_id=AgentCallId
                                ,member_call=MemberCall, agent_listener=AgentListener
                                ,account_id=AccountId, agent_id=AgentId, queue_notifications=Ns
                                ,member_call_queue_id=QueueId}=State) ->
+    %% Either originate response or the correlated native bridge can arrive
+    %% first. Publish exactly at the local transition so replicas learn the leg
+    %% even when the later originate response is ignored in answered state.
+    publish_shared_call_id(AgentCallId, State),
     acdc_agent_listener:member_connect_accepted(AgentListener, AgentCallId),
     maybe_notify(Ns, ?NOTIFY_PICKUP, State),
     {CIDNumber, CIDName} = acdc_util:caller_id(MemberCall),

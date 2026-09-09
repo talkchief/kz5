@@ -1,6 +1,6 @@
 %%% Pure, bounded queue selection. The manager supplies one atomic ready snapshot.
 -module(acdc_queue_strategy).
--export([select/5, unique_agents/1, process_matches/2]).
+-export([select/5, unique_agents/1, process_matches/2, offers/1]).
 
 -spec select(atom(), [binary()], [binary()], [binary()], kz_json:objects()) ->
           'undefined' | {kz_json:objects(), kz_json:objects(), [binary()], [binary()]}.
@@ -65,6 +65,17 @@ unique_agents([R|Rest], Seen) ->
         'true' -> unique_agents(Rest, Seen);
         'false' -> [R | unique_agents(Rest, Seen#{Id => 'true'})]
     end.
+
+%% Agent replicas share a user and its endpoints. Ringing each responding
+%% process originates competing copies of the same call; the losing copy can
+%% advertise ready while its peer is still answered. Select one originator and
+%% leave every other replica on the monitoring path. Preserve agent strategy
+%% order and the selected response's server/process identity for exact retries.
+-spec offers(kz_json:objects()) -> kz_json:objects().
+offers(Responses) ->
+    [kz_json:set_values([{<<"Agent-Process-IDs">>, [kz_json:get_ne_binary_value(<<"Process-ID">>, R)]}
+                       ,{<<"Msg-ID">>, kz_api:msg_id(R, kz_binary:rand_hex(16))}], R)
+     || R <- unique_agents(Responses)].
 
 -spec process_matches(kz_json:object(), kz_json:object()) -> boolean().
 process_matches(A, B) ->

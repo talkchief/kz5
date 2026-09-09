@@ -20,6 +20,7 @@ agent_recovery_test_() ->
                                ,fun old_channel_events_cannot_claim_new_offer/0
                                ,fun monitoring_failure_is_offer_scoped/0
                                ,fun success_does_not_wait_for_its_broadcast/0
+                               ,fun bridge_first_publishes_shared_identity/0
                                ,fun pending_pause_and_logout_limit_survive/0
                                ,fun losing_race_preserves_failure_count/0
                                ,fun missed_outbound_hangups_recover/0
@@ -184,6 +185,25 @@ success_does_not_wait_for_its_broadcast() ->
     Bad = kz_json:set_value(<<"Connect-ID">>, <<"old">>, Shared),
     ?assertEqual({next_state, ringing, Monitor}, acdc_agent_fsm:ringing(cast, {shared_call_id, Bad}, Monitor)),
     ?assertMatch({next_state, answered, _}, acdc_agent_fsm:ringing(cast, {shared_call_id, Shared}, Monitor)).
+
+bridge_first_publishes_shared_identity() ->
+    S=state([]),
+    Event=j([{<<"Call-ID">>,<<"agent-leg">>},{<<"Other-Leg-Call-ID">>,?MEMBER},
+             {<<"Custom-Channel-Vars">>,j([{<<"Account-ID">>,?ACCOUNT},{<<"Agent-ID">>,?AGENT},
+                                          {<<"Member-Call-ID">>,?MEMBER},{<<"Request-ID">>,?CONNECT}])}]),
+    {next_state,answered,Answered}=acdc_agent_fsm:ringing(cast,{channel_bridge_event,Event},S),
+    ?assertEqual(1,meck:num_calls(kapi_acdc_agent,publish_shared_call_id,'_')),
+    Props=meck:capture(first,kapi_acdc_agent,publish_shared_call_id,'_',1),
+    ?assertEqual(?CONNECT,proplists:get_value(<<"Connect-ID">>,Props)),
+    ?assertEqual(<<"agent-leg">>,proplists:get_value(<<"Agent-Call-ID">>,Props)),
+    ?assertEqual({next_state,answered,Answered},acdc_agent_fsm:answered(cast,{originate_resp,
+        j([{<<"Msg-ID">>,?CONNECT},{<<"Call-ID">>,<<"agent-leg">>}])},Answered)),
+    ?assertEqual(1,meck:num_calls(kapi_acdc_agent,publish_shared_call_id,'_')),
+    meck:reset(kapi_acdc_agent),meck:reset(acdc_agent_listener),
+    {next_state,answered,_}=acdc_agent_fsm:ringing(cast,{channel_bridge_event,Event},state([{monitoring,true}])),
+    ?assertEqual(0,meck:num_calls(kapi_acdc_agent,publish_shared_call_id,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_agent_listener,member_connect_accepted,'_')),
+    ?assertEqual(1,meck:num_calls(acdc_agent_listener,monitor_connect_accepted,'_')).
 
 pending_pause_and_logout_limit_survive() ->
     Pause = state([{agent_state_updates, [{pause, infinity}]}]),

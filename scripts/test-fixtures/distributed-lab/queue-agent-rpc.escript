@@ -36,14 +36,20 @@ main(Args) ->
         case Found of
             undefined -> io:put_chars("{\"present\":false}\n");
             F when is_pid(F) ->
-                {?ACCOUNT,U,_,_}=rpc(N,acdc_agent_fsm,dashboard_state,[F,2000]),
+                {?ACCOUNT,U,_,L}=rpc(N,acdc_agent_fsm,dashboard_state,[F,2000]),
                 Status=rpc(N,acdc_agent_fsm,status,[F]),true=is_list(Status),
                 State=proplists:get_value(state,Status),true=is_binary(State),
                 P=[{<<"present">>,true},{<<"state">>,State},
                    {<<"fsm">>,list_to_binary(rpc(N,erlang,pid_to_list,[F]))},
                    {<<"member_call_id">>,proplists:get_value(member_call_id,Status,<<>>)},
                    {<<"agent_call_id">>,proplists:get_value(agent_call_id,Status,<<>>)}],
-                J=rpc(N,kz_json,from_list,[P]),io:format("~s~n",[rpc(N,kz_json,encode,[J])])
+                Details=case Pinned of
+                    [] -> [{<<"listener_consuming">>,rpc(N,gen_listener,is_consuming,[L])},
+                           {<<"listener_queue">>,rpc(N,gen_listener,queue_name,[L])},
+                           {<<"agent_queues">>,rpc(N,gen_listener,call,[L,queues])}];
+                    _ -> []
+                end,
+                J=rpc(N,kz_json,from_list,[P++Details]),io:format("~s~n",[rpc(N,kz_json,encode,[J])])
         end,net_kernel:stop()
     catch _:_ -> io:put_chars("QUEUE_SNAPSHOT_FAILED\n"),halt(1) end.
 rpc(N,M,F,A)->rpc:call(N,M,F,A,5000).
