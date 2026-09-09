@@ -1284,7 +1284,7 @@ install_base_dependencies() {
     # installed minimal RPM. Preserve the provider instead of broad erasure.
     if rpm -q curl-minimal >/dev/null 2>&1; then curl_package=curl-minimal; fi
     dnf_install \
-        bash-completion ca-certificates "$curl_package" findutils git gzip iproute jq logrotate \
+        bash-completion ca-certificates "$curl_package" diffutils findutils git gzip iproute jq logrotate \
         openssl procps-ng python3 rsync tar unzip util-linux wget which zip
     run mkdir -p "$KAZOO_BUILD_ROOT" "$KAZOO_CACHE_DIR" "$KAZOO_CONFIG_DIR"
 }

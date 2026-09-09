@@ -20,5 +20,6 @@ for provider in minimal full absent; do
         esac
     done
     [[ $count == 1 ]]
+    [[ " ${installed[*]} " == *' diffutils '* ]]
 done
 echo 'PASS 3 actual base-dependency curl-provider paths; no packages changed'

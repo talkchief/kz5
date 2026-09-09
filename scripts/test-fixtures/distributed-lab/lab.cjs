@@ -125,7 +125,7 @@ function installRole(role) {
     assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
     assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],role);
     assert.equal(c.State.Running,true);assert.equal(c.NetworkSettings.Networks[NETWORK].IPAddress,r.ip);
-    assert.equal(podman(['exec',r.id,'git','-C','/opt/kz5','rev-parse','HEAD']),s.source);
+    assert.equal(podman(['exec',r.id,'git','-C','/opt/kz5','rev-parse','HEAD']),r.source||s.source);
     if(!s.secrets) {s.secrets={rabbit:crypto.randomBytes(32).toString('hex'),couch:crypto.randomBytes(32).toString('hex'),cookie:crypto.randomBytes(32).toString('hex')};saveState(s);}
     const cfg=Object.entries(configFor(role,s.secrets)).map(([k,v])=>k+'='+Buffer.from(v).toString('base64')).join('\n')+'\n';
     const config=DIR+'/'+role+'.env',cookie=DIR+'/'+role+'.cookie';
@@ -140,10 +140,20 @@ function installRole(role) {
         // A failed first preflight can be retried after correcting lab inputs,
         // but never replace independently edited container configuration.
         const prior=fs.readFileSync(config,'utf8');
-        assert.equal(podman(['exec',r.id,'cat','/etc/kazoo/deployment.env']),prior.trim(),'Container inputs drifted; inspect before retry');
+        const current=podman(['exec',r.id,'cat','/etc/kazoo/deployment.env']);
+        // Normal installer persistence adds resolved inputs. Verify every
+        // original supplied input and preserve its additional saved settings.
+        const values=text=>new Map(text.split('\n').filter(l=>l&&!l.startsWith('#')).map(l=>{
+            const p=l.indexOf('=');assert(p>0,'Malformed owned role inputs');return [l.slice(0,p),l.slice(p+1)];
+        }));
+        const actual=values(current);
+        for(const [key,value] of values(prior))assert.equal(actual.get(key),value,'Container inputs drifted; inspect before retry');
         if(prior!==cfg) {
             fs.writeFileSync(config,cfg,{mode:0o600});
-            podman(['cp',config,r.id+':/etc/kazoo/deployment.env']);
+            for(const [key,value] of values(cfg))actual.set(key,value);
+            const merged=DIR+'/'+role+'-retry.env';
+            fs.writeFileSync(merged,[...actual].map(([k,v])=>k+'='+v).join('\n')+'\n',{mode:0o600});
+            podman(['cp',merged,r.id+':/etc/kazoo/deployment.env']);
             podman(['exec',r.id,'chmod','0600','/etc/kazoo/deployment.env']);
         }
     }
@@ -158,7 +168,24 @@ function installRole(role) {
     assert.equal(podman(['exec',r.id,'systemctl','is-active',UNITS[role]+'.service']),'active');
     assert.equal(podman(['exec',r.id,'systemctl','is-enabled',UNITS[role]+'.service']),'enabled');
     r.phase='installed-service-verified';saveState(s);
-    console.log(JSON.stringify({status:'PASS',role,attempt,source:s.source,service:UNITS[role],log}));
+    console.log(JSON.stringify({status:'PASS',role,attempt,source:r.source||s.source,service:UNITS[role],log}));
+}
+function syncSource(role) {
+    assert(ROLES.includes(role));const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r);
+    const c=json(['inspect',r.id])[0];assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
+    assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],role);
+    assert.notEqual(r.phase,'installing');
+    assert.equal(command('git',['-C',ROOT,'status','--porcelain','--untracked-files=no']),'');
+    assert.equal(podman(['exec',r.id,'git','-C','/opt/kz5','status','--porcelain','--untracked-files=no']),'');
+    const source=command('git',['-C',ROOT,'rev-parse','HEAD']),bundle=DIR+'/source-'+source+'.bundle';
+    if(!fs.existsSync(bundle)) {
+        command('git',['-C',ROOT,'bundle','create',bundle,'HEAD','master'],{timeout:180000});fs.chmodSync(bundle,0o600);
+    }
+    podman(['cp',bundle,r.id+':/var/lib/kazoo-stage/upgrade.bundle']);
+    podman(['exec',r.id,'git','-C','/opt/kz5','fetch','/var/lib/kazoo-stage/upgrade.bundle','master'],{timeout:180000});
+    podman(['exec',r.id,'git','-C','/opt/kz5','merge','--ff-only',source],{timeout:180000});
+    assert.equal(podman(['exec',r.id,'git','-C','/opt/kz5','rev-parse','HEAD']),source);
+    r.source=source;saveState(s);console.log(JSON.stringify({status:'SOURCE_SYNCED',role,source,installed:false}));
 }
 module.exports={overlapsSubnet,ROLES,configFor};
 if(require.main===module) {
@@ -168,7 +195,8 @@ try {
     if(args.length===1&&args[0]==='--prepare')prepare();
     else if(args.length===2&&args[0]==='--create')create(args[1]);
     else if(args.length===2&&args[0]==='--install')installRole(args[1]);
+    else if(args.length===2&&args[0]==='--sync-source')syncSource(args[1]);
     else if(args.length===1&&args[0]==='--status')status();
-    else throw Error('Usage: --prepare | --create ROLE | --install ROLE | --status');
+    else throw Error('Usage: --prepare | --create ROLE | --install ROLE | --sync-source ROLE | --status');
 } catch(e) {console.error('Distributed lab refused/failed: '+e.message);process.exitCode=1;}
 }
