@@ -7,6 +7,18 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / current native retry — builds running, not a pass:**
+  Absolute-timer correction and installed-source admission guards are pushed
+  and synced as `4fac43d`. All80 maintenance cases and27 recovery cases pass;
+  journal8 and installed-source3 guard tests pass. After empty-media/ready-agent
+  admission, normal private rebuilds started as
+  `kz5-stage-install-kazoo-apps-11` and `kz5-stage-install-apps-peer-7`.
+  Collect these exact jobs, then rerun
+  `node scripts/test-acdc-native-maintenance.cjs --live` on dev44. The two failed
+  native restore receipts remain failed. No main44 runtime hot-load occurred.
+  Complete cluster fence/drain, durable coordinator integration and cold
+  restart/rollback acceptance are still open; the journal alone does not close them.
+
 - **INST-06 / pause and membership restore — source tests PASS, native gate OPEN:**
   Internal production FSM/listener restore operations now preserve absolute
   finite-pause expiry, infinite pauses and actual runtime queue membership.

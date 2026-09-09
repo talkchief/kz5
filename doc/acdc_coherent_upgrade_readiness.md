@@ -8,6 +8,15 @@ runtime/UI hold. See `FOCUSED_CLOSEOUT_2026-09-09.md` for collected receipts.
 Admission fencing, complete cluster drain, runtime-state preservation and
 coordinated restart/rollback acceptance remain open.
 
+**Current native jobs:** source `4fac43d` (absolute deadline correction included)
+is being installed normally in the two private apps guests as
+`kz5-stage-install-kazoo-apps-11` and `kz5-stage-install-apps-peer-7`.
+Both were confirmed running after zero private media and ready test replicas
+were checked. Collect those exact jobs before the next
+`node scripts/test-acdc-native-maintenance.cjs --live` attempt. Earlier builds10/6
+passed, but their two restore attempts failed as documented below. Do not confuse
+source synchronization or passing offline tests with a native restore pass.
+
 ### Restore primitives implemented; native coordinated acceptance still open
 
 The production FSM now exposes the internal `maintenance_restore/3` operation.
