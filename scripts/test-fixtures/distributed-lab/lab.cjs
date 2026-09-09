@@ -207,7 +207,21 @@ function verifyRole(role,reboot=false) {
             'Do not reboot data roles after dependent role admission');
         hardenContainer(r.id);
         const before=c.State.StartedAt;
-        podman(['restart','--time','30',r.id],{timeout:90000});
+        // Do not race the old conmon systemd scope's asynchronous teardown.
+        // A failed same-ID immediate restart was observed to kill new conmon.
+        podman(['stop','--time','30',r.id],{timeout:90000});
+        assert.equal(json(['inspect',r.id])[0].State.Running,false);
+        const deadline=Date.now()+30000;
+        while(Date.now()<deadline) {
+            const states=['libpod-'+r.id+'.scope','libpod-conmon-'+r.id+'.scope'].map(unit=>{
+                const result=cp.spawnSync('systemctl',['show','--value','-p','ActiveState',unit],{encoding:'utf8',timeout:5000});
+                assert(!result.error);return (result.stdout||'').trim();
+            });
+            if(states.every(state=>['','inactive','failed'].includes(state)))break;
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,250);
+        }
+        assert(Date.now()<deadline,'Old container scopes have not settled; container retained stopped');
+        podman(['start',r.id],{timeout:90000});
         const after=json(['inspect',r.id])[0];assert.equal(after.State.Running,true);assert.notEqual(after.State.StartedAt,before);
     }
     podman(['exec',r.id,'timeout','120','bash','-c',
