@@ -96,7 +96,9 @@ function peerOperation(action,h) {
         p.source=source;saveState(s);console.log(JSON.stringify({status:'PEER_SOURCE_SYNCED',source,installed:false}));return;
     }
     if(action==='install') {
-        assert(['configured-source-ready','failed'].includes(p.phase));
+        assert(['configured-source-ready','failed','installed'].includes(p.phase));
+        assert.equal(podman(['exec',p.id,'git','-C','/opt/kz5','rev-parse','HEAD']),p.source);
+        assert.equal(podman(['exec',p.id,'git','-C','/opt/kz5','status','--porcelain','--untracked-files=no']),'');
         const attempt=p.attempts?p.attempts+1:(p.phase==='failed'?2:1);p.attempts=attempt;
         p.unit='kz5-stage-install-apps-peer-'+attempt;p.insideLog='/var/lib/kazoo-stage/apps-peer-install-'+attempt+'.log';
         p.log=DIR+'/apps-peer-install-'+attempt+'.log';p.phase='installing';saveState(s);
