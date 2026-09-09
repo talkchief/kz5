@@ -115,6 +115,8 @@ function configFor(role,secrets) {
     const proxy=!['couchdb','rabbitmq','haproxy'].includes(role);
     return {KAZOO_ROOT:'/opt/kz5',KAZOO_AMQP_HOST:'172.30.253.12',KAZOO_AMQP_PORT:'5672',
         KAZOO_RABBITMQ_USER:'kazoo',KAZOO_RABBITMQ_PASSWORD:secrets.rabbit,KAZOO_RABBITMQ_VHOST:'/',
+        KAZOO_RABBITMQ_API_URL:'http://172.30.253.12:15672/',
+        KAZOO_RABBITMQ_API_USER:secrets.monitor?'kz5_install_monitor':'',KAZOO_RABBITMQ_API_PASSWORD:secrets.monitor||'',
         KAZOO_COUCHDB_HOST:proxy?'172.30.253.13':'172.30.253.11',KAZOO_COUCHDB_PORT:proxy?'15984':'5984',
         KAZOO_COUCHDB_ADMIN_PORT:proxy?'15986':'5984',KAZOO_COUCHDB_USER:'admin',KAZOO_COUCHDB_PASSWORD:secrets.couch,
         KAZOO_RABBITMQ_BIND:ip,KAZOO_COUCHDB_BIND:ip,KAZOO_HAPROXY_BIND:ip,KAZOO_PUBLIC_IP:ip,
@@ -127,7 +129,7 @@ function configFor(role,secrets) {
         KAZOO_MASTER_ADMIN_USER:'admin',KAMAILIO_CHILDREN:'2',KAMAILIO_TCP_CHILDREN:'2',
         KAMAILIO_AMQP_CONSUMERS:'1',KAMAILIO_AMQP_WORKERS:'2'};
 }
-function installRole(role) {
+function installRole(role,detached=false) {
     assert(Object.hasOwn(UNITS,role),'Role provisioning not implemented');
     const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r,'Create role first');
     const c=json(['inspect',r.id])[0];
@@ -167,6 +169,16 @@ function installRole(role) {
         }
     }
     const attempt=(r.attempts||0)+1,log=DIR+'/'+role+'-install-'+attempt+'.log';
+    if(detached) {
+        assert(!r.installUnit,'Collect the previous detached installer first');
+        const unit='kz5-stage-install-'+role+'-'+attempt,inside='/var/lib/kazoo-stage/'+role+'-install-'+attempt+'.log';
+        podman(['exec',r.id,'install','-m','0600','/dev/null',inside]);
+        r.attempts=attempt;r.phase='installing';r.log=log;r.installUnit=unit;r.insideLog=inside;saveState(s);
+        podman(['exec',r.id,'systemd-run','--unit',unit,'--property=RuntimeMaxSec=3600',
+            '--property=TasksMax=2048','--property=StandardOutput=append:'+inside,'--property=StandardError=append:'+inside,
+            '/usr/bin/bash','/opt/kz5/scripts/install-kazoo5.sh',role]);
+        console.log(JSON.stringify({status:'INSTALLING',role,source:r.source||s.source,unit,log:inside}));return;
+    }
     const fd=fs.openSync(log,'wx',0o600);r.attempts=attempt;r.phase='installing';r.log=log;saveState(s);
     let result;
     try {result=cp.spawnSync('podman',['exec',r.id,'bash','/opt/kz5/scripts/install-kazoo5.sh',role],
@@ -178,6 +190,42 @@ function installRole(role) {
     assert.equal(podman(['exec',r.id,'systemctl','is-enabled',UNITS[role]+'.service']),'enabled');
     r.phase='installed-service-verified';saveState(s);
     console.log(JSON.stringify({status:'PASS',role,attempt,source:r.source||s.source,service:UNITS[role],log}));
+}
+function collectRole(role) {
+    assert(Object.hasOwn(UNITS,role));const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r?.installUnit);
+    const c=json(['inspect',r.id])[0];assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
+    const details=podman(['exec',r.id,'systemctl','show','-p','ActiveState','-p','Result','-p','ExecMainStatus',
+        '-p','ExecMainStartTimestamp',r.installUnit+'.service']);
+    const fields=Object.fromEntries(details.split('\n').map(line=>{const p=line.indexOf('=');return [line.slice(0,p),line.slice(p+1)];}));
+    if(['active','activating','deactivating'].includes(fields.ActiveState)) {
+        console.log(JSON.stringify({status:'INSTALLING',role,unit:r.installUnit}));return;
+    }
+    podman(['cp',r.id+':'+r.insideLog,r.log]);fs.chmodSync(r.log,0o600);
+    r.exit=Number(fields.ExecMainStatus);r.completedUnit=r.installUnit;delete r.installUnit;
+    r.phase=fields.ExecMainStartTimestamp&&fields.Result==='success'&&fields.ExecMainStatus==='0'?'installed':'install-failed';saveState(s);
+    assert.equal(r.phase,'installed','Detached normal installer failed; inspect private role log');
+    assert.equal(podman(['exec',r.id,'systemctl','is-active',UNITS[role]+'.service']),'active');
+    assert.equal(podman(['exec',r.id,'systemctl','is-enabled',UNITS[role]+'.service']),'enabled');
+    r.phase='installed-service-verified';saveState(s);console.log(JSON.stringify({status:'PASS',role,source:r.source||s.source,log:r.log}));
+}
+function provisionMonitor() {
+    const s=readState();ownedNetwork(s);const r=s.roles.rabbitmq;assert.equal(r?.phase,'installed-service-verified');
+    const c=json(['inspect',r.id])[0];assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
+    assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],'rabbitmq');
+    if(!s.secrets.monitor) {s.secrets.monitor=crypto.randomBytes(32).toString('hex');saveState(s);}
+    const user='kz5_install_monitor';
+    const users=JSON.parse(podman(['exec',r.id,'rabbitmqctl','-q','list_users','--formatter','json']));
+    assert(Array.isArray(users));
+    const exists=users.some(row=>row.user===user);
+    const auth=operation=>podman(['exec','-i',r.id,'rabbitmqctl',operation,user],{input:s.secrets.monitor+'\n'});
+    if(!exists)auth('add_user');
+    // Prove this is our newly generated identity before changing privileges.
+    // Never reset a password or claim an existing unrelated monitoring user.
+    auth('authenticate_user');
+    podman(['exec',r.id,'rabbitmqctl','set_user_tags',user,'monitoring']);
+    podman(['exec',r.id,'rabbitmqctl','set_permissions','-p','/',user,'^$','^$','.*']);
+    s.monitorProvisioned=true;saveState(s);
+    console.log(JSON.stringify({status:'PASS',role:'rabbitmq',check:'lab-only-read-monitor-provisioned',privilege:'monitoring; read-only selected vhost'}));
 }
 function syncSource(role) {
     assert(ROLES.includes(role));const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r);
@@ -249,6 +297,9 @@ try {
     if(args.length===1&&args[0]==='--prepare')prepare();
     else if(args.length===2&&args[0]==='--create')create(args[1]);
     else if(args.length===2&&args[0]==='--install')installRole(args[1]);
+    else if(args.length===2&&args[0]==='--begin-install')installRole(args[1],true);
+    else if(args.length===2&&args[0]==='--collect-install')collectRole(args[1]);
+    else if(args.length===1&&args[0]==='--provision-monitor')provisionMonitor();
     else if(args.length===2&&args[0]==='--sync-source')syncSource(args[1]);
     else if(args.length===2&&args[0]==='--verify-role')verifyRole(args[1]);
     else if(args.length===2&&args[0]==='--reboot-role')verifyRole(args[1],true);
