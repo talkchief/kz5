@@ -7,6 +7,10 @@ authentication token (`638d9d38f451af33e3a26af04275a5ab` receipt, refresh-auth,
 zero events published, all client sockets closed). Native policy requires
 reconnect to change token and is not relaxed. The corrected harness issues one
 45-minute synthetic fixture token and retains the same sockets throughout.
+Second pilot (`5af423da05ef9f3bb603cda25881b231`) reached broker publication but
+native event validation rejected missing Msg-ID before any publication. The
+producer now obtains complete headers from the installed `kz_api:default_headers/4`
+instead of constructing an incomplete header subset. All client sockets closed.
 
 Explicit development44-only commands:
 

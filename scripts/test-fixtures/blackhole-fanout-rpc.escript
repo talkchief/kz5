@@ -44,9 +44,9 @@ execute(N,["publish",Tag0,First0,Count0]) ->
     lists:foreach(fun(I)->
         CCV=rpc(N,kz_json,from_list,[[{<<"Account-ID">>,?ACCOUNT},
             {<<"KZ5-Fixture-Sequence">>,I},{<<"KZ5-Fixture-Sent-Ms">>,erlang:system_time(millisecond)}]]),
-        Props=[{<<"Call-ID">>,CallId},{<<"Event-Category">>,<<"call_event">>},
-            {<<"Event-Name">>,<<"CHANNEL_HOLD">>},{<<"Custom-Channel-Vars">>,CCV},
-            {<<"App-Name">>,<<"kz5-fanout-acceptance">>},{<<"App-Version">>,<<"1">>}],
+        Headers=rpc(N,kz_api,default_headers,[<<"call_event">>,<<"CHANNEL_HOLD">>,
+            <<"kz5-fanout-acceptance">>,<<"1">>]),
+        Props=[{<<"Call-ID">>,CallId},{<<"Custom-Channel-Vars">>,CCV}|Headers],
         put(phase,event_validation),true=rpc(N,kapi_call,event_v,[Props]),
         put(phase,broker_publication),
         ok=rpc(N,kz_amqp_worker,cast,[Props,fun kapi_call:publish_event/1]),
