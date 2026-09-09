@@ -23,7 +23,9 @@ work postponed; do not generate voices at runtime or during deployment.
   source `2e91984`. Evidence `/var/log/kazoo-monitor-acceptance-aKrXXe` on dev44.
   Both real queued calls/audio, both unchanged FSM replicas, missed hangup
   during apps14 broker partition, ready recovery, no re-login/re-registration
-  and scoped cleanup passed. Main44 normal runtime deployment remains next.
+  and scoped cleanup passed. Main44 normal runtime deployment is running as
+  `kz5-acdc-replica-deploy-20260909` on `58c0194`, zero main44 channels verified
+  before starting. Collect the existing job; runtime after-checks still required.
   Native run3 exposed same-agent replica answered/ready disagreement while a
   real queue call was bridged. Both replicas originated the same offer. Root
   ACDC source now selects one originating process per agent and publishes its

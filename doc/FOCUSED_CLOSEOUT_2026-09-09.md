@@ -11,7 +11,9 @@ Latest verified results:
   `/var/log/kazoo-monitor-acceptance-aKrXXe`. Both actual queued calls carried
   directional audio; both original FSMs recovered after missed hangup during
   apps14-only AMQP loss, with no re-login/re-registration. Scoped cleanup passed.
-  Production source `2e91984`, runner `0ac6fb9`; main44 deployment is next.
+  Production source `2e91984`, runner `0ac6fb9`; main44 normal deployment is
+  running as `kz5-acdc-replica-deploy-20260909` on `58c0194`. No main44 calls
+  were active at admission. Its final result and after-checks remain pending.
 
 - Queued multi-node acceptance exposed a genuine same-agent replica discrepancy
   before fault injection: primary answered, peer ready. Both listeners/bindings

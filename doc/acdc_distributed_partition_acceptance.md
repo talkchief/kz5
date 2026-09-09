@@ -12,7 +12,10 @@ through apps14-only broker loss and recovered ready without re-login or SIP
 re-registration. The second call connected using those same registrations.
 Independent route restoration and scoped call/user/contact/pause cleanup passed.
 This covers that bounded apps-node broker partition, not arbitrary media-node
-failure or indefinite availability. Main44 runtime deployment is next.
+failure or indefinite availability. Main44 normal runtime deployment is running:
+`kz5-acdc-replica-deploy-20260909`, source `58c0194`, protected log
+`/var/log/kazoo-acdc-replica-deploy-20260909.log`. Zero main44 media channels were
+verified before starting. Collect this existing job; do not start another.
 
 Native run1 failed its direct-call-based ownership observation before fault
 injection, despite a bridged queued call. Evidence
@@ -46,7 +49,8 @@ process winners for2 users; bridge-first publication count0 instead of1.
 After fix:34 strategy tests,26 agent recovery tests and48 broader ACDC tests pass, including the real
 queue-selection path, exact shared correlation, monitor-only behavior, callbacks,
 ordinary bridge proof, ring-all losers and no broadcast-loopback dependency.
-This is not yet a native after-pass or a completed partition gate.
+These offline checks alone were not counted as a native pass; run5 above
+subsequently supplied the real SIP/RTP and partition-recovery evidence.
 
 Source `2e91984` is pushed to master and synced to main dev44 `/opt/kz5` and both
 private apps guests. Both normal installer rebuilds completed and their collected
