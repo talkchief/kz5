@@ -699,7 +699,13 @@ define(function(require) {
 					.prop('disabled', Boolean(item.disabled)).appendTo(languageSelect);
 			});
 			languageSelect.prop('disabled', Boolean(errors.systemMedia || errors.languageCapabilities));
-			languageSelect.val(languageSelection.selected);
+			if (languageSelection.selected === null) {
+				// jQuery 1.9's select hook can retain the first option for val(null).
+				// Set the DOM state explicitly without adding an inherit sixth option.
+				languageSelect.prop('selectedIndex', -1);
+			} else {
+				languageSelect.val(languageSelection.selected);
+			}
 			form.find('.acdc-language-preserved').toggleClass('hidden', languageSelection.selected !== null);
 			form.data('queue-language-selection', languageSelection);
 			if (authority.type === 'device' && authority.id) {
