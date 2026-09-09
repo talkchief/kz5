@@ -12,7 +12,13 @@ work postponed; do not generate voices at runtime or during deployment.
   fixture. It begins with nonnumeric caller ID, submits empty#, requires the
   complete prerecorded invalid-entry response, then confirms1001 and retains
   the strict unanswered-first/second-return SIP/RTP contract.103 retry groups,
-  14 language/scope groups and79 existing audio gates pass; native result pending.
+  14 language/scope groups and79 existing audio gates pass. Initial native unit
+  `kz5-callback-invalid-alternate-20260909` failed (4b6ff3): digits arrived before
+  the queued invalid-entry response finished. Exact native logs confirm the
+  invalid caller entered collection, empty# caused the expected response, and
+  premature number digits were consumed during feedback. The test now waits for
+  the7.171s fixed enter-number clip; no production timeout/guard is relaxed.
+  Evidence retained at `/var/log/kazoo-acceptance/20260909T122848Z`; rerun pending.
   No provider generation, imported-company traffic or runtime code hot-loading.
 
 - **Point2 active callback worker loss — native PASS:** fixture-only worker

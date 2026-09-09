@@ -26,7 +26,10 @@ function scenarios(root = path.join(__dirname, '..', 'sip-tests'), mode = 'confi
         request = request.replace(extraConfirmation, mode === 'entry-only' ?
             '  <!-- entry-only: no registration digit1; receive the server BYE after full success audio. -->' :
             '  <!-- Invalid caller ID: reject empty #, then explicitly confirm alternate1001. -->\n'
-            + '  <pause milliseconds="2500"/>\n  <nop><action><exec play_dtmf="#,200"/></action></nop>\n'
+            // The fixed EN enter-number clip is7.171s. Let it finish before
+            // asking for invalid-entry feedback; otherwise queued feedback
+            // legitimately consumes the following premature input digits.
+            + '  <pause milliseconds="8500"/>\n  <nop><action><exec play_dtmf="#,200"/></action></nop>\n'
             + '  <pause milliseconds="4500"/>\n'
             + '  <nop><action><exec play_dtmf="1001#,200"/></action></nop>\n'
             + '  <pause milliseconds="10000"/>\n  <nop><action><exec play_dtmf="1,200"/></action></nop>');
