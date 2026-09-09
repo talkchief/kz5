@@ -11,6 +11,11 @@ function localDatabaseHost(host,interfaces=require('node:os').networkInterfaces(
         &&Object.values(interfaces).some(rows=>Array.isArray(rows)&&rows.some(row=>row
             &&(row.family==='IPv4'||row.family===4)&&row.address===host));
 }
+function databaseUrl(host,port,interfaces){
+    assert(localDatabaseHost(host,interfaces)&&Number.isInteger(port)&&port>0&&port<65536,
+        'Reference database must be bound to a verified local address');
+    return 'http://'+(host==='localhost'?'127.0.0.1':host)+':'+port;
+}
 function locale(value){assert(typeof value==='string'&&LOCALES.includes(value),'Unsupported explicit locale');return value;}
 function read(file,limit=4*1024*1024){
     assert(path.isAbsolute(file)&&path.resolve(file)===file&&fs.realpathSync(file)===file,'Noncanonical evidence');
@@ -68,11 +73,11 @@ async function capture(directory,language,sourceRoot=root()){
         assert(bytes.toString('base64')===encoded&&!/[\r\n]/.test(bytes.toString()));env[key]=bytes.toString();
     }
     const port=Number(env.KAZOO_COUCHDB_PORT||5984);
-    // Accept a configured address owned by this host, but still send credentials
-    // only to loopback. Remote database hosts are not a reference-capture target.
-    assert(localDatabaseHost(env.KAZOO_COUCHDB_HOST)&&Number.isInteger(port)&&port>0&&port<65536
-        &&env.KAZOO_COUCHDB_USER&&!env.KAZOO_COUCHDB_USER.includes(':')&&env.KAZOO_COUCHDB_PASSWORD);
-    const url='http://127.0.0.1:'+port+'/system_media/'+encodeURIComponent(a.id)+'?attachments=true&conflicts=true';
+    // The service can bind only its private interface, not loopback. Send
+    // credentials only to the configured address after proving it is local.
+    const base=databaseUrl(env.KAZOO_COUCHDB_HOST,port);
+    assert(env.KAZOO_COUCHDB_USER&&!env.KAZOO_COUCHDB_USER.includes(':')&&env.KAZOO_COUCHDB_PASSWORD);
+    const url=base+'/system_media/'+encodeURIComponent(a.id)+'?attachments=true&conflicts=true';
     const headers={accept:'application/json',authorization:'Basic '+Buffer.from(env.KAZOO_COUCHDB_USER+':'+env.KAZOO_COUCHDB_PASSWORD).toString('base64')};
     const get=async()=>{
         const response=await fetch(url,{headers,redirect:'error',signal:AbortSignal.timeout(15000)});
@@ -99,7 +104,7 @@ function load(directory,digest,language,sourceRoot=root()){
     assert.equal(sha(bytes),digest);const receipt=JSON.parse(bytes),raw=read(path.join(directory,'returned-confirmation.ulaw'));
     verify(receipt,raw,asset(language,sourceRoot));return {receipt,raw};
 }
-module.exports={LOCALES,CANONICAL,sha,locale,read,asset,convert,verify,capture,load,localDatabaseHost};
+module.exports={LOCALES,CANONICAL,sha,locale,read,asset,convert,verify,capture,load,localDatabaseHost,databaseUrl};
 if(require.main===module)(async()=>{
     const [action,directory,language,sourceRoot]=process.argv.slice(2);
     assert(action==='capture'&&[5,6].includes(process.argv.length));

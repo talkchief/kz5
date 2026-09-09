@@ -16,6 +16,12 @@ for(const host of [undefined,null,{},'10.1.0.10','10.1.0.28','database.example',
 assert.equal(refs.localDatabaseHost('10.1.0.44',{}),false);
 assert.equal(refs.localDatabaseHost('10.1.0.44',{eth0:[{family:4,address:'10.1.0.44'}]}),true);
 groups++;
+assert.equal(refs.databaseUrl('10.1.0.44',5984,interfaces),'http://10.1.0.44:5984');
+assert.equal(refs.databaseUrl('localhost',5984,interfaces),'http://127.0.0.1:5984');
+assert.equal(refs.databaseUrl('127.0.0.1',15984,interfaces),'http://127.0.0.1:15984');
+for(const port of [0,65536,'5984',NaN])assert.throws(()=>refs.databaseUrl('10.1.0.44',port,interfaces));
+assert.throws(()=>refs.databaseUrl('10.1.0.10',5984,interfaces));
+groups++;
 for(const language of refs.LOCALES){
     const prompt=refs.CANONICAL+'-gemini-sulafat-'+sha(wav).slice(0,16);
     const a={locale:language,canonical_id:refs.CANONICAL,id:language+'/'+prompt,attachment:prompt+'.wav',sha256:sha(wav),transcript_sha256:sha(language),bytes:wav};

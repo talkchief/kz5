@@ -33,9 +33,15 @@ unchanged strict waveform cases. Source `ce7487e` is on main44.
 First reference-capture unit `kz5-he-returned-reference-main44-20260909` failed
 before HTTP (da5883). Main's configured CouchDB host is its own10.1.0.44 address;
 the old helper accepted only literal localhost/127.0.0.1. Source asset lookup
-succeeded separately (8d5d2a). The helper now accepts IPv4 addresses present on
-the local host's interfaces, but still sends credentials only to127.0.0.1.
-No DNS-based or remote database target is added. Three reference-validation
-groups pass1c9ee9, including rejection of remote addresses, deceptive hostnames,
-malformed settings and unowned addresses. Failed capture remains failed;
+succeeded separately (8d5d2a). Initial correction `de0a75a` accepted owned IPv4
+addresses but still requested loopback. Replacement unit ending20260909b failed
+(4d5e0c); sanitized stack608ca3 locates fetch failure, and socket read a6512e
+proves CouchDB listens only on10.1.0.44:5984. No database binding was changed.
+
+The helper now requests the configured IPv4 address only after proving that it
+belongs to the local host. Literal localhost remains mapped to127.0.0.1. No
+DNS-based or remote database target, redirect, or provider request is added.
+Four reference-validation groups pass cbb9b6, including exact private/loopback
+URLs and rejection of remote addresses, deceptive hostnames, invalid ports,
+malformed settings and unowned addresses. Failed captures remain failed;
 replacement capture and the native audio case are pending.
