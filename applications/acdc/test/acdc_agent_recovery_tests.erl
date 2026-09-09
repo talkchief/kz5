@@ -33,6 +33,7 @@ agent_recovery_test_() ->
                                ,fun running_fsm_handles_hangup_during_probe/0
                                ,fun status_checks_are_read_only_and_correlated/0
                                ,fun repeated_calls_remain_available/0
+                               ,fun sync_timeout_consumes_timer_reference/0
                                ,fun upgrade_preserves_existing_state/0
                                ,fun upgrade_rejects_active_legacy_state/0
                                ,fun upgrade_rejects_unknown_layouts/0
@@ -93,6 +94,18 @@ assert_accepts_next_offer(State) ->
     ?assertEqual({next_state, ready, State},
                  acdc_agent_fsm:ready(cast, {member_connect_req, Offer}, State)),
     ?assert(meck:called(acdc_agent_listener, member_connect_resp, [self(), Offer])).
+
+sync_timeout_consumes_timer_reference() ->
+    Ref = make_ref(),
+    Before = acdc_agent_fsm:strategy_test_state(
+               [{account_id, ?ACCOUNT}, {agent_id, ?AGENT}, {agent_listener, self()}
+               ,{sync_ref, Ref}, {max_connect_failures, 3}]),
+    {next_state, ready, After} = acdc_agent_fsm:sync(info, {timeout,Ref,sync_response_timeout}, Before),
+    ?assertEqual(undefined, field(sync_ref, After)),
+    From = {self(),make_ref()},
+    {keep_state,After,[{reply,From,{ok,Snapshot}}]} =
+        acdc_agent_fsm:ready({call,From},maintenance_state,After),
+    ?assertEqual(ready,maps:get(state,Snapshot)).
 
 failure_recovers_without_its_broadcast() ->
     {next_state, ready, Ready} = acdc_agent_fsm:ringing(cast, {originate_failed, failure()}, state([])),

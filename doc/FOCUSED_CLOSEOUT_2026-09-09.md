@@ -6,6 +6,16 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Installer maintenance baseline now reproduces pause loss on actual nodes:
+  both45-second-paused agent replicas returned ready after supervisor restart,
+  within5597ms of host admission. Private baseline receipt
+  `agent-restart-baseline-1788990948224.json` is FAIL and retained. Independent
+  after-check verifies all6 test replicas ready with original membership and
+  active consumers. Both preceding normal apps installations passed. A separate
+  stale consumed sync-reference source fix passes27 recovery and43 maintenance
+  cases; it is not yet deployed and does not solve pause restoration. Point4
+  remains open for fenced checkpoint/restore and coordinated rollback.
+
 - Native Blackhole fanout soak PASS: unit
   `kz5-blackhole-fanout-soak-20260909`, exit0, receipt
   `/var/log/kazoo-blackhole-fanout-6f4ed2b1f3bd165f0a2c551ddd4d4595.json`.

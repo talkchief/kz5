@@ -8,6 +8,55 @@ runtime/UI hold. See `FOCUSED_CLOSEOUT_2026-09-09.md` for collected receipts.
 Admission fencing, complete cluster drain, runtime-state preservation and
 coordinated restart/rollback acceptance remain open.
 
+### Native restart baseline: pause loss reproduced
+
+Both isolated apps installations on `b6d1a04` passed: primary
+`kz5-stage-install-kazoo-apps-9` and peer `kz5-stage-install-apps-peer-5`.
+The latter's retained log is
+`/var/lib/kazoo5-install-lab/apps-peer-install-5.log`.
+
+The explicit finite-pause baseline then **FAILED** on both actual nodes:
+both replicas of the single owned synthetic agent were paused for45seconds;
+`acdc_agents_sup:restart_agent/2` recreated their supervisors and both returned
+ready. The complete native log finished5597ms after host admission, well before
+that pause could legitimately expire. This is a real pause-loss reproduction,
+not a missing status response. Main44 services/customer accounts were untouched;
+the host acceptance lock was held, private media was empty, and the sole fixture
+queue had zero callback tickets before mutation.
+
+Evidence on dev44:
+
+- `/var/lib/kazoo5-install-lab/agent-restart-baseline-1788990948224.json` and `.log`;
+- executed fixture SHA-256
+  `5009d24047500897a3f4f7349d1d7fac6898d099e7c9b8719e3a41abd95f48bf`;
+- independent after-check
+  `/var/lib/kazoo5-install-lab/agent-restart-baseline-cleanup-1788991109162.json`:
+  all6 replicas ready, consumers active, no reported call legs and original
+  queue membership intact. This confirms after-state, not pause preservation.
+
+The original baseline's strict cleanup observation was refused; it is retained
+as such. Source inspection and a separate before-failing regression exposed a
+consumed `sync_response_timeout` reference retained in the ready FSM. That
+reference is now cleared when its timeout is handled.27 recovery cases and43
+production maintenance observation cases pass after the one-line behavior fix;
+retained latter evidence `/tmp/kazoo-acdc-maintenance.dGTCcC`. This source change
+is not yet deployed and does **not** fix pause loss by itself.
+
+The baseline source is
+`scripts/test-fixtures/distributed-lab/agent-restart-baseline.escript`; its next
+run also records bounded elapsed time explicitly and fails on unverified cleanup.
+It is an opt-in fixed-agent reproduction, not a generic restart/upgrade executor.
+Run only under the host acceptance lock after independent media/callback
+admission and ownership checks. It uses finite pauses, refuses unrelated/active
+states, and never re-logs agents or kills calls to manufacture a pass.
+
+Next implementation must capture runtime membership and finite/infinite pauses
+under a complete cluster admission fence, keep admission closed across restart,
+restore the checkpoint before reopening, and validate rollback in that same
+window. Do not inject a reusable pause into supervisor startup arguments: a later
+automatic child restart could reapply stale state after an operator resumed the
+agent. Do not restore a checkpoint after new work or operator changes are admitted.
+
 Native `acdc_agent_fsm:maintenance_state(Pid, Timeout)` now returns either an
 error or an allowlisted observation containing account/agent/listener identity,
 ready/paused state and the remaining pause in milliseconds. Finite pauses also
@@ -46,8 +95,8 @@ installation passed as `kz5-stage-install-kazoo-apps-9`, protected log
 observations then passed for all3 actual fixture agents: matching FSM/listener
 identities, ready state, zero pause and exact runtime membership. Receipt:
 `/var/lib/kazoo5-install-lab/agent-maintenance-primary-1788990470794.json`.
-This does not test pause restoration. Peer `kz5-stage-install-apps-peer-5` is
-still running; collect that existing handle, never restart on observation timeout.
+This did not test pause restoration. Peer `kz5-stage-install-apps-peer-5` has
+since passed too; the subsequent explicit pause-restart baseline failed above.
 Private media was verified at zero channels before these jobs. Main44 services
 are unchanged; its separate Blackhole soak has completed successfully.
 
@@ -60,7 +109,8 @@ listener identities and consumer readiness, and emits only allowlisted JSON.
 It has no restart/pause/restore operation and explicitly reports
 `admission_fence_proven:false`. Source-host invalid-argument execution compiles
 and refuses without connecting. Native primary observation passed as above;
-peer observation and fenced restart/restore acceptance remain due.
+fenced restart/restore acceptance remains due. The pause-loss baseline above
+must pass after an actual restoration implementation before closing this gate.
 
 ```sh
 bash scripts/run-kazoo-validation.sh --memory-mib 384 --reserve-mib 768 \

@@ -7,6 +7,21 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / restart pause retention — native defect reproduced, OPEN:**
+  Both normal isolated apps deployments passed on `b6d1a04`. In the explicit
+  fixed-agent baseline, both45-second-paused replicas returned ready after
+  supervisor restart, within5597ms of host admission. Receipt
+  `/var/lib/kazoo5-install-lab/agent-restart-baseline-1788990948224.json`.
+  Original cleanup observation refused; independent after-check
+  `agent-restart-baseline-cleanup-1788991109162.json` confirms all6 fixture
+  replicas ready, consumers/membership intact and no reported call legs.
+  A separate consumed-sync-reference defect now has a before-fail/after-pass
+  source fix (27 recovery +43 production maintenance tests pass). Not yet
+  deployed; clearing the reference does not preserve pauses across restart.
+  Complete the fenced checkpoint/restore and rollback path, then rerun this
+  failed native baseline. Do not restore stale state after reopening admission.
+  See `doc/acdc_coherent_upgrade_readiness.md` for exact evidence and safeguards.
+
 - **INST-06 / coordinated maintenance — runtime observation primitives tested:**
   Added read-only native agent FSM/listener maintenance observations in root
   ACDC source. They retain finite/infinite pause information and actual runtime
@@ -23,7 +38,8 @@ work postponed; do not generate voices at runtime or during deployment.
   passed as `kz5-stage-install-kazoo-apps-9`; all3 actual fixture agents then
   passed installed-code read-only state/membership observations, receipt
   `/var/lib/kazoo5-install-lab/agent-maintenance-primary-1788990470794.json`.
-  Peer `kz5-stage-install-apps-peer-5` is still running; collect that existing unit.
+  Peer `kz5-stage-install-apps-peer-5` also passed; log
+  `/var/lib/kazoo5-install-lab/apps-peer-install-5.log`.
   A fixed-scope read-only native adapter is prepared at
   `scripts/test-fixtures/distributed-lab/agent-maintenance-rpc.escript`.
 

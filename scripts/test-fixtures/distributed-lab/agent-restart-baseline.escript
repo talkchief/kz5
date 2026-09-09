@@ -1,0 +1,106 @@
+#!/usr/bin/env escript
+%%! +S 1:1 +SDcpu 1 +SDio 1 +A 1 -setcookie unused_restart_fixture -start_epmd false -kernel logger_level none
+%% Explicit baseline reproduction, not an upgrader. Run under the host's
+%% acceptance lock, after zero-media/zero-callback admission. Fixed lab agent
+%% only; finite pauses expire even if the fixture is interrupted.
+-mode(compile).
+-include_lib("kernel/include/file.hrl").
+-define(A, <<"45e827067baf078029d0ca16a489fa8a">>).
+-define(U, <<"d757645c21f28890684a5b91fe83722d">>).
+-define(Q, <<"cabcfb72812b530ccc32ffba30ef680d">>).
+main(Args) ->
+    Code=try
+        ["--live"]=Args,
+        {ok,"kz5-stage-kazoo-apps"}=inet:gethostname(),
+        {ok,Ifs}=inet:getifaddrs(),true=has_ip(Ifs,{172,30,253,14}),
+        {ok,#file_info{type=regular,uid=0,links=1,mode=M}}=
+            file:read_link_info("/etc/kazoo/.erlang.cookie"),
+        true=(M band 8#077)=:=0,{ok,C}=file:read_file("/etc/kazoo/.erlang.cookie"),
+        ok=application:set_env(kernel,inet_dist_use_interface,{172,30,253,14}),
+        {ok,_}=net_kernel:start([list_to_atom("restart_baseline_"++os:getpid()++"@kz5-stage-kazoo-apps"),shortnames]),
+        true=erlang:set_cookie(node(),binary_to_atom(string:trim(C),utf8)),
+        Ns=['kazoo_apps@kz5-stage-kazoo-apps','kazoo_apps@kz5-stage-kazoo-apps-peer'],
+        lists:foreach(fun({N,Ip}) -> admit(N,Ip) end,
+                      lists:zip(Ns,[{172,30,253,14},{172,30,253,20}])),
+        Before=[snapshot(N) || N<-Ns],
+        true=lists:all(fun({_,ready,0})->true;(_)->false end,Before),
+        lists:foreach(fun({N,{F,_,_}}) ->
+            put({owned_fsm,N},F),ok=rpc(N,acdc_agent_fsm,pause,[F,45])
+        end,lists:zip(Ns,Before)),
+        Paused=until(fun() -> Vs=[snapshot(N)||N<-Ns],
+            case lists:all(fun({_,paused,T})->is_integer(T) andalso T>30000;(_)->false end,Vs) of
+                true->{ok,Vs};false->retry
+            end end,10),
+        Started=erlang:monotonic_time(millisecond),
+        io:put_chars("{\"phase\":\"paused_before_restart\",\"replicas\":2}\n"),
+        lists:foreach(fun({N,{Old,paused,_}}) ->
+            {Old,paused,Left}=snapshot(N),true=Left>20000,
+            {ok,Sup}=rpc(N,acdc_agents_sup,restart_agent,[?A,?U]),true=is_pid(Sup),
+            New=until(fun() -> case rpc(N,acdc_agent_sup,fsm,[Sup]) of
+                F when is_pid(F),F=/=Old -> {ok,F};_ -> retry end end,5),
+            put({owned_fsm,N},New)
+        end,lists:zip(Ns,Paused)),
+        After=until(fun() -> Vs=[state_only(N)||N<-Ns],
+            case lists:all(fun({_,S})->S=:=ready orelse S=:=paused end,Vs) of
+                true->{ok,Vs};false->retry end end,15),
+        Pass=lists:all(fun({_,S})->S=:=paused end,After),
+        States=[atom_to_list(S)||{_,S}<-After],
+        Elapsed=erlang:monotonic_time(millisecond)-Started,
+        true=Elapsed<20000,
+        io:format("{\"phase\":\"after_restart\",\"states\":[\"~s\",\"~s\"],\"pause_preserved\":~s,\"restart_elapsed_ms\":~p}~n",
+                  States++[atom_to_list(Pass),Elapsed]),
+        case Pass of true->0;false->1 end
+    catch _:_ -> io:put_chars("RESTART_BASELINE_REFUSED_OR_FAILED\n"),1
+    after
+        %% Never stop calls, re-login, or change an unknown replacement FSM.
+        %% Only resume the exact finite pause introduced into this ready agent.
+        lists:foreach(fun cleanup/1,
+            ['kazoo_apps@kz5-stage-kazoo-apps','kazoo_apps@kz5-stage-kazoo-apps-peer'])
+    end,
+    case get(cleanup_failed) of true->halt(1);_->halt(Code) end.
+
+admit(N,Ip) ->
+    {ok,Ifs}=rpc(N,inet,getifaddrs,[]),true=has_ip(Ifs,Ip),
+    true=rpc(N,erlang,function_exported,[acdc_agent_fsm,maintenance_state,2]),
+    true=rpc(N,erlang,function_exported,[acdc_agent_listener,maintenance_state,2]),
+    Db=rpc(N,kzs_util,format_account_db,[?A]),
+    {ok,A}=rpc(N,kz_datamgr,open_doc,[Db,?A]),
+    <<"acceptance-724fa76c8821.invalid">>=rpc(N,kz_json,get_value,[<<"realm">>,A]),
+    {ok,U}=rpc(N,kz_datamgr,open_doc,[Db,?U]),
+    ?A=rpc(N,kz_json,get_value,[<<"pvt_account_id">>,U]),
+    <<"user">>=rpc(N,kz_doc,type,[U]),
+    <<"user">>=rpc(N,kz_json,get_value,[<<"priv_level">>,U]),
+    true=rpc(N,kz_json,is_true,[<<"enabled">>,U]).
+
+snapshot(N) ->
+    S=rpc(N,acdc_agents_sup,find_agent_supervisor,[?A,?U]),true=is_pid(S),
+    F=rpc(N,acdc_agent_sup,fsm,[S]),L=rpc(N,acdc_agent_sup,listener,[S]),
+    {ok,#{account_id:=?A,agent_id:=?U,listener:=L,state:=State,pause_remaining_ms:=Time}}=
+        rpc(N,acdc_agent_fsm,maintenance_state,[F,2000]),
+    {ok,#{account_id:=?A,agent_id:=?U,fsm:=F,queues:=[?Q]}}=
+        rpc(N,acdc_agent_listener,maintenance_state,[L,2000]),
+    {F,State,Time}.
+state_only(N) ->
+    F=get({owned_fsm,N}),true=is_pid(F),
+    {?A,?U,S,_}=rpc(N,acdc_agent_fsm,dashboard_state,[F,2000]),{F,S}.
+cleanup(N) ->
+    case get({owned_fsm,N}) of
+        undefined -> ok;
+        Owned ->
+            try case snapshot(N) of
+                {Owned,ready,0}->ok;
+                {Owned,paused,T} when is_integer(T),T>0,T=<45000 ->
+                    ok=rpc(N,acdc_agent_fsm,resume,[Owned]);
+                _->error(ownership_or_state_changed)
+            end
+            catch _:_ -> put(cleanup_failed,true),io:put_chars("FINITE_PAUSE_CLEANUP_UNVERIFIED\n") end
+    end.
+until(F,Seconds) -> until_deadline(F,erlang:monotonic_time(millisecond)+Seconds*1000).
+until_deadline(F,End) ->
+    case F() of
+        {ok,V}->V;
+        retry->true=erlang:monotonic_time(millisecond)<End,
+               timer:sleep(100),until_deadline(F,End)
+    end.
+has_ip(Ifs,Ip)->lists:any(fun({_,V})->lists:member({addr,Ip},V) end,Ifs).
+rpc(N,M,F,A)->rpc:call(N,M,F,A,5000).

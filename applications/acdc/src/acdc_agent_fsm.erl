@@ -633,7 +633,9 @@ sync('info', {'timeout', Ref, ?SYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref
     lager:debug("done waiting for sync responses"),
     acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
 
-    apply_state_updates(State#state{sync_ref=Ref});
+    %% This timeout has been consumed. Keeping its reference in ready/paused
+    %% makes a completed sync look like pending work during maintenance.
+    apply_state_updates(State#state{sync_ref='undefined'});
 sync('info', {'timeout', Ref, ?RESYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref}=State) when is_reference(Ref) ->
     lager:debug("resync timer expired, lets check with the others again"),
     SyncRef = start_sync_timer(),
