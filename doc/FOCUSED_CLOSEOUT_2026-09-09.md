@@ -4,6 +4,14 @@ This checkpoint does **not** close all four requested groups or certify a
 production release. Keep dashboard/history work postponed. Do not regenerate
 voices or repeat passing normal callback campaigns without a relevant change.
 
+Latest:30-call broker recovery completed both batches but **failed** fresh-error
+checks (`20260909T131334Z`). Required patch `b19fde3` addresses repeated secondary
+queue registration/corrupt binding state; focused regression passed, normal
+deployment and native retry pending. FreeSWITCH-only missing Erlang/EI is fixed
+in `ef49b89`, installer retry pending. Apps-only rebar bootstrap failure remains
+under investigation. Ordinary-user native HTTP/WSS scope checks passed7 cases.
+The task register above its earlier entries carries the latest role/boot detail.
+
 | Point | Current verified work | Still open |
 | --- | --- | --- |
 | 1 — ACDC reliability | Real eCallMgr loss/missed hangup exposed two next-call failures. Fixed routing-readiness validation and cold location-cache fallback. Native same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and after a full RabbitMQ outage, without re-login or re-registration. | Multi-node broker partitions, repeated failures and routing under representative fault/load/soak. |

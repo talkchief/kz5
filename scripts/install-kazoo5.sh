@@ -4319,6 +4319,11 @@ build_kazoo_freeswitch() {
     build_spandsp
     sync_git https://github.com/signalwire/freeswitch.git "$source_dir" "$FREESWITCH_REF"
     prepare_freeswitch_source "$source_dir"
+    if [[ $DRY_RUN != true && -f $source_dir/src/mod/outoftree/mod_kazoo/Makefile ]]; then
+        # The parent distclean does not invalidate this out-of-tree module's
+        # configure result. A failed first install may have cached no Erlang.
+        make -C "$source_dir/src/mod/outoftree/mod_kazoo" distclean
+    fi
     if [[ $DRY_RUN != true && -f $source_dir/Makefile ]]; then
         # A prior configure may have selected different dependency ABIs. A
         # distclean here makes a requested rebuild actually relink the core and

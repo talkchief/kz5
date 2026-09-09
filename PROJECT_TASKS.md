@@ -7,6 +7,30 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Latest checkpoint — NOT all four points closed:** the30-call broker-loss
+  campaign completed both30-call batches and same-FSM recovery, but failed its
+  clean-log gate (4/40 new errors), unit `kz5-acdc-broker-loss-30-20260909`,
+  evidence `node-loss/20260909T131334Z`. eCallMgr repeatedly rebuilt an improper
+  secondary binding list and retried an already-exclusive consumer. Required
+  source patch `b19fde3` fixes tuple handling, duplicate queue additions and
+  queue removal; focused actual-module regression passes. Normal eCallMgr
+  deployment `kz5-listener-recovery-deploy-20260909` is underway; native retest
+  is still required. Do not count the failed log gate as a pass.
+- **Fresh backend roles:** FreeSWITCH-only build failed because Erlang/EI was
+  omitted; source fix `ef49b89` adds the pinned dependency (two selector cases
+  pass), normal isolated installer retry2 underway. Apps-only dependency build
+  failed during rebar bootstrap; direct pinned bootstrap succeeds, underlying
+  fresh-make failure remains under investigation. No apps-only install pass.
+  Separate CouchDB/RabbitMQ repeat and guest-boot checks passed. HAProxy install,
+  repeat and verification passed, but automated guest reboot failed with a
+  Podman/conmon error; exact owned container was restored manually and verified.
+  No independent-machine, full-role matrix or rollback certification.
+- **Point6 ordinary-principal native PASS:** unit `kz5-native-principal-20260909`
+  passed seven real HTTP/WSS checks: own user/queue allowed, foreign company
+  users/devices/live queues and subscription denied, own subscription/unsubscribe
+  successful. Revocation acceptance is being prepared separately; no cache-wide
+  revocation, cross-node audio-privacy or slow-network pass is claimed.
+
 - **Point1 broker outage — native PASS:** unit
   `kz5-acdc-broker-loss-20260909.service` exited0. The real queued call ended
   while RabbitMQ was stopped; the agent stayed busy for a full reconciliation
