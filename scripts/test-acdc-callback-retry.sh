@@ -342,7 +342,7 @@ retry_wait_bridge() {
 # Fault injection is opt-in, queue-scoped and attempted at most once. Never
 # restart services or infer that a timeout means the restart did not happen.
 retry_restart_queue_in_backoff() {
-    local doc snapshot before after queue now
+    local doc snapshot before after before_local after_local queue now
     [[ ${RETRY_QUEUE_RESTART:-false} == true && $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 &&
        ${STATE[ACCEPTANCE_ACCOUNT_ID]} == "$RETRY_ACCOUNT_ID" &&
        ! -e $RUN_DIR/callback-queue-restart-started.json ]] || return 1
@@ -360,7 +360,10 @@ retry_restart_queue_in_backoff() {
         .next_attempt_at>($now+62167219200+8)' <<<"$doc" >/dev/null || return 1
     jq -e '.row_count==0' <<<"$snapshot" >/dev/null || return 1
     before=$(sup -n kazoo_apps -t 5 acdc_queues_sup find_queue_supervisor "$RETRY_ACCOUNT_ID" "$queue") || return 1
-    [[ $before =~ ^\<0\.[0-9]+\.[0-9]+\>$ ]] || return 1
+    [[ $before =~ ^\<[0-9]{1,10}\.[0-9]{1,10}\.[0-9]{1,10}\>$ ]] || return 1
+    # SUP prints an external PID in its own short-lived VM. The first number
+    # is that client's node index, not a stable identity on the target node.
+    before_local=${before#*.}; before_local=${before_local%>}
     jq -n --arg account "$RETRY_ACCOUNT_ID" --arg queue "$queue" --arg supervisor "$before" \
         --argjson doc "$doc" --argjson snapshot "$snapshot" --argjson started "$now" \
         '{account_id:$account,queue_id:$queue,supervisor_before:$supervisor,started_at:$started,
@@ -368,9 +371,13 @@ retry_restart_queue_in_backoff() {
     sup -n kazoo_apps -t 10 acdc_maintenance queue_restart "$RETRY_ACCOUNT_ID" "$queue" \
         > "$RUN_DIR/callback-queue-restart-command.txt" || return 1
     after=$(sup -n kazoo_apps -t 5 acdc_queues_sup find_queue_supervisor "$RETRY_ACCOUNT_ID" "$queue") || return 1
-    [[ $after =~ ^\<0\.[0-9]+\.[0-9]+\>$ && $after != "$before" ]] || return 1
-    jq --arg supervisor "$after" --argjson finished "$(date +%s)" \
-        '. + {supervisor_after:$supervisor,finished_at:$finished,replacement_verified:true}' \
+    [[ $after =~ ^\<[0-9]{1,10}\.[0-9]{1,10}\.[0-9]{1,10}\>$ ]] || return 1
+    after_local=${after#*.}; after_local=${after_local%>}
+    [[ $after_local != "$before_local" ]] || return 1
+    jq --arg supervisor "$after" --arg before_local "$before_local" --arg after_local "$after_local" \
+        --argjson finished "$(date +%s)" \
+        '. + {supervisor_after:$supervisor,supervisor_before_local_id:$before_local,
+              supervisor_after_local_id:$after_local,finished_at:$finished,replacement_verified:true}' \
         "$RUN_DIR/callback-queue-restart-started.json" > "$RUN_DIR/callback-queue-restart.json" || return 1
     log 'Isolated queue supervisor replaced during durable retry_wait; no services restarted'
 }

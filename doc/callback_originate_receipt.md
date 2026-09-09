@@ -165,6 +165,14 @@ prove the same ticket/order/backoff, second confirmation, receipt and bridge,
 without a third attempt or a Kazoo service restart.
 
 Guard results: 17 actual-shell boundary cases and13 CLI/reference groups pass
-(e1d377/065885), plus shell syntax and diff checks. Native execution is pending.
+(e1d377/065885), plus shell syntax and diff checks.
+First native unit `kz5-callback-queue-restart-main44-20260909` failed before
+issuing a restart (763319), run20260909T032217Z. There is no restart-attempt
+marker. SUP prints an external PID such as `<10623.1778.0>`, not a local
+`<0.N.S>` PID; the old guard rejected it. The corrected guard accepts the remote
+form but compares only the target-local ID/serial, not the ephemeral SUP VM's
+node index. Updated17 boundary cases pass25c932, including a changed client
+node index with unchanged target PID being rejected. Native rerun is pending;
+the original failed run is not relabeled as a pass.
 This tests losing a worker while a callback is waiting, **not** losing an
 active returned leg, registry expiry, broker failover or the historical ticket.

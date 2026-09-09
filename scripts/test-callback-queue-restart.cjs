@@ -28,8 +28,8 @@ sup(){
     printf '%s\n' "$*" >> "$RUN_DIR/actions"
     case "$*" in
         '-n kazoo_apps -t 5 acdc_queues_sup find_queue_supervisor ${A} ${Q}')
-            if [[ -f $RUN_DIR/callback-queue-restart-command.txt ]]; then printf '%s\n' ${quote(options.samePid?'<0.1.0>':'<0.2.0>')};
-            else printf '%s\n' '<0.1.0>'; fi ;;
+            if [[ -f $RUN_DIR/callback-queue-restart-command.txt ]]; then printf '%s\n' ${quote(options.samePid?'<19002.1778.0>':'<19002.2401.0>')};
+            else printf '%s\n' '<10623.1778.0>'; fi ;;
         '-n kazoo_apps -t 10 acdc_maintenance queue_restart ${A} ${Q}') return ${options.uncertain?1:0} ;;
         *) exit 99 ;;
     esac
@@ -46,6 +46,7 @@ if retry_restart_queue_in_backoff; then exit 0; else exit 1; fi
 }
 const ok=run();assert.equal(ok.code,0);assert(ok.proof.replacement_verified);
 assert.equal(ok.proof.callback.id,base.id);assert.equal(ok.proof.restart_requests,1);
+assert.equal(ok.proof.supervisor_before_local_id,'1778.0');assert.equal(ok.proof.supervisor_after_local_id,'2401.0');
 assert.equal(ok.actions.split('\n').filter(s=>s.includes('acdc_maintenance queue_restart')).length,1);
 for(const options of [{account:'other'},{queue:'other'},{channels:1},{already:true},
     {doc:{status:'dialing'}},{doc:{attempts:2}},{doc:{caller_call_id:'live'}},{doc:{agent_call_id:'live'}},
