@@ -1,0 +1,53 @@
+diff --git a/kazoo_media/src/kz_media_util.erl b/kazoo_media/src/kz_media_util.erl
+index 68e3d932a..60114d1bc 100644
+--- a/kazoo_media/src/kz_media_util.erl
++++ b/kazoo_media/src/kz_media_util.erl
+@@ -702,14 +702,40 @@ prompt_language(<<_/binary>> = AccountId, SystemDefault) ->
+         'false' -> default_prompt_language();
+         'true' ->
+             {'ok', AccountJObj} = kzd_accounts:fetch(AccountId),
+-            Default = kzd_accounts:language(AccountJObj, SystemDefault),
+-            kz_term:to_lower_binary(
+-              kapps_account_config:get_ne_binary(AccountId
+-                                                ,?CONFIG_CAT
+-                                                ,?PROMPT_LANGUAGE_KEY
+-                                                ,kz_term:to_lower_binary(Default)
+-                                                )
+-             )
++            AccountDefault = kzd_accounts:language(AccountJObj),
++            AccountLanguage = kapps_account_config:get_ne_binary(AccountId
++                                                                 ,?CONFIG_CAT
++                                                                 ,?PROMPT_LANGUAGE_KEY
++                                                                 ,AccountDefault
++                                                                 ),
++            Language = case AccountLanguage of
++                           'undefined' -> reseller_prompt_language(AccountId, SystemDefault);
++                           Explicit -> Explicit
++                       end,
++            kz_term:to_lower_binary(Language)
++    end.
++
++%% Only an account without either explicit setting inherits its direct reseller.
++%% Do not recurse through reseller chains or change shared media/account docs.
++%% An unavailable optional lookup retains the pre-existing caller/system fallback.
++-spec reseller_prompt_language(kz_term:ne_binary(), kz_term:ne_binary()) -> kz_term:ne_binary().
++reseller_prompt_language(AccountId, Default) ->
++    try
++        case kz_services_reseller:get_id(AccountId) of
++            ResellerId when is_binary(ResellerId), ResellerId =/= <<>>, ResellerId =/= AccountId ->
++                case kzd_accounts:fetch(ResellerId) of
++                    {'ok', ResellerDoc} ->
++                        kapps_account_config:get_ne_binary(ResellerId
++                                                          ,?CONFIG_CAT
++                                                          ,?PROMPT_LANGUAGE_KEY
++                                                          ,kzd_accounts:language(ResellerDoc, Default)
++                                                          );
++                    _ -> Default
++                end;
++            _ -> Default
++        end
++    catch
++        _:_ -> Default
+     end.
+ 
+ -spec store_path_from_doc(kz_json:object()) -> media_store_path() | {'error', 'no_attachments'}.

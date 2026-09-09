@@ -2,6 +2,21 @@
 
 ## Immediate operator follow-up — September8
 
+- **VOICE-01 reseller language fallback — SOURCE PASS, deployment pending (September9):**
+  Native `kz_media_util:prompt_language/2` omitted reseller defaults entirely.
+  Root-owned installer patch now uses account media.default_language, account
+  language, direct reseller media.default_language, reseller language, then the
+  existing caller/system fallback. Explicit settings avoid reseller reads;
+  disabled overrides retain system behavior. Missing/self/unavailable reseller
+  paths cannot recurse or crash this optional fallback. Baseline f6b473:4 failures
+  among14 cases. Final f9bb3f:16/16 pass plus exact clean-source/double-patch replay.
+  No database migration, regeneration or runtime Gemini dependency. OpenAPI source
+  updated. `scripts/test-media-language-live.cjs` prepares two empty, disabled
+  main-dev-only tenants, then verifies all five inherited locales and15 shared
+  prompt resolutions after deployment; not yet run. See
+  `doc/media_reseller_language.md`. The fixture is scoped; native calls/audio
+  pronunciation and broader release gates remain separate.
+
 - **VOICE-01 inherited queue edit — DEPLOYED / scoped PASS (September9):**
   An existing queue without a language override, or with an unsupported legacy
   locale, was displayed and silently saved as English when the English pack

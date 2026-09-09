@@ -2956,7 +2956,7 @@
     },
     {
       "file": "scripts/api-docs-overlays.cjs",
-      "sha256": "dc705ab0086ce1781d9c03737ced063d6771da62b257bd6d47ea03f1e9a3d617"
+      "sha256": "ad05f6ca31b2c945b4c0eb1143e239db6026752a01bb189284b5714a01214bfc"
     },
     {
       "file": "scripts/api-docs-queue-editor.cjs",
@@ -2980,7 +2980,7 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "580a0824989b41d6c326b1939f32cd0430a39536d79fd6266465244a0dd9a634"
+      "sha256": "08bb49f6b0679bc8cabb0609551d42d29a6b999943c640a569d83ee56c062ebd"
     },
     {
       "file": "scripts/patches/blackhole-kazoo5-integration.patch",

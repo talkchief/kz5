@@ -1703,6 +1703,7 @@ ensure_kazoo_sources() {
         die 'ACDC is not declared in make/apps.mk; use the integrated project revision'
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-jwt-malformed-input.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-entitlements-master-ancestry.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-media-reseller-language.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-config-startup-redaction.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-dataplan-log-redaction.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-couch-single-delete-result.patch"
