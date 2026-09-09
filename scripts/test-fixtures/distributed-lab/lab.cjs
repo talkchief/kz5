@@ -343,8 +343,9 @@ function verifyRole(role,reboot=false,drained=false) {
     assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],role);
     if(reboot) {
         if(drained) {
-            assert(!SETTINGS.cold,'Drained reboot belongs to the full original lab');
-            for(const dependency of Object.keys(UNITS)) {
+            if(SETTINGS.cold)assert.equal(role,'kazoo-apps','Cold reboot covers only the fresh apps bootstrap fixture');
+            const dependencies=SETTINGS.cold?['couchdb','rabbitmq','kazoo-apps']:Object.keys(UNITS);
+            for(const dependency of dependencies) {
                 const entry=s.roles[dependency];assert.equal(entry?.phase,'installed-service-verified');
                 const live=json(['inspect',entry.id])[0];
                 assert.equal(live.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
@@ -352,9 +353,17 @@ function verifyRole(role,reboot=false,drained=false) {
                 assert.equal(live.State.Running,true);
                 assert.equal(live.NetworkSettings.Networks[NETWORK].IPAddress,entry.ip);
             }
-            const channels=JSON.parse(podman(['exec',s.roles.freeswitch.id,
-                '/usr/local/freeswitch/bin/fs_cli','-x','show channels as json']));
-            assert.equal(channels.row_count,0,'Refusing a lab guest reboot with active media');
+            if(SETTINGS.cold) {
+                assert.deepEqual(Object.keys(s.roles).sort(),dependencies.slice().sort());
+                assert(s.coldBootstrapBaseline,'Cold fixture must have a retained empty-data baseline');
+                // This fixed scenario has no media node, endpoints, queues,
+                // test calls or external service routes; only normal bootstrap.
+            } else {
+                const channels=JSON.parse(podman(['exec',s.roles.freeswitch.id,
+                    '/usr/local/freeswitch/bin/fs_cli','-x','show channels as json']));
+                assert.equal(channels.row_count,0,'Refusing a lab guest reboot with active media');
+            }
+            requirePersistentPivot(role,c.Config.CreateCommand);
             r.drainedRebootAdmission={time:new Date().toISOString(),mediaChannels:0};saveState(s);
         } else {
             assert(['couchdb','rabbitmq','haproxy'].includes(role),'Reboot acceptance limited to isolated data tier');
@@ -402,7 +411,12 @@ function assertFreshDatabases(databases) {
     assert(databases.every(name=>['_users','_replicator','_global_changes'].includes(name)),
         'Cold bootstrap requires a fresh CouchDB with no Kazoo databases');
 }
-module.exports={overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases};
+function requirePersistentPivot(role,argv) {
+    if(['kazoo-apps','ecallmgr'].includes(role))
+        assert(Array.isArray(argv)&&argv.includes('net.ipv4.ip_local_reserved_ports=34512-34513'),
+            'Legacy guest lacks persistent Pivot ports; refuse before stopping the working role');
+}
+module.exports={overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases,requirePersistentPivot};
 if(require.main===module) {
 try {
     assert.equal(process.getuid(),0);assert(Object.values(os.networkInterfaces()).flat().some(n=>n.address==='10.1.0.44'),'Only development44 allowed');

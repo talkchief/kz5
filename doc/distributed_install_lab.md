@@ -125,6 +125,11 @@ the non-host network namespace, reserves the ports without changing the host,
 restarts the exact prerequisite and starts/verifies the role. It records a
 restoration, **not** an automatic boot pass. Do not weaken production readiness
 or change host/container-wide privilege to make this legacy fixture pass.
+Future apps/eCallMgr guest reboot admission now checks the recorded persistent
+creation flag before stopping the working role. The fresh cold three-role
+scenario also permits `--cold-bootstrap --drained-reboot-role kazoo-apps` after
+successful normal installation; it has no media role or calls. This tests the
+current creation path instead of pretending a temporary repair was persistent.
 
 ## Fresh bootstrap campaign
 
