@@ -20,6 +20,13 @@ main(["--self-test"]) ->
           {stage, confirming}, {executed, false}, {answered, true}, {destroyed, true}]),
     io:put_chars("PASS exact worker target and nine refusals; no cookie or connection\n");
 main(["--kill-fixture-worker", Ticket0, Call0]) ->
+    run(kill, Ticket0, Call0);
+main(["--inspect-fixture-worker", Ticket0, Call0]) ->
+    run(inspect, Ticket0, Call0);
+main(_) -> io:put_chars("Use --self-test or explicit fixture-worker mode CALLBACK_ID CALL_ID\n"), halt(2).
+
+run(Operation, Ticket0, Call0) ->
+    put(stage, local_scope),
     try
         true = os:getenv("USER") =:= "root",
         {ok, Ifs} = inet:getifaddrs(),
@@ -36,13 +43,16 @@ main(["--kill-fixture-worker", Ticket0, Call0]) ->
         ok = application:set_env(kernel, inet_dist_use_interface, {127,0,0,1}),
         {ok,_} = net_kernel:start([list_to_atom("callback_loss_" ++ os:getpid() ++ "@" ++ Host), shortnames]),
         true = erlang:set_cookie(node(), binary_to_atom(Cookie, utf8)),
-        lists:foreach(fun(M) -> record_layout(Node, M) end,
+        put(stage, record_layout),
+        lists:foreach(fun(M) -> put(layout_module,M), record_layout(Node, M) end,
                       [acdc_queue_fsm, gen_listener, acdc_callback_caller]),
+        put(stage, queue_lookup),
         Sup = rpc(Node, acdc_queues_sup, find_queue_supervisor, [?ACCOUNT, ?QUEUE]),
         true = is_pid(Sup),
         WorkersSup = rpc(Node, acdc_queue_sup, workers_sup, [Sup]),
         Workers = rpc(Node, acdc_queue_workers_sup, workers, [WorkersSup]),
         true = is_list(Workers) andalso length(Workers) =< 100,
+        put(stage, coordinator_lookup),
         Matches = lists:filtermap(fun(WorkerSup) ->
             Fsm = rpc(Node, acdc_queue_worker_sup, fsm, [WorkerSup]),
             case coordinator(Node, Fsm, Ticket, Call) of
@@ -51,21 +61,28 @@ main(["--kill-fixture-worker", Ticket0, Call0]) ->
             end
         end, Workers),
         [{Fsm, Worker}] = Matches,
+        put(stage, worker_identity),
         true = node(Worker) =:= Node andalso node(Fsm) =:= Node,
         Listener = record_map(gen_listener, rpc(Node, sys, get_state, [Worker, 2000])),
         acdc_callback_caller = maps:get(module, Listener),
         State = record_map(acdc_callback_caller, maps:get(module_state, Listener)),
         ok = target(State, Fsm, Ticket, Call),
+        put(stage, coordinator_recheck),
         {ok, Worker} = coordinator(Node, Fsm, Ticket, Call),
-        Ref = erlang:monitor(process, Worker),
-        true = rpc(Node, erlang, exit, [Worker, kill]),
-        receive {'DOWN',Ref,process,Worker,killed} -> ok after 3000 -> error(no_death_proof) end,
-        io:format("{\"worker_loss\":true,\"callback_id\":\"~s\",\"caller_call_id\":\"~s\",\"epoch_ms\":~B}~n",
-                  [Ticket, Call, erlang:system_time(millisecond)]),
+        case Operation of
+            inspect -> io:put_chars("PASS exact active fixture worker located; no mutation\n");
+            kill ->
+                put(stage, kill_boundary),
+                Ref = erlang:monitor(process, Worker),
+                true = rpc(Node, erlang, exit, [Worker, kill]),
+                receive {'DOWN',Ref,process,Worker,killed} -> ok after 3000 -> error(no_death_proof) end,
+                io:format("{\"worker_loss\":true,\"callback_id\":\"~s\",\"caller_call_id\":\"~s\",\"epoch_ms\":~B}~n",
+                          [Ticket, Call, erlang:system_time(millisecond)])
+        end,
         net_kernel:stop()
-    catch _:_ -> io:put_chars("ERROR scoped worker loss refused or unverified; do not repeat blindly\n"), halt(1)
-    end;
-main(_) -> io:put_chars("Use --self-test or --kill-fixture-worker CALLBACK_ID CALL_ID\n"), halt(2).
+    catch _:_ -> io:format("ERROR fixture worker stage=~p layout_module=~p; refused or unverified; do not repeat blindly~n",
+                          [get(stage),get(layout_module)]), halt(1)
+    end.
 
 rpc(Node, M, F, Args) -> rpc:call(Node, M, F, Args, 3000).
 
