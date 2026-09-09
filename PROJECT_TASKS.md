@@ -7,6 +7,18 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Cross-node JWT signing-secret revocation P0 — SOURCE FIXED, native retest pending:**
+  receipt `/var/lib/kazoo5-install-lab/cluster-auth-1788973933046.json` proved
+  primary HTTP401/WS1008, but peer HTTP200 and a post-revocation event leak.
+  No broker partition was needed to reproduce this stale identity-cache bug.
+  Required root patch `kazoo-identity-authoritative-read.patch` replaces the
+  Kazoo signing-secret cache read with an authoritative datastore read; errors
+  fail closed without cached fallback. Six actual-module regressions pass for
+  user/device/account revocation and datastore errors. Both lab nodes must be
+  rebuilt and healthy/partition acceptance must pass before closing this P0.
+  This adds a datastore read per identity validation, including outbound event
+  validation; it is not a claim of free caching or unlimited throughput.
+
 - **Cross-node API/revocation acceptance — preparing second isolated apps node:**
   new `--apps-peer create|install|collect` lab operation shares only the original
   lab's CouchDB/RabbitMQ. A private paused snapshot reuses build files, not a
@@ -19,8 +31,11 @@ work postponed; do not generate voices at runtime or during deployment.
   inactive before admission. Peer install1 exposed metadata-timer start-limit
   exhaustion after repeated package helper calls; its failure is retained.
   The full installer now holds one metadata pause across nested package steps
-  and restores it once. Nine actual coordination tests, host-lock regression
-  and the standard installer suite pass; normal peer retry is next.
+  and restores it once. Ten actual coordination tests, host-lock regression
+  and the standard installer suite pass. Normal peer retry2 passed on source
+  `9764bc2`; `apps-peer-install-2.log` retained, metadata timer active/enabled
+  with Result=success. The peer remains a reused-build install, not clean-install
+  evidence.
   Cross-node revocation and peer-only broker partition tests are prepared,
   including exact fixture-user CAS and an independent network-restoration timer.
   Cross-node acceptance is not yet passed.

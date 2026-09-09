@@ -1,0 +1,31 @@
+diff --git a/kazoo_auth/src/kz_auth_identity.erl b/kazoo_auth/src/kz_auth_identity.erl
+--- a/kazoo_auth/src/kz_auth_identity.erl
++++ b/kazoo_auth/src/kz_auth_identity.erl
+@@ -144,11 +144,17 @@ get_identity_secret(#{auth_provider := #{name := <<"kazoo">>}
+                      ,auth_db := Db
+                      ,auth_id := Key
+                      }=Token) ->
+-    case kz_datamgr:open_cache_doc(Db, Key) of
++    %% Signing-secret revocation must not depend on AMQP cache invalidation.
++    %% This read is also used by HTTP and outbound WebSocket authentication.
++    %% Never fall back to a cached identity if the datastore is unavailable.
++    case kz_datamgr:open_doc(Db, Key) of
+         {'ok', JObj} -> check_kazoo_secret(Token#{user_doc => JObj, user_map => kz_json:to_map(JObj)});
+         {'error', 'not_found'} ->
+             lager:debug("kazoo identity secret not found for ~s/~s", [Db, Key]),
+-            {'error', {500, 'invalid_identity_provider'}}
++            {'error', {500, 'invalid_identity_provider'}};
++        {'error', _} ->
++            lager:warning("unable to read authoritative kazoo identity"),
++            {'error', {500, 'datastore_fault'}}
+     end;
+ 
+ get_identity_secret(#{options := #{force_profile_update := 'true'}}=Token) ->
+@@ -403,6 +409,6 @@ verify_identity_signature(Token, ExpectedSignature, ExpectedSignature) ->
+     Token#{identify_verified => 'true'};
+ verify_identity_signature(Token, _IdentitySignature, _ExpectedSignature) ->
+-    lager:info("provided identity signature (~s) did not match the expected signature", [_IdentitySignature]),
++    lager:info("provided identity signature did not match the expected signature"),
+     Token#{identify_verified => 'false'
+           ,identity_error => 'invalid_identity_signature'
+           }.

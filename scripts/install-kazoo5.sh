@@ -1754,6 +1754,7 @@ ensure_kazoo_sources() {
     grep -Eq '^DEPS[[:space:]]*\?=[[:space:]]*acdc' "${KAZOO_ROOT}/make/apps.mk" || \
         die 'ACDC is not declared in make/apps.mk; use the integrated project revision'
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-jwt-malformed-input.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-identity-authoritative-read.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-entitlements-master-ancestry.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-media-reseller-language.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-config-startup-redaction.patch"

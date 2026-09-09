@@ -60,4 +60,9 @@ with_dnf_guard batch >/dev/null 2>&1
 [[ $(grep -c '^stop dnf-makecache.service$' "$trace") == 1 ]]
 [[ $(grep -c '^start dnf-makecache.timer$' "$trace") == 1 ]]
 [[ $(grep -c '^dnf ' "$trace") == 10 ]]
-echo 'PASS 9 actual DNF coordination cases including nested package batches; no packages, timers or services touched'
+reset_case
+install_requested() { KAZOO_MASTER_ACCOUNT_REALM=resolved.fixture.invalid; }
+save_deployment_config() { [[ $KAZOO_MASTER_ACCOUNT_REALM == resolved.fixture.invalid ]] || return 99; echo persisted >> "$trace"; }
+with_dnf_guard install_and_persist_requested >/dev/null 2>&1
+[[ $(grep -c '^persisted$' "$trace") == 1 ]]
+echo 'PASS 10 actual DNF coordination cases including nested batches and resolved-config persistence; no packages, timers or services touched'
