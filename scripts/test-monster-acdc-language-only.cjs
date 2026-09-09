@@ -25,7 +25,9 @@ const geminiMedia = [...voiceMap.matchAll(/\{<<"en-us">>,<<"([^"]+)">>,<<"([^"]+
     .map(m => ({id: 'en-us/' + m[2], name: m[1], language: 'en-us', has_attachments: true,
         prompt_id: m[2], canonical_prompt_id: m[1], source_type: 'kazoo5_acdc_gemini_voice_installer',
         source_map_sha256: voiceMapHash, sha256: m[3], import_metadata_verified: true}));
-assert.equal(geminiMedia.length, 29, 'English fixture must match all fixed immutable assets');
+// The focused inheritance mode supplies a controlled readiness catalog and
+// makes no claim about this older full-suite media fixture's asset count.
+if (!inheritanceOnly) assert.equal(geminiMedia.length, 29, 'English fixture must match all fixed immutable assets');
 const schema = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'applications/crossbar/priv/couchdb/schemas/queues.json'), 'utf8'));
 const requiredMedia = schema.properties.announcements.properties.media.required;
 assert.deepEqual(requiredMedia.slice().sort(), keys.slice().sort(), 'Test must cover every schema-required announcement prompt');
