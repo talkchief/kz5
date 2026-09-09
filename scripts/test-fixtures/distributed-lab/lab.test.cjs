@@ -30,6 +30,14 @@ for(const role of ROLES.slice(0,7)) {
 assert.throws(()=>configFor('push-bridge',testSecrets));
 assert.throws(()=>configFor('unknown',testSecrets));
 const cold=settingsFor(true),normal=settingsFor(false);
+const final=settingsFor(true,true);
+assert.throws(()=>settingsFor(false,true));
+for(const field of ['dir','owner','network','prefix','name','realm']) {
+    assert.notEqual(final[field],normal[field]);assert.notEqual(final[field],cold[field]);
+}
+assert.equal(overlapsSubnet('172.30.251.0/24',final.prefix),true);
+assert.equal(overlapsSubnet('172.30.252.0/24',final.prefix),false);
+assert.equal(configFor('kazoo-apps',testSecrets,final).KAZOO_COUCHDB_HOST,'172.30.251.11');
 for(const field of ['dir','owner','network','prefix','name','realm'])assert.notEqual(cold[field],normal[field]);
 assert.throws(()=>settingsFor('anything'));
 assert.equal(overlapsSubnet('172.30.253.0/24',cold.prefix),false);

@@ -4,14 +4,18 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const cp=require('node:child_process'),assert=require('node:assert/strict'),os=require('node:os');
 const ROOT=path.resolve(__dirname,'../../..');
-function settingsFor(cold=false) {
+function settingsFor(cold=false,final=false) {
     assert.equal(typeof cold,'boolean');
+    assert.equal(typeof final,'boolean');assert(!final||cold);
+    if(final)return {cold,dir:'/var/lib/kazoo5-cold-bootstrap-final',owner:'distributed-install-v1-cold-final',
+        network:'kz5-cold-final',prefix:'172.30.251.',name:'kz5-final-',realm:'cold-final-stage.invalid'};
     return cold?{cold,dir:'/var/lib/kazoo5-cold-bootstrap-lab',owner:'distributed-install-v1-cold',
         network:'kz5-cold-stage',prefix:'172.30.252.',name:'kz5-cold-',realm:'cold-installer-stage.invalid'}:
         {cold,dir:'/var/lib/kazoo5-install-lab',owner:'distributed-install-v1',
             network:'kz5-install-stage',prefix:'172.30.253.',name:'kz5-stage-',realm:'installer-stage.invalid'};
 }
-const SETTINGS=settingsFor(process.argv[2]==='--cold-bootstrap');
+const SETTINGS=settingsFor(['--cold-bootstrap','--cold-bootstrap-final'].includes(process.argv[2]),
+    process.argv[2]==='--cold-bootstrap-final');
 const {dir:DIR,owner:OWNER,network:NETWORK,prefix:PREFIX}=SETTINGS,SUBNET=PREFIX+'0/24';
 const ROLES=['couchdb','rabbitmq','haproxy','kazoo-apps','freeswitch','ecallmgr','kamailio','monster-ui','push-bridge'];
 const UNITS={couchdb:'couchdb',rabbitmq:'rabbitmq-server',haproxy:'haproxy','kazoo-apps':'kazoo-apps',
@@ -44,7 +48,7 @@ function overlapsSubnet(destination,prefix=PREFIX) {
     assert(/^\d+\.\d+\.\d+\.\d+$/.test(ip)&&ip.split('.').every(v=>Number(v)<=255));
     assert(Number.isInteger(mask)&&mask>=0&&mask<=32);
     const num=s=>s.split('.').reduce((n,v)=>(n*256+Number(v))>>>0,0);
-    assert(['172.30.253.','172.30.252.'].includes(prefix));
+    assert(['172.30.253.','172.30.252.','172.30.251.'].includes(prefix));
     const start=num(prefix+'0'),size=2**(32-mask),low=Math.floor(num(ip)/size)*size;
     return !(start+255<low||start>low+size-1);
 }

@@ -157,3 +157,13 @@ now creates/authenticates its own read-only monitor before copying app inputs.
 Every pre-success apps admission requires an empty Kazoo database inventory;
 original and subsequent admission receipts are retained. No diagnostic account
 creation is allowed. Native cold account bootstrap result is pending.
+
+The original cold run subsequently exposed the SUP packaging defect documented
+in `sup_archive_bootstrap.md`. Its account was created successfully, but the CLI
+could not discover it. After fixing/rebuilding, use `--cold-bootstrap-final`
+instead of `--cold-bootstrap` for one more genuinely empty end-to-end run. This
+fixed additional profile has separate state `/var/lib/kazoo5-cold-bootstrap-final`,
+network `172.30.251.0/24`, names `kz5-final-*`, fresh random secrets and realm
+`cold-final-stage.invalid`; all admission, ownership and no-takeover gates apply.
+It does not delete or reuse either earlier lab's data. First-install result is
+pending until its normal apps attempt1 and terminal service validation pass.

@@ -7,6 +7,18 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Fresh SUP packaging P0 — source fixed, native rebuild running:** the empty
+  fixture's first account creation succeeded, but discovery failed because the
+  freshly packaged SUP omitted `props.beam` (`undefined function props:get_value/2`,
+  exit127). Exactly one account and its configured master ID exist; no duplicate
+  was created. Required build patch `5e6f87a` serializes archive staging/cleanup
+  and makes embedded helpers explicit prerequisites. Installer now verifies
+  archive modules without distribution before bootstrap. Old native archive
+  fails the new gate; working archive and isolated Makefile regressions pass.
+  Cold attempt3 is running with guarded existing-master reuse. See
+  `doc/sup_archive_bootstrap.md`. A separate final empty fixture is being
+  prepared for a complete first-attempt run; retries will not be called fresh
+  first-install passes.
 - **Cold first-install verification — in progress:** a separate three-role
   empty-data lab is running to close the bootstrap evidence gap. New
   network/state/secrets/realm; original lab and development data preserved.
