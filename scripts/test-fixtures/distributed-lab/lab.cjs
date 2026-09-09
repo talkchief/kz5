@@ -130,7 +130,7 @@ function create(role) {
 function status() {
     const s=readState();if(s.network)ownedNetwork(s);
     console.log(JSON.stringify({owner:s.owner,phase:s.phase,source:s.source,base_digest:s.base_digest,
-        coldBootstrapBaseline:s.coldBootstrapBaseline,roles:s.roles}));
+        coldBootstrapBaseline:s.coldBootstrapBaseline,coldBootstrapAdmissions:s.coldBootstrapAdmissions,roles:s.roles}));
 }
 function hardenContainer(id) {
     podman(['cp',__dirname+'/kazoo-stage-isolation.service',id+':/etc/systemd/system/kazoo-stage-isolation.service']);
@@ -160,6 +160,15 @@ function configFor(role,secrets,settings=SETTINGS) {
 }
 function installRole(role,detached=false) {
     assert(Object.hasOwn(UNITS,role),'Role provisioning not implemented');
+    if(SETTINGS.cold&&role==='kazoo-apps') {
+        const before=readState();ownedNetwork(before);
+        for(const dependency of ['couchdb','rabbitmq'])
+            assert.equal(before.roles[dependency]?.phase,'installed-service-verified');
+        assert(!before.roles[role]?.installUnit,'Collect the previous installer before changing inputs');
+        // Normal apps admission requires a read-only management identity. Set
+        // up this lab-owned prerequisite before copying any app configuration.
+        if(!before.monitorProvisioned)provisionMonitor();
+    }
     const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r,'Create role first');
     const c=json(['inspect',r.id])[0];
     assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
@@ -199,15 +208,16 @@ function installRole(role,detached=false) {
         }
     }
     const attempt=(r.attempts||0)+1,log=DIR+'/'+role+'-install-'+attempt+'.log';
-    if(SETTINGS.cold&&role==='kazoo-apps'&&attempt===1) {
+    if(SETTINGS.cold&&role==='kazoo-apps'&&r.phase!=='installed-service-verified') {
         for(const dependency of ['couchdb','rabbitmq'])
             assert.equal(s.roles[dependency]?.phase,'installed-service-verified');
         const couch=s.roles.couchdb;
         const config='url = "http://'+couch.ip+':5984/_all_dbs"\nuser = "admin:'+s.secrets.couch+'"\n';
         const databases=JSON.parse(podman(['exec','-i',couch.id,'curl','--fail','--silent','--show-error','--config','-'],{input:config}));
         assertFreshDatabases(databases);
-        assert(!s.coldBootstrapBaseline,'Refusing to replace the original cold baseline');
-        s.coldBootstrapBaseline={time:new Date().toISOString(),databases,source:r.source||s.source,attempt};saveState(s);
+        const admission={time:new Date().toISOString(),databases,source:r.source||s.source,attempt};
+        if(!s.coldBootstrapBaseline)s.coldBootstrapBaseline=admission;
+        s.coldBootstrapAdmissions=[...(s.coldBootstrapAdmissions||[]),admission];saveState(s);
     }
     if(detached) {
         assert(!r.installUnit,'Collect the previous detached installer first');

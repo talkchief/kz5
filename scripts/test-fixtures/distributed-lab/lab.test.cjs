@@ -43,6 +43,8 @@ for(const role of ['couchdb','rabbitmq','kazoo-apps']) {
     assert(!JSON.stringify(c).includes('172.30.253.'));
 }
 assertFreshDatabases([]);assertFreshDatabases(['_users','_replicator']);
+assert(src.indexOf('if(!before.monitorProvisioned)provisionMonitor();')<src.indexOf('const cfg=Object.entries(configFor'),
+    'Cold apps must receive monitoring credentials before initial configuration is copied');
 for(const dbs of [null,{},['_users','accounts'],['system_config'],['account%2Ftest']])
     assert.throws(()=>assertFreshDatabases(dbs));
 console.log('PASS distributed-lab subnet, role, configuration, namespace and cold-bootstrap isolation guards; no containers or credentials created');

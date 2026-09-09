@@ -121,4 +121,10 @@ system databases (or be empty); the inventory/time/source receipt is retained.
 No manual account creation is part of this scenario. An installer retry must
 never be relabeled a first-attempt success. Existing labs/data are not deleted.
 
-Status: scenario guards tested offline; native first-attempt result pending.
+Cold CouchDB and RabbitMQ attempt1 both passed. Apps attempt1 refused the missing
+lab management-monitor credentials before compilation/account bootstrap. This
+failed preflight is retained, not called a successful first installation. The lab
+now creates/authenticates its own read-only monitor before copying app inputs.
+Every pre-success apps admission requires an empty Kazoo database inventory;
+original and subsequent admission receipts are retained. No diagnostic account
+creation is allowed. Native cold account bootstrap result is pending.

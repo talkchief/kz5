@@ -31,6 +31,7 @@ STATE_FILE=$DEFAULT_STATE_FILE
 STATE_HELPER=$DEFAULT_HELPER
 STAGES=1,5,10,20,30
 QUEUED_EXCESS=5
+SOAK_SECONDS=$CAPACITY_SOAK_SECONDS
 MODE=all
 LIVE=false
 INSTALL_DEPS=true
@@ -63,6 +64,7 @@ Options:
   --state-helper FILE  Acceptance provisioner/status helper
   --stages LIST        Increasing answered concurrency, maximum 30
   --queued-excess N    Extra callers held while 30 agents are busy (default 5)
+  --soak-seconds N     Verified hold, 180..1800s; >180 requires --stress --stages 30 --queued-excess 0
   --no-install-deps    Do not build SIPp when v3.7.7 is absent
   --run-root DIR       Protected results directory (default /var/log/kazoo-acceptance)
   --local-ip ADDRESS   SIPp source/media address (auto-selects 127.0.0.20 for local proxy)
@@ -92,6 +94,7 @@ parse_args() {
             --state-helper) (($# >= 2)) || die '--state-helper requires a file'; STATE_HELPER=$2; shift ;;
             --stages) (($# >= 2)) || die '--stages requires a list'; STAGES=$2; shift ;;
             --queued-excess) (($# >= 2)) || die '--queued-excess requires a number'; QUEUED_EXCESS=$2; shift ;;
+            --soak-seconds) (($# >= 2)) || die '--soak-seconds requires a number'; SOAK_SECONDS=$2; shift ;;
             --no-install-deps) INSTALL_DEPS=false ;;
             --run-root) (($# >= 2)) || die '--run-root requires a directory'; RUN_ROOT=$2; shift ;;
             --local-ip) (($# >= 2)) || die '--local-ip requires an address'; LOCAL_IP_OVERRIDE=$2; shift ;;
@@ -185,6 +188,22 @@ validate_stages() {
     done
     if [[ ! $QUEUED_EXCESS =~ ^[0-9]+$ ]] || ((QUEUED_EXCESS < 0 || QUEUED_EXCESS > 10)); then
         die 'Queued excess must be between 0 and 10'
+    fi
+    validate_soak
+}
+
+validate_soak() {
+    [[ $SOAK_SECONDS =~ ^[1-9][0-9]{2,3}$ ]] && ((SOAK_SECONDS >= 180 && SOAK_SECONDS <= 1800)) ||
+        die 'Soak seconds must be an integer in 180..1800'
+    if ((SOAK_SECONDS > CAPACITY_SOAK_SECONDS)); then
+        [[ $MODE == stress && $STAGES == 30 && $QUEUED_EXCESS == 0 ]] ||
+            die 'Extended soak requires --stress --stages 30 --queued-excess 0; do not exceed the queue wait budget'
+    fi
+}
+
+capacity_hold_ms() {
+    if ((SOAK_SECONDS == CAPACITY_SOAK_SECONDS)); then printf '%s\n' "$CAPACITY_HOLD_MS"
+    else printf '%s\n' "$(((SOAK_SECONDS + 120) * 1000))"
     fi
 }
 
@@ -502,6 +521,15 @@ best_effort_deregister_caller() {
 start_agent_uas() {
     local label=$1 count=$2 excess=${3:-0}
     local index calls port media stats output pid
+    local scenario=$SCENARIO_DIR/agent-answer.xml agent_timeout=600
+    if ((SOAK_SECONDS > CAPACITY_SOAK_SECONDS)); then
+        scenario=$RUN_DIR/agent-answer-soak.xml
+        agent_timeout=$(( $(capacity_hold_ms) / 1000 + 180 ))
+        [[ $(grep -Fc '<recv request="BYE" timeout="420000"/>' "$SCENARIO_DIR/agent-answer.xml") == 1 ]] ||
+            die 'Unexpected agent scenario timeout; extended soak refused'
+        sed "s/timeout=\"420000\"/timeout=\"$((agent_timeout * 1000))\"/" \
+            "$SCENARIO_DIR/agent-answer.xml" > "$scenario"
+    fi
     AGENT_PIDS=()
     for ((index=1; index<=count; index++)); do
         calls=1; ((excess > 0)) && calls=2
@@ -512,10 +540,10 @@ start_agent_uas() {
         media=$((AGENT_MEDIA_MIN + (index - 1) * 4))
         stats=$RUN_DIR/$label-agent-$index-stats.csv
         output=$RUN_DIR/$label-agent-$index.log
-        sipp -ci 127.0.0.1 -sf "$SCENARIO_DIR/agent-answer.xml" -i "$LOCAL_IP" -p "$port" \
+        sipp -ci 127.0.0.1 -sf "$scenario" -i "$LOCAL_IP" -p "$port" \
             -mi "$LOCAL_IP" -min_rtp_port "$media" -max_rtp_port "$((media + 1))" \
             -rtp_echo -m "$calls" -l 1 -r 1 -rp 1000 -nostdin -aa \
-            -timeout 600s -timeout_error -trace_stat -fd 1s -stf "$stats" >"$output" 2>&1 &
+            -timeout "${agent_timeout}s" -timeout_error -trace_stat -fd 1s -stf "$stats" >"$output" 2>&1 &
         pid=$!
         AGENT_PIDS+=("$pid")
         ACTIVE_PIDS+=("$pid")
@@ -531,6 +559,8 @@ start_callers() {
     local main_count=${7:-$count} excess_hold_ms=${8:-$hold_ms} excess_delay_ms=${9:-0}
     local csv=$RUN_DIR/$label-caller-input.csv stats=$RUN_DIR/$label-caller-stats.csv output=$RUN_DIR/$label-caller.log
     local timeout_seconds=$(((excess_delay_ms + excess_hold_ms) / 1000 + 120)) rate=$count
+    # Extended no-queue soak must not inherit the shorter excess-call timeout.
+    if ((hold_ms / 1000 + 120 > timeout_seconds)); then timeout_seconds=$((hold_ms / 1000 + 120)); fi
     # Capacity means concurrent established calls, not a burst-CPS test. Pace
     # setup so the final 35 arrivals overlap for the full soak without turning
     # this 2-vCPU acceptance host's dialplan-fetch timeout into the bottleneck.
@@ -859,10 +889,12 @@ run_stress_stage() {
     agent_status logout 1 "$STATUS_AGENT_MAX"
     agent_status login 1 "$count"
     cores_before=$(core_count); since=$(date +%s); capture_log_baseline "$label"; start_monitor "$label"; start_rtp_capture "$label"
-    register_agents "$label" "$count"
+    local registration_seconds=600
+    if ((SOAK_SECONDS > CAPACITY_SOAK_SECONDS)); then registration_seconds=$(( $(capacity_hold_ms) / 1000 + 180 )); fi
+    register_agents "$label" "$count" "$registration_seconds"
     start_agent_uas "$label" "$count" "$excess"
-    register_caller "$label" "$CALLER_PORT"
-    if ((count == MAX_ANSWERED_CALLS)); then hold_ms=$CAPACITY_HOLD_MS; else hold_ms=$STAGE_HOLD_MS; fi
+    register_caller "$label" "$CALLER_PORT" "$registration_seconds"
+    if ((count == MAX_ANSWERED_CALLS)); then hold_ms=$(capacity_hold_ms); else hold_ms=$STAGE_HOLD_MS; fi
     # All calls share the caller's registered source tuple. This avoids a
     # second contact for the same AOR replacing the first and invalidating its
     # registered-source authorization at Kamailio.
@@ -877,9 +909,9 @@ run_stress_stage() {
         "$((60 + (excess > 0 ? (QUEUED_EXCESS_DELAY_MS + 999) / 1000 : 0)))" ||
         die "$label did not simultaneously hold $expected caller legs and $count answered agent legs"
     if ((count == MAX_ANSWERED_CALLS)); then
-        hold_concurrent_call_legs "$label" "$count" "$expected" "$CAPACITY_SOAK_SECONDS" ||
-            die "$label did not sustain $expected caller legs and $count answered agent legs for ${CAPACITY_SOAK_SECONDS}s"
-        verified_hold=$CAPACITY_SOAK_SECONDS
+        hold_concurrent_call_legs "$label" "$count" "$expected" "$SOAK_SECONDS" ||
+            die "$label did not sustain $expected caller legs and $count answered agent legs for ${SOAK_SECONDS}s"
+        verified_hold=$SOAK_SECONDS
     fi
     if ((excess > 0)); then
         # ACDC consumes member messages from RabbitMQ immediately and tracks

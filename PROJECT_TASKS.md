@@ -14,6 +14,11 @@ work postponed; do not generate voices at runtime or during deployment.
   Normal installer only, no diagnostic account creation. Result pending; see
   `doc/distributed_install_lab.md` for the reproducible entry point.
 - **Final focused handover:** fixes for requested points1/2/4/6 are committed in
+- **Extended30-minute call hold — prepared, native result pending:** bounded
+  `--soak-seconds 1800` mode retains the actual SIP/RTP/concurrency/recovery/log
+  gates and derives endpoint lifetime/timeouts. No queued excess or queue-policy
+  changes in extended mode. Details: `doc/acdc_extended_soak.md`.
+- **Final focused handover:** fixes for requested points1/2/4/6 are committed in
   kz5 and deployed on main44. Final30-answered/5-queued capacity, broker recovery,
   callback edge cases and HTTP/WSS scope/revocation checks passed. All seven
   isolated backend roles now passed normal installer checks. All9 main services
