@@ -2,6 +2,25 @@
 -module(acdc_callback_caller_tests).
 -include_lib("eunit/include/eunit.hrl").
 
+originate_receipt_requires_execute_without_ready_conflict_test() ->
+    meck:new(acdc_callback_store, [non_strict, no_link]),
+    try
+        meck:expect(acdc_callback_store, advance, fun(Account, Queue, Id, Token, Action, Data) ->
+            ?assertEqual({<<"account">>, <<"queue">>, <<"callback">>, <<"token">>, originate_succeeded},
+                         {Account, Queue, Id, Token, Action}),
+            ?assertEqual([{<<"caller_call_id">>, <<"caller">>}, {<<"originate_uuid">>, <<"uuid">>}
+                          ,{<<"originate_msg_id">>, <<"request">>}], kz_json:to_proplist(Data)),
+            {ok, kz_json:new()}
+        end),
+        acdc_callback_caller:success_receipt_probe(false, undefined),
+        acdc_callback_caller:success_receipt_probe(true, conflicting_ready_response),
+        ?assertEqual(0, meck:num_calls(acdc_callback_store, advance, 6)),
+        acdc_callback_caller:success_receipt_probe(true, undefined),
+        ?assertEqual(1, meck:num_calls(acdc_callback_store, advance, 6)),
+        meck:expect(acdc_callback_store, advance, fun(_, _, _, _, _, _) -> {error, timeout} end),
+        ?assertEqual(ok, acdc_callback_caller:success_receipt_probe(true, cancelled))
+    after meck:unload(acdc_callback_store) end.
+
 -define(ACCOUNT, <<"11111111111111111111111111111111">>).
 -define(QUEUE, <<"callback-test-queue">>).
 -define(CALLBACK_ID,
@@ -9,6 +28,46 @@
 -define(ORIGINAL_CALL_ID, <<"22222222222222222222222222222222">>).
 -define(CALLER_CALL_ID, <<"33333333333333333333333333333333">>).
 -define(TOKEN, <<"44444444444444444444444444444444">>).
+
+slow_receipt_write_does_not_block_success_or_duplicate_writes_test_() ->
+    {timeout, 20, fun slow_receipt_write_does_not_block_success_or_duplicate_writes/0}.
+
+slow_receipt_write_does_not_block_success_or_duplicate_writes() ->
+    Parent = self(),
+    meck:new(acdc_callback_store, [non_strict, no_link]),
+    meck:new(kapps_config, [passthrough, no_link]),
+    meck:new(kapps_call_command, [passthrough, no_link]),
+    try
+        meck:expect(kapps_config, get_ne_binary, fun(_, _, Default) -> Default end),
+        meck:expect(kapps_config, get_binary, fun(_, _, Default) -> Default end),
+        meck:expect(kapps_config, get_ne_binaries, fun(_, _, Default) -> Default end),
+        meck:expect(kapps_call_command, set, fun(_, _, _) -> ok end),
+        meck:expect(acdc_callback_store, advance, fun(_, _, _, _, originate_succeeded, _) ->
+            Parent ! {receipt_writer, self()},
+            receive finish_receipt -> {ok, kz_json:new()} after 2000 -> error(blocked_writer) end
+        end),
+        Initial = acdc_callback_caller:success_response_state(),
+        Response = kz_json:from_list([{<<"Response-Message">>, <<"SUCCESS">>}
+                                     ,{<<"Call-ID">>, <<"caller">>}, {<<"Msg-ID">>, <<"msg">>}
+                                     ,{<<"Control-Queue">>, <<"control">>}
+                                     | kz_api:default_headers(<<"resource">>, <<"offnet_resp">>, <<"test">>, <<"1">>)]),
+        Stale = kz_json:set_value(<<"Msg-ID">>, <<"stale">>, Response),
+        ?assertEqual({noreply, Initial}, acdc_callback_caller:handle_cast({offnet_response, Stale}, Initial)),
+        ?assertEqual(0, meck:num_calls(acdc_callback_store, advance, 6)),
+        {Handler, HandlerRef} = spawn_monitor(fun() ->
+            Parent ! {success_handled, acdc_callback_caller:handle_cast({offnet_response, Response}, Initial)}
+        end),
+        Next = receive {success_handled, {noreply, State}} -> State after 1000 -> error(success_blocked) end,
+        receive {'DOWN', HandlerRef, process, Handler, normal} -> ok after 1000 -> error(handler_not_finished) end,
+        Writer = receive {receipt_writer, Pid} -> Pid after 1000 -> error(no_receipt_writer) end,
+        ?assert(erlang:is_process_alive(Writer)),
+        Ref = erlang:monitor(process, Writer),
+        {noreply, Duplicate} = acdc_callback_caller:handle_cast({offnet_response, Response}, Next),
+        _ = erlang:cancel_timer(maps:get(timer, acdc_callback_caller:confirmation_test_info(Duplicate))),
+        Writer ! finish_receipt,
+        receive {'DOWN', Ref, process, Writer, normal} -> ok after 1000 -> error(writer_not_finished) end,
+        ?assertEqual(1, meck:num_calls(acdc_callback_store, advance, 6))
+    after meck:unload(kapps_call_command), meck:unload(kapps_config), meck:unload(acdc_callback_store) end.
 
 confirmation_deadline_starts_after_correlated_prompt_test_() ->
     {timeout, 30, fun confirmation_deadline_starts_after_correlated_prompt/0}.

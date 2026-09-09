@@ -36,11 +36,13 @@ registration_allowlist_test() -> with_store(fun(_) ->
                                 ,{<<"dialstring">>, <<"unsafe">>}
                                 ,{<<"pvt_authority_id">>, <<"injected">>}
                                 ,{<<"pvt_authority_type">>, <<"resource">>}
-                                ,{<<"pvt_account_realm">>, <<"attacker.invalid">>}], registration()),
+                                ,{<<"pvt_account_realm">>, <<"attacker.invalid">>}
+                                ,{<<"pvt_originate_success">>, kz_json:from_list([{<<"version">>, 1}])}], registration()),
     {ok, Doc} = create(Extra),
     ?assertEqual(<<"registering">>, value(<<"status">>, Doc)),
     ?assertEqual(undefined, value(<<"pvt_lease">>, Doc)),
     ?assertEqual(undefined, value(<<"dialstring">>, Doc)),
+    ?assertEqual(undefined, value(<<"pvt_originate_success">>, Doc)),
     ?assertEqual(<<"callback-service-device">>, value(<<"pvt_authority_id">>, Doc)),
     ?assertEqual(<<"device">>, value(<<"pvt_authority_type">>, Doc)),
     ?assertEqual(<<"callback-test.invalid">>, value(<<"pvt_account_realm">>, Doc))
@@ -237,6 +239,76 @@ originate_handles_are_durable_and_immutable_test() -> with_store(fun(_) ->
     {ok, Found} = acdc_callback_store:find(?ACCOUNT, ?QUEUE, <<"original-caller-id">>),
     ?assertEqual(Id, kz_doc:id(Found))
 end).
+
+originate_success_receipt_is_durable_scoped_and_private_test() -> with_store(fun(Store) ->
+    Id = queued(), {ok, Doc} = claim(Id), Token = token(Doc),
+    {ok, _} = acdc_callback_store:bind_originate(?ACCOUNT, ?QUEUE, Id, Token, <<"uuid">>, <<"queue">>, <<"request">>),
+    Data = success_data(Doc),
+    ?assertEqual({error, reconciliation_required}, advance(Id, <<"old">>, originate_succeeded, Data)),
+    lists:foreach(fun(Key) ->
+        ?assertEqual({error, reconciliation_required},
+                     advance(Id, Token, originate_succeeded, kz_json:set_value(Key, <<"other">>, Data)))
+    end, [<<"caller_call_id">>, <<"originate_uuid">>, <<"originate_msg_id">>]),
+    {ok, Saved} = advance(Id, Token, originate_succeeded, Data),
+    ?assert(acdc_callback_store:originate_succeeded(Saved)),
+    ?assertEqual(<<"dialing">>, value(<<"status">>, Saved)),
+    ?assertEqual({ok, Saved}, advance(Id, Token, originate_succeeded, Data)),
+    ?assertEqual(undefined, value(<<"pvt_originate_success">>, acdc_callback_store:public(Saved))),
+    lists:foreach(fun({Key, Changed}) ->
+        ?assertNot(acdc_callback_store:originate_succeeded(kz_json:set_value(Key, Changed, Saved)))
+    end, [{<<"_id">>, <<"other">>}, {<<"pvt_account_id">>, ?OTHER_ACCOUNT}
+          ,{<<"queue_id">>, <<"other">>}, {<<"attempts">>, 2}
+          ,{<<"pvt_caller_call_id">>, <<"other">>}, {<<"pvt_originate_uuid">>, <<"other">>}
+          ,{<<"pvt_originate_msg_id">>, <<"other">>}]),
+    clock(Store, ?NOW + 60),
+    ?assertEqual({error, reconciliation_required}, advance(Id, Token, attempt_settled, cause())),
+    {ok, _} = cancel(Id),
+    {ok, CancelPending} = get_doc(Id),
+    ?assert(acdc_callback_store:originate_succeeded(CancelPending)),
+    ?assertEqual(<<"cancelling">>, value(<<"status">>, CancelPending))
+end).
+
+originate_success_receipt_can_arrive_after_expiry_but_not_next_attempt_test() -> with_store(fun(Store) ->
+    Id = queued(), {ok, Doc} = claim(Id), Token = token(Doc),
+    {ok, _} = acdc_callback_store:bind_originate(?ACCOUNT, ?QUEUE, Id, Token, <<"uuid">>, <<"queue">>, <<"request">>),
+    clock(Store, ?NOW + 31),
+    {ok, Saved} = advance(Id, Token, originate_succeeded, success_data(Doc)),
+    ?assert(acdc_callback_store:originate_succeeded(Saved)),
+    Proof = kz_json:set_values([{<<"caller_call_id">>, value(<<"pvt_caller_call_id">>, Doc)}
+                               ,{<<"originate_settled">>, true}, {<<"channels_down">>, true}], cause()),
+    {ok, Retry} = advance(Id, Token, attempt_settled, Proof),
+    ?assertEqual(undefined, value(<<"pvt_originate_success">>, Retry)),
+    clock(Store, value(<<"next_attempt_at">>, Retry)),
+    {ok, Next} = claim(Id),
+    ?assertNot(acdc_callback_store:originate_succeeded(Next)),
+    ?assertEqual({error, reconciliation_required}, advance(Id, Token, originate_succeeded, success_data(Doc)))
+end).
+
+originate_success_after_cancellation_is_evidence_not_completion_test() -> with_store(fun(Store) ->
+    Id = queued(), {ok, Doc} = claim(Id), Token = token(Doc),
+    {ok, _} = acdc_callback_store:bind_originate(?ACCOUNT, ?QUEUE, Id, Token, <<"uuid">>, <<"queue">>, <<"request">>),
+    {ok, _} = cancel(Id), clock(Store, ?NOW + 31),
+    {ok, Saved} = advance(Id, Token, originate_succeeded, success_data(Doc)),
+    ?assertEqual(<<"cancelling">>, value(<<"status">>, Saved)),
+    ?assert(acdc_callback_store:originate_succeeded(Saved)),
+    ?assertEqual({error, reconciliation_required}, advance(Id, Token, attempt_settled, cause()))
+end).
+
+originate_success_write_failure_never_creates_proof_test() -> with_store(fun(_) ->
+    Id = queued(), {ok, Doc} = claim(Id), Token = token(Doc),
+    ?assertEqual({error, reconciliation_required}, advance(Id, Token, originate_succeeded, success_data(Doc))),
+    {ok, _} = acdc_callback_store:bind_originate(?ACCOUNT, ?QUEUE, Id, Token, <<"uuid">>, <<"queue">>, <<"request">>),
+    lists:foreach(fun(Reason) ->
+        meck:expect(kz_datamgr, save_doc, fun(_, _) -> {error, Reason} end),
+        ?assertEqual({error, Reason}, advance(Id, Token, originate_succeeded, success_data(Doc))),
+        {ok, Fresh} = get_doc(Id),
+        ?assertNot(acdc_callback_store:originate_succeeded(Fresh))
+    end, [conflict, timeout])
+end).
+
+success_data(Doc) ->
+    kz_json:from_list([{<<"caller_call_id">>, value(<<"pvt_caller_call_id">>, Doc)}
+                      ,{<<"originate_uuid">>, <<"uuid">>}, {<<"originate_msg_id">>, <<"request">>}]).
 
 settled_cleanup_requires_exact_attempt_evidence_test() -> with_store(fun(Store) ->
     Id = queued(), {ok, Doc} = claim(Id), Token = token(Doc),

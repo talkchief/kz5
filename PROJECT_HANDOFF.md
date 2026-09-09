@@ -1,5 +1,14 @@
 # Kazoo 5 — start here / engineering handoff
 
+**September9: P0-06 durable originate receipt source fix; deployment pending.**
+The exact historical cancelling attempt still returns native unknown (6f4786)
+and is untouched. New callback SUCCESS events persist a private exact-attempt
+receipt without blocking speech. Recovery may use it after registry expiry,
+never instead of fresh channel-down/ownership evidence or over a timeout or
+conflicting native result. This does not retroactively resolve the old ticket.
+See `doc/callback_originate_receipt.md` for source, validation and deployment
+steps. Current work is restricted to this reported callback recovery gap.
+
 **September9: bridge watchdog replay + restrictive-umask installer FIXED / DEPLOYED.**
 Sourcebd083e5 fixes owner-watchdog exit1 (unsafe automatic replay after a hard
 stall) to78/manual recovery. Baseline2fail/19pass, candidate21deadline/watchdog

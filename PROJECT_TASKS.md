@@ -2,6 +2,19 @@
 
 ## Immediate operator follow-up — September9
 
+- **P0-06 durable originate receipt — SOURCE FIX / native deployment pending:**
+  exact native read6f4786 confirms the old retained cancelling ticket is unknown
+  in the current registry epoch. No forced settlement or document deletion.
+  Successful callback originates now persist a private, exact-attempt receipt
+  asynchronously without delaying speech; recovery uses it only after a
+  complete native collection reports no retained record. Fresh channel-down
+  and existing ownership/CAS checks remain mandatory. Old tickets without a
+  receipt remain open. Candidate27 store +18 recovery-I/O +9 caller tests pass;
+  13 cleanup +12 retry-harness groups and shell syntax also pass. Existing native
+  retry now requires the exact persisted receipt; native acceptance pending.
+  No unrelated campaigns. Details and next steps:
+  `doc/callback_originate_receipt.md`.
+
 - **BRIDGE-WATCHDOG-01 / INST-13 umask — FIXED / DEPLOYED / scoped PASS:** found a
   bypass of the existing uncertain-delivery no-replay policy: stalled owner
   watchdog exits1, which the installed `Restart=on-failure` restarts. Last

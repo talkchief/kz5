@@ -356,6 +356,15 @@ callback_evidence() {
            account_id:.pvt_account_id,queue_id,number,max_attempts,retry_delay,next_attempt_at,last_cause,
            caller_call_id:.pvt_caller_call_id,agent_call_id:.pvt_agent_call_id,
            selected_agents:.pvt_selected_agents,reconciliation_required,
+           originate_success_recorded:(.pvt_originate_success as $receipt |
+             $receipt.version==1 and ($receipt.observed_at|type)=="number" and $receipt.observed_at>0 and
+             $receipt.account_id==.pvt_account_id and $receipt.queue_id==.queue_id and
+             $receipt.callback_id==._id and $receipt.attempt==.attempts and .attempts>0 and
+             (.pvt_originate_uuid|type)=="string" and (.pvt_originate_uuid|length)>0 and
+             (.pvt_originate_msg_id|type)=="string" and (.pvt_originate_msg_id|length)>0 and
+             (.pvt_caller_call_id|type)=="string" and (.pvt_caller_call_id|length)>0 and
+             $receipt.caller_call_id==.pvt_caller_call_id and
+             $receipt.originate_uuid==.pvt_originate_uuid and $receipt.originate_msg_id==.pvt_originate_msg_id),
            internal_target:(.pvt_internal_target | if type=="object" then {number,flow_id,type,id} else null end)}] end' <<<"$response"
 }
 

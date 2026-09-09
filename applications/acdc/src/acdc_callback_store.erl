@@ -6,7 +6,7 @@
 
 -export([create/5, get/3, find/3, list/4, activate/3, claim/5
         ,bind_leg/6, bind_originate/7, bind_control/6, bind_registration/6, bind_selection/5
-        ,advance/6, renew/5, adopt/5, mark_reconciliation/5, cancel/3, expire/3, public/1
+        ,advance/6, originate_succeeded/1, renew/5, adopt/5, mark_reconciliation/5, cancel/3, expire/3, public/1
         ]).
 
 -include("acdc.hrl").
@@ -314,6 +314,18 @@ advance(AccountId, QueueId, Id, Token, Action, Data) ->
 %% persisted attempt and after its coordinator observed definitive originate
 %% settlement AND all participating channels down. Timeouts/absence alone are
 %% not that evidence. No HTTP adapter can invoke this operational action.
+transition_ownership(Doc, Token, 'originate_succeeded', Data, _Now) ->
+    case lists:member(status(Doc), ?ACTIVE ++ [<<"cancelling">>])
+        andalso Token =:= kz_json:get_ne_binary_value([<<"pvt_lease">>, <<"token">>], Doc)
+        andalso lists:all(fun({Input, Stored}) ->
+            valid_text(kz_json:get_value(Stored, Doc), 512)
+                andalso kz_json:get_value(Input, Data) =:= kz_json:get_value(Stored, Doc)
+        end, [{<<"caller_call_id">>, <<"pvt_caller_call_id">>}
+              ,{<<"originate_uuid">>, <<"pvt_originate_uuid">>}
+              ,{<<"originate_msg_id">>, <<"pvt_originate_msg_id">>}]) of
+        'true' -> 'ok';
+        'false' -> {'error', 'reconciliation_required'}
+    end;
 transition_ownership(Doc, Token, 'attempt_settled', Data, _Now) ->
     case lists:member(status(Doc), ?ACTIVE ++ [<<"cancelling">>])
         andalso Token =:= kz_json:get_ne_binary_value([<<"pvt_lease">>, <<"token">>], Doc)
@@ -327,6 +339,15 @@ transition_ownership(Doc, Token, 'attempt_settled', Data, _Now) ->
     end;
 transition_ownership(Doc, Token, _, _, Now) -> owns_lease(Doc, Token, Now).
 
+transition(Doc, 'originate_succeeded', _Data, Now) ->
+    case originate_succeeded(Doc) of
+        'true' -> {'unchanged', Doc};
+        'false' ->
+            Receipt = kz_json:set_value(<<"observed_at">>, Now, originate_identity(Doc)),
+            %% This records originate completion only, never channel teardown,
+            %% confirmation, a bridge or permission to redial.
+            changed(kz_json:set_value(<<"pvt_originate_success">>, Receipt, Doc), status(Doc), Now)
+    end;
 transition(Doc, 'attempt_settled', Data, Now) ->
     case status(Doc) of
         <<"cancelling">> ->
@@ -378,10 +399,35 @@ transition(Doc, 'attempt_ended', Data, Now) ->
                                      ,kz_json:delete_keys([<<"pvt_lease">>, <<"pvt_caller_call_id">>
                                                           ,<<"pvt_agent_call_id">>, <<"pvt_originate_uuid">>
                                                           ,<<"pvt_originate_queue">>, <<"pvt_caller_control_queue">>
-                                                          ,<<"pvt_selected_agents">>, <<"pvt_originate_msg_id">>], Doc)),
+                                                          ,<<"pvt_selected_agents">>, <<"pvt_originate_msg_id">>
+                                                          ,<<"pvt_originate_success">>], Doc)),
             changed(Next, NextState, Now)
     end;
 transition(_, _, _, _) -> {'error', 'invalid_transition'}.
+
+%% A receipt survives worker death and the native registry's retention window.
+%% Every identity component must still match; adoption can change the lease but
+%% cannot change this attempt. The private field is never accepted over HTTP.
+-spec originate_succeeded(kz_json:object()) -> boolean().
+originate_succeeded(Doc) ->
+    Receipt = kz_json:get_json_value(<<"pvt_originate_success">>, Doc, kz_json:new()),
+    Identity = originate_identity(Doc),
+    lists:member(status(Doc), ?ACTIVE ++ [<<"cancelling">>])
+        andalso kz_json:get_value(<<"pvt_type">>, Doc) =:= ?TYPE
+        andalso attempts(Doc) > 0
+        andalso kz_json:get_integer_value(<<"observed_at">>, Receipt, 0) > 0
+        andalso lists:all(fun({Key, Value}) ->
+            Value =/= 'undefined' andalso kz_json:get_value(Key, Receipt) =:= Value
+        end, kz_json:to_proplist(Identity)).
+
+-spec originate_identity(kz_json:object()) -> kz_json:object().
+originate_identity(Doc) ->
+    kz_json:from_list([{<<"version">>, 1}, {<<"account_id">>, kz_json:get_value(<<"pvt_account_id">>, Doc)}
+                      ,{<<"queue_id">>, kz_json:get_value(<<"queue_id">>, Doc)}
+                      ,{<<"callback_id">>, kz_doc:id(Doc)}, {<<"attempt">>, attempts(Doc)}
+                      ,{<<"caller_call_id">>, kz_json:get_value(<<"pvt_caller_call_id">>, Doc)}
+                      ,{<<"originate_uuid">>, kz_json:get_value(<<"pvt_originate_uuid">>, Doc)}
+                      ,{<<"originate_msg_id">>, kz_json:get_value(<<"pvt_originate_msg_id">>, Doc)}]).
 
 -spec renew(kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), kz_term:ne_binary(), pos_integer()) -> doc_result().
 renew(AccountId, QueueId, Id, Token, Seconds) ->

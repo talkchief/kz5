@@ -291,6 +291,43 @@ assert_node_hangup(CallId, Request) ->
     ?assertEqual(CallId, kz_api:call_id(Hangup)),
     ?assertEqual(<<"hangup">>, kapi_dialplan:application_name(Hangup)).
 
+durable_success_survives_native_registry_expiry_test() ->
+    Doc = receipt_reservation(),
+    Unknown = fun(_, Msg) -> {ok, [reconcile_response(<<"node">>, Msg, <<"unknown">>, [])]} end,
+    {ok, Evidence} = acdc_callback_recovery_io:reconcile_originate_with(Doc, status, Unknown),
+    ?assertEqual(settled, maps:get(status, Evidence)),
+    ?assertEqual(durable_success_receipt, maps:get(reason, Evidence)),
+    ?assertEqual(true, maps:get(originate_settled, Evidence)),
+    ?assertNot(maps:is_key(channels_down, Evidence)),
+    lists:foreach(fun(Changed) ->
+        ?assertMatch({unknown, _}, acdc_callback_recovery_io:reconcile_originate_with(Changed, status, Unknown))
+    end, [kz_json:delete_key(<<"pvt_originate_success">>, Doc)
+          ,kz_json:set_value(<<"attempts">>, 2, Doc)
+          ,kz_json:set_value([<<"pvt_originate_success">>, <<"originate_msg_id">>], <<"stale">>, Doc)]).
+
+durable_success_never_masks_incomplete_or_pending_native_evidence_test() ->
+    Doc = receipt_reservation(),
+    lists:foreach(fun(Result) ->
+        ?assertMatch({unknown, _}, acdc_callback_recovery_io:reconcile_originate_with(
+                                    Doc, status, fun(_, _) -> Result end))
+    end, [{error, timeout}, {timeout, []}, {ok, []},
+          {ok, [reconcile_response(<<"node">>, <<"wrong-correlation">>, <<"unknown">>, [])]}]),
+    Pending = fun(_, Msg) -> {ok, [reconcile_response(<<"node">>, Msg, <<"pending">>,
+                                 [{<<"Media-Node">>, <<"fs">>}, {<<"Module-Epoch">>, <<"epoch">>}])]} end,
+    {ok, Evidence} = acdc_callback_recovery_io:reconcile_originate_with(Doc, status, Pending),
+    ?assertEqual(pending, maps:get(status, Evidence)),
+    Cancel = fun(_, Msg) -> {ok, [kz_json:set_value(<<"Operation">>, <<"cancel">>,
+                                  reconcile_response(<<"node">>, Msg, <<"unknown">>, []))]} end,
+    ?assertMatch({unknown, _}, acdc_callback_recovery_io:reconcile_originate_with(Doc, cancel, Cancel)).
+
+receipt_reservation() ->
+    Receipt = kz_json:from_list([{<<"version">>, 1}, {<<"observed_at">>, 63950000000}
+                                ,{<<"account_id">>, ?ACCOUNT}, {<<"queue_id">>, <<"queue-fixture">>}
+                                ,{<<"callback_id">>, <<"acdc-callback-fixture">>}, {<<"attempt">>, 1}
+                                ,{<<"caller_call_id">>, ?CALLER}, {<<"originate_uuid">>, <<"originate-uuid">>}
+                                ,{<<"originate_msg_id">>, <<"originate-request">>}]),
+    reservation([{<<"status">>, <<"cancelling">>}, {<<"attempts">>, 1}, {<<"pvt_originate_success">>, Receipt}]).
+
 reservation(Extra) ->
     kz_json:from_list([{<<"_id">>, <<"acdc-callback-fixture">>}
                       ,{<<"pvt_account_id">>, ?ACCOUNT}

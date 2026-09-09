@@ -1,6 +1,7 @@
 %%% SPDX-License-Identifier: MPL-2.0
 %%% Owns one returned-caller originate/confirmation attempt. This worker does
-%%% not claim, retry, mutate the durable reservation, select an agent or bridge.
+%%% not claim, retry, select an agent or bridge. It persists only the exact
+%%% successful originate receipt; the coordinator owns reservation transitions.
 -module(acdc_callback_caller).
 -behaviour(gen_listener).
 
@@ -13,7 +14,8 @@
 -export([confirmation_event/3, failure_message/4, owner_loss_action/1
         ,confirmation_prompt/2, ready_message/5, settlement/3, valid_start/5
         ,ready_correlation_probe/0, returned_call_probe/5, reservation_call/2
-        ,confirmation_test_state/2, confirmation_test_info/1]).
+        ,confirmation_test_state/2, confirmation_test_info/1, success_receipt_probe/2
+        ,success_response_state/0]).
 -endif.
 
 -include("acdc.hrl").
@@ -298,6 +300,13 @@ execute_after_ready_ack(#state{originate_uuid=UUID, originate_queue=Queue}=State
     end.
 
 handle_success(#{'control_queue' := ControlQueue}, JObj, State) ->
+    %% One independent writer per attempt, not one per duplicate SUCCESS.
+    %% A slow/unavailable CouchDB must not delay the audible confirmation.
+    %% The store's exact attempt CAS rejects writes arriving after retirement.
+    case State#state.offnet_settled of
+        'false' -> _ = spawn(fun() -> persist_originate_success(State) end);
+        'true' -> 'ok'
+    end,
     ReturnedCall = returned_call(JObj, ControlQueue, State),
     State1 = State#state{returned_call=ReturnedCall, offnet_settled='true'},
     case State1#state.destroyed of
@@ -307,6 +316,23 @@ handle_success(#{'control_queue' := ControlQueue}, JObj, State) ->
             begin_cleanup('success_before_execute', State1);
         'false' -> maybe_confirm_or_cleanup(State1)
     end.
+
+%% READY was durably bound before execute. Only a correlated SUCCESS received
+%% after execute supplies this proof; failures, stale events and conflicting
+%% READY responses do not. A failed write must never manufacture a receipt or
+%% tear down a good call: recovery retains the native-query fallback.
+persist_originate_success(#state{executed='true', pending_cause=Cause
+                                ,account_id=AccountId, queue_id=QueueId
+                                ,callback_id=Id, lease_token=Token
+                                ,caller_call_id=CallerId, originate_uuid=UUID
+                                ,originate_msg_id=MsgId}) when Cause =/= 'conflicting_ready_response' ->
+    Data = kz_json:from_list([{<<"caller_call_id">>, CallerId}, {<<"originate_uuid">>, UUID}
+                              ,{<<"originate_msg_id">>, MsgId}]),
+    case catch acdc_callback_store:advance(AccountId, QueueId, Id, Token, 'originate_succeeded', Data) of
+        {'ok', _} -> 'ok';
+        _ -> lager:warning("callback originate success receipt was not persisted"), 'ok'
+    end;
+persist_originate_success(_) -> 'ok'.
 
 maybe_confirm_or_cleanup(#state{cancel_pending='true'}=State) ->
     begin_cleanup('cancelled', State);
@@ -640,6 +666,21 @@ matches(Value, Regex) when is_binary(Value), byte_size(Value) =< 512 ->
 matches(_, _) -> 'false'.
 
 -ifdef(TEST).
+-spec success_response_state() -> state().
+success_response_state() ->
+    #state{executed='true', account_id= <<"11111111111111111111111111111111">>
+           ,queue_id= <<"queue">>, callback_id= <<"callback">>, lease_token= <<"token">>
+           ,caller_call_id= <<"caller">>, originate_uuid= <<"uuid">>, originate_msg_id= <<"request">>
+           ,msg_id= <<"msg">>, original_call=kapps_call:new()}.
+
+-spec success_receipt_probe(boolean(), atom()) -> any().
+success_receipt_probe(Executed, Cause) ->
+    persist_originate_success(#state{executed=Executed, pending_cause=Cause
+                                     ,account_id= <<"account">>, queue_id= <<"queue">>
+                                     ,callback_id= <<"callback">>, lease_token= <<"token">>
+                                     ,caller_call_id= <<"caller">>, originate_uuid= <<"uuid">>
+                                     ,originate_msg_id= <<"request">>}).
+
 -spec confirmation_test_state(kz_json:object(), kapps_call:call()) -> state().
 confirmation_test_state(Queue, Call) ->
     #state{owner=self(), queue_doc=Queue, returned_call=Call,

@@ -307,10 +307,24 @@ reconcile_originate_with(Doc, Operation, QueryFun)
             Result = try QueryFun(Request, MsgId)
                      catch _:_ -> {'error', 'query_failed'}
                      end,
-            classify_reconcile_collection(UUID, OriginalRequestId, CallerId
-                                          ,OperationBin, MsgId, Result)
+            Classified = classify_reconcile_collection(UUID, OriginalRequestId, CallerId
+                                                       ,OperationBin, MsgId, Result),
+            durable_originate_result(Doc, Operation, Classified)
     end;
 reconcile_originate_with(_, _, _) -> {'error', 'invalid_input'}.
+
+%% Only a complete collection with no surviving native record can fall back
+%% to the exact durable success receipt. Never mask a timeout, partition,
+%% malformed/conflicting reply or a native pending operation. Call teardown
+%% still requires the independent, fresh all-node channel observation.
+durable_originate_result(Doc, 'status', {'unknown', #{'reason' := 'not_observed_in_current_module_epochs'}=Evidence}=Result) ->
+    case acdc_callback_store:originate_succeeded(Doc) of
+        'true' -> {'ok', Evidence#{'complete' => 'true', 'status' => 'settled'
+                                  ,'originate_settled' => 'true', 'outcome' => 'success'
+                                  ,'reason' => 'durable_success_receipt'}};
+        'false' -> Result
+    end;
+durable_originate_result(_, _, Result) -> Result.
 
 -spec query_originate(kz_term:proplist(), kz_term:ne_binary()) -> any().
 query_originate(Request, _MsgId) ->

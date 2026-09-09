@@ -314,7 +314,8 @@ retry_wait_bridge() {
         if [[ $(jq -r '.status' <<<"$doc") == completed ]]; then
             jq -e --argjson before "$CALLBACK_REGISTRATION_EVIDENCE" '
                 .id==$before.id and .enqueued_at==$before.enqueued_at and .enqueue_sequence==$before.enqueue_sequence and
-                .attempts==2 and .max_attempts==2 and .retry_delay==15 and .reconciliation_required!=true' <<<"$doc" >/dev/null || return 1
+                .attempts==2 and .max_attempts==2 and .retry_delay==15 and .reconciliation_required!=true and
+                .originate_success_recorded==true' <<<"$doc" >/dev/null || return 1
             caller=$(callback_channel "$(jq -r '.caller_call_id' <<<"$doc")") || return 1
             agent=$(callback_channel "$(jq -r '.agent_call_id' <<<"$doc")") || return 1
             jq -cen --arg account "$RETRY_ACCOUNT_ID" --argjson callback "$doc" --argjson caller "$caller" --argjson agent "$agent" '
