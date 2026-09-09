@@ -6,6 +6,8 @@ const cp=require('node:child_process'),assert=require('node:assert/strict'),os=r
 const ROOT=path.resolve(__dirname,'../../..'),DIR='/var/lib/kazoo5-install-lab';
 const OWNER='distributed-install-v1',NETWORK='kz5-install-stage',SUBNET='172.30.253.0/24';
 const ROLES=['couchdb','rabbitmq','haproxy','kazoo-apps','freeswitch','ecallmgr','kamailio','monster-ui','push-bridge'];
+const UNITS={couchdb:'couchdb',rabbitmq:'rabbitmq-server',haproxy:'haproxy','kazoo-apps':'kazoo-apps',
+    freeswitch:'kazoo-freeswitch',ecallmgr:'kazoo-ecallmgr',kamailio:'kazoo-kamailio'};
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 function command(program,args,options={}) {
     const r=cp.spawnSync(program,args,{encoding:'utf8',timeout:30000,maxBuffer:16*1024*1024,...options});
@@ -98,14 +100,65 @@ function status() {
     const s=readState();if(s.network)ownedNetwork(s);
     console.log(JSON.stringify({owner:s.owner,phase:s.phase,source:s.source,base_digest:s.base_digest,roles:s.roles}));
 }
-module.exports={overlapsSubnet,ROLES};
+function configFor(role,secrets) {
+    assert(Object.hasOwn(UNITS,role),'Role provisioning not implemented');
+    const ip='172.30.253.'+(11+ROLES.indexOf(role));
+    const proxy=!['couchdb','rabbitmq','haproxy'].includes(role);
+    return {KAZOO_ROOT:'/opt/kz5',KAZOO_AMQP_HOST:'172.30.253.12',KAZOO_AMQP_PORT:'5672',
+        KAZOO_RABBITMQ_USER:'kazoo',KAZOO_RABBITMQ_PASSWORD:secrets.rabbit,KAZOO_RABBITMQ_VHOST:'/',
+        KAZOO_COUCHDB_HOST:proxy?'172.30.253.13':'172.30.253.11',KAZOO_COUCHDB_PORT:proxy?'15984':'5984',
+        KAZOO_COUCHDB_ADMIN_PORT:proxy?'15986':'5984',KAZOO_COUCHDB_USER:'admin',KAZOO_COUCHDB_PASSWORD:secrets.couch,
+        KAZOO_RABBITMQ_BIND:ip,KAZOO_COUCHDB_BIND:ip,KAZOO_HAPROXY_BIND:ip,KAZOO_PUBLIC_IP:ip,
+        KAZOO_ERLANG_DIST_IP:ip,KAZOO_COOKIE_FILE:'/etc/kazoo/.erlang.cookie',KAZOO_MAKE_JOBS:'2',
+        KAZOO_API_URL:'http://172.30.253.18/v2/',KAZOO_API_UPSTREAM:'http://172.30.253.14:8000/v2/',
+        KAZOO_WEBSOCKET_UPSTREAM:'http://172.30.253.14:5555/websocket',KAZOO_START_TIMEOUT:'180',
+        KAZOO_REQUIRE_MEDIA_CONNECTION:role==='ecallmgr'?'true':'false',
+        KAZOO_FREESWITCH_NODES:role==='ecallmgr'?'freeswitch@kz5-stage-freeswitch':'',
+        KAZOO_MASTER_ACCOUNT_NAME:'Isolated installer acceptance',KAZOO_MASTER_ACCOUNT_REALM:'installer-stage.invalid',
+        KAZOO_MASTER_ADMIN_USER:'admin',KAMAILIO_CHILDREN:'2',KAMAILIO_TCP_CHILDREN:'2',
+        KAMAILIO_AMQP_CONSUMERS:'1',KAMAILIO_AMQP_WORKERS:'2'};
+}
+function installRole(role) {
+    assert(Object.hasOwn(UNITS,role),'Role provisioning not implemented');
+    const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r,'Create role first');
+    const c=json(['inspect',r.id])[0];
+    assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
+    assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],role);
+    assert.equal(c.State.Running,true);assert.equal(c.NetworkSettings.Networks[NETWORK].IPAddress,r.ip);
+    assert.equal(podman(['exec',r.id,'git','-C','/opt/kz5','rev-parse','HEAD']),s.source);
+    if(!s.secrets) {s.secrets={rabbit:crypto.randomBytes(32).toString('hex'),couch:crypto.randomBytes(32).toString('hex'),cookie:crypto.randomBytes(32).toString('hex')};saveState(s);}
+    if(!r.configured) {
+        assert.equal(r.phase,'booted-source-ready');
+        const cfg=Object.entries(configFor(role,s.secrets)).map(([k,v])=>k+'='+Buffer.from(v).toString('base64')).join('\n')+'\n';
+        const config=DIR+'/'+role+'.env',cookie=DIR+'/'+role+'.cookie';
+        fs.writeFileSync(config,cfg,{mode:0o600,flag:'wx'});fs.writeFileSync(cookie,s.secrets.cookie+'\n',{mode:0o600,flag:'wx'});
+        podman(['exec',r.id,'install','-d','-m','0755','/etc/kazoo']);
+        podman(['cp',config,r.id+':/etc/kazoo/deployment.env']);podman(['cp',cookie,r.id+':/etc/kazoo/.erlang.cookie']);
+        podman(['exec',r.id,'chmod','0600','/etc/kazoo/deployment.env','/etc/kazoo/.erlang.cookie']);
+        r.configured=true;saveState(s);
+    }
+    const attempt=(r.attempts||0)+1,log=DIR+'/'+role+'-install-'+attempt+'.log';
+    const fd=fs.openSync(log,'wx',0o600);r.attempts=attempt;r.phase='installing';r.log=log;saveState(s);
+    let result;
+    try {result=cp.spawnSync('podman',['exec',r.id,'bash','/opt/kz5/scripts/install-kazoo5.sh',role],
+        {timeout:3600000,stdio:['ignore',fd,fd]});}
+    finally {fs.closeSync(fd);}
+    r.exit=result.status;r.phase=result.status===0&&!result.error?'installed':'install-failed';saveState(s);
+    assert.equal(r.phase,'installed','Normal installer failed; inspect private role log');
+    assert.equal(podman(['exec',r.id,'systemctl','is-active',UNITS[role]+'.service']),'active');
+    assert.equal(podman(['exec',r.id,'systemctl','is-enabled',UNITS[role]+'.service']),'enabled');
+    r.phase='installed-service-verified';saveState(s);
+    console.log(JSON.stringify({status:'PASS',role,attempt,source:s.source,service:UNITS[role],log}));
+}
+module.exports={overlapsSubnet,ROLES,configFor};
 if(require.main===module) {
 try {
     assert.equal(process.getuid(),0);assert(Object.values(os.networkInterfaces()).flat().some(n=>n.address==='10.1.0.44'),'Only development44 allowed');
     const args=process.argv.slice(2);
     if(args.length===1&&args[0]==='--prepare')prepare();
     else if(args.length===2&&args[0]==='--create')create(args[1]);
+    else if(args.length===2&&args[0]==='--install')installRole(args[1]);
     else if(args.length===1&&args[0]==='--status')status();
-    else throw Error('Usage: --prepare | --create ROLE | --status');
+    else throw Error('Usage: --prepare | --create ROLE | --install ROLE | --status');
 } catch(e) {console.error('Distributed lab refused/failed: '+e.message);process.exitCode=1;}
 }
