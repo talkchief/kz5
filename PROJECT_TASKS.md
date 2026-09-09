@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-07 standalone service-unit scope — source fixed / focused PASS:**
+  Apps-only and eCallMgr-only installs previously rewrote both service definitions
+  and touched both log trees. Entry points now request an explicit generator role;
+  unselected unit/log paths are preserved, and invalid/missing role fails before
+  host mutations. Actual-generator regression failed3 before correction (a04a85),
+  then7 tests pass (b359be);9 Pivot checks pass after correcting stale fixture
+  naming input (50a4f5). Normal CLI dry-run apps/ecallmgr/combined selections pass
+  exact once/zero unit writes (ca722f). No new full install/reboot claim; shared
+  core config/build/cookie/Pivot still require coordinated deployment. Details:
+  `doc/installer_role_unit_isolation.md`.
+
 - **Installer persisted private management CA — fixed / scoped native PASS:**
   `KAZOO_RABBITMQ_API_CA_FILE` is saved/reloaded with deployment settings, validated
   as a protected root-owned certificate-only PEM, and applied only inside the

@@ -136,12 +136,12 @@ stat(){ if [[ $UNSAFE == true ]]; then printf '1000 777\\n'; else printf '0 755\
 die(){ printf '%s\\n' "$*" >&2; exit 42; }
 """
         return subprocess.run(["bash", "--noprofile", "--norc", "-s"], input=stubs + "\n".join(functions)
-                              + "\ninstall_kazoo_systemd_units\n", text=True, capture_output=True, timeout=5,
+                              + "\ninstall_kazoo_systemd_units all\n", text=True, capture_output=True, timeout=5,
                               env={"PATH": "/usr/bin:/bin", "SCRIPT_DIR": str(SCRIPTS), "DRY_RUN": "false",
                                    "KAZOO_HOSTNAME": "kazoo.fixture.invalid", "KAZOO_ROOT": "/fixture/kazoo",
                                    "KAZOO_RUNTIME_COOKIE_FILE": "/fixture/kazoo/.erlang.cookie", "KAZOO_COOKIE": "fixture-only",
                                    "KAZOO_CONFIG_DIR": "/fixture/config", "KAZOO_APPS_LIST": "pivot",
-                                   "KAZOO_NODE_NAME_TYPE": "sname", "KAZOO_ERLANG_DIST_IP": "127.0.0.1",
+                                   "KAZOO_NODE_NAME_TYPE": "-sname", "KAZOO_ERLANG_DIST_IP": "127.0.0.1",
                                    "UNSAFE": "true" if unsafe else "false"})
 
     def test_boot_dependencies_and_readonly_restart_guard(self):

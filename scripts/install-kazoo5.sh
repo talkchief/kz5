@@ -2495,7 +2495,12 @@ EOF
 }
 
 install_kazoo_systemd_units() {
-    local fqdn
+    local fqdn role=${1:-}
+    [[ $# == 1 ]] || die 'Specify exactly one service-unit role: kazoo-apps, ecallmgr, or all'
+    case $role in
+        kazoo-apps|ecallmgr|all) ;;
+        *) die 'Unknown Kazoo service-unit role; no units were changed' ;;
+    esac
     case ${KAZOO_NODE_NAME_TYPE:-} in
         -name|-sname) ;;
         *) die 'Run installer preflight before writing Kazoo service units; Erlang naming mode is not initialized' ;;
@@ -2507,18 +2512,19 @@ install_kazoo_systemd_units() {
     if ! id kazoo >/dev/null 2>&1; then
         run useradd --system --gid kazoo --home-dir /var/lib/kazoo --shell /sbin/nologin kazoo
     fi
-    run mkdir -p /var/lib/kazoo /var/log/kazoo/kazoo_apps/log /var/log/kazoo/ecallmgr/log "$KAZOO_ROOT/log" \
+    run mkdir -p /var/lib/kazoo "$KAZOO_ROOT/log" \
         "$KAZOO_ROOT/scripts/log/log" "$KAZOO_ROOT/var/lib/ra"
     reject_secret_symlink "$KAZOO_RUNTIME_COOKIE_FILE"
     printf '%s\n' "$KAZOO_COOKIE" | write_file 0400 "$KAZOO_RUNTIME_COOKIE_FILE"
     run chown kazoo:kazoo "$KAZOO_RUNTIME_COOKIE_FILE"
-    run chown -R kazoo:kazoo /var/lib/kazoo /var/log/kazoo \
+    run chown -R kazoo:kazoo /var/lib/kazoo \
         "$KAZOO_ROOT/log" "$KAZOO_ROOT/scripts/log" "$KAZOO_ROOT/var"
-    run install -d -m 0750 -o kazoo -g kazoo /var/log/kazoo \
-        /var/log/kazoo/kazoo_apps /var/log/kazoo/kazoo_apps/log \
-        /var/log/kazoo/ecallmgr /var/log/kazoo/ecallmgr/log
+    run install -d -m 0750 -o kazoo -g kazoo /var/log/kazoo
     install_kazoo_pivot_port_reservation
-    write_file 0644 /etc/systemd/system/kazoo-apps.service <<EOF
+    if [[ $role == kazoo-apps || $role == all ]]; then
+        run install -d -m 0750 -o kazoo -g kazoo /var/log/kazoo/kazoo_apps /var/log/kazoo/kazoo_apps/log
+        run chown -R kazoo:kazoo /var/log/kazoo/kazoo_apps
+        write_file 0644 /etc/systemd/system/kazoo-apps.service <<EOF
 [Unit]
 Description=Kazoo 5 Applications Node
 Wants=network-online.target
@@ -2552,7 +2558,11 @@ LimitNOFILE=65536
 WantedBy=multi-user.target
 Alias=kazoo-applications.service
 EOF
-    write_file 0644 /etc/systemd/system/kazoo-ecallmgr.service <<EOF
+    fi
+    if [[ $role == ecallmgr || $role == all ]]; then
+        run install -d -m 0750 -o kazoo -g kazoo /var/log/kazoo/ecallmgr /var/log/kazoo/ecallmgr/log
+        run chown -R kazoo:kazoo /var/log/kazoo/ecallmgr
+        write_file 0644 /etc/systemd/system/kazoo-ecallmgr.service <<EOF
 [Unit]
 Description=Kazoo 5 eCallMgr Node
 Wants=network-online.target
@@ -2584,6 +2594,7 @@ LimitNOFILE=65536
 [Install]
 WantedBy=multi-user.target
 EOF
+    fi
     run systemctl daemon-reload
 }
 
@@ -3040,7 +3051,7 @@ install_kazoo_apps() {
     install_acdc_language_packs
     install_acdc_editor_capabilities
     build_kazoo
-    install_kazoo_systemd_units
+    install_kazoo_systemd_units kazoo-apps
     install_sup_cli
     install_monster_catalog_receiver
     acdc_broker_upgrade_preflight
@@ -3629,7 +3640,7 @@ install_ecallmgr() {
     fi
     verify_kazoo_current_build
     configure_kazoo
-    install_kazoo_systemd_units
+    install_kazoo_systemd_units ecallmgr
     install_sup_cli
     service_enable_restart kazoo-ecallmgr.service
     if [[ $DRY_RUN != true ]]; then

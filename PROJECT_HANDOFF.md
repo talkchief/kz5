@@ -4,6 +4,17 @@
 campaigns. Fix in source, validate the failing path, deploy through the installer,
 then record the actual result. Dashboard/history work remains postponed.
 
+**Standalone installer unit scope — fixed / focused PASS.**
+Normal apps/eCallMgr entry points now generate only their own service definition
+and role-specific log directory, preserving the unselected counterpart. The unit
+generator requires an explicit valid role before mutation. Three pre-fix failures
+are reproduced;7 actual-generator/BEAM-guard tests,9 Pivot tests and3 normal CLI
+dry-run selections pass. The Pivot fixture's stale `sname` was corrected to the
+real preflight `-sname`, without weakening the runtime guard. Unit content itself
+is unchanged, so no service rebuild/restart is needed for this installer fix.
+Shared config/cookie/source/Pivot and full split-role acceptance remain separate.
+See `doc/installer_role_unit_isolation.md` for scope and main44 baseline hashes.
+
 **Private-CA installer follow-up — persisted / scoped native PASS.**
 The saved `KAZOO_RABBITMQ_API_CA_FILE` now survives later installer invocations;
 it is validated as protected certificate-only trust and scoped to broker HTTPS.

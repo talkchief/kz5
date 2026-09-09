@@ -39,12 +39,12 @@ class UnitRuntimeRootTests(unittest.TestCase):
             raise AssertionError("Fixture BEAM compilation failed: " + result.stderr)
 
     @classmethod
-    def render_units(cls):
+    def render_units(cls, role="all"):
         found = re.findall(r"^install_kazoo_systemd_units\(\) \{[\s\S]*?^\}", cls.source, re.M)
         if len(found) != 1:
             raise AssertionError("Expected exactly one actual unit generator")
         stubs = """set -euo pipefail
-run(){ :; }
+run(){ printf '%s\\n' "$*" >&2; }
 getent(){ return 0; }
 id(){ return 0; }
 reject_secret_symlink(){ :; }
@@ -58,9 +58,10 @@ write_file(){ printf '\\036%s\\037' "$2"; command cat; }
                "KAZOO_NODE_NAME_TYPE": "-sname", "KAZOO_ERLANG_DIST_IP": "127.0.0.1"}
         result = subprocess.run(["bash", "--noprofile", "--norc", "-s"], env=env, text=True,
                                 capture_output=True, timeout=5,
-                                input=stubs + found[0] + "\ninstall_kazoo_systemd_units\n")
+                                input=stubs + found[0] + "\ninstall_kazoo_systemd_units " + shlex.quote(role) + "\n")
         if result.returncode:
             raise AssertionError("Actual unit rendering failed: " + result.stderr)
+        cls.render_commands = result.stderr
         units = {}
         for record in result.stdout.split("\x1e")[1:]:
             name, body = record.split("\x1f", 1)
@@ -91,6 +92,28 @@ write_file(){ printf '\\036%s\\037' "$2"; command cat; }
                 self.assertIn("Environment=KAZOO_ROOT=" + str(self.runtime) + "\n", unit)
                 self.assertIn("source " + str(self.checkout / "scripts/install-kazoo5.sh"), unit)
 
+    def test_selected_role_does_not_write_the_other_service(self):
+        for role, expected in [("kazoo-apps", "kazoo-apps.service"), ("ecallmgr", "kazoo-ecallmgr.service")]:
+            with self.subTest(role=role):
+                self.assertEqual(set(self.render_units(role)), {expected})
+                other_log = "ecallmgr" if role == "kazoo-apps" else "kazoo_apps"
+                self.assertNotIn("/var/log/kazoo/" + other_log, self.render_commands)
+
+    def test_invalid_role_refuses_all_host_mutation(self):
+        generator = re.findall(r"^install_kazoo_systemd_units\(\) \{[\s\S]*?^\}", self.source, re.M)[0]
+        stubs = "set -euo pipefail\ndie(){ exit 77; }\ngetent(){ return 1; }\nrun(){ exit 88; }\n"
+        for args in ["", "unknown", "kazoo-apps ecallmgr"]:
+            with self.subTest(args=args):
+                result = subprocess.run(["bash", "-s"], env={**self.env, "KAZOO_NODE_NAME_TYPE": "-sname"},
+                    input=stubs + generator + "\ninstall_kazoo_systemd_units " + args + "\n",
+                    text=True, capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, 77)
+
+    def test_normal_installer_calls_request_the_exact_role(self):
+        for function, role in [("install_kazoo_apps", "kazoo-apps"), ("install_ecallmgr", "ecallmgr")]:
+            body = re.findall(r"^" + function + r"\(\) \{[\s\S]*?^\}", self.source, re.M)[0]
+            self.assertIn("install_kazoo_systemd_units " + role + "\n", body)
+
     def test_uninitialized_naming_mode_refuses_all_host_mutation(self):
         generator = re.findall(r"^install_kazoo_systemd_units\(\) \{[\s\S]*?^\}", self.source, re.M)[0]
         stubs = """set -euo pipefail
@@ -105,7 +128,7 @@ run(){ exit 88; }
                     env["KAZOO_NODE_NAME_TYPE"] = mode
                 result = subprocess.run(["bash", "--noprofile", "--norc", "-s"], env=env,
                                         text=True, capture_output=True, timeout=5,
-                                        input=stubs + generator + "\ninstall_kazoo_systemd_units\n")
+                                        input=stubs + generator + "\ninstall_kazoo_systemd_units all\n")
                 # 88 is a controlled first-mutation sentinel, not a host write.
                 self.assertEqual(result.returncode, 88 if mode in ["-name", "-sname"] else 77,
                                  result.stderr)
