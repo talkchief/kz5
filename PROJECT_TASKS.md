@@ -7,19 +7,33 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Cross-node JWT signing-secret revocation P0 — SOURCE FIXED, native retest pending:**
+- **Cross-node JWT signing-secret revocation P0 — SOURCE FIXED / two-node native PASS:**
   receipt `/var/lib/kazoo5-install-lab/cluster-auth-1788973933046.json` proved
   primary HTTP401/WS1008, but peer HTTP200 and a post-revocation event leak.
   No broker partition was needed to reproduce this stale identity-cache bug.
   Required root patch `kazoo-identity-authoritative-read.patch` replaces the
   Kazoo signing-secret cache read with an authoritative datastore read; errors
   fail closed without cached fallback. Six actual-module regressions pass for
-  user/device/account revocation and datastore errors. Both lab nodes must be
-  rebuilt and healthy/partition acceptance must pass before closing this P0.
+  user/device/account revocation and datastore errors; all six fail on pristine
+  pinned source and pass after real installer application, including reapply.
+  Both lab nodes were rebuilt by normal installer source `b8523ec`: primary
+  `kazoo-apps-install-7.log`, peer `apps-peer-install-3.log`, both PASS.
+  Healthy receipt `cluster-auth-1788975173069.json` and peer-only broker
+  partition receipt `cluster-auth-1788975191194.json`: HTTP200/200 before,
+  HTTP401/401 after exact fixture CAS; both sockets closed1008 with no revoked
+  marker delivered, before expiry, unchanged apps PIDs. Network restoration and
+  broker reconnection passed. Evidence root `/var/lib/kazoo5-install-lab`.
+  Main44 normal deployment `kz5-identity-authoritative-deploy-20260909` passed
+  (source `2b52bd7`, Result=success, exit0). Four actual HTTPS/WSS after-checks
+  passed; receipt `/root/kz5-acceptance/identity-authoritative-20260909/https-wss.json`.
+  All9 services active, zero calls, apps/eCallMgr error-priority journal entries0
+  since17:28UTC at final readback. Updated OpenAPI bytes match over verified HTTPS.
+  SIP/RTP partition recovery, slow network
+  and cross-node call-supervision privacy are separate, still-open release gates.
   This adds a datastore read per identity validation, including outbound event
   validation; it is not a claim of free caching or unlimited throughput.
 
-- **Cross-node API/revocation acceptance — preparing second isolated apps node:**
+- **Cross-node API/revocation acceptance — second isolated apps node installed:**
   new `--apps-peer create|install|collect` lab operation shares only the original
   lab's CouchDB/RabbitMQ. A private paused snapshot reuses build files, not a
   clean-install claim. Fixed peer IP172.30.253.20, unique hostname and a service
@@ -36,9 +50,9 @@ work postponed; do not generate voices at runtime or during deployment.
   `9764bc2`; `apps-peer-install-2.log` retained, metadata timer active/enabled
   with Result=success. The peer remains a reused-build install, not clean-install
   evidence.
-  Cross-node revocation and peer-only broker partition tests are prepared,
-  including exact fixture-user CAS and an independent network-restoration timer.
-  Cross-node acceptance is not yet passed.
+  Cross-node signing-secret revocation and peer-only broker partition tests now
+  pass, including exact fixture-user CAS and an independent network-restoration
+  timer. This is not a call-distribution or supervision partition acceptance.
 
 - **Installer DNF metadata-lock delay — source fixed / native helper PASS:**
   final empty apps installation compiled and passed SUP validation, then waited

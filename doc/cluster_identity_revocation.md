@@ -40,5 +40,32 @@ Verification:
   only the peer's broker route is blocked; independent restoration timer and
   reconnect verification. Not a SIP/RTP agent-recovery partition test.
 
-Native after-fix deployment and receipts are pending. Keep the P0 open until
-both modes pass. Never restore a revoked signing secret to tidy a test fixture.
+## Native after-fix acceptance
+
+Both normal lab apps installations passed on source `b8523ec`:
+`kazoo-apps-install-7.log` and `apps-peer-install-3.log`. Both runs used the
+required installer patch and full production rebuild, not runtime BEAM injection.
+Receipts below are in `/var/lib/kazoo5-install-lab` on dev44:
+
+| Mode | Receipt | HTTP before → after | WebSocket after |
+| --- | --- | --- | --- |
+| Healthy two-node cluster | `cluster-auth-1788975173069.json` | 200/200 → 401/401 | Both1008; no revoked marker |
+| Peer cannot reach RabbitMQ | `cluster-auth-1788975191194.json` | 200/200 → 401/401 | Both1008; no revoked marker |
+
+Both checks passed before JWT expiry with unchanged application PIDs. The
+partition check verified no established peer AMQP connection during the fault,
+then restored the exact route and verified broker reconnection. Only the fixed
+isolated QA user's signing secret was rotated; no production or main company
+document was changed. Native backend HTTP/WS was used here, not the HTTPS/WSS
+front door. This does not claim SIP/RTP partition recovery or call-supervision
+privacy. Never restore a revoked signing secret to tidy a test fixture.
+
+Main44 normal deployment also passed: unit
+`kz5-identity-authoritative-deploy-20260909`, source `2b52bd7`, Result=success,
+exit0. Protected backup/source/install log and HTTPS/WSS receipt are in
+`/root/kz5-acceptance/identity-authoritative-20260909/`. Four actual frontdoor
+checks passed: valid delivery, exact fixture-user CAS, revoked delivery1008/no
+marker, and HTTP401 before expiry. All9 stack services were active afterward,
+zero calls, and apps/eCallMgr error-priority journal entries0 since17:28UTC at
+readback. Updated `/apis/openapi.json` matches committed bytes over verified TLS.
+This is a deployment-window check, not an indefinite stability guarantee.
