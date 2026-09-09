@@ -19,6 +19,13 @@ work postponed; do not generate voices at runtime or during deployment.
   fence, broker/durable-callback drain, cold restore and rollback remain open.
   Complete native agent-cohort merging also passed:
   `agent-inventory-merged-1788994874158.json` (6 agreeing replicas).
+  **Normal native builds now running on `e405aab`:**
+  `kz5-stage-install-kazoo-apps-12` and `kz5-stage-install-apps-peer-8`,
+  both confirmed active/running with nonzero MainPID. Start receipt log:
+  `/var/lib/kazoo5-install-lab/queue-drain-deploy-e405aab-1788995943320.log`.
+  Admission observed zero private media/callbacks and all6 owned replicas ready.
+  Collect these exact jobs before `--queue-inventory`; do not edit/sync their
+  compiling checkouts or start duplicate installers. Main44 runtime untouched.
 
 - **INST-06 / native finite-pause restoration — PASS, full coordinator still OPEN:**
   Both `4fac43d` normal builds11/7 passed. Native receipt

@@ -53,6 +53,16 @@ cold restore/rollback are still required.
 
 ### Completed finite-pause native checkpoint
 
+**Current queue-observer native deployment:** private normal installs on
+`e405aab535baa8250d9325171b78fd25705eb6aa` are running as
+`kz5-stage-install-kazoo-apps-12` and `kz5-stage-install-apps-peer-8`.
+Both native systemd jobs were verified active/running with nonzero MainPID.
+Start log: `queue-drain-deploy-e405aab-1788995943320.log` in the private lab.
+Collect the exact jobs; source synchronization is not deployment and current
+`Result=success` while running is not terminal success. Only after collection
+run the new native queue inventory check. No production/imported-company
+mutation or main44 runtime deployment occurred.
+
 Both normal `4fac43d` installations passed and were collected:
 `kazoo-apps-install-11.log` and `apps-peer-install-7.log`. The unchanged guarded
 native finite-pause restore regression now **PASSES** on both nodes, receipt
