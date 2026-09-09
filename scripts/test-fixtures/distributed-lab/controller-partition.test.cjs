@@ -6,6 +6,12 @@ const s={owner,roles:{ecallmgr:{id:a,phase:'installed-service-verified'}},ecallm
 const inspect=id=>({Config:{Labels:{'io.talkchief.kazoo.acceptance':owner,'io.talkchief.kazoo.role':id===a?'ecallmgr':'ecallmgr-peer'}},
     State:{Running:true,Paused:false},NetworkSettings:{Networks:{'kz5-install-stage':{IPAddress:id===a?'172.30.253.16':'172.30.253.21'}}}});
 assert.equal(admit(s,inspect).length,2);
+const apps={owner,roles:{'kazoo-apps':{id:a,phase:'installed-service-verified'}},peer:{id:b,phase:'installed'}};
+const inspectApps=id=>{const c=inspect(id);c.Config.Labels['io.talkchief.kazoo.role']=id===a?'kazoo-apps':'kazoo-apps-peer';
+    c.NetworkSettings.Networks['kz5-install-stage'].IPAddress=id===a?'172.30.253.14':'172.30.253.20';return c;};
+assert.equal(admit(apps,inspectApps,'kazoo-apps').length,2);
+assert.throws(()=>admit(apps,inspect,'kazoo-apps'));
+assert.throws(()=>admit(s,inspect,'arbitrary-service'));
 assert.throws(()=>admit({...s,owner:'production'},inspect));
 for(const bad of ['ip','label','paused','stopped'])assert.throws(()=>admit(s,id=>{
     const c=inspect(id);if(bad==='ip')c.NetworkSettings.Networks['kz5-install-stage'].IPAddress='10.1.0.44';
@@ -37,6 +43,12 @@ async function test() {
     assert.equal(proof.query_consumer_at_broker_recovery,false);assert.equal(consumerDelay,0);
     assert(calls.filter(a=>a.includes('add')||a.includes('del')).every(a=>a.includes('172.30.253.12/32')));
     await p.restore();
+    blocked=false;killed=false;armed=false;
+    const ap=new Partition(admit(apps,inspectApps,'kazoo-apps'),run,'kazoo-apps');
+    const at=calls.length;await ap.start();const apProof=await ap.restore();
+    assert(apProof.same_node_vms&&apProof.registered_broker_recovered);
+    assert.equal(apProof.query_consumers_recovered,undefined);assert.equal(apProof.same_controller_vms,undefined);
+    assert(calls.slice(at).filter(a=>a.includes('sup')).every(a=>a.includes('kazoo_apps')&&!a.includes('is_consuming')));
     const bad=new Partition(admit(s,inspect),()=>'{badrpc,timeout}');assert.throws(()=>bad.available(bad.nodes[0]));
     assert.equal(bad.queryReady(bad.nodes[0]),false);
     const rpcFailure=new Partition(admit(s,inspect),()=>{throw Error('RPC unavailable');});

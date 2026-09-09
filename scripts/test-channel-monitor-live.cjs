@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 'use strict';
-// Opt-in synthetic audio acceptance. No MASTER resources, queue status, PSTN
-// routes, production recordings, or uncorrelated channel cleanup are allowed.
+// Opt-in synthetic audio acceptance. Default monitoring never changes queue
+// status. Explicit distributed queue-partition mode may pause only its two
+// admitted synthetic alternate agents, with bounded expiry and owned recovery.
+// No MASTER resources, PSTN routes or uncorrelated cleanup are allowed.
 const fs=require('node:fs'), path=require('node:path'), crypto=require('node:crypto');
 const cp=require('node:child_process'), assert=require('node:assert/strict');
 let audio=require('./test-fixtures/monitor-audio.cjs');
@@ -11,7 +13,7 @@ let AUTH='/etc/kazoo/installer-secrets.env', MASTER='302ae5a70c403124f764cbc5422
 const OWNER='kazoo5-isolated-monitor-acceptance', ID=/^[a-f0-9]{32}$/, CALL=/^[A-Za-z0-9_.:@-]{1,128}$/;
 const SCENARIOS=path.join(__dirname,'sip-tests'), FSCLI='/usr/local/freeswitch/bin/fs_cli';
 let state, fixture, masterToken, adminToken, userToken, runDir, current, cleaning=false;
-let partitionEnabled=false, controllerFault=null;
+let partitionEnabled=false, queuePartitionEnabled=false, controllerFault=null;
 const children=new Set(), registered=new Set();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const hex=()=>crypto.randomBytes(16).toString('hex');
@@ -68,9 +70,15 @@ function validFixture(f,s) {
     }
     if(f.current) {
         assert(new RegExp('^1-[1-9][0-9]*@'+audio.IP.replaceAll('.','\\.')+'$').test(f.current.caller_id)&&
-            ['eavesdrop','whisper','barge','join'].includes(f.current.mode),'Invalid saved fixture call');
+            ['eavesdrop','whisper','barge','join','queue_partition'].includes(f.current.mode),'Invalid saved fixture call');
         if(f.current.agent_id) assert(CALL.test(f.current.agent_id),'Invalid saved agent ID');
         if(f.current.supervisor_id) assert(ID.test(f.current.supervisor_id)&&ID.test(f.current.request_id),'Invalid monitor correlation');
+    }
+    if(f.queue_paused) {
+        assert(s.ACCEPTANCE_ACCOUNT_ID==='45e827067baf078029d0ca16a489fa8a'&&
+            Array.isArray(f.queue_paused)&&f.queue_paused.length<=2&&new Set(f.queue_paused).size===f.queue_paused.length);
+        for(const id of f.queue_paused)assert(ID.test(id)&&
+            [s.ACCEPTANCE_AGENT_2_USER_ID,s.ACCEPTANCE_AGENT_3_USER_ID].includes(id),'Unowned paused agent');
     }
     return f;
 }
@@ -374,6 +382,10 @@ async function cleanup() {
         catch {complete=false;log('Controller broker restoration incomplete; independent watchdog retained');}
     }
     try {await clearStage();}catch(error){complete=false;log('Scoped call cleanup incomplete: '+error.message+'; protected recovery state retained');}
+    if(fixture?.queue_paused?.length) {
+        try {await queueContext().restorePauses();}
+        catch {complete=false;log('Synthetic agent pause restoration incomplete; bounded expiry and owned recovery state retained');}
+    }
     for(const child of children)terminate(child);
     if(state&&runDir)for(const e of endpoints(state))if(registered.has(e.role)) {
         try {await verifyBorrowed();registration(e,0);}catch(_){complete=false;log('Exact registration cleanup incomplete; expires within600s');}
@@ -394,6 +406,17 @@ async function cleanup() {
     if(complete&&fixture){fs.unlinkSync(FILE);log('Owned temporary web users and exact registrations removed; evidence retained privately');}
     return complete;
 }
+function queueContext() {
+    assert(distributed,'Queue partition only allowed in admitted distributed lab');
+    return require('./test-fixtures/distributed-lab/queue-partition.cjs').context({
+        state,fixture,distributed,audio,runDir,adminToken,masterToken,children,
+        request,route,command,endpoints,writePrivate,registration,contacts,spawnPhone,
+        channel,ownedChannel,originalAlive,clearStage,saveFixture,until,sleep,log,terminate,
+        setCurrent(value){current=value;fixture.current=value;saveFixture();},
+        getCurrent(){return current;},
+        setFault(value){controllerFault=value;}
+    });
+}
 function prepare() {
     state=baseState(privateRead(BASE));
     const local=JSON.parse(command('ip',['-j','-4','address','show'])).flatMap(x=>x.addr_info||[]).map(x=>x.local);
@@ -412,6 +435,8 @@ async function main(args) {
     if(args[0]==='--distributed') {
         args=args.slice(1);
         if(args[0]==='--broker-partition') {partitionEnabled=true;args=args.slice(1);}
+        if(args[0]==='--queue-partition') {queuePartitionEnabled=true;args=args.slice(1);}
+        assert(!(partitionEnabled&&queuePartitionEnabled),'Select one fault profile');
         assert(args.length===1&&['--prepare-only','--live','--cleanup'].includes(args[0]),'Invalid distributed monitor mode');
         distributed=require('./test-fixtures/distributed-lab/monitor-profile.cjs').prepare();
         API=distributed.api;BASE=distributed.base;AUTH=distributed.auth;FILE=distributed.file;MASTER=distributed.master;
@@ -441,7 +466,7 @@ async function main(args) {
         }
         current=fixture.current||null;
         if(args[0]==='--cleanup') {
-            if(current?.supervisor_id) {
+            if(current?.supervisor_id||fixture.queue_paused?.length) {
                 assert(fixture.users.admin.id&&ownedUser((await request('GET',route('users',fixture.users.admin.id),undefined,masterToken)).data,'admin'),
                     'Cannot authorize saved supervisor cleanup');
                 adminToken=await login(fixture.users.admin.username,fixture.users.admin.password,fixture.realm,fixture.account_id);
@@ -458,11 +483,12 @@ async function main(args) {
             const channels=(await request('GET',route('channels'),undefined,adminToken)).data;
             assert(channels&&Object.keys(channels).length===0,'Acceptance tenant has active calls; wait for them to finish');
             for(const f of audio.FREQUENCIES)writePrivate('tone-'+f+'.ulaw',audio.tone([f]));
-            for(const mode of ['eavesdrop','whisper','barge','join'])await stage(mode);
+            if(queuePartitionEnabled)await queueContext().run();
+            else for(const mode of ['eavesdrop','whisper','barge','join'])await stage(mode);
         }
         catch(error){log('Stage failed: '+error.message);throw error;}
         finally {assert(await cleanup(),'Scoped fixture cleanup incomplete');}
-        log('All four modes passed. Private synthetic evidence: '+runDir);
+        log((queuePartitionEnabled?'Queued applications-partition recovery passed.':'All four modes passed.')+' Private synthetic evidence: '+runDir);
     } finally {lock.stdin.end();terminate(lock);}
 }
 module.exports={baseState,endpoints,validFixture,ownedChannel,ownedUser,ringingEvidence,MASTER,OWNER};

@@ -51,4 +51,5 @@ assert.equal(h.ringingEvidence(ring+answer,callId).caller_received_180_before_20
 for(const invalid of [answer,answer+ring,sip('S',callId,1,'180 Ringing')+answer,
     sip('R','1-9999@127.0.0.50',1,'180 Ringing')+answer,ring+sip('R',callId,2,'200 OK')])
     assert.throws(()=>h.ringingEvidence(invalid,callId),/SIP180|transaction mismatch/);
-console.log('PASS monitor fixture: master/PSTN/injection/duplicate rejection, exact saved identity, account/device/IP cleanup guards, web-user markers, opt-in and no queue-status mutations');
+assert.throws(()=>h.validFixture({...saved,queue_paused:[id(99)]},base));
+console.log('PASS monitor fixture: master/PSTN/injection/duplicate rejection, exact saved identity, account/device/IP cleanup guards, web-user markers, opt-in and paused-agent ownership');

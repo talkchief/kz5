@@ -7,6 +7,13 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Queued apps-node partition acceptance — native pending:** explicit guarded
+  `--distributed --queue-partition --live` now tracks both native ACDC replicas,
+  real two-way queued-call audio, missed hangup while one apps node loses AMQP,
+  same-FSM recovery and a second call without re-registration/re-login. Offline
+  ownership, audio and watchdog gates pass. See
+  `doc/acdc_distributed_partition_acceptance.md`. No native PASS claimed yet.
+
 - **Active supervision controller partition — run3 PASS after readiness fix:**
   fixed lab controller16 AMQP route only; controller21 remains healthy, original
   three-leg SIP/RTP bridge retained. Tests real broker unavailability, audio
