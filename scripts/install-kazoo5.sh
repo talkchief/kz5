@@ -1275,11 +1275,16 @@ ensure_crb_repository() {
 }
 
 install_base_dependencies() {
+    local curl_package=curl
     log 'Installing Rocky Linux repositories and base tooling'
     dnf_install dnf-plugins-core epel-release
     ensure_crb_repository
+    # Rocky minimal/cloud images already supply curl-minimal. Both providers
+    # support our HTTP(S) transfers; requesting full curl conflicts with the
+    # installed minimal RPM. Preserve the provider instead of broad erasure.
+    if rpm -q curl-minimal >/dev/null 2>&1; then curl_package=curl-minimal; fi
     dnf_install \
-        bash-completion ca-certificates curl findutils git gzip iproute jq logrotate \
+        bash-completion ca-certificates "$curl_package" findutils git gzip iproute jq logrotate \
         openssl procps-ng python3 rsync tar unzip util-linux wget which zip
     run mkdir -p "$KAZOO_BUILD_ROOT" "$KAZOO_CACHE_DIR" "$KAZOO_CONFIG_DIR"
 }
