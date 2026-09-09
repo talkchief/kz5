@@ -4,7 +4,76 @@ September 8–9, 2026 — P0-CALLBACK-CONFIRM-01 deployed; positive native
 short-window strict-media acceptance now passes after the bridge-identity fix.
 See `doc/ecallmgr_bridge_identity.md`:52905/bf7220 passes full prompt, strict RTP,
 confirmation1.146848s after completion, unanswered-first/retry bridge and restore.
-The older failed evidence below is unchanged. Native negative expiry is still open.
+The older failed evidence below is unchanged. Native negative final-attempt
+expiry now passes as documented next.
+
+## Native no-confirmation expiry — September9
+
+Committed harness85fd6c2 with file-mode endpoint correction5a4d0ea is installed
+on main10.1.0.44. No production rebuild/restart was needed for this acceptance:
+the already deployed worker and bridge-identity corrections are exercised.
+Terminal unit `kz5-callback-confirmation-expiry-main44-20260909b` exited0
+(a606c9); cleanup/runtime check7a3f37 confirms zero calls and active services.
+Run: `/var/log/kazoo-acceptance/20260909T021207Z`.
+
+- Original caller registers callback while the only agent is busy, hears the
+  full built-in success prompt and hangs up. Busy call ends after the proved
+  prompt plus the required two seconds.
+- First callback attempt deliberately goes unanswered, settles to durable
+  `retry_wait`, and retries at the saved due time (1.007088s after due).
+- Second caller answers but sends neither RTP DTMF nor SIP INFO. Agent remains
+  logged in with its endpoint listening throughout; capture proves no agent
+  INVITE and native evidence proves no agent leg.
+- Full34648-sample/4.331s EN prompt matches installed audio (correlation.999995)
+  with strict RTP timestamp coverage. Prompt ends4.870326s after ACK; Kazoo BYE
+  follows3.031146s later, matching the three-second response timeout.
+- Ticket ends `failed`, attempts2, `last_cause=confirmation_timeout`, runtime
+  caller/agent/selected-agent fields cleared and no reconciliation flag.
+- Real SIPp exits/counters pass; agent ready, unchanged services, fresh journal
+  and file errors0/0, new cores0. Exact isolated queue edit restored15->3->15.
+  `callback-confirmation-deadline-edit.json.verified=false` belongs to the
+  separate positive digit1 verifier, which this negative case intentionally
+  does not invoke; the independent negative proof is
+  `callback-confirmation-expiry.json`.
+
+Replay command (not a request to rerun an already passed case):
+
+```sh
+bash scripts/test-acdc-callback-retry.sh --live --keep-fixture \
+  --fixture-account 8310dc3170a18de37f205d0da172df65 \
+  --transport internal --language en-us --registration-mode entry-only \
+  --short-confirmation-window --confirmation-expiry \
+  --allow-absent-master-test-phones \
+  --confirmation-reference /var/log/kazoo-acceptance/gemini-reference.main44-en-us.P5mWcmOn/acdc-callback-success.ulaw
+```
+
+Root-owned helper `scripts/test-fixtures/callback-confirmation-expiry.cjs`
+builds only local synthetic PCMU silence and validates retained SIP/RTP and
+durable-state receipts. No Gemini/API voice synthesis occurs. Generator,
+timeout boundaries, missing-proof rejection and CLI restrictions pass; existing
+88 retry groups and12 locale/reference groups still pass.
+
+Receipt SHA256 values:
+
+- `callback-confirmation-expiry.json`:
+  `bae4858ce20efea1f156d1ac3e81d76475dcb10eb1205297982a7215490ed17a`
+- `retry-returned.pcap`:
+  `2ecf1f562a217b7a6c7250b681767f51f0f3cd0163bebe2bebea37996f9237ee`
+- Restored `callback-confirmation-deadline-edit.json`:
+  `18fa644a770da62ac8da2bd39c91dfa98cc1c7334e8eb342ee75d09ab7f62eec`
+- `/root/kz5-acceptance/callback-confirmation-expiry-main44-20260909b.log`:
+  `a218316a909b8fddffc2c5defc30b4360dd721f49252c3834aee516d39d00083`
+
+Earlier run020712Z stays **FAIL**: SIP signalling, native terminal state and
+offline full-prompt/3.030839s expiry checks passed, but SIPp exited253. Its pinned
+3.7.7 `EXIT_RTPCHECK_FAILED=-3` graded the received speech as a failed echo of
+the transmitted pattern. Corrected only this no-agent endpoint to file-mode
+silence, as existing announcement acceptance already does; no tolerance increase
+or ignored process exit. The strict received-audio gate is unchanged.
+
+Scope: final-attempt response expiry and cleanup are now proved natively.
+This is not proof that a first confirmation-timeout attempt retries correctly,
+nor node/broker failure recovery, all language branches or production readiness.
 
 The API permits `callback.confirmation_timeout=3`. The worker previously
 started that three-second timer when it submitted playback, although the

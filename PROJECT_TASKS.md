@@ -2,20 +2,30 @@
 
 ## Immediate operator follow-up — September9
 
-- **CALLBACK-DEADLINE negative expiry — IN PROGRESS:** focused on the reported
+- **CALLBACK-DEADLINE negative expiry — scoped native PASS:** focused on the reported
   callback confirmation behavior, not a general load campaign. Explicit
   `--confirmation-expiry --short-confirmation-window` reuses the isolated main
   fixture: first attempt unanswered, second answered without digit1. Requires
   complete built-in EN prompt followed by the saved3-second response window,
   server BYE, durable `failed/confirmation_timeout` at attempt2, no agent offer,
   zero remaining channels and conditional queue restoration. Positive playback
-  acceptance below is not rerun. Native result remains unverified until recorded.
+  acceptance below was not rerun. Source5a4d0ea is on master and main. Unit
+  `kz5-callback-confirmation-expiry-main44-20260909b` completed exit0 (a606c9).
+  Run `/var/log/kazoo-acceptance/20260909T021207Z`: full4.331s EN prompt with
+  strict RTP continuity, BYE3.031146s after completion, no confirmation or agent
+  INVITE; attempt2 durably `failed/confirmation_timeout`, cleared runtime legs.
+  Agent ready, services unchanged, fresh journal/file errors0/0 and new cores0.
+  Restore15->3->15 and zero calls verified7a3f37. Evidence SHA256:
+  `bae4858ce20efea1f156d1ac3e81d76475dcb10eb1205297982a7215490ed17a`.
+  This proves final-attempt expiry, not first-attempt confirmation-timeout retry
+  or cross-node failure. See `doc/callback_confirmation_deadline.md`.
   First run `/var/log/kazoo-acceptance/20260909T020712Z` correctly reached
   `failed/confirmation_timeout`, full4.331s prompt, BYE3.030839s later, no agent
   INVITE and zero channels; timeout restored. Overall FAIL: SIPp exit253 is its
   RTP echo-pattern check, inappropriate when hearing speech instead of echo.
-  Correct the endpoint to file-mode silence (same approach as offer acceptance),
-  keep strict received-waveform/timestamp assertions and real process-exit gate.
+  Corrected endpoint to file-mode silence (same approach as offer acceptance),
+  retaining strict received-waveform/timestamp assertions and real process-exit
+  gate. The failed run remains failed; the later candidate above passes.
 
 - **CALLBACK-RTP-01 bridge identity correction — FIXED / DEPLOYED / scoped PASS:**
   Native returned-call log selected broadcast while parked, adding five read-only
@@ -135,7 +145,7 @@
   after completion, with a successful retry bridge and no sequence loss.
   The separate20ms in-prompt timestamp gap was subsequently fixed and accepted
   under CALLBACK-RTP-01 above; native
-  negative response-expiry coverage remains unverified. Ordinary15-second retry
+  final-attempt negative response-expiry now passes in021207Z above. Ordinary15-second retry
   fixtures cannot prove this case. See `doc/callback_confirmation_deadline.md`.
 
 - **VOICE-01 locale spelling UI DEPLOYED:** existing `HE_IL`/`HE-IL`

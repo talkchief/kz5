@@ -1,5 +1,21 @@
 # Kazoo 5 — start here / engineering handoff
 
+**September9: native returned-caller confirmation expiry — scoped PASS.**
+Source5a4d0ea on master/main adds `--confirmation-expiry` to the existing isolated
+retry harness. Final unit `kz5-callback-confirmation-expiry-main44-20260909b`
+is terminal exit0. Run `/var/log/kazoo-acceptance/20260909T021207Z`: first attempt
+unanswered, second answers but sends no digit; full4.331s EN prompt, strict RTP,
+server BYE3.031146s after completion, no agent INVITE, durable final
+`failed/confirmation_timeout` with cleared legs, agent-ready, services unchanged,
+fresh log errors0/0 and cores0. Queue response timeout restored15->3->15 and
+zero calls verified7a3f37. No service restart or provider call. Earlier case
+020712Z correctly exposed an inappropriate SIPp echo-pattern assertion; it stays
+failed. File-mode silence plus independent strict received-waveform validation
+fixes the harness, not a new platform defect. Details and receipt hashes:
+`doc/callback_confirmation_deadline.md`. Do not repeat the passed case without
+a relevant change. First-attempt confirmation-timeout retry and cross-node
+failure remain distinct unverified scopes.
+
 **September9: callback bridge identity FIXED / DEPLOYED / scoped native PASS.**
 `ecallmgr_fs_channel:is_bridged/1` accepted self/empty peers. That can send a
 parked returned caller through broadcast's five read-only lead frames, matching
@@ -17,7 +33,8 @@ broadcast. Full4.331s EN prompt/strict RTP continuity, digit1 within the3s windo
 unanswered-first/retry bridge, agent-ready and fresh log/core gates pass. Exact
 timeout15->3->15 restored; zero calls and services active. Retained evidence:
 `/var/log/kazoo-acceptance/20260909T014723Z`. Both jobs terminal; do not rerun.
-Negative response-expiry, split-node failure and broader release gates remain.
+Negative final-attempt response-expiry now passes above; split-node failure and
+broader release gates remain.
 
 **September9: retained pre-fix CALLBACK-RTP-01 tracing (resolved above).**
 One instrumented isolated callback reproduces the strict timestamp failure while
@@ -111,7 +128,8 @@ coverage, then restored the timeout; zero calls/services active confirmed.
 Both jobs and offline replay44e6d4 are terminal. Do not repeat them. The replay
 confirms full4.331s English payload, digit1 received1.045s after completion,
 and connected retry with no sequence loss. Strict timing remains failed on
-a20ms in-prompt timestamp gap; native negative expiry is still unverified.
+a20ms in-prompt timestamp gap; later final-attempt native negative expiry passes
+in021207Z at the top of this handoff.
 Pinned-source timerfd diagnostic d0c54a subsequently reproduced the extra20ms
 and marker when two expirations are consumed. The captured runtime branch is
 not proven; another uninstrumented callback cannot establish it. Do not apply
