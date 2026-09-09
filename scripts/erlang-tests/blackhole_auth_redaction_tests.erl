@@ -13,6 +13,10 @@ redaction_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      [{"valid token is retained but never logged", fun successful_auth/0},
       {"already authorized context bypass is unchanged", fun authorized_bypass/0},
+      {"cached native command identity cannot bypass rejected tokens", fun cached_token_rejected/0},
+      {"native command token replacement requires reconnect", fun changed_token_rejected/0},
+      {"native commands require a positive authentication handler", fun missing_auth_handler/0},
+      {"cached native commands are freshly authenticated", fun cached_token_revalidated/0},
       {"denied text frames emit sanitized errors and never dispatch commands", fun denied_frames/0},
       {"mixed authentication failures stop both result orders", fun mixed_auth_results/0},
       {"valid text frame still reaches command dispatch", fun successful_frame/0},
@@ -142,10 +146,68 @@ denied_frames() ->
         ?assert(meck:called(kz_auth, validate_token, [?SECRET])),
         ?assert(meck:called(lager, md, [[{callid, ?REQUEST}]])),
         Events = [Event || {_, {blackhole_bindings, map, [Event, _]}, _} <- meck:history(blackhole_bindings)],
-        ?assertEqual([<<"blackhole.authenticate.fixture">>], Events),
-        ?assert(meck:called(lager, debug, ["failed to authenticate token auth"])),
+        ?assertEqual([], Events),
         assert_clean_logs(), assert_no_reply()
     end, reasons()).
+
+cached_context() ->
+    bh_context:set_authorized(bh_context:set_auth_account_id(
+        bh_context:set_auth_token(context(), ?SECRET), ?ACCOUNT)).
+
+assert_command_denied(Before, Frame) ->
+    ?assertEqual({ok, Before, hibernate},
+        blackhole_socket_handler:websocket_handle({text, Frame}, Before)),
+    receive {send_data, Reply} ->
+        ?assertEqual(<<"error">>, kz_json:get_value(<<"status">>, Reply)),
+        ?assertEqual(nomatch, binary:match(kz_json:encode(Reply), ?SECRET))
+    after 1000 -> ?assert(false)
+    end,
+    ?assertNot(meck:called(blackhole_bindings, map, [<<"blackhole.command.fixture">>, '_'])),
+    ?assertNot(meck:called(blackhole_bindings, fold, '_')),
+    assert_clean_logs(), assert_no_reply().
+
+cached_token_rejected() ->
+    lists:foreach(fun(Reason) ->
+        configure({error, Reason}),
+        assert_command_denied(cached_context(), frame()),
+        ?assert(meck:called(kz_auth, validate_token, [?SECRET]))
+    end, reasons()),
+    configure({ok, kz_json:new()}),
+    assert_command_denied(cached_context(), frame()),
+    configure({ok, kz_json:from_list([{<<"account_id">>, <<"different-account">>}])}),
+    assert_command_denied(cached_context(), frame()),
+    configure({error, unavailable}),
+    meck:expect(kz_auth, validate_token, fun(_) -> erlang:error({unavailable, ?SECRET}) end),
+    assert_command_denied(cached_context(), frame()).
+
+changed_token_rejected() ->
+    configure({ok, claims()}),
+    Other = kz_json:set_value(<<"auth_token">>, <<"changed-token">>, kz_json:decode(frame())),
+    assert_command_denied(cached_context(), kz_json:encode(Other)),
+    ?assertEqual([], meck:history(kz_auth)).
+
+missing_auth_handler() ->
+    try
+        lists:foreach(fun(Result) ->
+            configure({ok, claims()}),
+            meck:expect(blackhole_bindings, map, fun
+                (<<"blackhole.authenticate.fixture">>, _) -> Result;
+                (Event, Args) -> dispatch(Event, Args)
+            end),
+            assert_command_denied(cached_context(), frame())
+        end, [[], [false], [true]])
+    after meck:expect(blackhole_bindings, map, fun dispatch/2)
+    end.
+
+cached_token_revalidated() ->
+    configure({ok, claims()}),
+    WithoutToken = kz_json:delete_key(<<"auth_token">>, kz_json:decode(frame())),
+    {ok, After, hibernate} = blackhole_socket_handler:websocket_handle(
+        {text, kz_json:encode(WithoutToken)}, cached_context()),
+    ?assertEqual(?ACCOUNT, bh_context:auth_account_id(After)),
+    ?assertEqual(1, meck:num_calls(kz_auth, validate_token, [?SECRET])),
+    ?assert(meck:called(blackhole_bindings, map, [<<"blackhole.command.fixture">>, '_'])),
+    assert_clean_logs(), assert_no_reply().
 
 successful_frame() ->
     configure({ok, claims()}),

@@ -36,7 +36,7 @@ queue_live_test_() ->
       fun(_) -> ?_test(unavailable_local_auth()) end,
       fun(_) -> ?_test(ordinary_path()) end]}.
 
-mocks() -> [lager,kz_nodes,kz_buckets,blackhole_listener,acdc_live_auth].
+mocks() -> [lager,kz_nodes,kz_buckets,kz_auth,kapps_config,blackhole_listener,acdc_live_auth].
 setup() ->
     ets:new(?T,[named_table,public,bag]),
     lists:foreach(fun(M)->ok=meck:new(M,[non_strict,no_link]) end,mocks()),
@@ -47,6 +47,8 @@ setup() ->
     meck:expect(lager,md,fun()->[] end),meck:expect(lager,md,fun(_)->ok end),
     meck:expect(kz_nodes,node_hostname,fun()-><<"fixture.invalid">> end),
     meck:expect(kz_buckets,consume_token,fun(<<"blackhole">>,_)->true end),
+    meck:expect(kz_auth,validate_token,fun(?TOKEN)->{ok,kz_json:from_list([{<<"account_id">>,?A}])} end),
+    meck:expect(kapps_config,get_integer,fun(<<"blackhole">>,<<"max_queued_messages">>,50)->50 end),
     meck:expect(blackhole_listener,add_bindings,fun(L)->ets:insert(?T,{add,L}),ok end),
     meck:expect(blackhole_listener,remove_bindings,fun(L)->ets:insert(?T,{remove,L}),ok end),
     meck:expect(acdc_live_auth,fresh_token,fun(Token,A,Q)->
@@ -233,7 +235,13 @@ unavailable_local_auth() ->
     ?assertEqual(<<"error">>,reply_status(result(C))),?assertEqual([],ets:lookup(?T,add)).
 ordinary_path() ->
     C=context(),?assertEqual(pass,bh_queue_live:handle(<<"noop">>,kz_json:new(),C)),
-    ?assertMatch({ok,_,hibernate},frame(kz_json:from_list([{<<"action">>,<<"noop">>}]),C)),
+    ok=bh_ping:init(),ok=bh_token_auth:init(),
+    ?assertMatch({ok,_,hibernate},frame(kz_json:from_list([{<<"action">>,<<"ping">>}]),C)),
+    receive {send_data,Reply} ->
+        ?assertEqual(<<"success">>,kz_json:get_value(<<"status">>,Reply)),
+        ?assertEqual(<<"pong">>,kz_json:get_value([<<"data">>,<<"response">>],Reply))
+    after 1000 -> error(missing_native_reply)
+    end,
     ?assertEqual({reply,pong,C},info(pong,C)),none_auth().
 wait_dead(Pid) ->
     Mon=monitor(process,Pid),receive {'DOWN',Mon,process,Pid,_}->ok after 1000->error(worker_survived) end.

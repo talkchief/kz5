@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Current requested closeout — points1,2,4,6 IN PROGRESS:** user explicitly
+  requested ACDC reliability, callback edge cases, distributed installation,
+  and API/Blackhole/supervision gaps; no voice regeneration, bridge expansion
+  or dashboard redesign is added. Preserve prior passed native evidence.
+  First concrete fix is BH-02 native-command cached-authentication bypass:
+  original handler fails five focused cases (abe992), patched source passes14
+  public-entry tests and eight production compiles (e4e667). Installer-owned
+  command-auth overlay and source-bound OpenAPI contract are added. Actual
+  deployment/WSS acceptance and generic event lifetime/backpressure are still
+  pending; this is not closure of all four requested groups.
+
 - **P0-25 SmartPBX reported loading bug — SOURCE FIXED / DEPLOYED / BROWSER PASS:**
   Baseline stalled GET reproduced counter1, active blue bar, nine locked categories,
   no Retry (smartpbx-before-20260909.log). Source `e7dfa14` adds required,

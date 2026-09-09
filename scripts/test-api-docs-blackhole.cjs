@@ -42,6 +42,9 @@ accept(test, foreign); assert.throws(() => validateEvent(foreign, {account: a, q
 const spec = {components: {schemas: {}}, paths: {}};
 const applied = applyBlackhole({spec, root: path.resolve(__dirname, '..')});
 assert(applied.inputs.some(x => x.file.endsWith('/bh_queue_live.erl')));
+assert(applied.inputs.some(x => x.file.endsWith('/blackhole-command-auth.patch')));
+assert(spec['x-blackhole'].command_authentication.token_change.includes('Reconnect'));
+assert(spec['x-blackhole'].command_authentication.lifetime_limit.includes('already subscribed'));
 assert(applied.inputs.some(x => x.file.endsWith('/acdc_live_auth.erl')));
 assert(applied.inputs.some(x => x.file.endsWith('/kapi_acdc_dashboard_events.erl')));
 assert.equal(spec['x-blackhole'].queue_live.reconciliation_seconds, 15);

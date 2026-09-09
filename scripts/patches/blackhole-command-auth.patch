@@ -1,0 +1,99 @@
+diff --git a/src/blackhole_socket_callback.erl b/src/blackhole_socket_callback.erl
+index ab31d0d..563749c 100644
+--- a/src/blackhole_socket_callback.erl
++++ b/src/blackhole_socket_callback.erl
+@@ -31,11 +31,7 @@ open(Context) ->
+ 
+ -spec recv({binary(), kz_json:object()}, bh_context:context()) -> bh_return() | 'error'.
+ recv({Action, Payload}, Context) ->
+-    lager:debug("received action ~s with payload ~s"
+-               ,[Action
+-                ,kz_json:encode(kz_json:delete_key(<<"auth_token">>, Payload))
+-                ]
+-               ),
++    lager:debug("received websocket command"),
+     Routines = [fun rate/3
+                ,fun authenticate/3
+                ,fun validate/3
+@@ -45,7 +41,15 @@ recv({Action, Payload}, Context) ->
+                ,fun finish/3
+                ],
+     Ctx = bh_context:from_json(Context, Payload),
+-    exec(Ctx, Action, Payload, Routines).
++    case token_changed(Context, Payload) of
++        'true' -> send_error(bh_context:add_error(Ctx, <<"reconnect to change authentication token">>));
++        'false' -> exec(Ctx, Action, Payload, Routines)
++    end.
++
++token_changed(Context, Payload) ->
++    Old = bh_context:auth_token(Context),
++    New = kz_json:get_ne_binary_value(<<"auth_token">>, Payload),
++    is_binary(Old) andalso Old =/= <<>> andalso is_binary(New) andalso Old =/= New.
+ 
+ exec(Context, _Action, _Payload, []) ->
+     {'ok', Context};
+@@ -53,9 +57,7 @@ exec(Context, Action, Payload, [Fun | Funs]) ->
+     FunInfo = erlang:fun_info(Fun),
+     FunName = props:get_value('name', FunInfo),
+     FunArity = props:get_value('arity', FunInfo),
+-    lager:debug("executing ~s/~b for ~s with payload ~s"
+-               ,[FunName, FunArity, Action, kz_json:encode(kz_json:delete_key(<<"auth_token">>, Payload))]
+-               ),
++    lager:debug("executing websocket stage ~s/~b", [FunName, FunArity]),
+     Ctx = Fun(Context, Action, Payload),
+     case bh_context:success(Ctx) of
+         'true' -> exec(Ctx, Action, Payload, Funs);
+@@ -103,11 +105,47 @@ rate(Context, _Action, _Payload) ->
+     end.
+ 
+ authenticate(Context, Action, Payload) ->
+-    case bh_context:is_authenticated(Context) of
+-        'true' -> Context;
+-        'false' ->
+-            Routing = <<"blackhole.authenticate.", Action/binary>>,
+-            handle_result(Context, blackhole_bindings:map(Routing, [Context, Payload]))
++    %% A cached connection identity is not proof that its token is still valid.
++    %% Keep resource-specific authentication hooks, but require fresh token proof
++    %% and a positive context result; missing/crashed handlers cannot grant access.
++    case validate_command_token(bh_context:auth_token(Context)) of
++        {'ok', AccountId} ->
++            case bh_context:auth_account_id(Context) of
++                'undefined' -> authenticate_handlers(Context, Action, Payload, AccountId);
++                AccountId -> authenticate_handlers(Context, Action, Payload, AccountId);
++                _ -> bh_context:add_error(Context, <<"authentication identity changed; reconnect">>)
++            end;
++        'error' -> bh_context:add_error(Context, <<"failed to authenticate token">>)
++    end.
++
++validate_command_token(Token) when is_binary(Token), Token =/= <<>> ->
++    try kz_auth:validate_token(Token) of
++        {'ok', Claims} ->
++            case kz_json:get_ne_binary_value(<<"account_id">>, Claims) of
++                AccountId when is_binary(AccountId), AccountId =/= <<>> -> {'ok', AccountId};
++                _ -> 'error'
++            end;
++        _ -> 'error'
++    catch _:_ -> 'error'
++    end;
++validate_command_token(_) -> 'error'.
++
++authenticate_handlers(Context, Action, Payload, AccountId) ->
++    Routing = <<"blackhole.authenticate.", Action/binary>>,
++    Verified = bh_context:set_authorized(bh_context:set_auth_account_id(Context, AccountId)),
++    Results = blackhole_bindings:map(Routing, [Verified, Payload]),
++    case blackhole_bindings:succeeded(Results) of
++        [] -> bh_context:add_error(Context, <<"authentication handler unavailable or denied">>);
++        _ ->
++            Result = handle_result(Verified, Results),
++            case bh_context:is_context(Result) of
++                'true' ->
++                    case bh_context:auth_account_id(Result) =:= AccountId of
++                        'true' -> Result;
++                        'false' -> bh_context:add_error(Context, <<"authentication identity mismatch">>)
++                    end;
++                'false' -> bh_context:add_error(Context, <<"invalid authentication result">>)
++            end
+     end.
+ 
+ validate(Context, Action, Payload) ->
+

@@ -23,11 +23,12 @@ finish() {
 trap finish EXIT
 queue_live_archive=(src/bh_context.erl src/bh_events.erl src/blackhole_bindings.erl
     src/blackhole_socket_handler.erl src/blackhole_socket_callback.erl src/blackhole_data_emitter.erl
-    src/blackhole_listener.erl src/modules/bh_token_auth.erl)
+    src/blackhole_listener.erl src/modules/bh_token_auth.erl src/modules/bh_ping.erl)
 queue_live_sources=("${queue_live_archive[@]}" src/modules/bh_queue_live.erl)
 queue_live_extra=(applications/acdc/src/kapi_acdc_dashboard_events.erl applications/acdc/src/acdc_live_auth.erl)
 queue_live_patches=(scripts/patches/blackhole-kazoo5-integration.patch
-    scripts/patches/blackhole-pre-queue-live-integration.patch scripts/patches/blackhole-queue-live.patch)
+    scripts/patches/blackhole-pre-queue-live-integration.patch scripts/patches/blackhole-queue-live.patch
+    scripts/patches/blackhole-command-auth.patch)
 queue_live_deps=(core/kazoo_bindings/ebin/kazoo_bindings.beam core/kazoo_bindings/ebin/kazoo_bindings_rt.beam
     core/kazoo_stdlib/ebin/kz_json.beam core/kazoo_stdlib/ebin/kz_log.beam
     core/kazoo_stdlib/ebin/kz_term.beam core/kazoo_stdlib/ebin/kz_binary.beam
@@ -67,6 +68,11 @@ git -C "$queue_live_output/transition" apply "$queue_live_root/${queue_live_patc
 git -C "$queue_live_output/transition" apply --check "$queue_live_root/${queue_live_patches[2]}"
 git -C "$queue_live_output/transition" apply "$queue_live_root/${queue_live_patches[2]}"
 git -C "$queue_live_output/transition" apply --reverse --check "$queue_live_root/${queue_live_patches[2]}"
+for queue_live_lane in replay transition; do
+    git -C "$queue_live_output/$queue_live_lane" apply --check "$queue_live_root/${queue_live_patches[3]}"
+    git -C "$queue_live_output/$queue_live_lane" apply "$queue_live_root/${queue_live_patches[3]}"
+    git -C "$queue_live_output/$queue_live_lane" apply --reverse --check "$queue_live_root/${queue_live_patches[3]}"
+done
 if git -C "$queue_live_output/replay" apply --check "$queue_live_root/${queue_live_patches[0]}" 2>/dev/null; then
     printf 'Aggregate unexpectedly applies twice\n' >&2; exit 2
 fi

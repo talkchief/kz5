@@ -40,6 +40,7 @@ function queueLiveBlackholeContract() {
 function applyBlackhole({spec, root}) {
     const files = ['scripts/api-docs-blackhole.cjs', 'scripts/install-kazoo5.sh',
         'scripts/patches/blackhole-kazoo5-integration.patch',
+        'scripts/patches/blackhole-command-auth.patch',
         'scripts/patches/blackhole-token-redaction.patch',
         'scripts/patches/blackhole-redaction-to-integration.patch',
         'scripts/patches/blackhole-queue-live.patch',
@@ -99,6 +100,12 @@ function applyBlackhole({spec, root}) {
     const externalDocs = {url: '/apis/blackhole.html', description: 'Blackhole protocol and Next.js frontend integration'};
     spec['x-blackhole'] = {protocol: 'websocket', url: '/websocket', externalDocs,
         'x-contract-review': 'source-reviewed; not live acceptance',
+        command_authentication: {
+            validation: 'Each native command revalidates the connection token with the Kazoo token validator and requires a positive authentication-handler context. Cached account identity or HTTP101 alone cannot authorize a command. Rejected, malformed or unavailable token validation fails closed.',
+            token_change: 'Reconnect when changing tokens or login identity. A different nonempty auth_token on an established native connection is rejected; existing subscriptions are not transferred to another identity.',
+            lifetime_limit: 'This command guard does not establish periodic revalidation or termination of already subscribed generic event streams. Token/identity caches, revocation propagation, outbound event lifetime and backpressure require separate acceptance. Queue-live has its own fresh per-delivery authorization described below.',
+            acceptance: 'Source-tested command guard; deployment and real-token acceptance are recorded separately.'
+        },
         client_messages: {subscribe: ref('BlackholeSubscribe'), unsubscribe: ref('BlackholeUnsubscribe'), ping: ref('BlackholePing')},
         server_messages: {reply: ref('BlackholeReply'), event: ref('BlackholeEvent')},
         subscription_result: ref('BlackholeSubscriptionResult'), error_data: ref('BlackholeErrorData'), ping_result: ref('BlackholePingResult'),

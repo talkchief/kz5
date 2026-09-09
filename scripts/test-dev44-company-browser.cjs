@@ -13,6 +13,7 @@ const queueLogin = process.argv.slice(2).join(' ') === '--queue-login-check --al
 const storageSelector = process.argv.slice(2).join(' ') === '--storage-selector-check';
 const loadingRecovery = process.argv.slice(2).join(' ') === '--loading-recovery';
 const smartpbxRecovery = process.argv.slice(2).join(' ') === '--smartpbx-recovery';
+const blackholeCommandAuth = process.argv.slice(2).join(' ') === '--blackhole-command-auth';
 
 function privateText(file) {
     const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
@@ -38,7 +39,7 @@ function credentials() {
         const input = fs.readFileSync(0, 'utf8'); assert(input.length < 65536);
         result = JSON.parse(input);
     } else {
-        assert(process.argv.length === 2 || usersOnly || queueFormOnly || queueSave || queueLogin || storageSelector || loadingRecovery || smartpbxRecovery);
+        assert(process.argv.length === 2 || usersOnly || queueFormOnly || queueSave || queueLogin || storageSelector || loadingRecovery || smartpbxRecovery || blackholeCommandAuth);
         const auth = envFields(privateText('/etc/kazoo/installer-secrets.env'));
         const config = envFields(privateText('/etc/kazoo/deployment.env'));
         result = {account: Buffer.from(config.KAZOO_MASTER_ACCOUNT_NAME, 'base64').toString('utf8'),
@@ -69,6 +70,12 @@ function credentials() {
         await page.locator('button.login').click();
         await page.waitForFunction(id => window.monster && monster.apps.auth.accountId === id, MASTER, {timeout: 30000});
         await page.waitForTimeout(5000);
+        if (blackholeCommandAuth) {
+            phase = 'blackhole-command-auth';
+            assert.deepEqual(issues, []);
+            await require('./test-fixtures/blackhole-command-auth.cjs')(page, ORIGIN, MASTER);
+            return;
+        }
         if (smartpbxRecovery) {
             phase = 'smartpbx-recovery';
             assert.deepEqual(issues, []);

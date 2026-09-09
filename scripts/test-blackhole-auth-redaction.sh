@@ -2,7 +2,8 @@
 # Offline public-entry-point redaction checks; no JWT/live socket proof.
 set -Eeuo pipefail
 umask 077
-[[ $# == 0 ]] || { printf 'Usage: %s\n' "$0" >&2; exit 2; }
+[[ $# == 0 || ( $# == 1 && $1 == --baseline-command-auth ) ]] || { printf 'Usage: %s [--baseline-command-auth]\n' "$0" >&2; exit 2; }
+blackhole_command_baseline=${1:-}
 blackhole_test_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 blackhole_test_output=$(mktemp -d /tmp/kazoo-blackhole-redaction.XXXXXX)
 readonly blackhole_test_ref=4e3f02a5ab01c09a44c287f4f93b15d2782f5614
@@ -60,6 +61,7 @@ blackhole_test_other_inputs=(
     scripts/test-blackhole-auth-redaction.sh
     scripts/erlang-tests/blackhole_auth_redaction_tests.erl
     scripts/patches/blackhole-kazoo5-integration.patch
+    scripts/patches/blackhole-command-auth.patch
     scripts/install-kazoo5.sh
     applications/blackhole/src/blackhole.hrl
     core/kazoo_stdlib/include/kz_types.hrl
@@ -136,12 +138,23 @@ git -C "$blackhole_test_repo" archive "$blackhole_test_ref" \
 git -C "$blackhole_test_replay" apply --check "$blackhole_test_patch"
 git -C "$blackhole_test_replay" apply "$blackhole_test_patch"
 git -C "$blackhole_test_replay" apply --reverse --check "$blackhole_test_patch"
+git -C "$blackhole_test_replay" apply --check "$blackhole_test_root/scripts/patches/blackhole-command-auth.patch"
+git -C "$blackhole_test_replay" apply "$blackhole_test_root/scripts/patches/blackhole-command-auth.patch"
+git -C "$blackhole_test_replay" apply --reverse --check "$blackhole_test_root/scripts/patches/blackhole-command-auth.patch"
 if git -C "$blackhole_test_replay" apply --check "$blackhole_test_patch" 2>/dev/null; then
     printf 'Blackhole redaction patch unexpectedly applies twice\n' >&2; exit 2
 fi
 for blackhole_test_relative in "${blackhole_test_relative_sources[@]}" src/blackhole.hrl; do
     cmp -- "$blackhole_test_repo/$blackhole_test_relative" "$blackhole_test_replay/$blackhole_test_relative"
 done
+if [[ $blackhole_command_baseline == --baseline-command-auth ]]; then
+    # Only the private callback is reverted, to the exact pinned upstream bytes.
+    # The same denial tests must fail on the formerly cached authentication path.
+    git -C "$blackhole_test_replay" apply --reverse "$blackhole_test_root/scripts/patches/blackhole-command-auth.patch"
+    git -C "$blackhole_test_repo" show "$blackhole_test_ref:src/blackhole_socket_callback.erl" | \
+        cmp - "$blackhole_test_replay/src/blackhole_socket_callback.erl"
+    printf 'BASELINE command authentication callback restored in private replay only\n'
+fi
 sha256sum "${blackhole_test_replayed_sources[@]}" "$blackhole_test_replay/src/blackhole.hrl" \
     >"$blackhole_test_output/replay-pins.sha256"
 printf 'PASS pinned Blackhole %s patch replay, source equality, reverse/idempotence and installer hooks\n' \

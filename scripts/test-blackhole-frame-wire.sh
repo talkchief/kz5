@@ -70,6 +70,7 @@ blackhole_frame_other_inputs=(
     scripts/test-blackhole-frame-wire.sh
     scripts/erlang-tests/blackhole_frame_wire_tests.erl
     scripts/patches/blackhole-kazoo5-integration.patch
+    scripts/patches/blackhole-command-auth.patch
     scripts/install-kazoo5.sh
     scripts/patches/crossbar-kazoo5-integration.patch
     applications/crossbar/priv/couchdb/schemas/system_config.blackhole.json
@@ -151,6 +152,9 @@ git -C "$blackhole_frame_repo" archive "$blackhole_frame_ref" \
 git -C "$blackhole_frame_replay" apply --check "$blackhole_frame_patch"
 git -C "$blackhole_frame_replay" apply "$blackhole_frame_patch"
 git -C "$blackhole_frame_replay" apply --reverse --check "$blackhole_frame_patch"
+git -C "$blackhole_frame_replay" apply --check "$blackhole_frame_root/scripts/patches/blackhole-command-auth.patch"
+git -C "$blackhole_frame_replay" apply "$blackhole_frame_root/scripts/patches/blackhole-command-auth.patch"
+git -C "$blackhole_frame_replay" apply --reverse --check "$blackhole_frame_root/scripts/patches/blackhole-command-auth.patch"
 if git -C "$blackhole_frame_replay" apply --check "$blackhole_frame_patch" 2>/dev/null; then
     printf 'Blackhole frame/wire patch unexpectedly applies twice\n' >&2; exit 2
 fi
