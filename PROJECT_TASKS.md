@@ -7,6 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Remaining eCallMgr automatic-boot gate — current guest being provisioned:**
+  `--ecallmgr-peer` reuses only the original isolated lab's verified controller
+  filesystem with new IP172.30.253.21, distinct node name and persistent Pivot
+  reservation. Normal installer required before boot acceptance; old fixture
+  retained. First peer startup failed before Kazoo due host inotify-instance
+  exhaustion (systemd PID1 exit255; max_user_instances128). Protected init trace
+  and console diagnostic establish this, not an application crash. New lab
+  admission probes32 temporary instances and fails before starting another guest;
+  it creates no watches and changes no host limits. Completed cold-bootstrap
+  fixtures can be explicitly parked without deleting data/evidence. Guarded
+  resumption requires an authoritatively stopped, owned pre-configuration peer.
+  Boot success and full normal installer receipt are still pending.
+
 - **Cross-node JWT signing-secret revocation P0 — SOURCE FIXED / two-node native PASS:**
   receipt `/var/lib/kazoo5-install-lab/cluster-auth-1788973933046.json` proved
   primary HTTP401/WS1008, but peer HTTP200 and a post-revocation event leak.

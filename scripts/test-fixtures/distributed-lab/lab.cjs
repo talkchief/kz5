@@ -111,6 +111,7 @@ function create(role) {
     const name=SETTINGS.name+role,ip=PREFIX+(11+ROLES.indexOf(role));
     assert(!json(['ps','--all','--format','json']).some(c=>c.Names?.includes(name)),'Existing container name refused');
     const memory=['kazoo-apps','ecallmgr','freeswitch'].includes(role)?'6g':'1g';
+    command('python3',[__dirname+'/inotify-headroom.py','--check']);
     const id=podman(['run','--detach','--name',name,'--hostname',name,'--network',NETWORK,'--ip',ip,
         '--label','io.talkchief.kazoo.acceptance='+OWNER,'--label','io.talkchief.kazoo.role='+role,
         '--systemd=always','--security-opt','label=disable','--cap-add=NET_ADMIN','--memory',memory,
@@ -455,7 +456,36 @@ function requirePersistentPivot(role,argv) {
         assert(Array.isArray(argv)&&argv.includes('net.ipv4.ip_local_reserved_ports=34512-34513'),
             'Legacy guest lacks persistent Pivot ports; refuse before stopping the working role');
 }
-module.exports={overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases,requirePersistentPivot};
+function assertColdPark(s,settings) {
+    assert.equal(settings.cold,true,'Only completed empty-bootstrap fixtures may be parked');
+    assert.equal(s.owner,settings.owner);
+    assert.deepEqual(Object.keys(s.roles).sort(),['couchdb','kazoo-apps','rabbitmq']);
+    for(const r of Object.values(s.roles)) {
+        assert.equal(r.phase,'installed-service-verified');assert(!r.installUnit);
+    }
+    assert(s.roles['kazoo-apps'].guestBootVerified?.log,'Require completed automatic apps boot evidence');
+}
+function parkCold() {
+    const s=readState();ownedNetwork(s);assertColdPark(s,SETTINGS);
+    assert(fs.existsSync(s.roles['kazoo-apps'].guestBootVerified.log));
+    for(const role of ['kazoo-apps','rabbitmq','couchdb']) {
+        const r=s.roles[role],c=json(['inspect',r.id])[0];
+        assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],s.owner);
+        assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],role);
+        if(c.State.Running)assert.equal(c.NetworkSettings.Networks[NETWORK].IPAddress,r.ip);
+        assert.equal(c.State.Paused,false);
+    }
+    s.park={status:'STOPPING',started:new Date().toISOString(),dataRemoved:false};saveState(s);
+    for(const role of ['kazoo-apps','rabbitmq','couchdb']) {
+        const r=s.roles[role];
+        if(json(['inspect',r.id])[0].State.Running)podman(['stop','--time','30',r.id],{timeout:90000});
+        assert.equal(json(['inspect',r.id])[0].State.Running,false);
+    }
+    s.park.status='PARKED';s.park.finished=new Date().toISOString();saveState(s);
+    console.log(JSON.stringify({status:'PARKED',profile:SETTINGS.name,roles:3,dataRemoved:false,
+        reason:'Completed bootstrap evidence retained; release shared kernel/container resources'}));
+}
+module.exports={overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases,requirePersistentPivot,assertColdPark};
 if(require.main===module) {
 try {
     assert.equal(process.getuid(),0);assert(Object.values(os.networkInterfaces()).flat().some(n=>n.address==='10.1.0.44'),'Only development44 allowed');
@@ -473,9 +503,10 @@ try {
     else if(args.length===2&&args[0]==='--repair-legacy-pivot')repairLegacyPivot(args[1]);
     else if(args.length===1&&args[0]==='--status')status();
     else if(args.length===1&&args[0]==='--bootstrap-status')bootstrapStatus();
+    else if(args.length===1&&args[0]==='--park')parkCold();
     else if(args.length===2&&['--apps-peer','--ecallmgr-peer'].includes(args[0])) {
         assert(!SETTINGS.cold,'Peer belongs only to the original isolated lab');
-        assert(['create','install','collect','sync','reboot'].includes(args[1]));
+        assert(['create','resume','install','collect','sync','reboot'].includes(args[1]));
         require('./peer.cjs').peerOperation(args[1],{readState,saveState,ownedNetwork,json,podman,
             command,configFor,hardenContainer,DIR,ROOT},args[0]==='--apps-peer'?'kazoo-apps':'ecallmgr');
     }

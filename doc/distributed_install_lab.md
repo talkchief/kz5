@@ -152,6 +152,28 @@ Normal installation attempts and failures have distinct retained logs; source
 sync is refused while an installation runs. Snapshot creation has an independent
 unpause watchdog as well as normal cleanup for the exact owned primary.
 
+`--ecallmgr-peer create|resume|install|collect|sync|reboot` provides the corresponding
+media-controller peer at172.30.253.21. It uses a distinct hostname and persistent
+namespaced Pivot reservation; the old retained controller is not replaced.
+`resume` is only for a recorded pre-configuration peer that is now stopped, never
+for a timed-out observation of a still-running installation. The reboot gate
+requires an installed peer, empty owned media, persistent reservation, isolation
+routes and normal post-boot verifier, with an independent restoration timer.
+All images remain private and contain only this lab's protected credentials.
+
+Many simultaneous systemd guests can exhaust the host's per-user inotify instance
+limit even with RAM available. The first eCallMgr peer hit exactly this: systemd
+PID1 exited255 before any Kazoo startup. Source image binaries were healthy;
+protected console receipt `ecallmgr-init-console-1788976544127.log` records
+failure to create the control-group inotify object (too many open files).
+The new creation/reboot admission probes32 temporary inotify instances and closes
+them without adding watches or changing any kernel limit. On pressure, explicitly
+park completed bootstrap fixtures using `--cold-bootstrap --park` and
+`--cold-bootstrap-final --park`. Only each profile's three successfully installed
+roles with completed apps boot evidence qualify. Stop order is apps, broker,
+CouchDB; containers, private data and receipts remain available for later use.
+Parking is not another boot test and is never applied to the main stack.
+
 ## Fresh bootstrap campaign details
 
 Use the same entry point with `--cold-bootstrap` before the operation, starting

@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs');
-const {overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases,requirePersistentPivot}=require('./lab.cjs');
+const {overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases,requirePersistentPivot,assertColdPark}=require('./lab.cjs');
 assert.throws(()=>separateNamespace({dev:1,ino:2},{dev:1,ino:2}));
 separateNamespace({dev:1,ino:3},{dev:1,ino:2});
 separateNamespace({dev:2,ino:2},{dev:1,ino:2});
@@ -61,4 +61,12 @@ for(const role of ['kazoo-apps','ecallmgr']) {
     requirePersistentPivot(role,['--sysctl','net.ipv4.ip_local_reserved_ports=34512-34513']);
 }
 requirePersistentPivot('freeswitch',[]);requirePersistentPivot('kamailio',[]);
+const park={owner:cold.owner,roles:Object.fromEntries(['couchdb','rabbitmq','kazoo-apps'].map(role=>[role,
+    {phase:'installed-service-verified',guestBootVerified:{log:'/private/receipt'}}]))};
+assertColdPark(park,cold);
+assert.throws(()=>assertColdPark(park,normal));
+assert.throws(()=>assertColdPark({...park,owner:normal.owner},cold));
+assert.throws(()=>assertColdPark({...park,roles:{...park.roles,ecallmgr:{}}},cold));
+assert.throws(()=>assertColdPark({...park,roles:{...park.roles,'kazoo-apps':{phase:'installed-service-verified'}}},cold));
+assert.throws(()=>assertColdPark({...park,roles:{...park.roles,couchdb:{phase:'installing'}}},cold));
 console.log('PASS distributed-lab subnet, role, configuration, namespace and cold-bootstrap isolation guards; no containers or credentials created');

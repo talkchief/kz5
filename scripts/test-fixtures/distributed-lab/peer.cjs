@@ -31,7 +31,12 @@ function peerOperation(action,h,kind='kazoo-apps') {
     const {key,role:ROLE,name:NAME,ip:IP,unit,slug,filePrefix}=peerSettings(kind);
     const {readState,saveState,ownedNetwork,json,podman,command,configFor,hardenContainer,DIR,ROOT}=h;
     const s=readState();ownedNetwork(s);assert.equal(s.owner,'distributed-install-v1');
-    if(action==='create') {
+    if(action==='create'||action==='resume') {
+        command('python3',[__dirname+'/inotify-headroom.py','--check']);
+        assert.equal(command('git',['-C',ROOT,'status','--porcelain','--untracked-files=no']),'');
+        const source=command('git',['-C',ROOT,'rev-parse','HEAD']);
+        let id;
+        if(action==='create') {
         assert(!s[key],'Existing peer must be inspected, not replaced');
         assert.equal(command('git',['-C',ROOT,'status','--porcelain','--untracked-files=no']),'');
         assert(!json(['ps','--all','--format','json']).some(c=>c.Names?.includes(NAME)));
@@ -48,7 +53,6 @@ function peerOperation(action,h,kind='kazoo-apps') {
             '/usr/local/freeswitch/bin/fs_cli','-x','show channels as json'])).row_count,0);
         podman(['exec',primary.id,'test','!','-e',
             '/etc/systemd/system/'+unit+'.service.d/99-kz5-peer-admission.conf']);
-        const source=command('git',['-C',ROOT,'rev-parse','HEAD']);
         // Snapshot is private and intentionally contains the same lab's
         // protected credentials. Never push this image or call it a clean base.
         const watchdog='kz5-peer-snapshot-restore-'+process.pid;
@@ -62,12 +66,26 @@ function peerOperation(action,h,kind='kazoo-apps') {
             command('systemctl',['stop',watchdog+'.timer']);
         }
         s[key].image=image;s[key].phase='snapshot-retained';saveState(s);
-        const id=podman(['create','--name',NAME,'--hostname',NAME,'--network','kz5-install-stage','--ip',IP,
+        id=podman(['create','--name',NAME,'--hostname',NAME,'--network','kz5-install-stage','--ip',IP,
             '--label','io.talkchief.kazoo.acceptance='+s.owner,'--label','io.talkchief.kazoo.role='+ROLE,
             '--systemd=always','--security-opt','label=disable','--cap-add=NET_ADMIN',
             '--sysctl','net.ipv4.ip_local_reserved_ports=34512-34513',
             '--memory','6g','--memory-swap','6g','--pids-limit','4096',image]);
         assert(/^[a-f0-9]{64}$/.test(id));s[key].id=id;s[key].phase='created-stopped';saveState(s);
+        } else {
+            assert.equal(s[key]?.phase,'created-stopped','Resume only a retained pre-configuration startup failure');
+            id=s[key].id;
+            const c=json(['inspect',id])[0];
+            assert.equal(c.State.Running,false,'Never restart on observation timeout');
+            assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],s.owner);
+            assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],ROLE);
+            const argv=c.Config.CreateCommand;
+            for(const [flag,value] of [['--name',NAME],['--hostname',NAME],['--network','kz5-install-stage'],['--ip',IP]])
+                assert.equal(argv[argv.indexOf(flag)+1],value);
+            assert(argv.includes('net.ipv4.ip_local_reserved_ports=34512-34513'));
+            assert.equal(c.Image.replace(/^sha256:/,''),s[key].image.replace(/^sha256:/,''));
+            s[key].resumedSource=source;saveState(s);
+        }
         podman(['cp',__dirname+'/peer-admission/'+unit+'.service.d',id+':/etc/systemd/system/']);
         podman(['start',id],{timeout:90000});hardenContainer(id);
         const state=podman(['exec',id,'systemctl','show','--value','-p','ActiveState',unit]);
@@ -84,7 +102,7 @@ function peerOperation(action,h,kind='kazoo-apps') {
         podman(['exec',id,'git','-C','/opt/kz5','fetch','/var/lib/kazoo-stage/peer-source.bundle','master'],{timeout:180000});
         podman(['exec',id,'git','-C','/opt/kz5','merge','--ff-only',source],{timeout:180000});
         assert.equal(podman(['exec',id,'git','-C','/opt/kz5','rev-parse','HEAD']),source);
-        s[key].phase='configured-source-ready';saveState(s);
+        s[key].source=source;s[key].phase='configured-source-ready';saveState(s);
         console.log(JSON.stringify({status:'PEER_PREPARED',role:ROLE,source,ip:IP,serviceStarted:false}));return;
     }
     const p=s[key];assert(p?.id);
@@ -130,6 +148,7 @@ function peerOperation(action,h,kind='kazoo-apps') {
         assert.equal(mediaContainer.Config.Labels['io.talkchief.kazoo.role'],'freeswitch');
         assert.equal(mediaContainer.NetworkSettings.Networks['kz5-install-stage'].IPAddress,'172.30.253.15');
         assert.equal(JSON.parse(podman(['exec',media.id,'/usr/local/freeswitch/bin/fs_cli','-x','show channels as json'])).row_count,0);
+        command('python3',[__dirname+'/inotify-headroom.py','--check']);
         const receipt=DIR+'/'+slug+'-boot-'+Date.now()+'.log';
         const boot=p.boot={status:'RUNNING',started:new Date().toISOString(),receipt};saveState(s);
         const watchdog='kz5-peer-boot-restore-'+process.pid;
