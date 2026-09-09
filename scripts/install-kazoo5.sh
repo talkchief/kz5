@@ -29,6 +29,7 @@ readonly KAZOO_PERSISTED_KEYS=(
     KAZOO_ROOT KAZOO_BUILD_ROOT KAZOO_CACHE_DIR KAZOO_CONFIG_DIR KAZOO_COOKIE_FILE
     KAZOO_AMQP_HOST KAZOO_AMQP_PORT KAZOO_RABBITMQ_USER KAZOO_RABBITMQ_PASSWORD
     KAZOO_RABBITMQ_VHOST KAZOO_AMQP_URI KAZOO_COUCHDB_HOST KAZOO_COUCHDB_PORT
+    KAZOO_RABBITMQ_API_URL KAZOO_RABBITMQ_API_USER KAZOO_RABBITMQ_API_PASSWORD
     KAZOO_COUCHDB_ADMIN_PORT KAZOO_COUCHDB_USER KAZOO_COUCHDB_PASSWORD
     KAZOO_COUCHDB_BIND KAZOO_RABBITMQ_BIND KAZOO_HAPROXY_BIND KAZOO_PUBLIC_IP
     KAZOO_ERLANG_DIST_IP KAZOO_API_URL KAZOO_MAKE_JOBS KAZOO_MIN_BUILD_FREE_MB
@@ -126,6 +127,9 @@ KAZOO_RABBITMQ_USER=${KAZOO_RABBITMQ_USER:-kazoo}
 KAZOO_RABBITMQ_PASSWORD=${KAZOO_RABBITMQ_PASSWORD:-change_me}
 KAZOO_RABBITMQ_VHOST=${KAZOO_RABBITMQ_VHOST:-/}
 KAZOO_AMQP_URI=${KAZOO_AMQP_URI:-}
+KAZOO_RABBITMQ_API_URL=${KAZOO_RABBITMQ_API_URL:-}
+KAZOO_RABBITMQ_API_USER=${KAZOO_RABBITMQ_API_USER:-}
+KAZOO_RABBITMQ_API_PASSWORD=${KAZOO_RABBITMQ_API_PASSWORD:-}
 KAZOO_COUCHDB_HOST=${KAZOO_COUCHDB_HOST:-127.0.0.1}
 KAZOO_COUCHDB_PORT=${KAZOO_COUCHDB_PORT:-5984}
 KAZOO_COUCHDB_ADMIN_PORT=${KAZOO_COUCHDB_ADMIN_PORT:-$KAZOO_COUCHDB_PORT}
@@ -3006,7 +3010,20 @@ try {
 JS
 )
 
+acdc_broker_upgrade_preflight() (
+    set +x
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would verify callback queue properties on the configured broker before apps build/restart'
+        return 0
+    fi
+    export KAZOO_AMQP_URI KAZOO_RABBITMQ_API_URL KAZOO_RABBITMQ_API_USER KAZOO_RABBITMQ_API_PASSWORD
+    timeout --signal=TERM --kill-after=5 90 node "$SCRIPT_DIR/acdc-broker-preflight.cjs" ||
+        die 'ACDC broker upgrade preflight failed; no automatic queue deletion. See doc/acdc_broker_upgrade.md'
+)
+
 install_kazoo_apps() {
+    install_nodejs_toolchain
+    acdc_broker_upgrade_preflight
     # Validate/import immutable defaults before touching the application build
     # or restarting mapped code. Fresh bootstrap needs only configured CouchDB,
     # not SUP or a running local Kazoo/FreeSWITCH service.
@@ -3017,6 +3034,7 @@ install_kazoo_apps() {
     install_kazoo_systemd_units
     install_sup_cli
     install_monster_catalog_receiver
+    acdc_broker_upgrade_preflight
     service_enable_restart kazoo-apps.service
     if [[ $DRY_RUN != true ]]; then
         wait_kazoo_datastore_ready kazoo_apps

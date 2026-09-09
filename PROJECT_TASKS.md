@@ -7,6 +7,18 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **P0-06 / installer callback broker upgrade guard — source fix, validation in progress:**
+  Apps installation now inspects the effective broker's ACDC queue declarations
+  before imports/build and immediately before restart. Legacy auto-delete work
+  queues block upgrade with coordinated-drain guidance; no queue/ticket deletion.
+  Local broker identity is checked; separate hosts use explicit, read-only,
+  paginated management metadata with complete-inventory permissions. Missing
+  access fails closed, not a false fresh-install pass. Eleven focused regression
+  groups plus real installer early/restart-abort checks pass. Main44 read-only
+  check pending; no new call campaign or runtime restart is needed for this guard.
+  Split-host acceptance, coordinated migration and rollback remain open. Details:
+  `doc/acdc_broker_upgrade.md`.
+
 - **VOICE-05 Hebrew returned-confirmation coverage — scoped native PASS:**
   The September8 capture remains failed by160 samples. Following the deployed
   playback fix, main44 run20260909T043058Z now passes both the native HE retry
