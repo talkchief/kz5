@@ -210,6 +210,25 @@ assert.strictEqual(Object.hasOwn(blankCreate.announcements, 'language'), false);
 // Production forms always carry an explicit five-choice language state. There
 // is no inherit/empty choice, and readiness never resurrects a disabled option.
 const queueLanguageChoices = app.announcementLocales.map(value => ({ value, ready: value === 'en-us', disabled: value !== 'en-us', label: value }));
+// An existing queue without a supported override must not become English just
+// because its name/interval was saved. Keep exactly five choices, but require
+// an explicit choice before replacing inherited or unsupported legacy language.
+for (const original of [undefined, '', 'fr-ca']) {
+	const state = app.queueLanguageSelection(queueLanguageChoices, original, original, true);
+	assert.strictEqual(state.adopt, false, 'Unrelated edit must not silently adopt English: ' + original);
+	assert.strictEqual(state.selected, null, 'Do not display English as the inherited call language');
+	const payload = app.serializeQueue(queueForm(formValues, formChecks, { 'queue-language-selection': state }), true);
+	assert.strictEqual(payload.announcements.language, original);
+	assert.notStrictEqual(payload.announcements.media, null, 'Do not clear inherited/legacy prompt references');
+	assert.notStrictEqual(payload.callback.media, null);
+	state.selected = 'en-us'; state.adopt = true;
+	const adopted = app.serializeQueue(queueForm(formValues, formChecks, { 'queue-language-selection': state }), true);
+	assert.strictEqual(adopted.announcements.language, 'en-us');
+	assert.strictEqual(adopted.announcements.media, null);
+	assert.strictEqual(adopted.callback.media, null);
+}
+assert.strictEqual(app.queueLanguageSelection(queueLanguageChoices, undefined, undefined, false).selected, 'en-us',
+	'New queues retain the ready English default');
 assert(app.queueLanguageOptions([], 'en-us').every(item => item.disabled && !item.ready && item.label),
 	'Missing readiness descriptors must be labeled and disabled');
 for (const current of [undefined, '', 'fr-ca', 'en-us', 'he-il']) {

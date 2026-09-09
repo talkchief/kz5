@@ -2,6 +2,19 @@
 
 ## Immediate operator follow-up — September8
 
+- **VOICE-01 inherited queue edit — source fix, deployment pending (September9):**
+  An existing queue without a language override, or with an unsupported legacy
+  locale, was displayed and silently saved as English when the English pack
+  was ready. Baseline d5c05d reproduces this; source contract6f74ba passes after
+  preserving the original setting until an explicit language choice. Exactly
+  five options remain; a legacy/inherited edit starts with no selected option
+  and an explanatory notice, while new queues retain English. Existing supported
+  same-language built-in adoption is unchanged. A focused offline Chromium mode
+  covers actual dropdown/change/submit behavior; not yet run. No provider calls,
+  media regeneration or account/reseller default changes. See
+  `doc/queue_language_inherited_edit.md`. Native reseller default resolution is
+  still a separate open gap, not addressed by this UI fix.
+
 - **INSTALL-MODULE-SCOPE-01 DEPLOYED / scoped PASS:** native Crossbar
   start/stop read node/zone autoload overrides but overwrote cluster default,
   leaving their own startup list unchanged. Root-owned patch now persists to

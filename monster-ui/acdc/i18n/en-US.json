@@ -225,6 +225,7 @@
 			"intervalHelp": "Announcements repeat at this interval; Kazoo requires at least 15 seconds.",
 			"initialDelayHelp": "Wait this many seconds before the first position or estimated-wait announcement. For example, 30 waits half a minute after entering the queue. Repeats use the announcement interval independently.",
 			"languageHelp": "One queue language controls position announcements and every callback offer, menu, number readback, confirmation and error response, using its built-in female voice. New queues default to English. Saving a ready language uses its built-in prompts. Unavailable languages cannot be selected; existing unavailable settings survive unrelated edits. Synthetic voice availability does not imply native-speaker pronunciation approval.",
+			"languagePreserved": "This queue uses an inherited language or an older language setting. Other edits keep that behavior unchanged. Select a queue language above to use its built-in voice for announcements and callback responses.",
 			"promptsTitle": "Announcement prompts",
 			"promptsDescription": "Choose audio used around the spoken queue position and estimated wait time. Only verified installed system prompts and account media are offered.",
 			"legacyPromptsPreserved": "This queue has custom announcement or callback audio. Saving with a ready queue language replaces those queue prompt overrides with its built-in voice, even when the language is unchanged. Your recordings are not deleted. If the selected language is unavailable, unrelated edits preserve the current settings."

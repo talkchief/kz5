@@ -6,6 +6,8 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 const sourceRoot = process.env.KAZOO_PROJECT_ROOT || path.resolve(__dirname, '..');
 const englishCandidate = process.env.KAZOO_ENGLISH_MEDIA_CANDIDATE;
+const inheritanceOnly = process.argv[2] === '--inheritance-only';
+if (process.argv.length > (inheritanceOnly ? 3 : 2)) throw new Error('Unsupported test arguments');
 const vendorRoot = process.env.KAZOO_MONSTER_VENDOR_ROOT
     || '/usr/local/src/kazoo5-installer/monster-ui/src/js/vendor';
 const {chromium} = require(process.env.KAZOO_PLAYWRIGHT_MODULE || 'playwright');
@@ -99,11 +101,13 @@ async function main() {
                 window.saved.push({queueId, payload, agentIds, extension});
             };
             app.showFormError = (_view, message) => { window.formErrors.push(message); };
-            window.renderFixture = ({legacy = false, callback = false, announcement} = {}) => {
+            window.renderFixture = ({legacy = false, callback = false, announcement,
+                isEdit = legacy, languageSetting, builtinReady = false} = {}) => {
                 window.saved = [];
                 window.formErrors = [];
                 const queue = app.defaultQueue();
                 queue.name = 'Unsaved language-only queue';
+                if (languageSetting !== undefined) queue.announcements.language = languageSetting;
                 queue.callback.enabled = callback;
                 queue.callback.caller_id_source = 'inherit';
                 queue.callback.outbound_authority = {type: 'user', id: 'fixture-callback-user'};
@@ -118,7 +122,7 @@ async function main() {
                     }
                 }
                 const view = $(window.Handlebars.compile(template)({queue, i18n: translations,
-                    isEdit: legacy, users: [], legacyPromptOverrides: app.hasLegacyPromptOverrides(queue)}));
+                    isEdit, users: [], legacyPromptOverrides: app.hasLegacyPromptOverrides(queue)}));
                 $('body').empty().append(view);
                 view.data('roster-read-only', false).data('route-read-only', false)
                     .data('callflow-summaries', []).data('owned-route', null);
@@ -130,10 +134,17 @@ async function main() {
                     .map(id => id.slice(5)).concat(['agent-invalid_choice', 'menu-invalid_entry', 'cf-enter_number'])
                     .map(id => ({id: 'en-us/' + id, language: 'en-us', name: id, has_attachments: true}))
                     .concat(geminiMedia);
-                app.populateQueueDropdowns(view, queue, {users: [{id: 'fixture-callback-user', first_name: 'Fixture', last_name: 'Agent'}],
-                    media: [], numbers: [], verifiedSystemMedia: systemMedia, languageCapabilities: manifest}, {}, legacy);
+                const readiness = app.languageCapabilityOptions;
+                // Controlled catalog seam only. This focused mode tests editor
+                // selection/DOM/submit behavior, not installed media readiness.
+                if (builtinReady) app.languageCapabilityOptions = () => app.announcementLocales.map(value =>
+                    ({value, label: value, ready: true, disabled: false}));
+                try {
+                    app.populateQueueDropdowns(view, queue, {queue, users: [{id: 'fixture-callback-user', first_name: 'Fixture', last_name: 'Agent'}],
+                        media: [], numbers: [], verifiedSystemMedia: systemMedia, languageCapabilities: manifest}, {}, isEdit);
+                } finally { app.languageCapabilityOptions = readiness; }
                 app.renderAgentOrder(view, []);
-                app.bindQueueForm(view, legacy ? 'fixture-queue' : undefined, 1, 'fixture-account');
+                app.bindQueueForm(view, isEdit ? 'fixture-queue' : undefined, 1, 'fixture-account');
                 return queue;
             };
         }, {template, translations, geminiMedia});
@@ -146,6 +157,43 @@ async function main() {
                 form.requestSubmit();
                 return {checked, reported, saved: window.saved, formErrors: window.formErrors};
             });
+        }
+        if (inheritanceOnly) {
+            for (const languageSetting of [undefined, '', 'fr-ca']) {
+                const queue = await render({isEdit: true, legacy: true, languageSetting, builtinReady: true});
+                const language = page.locator('[name="announcements.language"]');
+                assert.deepEqual(await language.locator('option').evaluateAll(options => options.map(option => option.value)),
+                    ['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa']);
+                assert.equal(await language.evaluate(select => select.selectedIndex), -1);
+                assert.equal(await page.locator('.acdc-language-preserved').isVisible(), true);
+                await page.locator('[name="name"]').fill('Unrelated rename keeps language');
+                const kept = await submit();
+                assert(kept.checked && kept.reported && kept.saved.length === 1);
+                assert.deepEqual(kept.formErrors, []);
+                assert.equal(kept.saved[0].payload.announcements.language, languageSetting);
+                assert.deepEqual(kept.saved[0].payload.announcements.media, queue.announcements.media);
+                assert.deepEqual(kept.saved[0].payload.callback.media, queue.callback.media);
+                await language.selectOption('en-us');
+                assert.equal(await page.locator('.acdc-language-preserved').isVisible(), false);
+                const changed = await submit();
+                assert.equal(changed.saved.length, 2);
+                assert.equal(changed.saved[1].payload.announcements.language, 'en-us');
+                assert.equal(changed.saved[1].payload.announcements.media, null);
+                assert.equal(changed.saved[1].payload.callback.media, null);
+                cases++;
+            }
+            await render({builtinReady: true});
+            assert.equal(await page.locator('[name="announcements.language"]').inputValue(), 'en-us');
+            assert.equal(await page.locator('.acdc-language-preserved').isVisible(), false);
+            const created = await submit();
+            assert(created.checked && created.reported && created.saved.length === 1);
+            assert.equal(created.saved[0].payload.announcements.language, 'en-us');
+            assert(!Object.hasOwn(created.saved[0].payload.announcements, 'media'));
+            assert.deepEqual(network, []); assert.deepEqual(errors, []);
+            console.log(JSON.stringify({result: 'PASS', mode: 'inheritance-only', cases: cases + 1,
+                actual_template_and_submit_handler: true, actual_chromium_validation: true,
+                readiness_catalog: 'controlled', api_writes: 0, network_requests: 0}));
+            return;
         }
         await render({});
         const controls = await page.evaluate(fields => ({

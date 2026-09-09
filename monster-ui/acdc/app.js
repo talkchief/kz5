@@ -631,9 +631,13 @@ define(function(require) {
 			});
 		},
 
-		queueLanguageSelection: function(items, current, original) {
+		queueLanguageSelection: function(items, current, original, isEdit) {
 			var options = this.queueLanguageOptions(items, current),
-				selected = _.find(options, { selected: true }).value,
+				canonical = typeof current === 'string' ? current.toLowerCase().replace(/_/g, '-') : current,
+				// An inherited/unsupported legacy language has no truthful selection
+				// among the five built-ins. Do not adopt the create default on edit.
+				selected = isEdit && this.announcementLocales.indexOf(canonical) < 0
+					? null : _.find(options, { selected: true }).value,
 				ready = _.map(_.filter(options, function(item) {
 					return item.ready === true && item.disabled === false;
 				}), 'value');
@@ -685,7 +689,9 @@ define(function(require) {
 				setSelect(name, media, _.get(queue, name), labels.useDefault, errors.media || errors.systemMedia);
 			});
 			var languageSelect = form.find('[name="announcements.language"]'),
-				languageOptions = self.queueLanguageOptions(languages, _.get(queue, 'announcements.language'));
+				languageOptions = self.queueLanguageOptions(languages, _.get(queue, 'announcements.language')),
+				languageSelection = self.queueLanguageSelection(languages,
+					_.get(queue, 'announcements.language'), _.get(results.queue, 'announcements.language'), isEdit);
 
 			languageSelect.empty();
 			_.each(languageOptions, function(item) {
@@ -693,8 +699,9 @@ define(function(require) {
 					.prop('disabled', Boolean(item.disabled)).appendTo(languageSelect);
 			});
 			languageSelect.prop('disabled', Boolean(errors.systemMedia || errors.languageCapabilities));
-			form.data('queue-language-selection', self.queueLanguageSelection(languages,
-				_.get(queue, 'announcements.language'), _.get(results.queue, 'announcements.language')));
+			languageSelect.val(languageSelection.selected);
+			form.find('.acdc-language-preserved').toggleClass('hidden', languageSelection.selected !== null);
+			form.data('queue-language-selection', languageSelection);
 			if (authority.type === 'device' && authority.id) {
 				users.push({ value: authority.id, label: labels.legacyDevice, authorityType: 'device' });
 			}
@@ -2028,6 +2035,7 @@ define(function(require) {
 				if (selection && selection.ready.indexOf(value) >= 0) {
 					selection.selected = value;
 					selection.adopt = true;
+					form.find('.acdc-language-preserved').addClass('hidden');
 				}
 			});
 			form.find('[name="callback.enabled"], [name="callback.caller_id_source"], [name="callback.announcement.enabled"]').on('change', function() {

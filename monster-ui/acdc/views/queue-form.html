@@ -31,6 +31,7 @@
 			<label class="acdc-field"><span>{{i18n.acdc.fields.announcementInterval}}</span><input class="acdc-announcement-interval" type="number" name="announcements.interval" min="15" value="{{queue.announcements.interval}}" required><small>{{i18n.acdc.announcements.intervalHelp}}</small></label>
 			<label class="acdc-field"><span>{{i18n.acdc.fields.announcementInitialDelay}}</span><input class="acdc-announcement-initial-delay" type="number" name="announcements.initial_delay" min="1" max="3600" value="{{queue.announcements.initial_delay}}" required><small>{{i18n.acdc.announcements.initialDelayHelp}}</small></label>
 			<label class="acdc-field"><span>{{i18n.acdc.fields.announcementLanguage}}</span><select class="acdc-announcement-language" name="announcements.language"></select><small>{{i18n.acdc.announcements.languageHelp}}</small></label>
+			<div class="acdc-language-preserved acdc-warning acdc-field-wide hidden" role="status">{{i18n.acdc.announcements.languagePreserved}}</div>
 			{{#if legacyPromptOverrides}}<div class="acdc-warning acdc-field-wide acdc-legacy-prompt-warning" role="status">{{i18n.acdc.announcements.legacyPromptsPreserved}}</div>{{/if}}
 			<input type="hidden" name="announcements.media.you_are_at_position" value="{{queue.announcements.media.you_are_at_position}}">
 			<input type="hidden" name="announcements.media.in_the_queue" value="{{queue.announcements.media.in_the_queue}}">
