@@ -30,17 +30,19 @@ Preserve the unrelated untracked `doc/dashboard_caller_sidecar_design.md`.
   backend reads were used. No account writes or service outages were performed.
   This adds acceptance evidence, not a new runtime frontend change.
 
-## Next reported bug to address, without repeating passed campaigns
+## Subsequent SmartPBX completion, at the user's request
 
-P0-25 is still partially open. Reproduce one indefinitely stalled SmartPBX GET
-and inspect both the global blue indicator and local category-loading lifecycle.
-The pinned `src/js/lib/jquery.kazoosdk.js` request implementation currently has no
-timeout; `src/apps/voip/submodules/myOffice/myOffice.js` has parallel reads with
-success-only callbacks. These are source findings, not a completed native-stall
-reproduction or a deployed fix. Implement a root-owned installer patch and a
-focused regression only after confirming the failure. Do not replay writes or
-present failed reads as empty successful data. Never-settling AMD construction
-also remains open; a timeout alone must not permit late shared-object mutation.
+The user resumed work specifically to finish SmartPBX. Source `e7dfa14` fixes
+the reproduced stalled GET, dashboard error completion, local menu locks,
+visible Retry, service-plan failure and late-render ownership. The fix is carried
+in required installer patches and their build fingerprints. Normal Monster UI
+installation on main44 passed, followed by six focused native-browser checks
+for stalls, HTTP503, Retry, indicator/menu recovery and late responses after
+recovery/navigation. No account writes were performed. See
+`doc/smartpbx_loading_recovery.md` for exact before/after evidence and replay.
+Do not repeat these passed checks unchanged. Never-settling AMD construction
+remains a separate open gap; a timeout alone must not permit late shared-object
+mutation. The whole production release remains uncertified.
 
 ## Important release boundaries
 

@@ -7,6 +7,22 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **P0-25 SmartPBX reported loading bug — SOURCE FIXED / DEPLOYED / BROWSER PASS:**
+  Baseline stalled GET reproduced counter1, active blue bar, nine locked categories,
+  no Retry (smartpbx-before-20260909.log). Source `e7dfa14` adds required,
+  fingerprinted installer patches: SDK GET deadline15s (writes unchanged), all
+  dashboard read error completions, visible error/Retry, category unlocking,
+  account/render ownership guards, and initial service-plan error recovery.
+  Dashboard opening no longer invokes unused voicemail creation. Focused source
+  regression passes, including all nine read failures and duplicate completion.
+  Normal main44 Monster UI installer exited0 in1m10.207s (5deaad).
+  Native-browser after run exited0 in25.242s (4abbc3): all six stall/503/Retry/
+  indicator/menu/late-response/navigation checks PASS (13be7a). No account writes
+  or call tests. Main44 log `/root/kz5-acceptance/smartpbx-after-20260909.log`.
+  Details and receipt hashes: `doc/smartpbx_loading_recovery.md`.
+  This closes the SmartPBX dashboard stalled-read/local-menu gaps below; the
+  separate never-settling AMD loader and broader release gaps remain open.
+
 - **P0-25 browser outage recovery — six focused checks PASS; remaining gaps open:**
   Main44 `--loading-recovery` run passed ACDC503 visible Retry and idle indicator,
   successful Retry, stalled-read watchdog, late-delivery isolation after recovery,
@@ -16,9 +32,9 @@ work postponed; do not generate voices at runtime or during deployment.
   PASS (ffe0c1). This injected browser-only GET failures/stall with real login and
   successful API reads, blocked account writes, and caused no server outage.
   Harness commit `1225cc1` adds acceptance coverage, not another runtime fix.
-  SmartPBX indefinitely stalled reads, its local menu loading/error lifecycle,
-  and never-settling AMD construction are NOT closed by this run. Work stopped
-  at the user's explicit wrap-up instruction before extending those checks.
+  That earlier run did not close SmartPBX indefinitely stalled reads, its local
+  menu loading/error lifecycle, or never-settling AMD construction. The subsequent
+  SmartPBX source fix and native acceptance above close the first two gaps.
   Handover and next focused action: `doc/FOCUSED_HANDOVER_2026-09-09.md`.
 
 - **INST-07 standalone service-unit scope — source fixed / focused PASS:**
@@ -1934,7 +1950,7 @@ See `doc/callflows_users_entitlements_fix.md` for source, deployment and replay.
 | --- | --- | --- |
 | P0-21 | DEPLOYED — restricted-user acceptance open | Corrected legacy module spelling with an admin-only management guard. Installer refuses old unguarded backends and preserves unrelated modules. Installer22groups66cc53/cea08b and backend7groupsbcc947/c5cf88 pass; pinned baseline fails5. Deployment209651/1e3fc6 verifies actual bytes/capability/running+effective registration and unchanged31-agent states. Actual admin policy CRUD revision probe7c9f07/47ce1f passes stale412, weak412 and current-delete200+absence. Earlier run2 policy retained after harness POST-replacement mismatch. Ordinary-user HTTP denial and restricted-dashboard matrix remain unverified. See doc/scope_management_dashboard_acceptance.md. |
 | P0-22 | CLOSED — scoped main login-display acceptance | Actual selected-queue Login, interrupted proof GET / Check again recovery and immediate post-Logout table-label invalidation pass on main with exactly one Login POST; other29 statuses/memberships unchanged. Logout stale-proof regression fails before f820d18 and27 groups pass after. Normal installer87070/c84568 and deployed browser77891/5350d1 exit0. Source and retained evidence: doc/queue_login_browser_acceptance.md. Restricted principals, arbitrary stale navigation and live delayed-response reordering remain separate release gates. Runtime-only Login preserved; roster assignment is not login proof. |
-| P0-25 | FIXES DEPLOYED — scoped browser PASS; outage acceptance open | September 7 indefinite loading traced to both unbounded GET waits and overlapping native app construction clearing ACDC translations. Bounded GET fix is deployed; installer-owned singleflight patch b02f7fe passes16 actual-loader groups including original failure reproduction. Fresh production MwsDYg bundle deployed ec9a75/9f9af6. Initial dashboard/login-dialog probe passes without page errors3ff064/eefb87; standard default and account-switch production probes pass7/10 checks e5b91d/2241b2 and45576a/e20ac1 with zero page/console/HTTP errors. All four home/switched summary/detail reconnect cases pass7/9/10/12 checks with zero errors; receipts hltOHJ,jDrUgY,hcjYc6,2rApWe. Controlled unavailable-API/late-reply browser recovery and never-settling loader behavior remain open. See doc/monster_app_load_singleflight.md. |
+| P0-25 | FIXES DEPLOYED — scoped ACDC/SmartPBX recovery PASS; AMD hang gap open | September 7 indefinite loading traced to both unbounded GET waits and overlapping native app construction clearing ACDC translations. Bounded GET fix is deployed; installer-owned singleflight patch b02f7fe passes16 actual-loader groups including original failure reproduction. Fresh production MwsDYg bundle deployed ec9a75/9f9af6. Initial dashboard/login-dialog probe passes without page errors3ff064/eefb87; standard default and account-switch production probes pass7/10 checks e5b91d/2241b2 and45576a/e20ac1 with zero page/console/HTTP errors. All four home/switched summary/detail reconnect cases pass7/9/10/12 checks with zero errors; receipts hltOHJ,jDrUgY,hcjYc6,2rApWe. Controlled browser GET failure/stall/late-reply checks now pass for ACDC and SmartPBX. SmartPBX source e7dfa14 fixes dashboard read completion/menu locks; normal UI installer and six targeted native checks pass. Never-settling AMD loader behavior remains open. See doc/smartpbx_loading_recovery.md and doc/monster_app_load_singleflight.md. |
 | P0-26 | FIX DEPLOYED — actual create/readback PASS | September 7 repeated PUT /queues/editor400 logged editor_body_requires_exact_fields; actual Monster serializer adds unwanted ui_metadata. Local requestQueueEditor opt-out preserves strict five-field backend body, request identity and explicit retries; eight real-serializer fixture groups pass e412fe. Matching UI deployed6d7352/d9a24c. Actual form PUT created one owned empty-roster/no-extension queue with HTTP201 (7f91f3/816240); harness incorrectly expected200, but completed operation was durably captured. Recovery09a4d6/131789 verified saved settings/empty roster/no callflow, deleted exact owned queue and confirmed404; no create retry. Receipt retained. Validation failures, PATCH and uncertain receipt recovery remain open; normal owned cleanup is not conditional-delete proof. |
 | UI-01 | DEPLOYED — selector error fixed; capability gating remains open | Current ACDC Save does not request storage. SmartPBX call-recording/Common plan manager handle absent optional plans, but Common selector had no error completion and crashed on empty successful data. Installer patchf85bb21 fixes these; baseline4/7 failures, candidate7/7 pass including main build source. Normal installer22488/383cf4 and native404 browser33704/37350c pass; visible warning, settled callback, inactive bar, zero writes. Backend404 remains truthful; no dummy storage document or module registration. External-storage configuration/capability gating remain separate. See doc/monster_optional_storage.md. |
 | UI-02 | CLOSED — deployed and browser verified | September 7 user requests removing observed wording and renaming Elapsed in progress to In Progress. Plain user-facing dashboard labels now use Waiting, In Progress, Ready, Member and Active calls; technical API field names/metric semantics stay unchanged and unknown/stale/partial warnings remain. Root52 dashboard groups pass078c38/a26140. Matching production build130be8/b8aff7 and owned deployment6d7352/d9a24c passed. Fresh actual browser cbf2ed/80cbbf verified all dashboard values omit observed, visible Waiting/In Progress, and duration heading In Progress. See doc/acdc_ui_stabilization_20260907.md. |
