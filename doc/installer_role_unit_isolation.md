@@ -55,3 +55,8 @@ zero automatic restarts. Existing unit SHA256 values:
 The source fix belongs in main44 `/opt/kz5`; no runtime rebuild or restart is
 needed to activate a future installer branch decision. Full separate-role
 installation/upgrade/failure-recovery acceptance remains tracked in INST-07/13.
+
+Source `2dde850` is pushed to master and fast-forwarded on main44 (0d99bd).
+After synchronization, both unit hashes above and both service PIDs/restart
+counts were identical to baseline. The main checkout was clean. This was a
+source-only installer rollout, not an actual role reinstall or service restart.

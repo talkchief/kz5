@@ -16,7 +16,9 @@ work postponed; do not generate voices at runtime or during deployment.
   naming input (50a4f5). Normal CLI dry-run apps/ecallmgr/combined selections pass
   exact once/zero unit writes (ca722f). No new full install/reboot claim; shared
   core config/build/cookie/Pivot still require coordinated deployment. Details:
-  `doc/installer_role_unit_isolation.md`.
+  `doc/installer_role_unit_isolation.md`. Source `2dde850` is pushed/synced to
+  main44; both live unit hashes, PIDs and zero restart counts match baseline
+  after sync (0d99bd). No runtime restart or role reinstall was performed.
 
 - **Installer persisted private management CA — fixed / scoped native PASS:**
   `KAZOO_RABBITMQ_API_CA_FILE` is saved/reloaded with deployment settings, validated
