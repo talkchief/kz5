@@ -4,11 +4,11 @@
 // routes, production recordings, or uncorrelated channel cleanup are allowed.
 const fs=require('node:fs'), path=require('node:path'), crypto=require('node:crypto');
 const cp=require('node:child_process'), assert=require('node:assert/strict');
-const audio=require('./test-fixtures/monitor-audio.cjs');
-const ROOT=path.resolve(__dirname,'..'), API='http://127.0.0.1:8000/v2';
-const BASE='/etc/kazoo/acceptance-secrets.env', FILE='/etc/kazoo/monitor-acceptance.json';
-const AUTH='/etc/kazoo/installer-secrets.env', OWNER='kazoo5-isolated-monitor-acceptance';
-const MASTER='302ae5a70c403124f764cbc54229cfcd', ID=/^[a-f0-9]{32}$/, CALL=/^[A-Za-z0-9_.:@-]{1,128}$/;
+let audio=require('./test-fixtures/monitor-audio.cjs');
+const ROOT=path.resolve(__dirname,'..');
+let API='http://127.0.0.1:8000/v2', BASE='/etc/kazoo/acceptance-secrets.env', FILE='/etc/kazoo/monitor-acceptance.json';
+let AUTH='/etc/kazoo/installer-secrets.env', MASTER='302ae5a70c403124f764cbc54229cfcd', distributed=null;
+const OWNER='kazoo5-isolated-monitor-acceptance', ID=/^[a-f0-9]{32}$/, CALL=/^[A-Za-z0-9_.:@-]{1,128}$/;
 const SCENARIOS=path.join(__dirname,'sip-tests'), FSCLI='/usr/local/freeswitch/bin/fs_cli';
 let state, fixture, masterToken, adminToken, userToken, runDir, current, cleaning=false;
 const children=new Set(), registered=new Set();
@@ -66,7 +66,7 @@ function validFixture(f,s) {
             'Saved fixture web-user mismatch');
     }
     if(f.current) {
-        assert(/^1-[1-9][0-9]*@127\.0\.0\.50$/.test(f.current.caller_id)&&
+        assert(new RegExp('^1-[1-9][0-9]*@'+audio.IP.replaceAll('.','\\.')+'$').test(f.current.caller_id)&&
             ['eavesdrop','whisper','barge','join'].includes(f.current.mode),'Invalid saved fixture call');
         if(f.current.agent_id) assert(CALL.test(f.current.agent_id),'Invalid saved agent ID');
         if(f.current.supervisor_id) assert(ID.test(f.current.supervisor_id)&&ID.test(f.current.request_id),'Invalid monitor correlation');
@@ -83,6 +83,7 @@ function saveFixture() {
     fs.renameSync(tmp,FILE);
 }
 function command(file,args,timeout=15000) {
+    if(distributed&&file===FSCLI){args=['exec',distributed.media,file,...args];file='podman';}
     try {return cp.execFileSync(file,args,{encoding:'utf8',timeout,maxBuffer:4*1024*1024,stdio:['ignore','pipe','pipe']});}
     catch(_) {throw Error('Local dependency/diagnostic command failed: '+path.basename(file));}
 }
@@ -178,7 +179,8 @@ function writePrivate(name,content) {
     fs.writeFileSync(file,content,{mode:384,flag:'wx'});return file;
 }
 function contacts(e) {
-    const r=cp.spawnSync('kamcmd',['ul.lookup','location',e.username+'@'+state.ACCEPTANCE_REALM],{encoding:'utf8',timeout:5000});
+    const args=['ul.lookup','location',e.username+'@'+state.ACCEPTANCE_REALM];
+    const r=cp.spawnSync(distributed?'podman':'kamcmd',distributed?['exec',distributed.registrar,'kamcmd',...args]:args,{encoding:'utf8',timeout:5000});
     if(r.status!==0) {assert((r.stdout+r.stderr).includes('404'),'Registrar observation unavailable');return [];}
     return [...r.stdout.matchAll(/^\s*Address:\s*(sip:\S+)/gm)].map(m=>m[1].split(';')[0]);
 }
@@ -286,7 +288,7 @@ async function stage(mode) {
         `SEQUENTIAL\n${e.username};[authentication username=${e.username} password=${e.password}];${state.ACCEPTANCE_REALM};1002;120000;0;${path.join(runDir,'tone-440.ulaw')}\n`:
         `SEQUENTIAL\n${path.join(runDir,'tone-'+[440,660,880][i]+'.ulaw')}\n`);});
     const capture=path.join(runDir,mode+'.pcap');
-    const tcpdump=cp.spawn('tcpdump',['-i','lo','-Z','root','-n','-U','-s','512','-w',capture,'udp','and','host',audio.IP,'and','portrange','49000-49005'],{stdio:'ignore'});
+    const tcpdump=cp.spawn('tcpdump',['-i',distributed?distributed.iface:'lo','-Z','root','-n','-U','-s','512','-w',capture,'udp','and','host',audio.IP,'and','portrange','49000-49005'],{stdio:'ignore'});
     children.add(tcpdump);tcpdump.once('exit',()=>children.delete(tcpdump));
     const agent=spawnPhone(es[1],'monitor-agent.xml',input.agent), supervisor=spawnPhone(es[2],'monitor-supervisor.xml',input.supervisor);
     await sleep(500);assert(agent.exitCode===null&&supervisor.exitCode===null&&tcpdump.exitCode===null,'Fixture listener failed');
@@ -356,7 +358,8 @@ async function cleanup() {
 function prepare() {
     state=baseState(privateRead(BASE));
     const local=JSON.parse(command('ip',['-j','-4','address','show'])).flatMap(x=>x.addr_info||[]).map(x=>x.local);
-    assert(local.includes(state.ACCEPTANCE_SIP_PROXY_HOST),'SIP proxy must be this local server');
+    assert(distributed?(state.ACCEPTANCE_SIP_PROXY_HOST==='172.30.253.17'&&local.includes(audio.IP)):
+        local.includes(state.ACCEPTANCE_SIP_PROXY_HOST),'SIP proxy/fixture interface outside admitted profile');
     const version=cp.spawnSync('sipp',['-v'],{encoding:'utf8',timeout:5000});
     assert(!version.error&&(version.stdout+version.stderr).includes('SIPp v3.7.7-TLS-PCAP-SHA256'),'Pinned SIPp feature version required');
     command('tcpdump',['--version']);assert(fs.existsSync(FSCLI),'Local FS diagnostic client missing');
@@ -367,6 +370,13 @@ function prepare() {
     log('Prepared: isolated tenant only; three synthetic endpoints; no API writes, SIP traffic, or service changes');
 }
 async function main(args) {
+    if(args[0]==='--distributed') {
+        args=args.slice(1);
+        assert(args.length===1&&['--prepare-only','--live','--cleanup'].includes(args[0]),'Invalid distributed monitor mode');
+        distributed=require('./test-fixtures/distributed-lab/monitor-profile.cjs').prepare();
+        API=distributed.api;BASE=distributed.base;AUTH=distributed.auth;FILE=distributed.file;MASTER=distributed.master;
+        audio=audio.distributed();
+    }
     assert(args.length===1&&['--prepare-only','--live','--cleanup'].includes(args[0]),'Use --prepare-only, --live, or --cleanup');
     assert(process.getuid()===0,'Root required for protected fixture and local RTP evidence');prepare();
     if(args[0]==='--prepare-only')return;

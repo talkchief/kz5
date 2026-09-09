@@ -7,13 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Distributed SIP/supervision acceptance fixture — preparation in progress:**
+- **Distributed SIP/supervision acceptance fixture — native provisioning PASS:**
   original private lab only, three-agent synthetic child company and dedicated
   root0600 state. Uses the existing reviewed provisioning library after host
   admission of all seven owned roles and zero media calls; no imported-company
   data, production configuration, provider or external calls. API Login and
   provisioning are not SIP/RTP or cross-node supervision proof. The real call
-  tests and ownership/audio privacy checks remain open.
+  tests and ownership/audio privacy checks remain open. Normal fixture creation
+  completed on source `35250c3`, private receipt
+  `/var/lib/kazoo5-install-lab/provision-calls.log`. The opt-in supervision harness
+  now has a fixed original-lab transport adapter: API on apps-peer20, SIP via
+  Kamailio17, FS diagnostics on media15, RTP capture on the private bridge only.
+  Same full before/after-DTMF audio/privacy checks; no arbitrary host option.
+  Native supervision run pending; local scope/audio regressions pass.
 
 - **eCallMgr automatic-boot gate — native PASS:**
   `--ecallmgr-peer` reuses only the original isolated lab's verified controller

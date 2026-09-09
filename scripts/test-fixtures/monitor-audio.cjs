@@ -22,7 +22,8 @@ function tone(frequencies, seconds=1) {
     return Buffer.from(Array.from({length:8000*seconds}, (_,i) =>
         encode(frequencies.reduce((sum,f) => sum + 6000*Math.sin(2*Math.PI*f*i/8000),0))));
 }
-function packets(buffer) {
+function packets(buffer, address=IP) {
+    assert([IP,'172.30.253.1'].includes(address),'Unapproved fixture audio address');
     assert(buffer.length >= 24 && buffer.length <= 64*1024*1024, 'Invalid capture size');
     const magic = buffer.subarray(0,4).toString('hex');
     const little = ['d4c3b2a1','4d3cb2a1'].includes(magic);
@@ -49,9 +50,9 @@ function packets(buffer) {
         if(r[0]&16) {assert(start+4<=r.length,'RTP extension');start+=4+4*r.readUInt16BE(start+2);}
         const end=(r[0]&32)?r.length-r[r.length-1]:r.length;
         assert(start<=end,'Invalid RTP bounds');
-        if(source!==IP && dest!==IP) continue;
-        assert((source===IP && Object.values(PORTS).includes(sp)) ||
-            (dest===IP && Object.values(PORTS).includes(dp)), 'Capture contains non-fixture UDP');
+        if(source!==address && dest!==address) continue;
+        assert((source===address && Object.values(PORTS).includes(sp)) ||
+            (dest===address && Object.values(PORTS).includes(dp)), 'Capture contains non-fixture UDP');
         result.push({time,source,dest,sp,dp,pt:r[1]&127,stamp:r.readUInt32BE(4),ssrc:r.readUInt32BE(8),payload:r.subarray(start,end)});
     }
     return result;
@@ -74,16 +75,16 @@ function amplitudes(items) {
     assert(s.n>=8000 && s.packets>=40,'Insufficient audio evidence');
     return Object.fromEntries(FREQUENCIES.map((f,i)=>[f,Math.round(2*Math.hypot(s.re[i],s.im[i])/s.n)]));
 }
-function inspect(buffer, mode, windows) {
+function inspect(buffer, mode, windows, address=IP) {
     assert(['eavesdrop','whisper','barge','join'].includes(mode),'Unknown monitor mode');
     assert(Array.isArray(windows)&&windows.length===2,'Both pre/post-keypad windows required');
-    const all=packets(buffer), evidence=[];
+    const all=packets(buffer,address), evidence=[];
     for(const [index,window] of windows.entries()) {
         assert(Number.isFinite(window.start)&&Number.isFinite(window.end)&&window.end-window.start>=1.5,'Invalid evidence window');
         const frame=all.filter(p=>p.time>=window.start&&p.time<window.end), row={};
         for(const [role,port] of Object.entries(PORTS)) {
-            const outbound=amplitudes(frame.filter(p=>p.source===IP&&p.sp===port));
-            const incoming=amplitudes(frame.filter(p=>p.dest===IP&&p.dp===port));
+            const outbound=amplitudes(frame.filter(p=>p.source===address&&p.sp===port));
+            const incoming=amplitudes(frame.filter(p=>p.dest===address&&p.dp===port));
             const own={customer:440,agent:660,supervisor:880}[role];
             assert(outbound[own]>2000,`${role} stimulus missing`);
             const expected=role==='customer'?[660]:role==='agent'?[440]:[440,660];
@@ -97,8 +98,13 @@ function inspect(buffer, mode, windows) {
         }
         evidence.push({phase:index===0?'before_keypad_3':'after_keypad_3',...row});
     }
-    const digits=all.filter(p=>p.source===IP&&p.sp===PORTS.supervisor&&p.pt===96&&p.payload[0]===3);
+    const digits=all.filter(p=>p.source===address&&p.sp===PORTS.supervisor&&p.pt===96&&p.payload[0]===3);
     assert(digits.some(p=>p.time>=windows[0].end&&p.time<=windows[1].start),'No keypad-3 escalation attempt between evidence windows');
     return {mode,keypad_3_packets:digits.length,windows:evidence};
 }
-module.exports={IP,PORTS,FREQUENCIES,encode,decode,tone,packets,amplitudes,inspect};
+function distributed() {
+    const address='172.30.253.1';
+    return {IP:address,PORTS,FREQUENCIES,encode,decode,tone,amplitudes,
+        packets:buffer=>packets(buffer,address),inspect:(buffer,mode,windows)=>inspect(buffer,mode,windows,address)};
+}
+module.exports={IP,PORTS,FREQUENCIES,encode,decode,tone,packets,amplitudes,inspect,distributed};

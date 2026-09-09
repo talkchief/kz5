@@ -12,7 +12,7 @@ function packet(time, source, sp, dest, dp, pt, stamp, ssrc, data) {
     const header=Buffer.alloc(16);header.writeUInt32LE(Math.floor(time),0);header.writeUInt32LE(Math.round((time%1)*1e6),4);
     header.writeUInt32LE(p.length,8);header.writeUInt32LE(p.length,12);return Buffer.concat([header,p]);
 }
-function capture(mode,{leak=false,missingDigit=false,missingSupervisor=false}={}) {
+function capture(mode,{leak=false,missingDigit=false,missingSupervisor=false,address=audio.IP}={}) {
     const header=Buffer.alloc(24);header.writeUInt32LE(0xa1b2c3d4);header.writeUInt16LE(2,4);header.writeUInt16LE(4,6);header.writeUInt32LE(65535,16);header.writeUInt32LE(1,20);
     const buffers=[header], tones=new Map();
     function samples(fs,start){const key=fs.join();if(!tones.has(key))tones.set(key,audio.tone(fs));return tones.get(key).subarray(start%8000,start%8000+160);}
@@ -20,13 +20,13 @@ function capture(mode,{leak=false,missingDigit=false,missingSupervisor=false}={}
         const time=100+n/50,stamp=n*160;
         for(const [index,[role,port]] of Object.entries(audio.PORTS).entries()) {
             if(missingSupervisor&&role==='supervisor')continue;
-            buffers.push(packet(time,audio.IP,port,'127.0.0.1',30000+index*2,0,stamp,index+1,samples([audio.FREQUENCIES[index]],stamp)));
+            buffers.push(packet(time,address,port,'127.0.0.1',30000+index*2,0,stamp,index+1,samples([audio.FREQUENCIES[index]],stamp)));
             const receive=role==='customer'?[660]:role==='agent'?[440]:[440,660];
             if(role==='agent'&&mode!=='eavesdrop')receive.push(880);
             if(role==='customer'&&(['barge','join'].includes(mode)||(leak&&time>=107)))receive.push(880);
-            buffers.push(packet(time,'127.0.0.1',30000+index*2,audio.IP,port,0,stamp,index+11,samples(receive,stamp)));
+            buffers.push(packet(time,'127.0.0.1',30000+index*2,address,port,0,stamp,index+11,samples(receive,stamp)));
         }
-        if(n===250&&!missingDigit)buffers.push(packet(time,audio.IP,49004,'127.0.0.1',30004,96,stamp,3,Buffer.from([3,0x8a,0x06,0x40])));
+        if(n===250&&!missingDigit)buffers.push(packet(time,address,49004,'127.0.0.1',30004,96,stamp,3,Buffer.from([3,0x8a,0x06,0x40])));
     }
     return Buffer.concat(buffers);
 }
@@ -42,4 +42,12 @@ assert.throws(()=>audio.inspect(capture('join',{missingSupervisor:true}),'join',
 assert.throws(()=>audio.inspect(capture('barge').subarray(0,100),'barge',windows),/Truncated/);
 assert.throws(()=>audio.inspect(capture('barge'),'barge',[]),/windows/);
 console.log('PASS fail-closed leakage, missing keypad, missing stimulus, truncated capture and missing phase gates');
+const distributed=audio.distributed();
+assert.equal(distributed.IP,'172.30.253.1');assert.equal(audio.IP,'127.0.0.50');
+for(const mode of ['eavesdrop','whisper','barge','join'])
+    assert.equal(distributed.inspect(capture(mode,{address:distributed.IP}),mode,windows).windows.length,2);
+assert.throws(()=>distributed.inspect(capture('whisper',{address:distributed.IP,leak:true}),'whisper',windows),/leaked/);
+assert.throws(()=>distributed.inspect(capture('whisper'),'whisper',windows),/Missing/);
+assert.throws(()=>audio.packets(capture('join'),'10.1.0.28'),/Unapproved/);
+console.log('PASS separate fixed lab audio address with identical directionality/privacy gates and foreign-address refusal');
 module.exports={capture,packet};
