@@ -1,0 +1,39 @@
+diff --git a/kazoo_amqp/src/gen_listener.erl b/kazoo_amqp/src/gen_listener.erl
+index 95caace40..02170a801 100644
+--- a/kazoo_amqp/src/gen_listener.erl
++++ b/kazoo_amqp/src/gen_listener.erl
+@@ -664,8 +664,9 @@ handle_cast({'add_queue', QueueName, QueueProps, Bindings}, State) ->
+     {_, S} = add_other_queue(QueueName, QueueProps, Bindings, State),
+     {'noreply', S};
+ handle_cast({'rm_queue', QueueName}, #state{other_queues=OtherQueues}=State) ->
++    {Bindings, _QueueProps} = props:get_value(QueueName, OtherQueues, {[], []}),
+     _ = [remove_binding(Binding, Props, QueueName)
+-         || {Binding, Props} <- props:get_value(QueueName, OtherQueues, [])
++         || {Binding, Props} <- Bindings
+         ],
+     {'noreply', State#state{other_queues=props:delete(QueueName, OtherQueues)}};
+ handle_cast({'add_responder', Responder, Keys}, #state{responders=Responders}=State) ->
+@@ -1368,14 +1369,18 @@ add_other_queue(<<>>, QueueProps, Bindings, #state{other_queues=OtherQueues, aut
+     _ = [create_binding(Type, BindProps, Q) || {Type, BindProps} <- Bindings],
+     {Q, State#state{other_queues=[{Q, {Bindings, QueueProps}}|OtherQueues]}};
+ add_other_queue(QueueName, QueueProps, Bindings, #state{other_queues=OtherQueues, auto_ack=AutoAck}=State) ->
+-    {'ok', Q} = start_amqp([{'queue_name', QueueName} | QueueProps], AutoAck),
+-    gen_server:cast(self(), {?MODULE, {'created_queue', Q}}),
+-    _ = [create_binding(Type, BindProps, Q) || {Type, BindProps} <- Bindings],
+     case props:get_value(QueueName, OtherQueues) of
+         'undefined' ->
++            {'ok', Q} = start_amqp([{'queue_name', QueueName} | QueueProps], AutoAck),
++            gen_server:cast(self(), {?MODULE, {'created_queue', Q}}),
++            _ = [create_binding(Type, BindProps, Q) || {Type, BindProps} <- Bindings],
+             {Q, State#state{other_queues=[{Q, {Bindings, QueueProps}}|OtherQueues]}};
+-        OldBindings ->
+-            {Q, State#state{other_queues=[{Q, {Bindings ++ OldBindings, QueueProps}}
++        {OldBindings, OldQueueProps} ->
++            %% Reconnect restores these queues before created_queue callbacks
++            %% can add them again. Keep one consumer and a proper binding list.
++            NewBindings = [B || B <- Bindings, not lists:member(B, OldBindings)],
++            _ = [create_binding(Type, BindProps, QueueName) || {Type, BindProps} <- NewBindings],
++            {QueueName, State#state{other_queues=[{QueueName, {NewBindings ++ OldBindings, OldQueueProps}}
+                                          | props:delete(QueueName, OtherQueues)
+                                          ]}}
+     end.
