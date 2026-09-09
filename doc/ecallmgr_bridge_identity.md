@@ -31,6 +31,17 @@ only media-path/variable formatting is mocked. Real bridge detection is not.
 - Baseline evidence:`/tmp/kazoo-bridge-identity.vZPE06Tq`.
 - Candidate evidence:`/tmp/kazoo-bridge-identity.yhseP9K7`.
 
+The additive `assert-callback-direct-playback.cjs RUN` reads only the exact
+retained returned-call EXECUTE records, saves numeric/action evidence without
+phone numbers or media URLs, and requires park -> playback -> noop -> intercept
+with no broadcast. Applied to the retained pre-fix run,8ed28a fails as expected
+with broadcast count1. It does not replace the separate strict RTP checker.
+
+Normal CLI deployment is in progress under
+`kz5-callback-bridge-identity-install-main44-20260909`, observer63457. The log
+confirms the installer applied the root-owned patch before compiling eCallMgr.
+Do not start another deployment or native case until this unit is terminal.
+
 This is a confirmed source bug and a candidate explanation for CALLBACK-RTP-01.
 The retained native returned call was parked, yet its log shows broadcast at
 01:27:46.768276 and playback at01:27:46.868296. FreeSWITCH's broadcast path adds
