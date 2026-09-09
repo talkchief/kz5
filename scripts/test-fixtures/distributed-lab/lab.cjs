@@ -261,6 +261,27 @@ function reservePivotNamespace(container) {
         assert.equal(fs.readFileSync(kernel,'utf8'),before,'Host port reservations unexpectedly changed');
     } finally {fs.closeSync(fd);}
 }
+function repairLegacyPivot(role) {
+    assert(!SETTINGS.cold&&['kazoo-apps','ecallmgr'].includes(role));
+    const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r);
+    const c=json(['inspect',r.id])[0];
+    assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],role);
+    assert.equal(c.NetworkSettings.Networks[NETWORK].IPAddress,r.ip);
+    assert(!c.Config.CreateCommand.includes('net.ipv4.ip_local_reserved_ports=34512-34513'),
+        'Repair applies only to retained containers predating the creation fix');
+    const media=s.roles.freeswitch;assert(media);
+    const m=json(['inspect',media.id])[0];
+    assert.equal(m.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
+    assert.equal(m.Config.Labels['io.talkchief.kazoo.role'],'freeswitch');
+    assert.equal(JSON.parse(podman(['exec',media.id,'/usr/local/freeswitch/bin/fs_cli','-x','show channels as json'])).row_count,0);
+    reservePivotNamespace(c);
+    podman(['exec',r.id,'systemctl','restart','kazoo-pivot-port-reservation.service']);
+    podman(['exec',r.id,'systemctl','start',UNITS[role]+'.service']);
+    r.legacyPivotRepair={time:new Date().toISOString(),bootPassed:false};saveState(s);
+    verifyRole(role);
+    console.log(JSON.stringify({status:'RESTORED',role,bootPassed:false,
+        reason:'retained container predates namespaced sysctl creation; not an automatic boot pass'}));
+}
 function collectRole(role) {
     assert(Object.hasOwn(UNITS,role));const s=readState();ownedNetwork(s);const r=s.roles[role];assert(r?.installUnit);
     const c=json(['inspect',r.id])[0];assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],OWNER);
@@ -396,6 +417,7 @@ try {
     else if(args.length===2&&args[0]==='--verify-role')verifyRole(args[1]);
     else if(args.length===2&&args[0]==='--reboot-role')verifyRole(args[1],true);
     else if(args.length===2&&args[0]==='--drained-reboot-role')verifyRole(args[1],true,true);
+    else if(args.length===2&&args[0]==='--repair-legacy-pivot')repairLegacyPivot(args[1]);
     else if(args.length===1&&args[0]==='--status')status();
     else throw Error('Usage: --prepare | --create ROLE | --install ROLE | --sync-source ROLE | --verify-role ROLE | --reboot-role ROLE | --status');
 } catch(e) {console.error('Distributed lab refused/failed: '+e.message);process.exitCode=1;}

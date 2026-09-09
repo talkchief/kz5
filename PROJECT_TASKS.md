@@ -11,13 +11,27 @@ work postponed; do not generate voices at runtime or during deployment.
   empty-data lab is being prepared to close the bootstrap evidence gap. New
   network/state/secrets/realm; original lab and development data preserved.
   First apps attempt requires an authenticated no-Kazoo-databases inventory.
-  Normal installer only, no diagnostic account creation. Result pending; see
+  Normal installer only, no diagnostic account creation. CouchDB/RabbitMQ first
+  installs passed. Apps attempt1 refused missing lab monitor credentials before
+  account creation; corrected lab setup automatically provisions the read-only
+  identity. Attempt2 is running as container unit `kz5-stage-install-kazoo-apps-2`
+  in `kz5-cold-kazoo-apps`, source `c875758`. Both admissions proved no Kazoo DBs.
+  Original failure remains failed. Cold bootstrap result pending; see
   `doc/distributed_install_lab.md` for the reproducible entry point.
 - **Final focused handover:** fixes for requested points1/2/4/6 are committed in
-- **Extended30-minute call hold — prepared, native result pending:** bounded
+- **Extended30-minute call hold — running, native result pending:** bounded
   `--soak-seconds 1800` mode retains the actual SIP/RTP/concurrency/recovery/log
   gates and derives endpoint lifetime/timeouts. No queued excess or queue-policy
-  changes in extended mode. Details: `doc/acdc_extended_soak.md`.
+  changes in extended mode. Main44 unit `kz5-extended-soak-20260909.service`,
+  started14:58:59UTC, was verified running with30 connected calls; holds the
+  shared fixture lock. Do not restart main services while this run is active.
+  Protected log `/root/kz5-acceptance/extended-soak-20260909.log`.
+  Details: `doc/acdc_extended_soak.md`.
+- **Separated guest reboot matrix — continuing:** explicit all-owned/drained
+  admission added. HAProxy automatic guest stop/start and normal verifier passed,
+  receipt `/var/lib/kazoo5-install-lab/haproxy-boot-1788966152367.log`; earlier
+  failed Podman runs remain retained. Remaining media/apps guest checks running
+  independently of the main call soak. No physical-host reboot claim.
 - **Final focused handover:** fixes for requested points1/2/4/6 are committed in
   kz5 and deployed on main44. Final30-answered/5-queued capacity, broker recovery,
   callback edge cases and HTTP/WSS scope/revocation checks passed. All seven

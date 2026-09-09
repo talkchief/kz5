@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Actual argument/timing functions only; no live SIP, files or account writes.
+# Shared-library functions consume SOAK_SECONDS; do not execute the live main.
+# shellcheck disable=SC1091,SC2034
 set -Eeuo pipefail
 test_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 KAZOO_CALLS_LIBRARY=true source "$test_dir/test-kazoo-calls.sh"

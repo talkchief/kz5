@@ -193,8 +193,9 @@ validate_stages() {
 }
 
 validate_soak() {
-    [[ $SOAK_SECONDS =~ ^[1-9][0-9]{2,3}$ ]] && ((SOAK_SECONDS >= 180 && SOAK_SECONDS <= 1800)) ||
+    if [[ ! $SOAK_SECONDS =~ ^[1-9][0-9]{2,3}$ ]] || ((SOAK_SECONDS < 180 || SOAK_SECONDS > 1800)); then
         die 'Soak seconds must be an integer in 180..1800'
+    fi
     if ((SOAK_SECONDS > CAPACITY_SOAK_SECONDS)); then
         [[ $MODE == stress && $STAGES == 30 && $QUEUED_EXCESS == 0 ]] ||
             die 'Extended soak requires --stress --stages 30 --queued-excess 0; do not exceed the queue wait budget'

@@ -115,6 +115,17 @@ verification checks. It does not weaken `--reboot-role`'s earlier dependency
 restriction or authorize host/main-stack restart. A failed stop/start is retained
 as a failure, never treated as verified merely because a container later runs.
 
+September9 HAProxy drained guest reboot passed (`haproxy-boot-1788966152367.log`).
+The retained eCallMgr guest then failed automatic admission: its old Podman
+creation command lacks the namespaced reserved-port setting and the reservation
+service cannot write the container's read-only sysctl mount after a reboot.
+Current creation code includes the setting. The explicit original-lab-only
+`--repair-legacy-pivot ecallmgr` helper requires zero owned media channels, pins
+the non-host network namespace, reserves the ports without changing the host,
+restarts the exact prerequisite and starts/verifies the role. It records a
+restoration, **not** an automatic boot pass. Do not weaken production readiness
+or change host/container-wide privilege to make this legacy fixture pass.
+
 ## Fresh bootstrap campaign
 
 Use the same entry point with `--cold-bootstrap` before the operation, starting
