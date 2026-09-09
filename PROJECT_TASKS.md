@@ -2,6 +2,16 @@
 
 ## Immediate operator follow-up — September9
 
+- **BRIDGE-WATCHDOG-01 — source correction / deployment pending:** found a
+  bypass of the existing uncertain-delivery no-replay policy: stalled owner
+  watchdog exits1, which the installed `Restart=on-failure` restarts. Last
+  progress time cannot prove no HTTP dispatch or ACK is pending. Baseline
+  64767/0fb10a:2 new tests fail (real child exits1),19 existing/boundary tests
+  pass. Correct watchdog to exit78 with a fixed manual-recovery log; normal
+  idle disconnect/reconnect remains unchanged. Targeted candidate validation
+  passes7105/044fc0:21 deadline/watchdog tests and27 settlement tests. Normal
+  bridge SH deployment is next. No provider traffic is required.
+
 - **CALLBACK-DEADLINE negative expiry — scoped native PASS:** focused on the reported
   callback confirmation behavior, not a general load campaign. Explicit
   `--confirmation-expiry --short-confirmation-window` reuses the isolated main

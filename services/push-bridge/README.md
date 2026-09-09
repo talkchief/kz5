@@ -1,5 +1,11 @@
 # Mobile push bridge: modular installation and validation
 
+September9 watchdog correction: hard broker-loop stalls now use exit78, matching
+the existing uncertain-delivery no-replay policy. Exit1 previously allowed
+systemd automatic restart despite unknown dispatch/ACK state. Ordinary idle
+reconnect is unchanged. See [watchdog restart safety](../../doc/push_bridge_watchdog_replay.md)
+for regression, deployment evidence and the manual-recovery availability limit.
+
 ## Current deployment checkpoint — September 8
 
 Main-SH installation and independent verification pass74779/c9f0f1. Current

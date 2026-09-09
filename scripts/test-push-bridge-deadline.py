@@ -306,6 +306,55 @@ class FailStopTests(unittest.TestCase):
         self.assertNotIn(b"fixture-secret", result.stdout + result.stderr)
 
 
+class BrokerWatchdogTests(unittest.TestCase):
+    def watchdog(self, *, elapsed, stopped=False):
+        runtime = bridge.BridgeRuntime.__new__(bridge.BridgeRuntime)
+        runtime._settings = {"STALL_TIMEOUT": 60}
+        runtime._last_progress = 100
+        runtime._stop = Mock()
+        runtime._stop.wait.side_effect = [True] if stopped else [False, True]
+        with patch.object(bridge.threading, "Thread") as thread, \
+                patch.object(bridge.time, "monotonic", return_value=100 + elapsed), \
+                patch.object(bridge.os, "_exit", side_effect=SystemExit) as leave:
+            runtime.start_self_watchdog()
+            self.assertTrue(thread.call_args.kwargs["daemon"])
+            target = thread.call_args.kwargs["target"]
+            try:
+                target()
+            except SystemExit:
+                pass
+            return leave.call_args
+
+    def test_stalled_loop_cannot_request_automatic_replay(self):
+        with self.assertLogs("push_bridge", level="ERROR") as logs:
+            self.assertEqual(self.watchdog(elapsed=61).args, (78,))
+        self.assertIn("manual_recovery_required", logs.output[0])
+        unit = (SOURCE / "kazoo-push-bridge.service").read_text()
+        self.assertIn("\nRestart=on-failure\n", unit)
+        self.assertIn("\nRestartPreventExitStatus=2 78\n", unit)
+
+    def test_healthy_boundary_and_stopped_runtime_do_not_exit(self):
+        for elapsed, stopped in ((0, False), (59, False), (60, False), (1000, True)):
+            self.assertIsNone(self.watchdog(elapsed=elapsed, stopped=stopped))
+
+    def test_native_watchdog_child_uses_manual_recovery_exit(self):
+        result = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve()), "--stalled-loop-child"],
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=9, check=False)
+        self.assertEqual(result.returncode, 78, result.stderr.decode("utf-8", errors="replace"))
+        self.assertIn(b"manual_recovery_required", result.stderr)
+
+
+def stalled_loop_child():
+    # Real production watchdog in an isolated process; no provider constructors,
+    # socket, AMQP connection, credentials, or fabricated settlement outcome.
+    runtime = bridge.BridgeRuntime.__new__(bridge.BridgeRuntime)
+    runtime._settings = {"STALL_TIMEOUT": 60}
+    runtime._stop = threading.Event()
+    runtime._last_progress = time.monotonic() - 61
+    runtime.start_self_watchdog()
+    threading.Event().wait()
+
+
 def hanging_cleanup_child():
     clock = Clock()
     runtime, channel, connection, item = owner_runtime(clock, block_worker=True, block_cleanup=True)
@@ -320,6 +369,8 @@ def hanging_cleanup_child():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--stalled-loop-child"]:
+        sys.exit(stalled_loop_child())
     if sys.argv[1:] == ["--hanging-cleanup-child"]:
         sys.exit(hanging_cleanup_child())
     unittest.main()

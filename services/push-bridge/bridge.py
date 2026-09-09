@@ -209,13 +209,18 @@ class BridgeRuntime:
         self._last_progress = time.monotonic()
 
     def start_self_watchdog(self):
-        """Preserved broker-loop watchdog; it does not prove delivery progress."""
+        """A stalled owner cannot establish safe disposition or idle state."""
         def loop():
             while not self._stop.wait(5):
                 stalled = time.monotonic() - self._last_progress
                 if stalled > self._settings["STALL_TIMEOUT"]:
-                    log.error("broker_loop_stalled seconds=%.1f", stalled)
-                    os._exit(1)
+                    # The owner may be blocked during dispatch/ACK, so its last
+                    # progress timestamp cannot prove that no send is pending.
+                    # Exit1 would let systemd replay unacknowledged pushes on
+                    # restart. Match the uncertain-delivery fail-stop policy;
+                    # ordinary idle AMQP disconnects still reconnect in run().
+                    log.error("broker_loop_stalled_manual_recovery_required seconds=%.1f", stalled)
+                    os._exit(78)
         threading.Thread(target=loop, name="push-watchdog", daemon=True).start()
 
     def get_access_token(self):
