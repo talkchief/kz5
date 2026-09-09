@@ -243,6 +243,7 @@ function channel(id) {
         observed_answer_us:d['Caller-Channel-Answered-Time'],observed_bridge_uuid:d.variable_bridge_uuid,observed_signal_bond:d.variable_signal_bond,
         observed_authorizing_type:d['variable_ecallmgr_Authorizing-Type'],observed_endpoint_id:d['variable_ecallmgr_Endpoint-ID'],
         observed_device_id:d['variable_ecallmgr_Device-ID'],observed_sip_to_user:d.variable_sip_to_user,
+        observed_acdc_agent_id:d['variable_ecallmgr_Agent-ID'],observed_acdc_member_id:d['variable_ecallmgr_Member-Call-ID'],
         active:['CS_NEW','CS_INIT','CS_ROUTING','CS_SOFT_EXECUTE','CS_EXECUTE','CS_EXCHANGE_MEDIA','CS_PARK','CS_CONSUME_MEDIA','CS_HIBERNATE','CS_RESET'].includes(d['Channel-State']),
         // uuid_dump exposes the actual answered timestamp as an event header;
         // answer_epoch is not populated on every live channel before CDR close.

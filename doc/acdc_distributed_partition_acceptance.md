@@ -3,6 +3,14 @@
 Status: harness and offline ownership/audio gates pass; native acceptance pending.
 This closes no release gate until the retained native receipt passes.
 
+Native run1 failed its direct-call-based ownership observation before fault
+injection, despite a bridged queued call. Evidence
+`/var/log/kazoo-monitor-acceptance-KKW3kf`. Cleanup completed. ACDC explicitly
+exports the caller's Authorizing-ID onto its outbound leg; the queue-only gate
+now also requires exact Agent-ID, Member-Call-ID, device URI, private contact and
+mutual bridge, followed by both native FSM call correlations. Direct monitoring
+authorization gates are unchanged. This failed attempt is not a recovery pass.
+
 Explicit command on the admitted private dev44 lab:
 
 ```sh

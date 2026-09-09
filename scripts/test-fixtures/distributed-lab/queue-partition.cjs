@@ -17,6 +17,16 @@ function snapshot(value,pinned) {
     if(pinned)assert.equal(value.fsm,pinned,'Agent FSM replaced');
     assert(typeof value.state==='string');return value;
 }
+function ownedAgent(c,e,s,callerId,ip) {
+    // ACDC intentionally exports the original caller's Authorizing-ID (see
+    // maybe_connect_to_agent/7). Do not relax the direct-call ownership gate.
+    return Boolean(c&&c.active&&c.account===s.ACCEPTANCE_ACCOUNT_ID&&
+        c.device===s.ACCEPTANCE_CALLER_DEVICE_ID&&c.observed_authorizing_type==='user'&&
+        c.observed_sip_to_user===e.device&&c.observed_acdc_agent_id===e.user&&
+        c.observed_acdc_member_id===callerId&&c.bridge===callerId&&
+        c.ip===ip&&c.port===e.port&&[ip,s.ACCEPTANCE_SIP_PROXY_HOST].includes(c.peer)&&
+        (!c.auth_ip||c.auth_ip===ip));
+}
 function inspectAudio(audio,buffer,start,end) {
     assert(end-start>=2);const packets=audio.packets(buffer).filter(p=>p.time>=start&&p.time<end),proof={start,end};
     for(const [role,port,own,other] of [['customer',49000,440,660],['agent',49002,660,440]]) {
@@ -31,6 +41,11 @@ function context(h) {
     identity(h.state);
     let fault,nodes,pinned;
     const s=h.state,agent=s.ACCEPTANCE_AGENT_1_USER_ID;
+    function alive() {
+        const c=h.getCurrent(),es=h.endpoints(s),a=h.channel(c.caller_id),b=h.channel(c.agent_id);
+        assert(h.ownedChannel(a,es[0])&&ownedAgent(b,es[1],s,c.caller_id,h.audio.IP)&&
+            a.bridge===b.id&&a.answered&&b.answered,'Exact queued bridge did not survive');
+    }
     function probe(n,user,pin) {
         const text=h.command('podman',['exec',n.id,'escript','/var/lib/kazoo-stage/queue-agent-rpc.escript',user,...(pin?[pin]:[])],12000);
         return snapshot(JSON.parse(text),pin);
@@ -98,11 +113,11 @@ function context(h) {
         const target=await h.until(()=>{
             const c=h.channel(h.getCurrent().caller_id);last={caller:c};if(!c?.bridge||!c.answered)return false;
             assert(h.ownedChannel(c,es[0]),'Queue caller ownership');const a=h.channel(c.bridge);last.agent=a;
-            return h.ownedChannel(a,es[1])&&a.answered?a:false;
+            return ownedAgent(a,es[1],s,h.getCurrent().caller_id,h.audio.IP)&&a.answered?a:false;
         },35).catch(error=>{h.writePrivate(label+'-observation.json',JSON.stringify(last));throw error;});
-        h.getCurrent().agent_id=target.id;h.saveFixture();h.originalAlive();
+        h.getCurrent().agent_id=target.id;h.saveFixture();alive();
         const answered=await h.until(()=>both('answered',true),15);
-        const start=Date.now()/1000+0.5;await h.sleep(3500);h.originalAlive();
+        const start=Date.now()/1000+0.5;await h.sleep(3500);alive();
         const end=Date.now()/1000;
         h.terminate(tcpdump);await h.until(()=>tcpdump.exitCode!==null,5);fs.chmodSync(capture,384);
         const proof={answered,audio:inspectAudio(h.audio,fs.readFileSync(capture),start,end)};
@@ -143,4 +158,4 @@ function context(h) {
     }
     return {run,restorePauses};
 }
-module.exports={context,identity,snapshot,inspectAudio};
+module.exports={context,identity,snapshot,inspectAudio,ownedAgent};
