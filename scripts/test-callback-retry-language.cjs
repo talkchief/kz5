@@ -72,6 +72,9 @@ const shortArgs=['--fixture-account','8310dc3170a18de37f205d0da172df65','--langu
     '--transport','internal','--registration-mode','entry-only','--short-confirmation-window'];
 assert.equal(argsRun(['--short-confirmation-window']).status,65);
 assert.equal(argsRun(shortArgs).status,0);
+assert.equal(argsRun(['--confirmation-expiry']).status,65);
+assert.equal(argsRun([...shortArgs,'--confirmation-expiry']).status,0);
+assert.equal(argsRun([...shortArgs,'--confirmation-expiry','--confirmation-expiry']).status,65);
 assert.equal(argsRun([...shortArgs,'--short-confirmation-window']).status,65);
 assert.equal(argsRun([...shortArgs,'--edit-pending-language']).status,65);
 for(const [from,to] of [['en-us','fr-fr'],['internal','external'],['entry-only','confirm-current'],

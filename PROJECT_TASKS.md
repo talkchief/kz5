@@ -2,6 +2,15 @@
 
 ## Immediate operator follow-up — September9
 
+- **CALLBACK-DEADLINE negative expiry — IN PROGRESS:** focused on the reported
+  callback confirmation behavior, not a general load campaign. Explicit
+  `--confirmation-expiry --short-confirmation-window` reuses the isolated main
+  fixture: first attempt unanswered, second answered without digit1. Requires
+  complete built-in EN prompt followed by the saved3-second response window,
+  server BYE, durable `failed/confirmation_timeout` at attempt2, no agent offer,
+  zero remaining channels and conditional queue restoration. Positive playback
+  acceptance below is not rerun. Native result remains unverified until recorded.
+
 - **CALLBACK-RTP-01 bridge identity correction — FIXED / DEPLOYED / scoped PASS:**
   Native returned-call log selected broadcast while parked, adding five read-only
   lead frames before playback. `is_bridged/1` incorrectly accepts a self or empty

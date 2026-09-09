@@ -16,6 +16,7 @@ RETRY_LANGUAGE_EXPLICIT=false
 RETRY_LANGUAGE_ARGS=()
 RETRY_EDIT_PENDING_LANGUAGE=false
 RETRY_SHORT_CONFIRMATION_WINDOW=false
+RETRY_CONFIRMATION_EXPIRY=false
 RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=false
 RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=false
 RETRY_BUSY_PID=
@@ -33,6 +34,7 @@ retry_usage() {
         '       [--language en-us|he-il|fr-fr|es-es|ar-sa] (explicit owned queue language; absent preserves queue)' \
         '       [--edit-pending-language] (main isolated fixture only; EN admission then FR queue edit and conditional restore)' \
         '       [--short-confirmation-window] (main isolated EN fixture only; response timeout3, full existing prompt, conditional restore)' \
+        '       [--confirmation-expiry] (requires short window; answer retry without digit; assert timeout and no agent call)' \
         '       [--fixture-account ACCOUNT_ID] (must match canonical protected isolated state)' \
         '       [--transport external|internal] (default: external; internal uses isolated1001)' \
         '       [--allow-paused-master-test-phones] (only an already inactive/dead helper)' \
@@ -67,6 +69,7 @@ retry_args() {
             --transport) (($# >= 2)) || die 'Missing transport'; CALLBACK_TEST_TRANSPORT=$2; shift ;;
             --edit-pending-language) [[ $RETRY_EDIT_PENDING_LANGUAGE == false ]] || die 'Repeated pending-language mode'; RETRY_EDIT_PENDING_LANGUAGE=true ;;
             --short-confirmation-window) [[ $RETRY_SHORT_CONFIRMATION_WINDOW == false ]] || die 'Repeated short-confirmation mode'; RETRY_SHORT_CONFIRMATION_WINDOW=true ;;
+            --confirmation-expiry) [[ ${RETRY_CONFIRMATION_EXPIRY:-false} == false ]] || die 'Repeated confirmation-expiry mode'; RETRY_CONFIRMATION_EXPIRY=true ;;
             --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
             --allow-absent-master-test-phones) RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=true ;;
             -h|--help) retry_usage; exit 0 ;;
@@ -77,6 +80,7 @@ retry_args() {
     [[ $RETRY_REGISTRATION_MODE == entry-only || $RETRY_REGISTRATION_MODE == confirm-current ]] || die 'Invalid registration mode'
     [[ $CALLBACK_TEST_TRANSPORT == external || $CALLBACK_TEST_TRANSPORT == internal ]] || die 'Invalid transport'
     [[ $RETRY_EDIT_PENDING_LANGUAGE != true || $RETRY_SHORT_CONFIRMATION_WINDOW != true ]] || die 'Choose only one pending queue edit case'
+    [[ ${RETRY_CONFIRMATION_EXPIRY:-false} != true || $RETRY_SHORT_CONFIRMATION_WINDOW == true ]] || die 'Confirmation expiry requires explicit short confirmation window'
     if [[ $RETRY_EDIT_PENDING_LANGUAGE == true || $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then
         [[ $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 && $RETRY_LANGUAGE_EXPLICIT == true &&
            $RETRY_LANGUAGE == en-us && $CALLBACK_TEST_TRANSPORT == internal && $RETRY_REGISTRATION_MODE == entry-only ]] ||
@@ -325,6 +329,53 @@ retry_wait_bridge() {
     return 1
 }
 
+# The first attempt is still unanswered. Only the returned second attempt is
+# changed: answer, receive the full prompt, send no confirmation and await BYE.
+retry_start_expiry_carrier() {
+    write_returned_carrier_csv "$RUN_DIR/callback-carrier-input.csv" 6000
+    node "$retry_script_dir/test-fixtures/callback-confirmation-expiry.cjs" generate "$RUN_DIR"
+    sipp -ci 127.0.0.1 -sf "$RUN_DIR/callback-expiry.xml" -inf "$RUN_DIR/callback-carrier-input.csv" \
+        -i "$CARRIER_IP" -p "$CARRIER_PORT" -mi "$CARRIER_IP" -mp "$CARRIER_MEDIA_PORT" \
+        -min_rtp_port "$CARRIER_MEDIA_PORT" -max_rtp_port "$((CARRIER_MEDIA_PORT + 3))" \
+        -m 1 -l 1 -nostdin -aa -timeout 90s -timeout_error -trace_stat -fd 1s \
+        -stf "$RUN_DIR/callback-carrier-stats.csv" -trace_logs \
+        -log_file "$RUN_DIR/callback-carrier-negotiation.log" > "$RUN_DIR/callback-carrier.log" 2>&1 &
+    CARRIER_PID=$!; ACTIVE_PIDS+=("$CARRIER_PID")
+    sleep 1
+    kill -0 "$CARRIER_PID" 2>/dev/null || die 'No-confirmation caller exited before origination'
+}
+
+retry_wait_expiry() {
+    local deadline=$((SECONDS + 60)) doc caller snapshot
+    while ((SECONDS < deadline)); do
+        doc=$(callback_document) || return 1
+        jq -e --argjson before "$CALLBACK_REGISTRATION_EVIDENCE" '
+            .id==$before.id and .attempts<=2 and .agent_call_id==null and
+            .reconciliation_required!=true and .status!="completed"' <<<"$doc" >/dev/null || return 1
+        if jq -e '.attempts==2 and (.caller_call_id|type)=="string"' <<<"$doc" >/dev/null; then
+            if caller=$(retry_channel "$(jq -r '.caller_call_id' <<<"$doc")") &&
+               jq -e --arg account "$RETRY_ACCOUNT_ID" --arg callback "$CALLBACK_TICKET_ID" '
+                 .account==$account and .callback_id==$callback and (.answered|tonumber)>0 and
+                 (.bridge_to==null or .bridge_to=="")' <<<"$caller" >/dev/null; then
+                jq -n --argjson callback "$doc" --argjson caller "$caller" '{callback:$callback,caller:$caller}' \
+                    > "$RUN_DIR/callback-expiry-answered.json"
+            fi
+        fi
+        if jq -e '.status=="failed" and .attempts==2 and .last_cause=="confirmation_timeout" and
+            .caller_call_id==null and .agent_call_id==null and .selected_agents==null' <<<"$doc" >/dev/null; then
+            [[ -s $RUN_DIR/callback-expiry-answered.json ]] || return 1
+            snapshot=$(retry_snapshot) || return 1
+            jq -e '.row_count==0' <<<"$snapshot" >/dev/null || return 1
+            printf '%s\n' "$doc" > "$RUN_DIR/callback-expiry-final.json"
+            printf '%s\n' "$snapshot" > "$RUN_DIR/callback-expiry-both-down.json"
+            return 0
+        fi
+        [[ $(jq -r '.status' <<<"$doc") != @(completed|cancelled|expired|failed) ]] || return 1
+        sleep 1
+    done
+    return 1
+}
+
 retry_cleanup() {
     local status=$?
     [[ $RETRY_CLEANING == false ]] || return
@@ -443,7 +494,9 @@ retry_run() {
     retry_stop_capture
     retry_capture returned
     # Start the answering endpoint inside the configured 15s backoff window.
-    if [[ $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then
+    if [[ $RETRY_CONFIRMATION_EXPIRY == true ]]; then
+        retry_start_expiry_carrier
+    elif [[ $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then
         # EN prompt is4.331s. Six seconds after ACK is after the full prompt
         # but inside its three-second response window; waveform proof below
         # checks the actual times, not just this nominal schedule.
@@ -452,19 +505,32 @@ retry_run() {
         start_returned_carrier
     fi
     retry_wait_backoff || die 'First unanswered attempt did not durably enter retry_wait with positive settlement'
-    retry_wait_bridge || die 'Second returned attempt did not durably complete an exact native bridge'
-    log 'First attempt unanswered; durable retry_wait observed; second attempt completed with reciprocal native bridge'
-    retry_wait_checked 'second returned carrier' "$CARRIER_PID"
-    wait_agents_checked callback
-    assert_stats 'second returned carrier' "$RUN_DIR/callback-carrier-stats.csv" 1
-    assert_agent_stats callback 1 2
-    retry_stop_capture
-    stop_monitor
-    node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" "$CALLBACK_TEST_TRANSPORT" "${RETRY_LANGUAGE_ARGS[@]}" || die 'Strict unanswered/retry packet, media or timing gate failed'
-    if [[ $RETRY_EDIT_PENDING_LANGUAGE == true ]]; then
-        node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" verify "$RUN_DIR" || die 'Returned callback did not prove admitted-language audio after queue edit'
-    elif [[ $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then
-        node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" verify "$RUN_DIR" deadline || die 'Returned callback did not prove full prompt and short response window'
+    if [[ $RETRY_CONFIRMATION_EXPIRY == true ]]; then
+        retry_wait_expiry || die 'No-confirmation retry did not cleanly expire without an agent leg'
+        retry_wait_checked 'second returned caller without confirmation' "$CARRIER_PID"
+        # Keep the agent listening throughout the timeout: an unexpected offer
+        # must be detected, not hidden by removing its registered endpoint.
+        stop_waiting_agents_checked callback 1
+        assert_stats 'second returned caller without confirmation' "$RUN_DIR/callback-carrier-stats.csv" 1
+        assert_agent_stats callback 1 1
+        retry_stop_capture
+        stop_monitor
+        node "$retry_script_dir/test-fixtures/callback-confirmation-expiry.cjs" verify "$RUN_DIR" || die 'Native confirmation-expiry evidence failed'
+    else
+        retry_wait_bridge || die 'Second returned attempt did not durably complete an exact native bridge'
+        log 'First attempt unanswered; durable retry_wait observed; second attempt completed with reciprocal native bridge'
+        retry_wait_checked 'second returned carrier' "$CARRIER_PID"
+        wait_agents_checked callback
+        assert_stats 'second returned carrier' "$RUN_DIR/callback-carrier-stats.csv" 1
+        assert_agent_stats callback 1 2
+        retry_stop_capture
+        stop_monitor
+        node "$retry_script_dir/test-fixtures/assert-callback-retry.cjs" "$RUN_DIR" "$RETRY_REGISTRATION_MODE" "$CALLBACK_TEST_TRANSPORT" "${RETRY_LANGUAGE_ARGS[@]}" || die 'Strict unanswered/retry packet, media or timing gate failed'
+        if [[ $RETRY_EDIT_PENDING_LANGUAGE == true ]]; then
+            node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" verify "$RUN_DIR" || die 'Returned callback did not prove admitted-language audio after queue edit'
+        elif [[ $RETRY_SHORT_CONFIRMATION_WINDOW == true ]]; then
+            node "$retry_script_dir/test-fixtures/callback-language-edit.cjs" verify "$RUN_DIR" deadline || die 'Returned callback did not prove full prompt and short response window'
+        fi
     fi
     agent_status verify 1 1
     wait_agent_ready 1 || die 'Agent did not return ready after retry'
@@ -484,7 +550,7 @@ main_retry() {
     [[ ${STATE[ACCEPTANCE_ACCOUNT_ID]} == "$RETRY_ACCOUNT_ID" && $LOCAL_IP == 127.0.0.20 ]] || die 'Wrong account or non-isolated local endpoint'
     node "$retry_script_dir/test-fixtures/callback-fixture-account.cjs" "$STATE_FILE" || die 'Protected callback fixture identity refused'
     ensure_sipp
-    for file in create-callback-retry-scenarios.cjs assert-callback-retry.cjs assert-callback-registration-audio.cjs; do
+    for file in create-callback-retry-scenarios.cjs assert-callback-retry.cjs assert-callback-registration-audio.cjs callback-confirmation-expiry.cjs; do
         node --check "$retry_script_dir/test-fixtures/$file"
     done
     if [[ $CALLBACK_PREPARE == true ]]; then log 'Retry sources and isolated state validated; no API writes or SIP traffic'; return; fi

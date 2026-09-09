@@ -176,7 +176,7 @@ function inspect(buffer, reference, callId, ip = LOCAL.ip, sipPort = LOCAL.sip, 
         original_bye_epoch_seconds: bye.time, original_bye_ack_epoch_seconds: byeAck.time,
         complete_phrase_before_server_bye: true, missing_phrase_samples: 0, received_pcmu_packets: received.length};
 }
-module.exports = {inspect, fullPhrase};
+module.exports = {inspect, fullPhrase, sip, unique, rtp};
 if (require.main === module) {
     try {
         assert([8, 9].includes(process.argv.length), 'Usage: assert-callback-registration-audio.cjs PCAP REFERENCE_ULAW CALL_ID 127.0.0.20 15064 43000 [entry-only|confirm-current]');
