@@ -53,4 +53,11 @@ if dnf_install bash-completion >/dev/null 2>&1; then exit 1; fi
 reset_case; DRY_RUN=true
 dnf_install bash-completion >/dev/null 2>&1
 [[ ! -s $trace ]]
-echo 'PASS 8 actual DNF coordination cases; no packages, timers or services touched'
+reset_case
+batch() { local i; for ((i=0;i<10;i++)); do (dnf_install bash-completion); done; }
+with_dnf_guard batch >/dev/null 2>&1
+[[ $(grep -c '^stop dnf-makecache.timer$' "$trace") == 1 ]]
+[[ $(grep -c '^stop dnf-makecache.service$' "$trace") == 1 ]]
+[[ $(grep -c '^start dnf-makecache.timer$' "$trace") == 1 ]]
+[[ $(grep -c '^dnf ' "$trace") == 10 ]]
+echo 'PASS 9 actual DNF coordination cases including nested package batches; no packages, timers or services touched'

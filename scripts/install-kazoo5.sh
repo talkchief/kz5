@@ -765,8 +765,9 @@ sync_git() {
 
 # Metadata refresh is safe to pause; arbitrary DNF/RPM transactions are not.
 # Restore the timer's active state even when installation or a signal fails.
-dnf_transaction() (
-    [[ $DRY_RUN != true ]] || { run dnf "$@"; return; }
+KAZOO_DNF_GUARD_HELD=false
+with_dnf_guard() (
+    [[ $DRY_RUN != true && $KAZOO_DNF_GUARD_HELD != true ]] || { "$@"; return; }
     local timer_state cache_state cache_command restore_timer=false
     trap 'rc=$?; trap - EXIT; if [[ $restore_timer == true ]]; then timeout 60 systemctl start dnf-makecache.timer || rc=1; fi; exit "$rc"' EXIT
     trap 'exit 130' INT
@@ -787,8 +788,13 @@ dnf_transaction() (
     fi
     # A different package manager owner is not ours to terminate. Refuse its
     # lock promptly instead of waiting indefinitely behind an unknown writer.
-    run dnf --setopt=exit_on_lock=True "$@"
+    KAZOO_DNF_GUARD_HELD=true
+    "$@"
 )
+
+dnf_transaction() {
+    with_dnf_guard run dnf --setopt=exit_on_lock=True "$@"
+}
 
 dnf_install() {
     dnf_transaction install -y "$@"
@@ -6413,6 +6419,11 @@ install_requested() {
     verify_requested
 }
 
+install_and_persist_requested() {
+    install_requested
+    save_deployment_config
+}
+
 acquire_installer_lock() {
     # All roles share configuration, source and package/service managers. Even
     # verification must not report a half-published installation as healthy.
@@ -6445,8 +6456,9 @@ main() {
     if [[ $VERIFY_ONLY == true ]]; then
         verify_requested
     else
-        install_requested
-        save_deployment_config
+        # Keep one metadata pause across nested package/media/build steps.
+        # Repeated timer stop/start can exhaust systemd's start-rate limit.
+        with_dnf_guard install_and_persist_requested
     fi
     if [[ $DRY_RUN == true ]]; then
         log 'Dry run complete; no components were installed or live health checks performed'

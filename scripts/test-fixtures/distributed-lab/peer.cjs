@@ -39,8 +39,17 @@ function peerOperation(action,h) {
         const source=command('git',['-C',ROOT,'rev-parse','HEAD']);
         // Snapshot is private and intentionally contains the same lab's
         // protected credentials. Never push this image or call it a clean base.
-        const image=podman(['commit','--pause=true',primary.id],{timeout:180000});
-        s.peer={phase:'snapshot-retained',image,source,primary:primary.id,name:NAME,ip:IP};saveState(s);
+        const watchdog='kz5-peer-snapshot-restore-'+process.pid;
+        s.peer={phase:'snapshot-started',source,primary:primary.id,name:NAME,ip:IP,watchdog};saveState(s);
+        command('systemd-run',['--unit',watchdog,'--on-active=4m','--timer-property=AccuracySec=1s',
+            '/usr/bin/podman','unpause',primary.id]);
+        let image;
+        try {image=podman(['commit','--pause=true',primary.id],{timeout:180000});}
+        finally {
+            if(json(['inspect',primary.id])[0].State.Paused)podman(['unpause',primary.id]);
+            command('systemctl',['stop',watchdog+'.timer']);
+        }
+        s.peer.image=image;s.peer.phase='snapshot-retained';saveState(s);
         const id=podman(['create','--name',NAME,'--hostname',NAME,'--network','kz5-install-stage','--ip',IP,
             '--label','io.talkchief.kazoo.acceptance='+s.owner,'--label','io.talkchief.kazoo.role='+ROLE,
             '--systemd=always','--security-opt','label=disable','--cap-add=NET_ADMIN',
@@ -72,10 +81,25 @@ function peerOperation(action,h) {
     assert.equal(c.Config.Labels['io.talkchief.kazoo.role'],ROLE);
     assert.equal(c.NetworkSettings.Networks['kz5-install-stage'].IPAddress,IP);
     assert.equal(c.State.Running,true);
+    if(action==='sync') {
+        assert(['configured-source-ready','failed','installed'].includes(p.phase));
+        assert.equal(command('git',['-C',ROOT,'status','--porcelain','--untracked-files=no']),'');
+        assert.equal(podman(['exec',p.id,'git','-C','/opt/kz5','status','--porcelain','--untracked-files=no']),'');
+        const source=command('git',['-C',ROOT,'rev-parse','HEAD']),bundle=DIR+'/peer-source-'+source+'.bundle';
+        if(!fs.existsSync(bundle)) {
+            command('git',['-C',ROOT,'bundle','create',bundle,'HEAD','master'],{timeout:180000});fs.chmodSync(bundle,0o600);
+        }
+        podman(['cp',bundle,p.id+':/var/lib/kazoo-stage/peer-source.bundle']);
+        podman(['exec',p.id,'git','-C','/opt/kz5','fetch','/var/lib/kazoo-stage/peer-source.bundle','master'],{timeout:180000});
+        podman(['exec',p.id,'git','-C','/opt/kz5','merge','--ff-only',source],{timeout:180000});
+        assert.equal(podman(['exec',p.id,'git','-C','/opt/kz5','rev-parse','HEAD']),source);
+        p.source=source;saveState(s);console.log(JSON.stringify({status:'PEER_SOURCE_SYNCED',source,installed:false}));return;
+    }
     if(action==='install') {
-        assert.equal(p.phase,'configured-source-ready');
-        p.unit='kz5-stage-install-apps-peer-1';p.insideLog='/var/lib/kazoo-stage/apps-peer-install-1.log';
-        p.log=DIR+'/apps-peer-install-1.log';p.phase='installing';saveState(s);
+        assert(['configured-source-ready','failed'].includes(p.phase));
+        const attempt=p.attempts?p.attempts+1:(p.phase==='failed'?2:1);p.attempts=attempt;
+        p.unit='kz5-stage-install-apps-peer-'+attempt;p.insideLog='/var/lib/kazoo-stage/apps-peer-install-'+attempt+'.log';
+        p.log=DIR+'/apps-peer-install-'+attempt+'.log';p.phase='installing';saveState(s);
         podman(['exec',p.id,'install','-m','0600','/dev/null',p.insideLog]);
         podman(['exec',p.id,'systemd-run','--unit',p.unit,'--property=User=root','--property=RemainAfterExit=yes',
             '--property=RuntimeMaxSec=3600','--property=TasksMax=2048',

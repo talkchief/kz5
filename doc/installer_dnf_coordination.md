@@ -17,9 +17,17 @@ transaction finishes. SIGKILL cannot run shell cleanup; if the installer itself
 is forcibly killed, check and restore the previously active metadata timer.
 
 The wrapper covers normal package installs and Node.js module mutations.
-Eight tests execute the real helper with private adapters: active/inactive
+The full installer holds one pause across installation and configuration
+persistence, including nested media/package functions. Peer install1 exposed
+that pausing/restoring for every individual call exhausted the timer's systemd
+start limit (`Result=start-limit-hit`) despite successful package transactions.
+The failed receipt remains `/var/lib/kazoo5-install-lab/apps-peer-install-1.log`.
+The corrected batch boundary preserves the timer with only one stop/start for
+ten nested package calls. Standalone helper use still acquires its own guard.
+Nine tests execute the real helper with private adapters: active/inactive
 cache, nonstandard/multiple command refusal, package failure, cache-stop failure, timer
-restoration failure and dry-run. No real OS service is touched by those tests.
+restoration failure, dry-run and nested batches. No real OS service is touched
+by those tests. The corrected full peer installation is pending.
 Native helper validation passed in `kz5-cold-kazoo-apps` using the committed
 helper (`33254c0`, installer SHA256
 `96a56bc5115d8512535f4b782e1f8c3c131f06821478009cc09aafae2e077f8c`).

@@ -15,7 +15,15 @@ work postponed; do not generate voices at runtime or during deployment.
   Normal installer renders the peer before activation; master bootstrap is
   disabled. Snapshot/source/installer receipts are retained; no production or
   main44 company configuration is copied. Scope/configuration tests pass.
-  Native preparation and cross-node acceptance are not yet passed.
+  Native preparation passed, with the primary resumed and peer correctly
+  inactive before admission. Peer install1 exposed metadata-timer start-limit
+  exhaustion after repeated package helper calls; its failure is retained.
+  The full installer now holds one metadata pause across nested package steps
+  and restores it once. Nine actual coordination tests, host-lock regression
+  and the standard installer suite pass; normal peer retry is next.
+  Cross-node revocation and peer-only broker partition tests are prepared,
+  including exact fixture-user CAS and an independent network-restoration timer.
+  Cross-node acceptance is not yet passed.
 
 - **Installer DNF metadata-lock delay — source fixed / native helper PASS:**
   final empty apps installation compiled and passed SUP validation, then waited
