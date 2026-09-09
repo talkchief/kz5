@@ -10,6 +10,10 @@ exports the caller's Authorizing-ID onto its outbound leg; the queue-only gate
 now also requires exact Agent-ID, Member-Call-ID, device URI, private contact and
 mutual bridge, followed by both native FSM call correlations. Direct monitoring
 authorization gates are unchanged. This failed attempt is not a recovery pass.
+Run2 passed the exact queue-leg bridge gate, then timed out waiting for both FSMs
+to report answered; scoped cleanup completed. Evidence
+`/var/log/kazoo-monitor-acceptance-kqJbJ4`. The next runner retains the actual
+replica states on that failure, rather than treating a media bridge as FSM proof.
 
 Explicit command on the admitted private dev44 lab:
 

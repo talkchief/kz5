@@ -39,7 +39,7 @@ function inspectAudio(audio,buffer,start,end) {
 }
 function context(h) {
     identity(h.state);
-    let fault,nodes,pinned;
+    let fault,nodes,pinned,lastNative;
     const s=h.state,agent=s.ACCEPTANCE_AGENT_1_USER_ID;
     function alive() {
         const c=h.getCurrent(),es=h.endpoints(s),a=h.channel(c.caller_id),b=h.channel(c.agent_id);
@@ -52,6 +52,7 @@ function context(h) {
     }
     function both(wanted,correlate=false) {
         const values=nodes.map((n,i)=>probe(n,agent,pinned?.[i]));
+        lastNative=values;
         if(!values.every(v=>v.state===wanted))return false;
         if(correlate)for(const v of values) {
             assert.equal(v.member_call_id,h.getCurrent().caller_id,'Uncorrelated queue member');
@@ -116,7 +117,10 @@ function context(h) {
             return ownedAgent(a,es[1],s,h.getCurrent().caller_id,h.audio.IP)&&a.answered?a:false;
         },35).catch(error=>{h.writePrivate(label+'-observation.json',JSON.stringify(last));throw error;});
         h.getCurrent().agent_id=target.id;h.saveFixture();alive();
-        const answered=await h.until(()=>both('answered',true),15);
+        h.log(label+': exact SIP queue bridge verified; observing native replica states');
+        const answered=await h.until(()=>both('answered',true),15).catch(error=>{
+            h.writePrivate(label+'-fsm-observation.json',JSON.stringify(lastNative,null,2)+'\n');throw error;
+        });
         const start=Date.now()/1000+0.5;await h.sleep(3500);alive();
         const end=Date.now()/1000;
         h.terminate(tcpdump);await h.until(()=>tcpdump.exitCode!==null,5);fs.chmodSync(capture,384);
