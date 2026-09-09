@@ -7,6 +7,14 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **P0-25 browser outage recovery — focused acceptance in progress:**
+  Added explicit `--loading-recovery` to the main44 browser harness. It injects
+  failed/stalled GET responses in that browser only, uses real admin login and
+  successful API reads, and blocks account writes. Planned checks: ACDC visible
+  retry, bounded timeout, late-response isolation and global-indicator recovery;
+  SmartPBX failed-read indicator and navigation recovery. Server APIs/services
+  stay running. No pass or runtime fix is claimed until the actual run completes.
+
 - **INST-07 standalone service-unit scope — source fixed / focused PASS:**
   Apps-only and eCallMgr-only installs previously rewrote both service definitions
   and touched both log trees. Entry points now request an explicit generator role;
