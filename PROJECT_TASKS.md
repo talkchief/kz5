@@ -7,14 +7,28 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **Confirmed fresh Crossbar registration failure — source fixed:** apps5
+- **Final focused handover:** fixes for requested points1/2/4/6 are committed in
+  kz5 and deployed on main44. Final30-answered/5-queued capacity, broker recovery,
+  callback edge cases and HTTP/WSS scope/revocation checks passed. All seven
+  isolated backend roles now passed normal installer checks. All9 main services
+  active, zero calls and zero apps/eCallMgr error-priority journal entries since
+  14:28UTC at final readback. Do not claim all broad release gates closed:
+  multi-node partition/revocation/supervision privacy, extended soak, untouched
+  cold apps bootstrap and remaining boot/upgrade/rollback matrix remain open.
+  Historical ambiguous callback remains quarantined for operator disposition.
+  Authoritative evidence and boundaries: `doc/FOCUSED_CLOSEOUT_2026-09-09.md`.
+- **Confirmed fresh Crossbar registration failure — FIXED / DEPLOYED / PASS:** apps5
   reached API registration and exposed `undef` in the earlier autoload-scope
   change: it called private `kapps_config:get_category/2`. Replaced with public
   uncached `kz_datamgr:open_doc/2`, preserving node/zone/default ownership.
   Corrected the test seam that had invented the private export; mandatory fresh
   patch and old-source transition are included in the installer. Existing
   deployments often skipped this path because modules were already registered.
-  Native normal deployment/retry required before closure.
+  Source `8966bd7`: main44 targeted production build/service restart and normal
+  apps verifier passed (`kz5-crossbar-public-read-deploy-20260909.service`, terminal
+  success14:30:58UTC). Standalone apps normal installer attempt6 passed and was
+  collected. Strict mocks now reject invented private exports;9 tests pass and
+  old-source baseline reproduces7 failures. This specific defect is closed.
 - **Latest separated native results:** eCallMgr4 (`e780af1`) and Kamailio4
   (`6eddc28`) passed normal installer verification. eCallMgr reached the separate
   FreeSWITCH node with negotiated framing and native intercept inventory.
@@ -25,15 +39,15 @@ work postponed; do not generate voices at runtime or during deployment.
   secret-suppressing RPC. Its readiness barrier now additionally requires the
   accounts/users/profile schemas (constructed before native maintenance prechecks).
   Six actual Erlang readiness states and protected-RPC tests pass. Apps normal
-  retry remains required; do not relabel the original cold bootstrap as passed.
-- **eCallMgr media registration startup race — source fixed, retry pending:**
+  retry6 (`8966bd7`) passed; do not relabel the original cold bootstrap as passed.
+- **eCallMgr media registration startup race — FIXED / native retry PASS:**
   separate eCallMgr exposed that `get_fs_nodes` can read saved config before
   the media supervisor starts. Registration now waits for the actual eCallMgr
   application, using the existing bounded runtime gate. Raw SUP add-node output
   is no longer printed on success/failure because exceptions can contain the
   distribution cookie. Actual hook regression covers admission/refusal and
   sentinel-cookie non-disclosure; no credential or runtime guard bypass.
-- **Separated-role container restrictions — fixes deployed, retries running:**
+- **Separated-role container restrictions — FIXED / native retries PASS:**
   apps compiled successfully but its Pivot reservation service correctly refused
   a read-only container sysctl. Lab creation now reserves only the namespaced
   Pivot ports; older owned roles use a pinned, proven non-host network namespace
@@ -44,7 +58,8 @@ work postponed; do not generate voices at runtime or during deployment.
   Bare sockets and wrong peers remain rejected. No production safety check removed.
   Native Kamailio retry3 now passed its exact socket check; its later JWT gate
   correctly refused because the isolated apps role was not yet running. Retry
-  after apps admission, not by disabling that check. Apps4/eCallMgr3 are running.
+  after apps admission, not by disabling that check. Later eCallMgr4, Kamailio4
+  and apps6 all passed; original failed logs remain retained.
 - **Point1 corrected30-call broker-loss campaign — native PASS:**
   `kz5-acdc-broker-loss-30-fixed-20260909.service` completed exit0 after
   normal deployment of `b19fde3`. Evidence `node-loss/20260909T133950Z`:
@@ -87,7 +102,9 @@ work postponed; do not generate voices at runtime or during deployment.
 - **Post-fix capacity acceptance — native PASS:** `kz5-final-capacity-20260909.service`
   uses the existing locked isolated fixture for30 answered plus5 queued callers,
   with180s continuously verified concurrency and normal drain/RTP/log checks.
-  Completed exit0, SIP/RTP and drain checks passed. Evidence:
+  Completed exit0:35 caller/35 agent successes,0 failures, errors0/0, new cores0,
+  peak CPU72%, minimum available memory18830056KiB. SIP/RTP and drain passed.
+  Offered rate2 call starts/sec; this is not30 or80CPS acceptance. Evidence:
   `/var/log/kazoo-acceptance/20260909T140415Z`; this bounded180s concurrency
   acceptance is not an extended production soak or multi-node partition test.
 

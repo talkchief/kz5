@@ -34,7 +34,9 @@ run(Case) ->
     ets:insert(T, [{doc, Doc}, {writes, []}]),
     Modules = [crossbar_init, crossbar_config, kapps_config, kz_config, kz_datamgr],
     try
-        lists:foreach(fun(M) -> meck:new(M, [non_strict, no_link]) end, Modules),
+        %% Strict mocks reject expectations for APIs the real module does not
+        %% export; otherwise a private-function typo can pass every unit test.
+        lists:foreach(fun(M) -> meck:new(M, [no_link]) end, Modules),
         meck:expect(crossbar_init, start_mod, fun(_) -> ok end),
         meck:expect(crossbar_init, stop_mod, fun(_) -> ok end),
         meck:expect(crossbar_config, autoload_modules, fun() -> Effective end),

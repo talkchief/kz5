@@ -1,8 +1,9 @@
 # Separated-role installer acceptance lab
 
-Status: CouchDB, RabbitMQ, HAProxy, FreeSWITCH, eCallMgr and Kamailio isolated
-normal installation/service checks passed. Apps retry is pending; the full
-separated-role/boot/rollback matrix is not complete.
+Status: CouchDB, RabbitMQ, HAProxy, FreeSWITCH, eCallMgr, Kamailio and Kazoo apps
+isolated normal installation/service checks passed. Apps attempt6 passed after
+diagnostic lab bootstrap; untouched cold bootstrap is not proven by that retry.
+The full separated-role/boot/rollback matrix is not complete.
 This is an explicitly owned lab on development host10.1.0.44, not a production
 installer option and not evidence of independent-machine HA.
 
@@ -87,6 +88,7 @@ Additional native evidence under `/var/lib/kazoo5-install-lab`:
 | FreeSWITCH | repeat4 normal installer and enabled service | pinned Kazoo module and EI; no physical boot claim |
 | eCallMgr | install4, source `e780af1`, enabled service, separate FS connection/framing/intercept inventory | read-only native media admission, no cross-node supervision call |
 | Kamailio | install4, source `6eddc28`, enabled service, exact broker socket and JWT verification | passed after isolated apps became available |
+| Kazoo apps | install6, source `8966bd7`, normal validation/admin authentication/APIs/installed prompt maps | normal retry after diagnostic lab master creation, not untouched cold bootstrap |
 
 Fresh-role findings and source fixes: pinned Erlang/EI and stale out-of-tree
 configure invalidation for FreeSWITCH; explicit login environment for rebar
@@ -95,8 +97,12 @@ service UID without added capabilities; eCallMgr application readiness before
 node registration and cookie-safe registration diagnostics. Apps first master
 bootstrap failed; after startup a protected diagnostic succeeded. This was not
 retroactively marked a normal first-install pass. Its schema readiness barrier
-was strengthened, and normal retry is required. Lab master and transport-probe
-child are synthetic lab-only resources retained for inspection.
+was strengthened. Attempt5 then exposed the private `kapps_config:get_category/2`
+call in Crossbar module registration. Required source/transition patches now use
+the exported uncached datastore API. Normal attempt6 passed and its terminal
+receipt was collected (`kazoo-apps-install-6.log`). Lab master and transport-probe
+child are synthetic lab-only resources retained for inspection. These interventions
+and original failures remain recorded rather than relabeled as a cold-install pass.
 
 The remaining role/boot matrix, physical-machine failures, cluster-wide drain/
 upgrade and rollback are not certified by these container results.
