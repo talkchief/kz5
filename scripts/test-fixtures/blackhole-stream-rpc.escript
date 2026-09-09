@@ -10,7 +10,7 @@ main(Args) ->
     try
         put(phase, local_scope),
         true = Args =:= ["issue"] orelse Args =:= ["issue-user"] orelse (length(Args) =:= 3 andalso
-            lists:member(hd(Args), ["emit", "overflow"])),
+            lists:member(hd(Args), ["emit", "overflow", "revoke-user"])),
         {ok, Status} = file:read_file("/proc/self/status"),
         match = re:run(Status, <<"^Uid:[ \\t]+0[ \\t]+0[ \\t]+0[ \\t]+0$">>, [multiline,{capture,none}]),
         {ok, Ifs} = inet:getifaddrs(),
@@ -39,7 +39,31 @@ execute(Node,["issue-user"]) ->
     {ok,Token} = rpc(Node,kz_auth,create_token,[[{<<"account_id">>,?ACCOUNT},
         {<<"owner_id">>,?USER},{<<"method">>,<<"cb_user_auth">>},{<<"exp">>,Expiry}]]),
     {ok,_} = rpc(Node,kz_auth,validate_token,[Token]),
-    io:format("{\"token\":\"~s\",\"expires\":~B}~n",[Token,Expiry]);
+    {ok,Current} = rpc(Node,kz_datamgr,open_doc,[Db,?USER]),
+    Revision = rpc(Node,kz_doc,revision,[Current]),
+    io:format("{\"token\":\"~s\",\"expires\":~B,\"user_revision\":\"~s\"}~n",[Token,Expiry,Revision]);
+execute(Node,["revoke-user",Tag0,Revision0]) ->
+    put(phase, exact_fixture_revocation),
+    Tag = list_to_binary(Tag0), Revision = list_to_binary(Revision0),
+    match = re:run(Tag, <<"^streamguard-[a-f0-9]{32}$">>, [{capture,none}]),
+    match = re:run(Revision, <<"^[1-9][0-9]*-[a-f0-9]{32}$">>, [{capture,none}]),
+    Contexts = rpc(Node,blackhole_tracking,get_contexts_by_account_id,[?ACCOUNT]),
+    true = is_list(Contexts) andalso length(Contexts) =< 100,
+    [Context] = [C || C <- Contexts, rpc(Node,bh_context,req_id,[C]) =:= Tag],
+    Token = rpc(Node,bh_context,auth_token,[Context]),
+    {ok,Claims} = rpc(Node,kz_auth,validate_token,[Token]),
+    ?ACCOUNT = rpc(Node,kz_json,get_ne_binary_value,[<<"account_id">>,Claims]),
+    ?USER = rpc(Node,kz_json,get_ne_binary_value,[<<"owner_id">>,Claims]),
+    Db = rpc(Node,kzs_util,format_account_db,[?ACCOUNT]),
+    {ok,Doc} = rpc(Node,kz_datamgr,open_doc,[Db,?USER]),
+    Revision = rpc(Node,kz_doc,revision,[Doc]),
+    <<"user">> = rpc(Node,kz_json,get_ne_binary_value,[<<"pvt_type">>,Doc]),
+    <<"user">> = rpc(Node,kz_json,get_ne_binary_value,[<<"priv_level">>,Doc,<<"user">>]),
+    Updated = rpc(Node,kz_auth_identity,reset_doc_secret,[Doc]),
+    {ok,Saved} = rpc(Node,kz_datamgr,save_doc,[Db,Updated]),
+    PublicBefore = rpc(Node,kz_json,delete_keys,[[<<"_rev">>,<<"pvt_signature_secret">>],Doc]),
+    PublicBefore = rpc(Node,kz_json,delete_keys,[[<<"_rev">>,<<"pvt_signature_secret">>],Saved]),
+    io:put_chars("PASS exact fixture user signature rotated by revision CAS; other fields unchanged\n");
 execute(Node,["issue"]) ->
     put(phase, fixture_document),
     Db = rpc(Node,kzs_util,format_account_db,[?ACCOUNT]),
@@ -55,7 +79,7 @@ execute(Node,["issue"]) ->
 execute(Node,[Operation,Tag0,Marker0]) ->
     Tag = list_to_binary(Tag0), Marker = list_to_binary(Marker0),
     match = re:run(Tag, <<"^streamguard-[a-f0-9]{32}$">>, [{capture,none}]),
-    true = lists:member(Marker,[<<"before-expiry">>,<<"after-expiry">>,<<"overflow">>]),
+    true = lists:member(Marker,[<<"before-expiry">>,<<"after-expiry">>,<<"overflow">>,<<"after-revocation">>]),
     Contexts = rpc(Node,blackhole_tracking,get_contexts_by_account_id,[?ACCOUNT]),
     true = is_list(Contexts) andalso length(Contexts) =< 100,
     [Context] = [C || C <- Contexts, rpc(Node,bh_context,req_id,[C]) =:= Tag],

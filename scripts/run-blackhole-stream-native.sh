@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 umask 077
-[[ $EUID == 0 && ( $# == 0 || ( $# == 1 && $1 == --principal ) ) ]] || exit 64
+[[ $EUID == 0 && ( $# == 0 || ( $# == 1 && ( $1 == --principal || $1 == --revocation ) ) ) ]] || exit 64
 test_file=test-blackhole-stream-native.cjs
-[[ $# == 0 ]] || test_file=test-blackhole-principal-native.cjs
+if [[ ${1:-} == --principal ]]; then test_file=test-blackhole-principal-native.cjs; fi
+if [[ ${1:-} == --revocation ]]; then
+    test_file=test-blackhole-revocation-native.cjs
+    [[ -f /etc/kazoo/monitor-acceptance.lock && ! -L /etc/kazoo/monitor-acceptance.lock &&
+       $(stat -c '%u:%h' /etc/kazoo/monitor-acceptance.lock) == 0:1 ]] || exit 78
+    exec 9<>/etc/kazoo/monitor-acceptance.lock
+    flock -n 9 || { echo 'Another fixture acceptance run is active' >&2; exit 75; }
+fi
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 base=/usr/local/lib/kazoo5-browser-tests
 [[ -d $base && ! -L $base && $(stat -c '%u:%a' "$base") == 0:700 ]] || exit 78
