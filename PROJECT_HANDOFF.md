@@ -4,6 +4,20 @@
 campaigns. Fix in source, validate the failing path, deploy through the installer,
 then record the actual result. Dashboard/history work remains postponed.
 
+**Latest voice follow-up: VOICE-05 Hebrew returned audio — scoped PASS.**
+The old160-sample-gap capture remains failed. Main44 run20260909T043058Z now
+passes native HE retry (113c8e) and unchanged strict waveform replay (18e4df):
+42,648 samples /5.331 seconds, correlation0.999993, phrase complete2.145401s
+before digit1. Ticket completed at attempt2 with receipt/reciprocal bridge;
+agent ready, caller2/0, agent2/0, errors0/0, cores0, services unchanged and zero
+calls afterward. Reference capture had no provider requests or database writes.
+No audio was regenerated and no runtime service was restarted for this follow-up.
+Checker portability fixes `ce7487e` / `d579521` cover explicit main fixture scope
+and verified local CouchDB binding; four scope/waveform and four reference
+groups pass. Fixture retained; not human listening approval or full-language
+release readiness. All jobs terminal; do not rerun this passed case unchanged.
+See `doc/hebrew_callback_audio_followup.md` for evidence and failed captures.
+
 **Latest focused fix: callback retry after queue restart — DEPLOYED / scoped PASS.**
 Commits `72591d5` and `f853f47` are on master and main44. They retain shared
 callback work queues and correct basic_nack/1 sending ACK during shutdown.

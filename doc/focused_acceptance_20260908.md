@@ -188,7 +188,7 @@ exactly one observed registration digit6, complete reference audio, durable
 retry_wait and two attempts with15s retry policy. Retained fixture and native
 listening/complete-response limitations still apply.
 
-### Returned-call audio diagnostic, not accepted
+### September8 returned-call audio diagnostic, not accepted
 
 The separate `callback-returned-reference.cjs` and
 `assert-callback-returned-audio.cjs` helpers have passing private and repository
@@ -213,6 +213,13 @@ on the16-bit PCM scale (`25a09d`); it is low-level leading audio, not exact
 digital silence. No claim of bit-complete delivery or native voice approval is
 made. No assertion was relaxed, no PASS receipt replaced the failed coverage
 check, and no FreeSWITCH/audio change was made without a demonstrated cause.
+
+September9 follow-up: after the separately deployed playback-path fix, main44
+HE run20260909T043058Z passes native retry and the unchanged strict returned
+waveform checker, including all42,648 samples and full phrase before digit1.
+This is a new scoped pass, not a relabeling of the old failure or human listening
+approval. See `hebrew_callback_audio_followup.md` for source fixes, hashes and
+remaining release limitations; no recording was regenerated.
 
 ## Separate-host installer gates still open
 

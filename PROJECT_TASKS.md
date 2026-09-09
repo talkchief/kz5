@@ -7,15 +7,20 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **VOICE-05 Hebrew returned-confirmation coverage — focused verification in progress:**
-  Retained September8 HE audio failed strict RTP coverage by160 samples; do not
-  relabel it as passed. The subsequent bridge-peer playback fix was deployed and
-  verified for EN, but HE coverage remains open. Main44 currently has the fixed
-  eCallMgr module and a verified saved Hebrew registration reference. The additive
-  waveform checker now uses explicit fixture-account selection rather than the
-  old host's hard-coded account, preserving pinned evidence and all strict audio
-  checks. Next: one isolated HE retry and additive full returned-phrase replay,
-  using existing WAVs only. No voice generation or unrelated campaign.
+- **VOICE-05 Hebrew returned-confirmation coverage — scoped native PASS:**
+  The September8 capture remains failed by160 samples. Following the deployed
+  playback fix, main44 run20260909T043058Z now passes both the native HE retry
+  (113c8e) and unchanged strict returned-waveform checker (18e4df / 8023be).
+  All42,648 samples /5.331 seconds are covered, correlation0.999993; full phrase
+  ends2.145401 seconds before digit1. Same HE ticket completed at attempt2 with
+  receipt and reciprocal bridge. Agent ready, caller2/0, agent2/0, fresh errors0/0,
+  cores0, unchanged services and zero calls afterward. Fixture retained.
+  Checker portability fixes are in `ce7487e` / `d579521`: explicit fixture scope
+  and verified local CouchDB binding, with four scope/waveform and four reference
+  groups passing. No recording regeneration, provider requests, runtime restart
+  or weaker coverage assertion. Human listening approval, full-position coverage
+  and the overall five-language release gate remain separate/open. Evidence:
+  `doc/hebrew_callback_audio_followup.md`. Do not repeat this passed case unchanged.
 
 - **P0-06 pending-retry queue restart — FIXED / DEPLOYED / scoped native PASS:**
   Two source defects discarded callback work: last-consumer auto-delete and a
@@ -2249,7 +2254,7 @@ verified; do not toggle global deletion settings to run a dashboard test.
 | ACDC-02 | OPEN — UI | Reliable Callflows ACDC action and internal extension routing; dropdowns instead of technical free-text fields; default prompt selection must not trigger required-field errors. Preserve existing customer recordings. |
 | ACDC-03 | OPEN — ACDC | Verify/build supported ring strategies: ring-all, ordered, round-robin and existing alternatives. Resolve simultaneous-answer/DTMF exit ownership candidates; test fairness, single winner and cleanup. |
 | VOICE-01 | DEPLOYED — targeted UI/default fixes; wider call acceptance open | Five-language spelling and inherited-edit preservation are deployed. Native direct-reseller fallback now passes fresh-child all-five language resolution,15 shared prompt resolutions and explicit child precedence (3d60a1); both node/disk module hashes match79407f. See doc/media_reseller_language.md. Remaining: inherited live-call/endpoint contexts, cross-node cache propagation and native pronunciation; do not repeat completed fixture preparation. |
-| VOICE-05 | DEPLOYED — five-language single-key registration audio/retry PASS; broader composition open | Immutable built-in callback media and recorded digits are deployed; no runtime Gemini requests. Full87 canonical regressions pass fada33/fee8c1. Later EN/HE/FR/ES/AR runs listed in P0-10 prove exactly key6, complete locale-specific installed success audio before BYE, durable retry and second bridge. Receipt readback0aa77b confirms PASS and only digit6 for all five; evidence is now archived root-only on .44 (see focused acceptance). Complete prerecorded position/MOH composition and all alternate responses are separate; additive returned-confirmation HE waveform proof failed strict packet coverage and is not silently counted as passed. See doc/focused_acceptance_20260908.md. |
+| VOICE-05 | DEPLOYED — five-language registration/retry PASS; HE returned waveform PASS; broader composition open | Immutable callback media and digits are deployed without runtime Gemini. Full87 canonical regressions pass fada33/fee8c1; P0-10 records EN/HE/FR/ES/AR single6, full registration audio, durable retry and second bridge. Following the playback fix, main44 run20260909T043058Z passes strict HE returned-waveform coverage: all42,648 samples, full phrase before digit1 (18e4df / 8023be). The old failed capture is preserved, not relabeled. Complete position/MOH composition, alternate responses and native listening approval remain separate. See doc/hebrew_callback_audio_followup.md and doc/focused_acceptance_20260908.md. |
 | VOICE-02 | VERIFIED — generated assets and installer byte check | Existing165 effective Gemini entries /330 WAVs remain unchanged. September6 supplemental generation completed45 missing callback clips /90 WAVs in47 requests (two French digits retried once, previous failures retained). Combined immutable lookup210 assets /420 WAVs, committed0904240. Actual installer media-import19674 verified210, preserved210 and created0; nonsecret receipt at /usr/local/share/kazoo5-installer/acdc-gemini-media.json. This is not runtime mapping activation, five-language playback certification or complete prerecorded queue-position speech. |
 | VOICE-03 | DEPLOYED SHARED ARTIFACTS — broader language acceptance open | Shared fixed/cardinal packs are checked into kz5 and installed on .44 through the normal SH; retained runtime proof covers796 media documents and1,592 mappings. Main-host all-five callback success/retry passes; periodic offer/position validation is tracked in VOICE-MAIN44-SCHEDULE-01. Fresh-child native inherited language and15 shared prompt resolutions pass3d60a1. Native listening, wider spoken numbers/wait-time/alternate-response paths and inherited live-call audio remain open. Never generate during installation, account creation, queue editing or calls. |
 | VOICE-04 | HISTORICAL AUTHORING AUTHORITY — no generation job active | September6 authorization allowed one-time authoring of missing release WAVs; those saved assets are now in the deployed fixed/cardinal packs. Reuse them without provider credentials. This row is not a request to regenerate completed clips or introduce runtime TTS. Native language review and remaining call-path gates are distinct from generation. |
