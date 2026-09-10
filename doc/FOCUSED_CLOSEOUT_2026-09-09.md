@@ -6,6 +6,12 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Corrected source `494ee28` is pushed and synced to main44 root. Normal
+  private retries15/11 are active/running, verified MainPID506156/363012;
+  admission checked zero work and all6 ready replicas. Start receipt:
+  `init-readiness-deploy-494ee28-1789001079511.log`. Collect these exact jobs,
+  then verify version2 inventories; no runtime success claimed yet.
+
 - Normal private startup-readiness jobs14/10 on `c6e0c36` FAILED, exit2:
   six missing gen_server callback type specifications are fatal under the
   normal warn_missing_spec compiler flag. Both exact jobs were collected with

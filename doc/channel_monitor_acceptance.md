@@ -1,5 +1,16 @@
 # Opt-in call monitoring acceptance
 
+## Documentation command regression — September 10, 2026
+
+The generated guide and OpenAPI curl examples contained literal leading plus
+characters before continuation options. Eight local shell/argument regressions
+reproduce the error and pass after correcting the shared generator. They verify
+exact URLs, headers and JSON bodies using a local curl function; no network
+request is sent. The normal documentation suite runs these tests and verifies
+the regenerated assets. This fixes copy-and-paste instructions, not media code.
+The actual-call evidence below remains separately recorded and was revalidated
+against all eight retained healthy/partition synthetic RTP captures on September10.
+
 ## Latest actual distributed-call result — September 9, 2026
 
 **Additional active-call fault acceptance PASS:** all four modes also pass a

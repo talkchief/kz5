@@ -67,6 +67,13 @@ must establish those independent conditions and revalidate tokens before acting.
 
 ## Evidence and rollout
 
+- Corrected source `494ee28` is now in normal private deployment, exact units
+  `kz5-stage-install-kazoo-apps-15` / `kz5-stage-install-apps-peer-11`.
+  Actual active/running MainPID506156/363012 observed after guarded admission.
+  Protected start log `init-readiness-deploy-494ee28-1789001079511.log` is under
+  `/var/lib/kazoo5-install-lab`. Collect these jobs before version2 acceptance;
+  do not edit/sync compiling inputs or relabel their launch as a pass.
+
 - Normal builds14/10 on `c6e0c36` failed before deployment (exit2). The production
   compiler's warn_missing_spec rejects all six new gen_server callbacks without
   specifications. The focused runner originally lacked that flag; it now uses

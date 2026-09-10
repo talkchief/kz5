@@ -14,6 +14,8 @@ const root = path.resolve(__dirname, '..');
 const committed = path.join(__dirname, 'assets/api-docs');
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 async function offline() {
+    execFileSync(process.execPath, ['--test', path.join(__dirname, 'test-api-supervision-examples.cjs')],
+        {stdio: 'pipe', timeout: 15000});
     const result = verify(committed);
     const spec = JSON.parse(fs.readFileSync(path.join(committed, 'openapi.json')));
     const coverage = JSON.parse(fs.readFileSync(path.join(committed, 'coverage.json')));

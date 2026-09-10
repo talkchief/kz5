@@ -7,6 +7,24 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / corrected normal deployment now running:** source
+  `494ee28a85ff30ae53b615f802560a8bd9805102`, exact units
+  `kz5-stage-install-kazoo-apps-15` (MainPID506156) and
+  `kz5-stage-install-apps-peer-11` (MainPID363012), active/running at launch.
+  Admission rechecked exact terminal failed predecessors, active apps, all6
+  ready replicas, zero media/callback work, ownership and capacity. Protected
+  start log `init-readiness-deploy-494ee28-1789001079511.log` under
+  `/var/lib/kazoo5-install-lab`. Collect these jobs; do not sync their compiling
+  checkouts or launch duplicates. Startup token version2 acceptance still due.
+
+- **SUP / copyable command regression corrected:** stray literal plus signs
+  in the supervision guide/OpenAPI curl examples produced unwanted arguments.
+  All8 start/stop shell examples fail before and pass after the generator fix;
+  a local curl stub verifies exact arguments and JSON without network calls.
+  This regression is now part of the documentation suite. Real call/audio
+  evidence remains the September9 healthy and partition passes; this command
+  test is not a new call test. Generated artifacts are rebuilt and validated.
+
 - **INST-06 / startup-readiness build failure — source correction validated:**
   Normal jobs14/10 both terminated with exit2 before deployment. The production
   compiler rejects six missing gen_server callback specifications in acdc_init;
