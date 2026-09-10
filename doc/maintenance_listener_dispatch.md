@@ -82,6 +82,42 @@ runtime acknowledgement defect.
 
 ## Remaining acceptance and limits
 
+### First native rollout admission refused — no build started
+
+Source `a12fc2d` was pushed to master and synced to dev44 `/opt/kz5`.
+Unit `kz5-dispatch-apps-rollout-20260910` exited 1 during read-only preflight,
+before source synchronization into either private apps guest or either installer
+launch. Both remain on installed source `8343d47`, with admission open. Private
+rollout receipt/log: `/root/kz5-dispatch-rollout.BDPDJNag/receipt.json` and
+`run.log`. This attempt is FAIL, not a deployment or an installed-code pass.
+
+Independent native observations found all six agents ready with their original
+queue membership and zero private media channels, but queue inventories refuse:
+
+- Apps14 has one queue worker in `connecting`, retaining its member call,
+  delivery and winner; its bridge context has `proof_status=unresolved` and no
+  active probe/timer. The two other workers are drained.
+- Its manager retains one current member and three cancellation markers.
+- Apps20's three queue workers are drained, but its manager also retains three
+  cancellation markers.
+- A fresh `acdc_callback_recovery_io:observe_channels/2` query for the exact
+  retained caller returned complete `terminated` evidence from both advertised
+  eCallMgrs. No timer or state was changed by this observation.
+
+Read-only, field-name-derived runtime summaries and the fresh proof are retained
+in that rollout directory as `queue-state-172.30.253.14.txt`,
+`queue-state-172.30.253.20.txt` and `ordinary-proof-observation.txt`.
+No fake hangup, state replacement, force-ack, restart or redial was used.
+
+**Next source repair:** reconcile an ordinary queue bridge-proof timeout after
+its initial deadline without rerouting a possibly connected caller; only fresh
+complete terminal evidence may release owned queue work. Also reconcile manager
+cancellation markers against delivery ownership without allowing a delayed
+cancelled call to ring. Add before/after regressions and native recovery of this
+retained synthetic case, then retry the deployment admission. Do not equate
+zero FreeSWITCH sessions alone with complete broker/queue cleanup. This is the
+private ordinary-call fixture, not the separate historical callback ticket.
+
 Next: normal deployment to the owned private applications pair, native paired
 queue/agent inventory and cold checkpoint restoration, then actual SIP/RTP
 follow-up. Controller/main promotion must be explicit; synchronizing `/opt/kz5`

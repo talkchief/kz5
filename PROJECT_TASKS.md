@@ -7,6 +7,23 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **P0 / retained ordinary queue bridge and cancellation ownership — OPEN, September10:**
+  Native preflight for dispatch rollout refused before starting any installer.
+  Apps14 retains a `connecting` queue worker with unresolved bridge proof and
+  no active recovery timer; a fresh, complete two-controller query now reports
+  its exact caller terminated. The apps14 manager retains one member and three
+  cancellation markers; apps20 retains three cancellation markers. All six
+  agents are ready and private FreeSWITCH has zero channels, so those checks
+  alone do not prove queue drain. Preserve this owned synthetic state while
+  implementing safe ordinary-call reconciliation and delayed-delivery-safe
+  cancellation cleanup; add regressions and native recovery acceptance before
+  retrying rollout. No force-ack, synthetic hangup, restart or redial performed.
+  Unit `kz5-dispatch-apps-rollout-20260910` is terminal FAILED/exit1, collected;
+  no child installer was started. Both private apps remain on `8343d47`.
+  Evidence: `/root/kz5-dispatch-rollout.BDPDJNag/` on dev44.
+  See `doc/maintenance_listener_dispatch.md`. This supersedes any interpretation
+  of earlier bounded recovery passes as proof that current queue state is clean.
+
 - **INST-06 / listener work after broker acknowledgement — source PASS, native pending:**
   A broker-empty result can hide asynchronous `gen_listener` work. Required
   installer patch now tracks responders and nested dispatch groups through
@@ -16,7 +33,9 @@ work postponed; do not generate voices at runtime or during deployment.
   cases pass, with fresh pinned-source patch application; three valid and36
   rejected actual collector predicates also pass. Prior secondary-queue and
   restore validation regressions remain green. No runtime deployment is
-  claimed. Next: normal private apps-pair build, native inventory/cold restore
+  claimed. Source `a12fc2d` is pushed/synced. First native preflight refused on
+  retained old-runtime queue work (P0 above); no normal build started. After
+  safe recovery: normal private apps-pair build, native inventory/cold restore
   and real-call follow-up. Do not deploy only these helpers to old VMs. See
   `doc/maintenance_listener_dispatch.md`; producer fence/coordinated rollback
   remain OPEN.
