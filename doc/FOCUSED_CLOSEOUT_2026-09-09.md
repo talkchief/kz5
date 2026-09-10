@@ -6,6 +6,12 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Normal private media retry6 on `935d544` completed and was collected PASS in
+  `freeswitch-install-6.log`. The actual native observer now works under the
+  container's existing privileges. An explicit media-fenced real SIP/RTP
+  supervision campaign is implemented with passing offline guards; native
+  call and restart-persistence acceptance are next.
+
 - Media build5 compiled and started the service, then FAILED verification on
   a restricted-container proc read (root EACCES). The same-UID proc verifier
   correction passes24 focused tests and an actual native observation without

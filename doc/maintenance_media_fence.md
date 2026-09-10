@@ -82,6 +82,23 @@ the running build's checkout. The C patch and core build fingerprint are unchang
 
 ## Installer and evidence
 
+- **Normal private retry6 PASS:** source `935d544` completed, with service and
+  native helper verification collected in
+  `/var/lib/kazoo5-install-lab/freeswitch-install-6.log`. This supersedes the
+  failed build5 verifier below; its failed receipt remains unchanged.
+- The opt-in call harness now supports
+  `node scripts/test-channel-monitor-live.cjs --distributed --media-fence --live`.
+  For each real SIP/RTP supervision conversation, it proves a marked internal
+  null-endpoint call can answer before fencing, rejects the same endpoint while
+  fenced, verifies all three original legs remain allocated, and verifies the
+  permitted/forbidden audio window occurs entirely inside the closed interval.
+  After release the internal endpoint must answer again, and normal supervisor
+  stop must preserve the original conversation. Only the owned private media
+  guest is admitted. Exact temporary generations/probe UUIDs are durable in the
+  private fixture state; cleanup never selects unrelated calls or generations.
+  Offline record/injection/harness/audio checks pass. This new campaign has not
+  yet produced a native pass and does not test media restart persistence itself.
+
 - Native build5 on `88bf049` compiled and started the new media service but
   exited1 during helper verification: root's proc executable-link read returned
   EACCES. Its native admission command already returns open/zero sessions.

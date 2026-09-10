@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / media installation retry6 — PASS:** normal source `935d544`
+  completed and was collected in `freeswitch-install-6.log`. The native process
+  verifier is now installed and passes without granting ptrace privileges.
+  The core admission patch is deployed to the owned private media guest.
+  A new opt-in real SIP/RTP campaign (`--distributed --media-fence --live`)
+  checks each supervision mode while new internal calls are blocked, with
+  identical internal endpoints working before/after release. The harness stores
+  its exact generation for scoped cleanup and requires the audio window to fall
+  inside the closed interval. Offline ownership/probe/harness/audio tests pass;
+  actual campaign and restart-persistence acceptance remain pending.
+
 - **INST-06 / media build5 verification refusal — corrected:** normal compilation
   and media service startup completed, but installation exited1 when container
   root could not read `/proc/PID/exe` (EACCES without CAP_SYS_PTRACE). Native

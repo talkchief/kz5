@@ -13,7 +13,7 @@ let AUTH='/etc/kazoo/installer-secrets.env', MASTER='302ae5a70c403124f764cbc5422
 const OWNER='kazoo5-isolated-monitor-acceptance', ID=/^[a-f0-9]{32}$/, CALL=/^[A-Za-z0-9_.:@-]{1,128}$/;
 const SCENARIOS=path.join(__dirname,'sip-tests'), FSCLI='/usr/local/freeswitch/bin/fs_cli';
 let state, fixture, masterToken, adminToken, userToken, runDir, current, cleaning=false;
-let partitionEnabled=false, queuePartitionEnabled=false, controllerFault=null;
+let partitionEnabled=false, queuePartitionEnabled=false, mediaFenceEnabled=false, controllerFault=null;
 const children=new Set(), registered=new Set();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const hex=()=>crypto.randomBytes(16).toString('hex');
@@ -80,6 +80,7 @@ function validFixture(f,s) {
         for(const id of f.queue_paused)assert(ID.test(id)&&
             [s.ACCEPTANCE_AGENT_2_USER_ID,s.ACCEPTANCE_AGENT_3_USER_ID].includes(id),'Unowned paused agent');
     }
+    if(f.media_fence)require('./test-fixtures/distributed-lab/media-fence.cjs').validate(f.media_fence,f.deployment_id,distributed?.media);
     return f;
 }
 function saveFixture() {
@@ -345,6 +346,7 @@ async function stage(mode) {
     current.supervisor_id=accepted.supervisor_call_id;current.request_id=accepted.request_id;saveFixture();
     await until(()=>{const c=channel(current.supervisor_id);return c&&monitorMatches(c)&&c.answered;});
     await request('POST',route('channels',target.id),{action:'stop_monitoring',request_id:current.request_id},adminToken,403);
+    if(mediaFenceEnabled)await mediaContext().begin(mode);
     if(partitionEnabled) {
         originalAlive();assert(monitorMatches(channel(current.supervisor_id)));
         assert.equal(JSON.parse(command(FSCLI,['-x','show channels as json'])).row_count,3,
@@ -360,6 +362,8 @@ async function stage(mode) {
         partitionProof=await controllerFault.restore();
         writePrivate(mode+'-partition.json',JSON.stringify(partitionProof,null,2)+'\n');controllerFault=null;
     }
+    let mediaProof;
+    if(mediaFenceEnabled)mediaProof=await mediaContext().release();
     const stopped=await stopSupervisor(true);originalAlive();await sleep(2500);originalAlive();
     terminate(tcpdump);await until(()=>tcpdump.exitCode!==null,5);fs.chmodSync(capture,384);
     const buffer=fs.readFileSync(capture), ps=audio.packets(buffer);
@@ -370,8 +374,11 @@ async function stage(mode) {
         assert(digit.time+2>=partitionProof.started&&digit.time+5<=partitionProof.restored,
             'Post-keypad audio evidence must be entirely inside the verified broker partition');
     }
+    if(mediaProof)assert(digit.time+2>=mediaProof.closed_at&&digit.time+5<=mediaProof.released_at,
+        'Post-keypad audio evidence must be entirely inside the verified media fence');
     const proof=audio.inspect(buffer,mode,[{start:digit.time-3,end:digit.time-1},{start:digit.time+2,end:digit.time+5}]);
     if(partitionProof)proof.controller_broker_partition=partitionProof;
+    if(mediaProof)proof.media_admission_fence=mediaProof;
     proof.authorization_negatives=['cross_account403','non_admin403','stale404','extra_route400','stop_original403'];
     proof.call_ids={account_id:state.ACCEPTANCE_ACCOUNT_ID,...current};
     proof.supervisor_stop_http_status=stopped;
@@ -390,6 +397,10 @@ async function cleanup() {
         catch {complete=false;log('Controller broker restoration incomplete; independent watchdog retained');}
     }
     try {await clearStage();}catch(error){complete=false;log('Scoped call cleanup incomplete: '+error.message+'; protected recovery state retained');}
+    if(fixture?.media_fence){
+        try{await mediaContext().release(true);}
+        catch(_){complete=false;log('Owned media fence recovery incomplete; durable generation and fixture state retained');}
+    }
     if(fixture?.queue_paused?.length) {
         try {await queueContext().restorePauses();}
         catch {complete=false;log('Synthetic agent pause restoration incomplete; bounded expiry and owned recovery state retained');}
@@ -425,6 +436,12 @@ function queueContext() {
         setFault(value){controllerFault=value;}
     });
 }
+function mediaContext(){
+    assert(distributed,'Media fence acceptance requires the private distributed lab');
+    return require('./test-fixtures/distributed-lab/media-fence.cjs').context({
+        fixture,distributed,command,writePrivate,saveFixture,originalAlive,until,log
+    });
+}
 function prepare() {
     state=baseState(privateRead(BASE));
     const local=JSON.parse(command('ip',['-j','-4','address','show'])).flatMap(x=>x.addr_info||[]).map(x=>x.local);
@@ -444,7 +461,8 @@ async function main(args) {
         args=args.slice(1);
         if(args[0]==='--broker-partition') {partitionEnabled=true;args=args.slice(1);}
         if(args[0]==='--queue-partition') {queuePartitionEnabled=true;args=args.slice(1);}
-        assert(!(partitionEnabled&&queuePartitionEnabled),'Select one fault profile');
+        if(args[0]==='--media-fence') {mediaFenceEnabled=true;args=args.slice(1);}
+        assert([partitionEnabled,queuePartitionEnabled,mediaFenceEnabled].filter(Boolean).length<=1,'Select one fault profile');
         assert(args.length===1&&['--prepare-only','--live','--cleanup'].includes(args[0]),'Invalid distributed monitor mode');
         distributed=require('./test-fixtures/distributed-lab/monitor-profile.cjs').prepare();
         API=distributed.api;BASE=distributed.base;AUTH=distributed.auth;FILE=distributed.file;MASTER=distributed.master;
