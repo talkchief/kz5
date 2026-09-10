@@ -2,6 +2,19 @@
 
 ## Latest actual-call result — September 10, 2026
 
+**Post-terminal-cleanup installation PASS:** after normal private applications
+installs16/12 on source `8343d47`, `kz5-stage-monitor-terminal-cleanup-1` exited0
+using runner `6b4216e`. All four modes passed actual SIP/RTP, independently
+reanalyzed privacy windows before/after keypad3, authorization negatives,
+supervisor stop202 and original bridge survival. Protected evidence on dev44:
+`/var/log/kazoo-monitor-acceptance-CXndtt`; log
+`/var/lib/kazoo5-install-lab/monitor-terminal-cleanup-1.log`.
+Fresh strict native inventories also passed for all six agent/listener replicas;
+media admission was open with zero sessions and no retained monitor fixture.
+This is the installed version containing the terminal-event source correction,
+not merely the earlier runtime. Main44 runtime promotion and full coordinated
+maintenance remain unproven; see `acdc_listener_terminal_cleanup.md`.
+
 **Fresh user-requested retest PASS:** `kz5-stage-monitor-user-retest-1`
 exited0 on runner `40f1712`, after the two-applications-VM cold-restore tests.
 Listen/eavesdrop, Whisper, Barge and Join each used a new three-leg SIP call

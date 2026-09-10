@@ -16,13 +16,15 @@ inventories (`cold-agent-state-tbT2Rt/receipt.json` under the private lab root).
 Two subsequent actual queue calls passed audio, but the independent strict
 agent-drain check exposed retained terminal-leg placeholders on apps20.
 The correction is source `8343d47`; normal private installers
-`kz5-stage-install-kazoo-apps-16` and `kz5-stage-install-apps-peer-12` are running.
-Do not change their compiling checkouts. Collect them and run the strengthened
-`--distributed --queue-calls --live` acceptance, which now requires strict
-all-six-replica drain. See `acdc_listener_terminal_cleanup.md`.
-Fresh four-mode supervision independently passed on the preceding runtime
-(`/var/log/kazoo-monitor-acceptance-bev21u`); it is not verification of this
-new installation. Full cluster producer/broker drain and coordinated rollback
+`kz5-stage-install-kazoo-apps-16` and `kz5-stage-install-apps-peer-12` passed and
+were collected. The strengthened healthy and apps-broker-partition actual-call
+campaigns both passed with strict all-six-replica drain and independent audio/
+cleanup verification (`...-5ZZRCj`, `...-e3Y5w1` on dev44).
+See `acdc_listener_terminal_cleanup.md`. Main44 runtime promotion is not claimed.
+Fresh four-mode supervision independently passed on this new installation:
+`/var/log/kazoo-monitor-acceptance-CXndtt`, including post-call strict drain.
+The earlier `...-bev21u` run remains evidence for the preceding runtime only.
+Full cluster producer/broker drain and coordinated rollback
 remain open. Earlier "current" build references below are historical receipts.
 
 September10: initializer normal installs15/11 on `494ee28` and combined version2

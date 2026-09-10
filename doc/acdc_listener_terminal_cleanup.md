@@ -45,13 +45,38 @@ All eight focused cases pass; evidence `/tmp/kazoo-acdc-terminal.z4yxn8` on the
 source host. The queue-call harness now requires strict native inventories of
 all six replicas, including actual listener bindings, before reporting PASS.
 
-Normal installation of the new source on both private apps guests and two new
-actual queue calls with strict all-replica drain verification remain required.
-Do not claim this closes full cluster maintenance or coordinated rollback.
-
-Normal private installers started on `8343d47`:
+Normal private installers completed successfully on `8343d47`:
 `kz5-stage-install-kazoo-apps-16` and `kz5-stage-install-apps-peer-12`.
-Both are confirmed active/running. Collect these exact handles before another
-install or source sync. Main44 `/opt/kz5` is synced; this does not deploy its
-main runtime. The maintenance/restore suite,27 recovery tests and13 channel-event
-tests also passed before deployment. Native post-install acceptance is pending.
+Both terminal results were collected in `kazoo-apps-install-16.log` and
+`apps-peer-install-12.log` under `/var/lib/kazoo5-install-lab` on dev44.
+Main44 `/opt/kz5` is synced; this does not deploy its main runtime.
+The maintenance/restore suite,27 recovery tests and13 channel-event tests
+also passed before deployment.
+
+**Native healthy acceptance PASS:** `kz5-stage-queue-terminal-cleanup-1`,
+runner `6b4216e`; evidence `/var/log/kazoo-monitor-acceptance-5ZZRCj`.
+Two actual queue2000 calls passed both audio directions using the same agent
+FSMs, without re-login or SIP registration between calls. Independent RTP
+reanalysis and fresh installed collectors confirmed all six replicas ready,
+drained, consuming, with expected actual queue bindings and unchanged epochs.
+
+**Native missed-hangup acceptance PASS:** `kz5-stage-queue-terminal-partition-1`,
+runner `6b4216e`; evidence `/var/log/kazoo-monitor-acceptance-e3Y5w1`.
+An applications14 broker-only interruption retained applications20. The exact
+synthetic call ended during the interruption;15 samples confirmed the isolated
+replica remained conservatively answered. Both original FSMs recovered after
+connectivity returned and a second real queued conversation passed audio without
+re-login/registration. The strict all-six-replica drain check passed, including
+independent post-test collection. The exact broker routes were restored.
+
+Both units exited0 and removed owned temporary users/registrations; independent
+checks confirmed open media admission, zero sessions and no retained monitor
+fixture. The earlier strict-drain failure remains failed, not rewritten.
+These component tests do not close full cluster maintenance/coordinated rollback.
+
+**Supervision regression PASS:** `kz5-stage-monitor-terminal-cleanup-1`, runner
+`6b4216e`, tested all four supervision modes on the same installed apps source.
+Independent analysis of `/var/log/kazoo-monitor-acceptance-CXndtt` confirms
+audio privacy, supervisor stop202 and original bridge survival. All six strict
+agent/listener inventories still pass after these direct calls. See
+`channel_monitor_acceptance.md` for the exact scope.

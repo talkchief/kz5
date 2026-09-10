@@ -85,6 +85,13 @@ The actual follow-up call profile is
 `node scripts/test-channel-monitor-live.cjs --distributed --queue-calls --live`.
 It routes two real calls through queue2000 and verifies both directions of RTP,
 same agent FSMs and recovery to ready, without a broker interruption or an
-agent login/SIP registration between calls. This follow-up is pending.
+agent login/SIP registration between calls. The first follow-up exposed retained
+listener control-queue placeholders despite ready FSMs. After source8343d47 was
+normally installed on both nodes, the strengthened follow-up passed with strict
+all-six-replica drain: `kz5-stage-queue-terminal-cleanup-1`, evidence
+`/var/log/kazoo-monitor-acceptance-5ZZRCj`. A second campaign with a real apps
+broker interruption also passed: `kz5-stage-queue-terminal-partition-1`, evidence
+`/var/log/kazoo-monitor-acceptance-e3Y5w1`. Both results were independently checked;
+see `acdc_listener_terminal_cleanup.md` for the source fix and exact scope.
 The fixture does not attest a complete cluster producer/broker drain, release
 activation/rollback, host reboot or media HA.

@@ -12,10 +12,13 @@ Latest verified results:
   Actual follow-up queue calls passed audio but exposed a separate strict
   listener-drain defect. Source `8343d47` fixes terminal-leg cleanup and delayed
   control notifications; eight focused regressions and the broader maintenance,
-  recovery and channel-event suites pass. Normal private installs16/12 are
-  currently running; actual post-install queue calls and strict drain remain
-  pending. See `acdc_listener_terminal_cleanup.md`. Do not count the earlier
-  queue-call audio pass as a complete maintenance pass.
+  recovery and channel-event suites pass. Normal private installs16/12 passed
+  and were collected. Actual healthy and apps-broker-partition queue campaigns
+  also passed with independently verified audio, same FSMs, all-six strict drain
+  and zero-session cleanup (`...-5ZZRCj`, `...-e3Y5w1` under
+  `/var/log/kazoo-monitor-acceptance-` on dev44).
+  See `acdc_listener_terminal_cleanup.md`. Full coordinated maintenance and
+  deployment of this latest source to the main44 runtime remain unproven.
 
 - New calls after both native media restarts PASS all four supervision/audio
   modes: `kz5-stage-monitor-after-media-restart-1` (runner `4cc4540`, exit0),

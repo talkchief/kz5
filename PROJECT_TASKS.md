@@ -7,7 +7,7 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **INST-06 / post-call listener drain — source fix, native retest pending:**
+- **INST-06 / post-call listener drain — native PASS, September10:**
   Read-only installed-record diagnosis found two pending control-queue entries
   in one apps20 listener; all other FSM/listener pairs were drained. Root ACDC
   source now retires exact legs on validated terminal events, forwards delayed
@@ -15,12 +15,20 @@ work postponed; do not generate voices at runtime or during deployment.
   legs. Eight focused regressions pass against production compilation with
   `-Werror +warn_missing_spec` (`/tmp/kazoo-acdc-terminal.z4yxn8`). The actual
   queue-call harness now requires strict all-six-replica drain after calls.
-  Normal two-node installation and that native acceptance remain pending.
+  Normal two-node installation and healthy/fault native acceptance now PASS.
   See `doc/acdc_listener_terminal_cleanup.md`; do not weaken the drain predicate.
-  Source `8343d47` is pushed and synced to main44. Normal private builds16/12
-  are confirmed active/running; collect these exact jobs before changing their
-  checkouts or running the strengthened actual-call acceptance. Broader
-  maintenance/restore,27 recovery and13 channel-event tests passed.
+  Source `8343d47` is pushed and synced to main44; private normal builds16/12
+  completed and were collected. Native `kz5-stage-queue-terminal-cleanup-1`
+  and `kz5-stage-queue-terminal-partition-1` exited0. Independently checked
+  evidence `/var/log/kazoo-monitor-acceptance-5ZZRCj` and `...-e3Y5w1` on dev44
+  proves real queue calls/audio, same FSMs, all-six strict drain and clean
+  zero-session recovery. The partition run additionally proves conservative
+  busy state while disconnected and next-call recovery without re-login.
+  Broader maintenance/restore,27 recovery and13 channel-event tests passed.
+  Post-install four-mode supervision also passed with independent RTP/privacy,
+  original bridge survival and strict drain (`kz5-stage-monitor-terminal-cleanup-1`,
+  `/var/log/kazoo-monitor-acceptance-CXndtt`). No native test job remains running.
+  Main44 runtime deployment and full coordinated maintenance are not claimed.
 
 - **SUP / fresh user-requested actual-call retest — PASS, September10:**
   `kz5-stage-monitor-user-retest-1` exited0 on runner `40f1712`. All four modes
@@ -32,16 +40,16 @@ work postponed; do not generate voices at runtime or during deployment.
   active. Named how-to sections remain at `/apis/supervision.html`; legacy
   queue-eavesdrop endpoints remain disabled. See `doc/channel_monitor_acceptance.md`.
 
-- **INST-06 / post-cold-restore queue calls — audio PASS; strict drain OPEN:**
+- **INST-06 / earlier post-cold-restore queue calls — failed strict drain (fixed above):**
   `kz5-stage-queue-after-cold-restore-1` exited0 on runner `40f1712`; evidence
   `/var/log/kazoo-monitor-acceptance-VbqY7M`. Two real queue calls pass audio and
   unchanged-agent-FSM checks without a login or registration between calls.
   Independent cleanup verification nevertheless found apps20's stricter native
   maintenance snapshot refusing while all six public agent snapshots reported
   ready and both initializers ready. Diagnose the FSM/listener residual work;
-  do not waive the check or restart merely to erase it. This prevents claiming
-  full post-call maintenance drain acceptance. The independent supervision
-  passes above do not close this separate issue.
+  do not waive the check or restart merely to erase it. This historical result
+  remains a failed strict-drain acceptance. Source8343d47 and both subsequent
+  native campaigns above close this defect; supervision passes alone did not.
 
 - **INST-06 / paired cold agent/queue inventories — PASS, September10:**
   Extended native unit `kz5-stage-cold-agent-restore-2` exited0 on runner
