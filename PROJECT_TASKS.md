@@ -7,6 +7,18 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / normal startup-readiness rollout now running:** source
+  `c6e0c36532f5242fb5d9ef6d0b0391baaf9029b2`, exact native units
+  `kz5-stage-install-kazoo-apps-14` (MainPID489663) and
+  `kz5-stage-install-apps-peer-10` (MainPID346493), both confirmed active/running.
+  Protected start log:
+  `/var/lib/kazoo5-install-lab/init-readiness-deploy-c6e0c36-1789000314473.log`.
+  Admission checked owned isolated guests, completed preceding installs, zero
+  media/callback work and all6 ready agent replicas. Do not sync/edit the
+  compiling guest checkouts or launch duplicate jobs. Collect these exact
+  units, then run the version2 combined inventory. Main44 runtime unchanged;
+  root `/opt/kz5` is synced. No native startup-readiness pass is claimed yet.
+
 - **INST-06 / initializer completion — source corrected, native rollout next:**
   `acdc_init` now supervises/tracks initial work, agent startup and retries.
   Pending/failed jobs cannot count as completed initialization.18 production

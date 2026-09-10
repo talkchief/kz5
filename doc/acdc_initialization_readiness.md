@@ -86,3 +86,10 @@ Normal applications deployment on both private nodes and a version2 native
 combined snapshot are still required. Do not use the new collectors against
 the old installed runtime and call their expected refusal a deployment pass.
 No main44 runtime hot-loading is authorized or needed for this change.
+
+Normal deployment has now started on source
+`c6e0c36532f5242fb5d9ef6d0b0391baaf9029b2` after zero media/callback work and all6
+ready replicas were verified. Exact live jobs:
+`kz5-stage-install-kazoo-apps-14` and `kz5-stage-install-apps-peer-10`.
+Start log `/var/lib/kazoo5-install-lab/init-readiness-deploy-c6e0c36-1789000314473.log`.
+Collect those jobs before testing the new runtime. Their start is not a pass.

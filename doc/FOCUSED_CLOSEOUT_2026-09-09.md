@@ -6,6 +6,13 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Normal private deployment of startup-readiness source `c6e0c36` is running:
+  units `kz5-stage-install-kazoo-apps-14` and `kz5-stage-install-apps-peer-10`,
+  actual nonzero MainPID and active/running verified. Admission observed zero
+  media/callback work and6 ready replicas. Collect these exact jobs, then run
+  version2 combined inventory. Do not change their compiling inputs. See
+  `acdc_initialization_readiness.md`; no runtime pass or full closeout yet.
+
 - ACDC startup completion gap corrected in source: owned monitored startup/
   agent/retry jobs, native installer readiness, and version2 queue/agent
   snapshot tokens and strict agent-status reads (no error-to-unknown fallback).
