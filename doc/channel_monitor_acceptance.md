@@ -11,6 +11,14 @@ the regenerated assets. This fixes copy-and-paste instructions, not media code.
 The actual-call evidence below remains separately recorded and was revalidated
 against all eight retained healthy/partition synthetic RTP captures on September10.
 
+Release `d3eb3c3` is deployed through the normal installer documentation function
+on dev44. All13 served files match repository bytes over certificate-verified
+HTTPS against the local nginx listener for kz5-dev.talkchief.io. The rebuilt
+portal browser check loads653 operations with zero external requests/console
+errors; API execution remains disabled. Eight shell-example regressions and
+offline deterministic rebuild/schema/tamper checks pass. This does not claim
+a new public-network reachability test or a new live call.
+
 ## Latest actual distributed-call result — September 9, 2026
 
 **Additional active-call fault acceptance PASS:** all four modes also pass a

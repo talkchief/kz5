@@ -95,6 +95,19 @@ ownership, completed builds and empty media, then hold the acceptance lock.
 
 ## Still required before INST-06 can close
 
+Pinned FreeSWITCH source inspection on September10 confirms why a runtime
+`fsctl pause` alone cannot satisfy restart persistence. At
+`ef32e205295e29f034f1453ad245ba5efb07b94a`, SCF_NO_NEW_SESSIONS is the bitwise
+union of the inbound/outbound flags (`src/include/switch_types.h`), not a third
+independent flag. `fsctl pause_check` tests both bits, while its inbound/outbound
+variants report each bit. Session allocation checks the directional and global
+ready predicates in `src/switch_core_session.c`. Normal core startup explicitly
+clears both bits before api_on_startup (`src/switch_core.c`). Therefore even
+reapplying pause from api_on_startup leaves an admission window; a durable
+startup barrier must precede that clearing/admission point. This is verified
+source behavior, not a native persistent-media-fence acceptance result. No
+media pause/resume or firewall mutation was made during this inspection.
+
 Internal media origination, queued AMQP work, durable callbacks and asynchronous
 producers are not stopped merely by this input-port fence. Complete ingress
 coverage, media/producer fencing, broker/queue/callback drain, startup completion,

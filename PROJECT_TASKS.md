@@ -24,6 +24,9 @@ work postponed; do not generate voices at runtime or during deployment.
   This regression is now part of the documentation suite. Real call/audio
   evidence remains the September9 healthy and partition passes; this command
   test is not a new call test. Generated artifacts are rebuilt and validated.
+  Release `d3eb3c3` is deployed on dev44 via the installer docs function;
+  all13 files match over certificate-verified local-listener HTTPS. Browser
+  validation passes with653 operations and zero external requests/errors.
 
 - **INST-06 / startup-readiness build failure — source correction validated:**
   Normal jobs14/10 both terminated with exit2 before deployment. The production
