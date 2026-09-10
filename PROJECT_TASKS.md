@@ -7,6 +7,22 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / native media restart persistence — PASS, September10:**
+  `kz5-stage-media-restart-2` exited0 using runner `2abb5c5`, normally installed
+  media `935d544`. Independently verified receipt on dev44:
+  `/var/lib/kazoo5-install-lab/media-restart-1789004453657.json` (guest receipt
+  `/var/lib/kazoo-stage/media-restart-TdtnTD/receipt.json`). Both actual process/
+  core restarts retain closed admission and zero sessions. The second restores
+  an intentionally moved, exact-owned marker through the installed startup
+  guard; its original is retained in the private receipt directory. Identical
+  internal endpoints answer before/after, and are denied after both restarts.
+  Explicit release preserves inbound-only operator pause. Cleanup verifies open
+  admission/zero sessions/original pause flags. Run1 was an admission refusal
+  before any restart: systemd had garbage-collected an already-collected
+  installer unit. The corrected guard recognizes that terminal metadata case.
+  Full cluster producer/broker drain, durable cold agent restore and coordinated
+  upgrade/rollback remain open. This is not host reboot or media HA acceptance.
+
 - **SUP / actual-call retest and INST-06 media-fenced call acceptance — PASS,
   September10:** all four modes (Listen/eavesdrop, Whisper, Barge, Join) pass
   actual SIP/RTP on normally installed media `935d544`, runner `a2b7946`.
@@ -16,8 +32,8 @@ work postponed; do not generate voices at runtime or during deployment.
   interval; every supervisor stop202 preserves the original bridge. New marked
   internal calls answer before/after fencing and are rejected while closed.
   Cleanup passes: admission open, zero sessions, no retained monitor fixture.
-  Media restart persistence and full maintenance drain/restore/rollback remain
-  open; this does not certify enterprise reliability. See
+  Media restart persistence now passes as recorded above; full maintenance
+  drain/restore/rollback remains open. This does not certify enterprise reliability. See
   `doc/channel_monitor_acceptance.md` and `doc/maintenance_media_fence.md`.
 
 - **INST-06 / media installation retry6 — PASS:** normal source `935d544`
@@ -29,8 +45,8 @@ work postponed; do not generate voices at runtime or during deployment.
   identical internal endpoints working before/after release. The harness stores
   its exact generation for scoped cleanup and requires the audio window to fall
   inside the closed interval. Offline ownership/probe/harness/audio tests pass;
-  actual campaign now passes as recorded above; restart-persistence acceptance
-  remains pending.
+  actual campaign and process-restart persistence now pass as recorded above;
+  full coordinated acceptance remains pending.
 
 - **INST-06 / media build5 verification refusal — corrected:** normal compilation
   and media service startup completed, but installation exited1 when container

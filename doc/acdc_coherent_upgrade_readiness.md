@@ -10,9 +10,17 @@ coordinated restart/rollback acceptance remain open.
 
 ### Latest native results
 
-Initializer completion now has source/installer/collector integration with18
-production-process/status tests and26 JavaScript guard/merger tests passing. Normal
-deployment and version2 native acceptance remain pending; see
+September10: initializer normal installs15/11 on `494ee28` and combined version2
+inventory passed (two nodes/six replicas), receipt
+`queue-inventory-1789002002127-97f89a97.json` under the private lab root. Durable
+media normal install6 on `935d544`, all four real supervision/audio modes while
+fenced, and two native media process restarts with marker restoration also pass.
+See `maintenance_media_fence.md` for exact receipts and remaining scope. These
+component passes do not close full cluster producer/broker drain, cold whole-VM
+agent restoration, or coordinated rollback.
+
+Initializer source/installer/collector integration has18 production-process/status
+tests and26 JavaScript guard/merger tests passing; see
 `acdc_initialization_readiness.md`. Earlier combined native version1 snapshot
 passed on `25be59c`: `queue-inventory-1788999277496-9ba05000.json`, two queues/
 six replicas. It does not satisfy the newly enforced startup prerequisite.

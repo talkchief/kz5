@@ -6,20 +6,30 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Native media process-restart persistence PASS on September10:
+  `kz5-stage-media-restart-2`, runner `2abb5c5`, installed media `935d544`.
+  Receipt `/var/lib/kazoo5-install-lab/media-restart-1789004453657.json` on dev44
+  independently verified: two changed process/core identities, closed admission
+  after both starts, lost marker restored by the actual boot guard, identical
+  internal probes rejected while fenced and answered before/after, operator
+  pause retained on release, and clean open/zero-session final state. The
+  first run refused a stale collected installer handle before touching media;
+  its failed log remains. Full cluster maintenance is not closed by this test.
+
 - September10 actual-call retest PASS for Listen/eavesdrop, Whisper, Barge and
   Join: `kz5-stage-monitor-media-fence-1`, runner `a2b7946`, media `935d544`.
   All four synthetic RTP captures independently reanalyzed, including privacy
   while new media admission is fenced. Every supervisor stop202 preserves the
   original bridge; internal probes answer before/after and fail while fenced.
   Evidence `/var/log/kazoo-monitor-acceptance-xD4WRr` on dev44. Cleanup verified
-  open admission/zero sessions/no retained fixture. Media restart persistence
-  and full coordinated maintenance acceptance remain open.
+  open admission/zero sessions/no retained fixture. Process-restart persistence
+  now passes above; full coordinated maintenance acceptance remains open.
 
 - Normal private media retry6 on `935d544` completed and was collected PASS in
   `freeswitch-install-6.log`. The actual native observer now works under the
   container's existing privileges. An explicit media-fenced real SIP/RTP
-  supervision campaign now passes natively as recorded above; restart-persistence
-  acceptance is still required.
+  supervision campaign and process-restart persistence now pass natively as
+  recorded above; complete coordinated acceptance is still required.
 
 - Media build5 compiled and started the service, then FAILED verification on
   a restricted-container proc read (root EACCES). The same-UID proc verifier

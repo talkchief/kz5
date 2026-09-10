@@ -82,6 +82,26 @@ the running build's checkout. The C patch and core build fingerprint are unchang
 
 ## Installer and evidence
 
+- **Native process-restart persistence PASS, September10:** run
+  `node scripts/test-kazoo-maintenance-media-restart.cjs --distributed --live`
+  only from dev44 under its guarded host entry point. It admits the exact owned
+  media/apps/data guests, collected installations, six ready agent replicas,
+  no fixture callback work and empty/open media, holding the shared acceptance
+  lock throughout. Native unit `kz5-stage-media-restart-2` exited0 on runner
+  `2abb5c5`; installed media remains `935d544`. Receipt
+  `/var/lib/kazoo5-install-lab/media-restart-1789004453657.json` and guest
+  `/var/lib/kazoo-stage/media-restart-TdtnTD/receipt.json` independently verify:
+  two actual process/core restarts; closed admission and rejected internal
+  calls after both starts; startup restoration of a missing exact-owned marker;
+  an answered identical internal endpoint before fencing and after release;
+  inbound-only operator pause preserved by release; final open/zero sessions
+  and original pause flags. The moved marker is retained, not deleted.
+  This proves process restart, not host reboot, media failover, sustained-load
+  impact, or the full coordinator. Run1 refused a collected installer unit that
+  systemd had already garbage-collected; no media restart occurred. Its failed
+  log is retained. The guard now distinguishes absent collected handles from
+  running or failed installer jobs. Three offline guard tests also pass.
+
 - **Normal private retry6 PASS:** source `935d544` completed, with service and
   native helper verification collected in
   `/var/lib/kazoo5-install-lab/freeswitch-install-6.log`. This supersedes the
@@ -102,7 +122,8 @@ the running build's checkout. The C patch and core build fingerprint are unchang
   `/var/log/kazoo-monitor-acceptance-xD4WRr` on dev44. All measured post-keypad
   windows fall within the closed interval, all supervisor stops202 preserve the
   original bridge, and cleanup leaves admission open/zero sessions/no fixture.
-  This does not test media restart persistence or full coordinator acceptance.
+  This call campaign does not itself test restart persistence; the separate
+  native restart result above does. Full coordinator acceptance remains open.
 
 - Native build5 on `88bf049` compiled and started the new media service but
   exited1 during helper verification: root's proc executable-link read returned
