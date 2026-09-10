@@ -7,6 +7,32 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / persistent ingress startup guard — implemented and native PASS:**
+  Installer now packages a root-only durable nftables fence and privileged
+  startup guard for apps/FreeSWITCH/Kamailio/nginx, including standalone runtime
+  dependencies.16 focused tests and7 address-gate regression mappings pass.
+  Actual IPv4/IPv6 TCP/UDP and existing-connection rejection, unrelated traffic
+  preservation and kernel-loss reapply pass in an isolated namespace. Real
+  installer/systemd acceptance on private apps14 also passes: torn state blocks
+  startup, kernel loss is repaired before an unprivileged main process starts,
+  and explicit release/cleanup succeeds. Receipt inside apps14:
+  `/var/lib/kazoo-stage/fence-systemd-E8BQOL/receipt.json`. Concurrent service
+  startup exposed a real nonblocking-lock failure (`jJb4tP`, retained FAIL);
+  bounded startup serialization now passes the same native regression.
+  Main/modular/read-only installer suites also pass. No apps restart or
+  main44 service change. See `doc/maintenance_ingress_fence.md` for interface,
+  evidence and limits. Full producer/media fence, drain and cold restore/
+  rollback remain OPEN; this local hook is not the complete coordinator.
+
+- **INST-06 / builds13/9 collected — PASS:** both normal `25be59c` installs
+  completed successfully, service checks collected in `kazoo-apps-install-13.log`
+  and `apps-peer-install-9.log` under `/var/lib/kazoo5-install-lab`.
+  New native queue inventory PASS on both nodes:
+  `queue-inventory-1788998060332-c90cb0ed.json`. No installer job remains running.
+  Combined paused-agent/queue native correlation remains a separate next gate.
+
+### Preceding checkpoints (superseded where noted above)
+
 - **INST-06 / paused-agent drain correlation — source regression fixed:**
   The new queue manager guard incorrectly treated all busy flags as active
   calls, but intentional pauses publish busy too. The focused case fails

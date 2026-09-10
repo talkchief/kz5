@@ -844,9 +844,59 @@ verify_service_address_gate() {
         die "${unit} is missing the configured local-address startup gate"
 }
 
+maintenance_fence_service() {
+    case $1 in
+        kazoo-apps.service|kazoo-freeswitch.service|kazoo-kamailio.service|nginx.service) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+install_service_maintenance_fence() {
+    local unit=$1
+    maintenance_fence_service "$unit" || return 0
+    # The boot guard is self-contained, independent of a mutable source checkout.
+    # Install its runtime even on standalone SIP/media nodes without Monster UI.
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would install Node.js and nftables for the persistent ingress startup guard'
+    else
+        if ! command -v node >/dev/null ||
+           [[ $(node -p 'process.versions.node.split(".")[0]') != "$MONSTER_UI_NODE_MAJOR" ]]; then
+            install_nodejs_toolchain
+        fi
+        dnf_install nftables iproute util-linux
+    fi
+    validate_config_directory /usr/local/libexec
+    run install -d -o root -g root -m 0755 /usr/local/libexec
+    run install -o root -g root -m 0755 "$SCRIPT_DIR/kazoo-maintenance-fence.cjs" /usr/local/libexec/kazoo5-maintenance-fence
+    # Apply any durable intent before a restart is attempted, not just at boot.
+    run /usr/bin/node /usr/local/libexec/kazoo5-maintenance-fence --boot-guard
+    write_file 0644 "/etc/systemd/system/${unit}.d/35-kazoo-maintenance-fence.conf" <<'EOF'
+[Unit]
+After=nftables.service firewalld.service
+
+[Service]
+# Full privileges are needed even when the role itself runs as kazoo/freeswitch.
+# Unknown, corrupted or interrupted-release state prevents ExecStart.
+ExecStartPre=+/usr/bin/node /usr/local/libexec/kazoo5-maintenance-fence --boot-guard
+EOF
+}
+
+verify_service_maintenance_fence() {
+    local unit=$1 commands
+    maintenance_fence_service "$unit" || return 0
+    cmp -s "$SCRIPT_DIR/kazoo-maintenance-fence.cjs" /usr/local/libexec/kazoo5-maintenance-fence ||
+        die 'Installed maintenance fence helper differs; reinstall the selected role'
+    commands=$(systemctl show "$unit" -p ExecStartPre --value) || die 'Cannot inspect maintenance startup guard'
+    [[ $commands == *'argv[]=/usr/bin/node /usr/local/libexec/kazoo5-maintenance-fence --boot-guard ;'* ]] ||
+        die "${unit} is missing the persistent maintenance startup guard"
+    /usr/bin/node /usr/local/libexec/kazoo5-maintenance-fence --status >/dev/null ||
+        die 'Maintenance fence intent/kernel state is inconsistent; admission remains unverified'
+}
+
 service_enable_restart() {
     local unit=$1
     install_service_address_gate "$unit"
+    install_service_maintenance_fence "$unit"
     run systemctl daemon-reload
     run systemctl enable "$unit"
     run systemctl restart "$unit"
@@ -908,6 +958,7 @@ PY
 assert_service() {
     local unit=$1
     verify_service_address_gate "$unit"
+    verify_service_maintenance_fence "$unit"
     systemctl is-enabled --quiet "$unit" || die "${unit} is not enabled"
     systemctl is-active --quiet "$unit" || {
         systemctl --no-pager --full status "$unit" >&2 || true

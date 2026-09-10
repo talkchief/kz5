@@ -4,7 +4,7 @@ const source=fs.readFileSync(path.join(__dirname,'install-kazoo5.sh'),'utf8');
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'kazoo-address-unit-'));
 try {
   const names=['service_local_addresses','install_service_address_gate','verify_service_address_gate','service_enable_restart','validate_config_directory'];
-  const functions=names.map(name=>source.match(new RegExp('^'+name+'\\(\\) \\{[\\s\\S]*?^\\}','m'))[0]).join('\n').replaceAll('/usr/local/libexec',tmp+'/libexec').replaceAll('/etc/systemd/system',tmp+'/units');
+  const functions='install_service_maintenance_fence(){ :; }\n'+names.map(name=>source.match(new RegExp('^'+name+'\\(\\) \\{[\\s\\S]*?^\\}','m'))[0]).join('\n').replaceAll('/usr/local/libexec',tmp+'/libexec').replaceAll('/etc/systemd/system',tmp+'/units');
   const script=`set -euo pipefail\nSCRIPT_DIR=${__dirname}\nKAZOO_COUCHDB_BIND=10.1.0.41\nKAZOO_RABBITMQ_BIND=10.1.0.42\nKAZOO_HAPROXY_BIND=10.1.0.43\nKAZOO_ERLANG_DIST_IP=10.1.0.44\nKAZOO_PUBLIC_IP=46.225.31.248\nrun(){ "$@"; }\nwrite_file(){ mkdir -p "$(dirname "$2")"; install -m "$1" /dev/stdin "$2"; }\ndie(){ echo "$*" >&2; exit 1; }\nsystemctl(){
   if [[ $1 == show ]]; then
     if [[ \${BAD_GATE:-false} == true ]]; then echo 'argv[]=wrong'; else

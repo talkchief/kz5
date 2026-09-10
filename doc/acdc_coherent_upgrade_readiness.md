@@ -10,6 +10,18 @@ coordinated restart/rollback acceptance remain open.
 
 ### Latest native results
 
+Persistent local ingress fencing now has installer/startup integration and
+actual systemd plus real-packet acceptance PASS. See
+`maintenance_ingress_fence.md`. This is not the full cluster fence/drain.
+
+Normal builds13/9 on `25be59c` are now terminal successful and collected:
+`kazoo-apps-install-13.log`, `apps-peer-install-9.log` under the private lab root.
+Native queue inventory on that installed revision also passed on both nodes:
+`queue-inventory-1788998060332-c90cb0ed.json`. No build job remains active.
+Actual paired paused-agent/queue correlation and full cold restore remain due.
+
+Preceding deployment checkpoints (historical):
+
 Both normal `e405aab` builds12/8 passed and were collected. The pinned installed
 native queue collector passed for both nodes: one queue and three workers each,
 receipt `/var/lib/kazoo5-install-lab/queue-inventory-1788996716962-6fdd7ae9.json`.

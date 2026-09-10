@@ -6,6 +6,22 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Persistent local ingress fence is integrated into the installer and role
+  startup guards, with16 focused tests, real kernel packet acceptance and actual
+  systemd acceptance PASS. Unknown/corrupted/releasing state prevents startup;
+  lost kernel rules are restored from durable intent. Private apps14 receipt:
+  `/var/lib/kazoo-stage/fence-systemd-E8BQOL/receipt.json`. Native concurrent
+  startup regression failed before and passes with bounded lock serialization.
+  Main/modular/read-only installer suites pass. No apps restart.
+  Complete cluster producer/media fence, drain and cold restore/rollback remain
+  OPEN. See `maintenance_ingress_fence.md`; this is not a full coordinator pass.
+- Normal apps builds13/9 on `25be59c` completed and were collected successfully
+  (`kazoo-apps-install-13.log`, `apps-peer-install-9.log`). Native queue inventory
+  passed again: `queue-inventory-1788998060332-c90cb0ed.json`. These supersede
+  the build-running statements in the earlier checkpoints below.
+
+Earlier checkpoints (retain their evidence; deployment statements are historical):
+
 - Normal apps builds12/8 passed and were collected. Installed `e405aab` native
   queue inventory PASS on both nodes, one queue/three workers each:
   `queue-inventory-1788996716962-6fdd7ae9.json`. This does not prove full drain.
