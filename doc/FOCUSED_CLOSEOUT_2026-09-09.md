@@ -289,6 +289,15 @@ including independently reanalyzed RTP privacy and original bridge survival:
 collected. See `main_media_soak.md` and `channel_monitor_acceptance.md`.
 The coordinator and historical-ticket decisions below are unchanged.
 
+September10 broker follow-up: native inventory and installer helper deployment
+passed on `8601f57`. Actual synthetic publication and unacknowledged delivery
+both prevent an empty result; acknowledgement returns it to empty. The exact
+temporary vhost was removed and verified absent. Installed default-vhost scan
+observed586 queues/6 connections/724 channels with all work counters zero and
+unchanged broker process. Receipts and remaining producer/coordinator limits:
+`maintenance_broker_inventory.md`. This does not promote a sequential snapshot
+to complete cluster drain or coordinated activation/rollback acceptance.
+
 | Point | Current verified work | Still open |
 | --- | --- | --- |
 | 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Three consecutive30-agent broker outages passed with unchanged apps/FSM identities and90 successful subsequent calls.30-concurrent1800s hold passed:30 caller/30 agent successes,0 failures/errors/cores. Multi-apps-node broker partition now also passed both queued calls/audio and unchanged replica recovery; source fix deployed normally on main44. | Defined recovery gates passed. These bounded tests do not establish indefinite reliability or physical media-node HA. |

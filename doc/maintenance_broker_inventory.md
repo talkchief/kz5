@@ -79,6 +79,24 @@ The same change fixes the cold-maintenance harness's private staging list to
 include the previously added callback inventory helper. Its regression runs
 the actual installer functions against only the staged source files.
 
+## Installed helper verification
+
+Source `8601f579a10505b37a756ad0ff37568fc897f97b` was pushed to master and
+fast-forwarded into dev44 `/opt/kz5`. Under the shared acceptance lock and the
+installer's own host lock, the normal `install_broker_maintenance_tools` and
+`verify_broker_maintenance_tools` functions deployed and verified the helper.
+This was a helper-only deployment, not a full broker reinstall or restart.
+
+Installed helper SHA-256:
+`c7ff0ca15bbfa212cbaa5262487826fef5984aff9c1b8f979265a949e2870a34`.
+The installed executable's native snapshot passed at 05:09:59 UTC, observing
+one broker, 586 queues, six connections and 724 channels in the configured
+default vhost. All six pending-work counters were zero. Broker PID/start
+identity remained unchanged. Protected evidence on dev44:
+`/root/kz5-broker-inventory-release.HRw5Yk/receipt.json`, with `install.log`,
+`snapshot.json` and `snapshot.stderr` in the same private directory.
+This supports installed native observation, not the complete drain assertion.
+
 ## Remaining coordinated-maintenance acceptance
 
 These sequential observations are not an atomic snapshot or a promise that

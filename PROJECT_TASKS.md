@@ -18,8 +18,12 @@ work postponed; do not generate voices at runtime or during deployment.
   `/var/log/kazoo-broker-acceptance-trloi2/receipt.json`.
   Cold-maintenance staging also now includes the callback inventory helper,
   verified by executing actual installer functions against its staged bundle.
-  Helper deployment is pending; producer fencing and coordinated activation/
-  rollback are still OPEN. See `doc/maintenance_broker_inventory.md`.
+  Source `8601f57` pushed/synced; normal helper deployment and its installed
+  native snapshot passed without broker restart. It observed586 queues,
+  six connections and724 channels with all pending-work counters zero.
+  Deployment receipt: `/root/kz5-broker-inventory-release.HRw5Yk/receipt.json`.
+  Producer fencing and coordinated activation/rollback are still OPEN. See
+  `doc/maintenance_broker_inventory.md`.
 
 - **INST-06 / durable callback inventory — source/installed native PASS, September10:**
   New read-only `scripts/kazoo-maintenance-callbacks.cjs` scans every configured
