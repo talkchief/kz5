@@ -28,13 +28,25 @@ function write(file,value,mode){
     sync(path.dirname(file));
 }
 function command(bin,args){return cp.execFileSync(bin,args,{encoding:'utf8',env:ENV,timeout:10000,maxBuffer:32768,stdio:['ignore','pipe','pipe']}).trim();}
-function epoch(){
-    const pid=command('/usr/bin/systemctl',['show','kazoo-freeswitch.service','-p','MainPID','--value']);
+function epoch(io={command,read:p=>fs.readFileSync(p,'utf8'),readlink:p=>fs.readlinkSync(p)}){
+    const pid=io.command('/usr/bin/systemctl',['show','kazoo-freeswitch.service','-p','MainPID','--value']);
     assert(/^[1-9][0-9]*$/.test(pid),'Media service has no main PID');
-    assert.equal(fs.readlinkSync('/proc/'+pid+'/exe'),'/usr/local/freeswitch/bin/freeswitch');
-    const stat=fs.readFileSync('/proc/'+pid+'/stat','utf8'),start=stat.slice(stat.lastIndexOf(')')+2).split(' ')[19];
+    const uid=io.command('/usr/bin/id',['-u','freeswitch']);assert(/^[1-9][0-9]*$/.test(uid));
+    const ids=io.read('/proc/'+pid+'/status').match(/^Uid:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$/m);
+    assert(ids&&ids.slice(1).every(value=>value===uid),'Media main PID has unexpected credentials');
+    let exe;
+    try{exe=io.readlink('/proc/'+pid+'/exe');}
+    catch(e){
+        if(!['EACCES','EPERM'].includes(e.code))throw e;
+        // Container root need not have CAP_SYS_PTRACE. Use the already-verified
+        // service identity for this same-UID proc read; do not weaken ptrace policy.
+        exe=io.command('/usr/sbin/runuser',['-u','freeswitch','--','/usr/bin/readlink','/proc/'+pid+'/exe']);
+    }
+    assert.equal(exe,'/usr/local/freeswitch/bin/freeswitch');
+    const stat=io.read('/proc/'+pid+'/stat'),start=stat.slice(stat.lastIndexOf(')')+2).split(' ')[19];
     assert(/^[0-9]+$/.test(start));
-    return {pid:Number(pid),start_ticks:start,boot_id:fs.readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim()};
+    const boot=io.read('/proc/sys/kernel/random/boot_id').trim();assert(/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(boot));
+    return {pid:Number(pid),start_ticks:start,boot_id:boot};
 }
 function observe(){
     const before=epoch();
@@ -119,5 +131,5 @@ function main(){let fd;try{
     else result=args[0]==='--boot-guard'?f.bootGuard():f.status();
     console.log(JSON.stringify(result));
 }catch(_){console.error('MAINTENANCE_MEDIA_REFUSED_OR_FAILED');process.exitCode=1;}finally{if(fd!==undefined)fs.closeSync(fd);}}
-module.exports={MediaFence,spec,observe};
+module.exports={MediaFence,spec,observe,epoch};
 if(require.main===module)main();

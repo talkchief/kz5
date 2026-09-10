@@ -60,6 +60,11 @@ binary cannot silently bypass an active fence during rollback. Ordinary status
 and verify do not repair missing state. Native observations check the actual
 systemd main process executable, PID/start ticks/host boot identity before and
 after a loopback event-socket read, and retain the FreeSWITCH core UUID.
+On restricted containers, root can lack permission to read another UID's
+`/proc/PID/exe`. The helper first verifies real/effective/saved/filesystem UIDs
+against the freeswitch account, then performs only that denied proc read through
+runuser as freeswitch. Other proc errors, wrong UIDs and unexpected executables
+still fail. It never grants CAP_SYS_PTRACE or changes kernel ptrace policy.
 
 The **cluster coordinator must persist its reopening phase before release** and
 must never replay restoration once admission has reopened. A lost release reply
@@ -76,6 +81,16 @@ is helper-only and must be deployed after that build finishes, without changing
 the running build's checkout. The C patch and core build fingerprint are unchanged.
 
 ## Installer and evidence
+
+- Native build5 on `88bf049` compiled and started the new media service but
+  exited1 during helper verification: root's proc executable-link read returned
+  EACCES. Its native admission command already returns open/zero sessions.
+  The corrected same-UID helper passes on the actual service without restart
+  or privilege changes;24 focused source/helper/installer tests pass. Candidate
+  SHA256 `22425b980293fd388b9f30f85efa658d79db56ba958a4f7f82892aab43fe2b4b`.
+  The failed deployment remains failed; collect it and rerun the normal installer
+  with the corrected helper. Core patch/fingerprint are unchanged, so the normal
+  installer can retain that completed media build while refreshing the helper.
 
 The normal FreeSWITCH build applies the patch and changes the build fingerprint,
 forcing a real rebuild of older media binaries. Installation packages the

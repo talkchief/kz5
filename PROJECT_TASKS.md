@@ -7,6 +7,18 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / media build5 verification refusal — corrected:** normal compilation
+  and media service startup completed, but installation exited1 when container
+  root could not read `/proc/PID/exe` (EACCES without CAP_SYS_PTRACE). Native
+  `fsctl maintenance_check` correctly reports open/zero sessions. The helper
+  now verifies all four process UIDs against the freeswitch service identity,
+  then uses that identity only for a denied executable-link read. No privilege
+  or ptrace policy is relaxed.24 focused tests pass, and the corrected candidate
+  observer passes on the actual media process (open/zero, stable process/core
+  identity). Collect the failed build5 receipt, then perform a normal installer
+  retry with the corrected helper; no new C rebuild is needed. This is not yet
+  native fence/restart/call acceptance.
+
 - **INST-06 / private media build now running:** normal source `88bf049`,
   exact native unit `kz5-stage-install-freeswitch-5`, MainPID2947 active/running
   at launch. Protected start log `media-admission-deploy-88bf049-1789002406130.log`

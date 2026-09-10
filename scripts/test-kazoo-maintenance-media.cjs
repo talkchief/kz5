@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
-const {MediaFence,spec}=require('./kazoo-maintenance-media.cjs');
+const {MediaFence,spec,epoch}=require('./kazoo-maintenance-media.cjs');
 const input={schema_version:1,generation:'a'.repeat(32),manifest_sha256:'b'.repeat(64)};
 function fixture(t){
     const dir=fs.mkdtempSync(path.join(os.tmpdir(),'kazoo-media-intent-'));
@@ -13,6 +13,27 @@ function fixture(t){
 test('media spec is exact and bounded',()=>{
     assert.deepEqual(spec(input),input);
     for(const bad of [{extra:1},{generation:'../bad'},{generation:[input.generation]},{manifest_sha256:[input.manifest_sha256]},{schema_version:2}])assert.throws(()=>spec({...input,...bad}));
+});
+function processFixture(){
+    const calls=[],status='Uid:\t999\t999\t999\t999\n',boot='11111111-1111-1111-1111-111111111111';
+    const io={command(bin,args){calls.push([bin,args]);if(bin==='/usr/bin/systemctl')return '123';if(bin==='/usr/bin/id')return '999';
+        assert.deepEqual([bin,args],['/usr/sbin/runuser',['-u','freeswitch','--','/usr/bin/readlink','/proc/123/exe']]);return '/usr/local/freeswitch/bin/freeswitch';},
+        read(p){if(p.endsWith('/status'))return status;if(p.endsWith('/stat'))return '123 (freeswitch) S '+Array(18).fill('0').join(' ')+' 456';return boot;},
+        readlink(){throw Object.assign(Error('restricted proc'),{code:'EACCES'});}};
+    return {io,calls,boot};
+}
+test('restricted container proc identity is verified as the service UID without ptrace privileges',()=>{
+    const {io,calls,boot}=processFixture();assert.deepEqual(epoch(io),{pid:123,start_ticks:'456',boot_id:boot});
+    assert(calls.some(([bin])=>bin==='/usr/sbin/runuser'));
+});
+test('wrong service credentials refuse before same-UID proc fallback',()=>{
+    const {io,calls}=processFixture(),read=io.read;io.read=p=>p.endsWith('/status')?'Uid:\t0\t0\t0\t0\n':read(p);
+    assert.throws(()=>epoch(io),/unexpected credentials/);assert(!calls.some(([bin])=>bin==='/usr/sbin/runuser'));
+});
+test('unexpected executable or non-permission proc failure is never bypassed',()=>{
+    const {io,calls}=processFixture();io.readlink=()=>'/usr/bin/other';assert.throws(()=>epoch(io));
+    io.readlink=()=>{throw Object.assign(Error('process gone'),{code:'ENOENT'});};assert.throws(()=>epoch(io),/process gone/);
+    assert(!calls.some(([bin])=>bin==='/usr/sbin/runuser'));
 });
 test('close persists intent before marking and native observation; current sessions are not killed',t=>{
     const {f,k,root,pub}=fixture(t);k.sessions=3;const mark=f.mark.bind(f);

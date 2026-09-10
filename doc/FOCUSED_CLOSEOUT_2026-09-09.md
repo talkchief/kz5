@@ -6,6 +6,12 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Media build5 compiled and started the service, then FAILED verification on
+  a restricted-container proc read (root EACCES). The same-UID proc verifier
+  correction passes24 focused tests and an actual native observation without
+  relaxing privileges. Collect the failed receipt and perform a normal helper
+  deployment retry. Full fence/call/restart acceptance still follows.
+
 - Private media normal build started on `88bf049`, exact unit
   `kz5-stage-install-freeswitch-5`, MainPID2947 active/running. Guarded admission
   checked six ready replicas and zero media/callback work. Collect before native
