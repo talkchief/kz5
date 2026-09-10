@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs');
-const {identity,snapshot,inspectAudio,ownedAgent}=require('./queue-partition.cjs');
+const {identity,snapshot,inspectAudio,ownedAgent,strictInventory}=require('./queue-partition.cjs');
 const s={ACCEPTANCE_ACCOUNT_ID:'45e827067baf078029d0ca16a489fa8a',ACCEPTANCE_REALM:'acceptance-724fa76c8821.invalid',
     ACCEPTANCE_QUEUE_EXTENSION:'2000',ACCEPTANCE_AGENT_3_EXTENSION:'1004'};
 ['ACCEPTANCE_QUEUE_ID','ACCEPTANCE_QUEUE_CALLFLOW_ID','ACCEPTANCE_AGENT_1_USER_ID','ACCEPTANCE_AGENT_2_USER_ID',
@@ -32,6 +32,14 @@ for(const change of [{account:'c'.repeat(32)},{device:e.device},{observed_sip_to
     {port:18102},{peer:'10.1.0.44'},{auth_ip:'10.1.0.44'},{active:false}])
     assert(!ownedAgent({...leg,...change},e,qs,call,ip));
 const source=fs.readFileSync(__dirname+'/queue-partition.cjs','utf8');
+const inventory={schema_version:2,all_agent_workers_observed:true,complete_cluster_drain_proven:false,
+    agents:[1,2,3].map(i=>({account_id:s.ACCEPTANCE_ACCOUNT_ID,agent_id:s[`ACCEPTANCE_AGENT_${i}_USER_ID`],
+        state:'ready',queues:[s.ACCEPTANCE_QUEUE_ID]}))};
+strictInventory(inventory,s);
+for(const change of [{agents:inventory.agents.slice(1)},{all_agent_workers_observed:false},
+    {agents:inventory.agents.map(a=>({...a,state:'paused'}))},
+    {agents:inventory.agents.map(a=>({...a,queues:[]}))}])assert.throws(()=>strictInventory({...inventory,...change},s));
+assert(source.includes('strict_all_replica_agent_drain:true'));
 assert(source.includes("timeout:300")&&source.includes('while(Date.now()<end)')&&source.includes('Date.now()+35000'));
 assert(source.includes("both('ready'),90")&&source.includes('no_sip_reregistration:true'));
 assert(!source.includes("status:'login'")&&!source.includes("status:'logout'")&&!source.includes('systemctl restart'));

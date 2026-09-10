@@ -2344,11 +2344,11 @@
     },
     {
       "file": "applications/acdc/src/acdc_agent_handler.erl",
-      "sha256": "f1f90d479e904cdb1fd0f623fbbfc6e3b50b4788e6c06e47ea858184beadbb60"
+      "sha256": "e11aedbe5621e4410c51aab05967a9e4a1d5a26144b553ae2ed6f20792404a40"
     },
     {
       "file": "applications/acdc/src/acdc_agent_listener.erl",
-      "sha256": "9a3d1ddf9f098c7996d8fd38db080666bd3fb695a95f63596d2ca8474ae114d4"
+      "sha256": "854a437bd8928bf525ca7c70cda0666d193d0ae6bb98d02bf6aa7670dd215425"
     },
     {
       "file": "applications/acdc/src/acdc_callback_caller.erl",

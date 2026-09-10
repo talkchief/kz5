@@ -37,6 +37,17 @@ function inspectAudio(audio,buffer,start,end) {
     }
     return proof;
 }
+function strictInventory(v,s) {
+    assert.equal(v.schema_version,2);assert.equal(v.all_agent_workers_observed,true);
+    assert.equal(v.complete_cluster_drain_proven,false);
+    assert.equal(v.agents.length,3);
+    assert.deepEqual(v.agents.map(a=>a.agent_id).sort(),[1,2,3].map(i=>s[`ACCEPTANCE_AGENT_${i}_USER_ID`]).sort());
+    for(const a of v.agents) {
+        assert.equal(a.account_id,s.ACCEPTANCE_ACCOUNT_ID);assert.equal(a.state,'ready');
+        assert.deepEqual(a.queues,[s.ACCEPTANCE_QUEUE_ID]);
+    }
+    return v;
+}
 function context(h) {
     identity(h.state);
     let fault,nodes,pinned,lastNative;
@@ -159,11 +170,19 @@ function context(h) {
         const second=await call(partition?'queue-after-partition':'queue-second');
         const ready=await h.until(()=>both('ready'),30);
         await restorePauses();
+        // Public "ready" alone cannot establish listener drain. This installed
+        // read-only collector also verifies pending work and actual bindings.
+        const drained=await h.until(()=>{
+            try{return nodes.map(n=>strictInventory(JSON.parse(h.command('podman',
+                ['exec',n.id,'escript','/usr/local/libexec/kazoo5-maintenance-snapshot','--snapshot',n.ip],20000)),s));}
+            catch(_){return false;}
+        },45);
+        h.writePrivate('queue-post-call-agent-inventories.json',JSON.stringify(drained,null,2)+'\n');
         h.writePrivate(partition?'queue-partition-evidence.json':'queue-calls-evidence.json',JSON.stringify({first,second,ready,
-            partition_exercised:partition,same_fsm_replicas:true,no_agent_relogin:true,no_sip_reregistration:true},null,2)+'\n');
+            strict_all_replica_agent_drain:true,partition_exercised:partition,same_fsm_replicas:true,no_agent_relogin:true,no_sip_reregistration:true},null,2)+'\n');
         h.log(partition?'PASS two actual queued calls, directional audio, missed-hangup partition and same-FSM recovery':
             'PASS two actual queued calls and directional audio without agent re-login, SIP re-registration or broker interruption');
     }
     return {run,restorePauses};
 }
-module.exports={context,identity,snapshot,inspectAudio,ownedAgent};
+module.exports={context,identity,snapshot,inspectAudio,ownedAgent,strictInventory};

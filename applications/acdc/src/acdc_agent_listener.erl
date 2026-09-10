@@ -24,6 +24,7 @@
         ,hangup_call/1
         ,monitor_call/4
         ,channel_hungup/2
+        ,channel_destroyed/2
         ,rebind_events/3
         ,unbind_from_events/2
         ,originate_execute/2
@@ -246,6 +247,12 @@ monitor_call(Srv, Call, WinJObj, RecordingUrl) ->
 -spec channel_hungup(pid(), kz_term:ne_binary()) -> 'ok'.
 channel_hungup(Srv, CallId) ->
     gen_listener:cast(Srv, {'channel_hungup', CallId}).
+
+%% Terminal channel evidence, unlike channel_hungup which also requests
+%% cancellation of legs whose control queue has not arrived yet.
+-spec channel_destroyed(pid(), kz_term:ne_binary()) -> 'ok'.
+channel_destroyed(Srv, CallId) ->
+    gen_listener:cast(Srv, {'channel_destroyed', CallId}).
 
 -spec unbind_from_events(pid(), kz_term:ne_binary()) -> 'ok'.
 unbind_from_events(Srv, CallId) ->
@@ -557,6 +564,16 @@ handle_cast({'unbind_from_events', CallId}, State) ->
     acdc_util:unbind_from_call_events(CallId),
     {'noreply', State};
 
+handle_cast({'channel_destroyed', CallId}, #state{agent_call_ids=ACallIds}=State)
+  when is_binary(CallId), byte_size(CallId) > 0 ->
+    %% The validated CHANNEL_DESTROY handler has already observed this exact
+    %% leg ending. Retire even a pending {CallId, undefined} entry; retaining
+    %% it until originate_uuid arrives can strand the listener indefinitely.
+    %% Do not clear the member call or another leg, and do not issue a hangup.
+    Remaining = lists:filter(fun({Id, _}) -> Id =/= CallId;
+                                (Id) -> Id =/= CallId
+                             end, ACallIds),
+    {'noreply', State#state{agent_call_ids=Remaining}};
 handle_cast({'channel_hungup', CallId}, #state{call=Call
                                               ,is_thief=IsThief
                                               ,agent_call_ids=ACallIds
@@ -822,8 +839,16 @@ handle_cast({'originate_execute', JObj}, #state{my_q=Q}=State) ->
     {'noreply', State, 'hibernate'};
 
 handle_cast({'originate_uuid', UUID, CtlQ}, #state{agent_call_ids=ACallIds}=State) ->
-    lager:debug("updating ~s with ~s in ~p", [UUID, CtlQ, ACallIds]),
-    {'noreply', State#state{agent_call_ids=props:set_value(UUID, CtlQ, ACallIds)}};
+    case lists:keymember(UUID, 1, ACallIds) orelse lists:member(UUID, ACallIds) of
+        'true' ->
+            lager:debug("updating tracked agent leg ~s control queue", [UUID]),
+            {'noreply', State#state{agent_call_ids=props:set_value(UUID, CtlQ, ACallIds)}};
+        'false' ->
+            %% A late notification must not resurrect a terminal leg. New
+            %% origination intent is inserted before this mailbox is served.
+            lager:debug("ignoring control queue for untracked agent leg ~s", [UUID]),
+            {'noreply', State}
+    end;
 
 handle_cast({'outbound_call', CallId}, #state{agent_id=AgentId
                                              ,acct_id=AcctId

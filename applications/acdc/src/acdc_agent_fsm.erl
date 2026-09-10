@@ -1731,6 +1731,12 @@ handle_event('load_endpoints', StateName, #state{agent_id=AgentId
         {'ok', EPs} -> {'next_state', StateName, State#state{endpoints=EPs}};
         {'error', E} -> {'stop', E, State}
     end;
+handle_event({'originate_uuid', ACallId, ACtrlQ}, StateName,
+             #state{agent_listener=AgentListener}=State) ->
+    %% A native bridge may precede the control-queue notification. Deliver it
+    %% in answered/wrapup too; the listener admits only still-tracked legs.
+    acdc_agent_listener:originate_uuid(AgentListener, ACallId, ACtrlQ),
+    {'next_state', StateName, State};
 handle_event(Event, StateName, State) ->
     lager:debug("unhandled message in state ~s: ~p", [StateName, Event]),
     {'next_state', StateName, State}.

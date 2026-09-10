@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / post-call listener drain — source fix, native retest pending:**
+  Read-only installed-record diagnosis found two pending control-queue entries
+  in one apps20 listener; all other FSM/listener pairs were drained. Root ACDC
+  source now retires exact legs on validated terminal events, forwards delayed
+  control notifications in answered/wrap-up, and refuses to resurrect retired
+  legs. Eight focused regressions pass against production compilation with
+  `-Werror +warn_missing_spec` (`/tmp/kazoo-acdc-terminal.z4yxn8`). The actual
+  queue-call harness now requires strict all-six-replica drain after calls.
+  Normal two-node installation and that native acceptance remain pending.
+  See `doc/acdc_listener_terminal_cleanup.md`; do not weaken the drain predicate.
+
 - **SUP / fresh user-requested actual-call retest — PASS, September10:**
   `kz5-stage-monitor-user-retest-1` exited0 on runner `40f1712`. All four modes
   (Listen/eavesdrop, Whisper, Barge, Join) pass new distributed SIP calls with
