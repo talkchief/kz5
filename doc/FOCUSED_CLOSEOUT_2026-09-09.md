@@ -6,7 +6,15 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
-- Normal private deployment of startup-readiness source `c6e0c36` is running:
+- Normal private startup-readiness jobs14/10 on `c6e0c36` FAILED, exit2:
+  six missing gen_server callback type specifications are fatal under the
+  normal warn_missing_spec compiler flag. Both exact jobs were collected with
+  their failed logs retained. The focused runner now uses the normal warning
+  flags for production modules and reproduces the failure; source specifications
+  are added and all18 tests pass (`/tmp/kazoo-acdc-init.3egwot`). Normal
+  redeployment remains required.
+
+- Earlier launch of startup-readiness source `c6e0c36` (now failed above):
   units `kz5-stage-install-kazoo-apps-14` and `kz5-stage-install-apps-peer-10`,
   actual nonzero MainPID and active/running verified. Admission observed zero
   media/callback work and6 ready replicas. Collect these exact jobs, then run

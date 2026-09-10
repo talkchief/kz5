@@ -67,6 +67,16 @@ must establish those independent conditions and revalidate tokens before acting.
 
 ## Evidence and rollout
 
+- Normal builds14/10 on `c6e0c36` failed before deployment (exit2). The production
+  compiler's warn_missing_spec rejects all six new gen_server callbacks without
+  specifications. The focused runner originally lacked that flag; it now uses
+  the production warning flags when compiling production modules and reproduces
+  this exact failure. Callback specifications are added in source. Failed logs
+  are retained on dev44 under `/var/lib/kazoo5-install-lab` as
+  `kazoo-apps-install-14.log` and `apps-peer-install-10.log`. Corrected production
+  compilation and all18 tests PASS (`/tmp/kazoo-acdc-init.3egwot`, input hashes
+  unchanged). Normal deployment must pass before claiming runtime readiness.
+
 - 18 production initializer/status tests PASS in
   `/tmp/kazoo-acdc-init.SpfhvZ`: delayed agent work/retries, discovery failure,
   fresh database re-read, rejected startup/missing view, revision change and
@@ -87,9 +97,10 @@ combined snapshot are still required. Do not use the new collectors against
 the old installed runtime and call their expected refusal a deployment pass.
 No main44 runtime hot-loading is authorized or needed for this change.
 
-Normal deployment has now started on source
+The preceding deployment started on source
 `c6e0c36532f5242fb5d9ef6d0b0391baaf9029b2` after zero media/callback work and all6
-ready replicas were verified. Exact live jobs:
+ready replicas were verified. Exact jobs (now failed and collected):
 `kz5-stage-install-kazoo-apps-14` and `kz5-stage-install-apps-peer-10`.
 Start log `/var/lib/kazoo5-install-lab/init-readiness-deploy-c6e0c36-1789000314473.log`.
-Collect those jobs before testing the new runtime. Their start is not a pass.
+Their start and the earlier focused tests do not turn this failed build into
+a pass. Use a new normal deployment of the corrected source for runtime proof.

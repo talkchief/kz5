@@ -7,7 +7,18 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **INST-06 / normal startup-readiness rollout now running:** source
+- **INST-06 / startup-readiness build failure — source correction validated:**
+  Normal jobs14/10 both terminated with exit2 before deployment. The production
+  compiler rejects six missing gen_server callback specifications in acdc_init;
+  the focused compiler had not enabled warn_missing_spec. Failed logs are
+  collected as `kazoo-apps-install-14.log` and `apps-peer-install-10.log` under
+  `/var/lib/kazoo5-install-lab`. Callback specifications are now added and the
+  production modules in the focused runner use the normal warning flags.
+  The stricter runner reproduces the original failure and all18 tests pass
+  after correction (`/tmp/kazoo-acdc-init.3egwot`, unchanged input hashes).
+  A normal two-node retry is required. No runtime readiness pass yet.
+
+- **INST-06 / preceding startup-readiness launch (now failed, see above):** source
   `c6e0c36532f5242fb5d9ef6d0b0391baaf9029b2`, exact native units
   `kz5-stage-install-kazoo-apps-14` (MainPID489663) and
   `kz5-stage-install-apps-peer-10` (MainPID346493), both confirmed active/running.
@@ -16,7 +27,8 @@ work postponed; do not generate voices at runtime or during deployment.
   Admission checked owned isolated guests, completed preceding installs, zero
   media/callback work and all6 ready agent replicas. Do not sync/edit the
   compiling guest checkouts or launch duplicate jobs. Collect these exact
-  units, then run the version2 combined inventory. Main44 runtime unchanged;
+  units (both now collected as failed), then retry corrected source before the
+  version2 combined inventory. Main44 runtime unchanged;
   root `/opt/kz5` is synced. No native startup-readiness pass is claimed yet.
 
 - **INST-06 / initializer completion — source corrected, native rollout next:**

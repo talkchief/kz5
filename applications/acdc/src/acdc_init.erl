@@ -50,11 +50,13 @@ startup_status() ->
         _ -> 'unavailable'
     end.
 
+-spec init([]) -> {'ok', #state{}}.
 init([]) ->
     process_flag('trap_exit', 'true'),
     {_, State} = start_job(fun init_acdc/0, 'none', #state{epoch=make_ref()}),
     {'ok', State}.
 
+-spec handle_call(term(), {pid(), term()}, #state{}) -> {'reply', term(), #state{}}.
 handle_call('maintenance_state', _, #state{jobs=Jobs,failed=0,epoch=Epoch,revision=Revision}=State)
   when map_size(Jobs) =:= 0 ->
     {'reply', {'ok', #{initializer=>self(),epoch=>Epoch,revision=>Revision}}, State};
@@ -66,7 +68,9 @@ handle_call({'run', Fun, Recipient}, _, State) when is_function(Fun, 0) ->
     {Pid, Next} = start_job(Fun, Recipient, State),
     {'reply', Pid, Next};
 handle_call(_, _, State) -> {'reply', {'error','unsupported'}, State}.
+-spec handle_cast(term(), #state{}) -> {'noreply', #state{}}.
 handle_cast(_, State) -> {'noreply', State}.
+-spec handle_info(term(), #state{}) -> {'noreply', #state{}}.
 handle_info({'DOWN', Ref, 'process', Pid, Reason}, #state{jobs=Jobs,failed=Failed,revision=Revision}=State) ->
     case maps:find(Ref, Jobs) of
         {'ok', Pid} ->
@@ -75,9 +79,11 @@ handle_info({'DOWN', Ref, 'process', Pid, Reason}, #state{jobs=Jobs,failed=Faile
         _ -> {'noreply', State}
     end;
 handle_info(_, State) -> {'noreply', State}.
+-spec terminate(term(), #state{}) -> 'ok'.
 terminate(_, #state{jobs=Jobs}) ->
     %% No retry/agent initializer may outlive a normally stopped owner either.
     maps:foreach(fun(_, Pid) -> exit(Pid, 'shutdown') end, Jobs), 'ok'.
+-spec code_change(term(), #state{}, term()) -> {'ok', #state{}}.
 code_change(_, State, _) -> {'ok', State}.
 
 start_job(Fun, Recipient, #state{jobs=Jobs,revision=Revision}=State) ->
