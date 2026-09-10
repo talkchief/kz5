@@ -873,6 +873,7 @@ install_service_maintenance_fence() {
         for operation in snapshot queues restore; do
             run install -o root -g root -m 0755 "$SCRIPT_DIR/kazoo-maintenance-${operation}.escript" "/usr/local/libexec/kazoo5-maintenance-${operation}"
         done
+        run install -o root -g root -m 0755 "$SCRIPT_DIR/kazoo-maintenance-callbacks.cjs" /usr/local/libexec/kazoo5-maintenance-callbacks
     fi
     # Apply any durable intent before a restart is attempted, not just at boot.
     run /usr/bin/node /usr/local/libexec/kazoo5-maintenance-fence --boot-guard
@@ -903,6 +904,8 @@ verify_service_maintenance_fence() {
             cmp -s "$SCRIPT_DIR/kazoo-maintenance-${operation}.escript" "/usr/local/libexec/kazoo5-maintenance-${operation}" ||
                 die "Installed agent maintenance ${operation} helper differs; reinstall Kazoo applications"
         done
+        cmp -s "$SCRIPT_DIR/kazoo-maintenance-callbacks.cjs" /usr/local/libexec/kazoo5-maintenance-callbacks ||
+            die 'Installed durable callback inventory helper differs; reinstall Kazoo applications'
     fi
     if [[ $unit == kazoo-freeswitch.service ]]; then
         cmp -s "$SCRIPT_DIR/kazoo-maintenance-media.cjs" /usr/local/libexec/kazoo5-maintenance-media ||

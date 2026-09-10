@@ -7,6 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / durable callback inventory — source/native read PASS, September10:**
+  New read-only `scripts/kazoo-maintenance-callbacks.cjs` scans every configured
+  account database with complete pagination, opaque-token freshness and
+  before/after update/purge checks. Nonterminal reservations and unresolved
+  reconciliation/leases block; unknown/partial/conflicting data refuses.
+  Normal applications installation now ships/verifies this helper. Focused
+  regressions cover source and installer wiring. The corrected dev44 source
+  scan observed5 account databases/2219 documents/23 terminal callbacks with
+  zero blocked. First native cross-endpoint sequence-comparison refusal is
+  documented, not hidden. No callback/database write occurred. Normal helper
+  deployment is next; producer fencing, broker drain and full coordinated
+  activation/rollback remain OPEN. See `doc/maintenance_callback_inventory.md`.
+
 - **SUP / user-requested current-media actual-call retest — PASS, September10:**
   The earlier main supervision pass predates the latest FreeSWITCH installation.
   `kz5-main-supervision-current-media-20260910` exited0 and was collected after

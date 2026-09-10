@@ -52,6 +52,7 @@ test('all four ingress roles install dependencies, immutable helper and privileg
         fs.readFileSync(f.root+'/libexec/kazoo5-maintenance-'+name,'utf8'),
         fs.readFileSync(__dirname+'/kazoo-maintenance-'+name+'.escript','utf8'));
     assert.equal((f.calls().match(/packages nftables iproute util-linux/g)||[]).length,4);
+    assert.equal(fs.readFileSync(f.root+'/libexec/kazoo5-maintenance-callbacks','utf8'),fs.readFileSync(__dirname+'/kazoo-maintenance-callbacks.cjs','utf8'));
     assert.equal(fs.readFileSync(f.root+'/libexec/kazoo5-maintenance-media','utf8'),fs.readFileSync(__dirname+'/kazoo-maintenance-media.cjs','utf8'));
     assert(fs.readFileSync(f.root+'/units/kazoo-freeswitch.service.d/36-kazoo-maintenance-media.conf','utf8').includes('ExecStartPre=+guard_node '+f.root+'/libexec/kazoo5-maintenance-media --boot-guard'));
     assert(f.calls().includes('packages binutils'));
@@ -82,6 +83,11 @@ test('applications maintenance helpers must match the selected source',t=>{
 test('service acceptance includes maintenance verification',()=>{
     const body=source.match(/^assert_service\(\) \{[\s\S]*?^\}/m)[0];
     assert(body.includes('verify_service_maintenance_fence "$unit"'));
+});
+test('callback inventory helper drift refuses applications service acceptance',t=>{
+    const f=fixture(t);assert.equal(f.run('install_service_maintenance_fence kazoo-apps.service').status,0);
+    fs.appendFileSync(f.root+'/libexec/kazoo5-maintenance-callbacks','\n// changed\n');
+    assert.notEqual(f.run('verify_service_maintenance_fence kazoo-apps.service').status,0);
 });
 test('unsafe media state refuses before enabling or restarting FreeSWITCH',t=>{
     const f=fixture(t);assert.notEqual(f.run('MEDIA_FAIL=true service_enable_restart kazoo-freeswitch.service').status,0);
