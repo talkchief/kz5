@@ -7,6 +7,29 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Main44 runtime promotion — installer and actual-call PASS, September10:**
+  Normal applications and eCallMgr installer retry
+  `kz5-main-promotion-retry-20260910` exited0 on `4cd9953` and was collected.
+  Eight loaded module identities match disk; the installed strict snapshot
+  succeeds with all workers observed/zero agents. Main admission had zero media
+  sessions/agent workers; protected
+  runtime/config backups passed checksum verification. Initial launch failed
+  before installation on its missing login-home guard and remains recorded.
+  Retry has an explicit root login environment and a40-minute start deadline.
+  SIP ingress reopened after successful installation. A new exact-main-dev
+  supervision profile has passed offline guards. The first actual main Listen
+  call passed privacy/stop/bridge-survival but failed its immediate peer-teardown
+  assertion; scoped cleanup finished with zero sessions. The harness now waits
+  a bounded eight seconds for only that peer's native BYE completion; guards
+  pass. All four modes subsequently passed in
+  `kz5-main-monitor-after-promotion-2-20260910` (exit0, collected), with independent
+  RTP privacy/authorization/stop/bridge-survival checks. Evidence
+  `/var/log/kazoo-monitor-acceptance-WTrjrC`; zero sessions, no fixture, strict
+  zero-agent inventory and five active/enabled services verified. A streaming
+  post-start journal scan found no crash-report/supervisor-report/exception-exit
+  patterns among23269 entries. See
+  `doc/main_dev_runtime_promotion.md`; no full coordinated upgrade is claimed.
+
 - **INST-06 / post-call listener drain — native PASS, September10:**
   Read-only installed-record diagnosis found two pending control-queue entries
   in one apps20 listener; all other FSM/listener pairs were drained. Root ACDC
@@ -28,7 +51,8 @@ work postponed; do not generate voices at runtime or during deployment.
   Post-install four-mode supervision also passed with independent RTP/privacy,
   original bridge survival and strict drain (`kz5-stage-monitor-terminal-cleanup-1`,
   `/var/log/kazoo-monitor-acceptance-CXndtt`). No native test job remains running.
-  Main44 runtime deployment and full coordinated maintenance are not claimed.
+  Main44 applications/controller runtime deployment subsequently passed as
+  recorded above; full coordinated maintenance remains unproven.
 
 - **SUP / fresh user-requested actual-call retest — PASS, September10:**
   `kz5-stage-monitor-user-retest-1` exited0 on runner `40f1712`. All four modes

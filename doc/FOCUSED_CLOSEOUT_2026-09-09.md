@@ -6,6 +6,17 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- September10 main44 applications/controller promotion **PASS** through the
+  normal installer on `4cd9953`; eight loaded module identities match disk.
+  All four supervision modes also passed new actual main-runtime calls and
+  independent RTP/authorization/stop/bridge-survival checks, evidence
+  `/var/log/kazoo-monitor-acceptance-WTrjrC`. Fresh cleanup and bounded journal
+  crash-pattern scan pass. See `main_dev_runtime_promotion.md` for successful
+  receipts and retained first-launch/teardown failures. This closes the main
+  applications/controller promotion gap mentioned in older entries below,
+  not full cluster drain/coordinated upgrade/rollback or the private media
+  build's sustained-load gate.
+
 - September10 cold state restoration passed on both apps VMs, including paired
   finite/infinite-paused and empty-membership agent/queue inventories:
   `/var/lib/kazoo5-install-lab/cold-agent-state-tbT2Rt/receipt.json` on dev44.

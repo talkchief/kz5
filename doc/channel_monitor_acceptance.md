@@ -2,6 +2,17 @@
 
 ## Latest actual-call result — September 10, 2026
 
+**Main development runtime PASS:** normal applications/controller installation
+on `4cd9953` completed, followed by four new actual main44 calls in
+`kz5-main-monitor-after-promotion-2-20260910` (exit0, collected). Independent RTP
+reanalysis passes Listen/eavesdrop, Whisper, Barge and Join privacy before/after
+keypad3, five authorization negatives each, stop202 and original bridge survival.
+Evidence: `/var/log/kazoo-monitor-acceptance-WTrjrC`; deployment, first failed
+teardown attempt and recovery details: `main_dev_runtime_promotion.md`.
+Fresh cleanup confirms zero sessions, no retained fixture and active/enabled
+services. This supersedes the main44 promotion gap in the historical entries
+below; it does not close coordinated cluster upgrade/rollback or media HA.
+
 **Post-terminal-cleanup installation PASS:** after normal private applications
 installs16/12 on source `8343d47`, `kz5-stage-monitor-terminal-cleanup-1` exited0
 using runner `6b4216e`. All four modes passed actual SIP/RTP, independently

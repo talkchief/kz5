@@ -14,6 +14,7 @@ const OWNER='kazoo5-isolated-monitor-acceptance', ID=/^[a-f0-9]{32}$/, CALL=/^[A
 const SCENARIOS=path.join(__dirname,'sip-tests'), FSCLI='/usr/local/freeswitch/bin/fs_cli';
 let state, fixture, masterToken, adminToken, userToken, runDir, current, cleaning=false;
 let partitionEnabled=false, queuePartitionEnabled=false, queueCallsEnabled=false, mediaFenceEnabled=false, controllerFault=null;
+let mainDev=null;
 const children=new Set(), registered=new Set();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const hex=()=>crypto.randomBytes(16).toString('hex');
@@ -133,7 +134,7 @@ async function login(username,password,realm,account) {
     // Fresh distributed lab keeps the normal anti-abuse bucket: three fixture
     // logins at35 tokens each exceed its100-token burst when sent together.
     // Pace setup; never disable rate limiting or replay rejected mutations.
-    if(distributed)await sleep(4000);
+    if(distributed||mainDev)await sleep(4000);
     const j=await request('PUT','user_auth',{credentials:crypto.createHash('md5').update(username+':'+password).digest('hex'),method:'md5',realm},undefined,[200,201]);
     assert(j.data.account_id===account&&typeof j.auth_token==='string','Authentication account mismatch'); return j.auth_token;
 }
@@ -295,6 +296,13 @@ function ringingEvidence(text,callId) {
     return {caller_received_180_before_200:true,ringing_at:rows[ringing][0],answered_at:rows[answered][0]};
 }
 function terminate(child) {if(child&&child.exitCode===null&&!child.killed)child.kill('SIGINT');}
+async function waitForAgentEnd(id,observe=channel,wait=until) {
+    // SIP BYE completion on the peer can follow caller CHANNEL_DESTROY.
+    // Observe only the exact saved leg; never terminate another call to pass.
+    if(id)await wait(()=>!observe(id),8).catch(()=>{
+        throw Error('Fixture agent leg remains; refusing broad cleanup');
+    });
+}
 async function clearStage() {
     if(current?.supervisor_id)await stopSupervisor();
     if(current?.caller_id) {
@@ -305,7 +313,7 @@ async function clearStage() {
             await until(()=>!channel(c.id),8);
         }
     }
-    if(current?.agent_id) assert(!channel(current.agent_id),'Fixture agent leg remains; refusing broad cleanup');
+    await waitForAgentEnd(current?.agent_id);
     for(const child of children)terminate(child);
     await sleep(600);
     for(const child of children)if(child.exitCode===null)child.kill('SIGKILL');
@@ -444,6 +452,7 @@ function mediaContext(){
 }
 function prepare() {
     state=baseState(privateRead(BASE));
+    if(mainDev)assert.equal(state.ACCEPTANCE_SIP_PROXY_HOST,mainDev.proxy,'Main dev SIP proxy mismatch');
     const local=JSON.parse(command('ip',['-j','-4','address','show'])).flatMap(x=>x.addr_info||[]).map(x=>x.local);
     assert(distributed?(state.ACCEPTANCE_SIP_PROXY_HOST==='172.30.253.17'&&local.includes(audio.IP)):
         local.includes(state.ACCEPTANCE_SIP_PROXY_HOST),'SIP proxy/fixture interface outside admitted profile');
@@ -457,6 +466,12 @@ function prepare() {
     log('Prepared: isolated tenant only; three synthetic endpoints; no API writes, SIP traffic, or service changes');
 }
 async function main(args) {
+    if(args[0]==='--main-dev') {
+        args=args.slice(1);
+        assert(args.length===1&&['--prepare-only','--live','--cleanup'].includes(args[0]),'Invalid main dev monitor mode');
+        mainDev=require('./test-fixtures/main-dev-monitor-profile.cjs').prepare();
+        MASTER=mainDev.master;
+    }
     if(args[0]==='--distributed') {
         args=args.slice(1);
         if(args[0]==='--broker-partition') {partitionEnabled=true;args=args.slice(1);}
@@ -518,5 +533,5 @@ async function main(args) {
         log((queuePartitionEnabled?'Queued applications-partition recovery passed.':queueCallsEnabled?'Two queued calls passed.':'All four modes passed.')+' Private synthetic evidence: '+runDir);
     } finally {lock.stdin.end();terminate(lock);}
 }
-module.exports={baseState,endpoints,validFixture,ownedChannel,ownedUser,ringingEvidence,phoneCallLimit,MASTER,OWNER};
+module.exports={baseState,endpoints,validFixture,ownedChannel,ownedUser,ringingEvidence,phoneCallLimit,waitForAgentEnd,MASTER,OWNER};
 if(require.main===module)main(process.argv.slice(2)).catch(e=>{console.error('[monitor-acceptance] FAIL: '+e.message);process.exitCode=1;});

@@ -4,6 +4,8 @@ project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 cd "$project_root"
 node --check scripts/test-channel-monitor-live.cjs
 node scripts/test-channel-monitor-fixture.cjs
+node scripts/test-main-dev-monitor-profile.cjs
+node scripts/test-monitor-teardown.cjs
 node scripts/test-fixtures/monitor-audio.test.cjs
 work=$(mktemp -d /tmp/kazoo-monitor-sipp-parse.XXXXXX)
 cleanup() {

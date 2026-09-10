@@ -10,6 +10,13 @@ coordinated restart/rollback acceptance remain open.
 
 ### Latest native results
 
+Main44 applications/controller promotion subsequently **PASS** onSeptember10:
+normal installer source `4cd9953`, loaded/disk identity verification and actual
+four-mode supervision with independent RTP privacy/cleanup evidence
+`/var/log/kazoo-monitor-acceptance-WTrjrC`. See `main_dev_runtime_promotion.md`.
+The old main44 promotion statements below are historical. Complete cluster
+producer/broker drain and coordinated upgrade/rollback remain open.
+
 September10 current checkpoint: cold restoration of both applications VMs now
 passes, including finite/infinite pauses, empty membership and paired queue
 inventories (`cold-agent-state-tbT2Rt/receipt.json` under the private lab root).
