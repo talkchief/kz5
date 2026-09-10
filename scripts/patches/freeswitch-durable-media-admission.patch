@@ -1,0 +1,82 @@
+diff --git a/src/switch_core_session.c b/src/switch_core_session.c
+--- a/src/switch_core_session.c
++++ b/src/switch_core_session.c
+@@ -37,3 +37,29 @@
+ #include "switch_core.h"
+ #include "private/switch_core_pvt.h"
++#include <errno.h>
++#include <sys/stat.h>
++
++/* Durable Kazoo maintenance admission, independent of fsctl pause/resume.
++ * Check inside session_hash_mutex: a matching native observation cannot
++ * overtake a previously admitted allocation before it enters session_table.
++ * Missing intent is open; all other filesystem errors fail closed.
++ * The root helper owns the directory/marker. No per-account data lives here. */
++static int kazoo_maintenance_marker_state(void)
++{
++	struct stat st;
++	if (lstat("/etc/kazoo5-maintenance", &st) != 0) {
++		return errno == ENOENT ? 0 : -1;
++	}
++	if (!S_ISDIR(st.st_mode) || st.st_uid != 0 || (st.st_mode & 0777) != 0755) {
++		return -1;
++	}
++	if (lstat("/etc/kazoo5-maintenance/media.closed", &st) != 0) {
++		return errno == ENOENT ? 0 : -1;
++	}
++	if (!S_ISREG(st.st_mode) || st.st_uid != 0 || st.st_nlink != 1 ||
++		(st.st_mode & 0777) != 0644 || st.st_size <= 0 || st.st_size > 512) {
++		return -1;
++	}
++	return 1;
++}
+ 
+diff --git a/src/switch_core_session.c b/src/switch_core_session.c
+--- a/src/switch_core_session.c
++++ b/src/switch_core_session.c
+@@ -2411,2 +2411,7 @@
+ 	switch_mutex_lock(runtime.session_hash_mutex);
++	if (kazoo_maintenance_marker_state() != 0) {
++		switch_mutex_unlock(runtime.session_hash_mutex);
++		UNPROTECT_INTERFACE(endpoint_interface);
++		return NULL;
++	}
+ 	if (use_uuid && switch_core_hash_find(session_manager.session_table, use_uuid)) {
+diff --git a/src/switch_core_session.c b/src/switch_core_session.c
+--- a/src/switch_core_session.c
++++ b/src/switch_core_session.c
+@@ -2530,5 +2530,16 @@
+ SWITCH_DECLARE(uint32_t) switch_core_session_count(void)
+ {
+ 	return session_manager.session_count;
+ }
++
++/* Read-only barrier, not a setter and not a broker/callback drain assertion. */
++SWITCH_DECLARE(int) switch_core_session_maintenance_check(uint32_t *sessions)
++{
++	int state;
++	switch_mutex_lock(runtime.session_hash_mutex);
++	state = kazoo_maintenance_marker_state();
++	*sessions = session_manager.session_count;
++	switch_mutex_unlock(runtime.session_hash_mutex);
++	return state;
++}
+ 
+diff --git a/src/include/switch_core.h b/src/include/switch_core.h
+--- a/src/include/switch_core.h
++++ b/src/include/switch_core.h
+@@ -840,2 +840,4 @@
+ SWITCH_DECLARE(uint32_t) switch_core_session_count(void);
++/*! Read-only Kazoo durable admission barrier: 0=open, 1=closed, -1=invalid/closed. */
++SWITCH_DECLARE(int) switch_core_session_maintenance_check(uint32_t *sessions);
+ 
+diff --git a/src/mod/applications/mod_commands/mod_commands.c b/src/mod/applications/mod_commands/mod_commands.c
+--- a/src/mod/applications/mod_commands/mod_commands.c
++++ b/src/mod/applications/mod_commands/mod_commands.c
+@@ -2515,1 +2515,6 @@
++		} else if (!strcasecmp(argv[0], "maintenance_check")) {
++			uint32_t sessions = 0;
++			int state = switch_core_session_maintenance_check(&sessions);
++			stream->write_function(stream, "{\"schema_version\":1,\"admission\":\"%s\",\"sessions\":%u,\"core_uuid\":\"%s\"}\n",
++				state == 0 ? "open" : state == 1 ? "closed" : "error", sessions, switch_core_get_uuid());
+ 		} else if (!strcasecmp(argv[0], "pause_check")) {

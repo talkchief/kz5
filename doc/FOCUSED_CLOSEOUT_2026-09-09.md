@@ -6,6 +6,15 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Initializer rollout completed: jobs15/11 on `494ee28` collected PASS, then
+  version2 combined native inventory PASS (two nodes/six replicas):
+  `queue-inventory-1789002002127-97f89a97.json`. The startup prerequisite is now
+  deployed/verified; full maintenance fence/drain/restore remains open.
+- Durable media allocation fence and installer integration are implemented.
+  21 focused tests plus both full modified C translation units compile/pass;
+  normal media deployment and native call/restart acceptance remain required.
+  See `maintenance_media_fence.md`.
+
 - Corrected source `494ee28` is pushed and synced to main44 root. Normal
   private retries15/11 are active/running, verified MainPID506156/363012;
   admission checked zero work and all6 ready replicas. Start receipt:

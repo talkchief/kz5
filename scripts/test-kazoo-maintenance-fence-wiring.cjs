@@ -19,7 +19,7 @@ die(){ echo REFUSED >&2; exit 1; }
 log(){ :; }
 dnf_install(){ echo "packages $*" >> '${root}/calls'; }
 install_nodejs_toolchain(){ echo node-toolchain >> '${root}/calls'; }
-guard_node(){ echo "guard $*" >> '${root}/calls'; [[ \${GUARD_FAIL:-false} != true ]]; }
+guard_node(){ echo "guard $*" >> '${root}/calls'; [[ \${GUARD_FAIL:-false} != true ]] && { [[ $1 != *kazoo5-maintenance-media ]] || [[ \${MEDIA_FAIL:-false} != true ]]; }; }
 run(){ "$@"; }
 install_service_address_gate(){ :; }
 write_file(){ mkdir -p "$(dirname "$2")"; install -m "$1" /dev/stdin "$2"; }
@@ -27,6 +27,9 @@ systemctl(){
  if [[ $1 == show ]]; then
   if [[ \${WRONG_GATE:-false} == true ]]; then echo 'argv[]=wrong'; else
    printf 'argv[]=guard_node ${root}/libexec/kazoo5-maintenance-fence --boot-guard ;'
+   if [[ $2 == kazoo-freeswitch.service && \${MISSING_MEDIA:-false} != true ]]; then
+    printf ' argv[]=guard_node ${root}/libexec/kazoo5-maintenance-media --boot-guard ;'
+   fi
   fi
  else echo "systemctl $*" >> '${root}/calls'; fi
 }
@@ -46,6 +49,9 @@ test('all four ingress roles install dependencies, immutable helper and privileg
     }
     assert.equal(fs.readFileSync(f.root+'/libexec/kazoo5-maintenance-fence','utf8'),fs.readFileSync(__dirname+'/kazoo-maintenance-fence.cjs','utf8'));
     assert.equal((f.calls().match(/packages nftables iproute util-linux/g)||[]).length,4);
+    assert.equal(fs.readFileSync(f.root+'/libexec/kazoo5-maintenance-media','utf8'),fs.readFileSync(__dirname+'/kazoo-maintenance-media.cjs','utf8'));
+    assert(fs.readFileSync(f.root+'/units/kazoo-freeswitch.service.d/36-kazoo-maintenance-media.conf','utf8').includes('ExecStartPre=+guard_node '+f.root+'/libexec/kazoo5-maintenance-media --boot-guard'));
+    assert(f.calls().includes('packages binutils'));
     assert(f.calls().indexOf('--boot-guard')<f.calls().indexOf('systemctl restart'));
 });
 test('database, broker, controller and unrelated services get no ingress hook',t=>{
@@ -68,4 +74,21 @@ test('missing effective guard and changed installed source fail verification',t=
 test('service acceptance includes maintenance verification',()=>{
     const body=source.match(/^assert_service\(\) \{[\s\S]*?^\}/m)[0];
     assert(body.includes('verify_service_maintenance_fence "$unit"'));
+});
+test('unsafe media state refuses before enabling or restarting FreeSWITCH',t=>{
+    const f=fixture(t);assert.notEqual(f.run('MEDIA_FAIL=true service_enable_restart kazoo-freeswitch.service').status,0);
+    assert(!f.calls().includes('systemctl'));
+});
+test('media helper drift, missing boot hook or invalid native state fail verification',t=>{
+    const f=fixture(t);assert.equal(f.run('service_enable_restart kazoo-freeswitch.service').status,0);
+    assert.notEqual(f.run('MISSING_MEDIA=true verify_service_maintenance_fence kazoo-freeswitch.service').status,0);
+    assert.notEqual(f.run('MEDIA_FAIL=true verify_service_maintenance_fence kazoo-freeswitch.service').status,0);
+    fs.appendFileSync(f.root+'/libexec/kazoo5-maintenance-media','\n// changed\n');
+    assert.notEqual(f.run('verify_service_maintenance_fence kazoo-freeswitch.service').status,0);
+});
+test('normal FreeSWITCH builds include the durable core patch and invalidate the previous build marker',()=>{
+    const prepare=source.match(/^prepare_freeswitch_source\(\) \{[\s\S]*?^\}/m)[0];
+    const fingerprint=source.match(/^freeswitch_build_fingerprint\(\) \{[\s\S]*?^\}/m)[0];
+    assert(prepare.includes('patches/freeswitch-durable-media-admission.patch'));
+    assert(fingerprint.includes('durable-media-admission-v1'));
 });

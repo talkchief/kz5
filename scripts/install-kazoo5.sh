@@ -891,12 +891,29 @@ verify_service_maintenance_fence() {
         die "${unit} is missing the persistent maintenance startup guard"
     /usr/bin/node /usr/local/libexec/kazoo5-maintenance-fence --status >/dev/null ||
         die 'Maintenance fence intent/kernel state is inconsistent; admission remains unverified'
+    if [[ $unit == kazoo-freeswitch.service ]]; then
+        cmp -s "$SCRIPT_DIR/kazoo-maintenance-media.cjs" /usr/local/libexec/kazoo5-maintenance-media ||
+            die 'Installed media admission helper differs; reinstall FreeSWITCH'
+        [[ $commands == *'argv[]=/usr/bin/node /usr/local/libexec/kazoo5-maintenance-media --boot-guard ;'* ]] ||
+            die 'FreeSWITCH is missing the durable media admission startup guard'
+        /usr/bin/node /usr/local/libexec/kazoo5-maintenance-media --status >/dev/null ||
+            die 'Native media admission and durable intent disagree'
+    fi
 }
 
 service_enable_restart() {
     local unit=$1
     install_service_address_gate "$unit"
     install_service_maintenance_fence "$unit"
+    if [[ $unit == kazoo-freeswitch.service ]]; then
+        dnf_install binutils
+        run install -o root -g root -m 0755 "$SCRIPT_DIR/kazoo-maintenance-media.cjs" /usr/local/libexec/kazoo5-maintenance-media
+        run /usr/bin/node /usr/local/libexec/kazoo5-maintenance-media --boot-guard
+        write_file 0644 "/etc/systemd/system/${unit}.d/36-kazoo-maintenance-media.conf" <<'EOF'
+[Service]
+ExecStartPre=+/usr/bin/node /usr/local/libexec/kazoo5-maintenance-media --boot-guard
+EOF
+    fi
     run systemctl daemon-reload
     run systemctl enable "$unit"
     run systemctl restart "$unit"
@@ -4472,7 +4489,7 @@ prepare_mod_kazoo_source() {
 freeswitch_build_fingerprint() {
     printf '%s\n' \
         "freeswitch=${FREESWITCH_VERSION}@${FREESWITCH_REF}" \
-        "freeswitch_core=module-load-shutdown-v1" \
+        "freeswitch_core=module-load-shutdown-v1+durable-media-admission-v1" \
         "speech_modules=en-es-fr-v1" \
         "mod_sofia=profile-thread-lifecycle-v1+kazoo-proxy-uri-v1" \
         "mod_kazoo=${MOD_KAZOO_REF}+fetch-reply-ownership-v1+thread-lifecycle-v1+worker-shutdown-v3+cookie-redaction-v1+prefixes-serialization-v2+fetch-channel-data-v1+fetch-log-redaction-v1+originate-compatibility-v1+reply-completeness-v1+sync-command-protocol-v1+originate-reconcile-v1+hold-dtmf-events-v1+version-namespace-v1+atomic-intercept-v1" \
@@ -4487,6 +4504,7 @@ prepare_freeswitch_source() {
         "$SCRIPT_DIR/patches/freeswitch-mod-sofia-thread-lifecycle.patch"
         "$SCRIPT_DIR/patches/freeswitch-mod-sofia-kazoo-proxy-uri.patch"
         "$SCRIPT_DIR/patches/freeswitch-module-load-shutdown.patch"
+        "$SCRIPT_DIR/patches/freeswitch-durable-media-admission.patch"
     )
     for patch_file in "${patch_files[@]}"; do
         [[ -f $patch_file ]] || die "Required FreeSWITCH patch is missing: ${patch_file}"

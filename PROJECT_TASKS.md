@@ -7,6 +7,23 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / initializer native deployment and version2 inventory — PASS:**
+  Normal jobs15/11 on `494ee28` completed successfully and were collected as
+  `kazoo-apps-install-15.log` / `apps-peer-install-11.log`. Version2 combined
+  receipt `queue-inventory-1789002002127-97f89a97.json` under
+  `/var/lib/kazoo5-install-lab` passes for both nodes/six agent replicas.
+  This closes the supervised-initializer rollout prerequisite, not full
+  maintenance fence/drain/restore/rollback.
+
+- **INST-06 / durable media admission — implemented, native rollout next:**
+  Root-tracked FreeSWITCH session-allocation gate, serialized native count,
+  persistent helper, startup/rollback guard and normal installer fingerprint
+  now exist.21 focused tests and both full modified C translation units pass
+  (`/tmp/kazoo-media-build.pAHBAa`). No media runtime change or native fence
+  acceptance yet. See `doc/maintenance_media_fence.md`; internal originate,
+  restart persistence, existing-call survival, release and after-call/load tests
+  must pass before this component can be closed.
+
 - **INST-06 / corrected normal deployment now running:** source
   `494ee28a85ff30ae53b615f802560a8bd9805102`, exact units
   `kz5-stage-install-kazoo-apps-15` (MainPID506156) and

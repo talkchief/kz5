@@ -67,6 +67,14 @@ must establish those independent conditions and revalidate tokens before acting.
 
 ## Evidence and rollout
 
+- **Native rollout and version2 acceptance PASS:** corrected jobs15/11 on
+  `494ee28` exited0 and passed collection/service checks. Their logs are
+  `kazoo-apps-install-15.log` / `apps-peer-install-11.log`. The new combined
+  inventory passed both nodes/six agent replicas with schema_version2 startup
+  tokens: `queue-inventory-1789002002127-97f89a97.json` under
+  `/var/lib/kazoo5-install-lab`. This supersedes the pending rollout statements
+  below. It is not proof of the separate full cluster fence/drain/restore gate.
+
 - Corrected source `494ee28` is now in normal private deployment, exact units
   `kz5-stage-install-kazoo-apps-15` / `kz5-stage-install-apps-peer-11`.
   Actual active/running MainPID506156/363012 observed after guarded admission.
