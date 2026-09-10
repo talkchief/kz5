@@ -1574,6 +1574,26 @@ rabbitmqctl_password() (
     } >/dev/null 2>&1
 )
 
+install_broker_maintenance_tools() {
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would install Node.js for the native read-only broker inventory helper'
+    elif ! command -v node >/dev/null ||
+         [[ $(node -p 'process.versions.node.split(".")[0]') != "$MONSTER_UI_NODE_MAJOR" ]]; then
+        install_nodejs_toolchain
+    fi
+    validate_config_directory /usr/local/libexec
+    run install -d -o root -g root -m 0755 /usr/local/libexec
+    run install -o root -g root -m 0755 "$SCRIPT_DIR/kazoo-maintenance-broker.cjs" /usr/local/libexec/kazoo5-maintenance-broker
+}
+
+verify_broker_maintenance_tools() {
+    [[ $DRY_RUN != true ]] || return 0
+    cmp -s "$SCRIPT_DIR/kazoo-maintenance-broker.cjs" /usr/local/libexec/kazoo5-maintenance-broker ||
+        die 'Installed native broker inventory helper differs; reinstall RabbitMQ'
+    node --check /usr/local/libexec/kazoo5-maintenance-broker >/dev/null ||
+        die 'Native broker inventory helper cannot run with the installed Node.js'
+}
+
 install_rabbitmq() {
     local rpm_file="${KAZOO_CACHE_DIR}/rabbitmq-server-${RABBITMQ_VERSION}.rpm"
     local rpm_url="https://github.com/rabbitmq/rabbitmq-server/releases/download/v${RABBITMQ_VERSION}/rabbitmq-server-${RABBITMQ_VERSION}-1.el8.noarch.rpm"
@@ -1622,12 +1642,14 @@ EOF
         rabbitmqctl set_permissions -p "$KAZOO_RABBITMQ_VHOST" \
             "$KAZOO_RABBITMQ_USER" '.*' '.*' '.*'
     fi
+    install_broker_maintenance_tools
     verify_rabbitmq
 }
 
 verify_rabbitmq() {
     local installed_version installed_erlang listener permissions amqp_listeners
     if [[ $DRY_RUN == true ]]; then log 'Would verify RabbitMQ'; return 0; fi
+    verify_broker_maintenance_tools
     assert_service rabbitmq-server.service
     listener=$(ss -H -ltn 'sport = :25672')
     grep -F "${KAZOO_RABBITMQ_BIND}:25672" <<<"$listener" >/dev/null || \

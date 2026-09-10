@@ -4,6 +4,9 @@
 // NOT proof of full cluster producer/broker drain or an upgrade coordinator.
 const fs=require('node:fs'),cp=require('node:child_process'),os=require('node:os'),path=require('node:path');
 const crypto=require('node:crypto'),assert=require('node:assert/strict');
+const HELPER_FILES=Object.freeze(['install-kazoo5.sh','kazoo-maintenance-fence.cjs',
+    'kazoo-maintenance-snapshot.escript','kazoo-maintenance-queues.escript',
+    'kazoo-maintenance-restore.escript','kazoo-maintenance-callbacks.cjs']);
 const DIR='/var/lib/kazoo5-install-lab',LOCK='/etc/kazoo/monitor-acceptance.lock';
 const A='45e827067baf078029d0ca16a489fa8a',Q='cabcfb72812b530ccc32ffba30ef680d';
 const FENCE='/usr/local/libexec/kazoo5-maintenance-fence',MEDIA='/usr/local/libexec/kazoo5-maintenance-media';
@@ -94,7 +97,7 @@ async function main(){
             // stage, without changing the installed Erlang code or its checkout.
             for(const n of nodes){
                 pod('exec',n.id,'mkdir','-m','0700',guest);pod('exec',n.id,'mkdir','-m','0700',guest+'/scripts');
-                for(const name of ['install-kazoo5.sh','kazoo-maintenance-fence.cjs','kazoo-maintenance-snapshot.escript','kazoo-maintenance-queues.escript','kazoo-maintenance-restore.escript'])
+                for(const name of HELPER_FILES)
                     pod('cp',path.join(__dirname,name),n.id+':'+guest+'/scripts/'+name);
                 pod('exec',n.id,'bash','-c','source "$1"; install_service_maintenance_fence kazoo-apps.service; systemctl daemon-reload; verify_service_maintenance_fence kazoo-apps.service','cold-install',guest+'/scripts/install-kazoo5.sh');
             }
@@ -153,5 +156,5 @@ async function main(){
         assert.equal(receipt.status,'PASS');
     }finally{fs.closeSync(lock);}
 }
-module.exports={request,matches,owned};
+module.exports={request,matches,owned,HELPER_FILES};
 if(require.main===module)main().catch(_=>{console.error('COLD_AGENT_MAINTENANCE_REFUSED_OR_FAILED; inspect protected receipt');process.exitCode=1;});

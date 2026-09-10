@@ -89,6 +89,14 @@ test('callback inventory helper drift refuses applications service acceptance',t
     fs.appendFileSync(f.root+'/libexec/kazoo5-maintenance-callbacks','\n// changed\n');
     assert.notEqual(f.run('verify_service_maintenance_fence kazoo-apps.service').status,0);
 });
+test('cold-maintenance private source stage contains every helper used by the actual installer',t=>{
+    const f=fixture(t),stage=path.join(f.root,'source');fs.mkdirSync(stage,{mode:0o700});
+    for(const name of require('./test-acdc-cold-maintenance.cjs').HELPER_FILES)
+        fs.copyFileSync(path.join(__dirname,name),path.join(stage,name));
+    const result=f.run(`SCRIPT_DIR=${JSON.stringify(stage)}\ninstall_service_maintenance_fence kazoo-apps.service\nverify_service_maintenance_fence kazoo-apps.service`);
+    assert.equal(result.status,0,result.stderr);
+    assert(fs.existsSync(f.root+'/libexec/kazoo5-maintenance-callbacks'));
+});
 test('unsafe media state refuses before enabling or restarting FreeSWITCH',t=>{
     const f=fixture(t);assert.notEqual(f.run('MEDIA_FAIL=true service_enable_restart kazoo-freeswitch.service').status,0);
     assert(!f.calls().includes('systemctl'));

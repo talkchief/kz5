@@ -7,6 +7,20 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / native broker inventory — source and actual broker PASS, September10:**
+  Native queue/channel/connection inventory now refuses partial or changing
+  results and reports ready, unacknowledged, transactional and publisher-confirm
+  work. Normal RabbitMQ installation ships/verifies its standalone helper and
+  Node dependency. All41 focused source/installer/cold-stage tests pass. Native
+  `kz5-native-broker-drain-20260910` exited0: actual publish, unacknowledged get
+  and acknowledgement prove busy/empty transitions, with exact fixture vhost
+  cleanup verified. Protected receipt on dev44:
+  `/var/log/kazoo-broker-acceptance-trloi2/receipt.json`.
+  Cold-maintenance staging also now includes the callback inventory helper,
+  verified by executing actual installer functions against its staged bundle.
+  Helper deployment is pending; producer fencing and coordinated activation/
+  rollback are still OPEN. See `doc/maintenance_broker_inventory.md`.
+
 - **INST-06 / durable callback inventory — source/installed native PASS, September10:**
   New read-only `scripts/kazoo-maintenance-callbacks.cjs` scans every configured
   account database with complete pagination, opaque-token freshness and
