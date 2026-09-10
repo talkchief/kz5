@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / latest main media — installed PASS; load gate pending, September10:**
+  Normal `freeswitch` installation on `9972d12` completed and was collected in
+  `kz5-main-media-promotion-20260910`. Backups/receipts are under
+  `/root/kz5-main-media-promotion-20260910.xSDOxZhF` on dev44. Independent native
+  status confirms the new admission API, open/zero sessions and the installed
+  process/core identity. Main SIP was reopened after installation.
+  `scripts/test-main-media-soak.cjs` adds exact main-fixture admission and native
+  media identity observations around the existing30-call/1800s ACDC test; its
+  offline rejection guards pass. Actual load acceptance is pending. See
+  `doc/main_media_soak.md`; the older main soak is not reused as evidence.
+
 - **Main44 runtime promotion — installer and actual-call PASS, September10:**
   Normal applications and eCallMgr installer retry
   `kz5-main-promotion-retry-20260910` exited0 on `4cd9953` and was collected.

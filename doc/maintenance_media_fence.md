@@ -82,6 +82,12 @@ the running build's checkout. The C patch and core build fingerprint are unchang
 
 ## Installer and evidence
 
+- **Main44 normal media promotion PASS, September10:** source `9972d12`, native
+  `kz5-main-media-promotion-20260910` exit0/collected. Independent open/zero-session
+  native status and stable installed process/core verified. The new30-call
+  main-runtime soak is pending; see `main_media_soak.md`. This supersedes older
+  statements below that main media was unchanged, not the full cluster gate.
+
 - **After-restart real calls PASS:** native unit
   `kz5-stage-monitor-after-media-restart-1` exited0 on runner `4cc4540` after
   both restarts below. All four supervision modes pass new SIP/RTP calls,
