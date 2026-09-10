@@ -131,14 +131,15 @@ function context(h) {
         for(const file of Object.values(input))fs.unlinkSync(file);
         h.writePrivate(label+'-evidence.json',JSON.stringify(proof,null,2)+'\n');return proof;
     }
-    async function run() {
+    async function run({partition=true}={}) {
+        assert(typeof partition==='boolean');
         fault=partitions.prepare('kazoo-apps');nodes=fault.nodes;
         const es=h.endpoints(s).slice(0,2);
         es.forEach(e=>assert.equal(h.contacts(e).length,0,'Synthetic phone already registered'));
         await verifyAndPause();
         for(const e of es)h.registration(e,600);
         h.log('Queue2000: both native agent replicas pinned; alternate synthetic agents temporarily paused');
-        const first=await call('queue-before-partition',async()=>{
+        const first=await call(partition?'queue-before-partition':'queue-first',partition?async()=>{
             h.setFault(fault);await fault.start();h.log('Applications14 broker disconnected; peer20 healthy; ending exact synthetic conversation');
             await h.clearStage();
             const samples=[],end=Date.now()+35000;
@@ -151,15 +152,17 @@ function context(h) {
             const recovered=await h.until(()=>both('ready'),90);
             h.log('Both original FSM replicas recovered ready without re-login or SIP re-registration');
             return {...proof,busy_samples:samples,recovered};
-        });
+        }:undefined);
+        if(!partition)await h.until(()=>both('ready'),30);
         // Existing contacts must remain exact; do not REGISTER between calls.
         for(const e of es)assert.deepEqual(h.contacts(e),[`sip:${e.username}@${h.audio.IP}:${e.port}`]);
-        const second=await call('queue-after-partition');
+        const second=await call(partition?'queue-after-partition':'queue-second');
         const ready=await h.until(()=>both('ready'),30);
         await restorePauses();
-        h.writePrivate('queue-partition-evidence.json',JSON.stringify({first,second,ready,
-            same_fsm_replicas:true,no_agent_relogin:true,no_sip_reregistration:true},null,2)+'\n');
-        h.log('PASS two actual queued calls, directional audio, missed-hangup partition and same-FSM recovery');
+        h.writePrivate(partition?'queue-partition-evidence.json':'queue-calls-evidence.json',JSON.stringify({first,second,ready,
+            partition_exercised:partition,same_fsm_replicas:true,no_agent_relogin:true,no_sip_reregistration:true},null,2)+'\n');
+        h.log(partition?'PASS two actual queued calls, directional audio, missed-hangup partition and same-FSM recovery':
+            'PASS two actual queued calls and directional audio without agent re-login, SIP re-registration or broker interruption');
     }
     return {run,restorePauses};
 }

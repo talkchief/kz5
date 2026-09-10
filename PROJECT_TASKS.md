@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / paired cold agent/queue inventories — PASS, September10:**
+  Extended native unit `kz5-stage-cold-agent-restore-2` exited0 on runner
+  `e0f4777`; receipt `/var/lib/kazoo5-install-lab/cold-agent-state-tbT2Rt/receipt.json`
+  independently verified on dev44. Both queue-manager replicas correlate with
+  all six finite-paused/infinite-paused/empty-membership agent replicas before
+  restart and after disk restoration. Post-release preflight of retained
+  restore requests refuses with zero restored agents. Cleanup passes. Next is
+  two actual queue2000 calls after restoration, without another broker fault,
+  login or registration between calls (`--distributed --queue-calls --live`).
+  This does not substitute for full cluster producer/broker drain or rollback.
+
 - **INST-06 / native two-apps-VM durable agent restore — PASS, September10:**
   `kz5-stage-cold-agent-restore-1` exited0 on runner `e671f23` with unchanged
   normally installed Erlang source `494ee28`. Independent verification of

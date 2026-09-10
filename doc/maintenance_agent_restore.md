@@ -72,5 +72,19 @@ cleanup pass. Fixture SHA256
 The strengthened fixture additionally correlates the native queue-manager
 inventories with all six agents before restart and after restoration, and
 requires the last restore request's preflight to refuse after fence release.
-That extended campaign is pending. The fixture does not attest a complete
-cluster producer/broker drain, release activation/rollback, host reboot or media HA.
+The extended campaign PASSES: `kz5-stage-cold-agent-restore-2`, runner `e0f4777`,
+receipt `/var/lib/kazoo5-install-lab/cold-agent-state-tbT2Rt/receipt.json` on dev44.
+Independent verification confirms both six-agent/two-queue inventories,
+disk checkpoint restoration across both changed epochs, refusal of retained
+request preflight after release (zero restored), and clean baseline recovery.
+Fixture SHA256 `d4fc5ef222de74f124697746b2486b6107c0bc618d8f69bef7bbfbbeb781ecef`.
+Main installer, modular and read-only source suites also pass in a network-
+isolated validation guard after helper packaging changes.
+
+The actual follow-up call profile is
+`node scripts/test-channel-monitor-live.cjs --distributed --queue-calls --live`.
+It routes two real calls through queue2000 and verifies both directions of RTP,
+same agent FSMs and recovery to ready, without a broker interruption or an
+agent login/SIP registration between calls. This follow-up is pending.
+The fixture does not attest a complete cluster producer/broker drain, release
+activation/rollback, host reboot or media HA.

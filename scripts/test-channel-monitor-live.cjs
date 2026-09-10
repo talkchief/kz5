@@ -13,7 +13,7 @@ let AUTH='/etc/kazoo/installer-secrets.env', MASTER='302ae5a70c403124f764cbc5422
 const OWNER='kazoo5-isolated-monitor-acceptance', ID=/^[a-f0-9]{32}$/, CALL=/^[A-Za-z0-9_.:@-]{1,128}$/;
 const SCENARIOS=path.join(__dirname,'sip-tests'), FSCLI='/usr/local/freeswitch/bin/fs_cli';
 let state, fixture, masterToken, adminToken, userToken, runDir, current, cleaning=false;
-let partitionEnabled=false, queuePartitionEnabled=false, mediaFenceEnabled=false, controllerFault=null;
+let partitionEnabled=false, queuePartitionEnabled=false, queueCallsEnabled=false, mediaFenceEnabled=false, controllerFault=null;
 const children=new Set(), registered=new Set();
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const hex=()=>crypto.randomBytes(16).toString('hex');
@@ -461,8 +461,9 @@ async function main(args) {
         args=args.slice(1);
         if(args[0]==='--broker-partition') {partitionEnabled=true;args=args.slice(1);}
         if(args[0]==='--queue-partition') {queuePartitionEnabled=true;args=args.slice(1);}
+        if(args[0]==='--queue-calls') {queueCallsEnabled=true;args=args.slice(1);}
         if(args[0]==='--media-fence') {mediaFenceEnabled=true;args=args.slice(1);}
-        assert([partitionEnabled,queuePartitionEnabled,mediaFenceEnabled].filter(Boolean).length<=1,'Select one fault profile');
+        assert([partitionEnabled,queuePartitionEnabled,queueCallsEnabled,mediaFenceEnabled].filter(Boolean).length<=1,'Select one call profile');
         assert(args.length===1&&['--prepare-only','--live','--cleanup'].includes(args[0]),'Invalid distributed monitor mode');
         distributed=require('./test-fixtures/distributed-lab/monitor-profile.cjs').prepare();
         API=distributed.api;BASE=distributed.base;AUTH=distributed.auth;FILE=distributed.file;MASTER=distributed.master;
@@ -509,12 +510,12 @@ async function main(args) {
             const channels=(await request('GET',route('channels'),undefined,adminToken)).data;
             assert(channels&&Object.keys(channels).length===0,'Acceptance tenant has active calls; wait for them to finish');
             for(const f of audio.FREQUENCIES)writePrivate('tone-'+f+'.ulaw',audio.tone([f]));
-            if(queuePartitionEnabled)await queueContext().run();
+            if(queuePartitionEnabled||queueCallsEnabled)await queueContext().run({partition:queuePartitionEnabled});
             else for(const mode of ['eavesdrop','whisper','barge','join'])await stage(mode);
         }
         catch(error){log('Stage failed: '+error.message);throw error;}
         finally {assert(await cleanup(),'Scoped fixture cleanup incomplete');}
-        log((queuePartitionEnabled?'Queued applications-partition recovery passed.':'All four modes passed.')+' Private synthetic evidence: '+runDir);
+        log((queuePartitionEnabled?'Queued applications-partition recovery passed.':queueCallsEnabled?'Two queued calls passed.':'All four modes passed.')+' Private synthetic evidence: '+runDir);
     } finally {lock.stdin.end();terminate(lock);}
 }
 module.exports={baseState,endpoints,validFixture,ownedChannel,ownedUser,ringingEvidence,phoneCallLimit,MASTER,OWNER};

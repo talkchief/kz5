@@ -18,7 +18,7 @@ test('internal probe cannot dial a phone/PSTN address or inject CLI fields',()=>
 test('live harness requires explicit private mode, fences the measured RTP window and keeps cleanup state',()=>{
     const source=fs.readFileSync(path.join(__dirname,'../../test-channel-monitor-live.cjs'),'utf8');
     assert(source.includes("if(args[0]==='--media-fence')"));
-    assert(source.includes('[partitionEnabled,queuePartitionEnabled,mediaFenceEnabled].filter(Boolean).length<=1'));
+    assert(source.includes('[partitionEnabled,queuePartitionEnabled,queueCallsEnabled,mediaFenceEnabled].filter(Boolean).length<=1'));
     assert(source.includes('if(mediaFenceEnabled)await mediaContext().begin(mode)'));
     assert(source.includes('digit.time+2>=mediaProof.closed_at&&digit.time+5<=mediaProof.released_at'));
     assert(source.includes('if(fixture?.media_fence)'));
