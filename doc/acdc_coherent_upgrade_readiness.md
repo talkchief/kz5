@@ -10,6 +10,13 @@ coordinated restart/rollback acceptance remain open.
 
 ### Latest native results
 
+Initializer completion now has source/installer/collector integration with18
+production-process/status tests and26 JavaScript guard/merger tests passing. Normal
+deployment and version2 native acceptance remain pending; see
+`acdc_initialization_readiness.md`. Earlier combined native version1 snapshot
+passed on `25be59c`: `queue-inventory-1788999277496-9ba05000.json`, two queues/
+six replicas. It does not satisfy the newly enforced startup prerequisite.
+
 Persistent local ingress fencing now has installer/startup integration and
 actual systemd plus real-packet acceptance PASS. See
 `maintenance_ingress_fence.md`. This is not the full cluster fence/drain.

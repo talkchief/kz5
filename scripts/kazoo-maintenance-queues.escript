@@ -26,14 +26,15 @@ main(Args) ->
         put(worker_budget,5000),
         {ok,RemoteIfs}=rpc(N,inet,getifaddrs,[]),
         true=lists:any(fun({_,V})->lists:member({addr,Bind},V) end,RemoteIfs),
-        Epoch=epoch(N),Queues=children(N,acdc_queues_sup,acdc_queue_sup),
+        Epoch=epoch(N),Startup=startup(N),Queues=children(N,acdc_queues_sup,acdc_queue_sup),
         []=rpc(N,supervisor,which_children,[acdc_announcements_sup]),
         Rows=[queue(N,Sup)||Sup<-Queues],
-        Queues=children(N,acdc_queues_sup,acdc_queue_sup),Epoch=epoch(N),
+        Queues=children(N,acdc_queues_sup,acdc_queue_sup),Epoch=epoch(N),Startup=startup(N),
         []=rpc(N,supervisor,which_children,[acdc_announcements_sup]),
         Ids=[{proplists:get_value(<<"account_id">>,R),proplists:get_value(<<"queue_id">>,R)}||R<-Rows],
         true=length(Ids)=:=length(lists:usort(Ids)),
-        Json=object(N,[{<<"schema_version">>,1},{<<"node">>,atom_to_binary(N,utf8)},
+        Json=object(N,[{<<"schema_version">>,2},{<<"node">>,atom_to_binary(N,utf8)},
+                       {<<"startup_token">>,startup_token(Startup)},
                        {<<"epoch">>,Epoch},{<<"captured_at_unix_ms">>,erlang:system_time(millisecond)},
                        {<<"queues">>,[object(N,R)||R<-Rows]},
                        {<<"all_queue_workers_observed">>,true},
@@ -42,6 +43,11 @@ main(Args) ->
     catch _:_ -> io:put_chars("MAINTENANCE_QUEUE_INVENTORY_REFUSED\n"),halt(1) end.
 
 %% Unlike workers/0 helpers, never silently omit restarting/undefined children.
+startup(N) ->
+    {ok,#{initializer:=Pid,epoch:=Ref,revision:=Revision}=S}=rpc(N,acdc_init,maintenance_state,[2000]),
+    true=is_pid(Pid),true=is_reference(Ref),true=is_integer(Revision) andalso Revision>=2,S.
+startup_token(S) ->
+    iolist_to_binary([io_lib:format("~2.16.0b",[B]) || <<B>> <= crypto:hash(sha256,term_to_binary(S))]).
 children(N,Sup,Module) ->
     Cs=rpc(N,supervisor,which_children,[Sup]),true=is_list(Cs),true=length(Cs)=<5000,
     Ps=[begin {_,P,supervisor,[Module]}=C,true=is_pid(P),P end||C<-Cs],
@@ -56,7 +62,11 @@ queue(N,Sup) ->
     lists:foreach(fun hex_id/1,Busy0),Busy=lists:sort(Busy0),
     Workers=children(N,WorkerSup,acdc_queue_worker_sup),
     true=length(Workers)>0,
-    BrokerQueues=lists:usort(listener_queues(N,Manager)++lists:append([worker(N,W,Manager,A,Q)||W<-Workers])),
+    ManagerQueues=listener_queues(N,Manager),
+    %% Secondary queue declaration is asynchronous: primary consumption alone
+    %% must not let its still-pending creation escape the broker inventory.
+    true=lists:member(<<"acdc.queue.manager.",Q/binary>>,ManagerQueues),
+    BrokerQueues=lists:usort(ManagerQueues++lists:append([worker(N,W,Manager,A,Q)||W<-Workers])),
     Db=rpc(N,kzs_util,format_account_db,[A]),
     {ok,Doc}=rpc(N,kz_datamgr,open_doc,[Db,Q]),
     <<"queue">>=rpc(N,kz_doc,type,[Doc]),A=rpc(N,kz_doc,account_id,[Doc]),Q=rpc(N,kz_doc,id,[Doc]),

@@ -3905,6 +3905,29 @@ verify_erlang_applications() {
     die "Erlang applications did not become ready on ${node_prefix}: ${expected_apps}"
 }
 
+verify_acdc_initialization_ready() {
+    if [[ $DRY_RUN == true ]]; then
+        log 'Would require all supervised ACDC initialization and retry jobs to finish'
+        return 0
+    fi
+    local erl_call_bin output deadline
+    verify_cookie_copy "$KAZOO_RUNTIME_COOKIE_FILE" kazoo
+    erl_call_bin=$(find_erl_call) || die 'erl_call was not installed with Erlang'
+    deadline=$((SECONDS + KAZOO_START_TIMEOUT))
+    while ((SECONDS < deadline)); do
+        if output=$(timeout 10 runuser --user kazoo -- "$erl_call_bin" \
+            "$KAZOO_NODE_NAME_TYPE" "kazoo_apps@${KAZOO_HOSTNAME}" \
+            -a 'acdc_init startup_status []' 2>/dev/null); then
+            case $output in
+                ready) log 'PASS all supervised ACDC initialization jobs completed'; return 0 ;;
+                failed) die 'An ACDC initialization job failed; inspect startup logs before retrying installation' ;;
+            esac
+        fi
+        sleep 2
+    done
+    die 'ACDC initialization remains pending or unavailable; a running application alone is not startup completion'
+}
+
 verify_acdc_stats_ready() {
     if [[ $DRY_RUN == true ]]; then
         log 'Would require migrated ACDC stats tables and native broker consumption'
@@ -3968,6 +3991,7 @@ verify_kazoo_apps() {
     verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
     verify_kazoo_amqp_ready kazoo_apps
     verify_acdc_stats_ready
+    verify_acdc_initialization_ready
     deadline=$((SECONDS + KAZOO_START_TIMEOUT))
     while ((SECONDS < deadline)); do
         api_result=$(curl --connect-timeout 5 --max-time 15 --silent --show-error \

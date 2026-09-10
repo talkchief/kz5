@@ -118,7 +118,7 @@ function queueInventory(primary, peer) {
             } finally { fs.closeSync(fd); }
             assert(result.status === 0 && !result.error, 'Native queue inventory refused');
             const data = JSON.parse(fs.readFileSync(stem + '-' + ip + '.log', 'utf8'));
-            assert(data.schema_version === 1 && data.all_queue_workers_observed === true);
+            assert(data.schema_version === 2 && data.all_queue_workers_observed === true);
             assert(data.complete_cluster_drain_proven === false && data.admission_fence_proven === false);
             assert.equal(data.queues.length, 1, 'Unexpected fixture queue inventory');
             assert.equal(data.queues[0].account_id, A); assert.equal(data.queues[0].queue_id, Q);

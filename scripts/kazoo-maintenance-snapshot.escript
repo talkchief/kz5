@@ -24,13 +24,14 @@ main(Args) ->
         N=list_to_atom("kazoo_apps@"++Host),
         {ok,RemoteIfs}=rpc(N,inet,getifaddrs,[]),
         true=lists:any(fun({_,V})->lists:member({addr,Bind},V) end,RemoteIfs),
-        Epoch=epoch(N),Workers=workers(N),
+        Epoch=epoch(N),Startup=startup(N),Workers=workers(N),
         put(snapshot_deadline,erlang:monotonic_time(millisecond)+120000),
         Pairs=[snapshot(N,S) || S<-Workers],
-        Workers=workers(N),Epoch=epoch(N),
+        Workers=workers(N),Epoch=epoch(N),Startup=startup(N),
         Ids=[{maps:get(account_id,A),maps:get(agent_id,A)} || {A,_}<-Pairs],
         true=length(Ids)=:=length(lists:usort(Ids)),
-        Data=[{<<"schema_version">>,1},{<<"node">>,atom_to_binary(N,utf8)},
+        Data=[{<<"schema_version">>,2},{<<"node">>,atom_to_binary(N,utf8)},
+              {<<"startup_token">>,startup_token(Startup)},
               {<<"epoch">>,Epoch},{<<"captured_at_unix_ms">>,erlang:system_time(millisecond)},
               {<<"agents">>,[json_agent(N,A) || {A,_}<-Pairs]},
               {<<"document_revisions">>,[J || {_,J}<-Pairs]},
@@ -44,6 +45,11 @@ main(Args) ->
 workers(N) ->
     Ws=rpc(N,acdc_agents_sup,workers,[]),true=is_list(Ws),true=length(Ws)=<5000,
     true=lists:all(fun is_pid/1,Ws),lists:sort(Ws).
+startup(N) ->
+    {ok,#{initializer:=Pid,epoch:=Ref,revision:=Revision}=S}=rpc(N,acdc_init,maintenance_state,[2000]),
+    true=is_pid(Pid),true=is_reference(Ref),true=is_integer(Revision) andalso Revision>=2,S.
+startup_token(S) ->
+    iolist_to_binary([io_lib:format("~2.16.0b",[B]) || <<B>> <= crypto:hash(sha256,term_to_binary(S))]).
 epoch(N) ->
     Pid=rpc(N,os,getpid,[]),Creation=rpc(N,erlang,system_info,[creation]),
     match=re:run(Pid,"^[0-9]+$",[{capture,none}]),true=is_integer(Creation),

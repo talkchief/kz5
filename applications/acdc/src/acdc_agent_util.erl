@@ -14,6 +14,7 @@
 -export([update_status/3, update_status/4
 
         ,most_recent_status/2
+        ,most_recent_status_strict/2
         ,most_recent_statuses/1, most_recent_statuses/2, most_recent_statuses/3
 
         ,most_recent_ets_status/2
@@ -46,6 +47,20 @@ update_status(?NE_BINARY = AccountId, AgentId, Status, Options) ->
 -spec most_recent_status(kz_term:ne_binary(), kz_term:ne_binary()) ->
           {'ok', kz_term:ne_binary()}.
 most_recent_status(AccountId, AgentId) ->
+    most_recent_status(AccountId, AgentId, 'legacy').
+
+%% Startup cannot treat a failed datastore read as a legitimately unknown
+%% (never logged-in) agent. Preserve the historical public API for other callers.
+-spec most_recent_status_strict(kz_term:ne_binary(), kz_term:ne_binary()) ->
+          {'ok', kz_term:ne_binary()} | {'error', any()}.
+most_recent_status_strict(AccountId, AgentId) ->
+    case most_recent_status(AccountId, AgentId, 'strict') of
+        {'ok', ?NE_BINARY}=OK -> OK;
+        {'ok', _} -> {'error', 'invalid_agent_status'};
+        {'error', _}=Error -> Error
+    end.
+
+most_recent_status(AccountId, AgentId, Mode) ->
     case most_recent_ets_status(AccountId, AgentId) of
         {'ok', _}=OK -> OK;
         {'error', _ErrJObj} ->
@@ -53,7 +68,7 @@ most_recent_status(AccountId, AgentId) ->
                 'true' -> lager:debug("failed to get ETS stats: ~p", [kz_json:get_value(<<"Error-Reason">>, _ErrJObj)]);
                 'false' -> lager:debug("failed to get ETS stats: ~p", [_ErrJObj])
             end,
-            most_recent_db_status(AccountId, AgentId)
+            most_recent_db_status(AccountId, AgentId, Mode)
     end.
 
 -spec most_recent_ets_status(kz_term:ne_binary(), kz_term:ne_binary()) ->
@@ -77,6 +92,9 @@ most_recent_ets_agent_status(Stats) ->
 -spec most_recent_db_status(kz_term:ne_binary(), kz_term:ne_binary()) ->
           {'ok', kz_term:ne_binary()}.
 most_recent_db_status(AccountId, AgentId) ->
+    most_recent_db_status(AccountId, AgentId, 'legacy').
+
+most_recent_db_status(AccountId, AgentId, Mode) ->
     Opts = [{'startkey', [AgentId, kz_time:now_s()]}
            ,{'endkey', [AgentId, 0]}
            ,{'limit', 1}
@@ -87,19 +105,17 @@ most_recent_db_status(AccountId, AgentId) ->
             {'ok', kz_json:get_value(<<"value">>, StatusJObj)};
         {'ok', []} ->
             lager:debug("could not find a recent status for agent ~s, checking previous modb", [AgentId]),
-            prev_month_recent_db_status(AccountId, AgentId);
+            prev_month_recent_db_status(AccountId, AgentId, Mode);
         {'error', 'not_found'} ->
             acdc_maintenance:refresh_account(AccountId),
             timer:sleep(150),
-            most_recent_db_status(AccountId, AgentId);
+            most_recent_db_status(AccountId, AgentId, Mode);
         {'error', _E} ->
             lager:debug("error querying view: ~p", [_E]),
-            {'ok', <<"unknown">>}
+            status_read_failure(Mode, _E)
     end.
 
--spec prev_month_recent_db_status(kz_term:ne_binary(), kz_term:ne_binary()) ->
-          {'ok', kz_term:ne_binary()}.
-prev_month_recent_db_status(AccountId, AgentId) ->
+prev_month_recent_db_status(AccountId, AgentId, Mode) ->
     Opts = [{'startkey', [AgentId, kz_time:now_s()]}
            ,{'endkey', [AgentId, 0]}
            ,{'limit', 1}
@@ -116,8 +132,11 @@ prev_month_recent_db_status(AccountId, AgentId) ->
             {'ok', <<"unknown">>};
         {'error', _E} ->
             lager:debug("error querying view: ~p", [_E]),
-            {'ok', <<"unknown">>}
+            status_read_failure(Mode, _E)
     end.
+
+status_read_failure('legacy', _) -> {'ok', <<"unknown">>};
+status_read_failure('strict', Reason) -> {'error', Reason}.
 
 -type statuses_return() :: {'ok', kz_json:object()}.
 

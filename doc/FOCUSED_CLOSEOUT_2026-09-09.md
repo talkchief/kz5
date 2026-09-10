@@ -6,6 +6,16 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- ACDC startup completion gap corrected in source: owned monitored startup/
+  agent/retry jobs, native installer readiness, and version2 queue/agent
+  snapshot tokens and strict agent-status reads (no error-to-unknown fallback).
+  18 production initializer/status tests and26 installer/
+  native-guard/journal tests pass. Normal private deployment and new native
+  combined acceptance still pending; see `acdc_initialization_readiness.md`.
+  Earlier version1 combined native result on `25be59c` passed with two queues/
+  six replicas (`queue-inventory-1788999277496-9ba05000.json`), but is not proof
+  of the new startup prerequisite. Full cluster drain/restore/rollback is open.
+
 - Persistent local ingress fence is integrated into the installer and role
   startup guards, with16 focused tests, real kernel packet acceptance and actual
   systemd acceptance PASS. Unknown/corrupted/releasing state prevents startup;

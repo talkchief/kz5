@@ -7,6 +7,27 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / initializer completion — source corrected, native rollout next:**
+  `acdc_init` now supervises/tracks initial work, agent startup and retries.
+  Pending/failed jobs cannot count as completed initialization.18 production
+  process/status tests PASS (`/tmp/kazoo-acdc-init.SpfhvZ`), including fresh
+  database discovery and normal/abnormal owner shutdown. Startup now uses a
+  strict status lookup: datastore errors cannot silently become unknown and
+  skip an agent; the old status API stays compatible for other callers.
+  Installer checks native
+  startup_status; version2 queue/agent collectors require an unchanged ready
+  initializer token, and their merger rejects cross-observation changes.
+  Four installer-function, five native guard and17 journal tests PASS.
+  Normal two-node deployment and new native version2 acceptance remain due.
+  See `doc/acdc_initialization_readiness.md`. Full cluster drain/restore/rollback
+  is still OPEN; these startup prerequisites do not replace it.
+
+- **INST-06 / earlier combined inventory — native PASS:** installed `25be59c`,
+  runner `60ea701`, receipt `queue-inventory-1788999277496-9ba05000.json` under
+  `/var/lib/kazoo5-install-lab`: two queues/six agent replicas; combined epoch/
+  revision/membership checks pass. This version1 receipt is historical and
+  does not prove the newer supervised-initializer prerequisite.
+
 - **INST-06 / combined native inventory — runner ready:** `--queue-inventory`
   now collects fresh queue and agent observations on both installed nodes and
   runs the actual combined merger. It requires the exact two-node/six-agent

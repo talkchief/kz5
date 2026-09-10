@@ -18,7 +18,7 @@ test('missing install attestation and mismatched node sources fail closed', () =
 function inventories(){
     const account='45e827067baf078029d0ca16a489fa8a',queue='cabcfb72812b530ccc32ffba30ef680d';
     const nodes=['kazoo_apps@kz5-stage-kazoo-apps','kazoo_apps@kz5-stage-kazoo-apps-peer'];
-    const base=n=>({schema_version:1,node:n,epoch:'current-'+n.replace('@','-'),captured_at_unix_ms:Date.now(),
+    const base=n=>({schema_version:2,node:n,epoch:'current-'+n.replace('@','-'),startup_token:'d'.repeat(64),captured_at_unix_ms:Date.now(),
         complete_cluster_drain_proven:false,admission_fence_proven:false});
     const agents=nodes.map(n=>({...base(n),all_agent_workers_observed:true,
         agents:[1,2,3].map(i=>({node:n,account_id:account,agent_id:String(i).repeat(32),state:'ready',

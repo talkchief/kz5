@@ -112,7 +112,7 @@ test('record fence intent before action and require verified cleanup on pre-acti
     j.advance(f.root, f.generation, 4, 'completed', receipt);
 });
 function snapshots() {
-    return manifest.nodes.map(n => ({schema_version: 1, node: n.name, epoch: n.epoch,
+    return manifest.nodes.map(n => ({schema_version: 2, node: n.name, epoch: n.epoch, startup_token:'d'.repeat(64),
         captured_at_unix_ms: Date.now(), agents: [{...agent, node: n.name}],
         document_revisions: [{account_id: agent.account_id, agent_id: agent.agent_id, revision: '1-' + 'e'.repeat(32)}],
         all_agent_workers_observed: true, complete_cluster_drain_proven: false, admission_fence_proven: false}));
@@ -144,7 +144,7 @@ test('snapshot merger refuses missing revisions and conflicting replica state or
 });
 
 function queueSnapshots() {
-    return manifest.nodes.map(n => ({schema_version: 1, node: n.name, epoch: n.epoch,
+    return manifest.nodes.map(n => ({schema_version: 2, node: n.name, epoch: n.epoch, startup_token:'d'.repeat(64),
         captured_at_unix_ms: Date.now(), all_queue_workers_observed: true,
         complete_cluster_drain_proven: false, admission_fence_proven: false,
         queues: [{account_id: agent.account_id, queue_id: agent.queues[0],
@@ -189,4 +189,17 @@ test('queue merger refuses ambiguous inventories, mismatched revisions and absen
     assert.throws(() => j.mergeQueueSnapshots(empty,snapshots(),manifest), /no observed queue/);
     const dup=queueSnapshots();dup[0].queues.push(dup[0].queues[0]);
     assert.throws(() => j.mergeQueueSnapshots(dup,snapshots(),manifest), /Duplicate queue/);
+});
+test('snapshot version2 requires observed startup readiness and a stable per-node initializer token',()=>{
+    for(const extra of [{schema_version:1},{startup_token:undefined},{startup_token:'not-ready'}]){
+        const a=snapshots();Object.assign(a[0],extra);
+        assert.throws(()=>j.mergeAgentSnapshots(a,manifest));
+    }
+    const q=queueSnapshots();q[0].startup_token='e'.repeat(64);
+    assert.throws(()=>j.mergeQueueSnapshots(q,snapshots(),manifest),/Initializer changed/);
+    const a=snapshots();a[1].startup_token='f'.repeat(64);
+    const perNode=queueSnapshots();perNode[1].startup_token='f'.repeat(64);
+    const merged=j.mergeQueueSnapshots(perNode,a,manifest);
+    assert.equal(merged.agents.length,2);
+    assert.deepEqual(merged.startup_tokens,a.map(s=>({node:s.node,startup_token:s.startup_token})));
 });

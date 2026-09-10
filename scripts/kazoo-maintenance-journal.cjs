@@ -159,11 +159,13 @@ function mergeAgentSnapshots(snapshots, manifest, now = Date.now()) {
     assert(Number.isSafeInteger(now) && now > 0);
     const nodes = new Map(manifest.nodes.filter(n => n.role === 'kazoo-apps').map(n => [n.name, n]));
     assert(Array.isArray(snapshots) && snapshots.length === nodes.size, 'Missing applications-node snapshot');
-    const seen = new Set(), cohort = new Map(), agents = [], revisions = [];
+    const seen = new Set(), cohort = new Map(), agents = [], revisions = [], startupTokens = [];
     for (const s of snapshots) {
-        exact(s, ['schema_version', 'node', 'epoch', 'captured_at_unix_ms', 'agents',
+        exact(s, ['schema_version', 'node', 'epoch', 'startup_token', 'captured_at_unix_ms', 'agents',
             'document_revisions', 'all_agent_workers_observed', 'complete_cluster_drain_proven', 'admission_fence_proven']);
-        assert.equal(s.schema_version, 1); assert(nodes.has(s.node) && !seen.has(s.node)); seen.add(s.node);
+        assert.equal(s.schema_version, 2); hex(s.startup_token,64);
+        assert(nodes.has(s.node) && !seen.has(s.node)); seen.add(s.node);
+        startupTokens.push({node:s.node,startup_token:s.startup_token});
         assert.equal(s.epoch, nodes.get(s.node).epoch, 'Node epoch changed');
         assert(Number.isSafeInteger(s.captured_at_unix_ms) && now - s.captured_at_unix_ms <= 30000 &&
             now - s.captured_at_unix_ms >= -2000, 'Stale snapshot or unverified clock');
@@ -193,11 +195,13 @@ function mergeAgentSnapshots(snapshots, manifest, now = Date.now()) {
                 revision: documents.get(key)});
         }
     }
-    return {agents, document_revisions: revisions, complete_cluster_drain_proven: false, admission_fence_proven: false};
+    return {agents, document_revisions: revisions, startup_tokens:startupTokens,
+        complete_cluster_drain_proven: false, admission_fence_proven: false};
 }
 function mergeQueueSnapshots(queueSnapshots, agentSnapshots, manifest, now = Date.now()) {
     const merged = mergeAgentSnapshots(agentSnapshots, manifest, now);
     const nodes = new Map(manifest.nodes.filter(n => n.role === 'kazoo-apps').map(n => [n.name, n]));
+    const startup = new Map(agentSnapshots.map(s => [s.node,s.startup_token]));
     assert(Array.isArray(queueSnapshots) && queueSnapshots.length === nodes.size, 'Missing queue-node snapshot');
     const seen = new Set(), queues = [], cohort = new Map(), agents = new Map();
     for (const a of merged.agents) {
@@ -206,9 +210,11 @@ function mergeQueueSnapshots(queueSnapshots, agentSnapshots, manifest, now = Dat
         agents.get(key).push(a);
     }
     for (const s of queueSnapshots) {
-        exact(s, ['schema_version', 'node', 'epoch', 'captured_at_unix_ms', 'queues',
+        exact(s, ['schema_version', 'node', 'epoch', 'startup_token', 'captured_at_unix_ms', 'queues',
             'all_queue_workers_observed', 'complete_cluster_drain_proven', 'admission_fence_proven']);
-        assert.equal(s.schema_version, 1); assert(nodes.has(s.node) && !seen.has(s.node)); seen.add(s.node);
+        assert.equal(s.schema_version, 2); hex(s.startup_token,64);
+        assert.equal(s.startup_token,startup.get(s.node),'Initializer changed between queue and agent collection');
+        assert(nodes.has(s.node) && !seen.has(s.node)); seen.add(s.node);
         assert.equal(s.epoch, nodes.get(s.node).epoch, 'Queue node epoch changed');
         assert(Number.isSafeInteger(s.captured_at_unix_ms) && now - s.captured_at_unix_ms <= 30000 &&
             now - s.captured_at_unix_ms >= -2000, 'Stale queue snapshot or unverified clock');
