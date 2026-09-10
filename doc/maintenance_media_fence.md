@@ -69,6 +69,12 @@ change existing directional pause flags; a preexisting operator pause remains.
 Downgrade to a binary without this barrier requires a separate safe plan, not
 bypassing the startup guard.
 
+New state directories and their parent directory entries are fsynced explicitly,
+in addition to each intent/marker file and its containing directory. The initial
+normal media build uses source `88bf049`; this directory-durability correction
+is helper-only and must be deployed after that build finishes, without changing
+the running build's checkout. The C patch and core build fingerprint are unchanged.
+
 ## Installer and evidence
 
 The normal FreeSWITCH build applies the patch and changes the build fingerprint,
@@ -92,3 +98,10 @@ The existing ingress firewall guard is retained independently.
 - Normal private media rebuild, actual internal originate rejection, retained
   active-call survival, restart persistence, scoped release and after-call/load
   acceptance remain pending. These source tests are not a live-call pass.
+
+Normal private deployment of `88bf049` is running as
+`kz5-stage-install-freeswitch-5` (MainPID2947, active/running at launch), after
+guarded zero-work admission. Protected start log on dev44:
+`/var/lib/kazoo5-install-lab/media-admission-deploy-88bf049-1789002406130.log`.
+Collect that exact job before changing the guest checkout or running the native
+fence/call acceptance. Main44's own media service was not changed.

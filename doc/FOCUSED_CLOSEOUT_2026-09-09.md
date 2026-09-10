@@ -6,6 +6,12 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- Private media normal build started on `88bf049`, exact unit
+  `kz5-stage-install-freeswitch-5`, MainPID2947 active/running. Guarded admission
+  checked six ready replicas and zero media/callback work. Collect before native
+  acceptance; deploy the subsequent helper-only directory-fsync correction
+  after collection. Do not modify compiling inputs. See `maintenance_media_fence.md`.
+
 - Initializer rollout completed: jobs15/11 on `494ee28` collected PASS, then
   version2 combined native inventory PASS (two nodes/six replicas):
   `queue-inventory-1789002002127-97f89a97.json`. The startup prerequisite is now

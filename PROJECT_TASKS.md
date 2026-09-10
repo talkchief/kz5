@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / private media build now running:** normal source `88bf049`,
+  exact native unit `kz5-stage-install-freeswitch-5`, MainPID2947 active/running
+  at launch. Protected start log `media-admission-deploy-88bf049-1789002406130.log`
+  under `/var/lib/kazoo5-install-lab`. Admission validated owned isolated guests,
+  both completed applications installs, six ready replicas, no callback/media
+  work and no preexisting media marker. Do not alter its compiling inputs.
+  Collect this job before native media acceptance. A subsequent helper-only
+  correction explicitly fsyncs newly created state directories and their parent
+  entries; deploy the latest helper after collection without relabeling the
+  compiling source revision. The core patch/build fingerprint is unchanged.
+
 - **INST-06 / initializer native deployment and version2 inventory — PASS:**
   Normal jobs15/11 on `494ee28` completed successfully and were collected as
   `kazoo-apps-install-15.log` / `apps-peer-install-11.log`. Version2 combined

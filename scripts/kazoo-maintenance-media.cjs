@@ -104,7 +104,10 @@ function main(){let fd;try{
     assert.equal(process.getuid(),0);const args=process.argv.slice(2);
     assert((args.length===1&&['--boot-guard','--status'].includes(args[0]))||(args.length===2&&['--close','--verify','--release'].includes(args[0])));
     for(const [dir,mode] of [[path.dirname(ROOT),0o700],[ROOT,0o700],[PUBLIC,0o755]]){
-        try{fs.mkdirSync(dir,{mode});fs.chmodSync(dir,mode);}catch(e){if(e.code!=='EEXIST')throw e;}directory(dir,mode);
+        try{
+            fs.mkdirSync(dir,{mode});fs.chmodSync(dir,mode);
+            sync(dir);sync(path.dirname(dir));
+        }catch(e){if(e.code!=='EEXIST')throw e;}directory(dir,mode);
     }
     fd=fs.openSync(path.join(ROOT,'lock'),fs.constants.O_RDWR|fs.constants.O_CREAT|fs.constants.O_NOFOLLOW,0o600);
     const st=fs.fstatSync(fd);assert(st.isFile()&&st.uid===0&&st.nlink===1&&(st.mode&511)===0o600);
