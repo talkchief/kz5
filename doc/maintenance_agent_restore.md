@@ -60,5 +60,17 @@ test fences only after verification. An interrupted/failed run retains private
 state under `/var/lib/kazoo5-install-lab/cold-agent-state-*`; do not blindly rerun
 while a generation or changed fixture state remains.
 
-Native acceptance is pending. The fixture does not attest a complete cluster
-producer/broker drain, release activation/rollback, host reboot or media HA.
+Native cold restart PASS: `kz5-stage-cold-agent-restore-1`, runner `e671f23`,
+normally installed applications source `494ee28`. Receipt
+`/var/lib/kazoo5-install-lab/cold-agent-state-R7xT5b/receipt.json` on dev44 was
+independently verified: two changed VM epochs, six actual restored replicas,
+hash-checked disk checkpoint, finite deadlines not extended, indefinite pauses
+and empty membership retained. Baseline restoration and open/zero-session
+cleanup pass. Fixture SHA256
+`36ee7ae91a6c9c9145015743e23e8098945a65417d098643462fa2e15a5ddfa1`.
+
+The strengthened fixture additionally correlates the native queue-manager
+inventories with all six agents before restart and after restoration, and
+requires the last restore request's preflight to refuse after fence release.
+That extended campaign is pending. The fixture does not attest a complete
+cluster producer/broker drain, release activation/rollback, host reboot or media HA.

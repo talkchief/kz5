@@ -65,16 +65,27 @@ async function main(){
         const copy=(n,file,name)=>pod('cp',file,n.id+':'+guest+'/'+name);
         const fence=(n,...args)=>JSON.parse(pod('exec',n.id,'node',FENCE,...args));
         const snapshot=n=>JSON.parse(pod('exec',n.id,'escript','/usr/local/libexec/kazoo5-maintenance-snapshot','--snapshot',n.ip));
-        let seq=0;
+        let seq=0;const lastRequests=new Map();
         function restore(n,current,saved,label){
             const name='request-'+(++seq)+'.json',r=request({...current,document_revisions:saved.document_revisions},generation,saved.agents);
             const file=save(name,r);copy(n,file,name);
+            lastRequests.set(n.id,name);
             for(const mode of ['--validate','--restore']){
                 const out=JSON.parse(pod('exec',n.id,'escript','/usr/local/libexec/kazoo5-maintenance-restore',mode,n.ip,guest+'/'+name));
                 assert.equal(out.status,'PASS');assert.equal(out.agents_validated,3);
                 assert.equal(out.agents_restored,mode==='--restore'?3:0);assert.equal(out.checkpoint_sha256,sha(fs.readFileSync(file)));
                 save(label+'-'+n.ip+'-'+mode.slice(2)+'.json',out);
             }
+        }
+        async function correlate(label){
+            let attempt=0;
+            return until(()=>{
+                const queues=nodes.map(n=>JSON.parse(pod('exec',n.id,'escript','/usr/local/libexec/kazoo5-maintenance-queues','--snapshot',n.ip)));
+                const agents=nodes.map(snapshot);const name=label+'-inventory-'+(++attempt)+'.json';
+                save(name,{queues,agents});
+                const merged=require('./test-acdc-native-maintenance.cjs').mergeNativeInventories(queues,agents,nodes[0].installedSource);
+                save(label+'-merged.json',merged);return merged;
+            },60);
         }
         let baseline,closed=[],mediaClosed=false,modified=false,passed=false;
         phase('install_helpers');
@@ -107,6 +118,7 @@ async function main(){
                 assert.equal(captured[i].agents.filter(a=>a.state==='ready'&&a.queues.length===0).length,1);
             }
             save('checkpoint.json',captured);receipt.checkpoint_sha256=sha(fs.readFileSync(root+'/checkpoint.json'));phase('cold_restart');
+            receipt.correlated_before=(await correlate('before-restart')).agents.length;
             for(const n of nodes)pod('exec',n.id,'systemctl','restart','kazoo-apps.service');
             const after=[];for(const n of nodes)after.push(await until(()=>snapshot(n)));
             for(let i=0;i<2;i++){assert.notEqual(after[i].epoch,baseline[i].epoch);assert.equal(fence(nodes[i],'--verify',generation).state,'closed');}
@@ -114,7 +126,8 @@ async function main(){
             const bytes=privateRead(root+'/checkpoint.json');assert.equal(sha(bytes),receipt.checkpoint_sha256);const stored=JSON.parse(bytes);
             for(let i=0;i<2;i++)restore(nodes[i],after[i],stored[i],'cold-restore');
             const restored=nodes.map(snapshot);for(let i=0;i<2;i++)matches(restored[i],stored[i]);
-            save('restored.json',restored);receipt.restored_replicas=6;receipt.absolute_deadlines_preserved=true;receipt.infinite_pause_preserved=true;receipt.empty_membership_preserved=true;passed=true;
+            save('restored.json',restored);receipt.correlated_after=(await correlate('after-restore')).agents.length;
+            receipt.restored_replicas=6;receipt.absolute_deadlines_preserved=true;receipt.infinite_pause_preserved=true;receipt.empty_membership_preserved=true;passed=true;
         }catch(_){receipt.failed_phase=receipt.phase;}
         finally{
             phase('scoped_cleanup');
@@ -125,6 +138,13 @@ async function main(){
                 // Test-fixture cleanup only, never a claimed coordinator reopen.
                 if(mediaClosed){assert.equal(JSON.parse(pod('exec',m.id,'node',MEDIA,'--release',generation)).state,'open');mediaClosed=false;}
                 for(const n of closed)assert.equal(fence(n,'--release',generation).state,'open');closed=[];
+                if(modified){for(const n of nodes){
+                    // Read-only preflight of the exact last request must refuse
+                    // after release. The same guard precedes every restore write.
+                    const result=cp.spawnSync('/usr/bin/podman',['exec',n.id,'escript','/usr/local/libexec/kazoo5-maintenance-restore','--validate',n.ip,guest+'/'+lastRequests.get(n.id)],
+                        {encoding:'utf8',timeout:30000,stdio:['ignore','pipe','pipe']});
+                    assert.equal(result.status,1);assert(!result.error);assert(result.stdout.includes('restored=0'));
+                }receipt.post_release_replay_preflight_refused=true;}
                 receipt.cleanup_verified=true;
             }catch(_){receipt.cleanup_verified=false;}
             receipt.status=passed&&receipt.cleanup_verified?'PASS':'FAIL';phase('finished');

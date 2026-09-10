@@ -7,6 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / native two-apps-VM durable agent restore — PASS, September10:**
+  `kz5-stage-cold-agent-restore-1` exited0 on runner `e671f23` with unchanged
+  normally installed Erlang source `494ee28`. Independent verification of
+  `/var/lib/kazoo5-install-lab/cold-agent-state-R7xT5b/receipt.json` on dev44
+  confirms two changed VM epochs, six replicas restored from the hash-checked
+  disk checkpoint, original finite deadlines, indefinite pauses and empty
+  membership preserved. Actual baseline restoration and open/zero-session
+  cleanup were verified. Normal installer helper packaging executed on both
+  apps nodes without replacing compiled Erlang code. The next strengthened
+  campaign adds native queue-manager/agent correlation before and after restart
+  and post-release replay-preflight rejection. Full cluster producer/broker
+  drain and coordinated release/rollback remain open.
+
 - **INST-06 / cold agent restore implementation — native acceptance next:**
   Added a protected local checkpoint executor and normal applications-installer
   packaging/verification for immutable snapshot, queue and restore helpers.
