@@ -40,8 +40,10 @@ async function offline() {
     assert(channel.description.includes('not the top-level HTTP request_id'));
     assert(channel.description.includes('Actual distributed SIP/RTP acceptance passed on 2026-09-09'));
     assert(channel.description.includes('new actual-call retest passing on 2026-09-10'));
-    assert(channel.description.includes('Main development deployment also passed actual calls'));
-    assert(channel.description.includes('doc/main_dev_runtime_promotion.md'));
+    assert(channel.description.includes('Latest main development actual-call retest passed on 2026-09-10'));
+    assert(channel.description.includes('/var/log/kazoo-monitor-acceptance-cwWdKC'));
+    assert(channel.description.includes('doc/main_media_soak.md'));
+    assert(channel.description.includes('Legacy queue-eavesdrop routes remain disabled'));
     assert(channel.description.includes('does not certify media-node failover'));
     assert(!/<script\b|\son\w+\s*=|javascript:/i.test(guide), 'Supervision guide must not execute calls');
     assert.equal(spec.components.schemas.MonitorStart.properties.timeout.default, 20);

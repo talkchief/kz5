@@ -10,6 +10,13 @@ coordinated restart/rollback acceptance remain open.
 
 ### Latest native results
 
+The subsequent main media installation and30-call/1800s soak also **PASS**,
+with zero failures/errors/new cores, unchanged media process and empty final
+native inventories. Current-media actual supervision passes all four modes,
+including independent RTP privacy analysis and clean supervisor-only stop:
+`/var/log/kazoo-monitor-acceptance-cwWdKC`. See `main_media_soak.md` and
+`channel_monitor_acceptance.md`. Full cluster coordination remains open.
+
 Main44 applications/controller promotion subsequently **PASS** onSeptember10:
 normal installer source `4cd9953`, loaded/disk identity verification and actual
 four-mode supervision with independent RTP privacy/cleanup evidence

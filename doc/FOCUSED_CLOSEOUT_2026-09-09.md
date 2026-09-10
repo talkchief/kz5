@@ -280,6 +280,15 @@ Details: `sup_archive_bootstrap.md`, `installer_dnf_coordination.md`,
 `distributed_install_lab.md`, `acdc_extended_soak.md` and `acdc_native_node_loss.md`.
 Earlier failed attempts remain failed; successful later runs do not erase them.
 
+September10 follow-up: the newly installed main media also passed the full
+30-call/1800s soak (`kazoo-main-media-soak-zrYHkl/receipt.json` under `/var/log`),
+with zero failures/errors/new cores and clean native teardown. Four subsequent
+actual main supervision calls pass Listen/eavesdrop, Whisper, Barge and Join,
+including independently reanalyzed RTP privacy and original bridge survival:
+`/var/log/kazoo-monitor-acceptance-cwWdKC`. Both native units exited0 and were
+collected. See `main_media_soak.md` and `channel_monitor_acceptance.md`.
+The coordinator and historical-ticket decisions below are unchanged.
+
 | Point | Current verified work | Still open |
 | --- | --- | --- |
 | 1 — ACDC reliability | Same-FSM recovery/next-call SIP/RTP passed after eCallMgr loss and full RabbitMQ outage, without re-login/re-registration. Three consecutive30-agent broker outages passed with unchanged apps/FSM identities and90 successful subsequent calls.30-concurrent1800s hold passed:30 caller/30 agent successes,0 failures/errors/cores. Multi-apps-node broker partition now also passed both queued calls/audio and unchanged replica recovery; source fix deployed normally on main44. | Defined recovery gates passed. These bounded tests do not establish indefinite reliability or physical media-node HA. |

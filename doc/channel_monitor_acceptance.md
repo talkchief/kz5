@@ -2,6 +2,27 @@
 
 ## Latest actual-call result — September 10, 2026
 
+**Current-media actual-call retest PASS:** after the normal FreeSWITCH promotion
+and successful30-call/1800s soak, user-requested unit
+`kz5-main-supervision-current-media-20260910` exited0 and was collected.
+Four new actual main44 SIP/RTP conversations passed Listen/eavesdrop, Whisper,
+Barge and Join. Independent reanalysis of all four captures confirms permitted
+audio and forbidden supervisor leakage before/after keypad3, five authorization
+negatives per mode, supervisor stop202 and survival of the original bridge.
+Evidence: `/var/log/kazoo-monitor-acceptance-cwWdKC` on dev44.
+
+Fresh native checks confirm the same media binary/process/core as the soak,
+zero media sessions, strict zero-agent inventory, no retained fixture and five
+active/enabled services. The checked app/controller journal window
+04:30:34–04:33:28UTC contains1941 entries and zero CRASH REPORT, SUPERVISOR REPORT
+or exception-exit matches. Protected log, independent capture/checksum receipt
+and journal receipt are under
+`/root/kz5-main-media-promotion-20260910.xSDOxZhF/`:
+`supervision-current-media.log`, `supervision-current-media-independent.json`,
+`supervision-current-media-journal.json`. This tests the documented channel API,
+not the deliberately disabled legacy queue-eavesdrop routes. It is bounded
+actual-call evidence, not proof of indefinite reliability or media-node failover.
+
 **Main development runtime PASS:** normal applications/controller installation
 on `4cd9953` completed, followed by four new actual main44 calls in
 `kz5-main-monitor-after-promotion-2-20260910` (exit0, collected). Independent RTP

@@ -65,7 +65,24 @@ Offline native epoch/admission and complete capacity-summary rejection tests
 pass (`node scripts/test-main-media-soak-guards.cjs`). Invalid arguments refuse
 before any native actions.
 
-## Active native campaign — result pending
+## Completed native campaign — PASS
+
+Unit `kz5-main-media-soak-20260910` exited0 and was collected. The protected
+receipt is PASS:30 caller and30 agent successes, zero failures/errors/new cores,
+verified1800-second concurrent hold, peak CPU32% and minimum available memory
+16888848KiB. Final native media/agent inventories are empty, cleanup passed,
+and the media binary/process/core remained unchanged. The underlying
+`summary.tsv` independently matches these counts. The full run including
+setup, RTP analysis and teardown took about38minutes; it was not shortened.
+
+Subsequent actual four-mode supervision also passed on the same media process:
+`kz5-main-supervision-current-media-20260910`, evidence
+`/var/log/kazoo-monitor-acceptance-cwWdKC`. Independent RTP/privacy and final
+native/service checks pass; see `channel_monitor_acceptance.md`.
+This closes the bounded new-media load gate, not complete cluster producer
+fencing/drain or coordinated version upgrade/rollback.
+
+### Launch and interim observations (historical)
 
 Runner `8472024` was pushed and synced before launch. Exact systemd unit:
 `kz5-main-media-soak-20260910`, with `User=root`, `MemoryMax=4G`,
@@ -79,5 +96,5 @@ Underlying campaign log: `calls.log` in that directory. Wrapper log:
 An interim31-sample observation reported phase `real_acdc_soak`, current/peak60
 native media sessions, and the30-conversation stress stage. This is a running
 test, **not** its final result or evidence that1800seconds has passed.
-Collect the exact unit, successful full receipt and underlying summary, then
-independently verify final media/agent/registration cleanup and logs.
+The completed receipt and subsequent independent checks above supersede this
+interim observation.

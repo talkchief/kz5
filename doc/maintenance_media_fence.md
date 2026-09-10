@@ -22,7 +22,8 @@ schema_version1, generation32hex and manifest_sha25664hex, never credentials.
 The core checks metadata/existence, while the privileged helper additionally
 validates its full contents against private durable intent. Two metadata lookups
 are added per allocation when the parent exists; no TTS/API/network dependency
-is introduced into the media path. Native load acceptance is still required.
+is introduced into the media path. Bounded native load acceptance subsequently
+passed; see `main_media_soak.md`.
 
 The read-only event-socket command `fsctl maintenance_check` observes admission
 and the actual allocated session count under the same mutex. It returns
@@ -85,7 +86,9 @@ the running build's checkout. The C patch and core build fingerprint are unchang
 - **Main44 normal media promotion PASS, September10:** source `9972d12`, native
   `kz5-main-media-promotion-20260910` exit0/collected. Independent open/zero-session
   native status and stable installed process/core verified. The new30-call
-  main-runtime soak is pending; see `main_media_soak.md`. This supersedes older
+  main-runtime1800s soak subsequently passed with zero failures/errors/cores;
+  current-media four-mode actual supervision also passed. See `main_media_soak.md`.
+  This supersedes older
   statements below that main media was unchanged, not the full cluster gate.
 
 - **After-restart real calls PASS:** native unit

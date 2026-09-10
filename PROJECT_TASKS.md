@@ -7,7 +7,22 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **INST-06 / latest main media — installed PASS; soak RUNNING, September10:**
+- **SUP / user-requested current-media actual-call retest — PASS, September10:**
+  The earlier main supervision pass predates the latest FreeSWITCH installation.
+  `kz5-main-supervision-current-media-20260910` exited0 and was collected after
+  the soak passed, without overlap. All four new actual SIP/RTP calls passed:
+  Listen/eavesdrop, Whisper, Barge and Join. Independent capture reanalysis
+  confirms permitted audio, forbidden leakage before/after keypad3, five
+  authorization negatives per mode, stop202 and original bridge survival.
+  Evidence: `/var/log/kazoo-monitor-acceptance-cwWdKC`. Fresh checks confirm
+  unchanged media binary/process, zero sessions/agent workers, no fixture and
+  five active/enabled services. The1941 app/controller journal entries in the
+  checked04:30:34–04:33:28UTC window contain no crash-report, supervisor-report
+  or exception-exit patterns. Protected log and independent receipts:
+  `/root/kz5-main-media-promotion-20260910.xSDOxZhF/supervision-current-media.log`.
+  Legacy queue-eavesdrop remains disabled; this tests the documented channel API.
+
+- **INST-06 / latest main media — installed and soak PASS, September10:**
   Normal `freeswitch` installation on `9972d12` completed and was collected in
   `kz5-main-media-promotion-20260910`. Backups/receipts are under
   `/root/kz5-main-media-promotion-20260910.xSDOxZhF` on dev44. Independent native
@@ -17,9 +32,11 @@ work postponed; do not generate voices at runtime or during deployment.
   media identity observations around the existing30-call/1800s ACDC test; its
   offline rejection guards pass. Runner `8472024` pushed/synced. Exact live unit
   `kz5-main-media-soak-20260910` (MainPID128396 at observation), receipt
-  `/var/log/kazoo-main-media-soak-zrYHkl/receipt.json`, has reached60 native
-  sessions/30 conversations. The full1800-second hold and final acceptance
-  remain pending; collect this unit rather than launching another run. See
+  `/var/log/kazoo-main-media-soak-zrYHkl/receipt.json`, is PASS; unit exit0 was
+  collected. Verified1800-second hold:30/30 caller/agent successes, zero
+  failures/errors/new cores, peak CPU32%, minimum available16888848KiB.
+  Native media identity remained unchanged, final media/agent inventories
+  were empty, and cleanup passed. Full coordinated maintenance remains open. See
   `doc/main_media_soak.md`; the older main soak is not reused as evidence.
 
 - **Main44 runtime promotion — installer and actual-call PASS, September10:**
