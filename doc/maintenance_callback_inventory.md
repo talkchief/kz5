@@ -89,4 +89,13 @@ The source helper's native read-only development44 scan passed at
 (14 completed,2 failed,7 cancelled), zero blocked. No database was changed.
 The scan covers this configured dev database endpoint, not the original server's
 separately quarantined historical callback or shared production CouchDB.
-Normal helper deployment/installed-byte verification is the next step.
+Normal helper deployment also passed on source `ba38090`, using the installer's
+actual `install_service_maintenance_fence` and `verify_service_maintenance_fence`
+functions under the shared acceptance lock. No applications, controller or
+media process restarted. Installed bytes match the repository helper; its
+native04:47:24UTC scan reproduced the same complete counts and hashes.
+Protected evidence on dev44:
+`/root/kz5-callback-inventory-release.1kb3ZN/receipt.json`, `install.log`,
+`before.json`, `check.stdout` and `check.stderr`. The30 focused source/installer
+tests pass. This was a helper deployment, not a full Erlang rebuild or a proof
+that coordinated upgrades are complete.

@@ -10,6 +10,13 @@ coordinated restart/rollback acceptance remain open.
 
 ### Latest native results
 
+September10: the durable callback inventory is now implemented, installed
+through the normal helper path and natively verified across all five main-dev
+account databases. It refuses nonterminal or unresolved reservations and
+incomplete/changing inventories. Thirty focused source/installer tests pass.
+See `maintenance_callback_inventory.md`. This closes the missing callback
+observation, not producer fencing or the full coordinated activation gate.
+
 The subsequent main media installation and30-call/1800s soak also **PASS**,
 with zero failures/errors/new cores, unchanged media process and empty final
 native inventories. Current-media actual supervision passes all four modes,

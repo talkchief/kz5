@@ -7,7 +7,7 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **INST-06 / durable callback inventory — source/native read PASS, September10:**
+- **INST-06 / durable callback inventory — source/installed native PASS, September10:**
   New read-only `scripts/kazoo-maintenance-callbacks.cjs` scans every configured
   account database with complete pagination, opaque-token freshness and
   before/after update/purge checks. Nonterminal reservations and unresolved
@@ -17,7 +17,10 @@ work postponed; do not generate voices at runtime or during deployment.
   scan observed5 account databases/2219 documents/23 terminal callbacks with
   zero blocked. First native cross-endpoint sequence-comparison refusal is
   documented, not hidden. No callback/database write occurred. Normal helper
-  deployment is next; producer fencing, broker drain and full coordinated
+  deployment on `ba38090` passed with exact installed bytes, the same native
+  counts and no runtime restart; protected evidence:
+  `/root/kz5-callback-inventory-release.1kb3ZN/receipt.json`. All30 focused
+  source/installer tests pass. Producer fencing, broker drain and full coordinated
   activation/rollback remain OPEN. See `doc/maintenance_callback_inventory.md`.
 
 - **SUP / user-requested current-media actual-call retest — PASS, September10:**
