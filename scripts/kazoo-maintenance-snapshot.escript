@@ -58,6 +58,7 @@ snapshot(N,Sup) ->
     true=erlang:monotonic_time(millisecond)<get(snapshot_deadline),
     Fsm=rpc(N,acdc_agent_sup,fsm,[Sup]),Listener=rpc(N,acdc_agent_sup,listener,[Sup]),
     true=is_pid(Fsm),true=is_pid(Listener),
+    dispatch_drained(N,Listener),
     {ok,#{account_id:=AccountId,agent_id:=AgentId,listener:=Listener,state:=State}=F}=
         rpc(N,acdc_agent_fsm,maintenance_state,[Fsm,2000]),
     true=State=:=ready orelse State=:=paused,hex_id(AccountId),hex_id(AgentId),
@@ -78,6 +79,7 @@ snapshot(N,Sup) ->
     true=is_binary(Revision) andalso byte_size(Revision)>0,
     Sup=rpc(N,acdc_agents_sup,find_agent_supervisor,[AccountId,AgentId]),
     Fsm=rpc(N,acdc_agent_sup,fsm,[Sup]),Listener=rpc(N,acdc_agent_sup,listener,[Sup]),
+    dispatch_drained(N,Listener),
     RevisionJson=rpc(N,kz_json,from_list,[[{<<"account_id">>,AccountId},
         {<<"agent_id">>,AgentId},{<<"revision">>,Revision}]]),
     {F#{queues=>Queues},RevisionJson}.
@@ -91,6 +93,9 @@ json_agent(N,#{account_id:=AccountId,agent_id:=AgentId,state:=State,queues:=Queu
         {<<"account_id">>,AccountId},{<<"agent_id">>,AgentId},
         {<<"state">>,atom_to_binary(State,utf8)},{<<"queues">>,Queues},
         {<<"pause_until_unix_ms">>,Until}]]).
+dispatch_drained(N,P) -> validate_dispatch(rpc(N,gen_server,call,[P,maintenance_dispatch_state,2000])).
+validate_dispatch(#{pending_dispatches:=0,failed_dispatches:=0,
+                    admission_fence_proven:=false,complete_cluster_drain_proven:=false}=S) when map_size(S)=:=4 -> ok.
 hex_id(Id) -> match=re:run(Id,<<"^[a-f0-9]{32}$">>,[{capture,none}]),ok.
 rpc(N,M,F,A) ->
     Timeout=case get(snapshot_deadline) of

@@ -1,0 +1,129 @@
+diff --git a/kazoo_amqp/src/gen_listener.erl b/kazoo_amqp/src/gen_listener.erl
+index 95caace40..23bbcb109 100644
+--- a/kazoo_amqp/src/gen_listener.erl
++++ b/kazoo_amqp/src/gen_listener.erl
+@@ -157,6 +157,11 @@
+                ,consumer_tags = [] :: kz_term:binaries()
+                ,handle_event_mfa = 'undefined' :: mfa() | 'undefined'
+                ,auto_ack = 'false' :: boolean()
++               %% A broker acknowledgement does not imply responder completion.
++               %% These monitors cover this listener's asynchronous dispatch;
++               %% they are not an admission fence or a complete node inventory.
++               ,dispatch_workers = #{} :: map()
++               ,failed_dispatches = 0 :: non_neg_integer()
+                }).
+ -type state() :: #state{}.
+ 
+@@ -599,6 +604,13 @@ handle_call('waiting_federators', _From, #state{waiting_federators=WaitingFedera
+     {'reply', WaitingFederators, State};
+ handle_call('is_consuming', _From, #state{is_consuming=IsC}=State) ->
+     {'reply', IsC, State};
++handle_call('maintenance_dispatch_state', _From
++           ,#state{dispatch_workers=Workers, failed_dispatches=Failed}=State) ->
++    {'reply', #{pending_dispatches => map_size(Workers)
++               ,failed_dispatches => Failed
++               ,admission_fence_proven => 'false'
++               ,complete_cluster_drain_proven => 'false'
++               }, State};
+ handle_call({'$client_call', Request}, From, State) ->
+     handle_module_call(Request, From, State);
+ handle_call({'add_binding', _Binding, _Props}=AddBinding, _From, State) ->
+@@ -685,8 +698,7 @@ handle_cast({'federated_event', JObj, Props}, #state{params=Params}=State) ->
+     Basic = props:get_value('basic', Props),
+     case props:is_true('spawn_handle_event', Params, 'false') of
+         'true'  ->
+-            kz_process:spawn(fun distribute_event/3, [JObj, {Deliver, Basic}, State]),
+-            {'noreply', State};
++            {'noreply', spawn_dispatch(fun distribute_event/3, [JObj, {Deliver, Basic}], State)};
+         'false' -> distribute_event(JObj, {Deliver, Basic}, State)
+     end;
+ 
+@@ -806,8 +818,7 @@ handle_info({#'basic.deliver'{}=BD
+             kz_log:put_callid(CallId),
+             Reply;
+         'true'  ->
+-            kz_process:spawn(fun handle_event/4, [Payload, {CT, CE}, {BD, Basic}, State]),
+-            {'noreply', State}
++            {'noreply', spawn_dispatch(fun handle_event/4, [Payload, {CT, CE}, {BD, Basic}], State)}
+     end;
+ handle_info({#'basic.return'{}=BR
+             ,#amqp_msg{props=#'P_basic'{content_type=CT
+@@ -1015,6 +1026,17 @@ add_default_options(Options) ->
+ -spec handle_down(kz_term:pid_ref(), any(), state()) ->
+           {'noreply', state()}.
+ handle_down({Pid, Ref}, Reason, #state{federators=Fs}=State) ->
++    handle_dispatch_down({Pid, Ref}, Reason, Fs, State).
++
++-spec handle_dispatch_down(kz_term:pid_ref(), any(), federator_listeners(), state()) ->
++          {'noreply', state()}.
++handle_dispatch_down({Pid, Ref}, Reason, _Fs
++                     ,#state{dispatch_workers=Workers, failed_dispatches=Failed}=State)
++  when is_map_key(Ref, Workers), map_get(Ref, Workers) =:= Pid ->
++    Failure = case Reason of 'normal' -> 0; _ -> 1 end,
++    {'noreply', State#state{dispatch_workers=maps:remove(Ref, Workers)
++                           ,failed_dispatches=Failed+Failure}};
++handle_dispatch_down({Pid, Ref}, Reason, Fs, State) ->
+     case lists:keytake({Pid, Ref}, 2, Fs) of
+         'false' -> handle_callback_info({'DOWN', Ref, 'process', Pid, Reason}, State);
+         {'value', {Broker, _PidRef}, UpdatedFs} ->
+@@ -1118,17 +1140,49 @@ distribute_event(CallbackData, JObj, Deliver, #state{responders=Responders
+                                                     }=State) ->
+     Key = kz_api:event_type(JObj),
+     Channel = kz_amqp_channel:consumer_channel(),
+-    _ = [kz_process:spawn(fun client_handle_event/6, [JObj
+-                                                     ,Channel
+-                                                     ,ConsumerKey
+-                                                     ,Callback
+-                                                     ,CallbackData
+-                                                     ,Deliver
+-                                                     ])
+-         || {Evt, Callback} <- Responders,
+-            maybe_event_matches_key(Key, Evt)
+-        ],
+-    {'noreply', State}.
++    NewState = lists:foldl(fun({Evt, Callback}, Acc) ->
++                                  case maybe_event_matches_key(Key, Evt) of
++                                      'false' -> Acc;
++                                      'true' -> spawn_dispatch_worker(fun client_handle_event/6
++                                                                    ,[JObj, Channel, ConsumerKey
++                                                                     ,Callback, CallbackData, Deliver]
++                                                                    ,Acc)
++                                  end
++                          end, State, Responders),
++    {'noreply', NewState}.
++
++-spec spawn_dispatch(fun(), list(), state()) -> state().
++spawn_dispatch(Fun, Args, State) ->
++    %% A detached dispatcher owns its own child monitors. Keep it alive until
++    %% every responder it starts has finished; do not copy the owner's monitors
++    %% into that private group or synchronously call the owner from a child.
++    ChildState = State#state{dispatch_workers=#{}, failed_dispatches=0},
++    spawn_dispatch_worker(fun run_dispatch/2, [Fun, Args ++ [ChildState]], State).
++
++-spec spawn_dispatch_worker(fun(), list(), state()) -> state().
++spawn_dispatch_worker(Fun, Args, #state{dispatch_workers=Workers}=State) ->
++    {Pid, Ref} = kz_process:spawn_monitor(Fun, Args),
++    State#state{dispatch_workers=Workers#{Ref => Pid}}.
++
++-spec run_dispatch(fun(), list()) -> 'ok'.
++run_dispatch(Fun, Args) ->
++    case erlang:apply(Fun, Args) of
++        {'noreply', #state{dispatch_workers=Workers}} -> await_dispatch_workers(Workers, 0);
++        {'noreply', #state{dispatch_workers=Workers}, _Timeout} -> await_dispatch_workers(Workers, 0);
++        _ -> exit('dispatch_did_not_complete')
++    end.
++
++-spec await_dispatch_workers(map(), non_neg_integer()) -> 'ok'.
++await_dispatch_workers(Workers, 0) when map_size(Workers) =:= 0 -> 'ok';
++await_dispatch_workers(Workers, _Failed) when map_size(Workers) =:= 0 ->
++    exit('responder_did_not_complete');
++await_dispatch_workers(Workers, Failed) ->
++    receive
++        {'DOWN', Ref, 'process', Pid, Reason}
++          when is_map_key(Ref, Workers), map_get(Ref, Workers) =:= Pid ->
++            Failure = case Reason of 'normal' -> 0; _ -> 1 end,
++            await_dispatch_workers(maps:remove(Ref, Workers), Failed+Failure)
++    end.
+ 
+ -spec client_handle_event(kz_json:object(), kz_term:api_pid() | kz_amqp_channel:consumer_channel(), kz_amqp_channel:consumer_pid(), responder_mfa(), callback_data(), deliver()) -> any().
+ client_handle_event(JObj, 'undefined', ConsumerKey, Callback, CallbackData, Deliver) ->

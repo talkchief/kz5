@@ -7,6 +7,20 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / listener work after broker acknowledgement — source PASS, native pending:**
+  A broker-empty result can hide asynchronous `gen_listener` work. Required
+  installer patch now tracks responders and nested dispatch groups through
+  completion, retaining failures instead of silently certifying drain. Agent/
+  queue checkpoint and restore helpers refuse pending, failed or unsupported
+  dispatch observations. Twelve production-process before-fail/after-pass
+  cases pass, with fresh pinned-source patch application; three valid and36
+  rejected actual collector predicates also pass. Prior secondary-queue and
+  restore validation regressions remain green. No runtime deployment is
+  claimed. Next: normal private apps-pair build, native inventory/cold restore
+  and real-call follow-up. Do not deploy only these helpers to old VMs. See
+  `doc/maintenance_listener_dispatch.md`; producer fence/coordinated rollback
+  remain OPEN.
+
 - **INST-06 / native broker inventory — source and actual broker PASS, September10:**
   Native queue/channel/connection inventory now refuses partial or changing
   results and reports ready, unacknowledged, transactional and publisher-confirm

@@ -85,10 +85,11 @@ workers(N)->Ws=rpc(N,acdc_agents_sup,workers,[]),true=is_list(Ws),true=length(Ws
     true=lists:all(fun is_pid/1,Ws),lists:sort(Ws).
 observe(N,Sup)->
     F=rpc(N,acdc_agent_sup,fsm,[Sup]),L=rpc(N,acdc_agent_sup,listener,[Sup]),true=is_pid(F),true=is_pid(L),
+    dispatch_drained(N,L),
     {ok,#{account_id:=A,agent_id:=U,listener:=L,state:=State}}=rpc(N,acdc_agent_fsm,maintenance_state,[F,2000]),
     true=State=:=ready orelse State=:=paused,
     {ok,#{account_id:=A,agent_id:=U,fsm:=F,queues:=Qs}}=rpc(N,acdc_agent_listener,maintenance_state,[L,2000]),
-    bindings(N,L,A,Qs),{{A,U},Sup,F,L}.
+    bindings(N,L,A,Qs),dispatch_drained(N,L),{{A,U},Sup,F,L}.
 bindings(N,L,A,Qs)->
     true=rpc(N,gen_listener,is_consuming,[L]),Bs=rpc(N,gen_listener,bindings,[L]),true=is_list(Bs),
     Bound=lists:usort([proplists:get_value(queue_id,P)||{<<"acdc_queue">>,P}<-Bs,
@@ -140,5 +141,8 @@ decode(N,B)->rpc(N,kz_json,to_map,[rpc(N,kz_json,decode,[B])]).
 emit(N,M)->J=rpc(N,kz_json,from_map,[M]),io:format("~s~n",[rpc(N,kz_json,encode,[J])]).
 digest(B)->iolist_to_binary([io_lib:format("~2.16.0b",[X])||<<X>><=crypto:hash(sha256,B)]).
 has_ip(Ifs,Ip)->lists:any(fun({_,V})->lists:member({addr,Ip},V) end,Ifs).
+dispatch_drained(N,P) -> validate_dispatch(rpc(N,gen_server,call,[P,maintenance_dispatch_state,2000])).
+validate_dispatch(#{pending_dispatches:=0,failed_dispatches:=0,
+                    admission_fence_proven:=false,complete_cluster_drain_proven:=false}=S) when map_size(S)=:=4 -> ok.
 rpc(N,M,F,A)->End=get(deadline),Left=End-erlang:monotonic_time(millisecond),true=Left>0,
     rpc:call(N,M,F,A,min(5000,Left)).

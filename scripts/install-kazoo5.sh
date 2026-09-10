@@ -1873,6 +1873,7 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-amqp-connection-uri-redaction.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-amqp-supervised-registration.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-listener-secondary-queue-recovery.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-listener-dispatch-inventory.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-registration-collection.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-channel-monitoring.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-playback-file-timeout.patch"

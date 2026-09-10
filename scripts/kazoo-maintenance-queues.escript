@@ -56,6 +56,7 @@ queue(N,Sup) ->
     Original=rpc(N,supervisor,which_children,[Sup]),true=is_list(Original),
     2=length(Original),
     Manager=rpc(N,acdc_queue_sup,manager,[Sup]),true=is_pid(Manager),
+    dispatch_drained(N,Manager),
     WorkerSup=rpc(N,acdc_queue_sup,workers_sup,[Sup]),true=is_pid(WorkerSup),
     {ok,#{account_id:=A,queue_id:=Q,supervisor:=Sup,busy_agents:=Busy0}}=
         rpc(N,acdc_queue_manager,maintenance_state,[Manager,2000]),hex_id(A),hex_id(Q),
@@ -77,6 +78,7 @@ queue(N,Sup) ->
     {ok,#{account_id:=A,queue_id:=Q,supervisor:=Sup,busy_agents:=Busy1}}=
         rpc(N,acdc_queue_manager,maintenance_state,[Manager,2000]),
     Busy=lists:sort(Busy1),
+    dispatch_drained(N,Manager),
     [{<<"account_id">>,A},{<<"queue_id">>,Q},{<<"document_revision">>,Revision},
      {<<"worker_count">>,length(Workers)},{<<"broker_queues">>,BrokerQueues},
      {<<"busy_agents">>,Busy}].
@@ -86,6 +88,7 @@ worker(N,W,Manager,A,Q) ->
     F=rpc(N,acdc_queue_worker_sup,fsm,[W]),L=rpc(N,acdc_queue_worker_sup,listener,[W]),
     Shared=rpc(N,acdc_queue_worker_sup,shared_queue,[W]),
     true=is_pid(F),true=is_pid(L),true=is_pid(Shared),
+    dispatch_drained(N,L),dispatch_drained(N,Shared),
     {ok,#{account_id:=A,queue_id:=Q,state:=ready,listener:=L,manager:=Manager}}=
         rpc(N,acdc_queue_fsm,maintenance_state,[F,2000]),
     {ok,#{account_id:=A,queue_id:=Q,fsm:=F,manager:=Manager,shared_listener:=Shared,broker_queue:=Private}}=
@@ -97,6 +100,7 @@ worker(N,W,Manager,A,Q) ->
     Names=listener_queues(N,L)++listener_queues(N,Shared),
     Original=rpc(N,supervisor,which_children,[W]),Names.
 listener_queues(N,P) ->
+    dispatch_drained(N,P),
     true=rpc(N,gen_listener,is_consuming,[P]),
     Q=rpc(N,gen_listener,queue_name,[P]),Other=rpc(N,gen_listener,other_queues,[P]),
     true=is_list(Other),true=length(Other)=<1000,
@@ -108,6 +112,9 @@ epoch(N) ->
     list_to_binary(Pid++"-"++integer_to_list(Creation)).
 object(N,Pairs)->rpc(N,kz_json,from_list,[Pairs]).
 hex_id(Id)->match=re:run(Id,<<"^[a-f0-9]{32}$">>,[{capture,none}]),ok.
+dispatch_drained(N,P) -> validate_dispatch(rpc(N,gen_server,call,[P,maintenance_dispatch_state,2000])).
+validate_dispatch(#{pending_dispatches:=0,failed_dispatches:=0,
+                    admission_fence_proven:=false,complete_cluster_drain_proven:=false}=S) when map_size(S)=:=4 -> ok.
 rpc(N,M,F,A) ->
     Left=get(snapshot_deadline)-erlang:monotonic_time(millisecond),true=Left>0,
     rpc:call(N,M,F,A,min(5000,Left)).
