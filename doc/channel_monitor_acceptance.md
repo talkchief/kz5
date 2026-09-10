@@ -2,6 +2,18 @@
 
 ## Latest actual-call result — September 10, 2026
 
+**Additional after-restart PASS:** after the native maintenance test restarted
+FreeSWITCH twice, `kz5-stage-monitor-after-media-restart-1` exited0 using runner
+`4cc4540`. All four modes pass on new SIP/RTP conversations; saved captures were
+independently reanalyzed. Privacy before/after keypad3, all authorization checks,
+stop202 and original bridge survival pass. Protected evidence on dev44:
+`/var/log/kazoo-monitor-acceptance-DeA1qp`; log
+`/var/lib/kazoo5-install-lab/monitor-after-media-restart-1.log`.
+The test did not restart apps/controllers. Cleanup leaves admission open with
+zero sessions and no monitor fixture. Media, two apps and two controllers were
+active, with zero error-priority journal entries in the checked window since
+the restart test began. This is post-restart call recovery, not live media HA.
+
 **PASS: Listen/eavesdrop, Whisper, Barge and Join on the newly installed private
 media build.** Native unit `kz5-stage-monitor-media-fence-1` exited0 using root
 runner `a2b7946`, normally installed FreeSWITCH source `935d544` and applications
@@ -22,9 +34,10 @@ The identical marked internal endpoint answers before fencing and after release.
 Process/core identity is unchanged. Scoped cleanup completed; final native
 admission is open with zero sessions and no retained monitor fixture.
 
-This is real call/audio verification, not an HTTP-only result. It does not close
-media restart persistence, whole-cluster drain/restore/rollback or sustained-load
-acceptance of the new media gate. Use the documented channel supervision API;
+This is real call/audio verification, not an HTTP-only result. Media process
+restart persistence passes separately in `maintenance_media_fence.md`;
+whole-cluster drain/restore/rollback and sustained-load acceptance of the new
+media gate remain open. Use the documented channel supervision API;
 the unsupported legacy queue eavesdrop endpoints still deliberately return503.
 
 ## Documentation command regression — September 10, 2026

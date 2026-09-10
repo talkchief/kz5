@@ -82,6 +82,16 @@ the running build's checkout. The C patch and core build fingerprint are unchang
 
 ## Installer and evidence
 
+- **After-restart real calls PASS:** native unit
+  `kz5-stage-monitor-after-media-restart-1` exited0 on runner `4cc4540` after
+  both restarts below. All four supervision modes pass new SIP/RTP calls,
+  independently reanalyzed for permitted/forbidden audio before/after keypad3,
+  authorization and stop202/original bridge survival. Evidence
+  `/var/log/kazoo-monitor-acceptance-DeA1qp` on dev44. Final admission open,
+  zero sessions, no retained monitor fixture. Five relevant private services
+  active and zero error-priority journal entries in the checked restart window.
+  No applications/controller restart was performed by this test.
+
 - **Native process-restart persistence PASS, September10:** run
   `node scripts/test-kazoo-maintenance-media-restart.cjs --distributed --live`
   only from dev44 under its guarded host entry point. It admits the exact owned

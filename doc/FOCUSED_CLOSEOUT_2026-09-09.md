@@ -6,6 +6,14 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- New calls after both native media restarts PASS all four supervision/audio
+  modes: `kz5-stage-monitor-after-media-restart-1` (runner `4cc4540`, exit0),
+  protected evidence `/var/log/kazoo-monitor-acceptance-DeA1qp` on dev44.
+  Independent capture analysis confirms privacy and original bridge survival
+  after supervisor stop; cleanup is open/zero sessions/no fixture. Five relevant
+  services active, zero error-priority journal entries in the checked restart
+  window. Full coordinated upgrade/rollback remains open.
+
 - Native media process-restart persistence PASS on September10:
   `kz5-stage-media-restart-2`, runner `2abb5c5`, installed media `935d544`.
   Receipt `/var/lib/kazoo5-install-lab/media-restart-1789004453657.json` on dev44

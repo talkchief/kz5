@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / next-call recovery after media restarts — PASS, September10:**
+  `kz5-stage-monitor-after-media-restart-1` exited0 on runner `4cc4540`.
+  Actual new SIP/RTP calls pass all four modes after the two media process
+  restarts, without this test restarting apps/controllers. Independent reanalysis
+  confirms privacy, five authorization negatives per mode, stop202 and original
+  bridge survival. Protected evidence `/var/log/kazoo-monitor-acceptance-DeA1qp`
+  on dev44. Cleanup verified open admission/zero sessions/no monitor fixture.
+  Media, both apps and both controllers were active with zero error-priority
+  journal entries in the checked window since the restart test began. This
+  closes the component's after-restart call check, not full-cluster maintenance.
+
 - **INST-06 / native media restart persistence — PASS, September10:**
   `kz5-stage-media-restart-2` exited0 using runner `2abb5c5`, normally installed
   media `935d544`. Independently verified receipt on dev44:
