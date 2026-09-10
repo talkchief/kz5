@@ -10,14 +10,29 @@ coordinated restart/rollback acceptance remain open.
 
 ### Latest native results
 
+September10 current checkpoint: cold restoration of both applications VMs now
+passes, including finite/infinite pauses, empty membership and paired queue
+inventories (`cold-agent-state-tbT2Rt/receipt.json` under the private lab root).
+Two subsequent actual queue calls passed audio, but the independent strict
+agent-drain check exposed retained terminal-leg placeholders on apps20.
+The correction is source `8343d47`; normal private installers
+`kz5-stage-install-kazoo-apps-16` and `kz5-stage-install-apps-peer-12` are running.
+Do not change their compiling checkouts. Collect them and run the strengthened
+`--distributed --queue-calls --live` acceptance, which now requires strict
+all-six-replica drain. See `acdc_listener_terminal_cleanup.md`.
+Fresh four-mode supervision independently passed on the preceding runtime
+(`/var/log/kazoo-monitor-acceptance-bev21u`); it is not verification of this
+new installation. Full cluster producer/broker drain and coordinated rollback
+remain open. Earlier "current" build references below are historical receipts.
+
 September10: initializer normal installs15/11 on `494ee28` and combined version2
 inventory passed (two nodes/six replicas), receipt
 `queue-inventory-1789002002127-97f89a97.json` under the private lab root. Durable
 media normal install6 on `935d544`, all four real supervision/audio modes while
 fenced, and two native media process restarts with marker restoration also pass.
 See `maintenance_media_fence.md` for exact receipts and remaining scope. These
-component passes do not close full cluster producer/broker drain, cold whole-VM
-agent restoration, or coordinated rollback.
+component passes do not close full cluster producer/broker drain or coordinated
+rollback. Cold whole-VM agent restoration subsequently passed as recorded above.
 
 Initializer source/installer/collector integration has18 production-process/status
 tests and26 JavaScript guard/merger tests passing; see

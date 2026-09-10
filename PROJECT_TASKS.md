@@ -17,6 +17,10 @@ work postponed; do not generate voices at runtime or during deployment.
   queue-call harness now requires strict all-six-replica drain after calls.
   Normal two-node installation and that native acceptance remain pending.
   See `doc/acdc_listener_terminal_cleanup.md`; do not weaken the drain predicate.
+  Source `8343d47` is pushed and synced to main44. Normal private builds16/12
+  are confirmed active/running; collect these exact jobs before changing their
+  checkouts or running the strengthened actual-call acceptance. Broader
+  maintenance/restore,27 recovery and13 channel-event tests passed.
 
 - **SUP / fresh user-requested actual-call retest — PASS, September10:**
   `kz5-stage-monitor-user-retest-1` exited0 on runner `40f1712`. All four modes

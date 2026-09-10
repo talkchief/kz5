@@ -6,6 +6,17 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- September10 cold state restoration passed on both apps VMs, including paired
+  finite/infinite-paused and empty-membership agent/queue inventories:
+  `/var/lib/kazoo5-install-lab/cold-agent-state-tbT2Rt/receipt.json` on dev44.
+  Actual follow-up queue calls passed audio but exposed a separate strict
+  listener-drain defect. Source `8343d47` fixes terminal-leg cleanup and delayed
+  control notifications; eight focused regressions and the broader maintenance,
+  recovery and channel-event suites pass. Normal private installs16/12 are
+  currently running; actual post-install queue calls and strict drain remain
+  pending. See `acdc_listener_terminal_cleanup.md`. Do not count the earlier
+  queue-call audio pass as a complete maintenance pass.
+
 - New calls after both native media restarts PASS all four supervision/audio
   modes: `kz5-stage-monitor-after-media-restart-1` (runner `4cc4540`, exit0),
   protected evidence `/var/log/kazoo-monitor-acceptance-DeA1qp` on dev44.

@@ -48,3 +48,10 @@ all six replicas, including actual listener bindings, before reporting PASS.
 Normal installation of the new source on both private apps guests and two new
 actual queue calls with strict all-replica drain verification remain required.
 Do not claim this closes full cluster maintenance or coordinated rollback.
+
+Normal private installers started on `8343d47`:
+`kz5-stage-install-kazoo-apps-16` and `kz5-stage-install-apps-peer-12`.
+Both are confirmed active/running. Collect these exact handles before another
+install or source sync. Main44 `/opt/kz5` is synced; this does not deploy its
+main runtime. The maintenance/restore suite,27 recovery tests and13 channel-event
+tests also passed before deployment. Native post-install acceptance is pending.
