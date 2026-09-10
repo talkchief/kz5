@@ -7,7 +7,7 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **INST-06 / latest main media — installed PASS; load gate pending, September10:**
+- **INST-06 / latest main media — installed PASS; soak RUNNING, September10:**
   Normal `freeswitch` installation on `9972d12` completed and was collected in
   `kz5-main-media-promotion-20260910`. Backups/receipts are under
   `/root/kz5-main-media-promotion-20260910.xSDOxZhF` on dev44. Independent native
@@ -15,7 +15,11 @@ work postponed; do not generate voices at runtime or during deployment.
   process/core identity. Main SIP was reopened after installation.
   `scripts/test-main-media-soak.cjs` adds exact main-fixture admission and native
   media identity observations around the existing30-call/1800s ACDC test; its
-  offline rejection guards pass. Actual load acceptance is pending. See
+  offline rejection guards pass. Runner `8472024` pushed/synced. Exact live unit
+  `kz5-main-media-soak-20260910` (MainPID128396 at observation), receipt
+  `/var/log/kazoo-main-media-soak-zrYHkl/receipt.json`, has reached60 native
+  sessions/30 conversations. The full1800-second hold and final acceptance
+  remain pending; collect this unit rather than launching another run. See
   `doc/main_media_soak.md`; the older main soak is not reused as evidence.
 
 - **Main44 runtime promotion — installer and actual-call PASS, September10:**

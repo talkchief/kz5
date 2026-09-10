@@ -63,4 +63,21 @@ output, an active service, or a short concurrency peak is not a completed soak.
 
 Offline native epoch/admission and complete capacity-summary rejection tests
 pass (`node scripts/test-main-media-soak-guards.cjs`). Invalid arguments refuse
-before any native actions. Native soak launch/result is pending.
+before any native actions.
+
+## Active native campaign — result pending
+
+Runner `8472024` was pushed and synced before launch. Exact systemd unit:
+`kz5-main-media-soak-20260910`, with `User=root`, `MemoryMax=4G`,
+`TimeoutStartSec=3000`, private output and the wrapper's inherited acceptance
+lock. MainPID128396 was confirmed live after launch; the same handle must be
+polled, not restarted after an observation timeout.
+
+Protected receipt: `/var/log/kazoo-main-media-soak-zrYHkl/receipt.json`.
+Underlying campaign log: `calls.log` in that directory. Wrapper log:
+`/root/kz5-main-media-promotion-20260910.xSDOxZhF/soak.log`.
+An interim31-sample observation reported phase `real_acdc_soak`, current/peak60
+native media sessions, and the30-conversation stress stage. This is a running
+test, **not** its final result or evidence that1800seconds has passed.
+Collect the exact unit, successful full receipt and underlying summary, then
+independently verify final media/agent/registration cleanup and logs.
