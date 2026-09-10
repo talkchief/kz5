@@ -7,6 +7,16 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / combined native inventory — runner ready:** `--queue-inventory`
+  now collects fresh queue and agent observations on both installed nodes and
+  runs the actual combined merger. It requires the exact two-node/six-agent
+  fixture cohort, matching node epochs, revisions and memberships, with no
+  invented admission/drain claim.21 journal/native guard regressions PASS.
+  Next run must retain the merged private receipt, not just independent queue
+  snapshots. The full startup barrier is still required: `acdc_init.erl`
+  currently returns `ignore` from start_link and uses untracked asynchronous
+  agent/retry jobs. A stable current-worker list is not startup completion.
+
 - **INST-06 / persistent ingress startup guard — implemented and native PASS:**
   Installer now packages a root-only durable nftables fence and privileged
   startup guard for apps/FreeSWITCH/Kamailio/nginx, including standalone runtime

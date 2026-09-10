@@ -99,8 +99,11 @@ function execute(mode = 'restore') {
 function queueInventory(primary, peer) {
     const source = ROOT + '/scripts/kazoo-maintenance-queues.escript';
     const sha = crypto.createHash('sha256').update(fs.readFileSync(source)).digest('hex');
+    const agentSource = ROOT + '/scripts/kazoo-maintenance-snapshot.escript';
+    const agentSha = crypto.createHash('sha256').update(fs.readFileSync(agentSource)).digest('hex');
     const stem = DIR + '/queue-inventory-' + Date.now() + '-' + crypto.randomBytes(4).toString('hex');
-    const snapshots = [];
+    const snapshots = [], agentSnapshots = [];
+    let merged;
     let pass = false;
     try {
         for (const [entry, ip] of [[primary, '172.30.253.14'], [peer, '172.30.253.20']]) {
@@ -121,18 +124,45 @@ function queueInventory(primary, peer) {
             assert.equal(data.queues[0].account_id, A); assert.equal(data.queues[0].queue_id, Q);
             assert(Number.isSafeInteger(data.queues[0].worker_count) && data.queues[0].worker_count > 0);
             snapshots.push(data);
+            run(['cp', agentSource, entry.id + ':/var/lib/kazoo-stage/maintenance-snapshot.escript']);
+            run(['exec', entry.id, 'chmod', '0600', '/var/lib/kazoo-stage/maintenance-snapshot.escript']);
+            const agentLog = stem + '-agents-' + ip + '.log';
+            const agentFd = fs.openSync(agentLog, 'wx', 0o600);
+            let agentResult;
+            try {
+                agentResult = cp.spawnSync('podman', ['exec', entry.id, 'escript',
+                    '/var/lib/kazoo-stage/maintenance-snapshot.escript', '--snapshot', ip],
+                    {timeout: 135000, stdio: ['ignore', agentFd, agentFd]});
+            } finally { fs.closeSync(agentFd); }
+            assert(agentResult.status === 0 && !agentResult.error, 'Native agent inventory refused');
+            agentSnapshots.push(JSON.parse(fs.readFileSync(agentLog, 'utf8')));
         }
         assert.notEqual(snapshots[0].node, snapshots[1].node);
         assert.equal(snapshots[0].queues[0].document_revision, snapshots[1].queues[0].document_revision);
+        merged = mergeNativeInventories(snapshots, agentSnapshots, primary.source);
         pass = true;
     } finally {
         fs.writeFileSync(stem + '.json', JSON.stringify({status: pass ? 'PASS' : 'FAIL',
             production_source: primary.source, collector_sha256: sha, snapshots,
+            agent_collector_sha256: agentSha, agent_snapshots: agentSnapshots, merged,
             complete_cluster_fence_proven: false, durable_cold_restart_proven: false}) + '\n',
             {mode: 0o600, flag: 'wx'});
         console.log(JSON.stringify({status: pass ? 'PASS' : 'FAIL', receipt: stem + '.json',
-            nodes_observed: snapshots.length}));
+            nodes_observed: snapshots.length, agent_replicas: merged?.agents.length,
+            combined_inventory_verified: Boolean(merged)}));
     }
+}
+function mergeNativeInventories(queues, agents, source, now = Date.now()) {
+    assert.deepEqual(queues.map(s => s.node).sort(),
+        ['kazoo_apps@kz5-stage-kazoo-apps', 'kazoo_apps@kz5-stage-kazoo-apps-peer']);
+    const manifest = {source_from: source, source_to: source,
+        nodes: queues.map(s => ({name: s.node, role: 'kazoo-apps', epoch: s.epoch}))};
+    const merged = require('./kazoo-maintenance-journal.cjs').mergeQueueSnapshots(queues, agents, manifest, now);
+    assert.equal(merged.queues.length, 2);
+    assert.equal(merged.agents.length, 6, 'Incomplete expected fixture agent cohort');
+    assert(merged.agents.every(a => a.account_id === A));
+    assert(merged.queues.every(q => q.account_id === A && q.queue_id === Q));
+    return merged;
 }
 function main() { try {
     assert.equal(process.getuid(), 0);
@@ -158,5 +188,5 @@ function main() { try {
     // Never print subprocess input, credential-bearing configuration or raw RPC errors.
     console.error('NATIVE_MAINTENANCE_REFUSED_OR_FAILED'); process.exitCode = 1;
 } }
-module.exports = {assertInstalledSources};
+module.exports = {assertInstalledSources, mergeNativeInventories};
 if (require.main === module) main();
