@@ -130,8 +130,14 @@ function hostMain(){
             assert.equal(r.phase,status);assert(!r.installUnit);
             if(role!=='couchdb')assert.equal(r.source,r.installedSource);
             if(r.unit){
-                assert.equal(ctl('show',r.unit,'-p','SubState','--value'),'exited');
-                assert.equal(ctl('show',r.unit,'-p','ExecMainStatus','--value'),'0');
+                // A collected transient installer can be garbage-collected;
+                // its retained name is not an active execution handle.
+                const load=ctl('show',r.unit,'-p','LoadState','--value');
+                if(load!=='not-found'){
+                    assert.equal(load,'loaded');
+                    assert.equal(ctl('show',r.unit,'-p','SubState','--value'),'exited');
+                    assert.equal(ctl('show',r.unit,'-p','ExecMainStatus','--value'),'0');
+                }
             }
             const c=JSON.parse(pod('inspect',r.id))[0];
             assert.equal(c.Config.Labels['io.talkchief.kazoo.acceptance'],s.owner);
