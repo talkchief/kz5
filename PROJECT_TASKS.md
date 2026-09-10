@@ -7,6 +7,27 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **SUP / fresh user-requested actual-call retest — PASS, September10:**
+  `kz5-stage-monitor-user-retest-1` exited0 on runner `40f1712`. All four modes
+  (Listen/eavesdrop, Whisper, Barge, Join) pass new distributed SIP calls with
+  independently reanalyzed RTP privacy, five authorization negatives per mode,
+  supervisor stop202 and original bridge survival. Private evidence on dev44:
+  `/var/log/kazoo-monitor-acceptance-bev21u`. Final media admission is open with
+  zero sessions, no retained monitor fixture, and media/both apps services
+  active. Named how-to sections remain at `/apis/supervision.html`; legacy
+  queue-eavesdrop endpoints remain disabled. See `doc/channel_monitor_acceptance.md`.
+
+- **INST-06 / post-cold-restore queue calls — audio PASS; strict drain OPEN:**
+  `kz5-stage-queue-after-cold-restore-1` exited0 on runner `40f1712`; evidence
+  `/var/log/kazoo-monitor-acceptance-VbqY7M`. Two real queue calls pass audio and
+  unchanged-agent-FSM checks without a login or registration between calls.
+  Independent cleanup verification nevertheless found apps20's stricter native
+  maintenance snapshot refusing while all six public agent snapshots reported
+  ready and both initializers ready. Diagnose the FSM/listener residual work;
+  do not waive the check or restart merely to erase it. This prevents claiming
+  full post-call maintenance drain acceptance. The independent supervision
+  passes above do not close this separate issue.
+
 - **INST-06 / paired cold agent/queue inventories — PASS, September10:**
   Extended native unit `kz5-stage-cold-agent-restore-2` exited0 on runner
   `e0f4777`; receipt `/var/lib/kazoo5-install-lab/cold-agent-state-tbT2Rt/receipt.json`

@@ -2,6 +2,27 @@
 
 ## Latest actual-call result — September 10, 2026
 
+**Fresh user-requested retest PASS:** `kz5-stage-monitor-user-retest-1`
+exited0 on runner `40f1712`, after the two-applications-VM cold-restore tests.
+Listen/eavesdrop, Whisper, Barge and Join each used a new three-leg SIP call
+through the isolated distributed dev44 stack. Independent reanalysis of all
+four saved RTP captures confirms both pre/post-keypad3 privacy windows:
+Listen leaks no supervisor audio, Whisper reaches only the agent, and Barge
+and Join reach both original parties. All five authorization negatives per mode,
+supervisor stop202, and original bridge survival pass. This was actual call/audio
+testing, not acceptance of an HTTP response alone.
+
+Protected evidence: `/var/log/kazoo-monitor-acceptance-bev21u` on dev44;
+log: `/var/lib/kazoo5-install-lab/monitor-user-retest-1.log`.
+Independent final checks confirm media admission open, zero media sessions,
+no retained monitor fixture, and media/both applications services active.
+The harness removed its exact temporary users and registrations. No production
+or imported-company calls were used. This proves these bounded supervision
+cases, not general availability or full maintenance drain: the separately
+observed apps-peer strict agent-drain discrepancy remains open. The legacy
+queue-eavesdrop endpoints remain deliberately disabled; use the named
+channel-supervision instructions at `/apis/supervision.html`.
+
 **Additional after-restart PASS:** after the native maintenance test restarted
 FreeSWITCH twice, `kz5-stage-monitor-after-media-restart-1` exited0 using runner
 `4cc4540`. All four modes pass on new SIP/RTP conversations; saved captures were
