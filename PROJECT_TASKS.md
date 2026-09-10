@@ -7,6 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **SUP / actual-call retest and INST-06 media-fenced call acceptance — PASS,
+  September10:** all four modes (Listen/eavesdrop, Whisper, Barge, Join) pass
+  actual SIP/RTP on normally installed media `935d544`, runner `a2b7946`.
+  Native unit `kz5-stage-monitor-media-fence-1` exited0; protected evidence
+  `/var/log/kazoo-monitor-acceptance-xD4WRr` on dev44. Independent capture
+  reanalysis verifies privacy before/after keypad3, including the closed-fence
+  interval; every supervisor stop202 preserves the original bridge. New marked
+  internal calls answer before/after fencing and are rejected while closed.
+  Cleanup passes: admission open, zero sessions, no retained monitor fixture.
+  Media restart persistence and full maintenance drain/restore/rollback remain
+  open; this does not certify enterprise reliability. See
+  `doc/channel_monitor_acceptance.md` and `doc/maintenance_media_fence.md`.
+
 - **INST-06 / media installation retry6 — PASS:** normal source `935d544`
   completed and was collected in `freeswitch-install-6.log`. The native process
   verifier is now installed and passes without granting ptrace privileges.
@@ -16,7 +29,8 @@ work postponed; do not generate voices at runtime or during deployment.
   identical internal endpoints working before/after release. The harness stores
   its exact generation for scoped cleanup and requires the audio window to fall
   inside the closed interval. Offline ownership/probe/harness/audio tests pass;
-  actual campaign and restart-persistence acceptance remain pending.
+  actual campaign now passes as recorded above; restart-persistence acceptance
+  remains pending.
 
 - **INST-06 / media build5 verification refusal — corrected:** normal compilation
   and media service startup completed, but installation exited1 when container

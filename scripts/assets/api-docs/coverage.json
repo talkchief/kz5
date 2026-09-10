@@ -2968,7 +2968,7 @@
     },
     {
       "file": "scripts/api-docs-supervision.cjs",
-      "sha256": "4da64e4fdb50c6147d79239a11a894d85637a95aa1c9496228625a7974d425f8"
+      "sha256": "90dc5175221665eed498ec5010e92b28e70b8145cf8f75b8ef2671f9c8dc8404"
     },
     {
       "file": "scripts/api-docs-tooling/package-lock.json",

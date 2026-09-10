@@ -6,11 +6,20 @@ voices or repeat passing normal callback campaigns without a relevant change.
 
 Latest verified results:
 
+- September10 actual-call retest PASS for Listen/eavesdrop, Whisper, Barge and
+  Join: `kz5-stage-monitor-media-fence-1`, runner `a2b7946`, media `935d544`.
+  All four synthetic RTP captures independently reanalyzed, including privacy
+  while new media admission is fenced. Every supervisor stop202 preserves the
+  original bridge; internal probes answer before/after and fail while fenced.
+  Evidence `/var/log/kazoo-monitor-acceptance-xD4WRr` on dev44. Cleanup verified
+  open admission/zero sessions/no retained fixture. Media restart persistence
+  and full coordinated maintenance acceptance remain open.
+
 - Normal private media retry6 on `935d544` completed and was collected PASS in
   `freeswitch-install-6.log`. The actual native observer now works under the
   container's existing privileges. An explicit media-fenced real SIP/RTP
-  supervision campaign is implemented with passing offline guards; native
-  call and restart-persistence acceptance are next.
+  supervision campaign now passes natively as recorded above; restart-persistence
+  acceptance is still required.
 
 - Media build5 compiled and started the service, then FAILED verification on
   a restricted-container proc read (root EACCES). The same-UID proc verifier

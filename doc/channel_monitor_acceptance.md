@@ -1,5 +1,32 @@
 # Opt-in call monitoring acceptance
 
+## Latest actual-call result — September 10, 2026
+
+**PASS: Listen/eavesdrop, Whisper, Barge and Join on the newly installed private
+media build.** Native unit `kz5-stage-monitor-media-fence-1` exited0 using root
+runner `a2b7946`, normally installed FreeSWITCH source `935d544` and applications
+source `494ee28`. Protected synthetic evidence on dev44:
+`/var/log/kazoo-monitor-acceptance-xD4WRr`; terminal log
+`/var/lib/kazoo5-install-lab/monitor-media-fence-1.log`.
+
+Each mode used an actual three-leg SIP conversation and captured RTP. Independent
+reanalysis of all four captures confirms the expected tone routing and forbidden
+supervisor leakage before/after keypad3. Listen is silent to both original
+parties; Whisper reaches only the agent; Barge and Join reach both parties.
+Authorization negatives pass, supervisor stop returns202, and the original
+answered bridge survives every stop.
+
+The post-keypad audio window is entirely within a verified durable media fence:
+new internal calls are rejected while all three existing legs remain allocated.
+The identical marked internal endpoint answers before fencing and after release.
+Process/core identity is unchanged. Scoped cleanup completed; final native
+admission is open with zero sessions and no retained monitor fixture.
+
+This is real call/audio verification, not an HTTP-only result. It does not close
+media restart persistence, whole-cluster drain/restore/rollback or sustained-load
+acceptance of the new media gate. Use the documented channel supervision API;
+the unsupported legacy queue eavesdrop endpoints still deliberately return503.
+
 ## Documentation command regression — September 10, 2026
 
 The generated guide and OpenAPI curl examples contained literal leading plus
@@ -19,7 +46,7 @@ errors; API execution remains disabled. Eight shell-example regressions and
 offline deterministic rebuild/schema/tamper checks pass. This does not claim
 a new public-network reachability test or a new live call.
 
-## Latest actual distributed-call result — September 9, 2026
+## Earlier actual distributed-call results — September 9, 2026
 
 **Additional active-call fault acceptance PASS:** all four modes also pass a
 controller16 broker-only partition, retaining controller21 and the media node.

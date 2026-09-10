@@ -96,8 +96,13 @@ the running build's checkout. The C patch and core build fingerprint are unchang
   stop must preserve the original conversation. Only the owned private media
   guest is admitted. Exact temporary generations/probe UUIDs are durable in the
   private fixture state; cleanup never selects unrelated calls or generations.
-  Offline record/injection/harness/audio checks pass. This new campaign has not
-  yet produced a native pass and does not test media restart persistence itself.
+  Offline record/injection/harness/audio checks pass. Native campaign
+  `kz5-stage-monitor-media-fence-1` on runner `a2b7946` exited0 on September10:
+  all four modes PASS, independently reanalyzed from the protected captures at
+  `/var/log/kazoo-monitor-acceptance-xD4WRr` on dev44. All measured post-keypad
+  windows fall within the closed interval, all supervisor stops202 preserve the
+  original bridge, and cleanup leaves admission open/zero sessions/no fixture.
+  This does not test media restart persistence or full coordinator acceptance.
 
 - Native build5 on `88bf049` compiled and started the new media service but
   exited1 during helper verification: root's proc executable-link read returned
