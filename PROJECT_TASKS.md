@@ -7,6 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **INST-06 / cold agent restore implementation — native acceptance next:**
+  Added a protected local checkpoint executor and normal applications-installer
+  packaging/verification for immutable snapshot, queue and restore helpers.
+  It requires a matching actual kernel fence, complete drained agent cohort,
+  unchanged document revisions and stable target epoch/initializer; no blind
+  write retries or automatic reopening.23 real validation/file cases, nine
+  installer cases and four cold-fixture guards pass. The new exact-private-lab
+  `test-acdc-cold-maintenance.cjs --live` retains actual six-replica checkpoints
+  on disk, tests full two-apps-VM restart with finite/infinite pause and empty
+  runtime membership, and verifies baseline restoration before fixture reopening.
+  Native result pending; full coordinator/producer/broker drain remains open.
+  See `doc/maintenance_agent_restore.md`.
+
 - **INST-06 / next-call recovery after media restarts — PASS, September10:**
   `kz5-stage-monitor-after-media-restart-1` exited0 on runner `4cc4540`.
   Actual new SIP/RTP calls pass all four modes after the two media process

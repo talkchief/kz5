@@ -48,6 +48,9 @@ test('all four ingress roles install dependencies, immutable helper and privileg
         assert(config.includes('After=nftables.service firewalld.service'));
     }
     assert.equal(fs.readFileSync(f.root+'/libexec/kazoo5-maintenance-fence','utf8'),fs.readFileSync(__dirname+'/kazoo-maintenance-fence.cjs','utf8'));
+    for(const name of ['snapshot','queues','restore'])assert.equal(
+        fs.readFileSync(f.root+'/libexec/kazoo5-maintenance-'+name,'utf8'),
+        fs.readFileSync(__dirname+'/kazoo-maintenance-'+name+'.escript','utf8'));
     assert.equal((f.calls().match(/packages nftables iproute util-linux/g)||[]).length,4);
     assert.equal(fs.readFileSync(f.root+'/libexec/kazoo5-maintenance-media','utf8'),fs.readFileSync(__dirname+'/kazoo-maintenance-media.cjs','utf8'));
     assert(fs.readFileSync(f.root+'/units/kazoo-freeswitch.service.d/36-kazoo-maintenance-media.conf','utf8').includes('ExecStartPre=+guard_node '+f.root+'/libexec/kazoo5-maintenance-media --boot-guard'));
@@ -69,6 +72,11 @@ test('missing effective guard and changed installed source fail verification',t=
     const f=fixture(t);assert.equal(f.run('install_service_maintenance_fence kazoo-apps.service').status,0);
     assert.notEqual(f.run('WRONG_GATE=true verify_service_maintenance_fence kazoo-apps.service').status,0);
     fs.appendFileSync(f.root+'/libexec/kazoo5-maintenance-fence','\n// changed\n');
+    assert.notEqual(f.run('verify_service_maintenance_fence kazoo-apps.service').status,0);
+});
+test('applications maintenance helpers must match the selected source',t=>{
+    const f=fixture(t);assert.equal(f.run('install_service_maintenance_fence kazoo-apps.service').status,0);
+    fs.appendFileSync(f.root+'/libexec/kazoo5-maintenance-restore','\n% changed\n');
     assert.notEqual(f.run('verify_service_maintenance_fence kazoo-apps.service').status,0);
 });
 test('service acceptance includes maintenance verification',()=>{

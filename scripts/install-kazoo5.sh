@@ -868,6 +868,12 @@ install_service_maintenance_fence() {
     validate_config_directory /usr/local/libexec
     run install -d -o root -g root -m 0755 /usr/local/libexec
     run install -o root -g root -m 0755 "$SCRIPT_DIR/kazoo-maintenance-fence.cjs" /usr/local/libexec/kazoo5-maintenance-fence
+    if [[ $unit == kazoo-apps.service ]]; then
+        local operation
+        for operation in snapshot queues restore; do
+            run install -o root -g root -m 0755 "$SCRIPT_DIR/kazoo-maintenance-${operation}.escript" "/usr/local/libexec/kazoo5-maintenance-${operation}"
+        done
+    fi
     # Apply any durable intent before a restart is attempted, not just at boot.
     run /usr/bin/node /usr/local/libexec/kazoo5-maintenance-fence --boot-guard
     write_file 0644 "/etc/systemd/system/${unit}.d/35-kazoo-maintenance-fence.conf" <<'EOF'
@@ -891,6 +897,13 @@ verify_service_maintenance_fence() {
         die "${unit} is missing the persistent maintenance startup guard"
     /usr/bin/node /usr/local/libexec/kazoo5-maintenance-fence --status >/dev/null ||
         die 'Maintenance fence intent/kernel state is inconsistent; admission remains unverified'
+    if [[ $unit == kazoo-apps.service ]]; then
+        local operation
+        for operation in snapshot queues restore; do
+            cmp -s "$SCRIPT_DIR/kazoo-maintenance-${operation}.escript" "/usr/local/libexec/kazoo5-maintenance-${operation}" ||
+                die "Installed agent maintenance ${operation} helper differs; reinstall Kazoo applications"
+        done
+    fi
     if [[ $unit == kazoo-freeswitch.service ]]; then
         cmp -s "$SCRIPT_DIR/kazoo-maintenance-media.cjs" /usr/local/libexec/kazoo5-maintenance-media ||
             die 'Installed media admission helper differs; reinstall FreeSWITCH'
