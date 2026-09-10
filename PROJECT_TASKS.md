@@ -29,6 +29,9 @@ work postponed; do not generate voices at runtime or during deployment.
   post-start journal scan found no crash-report/supervisor-report/exception-exit
   patterns among23269 entries. See
   `doc/main_dev_runtime_promotion.md`; no full coordinated upgrade is claimed.
+  Release `718e99c` pushed/synced; the normal docs installer deployed the named
+  supervision reference, all13 assets matched over certificate-verified local
+  HTTPS, and the653-operation browser check had no console errors/external calls.
 
 - **INST-06 / post-call listener drain — native PASS, September10:**
   Read-only installed-record diagnosis found two pending control-queue entries

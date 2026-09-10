@@ -107,3 +107,17 @@ closed. Full cluster producer/broker drain and coordinated upgrade/rollback,
 new private media-gate sustained load, and historical callback disposition
 remain separately tracked. No production company or historical ticket was
 changed by this deployment/test.
+
+## Repository and published reference
+
+Release `718e99c` was pushed to kz5 `master` and fast-forwarded into dev44
+`/opt/kz5`. Its changes after the installed `4cd9953` baseline are the acceptance
+harness and documentation, not applications/core runtime source.
+The normal `install_api_developer_docs` installer function deployed the guide.
+All13 served assets matched repository bytes through certificate-verified HTTPS
+against the local nginx listener for `kz5-dev.talkchief.io`; protected receipt
+`docs-https.json`. The browser loaded653 operations with zero console errors or
+external requests, and API execution disabled. Named instructions remain at
+`https://kz5-dev.talkchief.io/apis/supervision.html#whisper`, `#barge`, `#join`
+and `#listen`. This check does not claim a fresh external-network reachability
+test. The unrelated untracked dashboard draft and Python cache were preserved.
