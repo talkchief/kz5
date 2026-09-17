@@ -7,6 +7,29 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **P0-09 / automatic agent logout threshold — SOURCE FIXED + offline PASS, September17:**
+  `max_connect_failures=0` logged every agent out on the first queue offer and
+  the protection could not be disabled; the logout itself was logged only at
+  debug/info. Limits are now normalized (positive integer = limit; `0`,
+  negative, `infinity`, `disabled` = off; unreadable = fallback with a warning)
+  and each automatic logout logs a warning with agent, count and limit. Unit60,
+  agent-recovery27, strategies19/18, agent-maintenance138, sync-status11,
+  dashboard-agents17, listener-terminal8 and both guarded real-OTP upgrade
+  suites pass; the FSM state record is unchanged. The production threshold
+  itself remains an operator policy decision; exposing the logout reason through
+  API/UI is still open. See `doc/acdc_agent_recovery.md`. Deployment recorded
+  separately when performed.
+
+- **P0-13 / `outbound` agent sync status — now DEPLOYED, September17:** the
+  source fix was already on master, so the September17 private-pair and main44
+  normal installs carry it; main44 loads the rebuilt `kapi_acdc_agent`. No
+  separate call acceptance was run for this status.
+
+- **Host hygiene, September17:** `/opt/kz5/key` (operator credentials) was mode
+  0644 and unignored; now 0600 and ignored together with `__pycache__/`; it was
+  never committed on any branch. Missing OS directory `/var/log/sssd` restored
+  to the package-declared `sssd:sssd 0750`, ending the `sssd_kcm` broadcast.
+
 - **Main44 runtime promotion of queue recovery + DNS default — installer PASS, September17:**
   New tracked `scripts/promote-main-dev-runtime.sh` (the previously uncommitted
   wrapper, per `doc/main_dev_runtime_promotion.md`) ran as unit `kz5-promo` on

@@ -100,3 +100,48 @@ outbound_connect_satisfied_recovery(PauseRef, Updates, Expected) ->
     after
         [meck:unload(M) || M <- Modules]
     end.
+
+%% Automatic-logout threshold. Zero used to compare as already exceeded and
+%% logged every agent out on the first queue offer.
+connect_failure_limit_test_() ->
+    [?_assertEqual(3, acdc_agent_fsm:connect_failure_limit(3, 7))
+    ,?_assertEqual(5, acdc_agent_fsm:connect_failure_limit(<<"5">>, 7))
+    ,?_assertEqual('infinity', acdc_agent_fsm:connect_failure_limit(0, 7))
+    ,?_assertEqual('infinity', acdc_agent_fsm:connect_failure_limit(-1, 7))
+    ,?_assertEqual('infinity', acdc_agent_fsm:connect_failure_limit(<<"0">>, 7))
+    ,?_assertEqual('infinity', acdc_agent_fsm:connect_failure_limit(<<"infinity">>, 7))
+    ,?_assertEqual('infinity', acdc_agent_fsm:connect_failure_limit(<<"disabled">>, 7))
+    ,?_assertEqual('infinity', acdc_agent_fsm:connect_failure_limit('infinity', 7))
+    ,?_assertEqual(7, acdc_agent_fsm:connect_failure_limit(<<"three">>, 7))
+    ,?_assertEqual(7, acdc_agent_fsm:connect_failure_limit(2.5, 7))
+    ,?_assertEqual('infinity', acdc_agent_fsm:connect_failure_limit('true', 'infinity'))
+    ].
+
+disabled_failure_limit_never_logs_an_agent_out_test() ->
+    Modules = [acdc_agent_listener, acdc_agent_stats],
+    [meck:new(M, [non_strict, no_link]) || M <- Modules],
+    try
+        meck:expect(acdc_agent_listener, member_connect_resp, fun(_, _) -> ok end),
+        meck:expect(acdc_agent_stats, agent_logged_out, fun(_, _) -> ok end),
+        Offer = kz_json:from_list([{<<"Call-ID">>, <<"queue-call">>}]),
+        Disabled = acdc_agent_fsm:strategy_test_state(
+                     [{account_id, <<"account">>}, {agent_id, <<"agent">>}, {agent_listener, self()}
+                     ,{connect_failures, 50}
+                     ,{max_connect_failures, acdc_agent_fsm:connect_failure_limit(0, 3)}
+                     ]),
+        ?assertEqual({next_state, ready, Disabled},
+                     acdc_agent_fsm:ready(cast, {member_connect_req, Offer}, Disabled)),
+        ?assertEqual(1, meck:num_calls(acdc_agent_listener, member_connect_resp, '_')),
+        ?assertEqual(0, meck:num_calls(acdc_agent_stats, agent_logged_out, '_')),
+        %% The configured protection itself is unchanged.
+        Limited = acdc_agent_fsm:strategy_test_state(
+                    [{account_id, <<"account">>}, {agent_id, <<"agent">>}, {agent_listener, self()}
+                    ,{connect_failures, 3}, {max_connect_failures, 3}
+                    ]),
+        ?assertMatch({next_state, paused, _},
+                     acdc_agent_fsm:ready(cast, {member_connect_req, Offer}, Limited)),
+        ?assert(meck:called(acdc_agent_stats, agent_logged_out, [<<"account">>, <<"agent">>])),
+        ?assertEqual(1, meck:num_calls(acdc_agent_listener, member_connect_resp, '_'))
+    after
+        meck:unload(Modules)
+    end.

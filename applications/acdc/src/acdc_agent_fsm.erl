@@ -70,7 +70,7 @@
         ]).
 
 -ifdef(TEST).
--export([changed_endpoints/2, strategy_test_state/1, strategy_test_field/2]).
+-export([changed_endpoints/2, strategy_test_state/1, strategy_test_field/2, connect_failure_limit/2]).
 -endif.
 
 -include("acdc.hrl").
@@ -93,7 +93,8 @@
 -define(CALL_CHECK_MESSAGE, 'check_agent_calls').
 
 -define(MAX_CONNECT_FAILURES, <<"max_connect_failures">>).
--define(MAX_FAILURES, kapps_config:get_integer(?CONFIG_CAT, ?MAX_CONNECT_FAILURES, 3)).
+-define(DEFAULT_MAX_FAILURES, 3).
+-define(MAX_FAILURES, connect_failure_limit(kapps_config:get(?CONFIG_CAT, ?MAX_CONNECT_FAILURES, ?DEFAULT_MAX_FAILURES), ?DEFAULT_MAX_FAILURES)).
 
 -define(NOTIFY_PICKUP, <<"pickup">>).
 -define(NOTIFY_HANGUP, <<"hangup">>).
@@ -567,14 +568,40 @@ init([AccountId, AgentId, Supervisor, Props, IsThief]) ->
            }
     }.
 
--spec max_failures(kz_term:ne_binary() | kz_json:object()) -> non_neg_integer().
+-spec max_failures(kz_term:ne_binary() | kz_json:object()) -> timeout().
 max_failures(Account) when is_binary(Account) ->
     case kzd_accounts:fetch(Account) of
         {'ok', AccountJObj} -> max_failures(AccountJObj);
         {'error', _} -> ?MAX_FAILURES
     end;
 max_failures(JObj) ->
-    kz_json:get_integer_value(?MAX_CONNECT_FAILURES, JObj, ?MAX_FAILURES).
+    System = ?MAX_FAILURES,
+    case kz_json:get_value(?MAX_CONNECT_FAILURES, JObj) of
+        'undefined' -> System;
+        Value -> connect_failure_limit(Value, System)
+    end.
+
+%% Consecutive failed connects before an automatic logout. A positive integer is
+%% the limit. Zero, a negative number, "infinity" or "disabled" turns the
+%% protection off: zero used to compare as already exceeded and logged every
+%% agent out on the first offer. Anything unreadable keeps the fallback rather
+%% than crashing agent startup or silently changing the policy.
+-spec connect_failure_limit(any(), timeout()) -> timeout().
+connect_failure_limit(Limit, _Fallback) when is_integer(Limit), Limit > 0 -> Limit;
+connect_failure_limit(Limit, _Fallback) when is_integer(Limit) -> 'infinity';
+connect_failure_limit('infinity', _Fallback) -> 'infinity';
+connect_failure_limit(<<"infinity">>, _Fallback) -> 'infinity';
+connect_failure_limit(<<"disabled">>, _Fallback) -> 'infinity';
+connect_failure_limit(Limit, Fallback) when is_binary(Limit) ->
+    try connect_failure_limit(binary_to_integer(Limit), Fallback)
+    catch 'error':'badarg' -> invalid_failure_limit(Limit, Fallback)
+    end;
+connect_failure_limit(Limit, Fallback) -> invalid_failure_limit(Limit, Fallback).
+
+-spec invalid_failure_limit(any(), timeout()) -> timeout().
+invalid_failure_limit(Limit, Fallback) ->
+    lager:warning("ignoring invalid ~s ~p; using ~p", [?MAX_CONNECT_FAILURES, Limit, Fallback]),
+    Fallback.
 
 -spec wait_for_listener(pid(), pid(), kz_term:proplist(), boolean()) -> 'ok'.
 wait_for_listener(Supervisor, ServerRef, Props, IsThief) ->
@@ -829,7 +856,8 @@ ready('cast', {'member_connect_req', _}, #state{max_connect_failures=Max
                                                ,account_id=AccountId
                                                ,agent_id=AgentId
                                                }=State) when is_integer(Max), Fails >= Max ->
-    lager:info("agent has failed to connect ~b times, logging out", [Fails]),
+    lager:warning("automatic logout of agent ~s: ~b consecutive failed connects reached ~s ~b"
+                 ,[AgentId, Fails, ?MAX_CONNECT_FAILURES, Max]),
     acdc_agent_stats:agent_logged_out(AccountId, AgentId),
     agent_logout(self()),
     {'next_state', 'paused', State};
@@ -2039,7 +2067,8 @@ clear_call(#state{connect_failures=Fails
                  }=State, 'failed') when is_integer(Max), (Max - Fails) =< 1 ->
     acdc_agent_stats:agent_logged_out(AccountId, AgentId),
     agent_logout(self()),
-    lager:debug("agent has failed to connect ~b times, logging out", [Fails+1]),
+    lager:warning("automatic logout of agent ~s: ~b consecutive failed connects reached ~s ~b"
+                 ,[AgentId, Fails+1, ?MAX_CONNECT_FAILURES, Max]),
     clear_call(State#state{connect_failures=Fails+1}, 'paused');
 clear_call(#state{connect_failures=Fails
                  ,max_connect_failures=_MaxFails

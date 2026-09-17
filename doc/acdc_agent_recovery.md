@@ -115,6 +115,27 @@ connection failures. Recovery does not force paused/logged-out agents online,
 and deliberately cannot declare a call ended while status evidence is unknown.
 No production deployment or live-call validation is performed by these scripts.
 
+### Automatic logout threshold — September 17, 2026
+
+`max_connect_failures` (system_config `acdc`, overridable on the account
+document; default 3) is the number of consecutive failed connects after which
+an agent is logged out automatically. A successful answer resets the count.
+
+- A positive integer is the limit.
+- `0`, a negative number, `"infinity"` or `"disabled"` turns the protection
+  **off**. Previously `0` compared as already exceeded, so every agent was
+  logged out on the first queue offer, and there was no way to disable it.
+- An unreadable value keeps the fallback (account -> system -> 3) and logs a
+  warning; it no longer crashes agent startup.
+- Each automatic logout is now logged at `warning` with the agent, the count
+  and the limit. It was `debug`/`info`, so operators saw unexplained logouts.
+
+The Crossbar schema types this key as an integer, so use `0` through the API.
+Whether production should keep 3, raise it or disable it is an operator policy
+decision (P0-09); this change only makes every choice safe and visible.
+Tests: `bash scripts/test-acdc-unit.sh` (11 limit cases plus a disabled-limit
+offer regression and an unchanged-protection control).
+
 ## kz5 integration checkpoint — 2026-09-06
 
 Root verified the handoff bundle for commit
