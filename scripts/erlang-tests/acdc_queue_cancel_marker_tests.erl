@@ -98,7 +98,10 @@ amqp_handlers_forward_settlement_only_when_the_owner_declared_it_test() -> with_
     ok=acdc_queue_manager:handle_queue_member_remove(kz_json:from_list([{<<"Settled-Call-ID">>,<<>>}|Base]),Props),
     ?assertEqual([{handle_queue_member_remove,<<"logical">>}],drain()),
     ok=acdc_queue_manager:handle_member_call_success(kz_json:from_list(Base),Props),
-    ?assertEqual([{handle_queue_member_remove,<<"logical">>},{member_delivery_settled,<<"logical">>}],drain())
+    ?assertEqual([{handle_queue_member_remove,<<"logical">>},{member_delivery_settled,<<"logical">>}],drain()),
+    %% A returned callback leg: the marker key is the physical id.
+    ok=acdc_queue_manager:handle_member_call_success(kz_json:from_list([{<<"Settled-Call-ID">>,<<"physical">>}|Base]),Props),
+    ?assertEqual([{handle_queue_member_remove,<<"logical">>},{member_delivery_settled,<<"physical">>}],drain())
 end).
 
 drain() -> receive {cast,Msg} -> [Msg|drain()] after 0 -> [] end.
@@ -120,6 +123,22 @@ listener(Call) ->
 published() ->
     [kz_json:from_list(P) || {_,{kapi_acdc_queue,publish_queue_member_remove,[P]},_} <- meck:history(kapi_acdc_queue)].
 settled(JObj) -> kz_json:get_value(<<"Settled-Call-ID">>,JObj).
+
+handled_callback_leg_announces_its_physical_id_test() -> with_mocks(fun() ->
+    meck:expect(kapi_acdc_queue,publish_member_call_success,fun(_,_) -> ok end),
+    Call=kapps_call:kvs_store(<<"acdc_logical_member_id">>,<<"logical">>,member(<<"physical">>)),
+    Logical=acdc_queue_member:logical_id(Call),
+    {noreply,_,hibernate}=acdc_queue_listener:handle_cast({finish_member_call},listener(Call)),
+    [Sent]=[kz_json:from_list(P) || {_,{kapi_acdc_queue,publish_member_call_success,[_,P]},_} <- meck:history(kapi_acdc_queue)],
+    ?assertEqual(Logical,kz_json:get_value(<<"Call-ID">>,Sent)),
+    ?assertEqual(<<"physical">>,kz_json:get_value(<<"Settled-Call-ID">>,Sent)),
+    ?assertEqual(1,meck:num_calls(acdc_queue_shared,ack,'_')),
+    Wire=[{<<"Msg-ID">>,<<"m">>}|kz_api:default_headers(<<"server">>,<<"member">>,<<"call_success">>,<<"acdc">>,<<"1">>)]
+        ++[{K,V} || {K,V} <- kz_json:to_proplist(Sent), not lists:member(K,[<<"App-Name">>,<<"App-Version">>])],
+    ?assert(kapi_acdc_queue:member_call_success_v(Wire)),
+    ?assert(kapi_acdc_queue:member_call_success_v(proplists:delete(<<"Settled-Call-ID">>,Wire))),
+    ?assertNot(kapi_acdc_queue:member_call_success_v([{<<"Settled-Call-ID">>,true}|proplists:delete(<<"Settled-Call-ID">>,Wire)]))
+end).
 
 listener_announces_settlement_after_ack_and_never_after_nack_test() -> with_mocks(fun() ->
     Call=member(<<"c1">>),

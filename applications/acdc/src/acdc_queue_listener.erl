@@ -491,7 +491,8 @@ handle_call_success(#state{queue_id=QueueId
                           ,delivery=Delivery
                           }) ->
     ack_and_unbind(Call, SharedPid, Delivery),
-    send_member_call_success(Q, AccountId, QueueId, MyId, AgentId, acdc_queue_member:logical_id(Call)).
+    send_member_call_success(Q, AccountId, QueueId, MyId, AgentId, acdc_queue_member:logical_id(Call)
+                            ,kapps_call:call_id(Call)).
 
 %%------------------------------------------------------------------------------
 %% @doc Notify various listeners about a failure to handle a call and stop
@@ -578,13 +579,16 @@ send_agent_timeout(RespJObj, Call, QueueId) ->
            ,fun kapi_acdc_queue:publish_agent_timeout/2
            ).
 
-send_member_call_success(Q, AccountId, QueueId, MyId, AgentId, CallId) ->
+%% Published after the acknowledgement: a returned callback leg's physical id
+%% differs from its logical id, and cancellation markers use the physical one.
+send_member_call_success(Q, AccountId, QueueId, MyId, AgentId, CallId, SettledCallId) ->
     Resp = props:filter_undefined(
              [{<<"Account-ID">>, AccountId}
              ,{<<"Queue-ID">>, QueueId}
              ,{<<"Process-ID">>, MyId}
              ,{<<"Agent-ID">>, AgentId}
              ,{<<"Call-ID">>, CallId}
+             ,{<<"Settled-Call-ID">>, SettledCallId}
               | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
              ]),
     publish(Q, Resp, fun kapi_acdc_queue:publish_member_call_success/2).

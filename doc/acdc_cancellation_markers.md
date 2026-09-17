@@ -70,6 +70,13 @@ baseline control that passes on both sources is the retention safety property.
 All four changed modules also compile with the full production flags
 (`+warn_missing_spec -Werror`).
 
+Follow-up the same day: `member.call_success` also carries `Settled-Call-ID`.
+A returned callback leg has a physical id that differs from its logical id and
+markers are keyed by the physical one, so a cancellation racing a handled
+callback could previously strand a marker. Older workers omit the header and the
+logical id is used as before. The suite now has eight groups; six fail on
+`d14880e`.
+
 Not proven: broker behavior, multi-node ordering under load, a worker dying
 between acknowledgement and announcement (the marker is then retained, which is
 the safe direction), and any installed runtime.

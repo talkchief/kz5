@@ -233,7 +233,8 @@ handle_member_call_success(JObj, Prop) ->
     Srv = props:get_value('server', Prop),
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
     gen_listener:cast(Srv, {'handle_queue_member_remove', CallId}),
-    gen_listener:cast(Srv, {'member_delivery_settled', CallId}).
+    %% Older workers omit the physical id; their logical id is then the best proof.
+    gen_listener:cast(Srv, {'member_delivery_settled', kz_json:get_ne_binary_value(<<"Settled-Call-ID">>, JObj, CallId)}).
 
 -spec handle_member_call_cancel(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_member_call_cancel(JObj, Props) ->

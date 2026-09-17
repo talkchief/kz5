@@ -141,11 +141,12 @@ member_call_failure_v(JObj) ->
 %% Member Call Success - if an agent is handling the call
 %%------------------------------------------------------------------------------
 -define(MEMBER_CALL_SUCCESS_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>]).
--define(OPTIONAL_MEMBER_CALL_SUCCESS_HEADERS, [<<"Process-ID">>, <<"Agent-ID">>, <<"Call-ID">>]).
+%% Settled-Call-ID: physical call id whose delivery the publishing worker acknowledged.
+-define(OPTIONAL_MEMBER_CALL_SUCCESS_HEADERS, [<<"Process-ID">>, <<"Agent-ID">>, <<"Call-ID">>, <<"Settled-Call-ID">>]).
 -define(MEMBER_CALL_SUCCESS_VALUES, [{<<"Event-Category">>, <<"member">>}
                                     ,{<<"Event-Name">>, <<"call_success">>}
                                     ]).
--define(MEMBER_CALL_SUCCESS_TYPES, []).
+-define(MEMBER_CALL_SUCCESS_TYPES, [{<<"Settled-Call-ID">>, fun kz_term:is_ne_binary/1}]).
 
 -spec member_call_success(kz_term:api_terms()) ->
           {'ok', iolist()} |
