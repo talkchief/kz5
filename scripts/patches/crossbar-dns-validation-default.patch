@@ -1,0 +1,39 @@
+diff --git a/priv/api/swagger.json b/priv/api/swagger.json
+index f18eeb35..d368c17c 100644
+--- a/priv/api/swagger.json
++++ b/priv/api/swagger.json
+@@ -17282,7 +17282,7 @@
+                     }
+                 },
+                 "should_validate_dns": {
+-                    "default": true,
++                    "default": false,
+                     "description": "kazoo_web should_validate_dns",
+                     "type": "boolean"
+                 }
+diff --git a/priv/couchdb/schemas/system_config.kazoo_web.json b/priv/couchdb/schemas/system_config.kazoo_web.json
+index f4d61600..00fff0c1 100644
+--- a/priv/couchdb/schemas/system_config.kazoo_web.json
++++ b/priv/couchdb/schemas/system_config.kazoo_web.json
+@@ -55,7 +55,7 @@
+             }
+         },
+         "should_validate_dns": {
+-            "default": true,
++            "default": false,
+             "description": "kazoo_web should_validate_dns",
+             "type": "boolean"
+         }
+diff --git a/priv/oas3/oas3-schemas.yml b/priv/oas3/oas3-schemas.yml
+index 571fd25f..b4c4ba91 100644
+--- a/priv/oas3/oas3-schemas.yml
++++ b/priv/oas3/oas3-schemas.yml
+@@ -13608,7 +13608,7 @@
+                 'type': integer
+               'type': array
+     'should_validate_dns':
+-      'default': true
++      'default': false
+       'description': kazoo_web should_validate_dns
+       'type': boolean
+   'type': object

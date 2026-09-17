@@ -1,0 +1,13 @@
+diff --git a/kazoo_schemas/src/kz_json_schema_extensions.erl b/kazoo_schemas/src/kz_json_schema_extensions.erl
+index b06ff64d1..fff011c39 100644
+--- a/kazoo_schemas/src/kz_json_schema_extensions.erl
++++ b/kazoo_schemas/src/kz_json_schema_extensions.erl
+@@ -417,7 +417,7 @@ is_valid_dns(_Host) -> 'true'.
+ 
+ -spec is_valid_dns(kz_term:ne_binary()) -> boolean().
+ is_valid_dns(Host) ->
+-    is_valid_dns(Host, kapps_config:is_true(<<"kazoo_web">>, <<"should_validate_dns">>, 'true')).
++    is_valid_dns(Host, kapps_config:is_true(<<"kazoo_web">>, <<"should_validate_dns">>, 'false')).
+ 
+ is_valid_dns(_Host, 'false') ->
+     lager:info("configured to not validate DNS"),

@@ -15,7 +15,7 @@
     {
       "file": "coverage.json",
       "bytes": 137221,
-      "sha256": "c048d4eec8b60f9d289997503a81c2542ad49b4f7dcadbd6283212dca5df1596"
+      "sha256": "994a2ccb616680adaa6ad4326110ccd3a669f0244555699ec56d2853f9f1d3fd"
     },
     {
       "file": "index.html",
@@ -24,8 +24,8 @@
     },
     {
       "file": "openapi.json",
-      "bytes": 1842983,
-      "sha256": "e935e1d00bff03b76dc68dca86cf6970efcadecbe2d8053750a65f1f13a08d4a"
+      "bytes": 1842984,
+      "sha256": "3ed0f6d1ef7265872e21ff9115c27b3ba68decabe0abbbf06f3b911c041c37ac"
     },
     {
       "file": "planned.openapi.json",

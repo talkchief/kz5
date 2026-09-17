@@ -87,7 +87,9 @@ remain unproven; the conservative unresolved-proof liveness limit still applies.
 
 ## Unresolved-proof reconciliation — September 17, 2026 (source only)
 
-**Not deployed; no native acceptance.** The liveness limitation above was hit on
+**Deployed to the private apps pair September 17; the terminated-evidence release
+was observed natively on apps14 during `kz5-stage-queue-partition-6` (unresolved at
+21:03:28, released at 21:04:28). Not yet promoted to main44.** The liveness limitation above was hit on
 September 10: apps14 retained a `connecting` worker with `proof_status=unresolved`
 and no timer after its caller had terminated (`maintenance_listener_dispatch.md`).
 The fault that loses the proof can lose the authoritative hangup too, and

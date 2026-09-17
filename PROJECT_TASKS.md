@@ -7,7 +7,44 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **P0 / retained queue work — SOURCE FIXED + offline PASS, NOT DEPLOYED, September17:**
+- **P0 / retained queue work — PRIVATE PAIR DEPLOYED + NATIVE PASS, September17:**
+  Source `9fe5141` (pushed) installed through the normal installer on both
+  private apps guests: primary `kz5-stage-install-kazoo-apps-18` and peer
+  `kz5-stage-install-apps-peer-13`, both exit0 and collected on `44931ad`.
+  Read-only `scripts/test-fixtures/distributed-lab/loaded-modules-rpc.escript`
+  proves both running VMs loaded the four changed modules byte-identical to disk
+  and that the live validator enforces `Settled-Call-ID`. Native queue inventory
+  PASS after restart (`queue-inventory-1789678943283-e57a48f3.json`). Actual
+  missed-hangup campaign `kz5-stage-queue-partition-6` exit0: two real queued
+  calls, directional audio, apps14 broker partition, same-FSM recovery; evidence
+  `/var/log/kazoo-monitor-acceptance-jpKGdT`, log
+  `/var/lib/kazoo5-install-lab/queue-partition-6.log`. Apps14 journal shows the
+  repaired path itself: 21:03:28 `proof unresolved; preserving caller`, then
+  21:04:28 `complete evidence shows unresolved queue member ... terminated;
+  releasing queue work`. Native queue inventory PASS again **after** that fault
+  (`queue-inventory-1789679115855-73d80e5a.json`, two nodes/six replicas) — the
+  state that refused on September10. Attempt17 FAILED before any build and stays
+  recorded: the lab CouchDB was OOM crash-looping (next entry). Not yet proven:
+  main44 promotion, the late-bridge-evidence branch natively, a worker dying
+  between acknowledgement and settlement, load. The statistic
+  `member_hangup_bridge_unproven` is new; dashboards treat it as an abandon.
+
+- **LAB / guest journal exhausted container memory — FIXED + applied, September17:**
+  Lab guests keep `/var/log/journal` on tmpfs charged to the container limit.
+  CouchDB's reached951MiB of1GiB; the kernel OOM-killed CouchDB on every start
+  (5,127 restarts, about8.5 hours) and apps install attempt17 failed its
+  `system_media` preflight. `44931ad` bounds every created/resumed/rebooted guest
+  to48MiB and adds `--bound-journals`; applied to all ten guests (CouchDB959->25,
+  apps308->8, peer557->34MiB), CouchDB active and reachable through HAProxy.
+  Lab-only: real hosts keep the journal on disk.
+
+- **CONFIG / `should_validate_dns` default false — build + current deployments, September17:**
+  Operator request. Required core and Crossbar patches, installer store/verify
+  steps, regenerated API catalog and a six-group regression. Applied natively to
+  main44 (`true`->`false`) and the private pair without restarts. See
+  `doc/dns_validation_default.md`.
+
+- **P0 / retained queue work — SOURCE FIXED + offline PASS (superseded by the entry above), September17:**
   Both causes of the September10 rollout refusal below are repaired in source.
   (1) An unresolved bridge proof now keeps a 30-second single-probe observation
   armed; only complete terminated evidence releases the member (abandon reason

@@ -2,8 +2,8 @@
 
 ## Status — September 17, 2026
 
-**Source and offline regressions only. Not built by the installer, not deployed,
-no native or call acceptance.** Repairs the second half of the September 10
+**Deployed to the private apps pair and natively accepted on September 17 (see
+`PROJECT_TASKS.md`); not yet promoted to main44.** Originally source-only. Repairs the second half of the September 10
 rollout refusal recorded in `maintenance_listener_dispatch.md` (three retained
 cancellation markers on each of apps14 and apps20).
 

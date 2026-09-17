@@ -2508,7 +2508,7 @@
     },
     {
       "file": "applications/crossbar/priv/oas3/oas3-schemas.yml",
-      "sha256": "c7b53f31ec83f049a08a8842667b5868784ec7be56b9b1d3b9c34248e8cfe3da"
+      "sha256": "13719a7ae9ceba78ef07fc4c110dfcd066cbea08bb6ed08a88bf40221113906b"
     },
     {
       "file": "applications/crossbar/priv/oas3/openapi.yml",
@@ -2984,7 +2984,7 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "5c5d68da82e2f78cb71ab688d74dbd491bd55b82fa3b41215b60b023b0710d5b"
+      "sha256": "a21c11a6aa74e56910092d0ff182bc7f9996234db670910fbc8040e4dfe8e0b2"
     },
     {
       "file": "scripts/patches/blackhole-before-stream-guard.patch",

@@ -1882,6 +1882,7 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-sup-archive-order.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-call-forward-confirmation.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-media-scoped-migration.patch"
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-dns-validation-default.patch"
     # One patch per overlapping source stack makes reinstallation idempotent:
     # later callback edits must not invalidate reverse checks of earlier OTP
     # and announcement hunks. Feature patches remain review/test provenance.
@@ -1895,6 +1896,8 @@ ensure_kazoo_sources() {
         "$SCRIPT_DIR/patches/crossbar-scope-management-guard.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
         "$SCRIPT_DIR/patches/crossbar-optional-content-defaults.patch"
+    apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
+        "$SCRIPT_DIR/patches/crossbar-dns-validation-default.patch"
     if grep -Fq "case kapps_config:get_category(?CONFIG_CAT, 'false') of" \
             "$KAZOO_ROOT/applications/crossbar/src/crossbar_maintenance.erl"; then
         apply_required_source_patch "$KAZOO_ROOT/applications/crossbar" \
@@ -2948,6 +2951,35 @@ load_or_create_master_credentials() {
     log "Saved the initial Monster UI administrator credentials in ${KAZOO_INSTALLER_SECRETS} (mode 0600)"
 }
 
+# Operator decision (September 17, 2026): kazoo_web hostname DNS validation is
+# off by default. The source patches change the compiled and documented default;
+# kapps_config persists whatever default it first read, so an existing database
+# keeps an explicit true. Installation therefore also stores false. Verification
+# only reads: --verify-only must never change configuration.
+dns_validation_setting() {
+    timeout --signal=KILL 30 sup -e kapps_config get_is_true \
+        '<<"kazoo_web">>' '<<"should_validate_dns">>' 'false' </dev/null
+}
+
+ensure_dns_validation_disabled() {
+    local output
+    output=$(timeout --signal=KILL 30 sup -e kapps_config set_default \
+        '<<"kazoo_web">>' '<<"should_validate_dns">>' 'false' </dev/null) || \
+        die 'Could not store kazoo_web should_validate_dns=false'
+    [[ $output == *ok* ]] || die 'Unconfirmed kazoo_web should_validate_dns update'
+    timeout --signal=KILL 30 sup kapps_config flush kazoo_web </dev/null >/dev/null || \
+        die 'Could not flush the kazoo_web configuration cache'
+    verify_dns_validation_disabled
+}
+
+verify_dns_validation_disabled() {
+    local configured
+    configured=$(dns_validation_setting) || die 'Could not read kazoo_web should_validate_dns'
+    [[ $configured == false ]] || \
+        die "kazoo_web should_validate_dns is ${configured:-unknown}; expected false (rerun the kazoo-apps installation)"
+    log 'PASS kazoo_web hostname DNS validation is disabled'
+}
+
 master_account_id() {
     timeout --signal=KILL 30 sup kapps_util get_master_account_id </dev/null 2>/dev/null || true
 }
@@ -3254,6 +3286,7 @@ install_kazoo_apps() {
         wait_kazoo_bootstrap_ready
         ensure_master_account
         configure_kazoo_api_modules
+        ensure_dns_validation_disabled
     fi
     install_kazoo_prompts
     activate_acdc_voice_mappings
@@ -4048,6 +4081,7 @@ verify_kazoo_apps() {
     verify_kazoo_amqp_ready kazoo_apps
     verify_acdc_stats_ready
     verify_acdc_initialization_ready
+    verify_dns_validation_disabled
     deadline=$((SECONDS + KAZOO_START_TIMEOUT))
     while ((SECONDS < deadline)); do
         api_result=$(curl --connect-timeout 5 --max-time 15 --silent --show-error \
