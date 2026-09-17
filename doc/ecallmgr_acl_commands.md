@@ -49,7 +49,12 @@ Required installer patch `scripts/patches/ecallmgr-acl-command-forwarding.patch`
 `carrier_acls`, `sbc_acls`, `acl_summary`, `reload_acls`, `test_carrier_ip`,
 `test_sbc_ip` — first checks whether `ecallmgr_fs_nodes` runs locally. If not,
 it executes itself on every connected node that does; that node's output returns
-to the operator's terminal. With no reachable ecallmgr node it writes nothing
+to the operator's terminal. Candidates are the already connected nodes plus every node the AMQP node
+registry advertises as running `ecallmgr`; on separate hosts the applications
+node is normally not connected to it beforehand, and the call connects on demand
+with the cluster cookie. A candidate is used only if it really runs
+`ecallmgr_fs_nodes`, so dead or unrelated advertised nodes are skipped. With no
+reachable ecallmgr node it writes nothing
 and prints the `sup -n ecallmgr` form. Behavior on an ecallmgr node is unchanged.
 
 ## Verification
