@@ -85,6 +85,10 @@ compile_commands.json
 /node_modules/
 /var/
 
+# Operator-local credentials and Python caches: never commit.
+/key
+__pycache__/
+
 /doc/mkdocs/*.local
 
 /doc/engineering/.org/proper.pdf
