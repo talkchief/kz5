@@ -15,6 +15,14 @@ assert(src.includes("'--sysctl','net.ipv4.ip_local_reserved_ports=34512-34513'")
 assert(src.includes("'--net=/proc/self/fd/3'"),'Pin only the owned network namespace');
 assert(!src.includes("'--privileged'")&&!src.includes("'--network=host'")&&!src.includes("'--publish'"));
 assert(src.indexOf('saveState(s);\n    podman')<src.indexOf("['network','create'"));
+// Regression: an unbounded tmpfs journal OOM-killed the 1 GiB CouchDB guest.
+const journal=fs.readFileSync(__dirname+'/kazoo-stage-journal.conf','utf8');
+for(const key of ['SystemMaxUse','RuntimeMaxUse']) {
+    const limit=journal.match(new RegExp('^'+key+'=(\\d+)M$','m'));
+    assert(limit&&Number(limit[1])>0&&Number(limit[1])<=64,key+' must bound the guest journal far below the smallest role limit');
+}
+assert(/function hardenContainer\(id\) \{[\s\S]*?boundJournal\(id\);\n\}/.test(src),'Every created, resumed or rebooted guest must bound its journal');
+assert(src.includes("'--vacuum-size=48M'")&&src.includes("'--rotate'"),'An already grown journal must be released, not only capped');
 const isolation=fs.readFileSync(__dirname+'/kazoo-stage-isolation.service','utf8');
 assert(isolation.includes('route replace blackhole 10.1.0.0/16'));
 assert(isolation.includes('Before=network-pre.target network.target network-online.target'));

@@ -164,6 +164,30 @@ function hardenContainer(id) {
     podman(['exec',id,'systemctl','daemon-reload']);
     podman(['exec',id,'systemctl','enable','--now','kazoo-stage-isolation.service']);
     assert.equal(podman(['exec',id,'systemctl','is-active','kazoo-stage-isolation.service']),'active');
+    boundJournal(id);
+}
+// The guest journal is tmpfs charged to the container memory limit. Bound it,
+// then rotate and vacuum so an already grown journal is released immediately.
+function journalMiB(id) {
+    return Number(podman(['exec',id,'sh','-c',"df -m /var/log/journal | awk 'END{print $3}'"]));
+}
+function boundJournal(id) {
+    const before=journalMiB(id);
+    podman(['exec',id,'install','-d','-m','0755','/etc/systemd/journald.conf.d']);
+    podman(['cp',__dirname+'/kazoo-stage-journal.conf',id+':/etc/systemd/journald.conf.d/10-kazoo-stage-memory.conf']);
+    podman(['exec',id,'chmod','0644','/etc/systemd/journald.conf.d/10-kazoo-stage-memory.conf']);
+    podman(['exec',id,'systemctl','restart','systemd-journald.service'],{timeout:60000});
+    podman(['exec',id,'journalctl','--rotate']);
+    podman(['exec',id,'journalctl','--vacuum-size=48M'],{timeout:60000});
+    const after=journalMiB(id);
+    assert(Number.isFinite(after)&&after<=64,'Guest journal still exceeds its memory bound: '+after+' MiB');
+    return {before,after};
+}
+function boundJournals() {
+    const owned=json(['ps','--format','json','--filter','label=io.talkchief.kazoo.acceptance='+OWNER]);
+    assert(owned.length>0,'No running owned lab guest');
+    const result=owned.map(c=>({name:c.Names[0],...boundJournal(c.Id)}));
+    console.log(JSON.stringify({status:'JOURNALS_BOUNDED',limit_mib:48,guests:result}));
 }
 function configFor(role,secrets,settings=SETTINGS) {
     assert(Object.hasOwn(UNITS,role),'Role provisioning not implemented');
@@ -497,6 +521,7 @@ try {
     else if(args.length===2&&args[0]==='--begin-install')installRole(args[1],true);
     else if(args.length===2&&args[0]==='--collect-install')collectRole(args[1]);
     else if(args.length===1&&args[0]==='--provision-monitor')provisionMonitor();
+    else if(args.length===1&&args[0]==='--bound-journals')boundJournals();
     else if(args.length===2&&args[0]==='--sync-source')syncSource(args[1]);
     else if(args.length===2&&args[0]==='--verify-role')verifyRole(args[1]);
     else if(args.length===2&&args[0]==='--reboot-role')verifyRole(args[1],true);
