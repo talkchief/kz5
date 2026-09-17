@@ -7,6 +7,22 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Main44 runtime promotion of queue recovery + DNS default — installer PASS, September17:**
+  New tracked `scripts/promote-main-dev-runtime.sh` (the previously uncommitted
+  wrapper, per `doc/main_dev_runtime_promotion.md`) ran as unit `kz5-promo` on
+  pushed source `7449916`: idle admission (0 channels, no ACDC agents), verified
+  checksummed runtime/config backups, SIP ingress closed 21:48:38, normal
+  `install-kazoo5.sh kazoo-apps ecallmgr` exit0, ingress reopened 22:00:32.
+  Protected receipt/logs: `/root/kz5-main-promotion-20260917.HrMmbqHO`.
+  Independent post-checks: the running VM's `acdc_queue_fsm`,
+  `acdc_queue_manager`, `acdc_queue_listener`, `kapi_acdc_queue` and
+  `kz_json_schema_extensions` MD5s equal the built files; the new installer gate
+  reported DNS validation disabled and the stored value rereads `false`; nine
+  main services active; zero channels. No call was placed on main44 in this
+  promotion: the real-call evidence for these fixes is the private pair entry
+  below. Backups are recovery material, not a tested rollback. A harmless,
+  pre-existing OS `sssd_kcm` log-directory warning was seen and is unrelated.
+
 - **P0 / retained queue work — PRIVATE PAIR DEPLOYED + NATIVE PASS, September17:**
   Source `9fe5141` (pushed) installed through the normal installer on both
   private apps guests: primary `kz5-stage-install-kazoo-apps-18` and peer
