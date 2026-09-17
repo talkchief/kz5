@@ -16,6 +16,8 @@
 -define(ABANDON_HANGUP, <<"member_hangup">>).
 -define(ABANDON_EMPTY, <<"member_exit_empty">>).
 -define(ABANDON_INTERNAL_ERROR, <<"INTERNAL ERROR">>).
+%% Caller ended after a selected agent accepted but before any bridge was proven.
+-define(ABANDON_UNPROVEN_BRIDGE, <<"member_hangup_bridge_unproven">>).
 
 -define(PRESENCE_GREEN, <<"terminated">>).
 -define(PRESENCE_RED_FLASH, <<"early">>).

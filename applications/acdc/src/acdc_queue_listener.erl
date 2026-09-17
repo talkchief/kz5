@@ -380,6 +380,7 @@ handle_cast({'timeout_member_call', WinnerJObjs}, #state{call=Call
 handle_cast({'ignore_member_call', Call, Delivery}, #state{shared_pid=SharedPid}=State) ->
     lager:debug("ignoring member call ~s, moving on", [kapps_call:call_id(Call)]),
     ack_and_unbind(Call, SharedPid, Delivery),
+    publish_member_delivery_settled(State#state.account_id, State#state.queue_id, Call),
     {'noreply', clear_call_state(State), 'hibernate'};
 handle_cast({'exit_member_call', WinnerJObjs}, #state{call=Call
                                                      ,queue_id=QueueId
@@ -416,8 +417,12 @@ handle_cast({'cancel_member_call', _RejectJObj}, #state{queue_id=QueueId
                                                        }=State) ->
     lager:debug("agent failed to handle the call, nack"),
 
-    publish_queue_member_remove(AccountId, QueueId, acdc_queue_member:logical_id(Call)),
-    _ = maybe_nack(Call, Delivery, Pid),
+    %% A nack returns the delivery to the broker: only an acknowledgement may be
+    %% announced as settled.
+    case maybe_nack(Call, Delivery, Pid) of
+        'true' -> publish_queue_member_remove(AccountId, QueueId, acdc_queue_member:logical_id(Call));
+        'false' -> publish_member_delivery_settled(AccountId, QueueId, Call)
+    end,
     {'noreply', clear_call_state(State), 'hibernate'};
 handle_cast({'cancel_member_call', _MemberCallJObj, Delivery}, #state{shared_pid=Pid}=State) ->
     lager:debug("can't handle the member_call, sending it back up"),
@@ -508,8 +513,8 @@ handle_call_failure(#state{queue_id=QueueId
                           ,delivery=Delivery
                           }, Reason) ->
     CallId = acdc_queue_member:logical_id(Call),
-    publish_queue_member_remove(AccountId, QueueId, CallId),
     ack_and_unbind(Call, SharedPid, Delivery),
+    publish_member_delivery_settled(AccountId, QueueId, Call),
     send_member_call_failure(Q, AccountId, QueueId, CallId, MyId, AgentId, Reason).
 
 %%------------------------------------------------------------------------------
@@ -601,6 +606,17 @@ publish_queue_member_remove(AccountId, QueueId, CallId) ->
     Prop = [{<<"Account-ID">>, AccountId}
            ,{<<"Queue-ID">>, QueueId}
            ,{<<"Call-ID">>, CallId}
+            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+           ],
+    kapi_acdc_queue:publish_queue_member_remove(Prop).
+
+%% Only the worker that owned this broker delivery, after acknowledging it.
+-spec publish_member_delivery_settled(kz_term:ne_binary(), kz_term:ne_binary(), kapps_call:call()) -> 'ok'.
+publish_member_delivery_settled(AccountId, QueueId, Call) ->
+    Prop = [{<<"Account-ID">>, AccountId}
+           ,{<<"Queue-ID">>, QueueId}
+           ,{<<"Call-ID">>, acdc_queue_member:logical_id(Call)}
+           ,{<<"Settled-Call-ID">>, kapps_call:call_id(Call)}
             | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
            ],
     kapi_acdc_queue:publish_queue_member_remove(Prop).

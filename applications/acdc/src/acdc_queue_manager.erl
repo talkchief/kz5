@@ -229,7 +229,11 @@ start_queue_call(JObj, Props, Call) ->
 
 -spec handle_member_call_success(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_member_call_success(JObj, Prop) ->
-    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', kz_json:get_value(<<"Call-ID">>, JObj)}).
+    %% Published by the delivery owner after acknowledging the broker delivery.
+    Srv = props:get_value('server', Prop),
+    CallId = kz_json:get_value(<<"Call-ID">>, JObj),
+    gen_listener:cast(Srv, {'handle_queue_member_remove', CallId}),
+    gen_listener:cast(Srv, {'member_delivery_settled', CallId}).
 
 -spec handle_member_call_cancel(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_member_call_cancel(JObj, Props) ->
@@ -267,7 +271,12 @@ handle_queue_member_replace(JObj, Prop) ->
 
 -spec handle_queue_member_remove(kz_json:object(), kz_term:proplist()) -> 'ok'.
 handle_queue_member_remove(JObj, Prop) ->
-    gen_listener:cast(props:get_value('server', Prop), {'handle_queue_member_remove', kz_json:get_value(<<"Call-ID">>, JObj)}).
+    Srv = props:get_value('server', Prop),
+    gen_listener:cast(Srv, {'handle_queue_member_remove', kz_json:get_value(<<"Call-ID">>, JObj)}),
+    case kz_json:get_ne_binary_value(<<"Settled-Call-ID">>, JObj) of
+        'undefined' -> 'ok';
+        SettledId -> gen_listener:cast(Srv, {'member_delivery_settled', SettledId})
+    end.
 
 -spec handle_config_change(kz_types:server_ref(), kz_json:object()) -> 'ok'.
 handle_config_change(Srv, JObj) ->
@@ -657,9 +666,7 @@ handle_cast({'update_queue_config', JObj}, #state{enter_when_empty=_EnterWhenEmp
     lager:debug("maybe changing ewe from ~s to ~s", [_EnterWhenEmpty, EWE]),
     {'noreply', State#state{enter_when_empty=EWE}, 'hibernate'};
 
-handle_cast({'member_call_cancel', K, JObj}, #state{ignored_member_calls=Dict
-                                                   ,current_member_calls=Calls
-                                                   }=State) ->
+handle_cast({'member_call_cancel', K, JObj}, #state{current_member_calls=Calls}=State) ->
     AccountId = kz_json:get_value(<<"Account-ID">>, JObj),
     QueueId = kz_json:get_value(<<"Queue-ID">>, JObj),
     CallId = kz_json:get_value(<<"Call-ID">>, JObj),
@@ -676,7 +683,13 @@ handle_cast({'member_call_cancel', K, JObj}, #state{ignored_member_calls=Dict
             publish_member_call_failure(Q, AccountId, QueueId, CallId, Reason)
     end,
 
-    {'noreply', State#state{ignored_member_calls=dict:store(K, 'true', Dict)}};
+    {'noreply', maybe_ignore_member_call(K, queue_member(CallId, Calls), State)};
+
+handle_cast({'member_delivery_settled', CallId}, #state{account_id=AccountId, queue_id=QueueId}=State)
+  when is_binary(CallId) ->
+    {'noreply', settle_member_delivery(make_ignore_key(AccountId, QueueId, CallId), State)};
+handle_cast({'member_delivery_settled', _}, State) ->
+    {'noreply', State};
 
 handle_cast({'start_workers'}, #state{account_id=AccountId
                                      ,queue_id=QueueId
@@ -968,6 +981,45 @@ start_secondary_queue(AccountId, QueueId) ->
 
 make_ignore_key(AccountId, QueueId, CallId) ->
     {AccountId, QueueId, CallId}.
+
+%% A cancellation marker suppresses a cancelled member_call that is still queued
+%% at the broker. Every manager stores one, but only the node whose worker later
+%% consumes that delivery used to erase it, so the others kept theirs forever.
+%% The delivery owner now announces settlement after its acknowledgement; only
+%% that proof releases a marker. Unproven markers are retained: a delayed
+%% cancelled delivery must never ring an agent.
+-define(SETTLED_MEMBER_TTL_MS, 5 * ?MILLISECONDS_IN_MINUTE).
+-define(SETTLED_MEMBER_MAX, 2000).
+
+-spec settle_member_delivery(tuple(), mgr_state()) -> mgr_state().
+settle_member_delivery(K, #state{ignored_member_calls=Dict, settled_member_calls=Settled}=State) ->
+    Now = erlang:monotonic_time('millisecond'),
+    State#state{ignored_member_calls=dict:erase(K, Dict)
+               ,settled_member_calls=prune_settled_members(Settled#{K => Now}, Now)
+               }.
+
+%% The settlement can overtake the cancellation it answers. Skip the marker only
+%% then: a call this manager still lists as waiting was enqueued again after the
+%% settlement and keeps full protection.
+-spec maybe_ignore_member_call(tuple(), kapps_call:call() | 'undefined', mgr_state()) -> mgr_state().
+maybe_ignore_member_call(K, Member, #state{ignored_member_calls=Dict, settled_member_calls=Settled}=State) ->
+    Now = erlang:monotonic_time('millisecond'),
+    case Member =:= 'undefined'
+        andalso Now - maps:get(K, Settled, Now - ?SETTLED_MEMBER_TTL_MS) < ?SETTLED_MEMBER_TTL_MS
+    of
+        'true' -> State#state{settled_member_calls=maps:remove(K, Settled)};
+        'false' -> State#state{ignored_member_calls=dict:store(K, 'true', Dict)}
+    end.
+
+-spec prune_settled_members(map(), integer()) -> map().
+prune_settled_members(Settled, Now) ->
+    Fresh = maps:filter(fun(_, At) -> Now - At < ?SETTLED_MEMBER_TTL_MS end, Settled),
+    case maps:size(Fresh) > ?SETTLED_MEMBER_MAX of
+        'false' -> Fresh;
+        'true' ->
+            Newest = lists:sublist(lists:reverse(lists:keysort(2, maps:to_list(Fresh))), ?SETTLED_MEMBER_MAX),
+            maps:from_list(Newest)
+    end.
 
 -spec queue_member(kz_term:ne_binary(), [kapps_call:call()]) -> kapps_call:call() | 'undefined'.
 queue_member(LogicalId, Calls) ->

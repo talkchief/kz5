@@ -7,6 +7,29 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **P0 / retained queue work — SOURCE FIXED + offline PASS, NOT DEPLOYED, September17:**
+  Both causes of the September10 rollout refusal below are repaired in source.
+  (1) An unresolved bridge proof now keeps a 30-second single-probe observation
+  armed; only complete terminated evidence releases the member (abandon reason
+  `member_hangup_bridge_unproven`) and only complete reciprocal evidence marks
+  it handled. (2) Cancellation markers are released by the delivery owner's
+  post-acknowledgement `Settled-Call-ID` announcement instead of leaking on every
+  other manager. Regressions: ordinary bridge proof 9 groups (3 new fail on
+  `d14880e`), new `scripts/test-acdc-cancel-markers.sh` 7 pass / baseline 5 fail
+  + 1 control. Unchanged and passing: unit48, callback-queue27, agent-maintenance
+  138, strategy shards19/18, agent-recovery27, dashboard caller10/events24,
+  callback probe6/snapshot5/announcements12, languages12, dispatch guards.
+  Already failing identically on untouched `d14880e` on this host, not caused
+  here: `test-acdc-queue-members.sh` (meck cannot mock the locally built
+  `kapps_call`), `test-callback-timing.cjs`, and
+  `test-gen-listener-dispatch.sh` (local `core/` differs from fresh pinned source
+  plus patches — the checkout predates the latest patch application).
+  Manager record layout changed: cold restart only. No installer run, native
+  check or call was performed; the retained private-VM state was not touched.
+  See `doc/acdc_cancellation_markers.md` and `doc/acdc_ordinary_bridge_proof.md`.
+  Next: normal private apps-pair build, native inventory, real abandoned-call and
+  lost-hangup acceptance, then the rollout retry.
+
 - **P0 / retained ordinary queue bridge and cancellation ownership — OPEN, September10:**
   Native preflight for dispatch rollout refused before starting any installer.
   Apps14 retains a `connecting` queue worker with unresolved bridge proof and

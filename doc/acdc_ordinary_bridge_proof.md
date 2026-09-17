@@ -84,3 +84,36 @@ The earlier43165 failure remains valid baseline evidence, superseded by this
 pass, not reclassified. Hints contain no causal call nonce. Browser call-transition
 rendering, restricted-user authorization, cross-node failures and load/soak
 remain unproven; the conservative unresolved-proof liveness limit still applies.
+
+## Unresolved-proof reconciliation — September 17, 2026 (source only)
+
+**Not deployed; no native acceptance.** The liveness limitation above was hit on
+September 10: apps14 retained a `connecting` worker with `proof_status=unresolved`
+and no timer after its caller had terminated (`maintenance_listener_dispatch.md`).
+The fault that loses the proof can lose the authoritative hangup too, and
+nothing looked again after the fixed 15-second deadline.
+
+An unresolved caller now keeps one slow observation armed: every 30 seconds a
+single `observe_channels/2` probe with a 10-second watchdog. The timer is re-armed
+before each probe, so a probe that never reports is replaced by the next tick
+and never doubled. Outcomes:
+
+- complete evidence of the reciprocal answered bridge with a selected, accepted
+  agent leg on one switch node → the existing handled completion, once;
+- complete evidence, stable responder set, exactly this caller, `terminated` →
+  the delivery is cancelled through the listener and the member is published as
+  abandoned with reason `member_hangup_bridge_unproven`. It is deliberately not
+  `handled` (no bridge was ever proven) and not `member_hangup` (an agent had
+  accepted), so reports can separate it;
+- anything else (unknown, incomplete, empty responders, another caller, extra
+  channels, active but unbridged, bridged to an unselected leg) → no change.
+
+No reroute, synthetic hangup, partner cancellation or second originate is
+introduced; authoritative late `member_hungup`/bridge events still win and stop
+the timer. The FSM state record is unchanged (`bridge_ctx` is a map).
+
+`bash scripts/test-acdc-ordinary-bridge-proof.sh` now runs nine groups; the three
+new ones fail on `d14880e` and pass on the candidate, the six earlier groups pass
+on both. Both strategy shards pass (19 and 18). A worker already stuck in an old
+VM has no armed timer and is not recovered by this change; it needs the restart
+that a normal deployment performs, or a separately reviewed intervention.

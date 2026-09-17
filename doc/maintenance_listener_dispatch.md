@@ -109,6 +109,12 @@ in that rollout directory as `queue-state-172.30.253.14.txt`,
 `queue-state-172.30.253.20.txt` and `ordinary-proof-observation.txt`.
 No fake hangup, state replacement, force-ack, restart or redial was used.
 
+**September 17 source update (not deployed):** both repairs named below are now
+implemented with before-fail/after-pass regressions — unresolved-proof
+reconciliation in `acdc_ordinary_bridge_proof.md`, marker settlement in
+`acdc_cancellation_markers.md`. Native recovery acceptance and the rollout retry
+are still outstanding.
+
 **Next source repair:** reconcile an ordinary queue bridge-proof timeout after
 its initial deadline without rerouting a possibly connected caller; only fresh
 complete terminal evidence may release owned queue work. Also reconcile manager

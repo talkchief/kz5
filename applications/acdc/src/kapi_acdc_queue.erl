@@ -606,11 +606,13 @@ is_callback_id(<<"acdc-callback-", Digest:64/binary>>) ->
 is_callback_id(_) -> 'false'.
 
 -define(QUEUE_MEMBER_REMOVE_HEADERS, [<<"Account-ID">>, <<"Queue-ID">>, <<"Call-ID">>]).
--define(OPTIONAL_QUEUE_MEMBER_REMOVE_HEADERS, []).
+%% Settled-Call-ID: set only by the worker that owned the broker delivery, after
+%% acknowledging it. Absent on removals that may still requeue the delivery.
+-define(OPTIONAL_QUEUE_MEMBER_REMOVE_HEADERS, [<<"Settled-Call-ID">>]).
 -define(QUEUE_MEMBER_REMOVE_VALUES, [{<<"Event-Category">>, <<"queue">>}
                                     ,{<<"Event-Name">>, <<"member_remove">>}
                                     ]).
--define(QUEUE_MEMBER_REMOVE_TYPES, []).
+-define(QUEUE_MEMBER_REMOVE_TYPES, [{<<"Settled-Call-ID">>, fun kz_term:is_ne_binary/1}]).
 
 -spec queue_member_remove(kz_term:api_terms()) ->
           {'ok', iolist()} |

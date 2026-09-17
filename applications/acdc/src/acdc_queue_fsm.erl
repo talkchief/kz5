@@ -76,6 +76,11 @@
 -define(ANNOUNCE_TIMEOUT, 120 * ?MILLISECONDS_IN_SECOND).
 -define(ANNOUNCE_TIMEOUT_MESSAGE, 'announce_timer_expired').
 
+%% Slow observation of a caller whose bridge proof stayed unresolved. The probe
+%% budget must stay below the interval so at most one probe is ever in flight.
+-define(ORDINARY_RECONCILE_MS, 30 * ?MILLISECONDS_IN_SECOND).
+-define(ORDINARY_RECONCILE_PROBE_MS, 10 * ?MILLISECONDS_IN_SECOND).
+
 -record(state, {listener_proc :: kz_term:api_pid()
                ,manager_proc :: pid()
                ,connect_resps = [] :: kz_json:objects()
@@ -687,8 +692,13 @@ connecting('info', {'timeout', Ref, 'ordinary_bridge_proof_timeout'}, #state{bri
     %% partner, or start a second originate because an AMQP proof was lost.
     lager:error("ACDC selected-agent/reciprocal-bridge proof unresolved; preserving caller without rerouting"),
     ordinary_stop_bridge_probe(Ctx),
-    {'keep_state', State#state{bridge_ctx=(maps:without(['timer_ref', 'probe_ref', 'probe_pid', 'probe_retry_ref'], Ctx))#{'proof_status' => 'unresolved'}}};
+    Unresolved = (maps:without(['timer_ref', 'probe_ref', 'probe_pid', 'probe_retry_ref'], Ctx))#{'proof_status' => 'unresolved'},
+    {'keep_state', State#state{bridge_ctx=ordinary_arm_reconcile(Unresolved)}};
 connecting('info', {'timeout', _, 'ordinary_bridge_proof_timeout'}, State) -> {'keep_state', State};
+connecting('info', {'timeout', Ref, 'ordinary_bridge_reconcile'}
+            ,#state{bridge_ctx=#{'reconcile_ref' := Ref, 'proof_status' := 'unresolved'}}=State) ->
+    ordinary_start_reconcile(State);
+connecting('info', {'timeout', _, 'ordinary_bridge_reconcile'}, State) -> {'keep_state', State};
 connecting('info', {'timeout', Ref, 'callback_commit_retry'}
             ,#state{callback_ctx=#{'timer_ref' := Ref, 'mode' := 'native'}}=State) -> callback_complete(State);
 connecting('info', Event, State) -> callback_native_info(Event, 'connecting', State).
@@ -709,6 +719,15 @@ handle_event({'ordinary_bridge_snapshot', Ref, Caller, Result}, 'connecting'
         'false' -> {'keep_state', State}
     end;
 handle_event({'ordinary_bridge_snapshot', _, _, _}, StateName, State) -> {'next_state', StateName, State};
+handle_event({'ordinary_bridge_reconcile', Ref, Caller, Result}, 'connecting'
+             ,#state{bridge_ctx=#{'probe_ref' := Ref, 'proof_status' := 'unresolved'}=Context
+                    ,member_call=Call}=State) ->
+    case Caller =:= kapps_call:call_id(Call) of
+        'true' ->
+            ordinary_reconcile(Result, State#state{bridge_ctx=maps:without(['probe_ref', 'probe_pid'], Context)});
+        'false' -> {'keep_state', State}
+    end;
+handle_event({'ordinary_bridge_reconcile', _, _, _}, StateName, State) -> {'next_state', StateName, State};
 handle_event({'channel_bridged', Event}, 'connecting', #state{callback_ctx=#{'mode' := 'native'}}=State) ->
     callback_bridge(Event, State);
 handle_event({'channel_bridged', _}, StateName, #state{callback_ctx=#{'mode' := 'native'}}=State) ->
@@ -933,6 +952,7 @@ clear_member_call(#state{connection_timer_ref=ConnRef
     maybe_stop_timer(maps:get('lease_timer_ref', Callback, 'undefined')),
     maybe_stop_timer(maps:get('bridge_probe_ref', Callback, 'undefined')),
     maybe_stop_timer(maps:get('timer_ref', State#state.bridge_ctx, 'undefined')),
+    maybe_stop_timer(maps:get('reconcile_ref', State#state.bridge_ctx, 'undefined')),
     ordinary_stop_bridge_probe(State#state.bridge_ctx),
     State#state{connect_resps=[]
                ,connect_wins=[]
@@ -2208,6 +2228,64 @@ ordinary_bridge_snapshot(Result, #state{bridge_ctx=Context, member_call=Call, co
             {'next_state', 'connecting', State#state{bridge_ctx=Context#{'probe_retry_ref' => Ref}}};
         _ -> {'next_state', 'connecting', State}
     end.
+
+%% The fixed proof deadline bounds the fast probe only. An unresolved caller is
+%% still owned queue work, and the authoritative hangup or bridge event may be
+%% lost with the same fault that lost the proof. Keep one slow, always-armed
+%% observation: only fresh complete evidence may finish the member. Unknown or
+%% partial evidence changes nothing, so a possibly bridged caller is never
+%% rerouted, hung up or reported handled by inference.
+-spec ordinary_arm_reconcile(map()) -> map().
+ordinary_arm_reconcile(Context) ->
+    maybe_stop_timer(maps:get('reconcile_ref', Context, 'undefined')),
+    Context#{'reconcile_ref' => erlang:start_timer(?ORDINARY_RECONCILE_MS, self(), 'ordinary_bridge_reconcile')}.
+
+-spec ordinary_start_reconcile(state()) -> kz_types:handle_fsm_ret(state()).
+ordinary_start_reconcile(#state{bridge_ctx=Context, member_call=Call, account_id=AccountId}=State) ->
+    %% Re-arm before probing: a probe killed by its watchdog never reports, and
+    %% the next tick replaces it instead of leaving the worker without a timer.
+    ordinary_stop_bridge_probe(Context),
+    Parent = self(), Ref = make_ref(), Caller = kapps_call:call_id(Call),
+    Pid = spawn(fun() ->
+        {'ok', Watchdog} = timer:kill_after(?ORDINARY_RECONCILE_PROBE_MS, self()),
+        Observed = try acdc_callback_recovery_io:observe_channels(AccountId, [Caller])
+                   catch _:_ -> {'error', 'unknown'} end,
+        _ = timer:cancel(Watchdog),
+        gen_statem:cast(Parent, {'ordinary_bridge_reconcile', Ref, Caller, Observed})
+    end),
+    Next = ordinary_arm_reconcile(maps:without(['probe_retry_ref'], Context)),
+    {'keep_state', State#state{bridge_ctx=Next#{'probe_ref' => Ref, 'probe_pid' => Pid}}}.
+
+-spec ordinary_reconcile(any(), state()) -> kz_types:handle_fsm_ret(state()).
+ordinary_reconcile(Result, #state{bridge_ctx=Context, member_call=Call, connect_wins=Wins
+                                 ,listener_proc=Listener, account_id=AccountId, queue_id=QueueId}=State) ->
+    Caller = kapps_call:call_id(Call),
+    Accepts = maps:values(maps:get('accepts', Context, #{})),
+    Candidates = lists:usort([kz_json:get_value(<<"Agent-Call-ID">>, A) || A <- Accepts,
+                            lists:any(fun(W) -> acdc_queue_strategy:process_matches(A, W) end, Wins)]),
+    case {callback_observed_agent(Result, Caller, Candidates), ordinary_caller_terminated(Result, Caller)} of
+        {{'ok', Leg}, _} ->
+            lager:notice("late complete bridge evidence resolved queue member ~s", [Caller]),
+            ordinary_record_bridge(Leg, State);
+        {'unknown', 'true'} ->
+            %% The bridge was never proven, so this is neither handled nor an
+            %% ordinary waiting abandon; keep the distinction in the statistic.
+            lager:notice("complete evidence shows unresolved queue member ~s terminated; releasing queue work", [Caller]),
+            acdc_queue_listener:cancel_member_call(Listener, kz_json:from_list([{<<"Call-ID">>, Caller}])),
+            acdc_stats:call_abandoned(AccountId, QueueId, acdc_queue_member:logical_id(Call), ?ABANDON_UNPROVEN_BRIDGE),
+            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
+        {'unknown', 'false'} -> {'keep_state', State}
+    end.
+
+%% Exactly one complete observation of this caller, from a stable responder set,
+%% with no active owner. Anything else is not termination evidence.
+-spec ordinary_caller_terminated(any(), kz_term:ne_binary()) -> boolean().
+ordinary_caller_terminated({'ok', #{'complete' := 'true', 'channels' := Channels}}, Caller) when is_list(Channels) ->
+    case [O || #{'call_id' := Id}=O <- Channels, Id =:= Caller] of
+        [#{'state' := 'terminated', 'responders' := [_|_]}] -> length(Channels) =:= 1;
+        _ -> 'false'
+    end;
+ordinary_caller_terminated(_, _) -> 'false'.
 
 ordinary_stop_bridge_probe(Context) ->
     maybe_stop_timer(maps:get('probe_retry_ref', Context, 'undefined')),

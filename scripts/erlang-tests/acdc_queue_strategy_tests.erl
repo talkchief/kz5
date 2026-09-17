@@ -395,6 +395,102 @@ ordinary_probe_retry_succeeds_without_extending_deadline_test() -> with_mocks(fu
     after acdc_queue_fsm:terminate(normal,connecting,P2),probe_stopped(P2) end
 end).
 
+%% Retained production state: the fixed deadline passed, the hangup event was
+%% lost, and both controllers later report the exact caller terminated.
+unresolved_state() ->
+    {next_state,connecting,Pending}=acdc_queue_fsm:connecting(cast,{accepted,accepted(r(<<"a">>),<<"a-leg">>)},bridge_state()),
+    Ref=maps:get(timer_ref,qfield(bridge_ctx,Pending)),
+    {keep_state,Unresolved}=acdc_queue_fsm:connecting(info,{timeout,Ref,ordinary_bridge_proof_timeout},Pending),
+    erlang:cancel_timer(Ref), probe_stopped(Pending),
+    Unresolved.
+
+terminated_snapshot() ->
+    {ok,#{complete=>true,bridge=>#{state=>none},reasons=>[],
+          channels=>[#{call_id=><<"caller">>,state=>terminated,reason=>complete,responder_count=>2,
+                       responders=>[<<"ecallmgr@a">>,<<"ecallmgr@b">>]}]}}.
+
+reconcile_message(State) ->
+    Ref=maps:get(probe_ref,qfield(bridge_ctx,State)),
+    receive {'$gen_cast',{ordinary_bridge_reconcile,Ref,_,_}=Msg}->Msg after 1000->?assert(false) end.
+
+reconcile_tick(State) ->
+    Ref=maps:get(reconcile_ref,qfield(bridge_ctx,State)),
+    {keep_state,Probing}=acdc_queue_fsm:connecting(info,{timeout,Ref,ordinary_bridge_reconcile},State),
+    erlang:cancel_timer(Ref),
+    ?assertNotEqual(Ref,maps:get(reconcile_ref,qfield(bridge_ctx,Probing))),
+    Probing.
+
+ordinary_unresolved_releases_only_on_complete_terminated_evidence_test() -> with_mocks(fun() ->
+    Unresolved=unresolved_state(),
+    ?assert(is_reference(maps:get(reconcile_ref,qfield(bridge_ctx,Unresolved)))),
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(<<"account">>,[<<"caller">>]) -> terminated_snapshot() end),
+    Probing=reconcile_tick(Unresolved),
+    {next_state,ready,Done,hibernate}=acdc_queue_fsm:connecting(cast,reconcile_message(Probing),Probing),
+    ?assertEqual(#{},qfield(bridge_ctx,Done)), ?assertEqual(undefined,qfield(member_call,Done)),
+    ?assertEqual(false,erlang:read_timer(maps:get(reconcile_ref,qfield(bridge_ctx,Probing)))),
+    ?assertEqual(1,meck:num_calls(acdc_queue_listener,cancel_member_call,'_')),
+    ?assert(meck:called(acdc_stats,call_abandoned,[<<"account">>,<<"queue">>,<<"caller">>,<<"member_hangup_bridge_unproven">>])),
+    ?assertEqual(0,meck:num_calls(acdc_stats,call_handled,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,finish_member_call,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,timeout_agent,'_'))
+end).
+
+ordinary_unresolved_late_bridge_evidence_completes_handled_once_test() -> with_mocks(fun() ->
+    Unresolved=unresolved_state(),
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) -> reciprocal_snapshot(<<"a-leg">>) end),
+    Probing=reconcile_tick(Unresolved), Msg=reconcile_message(Probing),
+    {next_state,ready,Done,hibernate}=acdc_queue_fsm:connecting(cast,Msg,Probing),
+    ?assertEqual(false,erlang:read_timer(maps:get(reconcile_ref,qfield(bridge_ctx,Probing)))),
+    ?assert(meck:called(acdc_stats,call_handled,[<<"account">>,<<"queue">>,<<"caller">>,<<"a">>])),
+    ?assertEqual(0,meck:num_calls(acdc_stats,call_abandoned,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,cancel_member_call,'_')),
+    {next_state,ready,Done}=acdc_queue_fsm:ready(cast,Msg,Done),
+    ?assertEqual(1,meck:num_calls(acdc_stats,call_handled,'_'))
+end).
+
+ordinary_unresolved_inconclusive_evidence_retains_caller_and_timer_test() -> with_mocks(fun() ->
+    Unresolved=unresolved_state(),
+    {ok,Term}=terminated_snapshot(), [Obs]=maps:get(channels,Term),
+    Inconclusive=[{error,unknown}
+                 ,{unknown,Term#{complete=>false}}
+                 ,{ok,Term#{channels=>[Obs#{responders=>[]}]}}
+                 ,{ok,Term#{channels=>[Obs#{call_id=><<"other">>}]}}
+                 ,{ok,Term#{channels=>[Obs,Obs#{call_id=><<"extra">>}]}}
+                 ,{ok,Term#{channels=>[Obs#{state=>active,answered=>true}]}}
+                 ,reciprocal_snapshot(<<"unselected-leg">>)],
+    Last=lists:foldl(fun(Result,State) ->
+        meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) -> Result end),
+        Probing=reconcile_tick(State),
+        {keep_state,Kept}=acdc_queue_fsm:connecting(cast,reconcile_message(Probing),Probing),
+        ?assertEqual(maps:without([probe_ref,probe_pid],qfield(bridge_ctx,Probing)),qfield(bridge_ctx,Kept)),
+        ?assertEqual(qfield(member_call,Probing),qfield(member_call,Kept)),
+        ?assertEqual(unresolved,maps:get(proof_status,qfield(bridge_ctx,Kept))),
+        ?assert(is_integer(erlang:read_timer(maps:get(reconcile_ref,qfield(bridge_ctx,Kept))))),
+        Kept
+    end,Unresolved,Inconclusive),
+    %% A probe that never reports is replaced by the next tick, never doubled.
+    Parent=self(),
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) -> Parent!{hung,self()}, receive never->ok end end),
+    Hung=reconcile_tick(Last), HungPid=maps:get(probe_pid,qfield(bridge_ctx,Hung)),
+    receive {hung,HungPid}->ok after 1000->?assert(false) end,
+    Next=reconcile_tick(Hung), probe_stopped(Hung),
+    ?assertNotEqual(HungPid,maps:get(probe_pid,qfield(bridge_ctx,Next))),
+    Stale={ordinary_bridge_reconcile,maps:get(probe_ref,qfield(bridge_ctx,Hung)),<<"caller">>,terminated_snapshot()},
+    ?assertEqual({next_state,connecting,Next},acdc_queue_fsm:connecting(cast,Stale,Next)),
+    WrongCaller={ordinary_bridge_reconcile,maps:get(probe_ref,qfield(bridge_ctx,Next)),<<"other">>,terminated_snapshot()},
+    ?assertEqual({keep_state,Next},acdc_queue_fsm:connecting(cast,WrongCaller,Next)),
+    ?assertEqual({keep_state,Next},acdc_queue_fsm:connecting(info,{timeout,make_ref(),ordinary_bridge_reconcile},Next)),
+    ?assertEqual(0,meck:num_calls(acdc_stats,call_abandoned,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_stats,call_handled,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,cancel_member_call,'_')),
+    %% Authoritative late events still win while reconciliation is armed.
+    Hangup=j([{<<"Call-ID">>,<<"caller">>}]),
+    {next_state,ready,_,hibernate}=acdc_queue_fsm:connecting(cast,{member_hungup,Hangup},Next),
+    probe_stopped(Next),
+    ?assertEqual(false,erlang:read_timer(maps:get(reconcile_ref,qfield(bridge_ctx,Next)))),
+    ?assert(meck:called(acdc_stats,call_abandoned,[<<"account">>,<<"queue">>,<<"caller">>,<<"member_hangup">>]))
+end).
+
 reciprocal_snapshot(Leg) ->
     {ok,#{complete=>true,bridge=>#{state=>bridged,call_ids=>[<<"caller">>,Leg]},
           channels=>[#{call_id=><<"caller">>,state=>active,answered=>true,other_leg_call_id=>Leg,switch_node=><<"fs">>},

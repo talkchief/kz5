@@ -61,6 +61,7 @@ erl -pa "$bridge_output/production" -pa "$bridge_output/test" -noshell -eval '
     Module=acdc_queue_strategy_tests,
     Tests=lists:sort([N || {N,0}<-Module:module_info(exports),
         lists:prefix("ordinary_",atom_to_list(N)),lists:suffix("_test",atom_to_list(N))]),
-    6=length(Tests),io:format("Six ordinary bridge regression groups: ~p~n",[Tests]),
+    Wanted=case os:getenv("ACDC_ORDINARY_BRIDGE_EXPECTED") of false->9; Count->list_to_integer(Count) end,
+    Wanted=length(Tests),io:format("~b ordinary bridge regression groups: ~p~n",[Wanted,Tests]),
     case eunit:test([{test,Module,N} || N<-Tests],[verbose,{scale_timeouts,4}]) of ok->halt(0);_->halt(1) end.' \
     | tee "$bridge_output/eunit.log"
