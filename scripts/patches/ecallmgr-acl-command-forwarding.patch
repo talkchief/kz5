@@ -1,0 +1,192 @@
+diff --git a/src/ecallmgr_maintenance.erl b/src/ecallmgr_maintenance.erl
+index b3410bb..070bc0b 100644
+--- a/src/ecallmgr_maintenance.erl
++++ b/src/ecallmgr_maintenance.erl
+@@ -174,14 +174,13 @@ carrier_acls() -> carrier_acls('false').
+ carrier_acls(AsDefault) when not is_boolean(AsDefault) ->
+     carrier_acls(kz_term:is_true(AsDefault));
+ carrier_acls('true') ->
+-    list_acls(get_acls(<<"default">>), ?FS_CARRIER_ACL_LIST);
++    on_ecallmgr('carrier_acls', ['true'], fun() -> list_acls(get_acls(<<"default">>), ?FS_CARRIER_ACL_LIST) end);
+ carrier_acls('false') ->
+-    list_acls(get_acls(), ?FS_CARRIER_ACL_LIST).
++    on_ecallmgr('carrier_acls', ['false'], fun() -> list_acls(get_acls(), ?FS_CARRIER_ACL_LIST) end).
+ 
+ -spec test_carrier_ip(kz_term:ne_binary()) -> 'ok'.
+ test_carrier_ip(IP) ->
+-    Nodes = ecallmgr_fs_nodes:connected(),
+-    test_carrier_ip(IP, Nodes).
++    on_ecallmgr('test_carrier_ip', [IP], fun() -> test_carrier_ip(IP, ecallmgr_fs_nodes:connected()) end).
+ 
+ -spec test_carrier_ip(kz_term:ne_binary(), kz_term:ne_binary() | kz_term:ne_binaries()) -> 'ok'.
+ test_carrier_ip(_, []) -> 'no_return';
+@@ -201,9 +200,11 @@ allow_carrier(Name, IP) -> allow_carrier(Name, IP, 'false').
+ allow_carrier(Name, IP, AsDefault) when not is_boolean(AsDefault) ->
+     allow_carrier(Name, IP, kz_term:is_true(AsDefault));
+ allow_carrier(Name, IP, 'true') ->
+-    allow_carrier(Name, IP, get_acls(<<"default">>), fun kapps_config:set_default/3);
++    on_ecallmgr('allow_carrier', [Name, IP, 'true']
++               ,fun() -> allow_carrier(Name, IP, get_acls(<<"default">>), fun kapps_config:set_default/3) end);
+ allow_carrier(Name, IP, 'false') ->
+-    allow_carrier(Name, IP, get_acls(), fun kapps_config:set_node/4).
++    on_ecallmgr('allow_carrier', [Name, IP, 'false']
++               ,fun() -> allow_carrier(Name, IP, get_acls(), fun kapps_config:set_node/4) end).
+ 
+ -spec allow_carrier(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), config_fun()) ->
+           'no_return'.
+@@ -220,9 +221,11 @@ deny_carrier(Name, IP) -> deny_carrier(Name, IP, 'false').
+ deny_carrier(Name, IP, AsDefault) when not is_boolean(AsDefault) ->
+     deny_carrier(Name, IP, kz_term:is_true(AsDefault));
+ deny_carrier(Name, IP, 'true') ->
+-    deny_carrier(Name, IP, get_acls(<<"default">>), fun kapps_config:set_default/3);
++    on_ecallmgr('deny_carrier', [Name, IP, 'true']
++               ,fun() -> deny_carrier(Name, IP, get_acls(<<"default">>), fun kapps_config:set_default/3) end);
+ deny_carrier(Name, IP, 'false') ->
+-    deny_carrier(Name, IP, get_acls(), fun kapps_config:set_node/4).
++    on_ecallmgr('deny_carrier', [Name, IP, 'false']
++               ,fun() -> deny_carrier(Name, IP, get_acls(), fun kapps_config:set_node/4) end).
+ 
+ -spec deny_carrier(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), config_fun()) ->
+           'no_return'.
+@@ -236,14 +239,13 @@ sbc_acls() -> sbc_acls('false').
+ sbc_acls(AsDefault) when not is_boolean(AsDefault) ->
+     sbc_acls(kz_term:is_true(AsDefault));
+ sbc_acls('true') ->
+-    list_acls(get_acls(<<"default">>), ?FS_SBC_ACL_LIST);
++    on_ecallmgr('sbc_acls', ['true'], fun() -> list_acls(get_acls(<<"default">>), ?FS_SBC_ACL_LIST) end);
+ sbc_acls('false') ->
+-    list_acls(get_acls(), ?FS_SBC_ACL_LIST).
++    on_ecallmgr('sbc_acls', ['false'], fun() -> list_acls(get_acls(), ?FS_SBC_ACL_LIST) end).
+ 
+ -spec test_sbc_ip(kz_term:ne_binary()) -> 'ok'.
+ test_sbc_ip(IP) ->
+-    Nodes = ecallmgr_fs_nodes:connected(),
+-    test_sbc_ip(IP, Nodes).
++    on_ecallmgr('test_sbc_ip', [IP], fun() -> test_sbc_ip(IP, ecallmgr_fs_nodes:connected()) end).
+ 
+ -spec test_sbc_ip(kz_term:ne_binary(), kz_term:ne_binary() | kz_term:ne_binaries()) -> 'ok'.
+ test_sbc_ip(_, []) -> 'no_return';
+@@ -263,9 +265,11 @@ allow_sbc(Name, IP) -> allow_sbc(Name, IP, 'false').
+ allow_sbc(Name, IP, AsDefault) when not is_boolean(AsDefault) ->
+     allow_sbc(Name, IP, kz_term:is_true(AsDefault));
+ allow_sbc(Name, IP, 'true') ->
+-    allow_sbc(Name, IP, get_acls(<<"default">>), fun kapps_config:set_default/3);
++    on_ecallmgr('allow_sbc', [Name, IP, 'true']
++               ,fun() -> allow_sbc(Name, IP, get_acls(<<"default">>), fun kapps_config:set_default/3) end);
+ allow_sbc(Name, IP, 'false') ->
+-    allow_sbc(Name, IP, get_acls(), fun kapps_config:set_node/4).
++    on_ecallmgr('allow_sbc', [Name, IP, 'false']
++               ,fun() -> allow_sbc(Name, IP, get_acls(), fun kapps_config:set_node/4) end).
+ 
+ -spec allow_sbc(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), config_fun()) -> 'no_return'.
+ allow_sbc(Name, IP, ACLs, SetterFun) ->
+@@ -281,46 +285,41 @@ deny_sbc(Name, IP) -> deny_sbc(Name, IP, 'false').
+ deny_sbc(Name, IP, AsDefault) when not is_boolean(AsDefault) ->
+     deny_sbc(Name, IP, kz_term:is_true(AsDefault));
+ deny_sbc(Name, IP, 'true') ->
+-    deny_sbc(Name, IP, get_acls(<<"default">>), fun kapps_config:set_default/3);
++    on_ecallmgr('deny_sbc', [Name, IP, 'true']
++               ,fun() -> deny_sbc(Name, IP, get_acls(<<"default">>), fun kapps_config:set_default/3) end);
+ deny_sbc(Name, IP, 'false') ->
+-    deny_sbc(Name, IP, get_acls(), fun kapps_config:set_node/4).
++    on_ecallmgr('deny_sbc', [Name, IP, 'false']
++               ,fun() -> deny_sbc(Name, IP, get_acls(), fun kapps_config:set_node/4) end).
+ 
+ -spec deny_sbc(kz_term:ne_binary(), kz_term:ne_binary(), kz_json:object(), config_fun()) -> 'no_return'.
+ deny_sbc(Name, IP, ACLs, SetterFun) ->
+     modify_acls(Name, IP, ACLs, fun(_) -> sbc_acl(IP, <<"deny">>) end, SetterFun).
+ 
+ -spec acl_summary() -> 'no_return'.
+-acl_summary() ->
+-    list_acls(get_acls(), 'undefined').
++acl_summary() -> acl_summary('false').
+ 
+ -spec acl_summary(kz_term:api_binary() | boolean()) -> 'no_return'.
+ acl_summary(AsDefault) when not is_boolean(AsDefault) ->
+     acl_summary(kz_term:is_true(AsDefault));
+ acl_summary('true') ->
+-    list_acls(get_acls(<<"default">>), 'undefined');
++    on_ecallmgr('acl_summary', ['true'], fun() -> list_acls(get_acls(<<"default">>), 'undefined') end);
+ acl_summary('false') ->
+-    list_acls(get_acls(), 'undefined').
++    on_ecallmgr('acl_summary', ['false'], fun() -> list_acls(get_acls(), 'undefined') end).
+ 
+ -spec remove_acl(kz_term:text()) -> 'no_return'.
+ remove_acl(Name) ->
+-    remove_acl(kz_term:to_binary(Name)
+-              ,get_acls()
+-              ,fun kapps_config:set/3
+-              ).
++    on_ecallmgr('remove_acl', [Name]
++               ,fun() -> remove_acl(kz_term:to_binary(Name), get_acls(), fun kapps_config:set/3) end).
+ 
+ -spec remove_acl(kz_term:text(), kz_term:text() | boolean()) -> 'no_return'.
+ remove_acl(Name, AsDefault) when not is_boolean(AsDefault) ->
+     remove_acl(Name, kz_term:is_true(AsDefault));
+ remove_acl(Name, 'true') ->
+-    remove_acl(kz_term:to_binary(Name)
+-              ,get_acls(<<"default">>)
+-              ,fun kapps_config:set_default/3
+-              );
++    on_ecallmgr('remove_acl', [Name, 'true']
++               ,fun() -> remove_acl(kz_term:to_binary(Name), get_acls(<<"default">>), fun kapps_config:set_default/3) end);
+ remove_acl(Name, 'false') ->
+-    remove_acl(kz_term:to_binary(Name)
+-              ,get_acls()
+-              ,fun kapps_config:set_node/4
+-              ).
++    on_ecallmgr('remove_acl', [Name, 'false']
++               ,fun() -> remove_acl(kz_term:to_binary(Name), get_acls(), fun kapps_config:set_node/4) end).
+ 
+ -spec maybe_reload_acls(kz_term:ne_binary(), 'modify' | 'remove', non_neg_integer()) -> 'no_return'.
+ maybe_reload_acls(_Name, _Action, 0) ->
+@@ -363,8 +362,7 @@ reload_media_acls() ->
+ 
+ -spec reload_acls() -> 'no_return'.
+ reload_acls() ->
+-    _ = reload_media_acls(),
+-    'no_return'.
++    on_ecallmgr('reload_acls', [], fun() -> _ = reload_media_acls(), 'no_return' end).
+ 
+ -spec reload_trusted() -> 'no_return'.
+ reload_trusted() ->
+@@ -679,6 +677,39 @@ print_acl(FormatString, ACL) ->
+                             ]).
+ 
+ -spec get_acls() -> kz_json:object().
++%% SUP defaults to the applications node, which also carries this module but
++%% runs no ecallmgr: a node-scoped ACL was then stored under a node that nothing
++%% reads and the FreeSWITCH reload crashed with noproc, while the command looked
++%% half successful. Run the command where ecallmgr lives instead. Without a
++%% reachable ecallmgr node nothing is written.
++-spec on_ecallmgr(atom(), list(), fun(() -> Result)) -> Result | 'no_return'.
++on_ecallmgr(Function, Args, Local) ->
++    case is_pid(whereis('ecallmgr_fs_nodes')) of
++        'true' -> Local();
++        'false' -> forward_to_ecallmgr(Function, Args, ecallmgr_nodes())
++    end.
++
++-spec ecallmgr_nodes() -> [node()].
++ecallmgr_nodes() ->
++    [Node || Node <- lists:sort(nodes()),
++             is_pid(rpc:call(Node, 'erlang', 'whereis', ['ecallmgr_fs_nodes'], 5 * ?MILLISECONDS_IN_SECOND))
++    ].
++
++-spec forward_to_ecallmgr(atom(), list(), [node()]) -> 'no_return'.
++forward_to_ecallmgr(Function, _Args, []) ->
++    io:format("~s does not run ecallmgr and no connected ecallmgr node was found; nothing was changed.~n"
++              "Start ecallmgr, or run: sup -n ecallmgr ecallmgr_maintenance ~s ...~n", [node(), Function]),
++    'no_return';
++forward_to_ecallmgr(Function, Args, Nodes) ->
++    lists:foreach(fun(Node) ->
++                          io:format("~s does not run ecallmgr; running ~s on ~s~n", [node(), Function, Node]),
++                          case rpc:call(Node, ?MODULE, Function, Args, 60 * ?MILLISECONDS_IN_SECOND) of
++                              {'badrpc', Reason} -> io:format("~s failed on ~s: ~p~n", [Function, Node, Reason]);
++                              _ -> 'ok'
++                          end
++                  end, Nodes),
++    'no_return'.
++
+ get_acls() -> get_acls(node()).
+ 
+ -spec get_acls(atom() | kz_term:ne_binary()) -> kz_json:object().

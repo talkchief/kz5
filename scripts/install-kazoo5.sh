@@ -1914,6 +1914,8 @@ ensure_kazoo_sources() {
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"
     apply_kazoo_integration_patch ecallmgr
     apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
+        "$SCRIPT_DIR/patches/ecallmgr-acl-command-forwarding.patch"
+    apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
         "$SCRIPT_DIR/patches/ecallmgr-bridge-peer-identity.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
         "$SCRIPT_DIR/patches/ecallmgr-location-cache-recovery.patch"

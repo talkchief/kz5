@@ -7,6 +7,31 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **OPS / carrier whitelisting command — FIXED in source + native repair, September17:**
+  Operator ran `sup ecallmgr_maintenance allow_carrier` for three carriers; each
+  ended in `noproc ... ecallmgr_fs_nodes` and the entries were stored under
+  `kazoo_apps@dev-testing`, which ecallmgr never reads, while the listing looked
+  correct. Native repair on main44: carriers added as cluster defaults on the
+  ecallmgr node and present in its effective trusted list; misplaced copies
+  removed. Required patch `ecallmgr-acl-command-forwarding.patch` makes every ACL
+  command execute on the connected ecallmgr node(s) when run elsewhere, and write
+  nothing when none is reachable. Three-group regression including two real
+  distributed nodes passes; unpatched baseline fails; installer suites pass.
+  `fs_cli acl IP trusted` is false by design and is not a whitelisting test. See
+  `doc/ecallmgr_acl_commands.md`. Patch deployment recorded separately.
+
+- **ACDC / settled id on handled callbacks — source + offline PASS, September17:**
+  `member.call_success` now carries `Settled-Call-ID`; closes the documented
+  marker limit for returned callback legs. Eight marker groups pass, six fail on
+  `d14880e`; unit60, callback-queue27, ordinary-proof9, agent-maintenance138 pass.
+
+- **Private pair on `e6d5a08` — installer + real calls PASS, September17:** units
+  `kz5-stage-install-kazoo-apps-19` and `kz5-stage-install-apps-peer-14` exit0 and
+  collected; both VMs load the rebuilt modules. `kz5-stage-queue-calls-7` exit0:
+  two actual queued calls with directional audio
+  (`/var/log/kazoo-monitor-acceptance-YtaLzj`); native queue inventory PASS after
+  it (`queue-inventory-1789684952400-92c904f7.json`).
+
 - **P0-09 / automatic agent logout threshold — SOURCE FIXED + offline PASS, September17:**
   `max_connect_failures=0` logged every agent out on the first queue offer and
   the protection could not be disabled; the logout itself was logged only at
