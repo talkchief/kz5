@@ -2197,6 +2197,10 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"
     apply_kazoo_integration_patch ecallmgr
+    # Stacked on two files the integration patch owns, clear of its hunks, so its
+    # own applied-state check still recognises it (test-ecallmgr-media-reconnect.sh).
+    apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
+        "$SCRIPT_DIR/patches/ecallmgr-media-reconnect-delay.patch"
     apply_required_source_patch_stack "$KAZOO_ROOT/applications/ecallmgr" \
         "$SCRIPT_DIR/patches/ecallmgr-acl-command-forwarding.patch" \
         "$SCRIPT_DIR/patches/ecallmgr-acl-forwarding-node-registry.patch"

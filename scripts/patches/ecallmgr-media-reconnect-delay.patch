@@ -1,0 +1,34 @@
+--- a/src/node/ecallmgr_fs_nodes.erl
++++ b/src/node/ecallmgr_fs_nodes.erl
+@@ -672,7 +672,10 @@
+ 
+ -spec maybe_connect_to_node(fs_node()) -> 'ok' | {'error', any()}.
+ maybe_connect_to_node(#node{node=NodeName}=Node) ->
+-    timer:sleep(3 * ?MILLISECONDS_IN_SECOND),
++    %% FreeSWITCH accepts SIP a few seconds after its Erlang listener. Fixed
++    %% three-second waits here and in the pinger left it routable for about ten
++    %% seconds with no controller connected, and calls got 486.
++    timer:sleep(kapps_config:get_integer(?APP_NAME, <<"fs_node_connect_delay_ms">>, ?MILLISECONDS_IN_SECOND)),
+     lager:debug("attempting to connect to freeswitch node ~s", [NodeName]),
+     case maybe_ping_node(Node) of
+         {'error', _R}=E -> E;
+--- a/src/node/ecallmgr_fs_pinger.erl
++++ b/src/node/ecallmgr_fs_pinger.erl
+@@ -31,7 +31,7 @@
+ 
+ -record(state, {node = 'undefined' :: atom()
+                ,options = [] :: kz_term:proplist()
+-               ,timeout = 2 * ?MILLISECONDS_IN_SECOND
++               ,timeout = ?MILLISECONDS_IN_SECOND
+                }).
+ -type state() :: #state{}.
+ 
+@@ -95,7 +95,7 @@
+         end,
+     GracePeriod = kapps_config:get_integer(?APP_NAME, <<"node_down_grace_period">>, 10 * ?MILLISECONDS_IN_SECOND),
+     erlang:send_after(GracePeriod, self(), {'flush_channels', Node}),
+-    erlang:send_after(3 * ?MILLISECONDS_IN_SECOND, self(), 'check_node_status'),
++    erlang:send_after(?MILLISECONDS_IN_SECOND, self(), 'check_node_status'),
+     {'noreply', State};
+ handle_info({'flush_channels', Node}, State) ->
+     lager:info("node ~s has been down past the grace period, flushing channels", [Node]),
