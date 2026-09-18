@@ -70,7 +70,9 @@
         ]).
 
 -ifdef(TEST).
--export([changed_endpoints/2, strategy_test_state/1, strategy_test_field/2, connect_failure_limit/2]).
+-export([changed_endpoints/2, strategy_test_state/1, strategy_test_field/2, connect_failure_limit/2
+        ,peer_paused_updates/1
+        ]).
 -endif.
 
 -include("acdc.hrl").
@@ -149,6 +151,10 @@ strategy_test_state(Values) ->
 strategy_test_field(Name, State) ->
     Fields = lists:zip(record_info(fields, state), lists:seq(2, record_info(size, state))),
     element(props:get_value(Name, Fields), State).
+
+-spec peer_paused_updates(list()) -> list().
+peer_paused_updates(Queue) ->
+    strategy_test_field('agent_state_updates', peer_paused(strategy_test_state([{'agent_state_updates', Queue}]))).
 -endif.
 
 %%%=============================================================================
@@ -603,6 +609,22 @@ invalid_failure_limit(Limit, Fallback) ->
     lager:warning("ignoring invalid ~s ~p; using ~p", [?MAX_CONNECT_FAILURES, Limit, Fallback]),
     Fallback.
 
+%% The pause is queued like any other update received before the agent is ready.
+-spec restore_pause('undefined' | timeout()) -> 'ok'.
+restore_pause('undefined') -> 'ok';
+restore_pause(Left) ->
+    lager:info("restoring the agent's pause after a restart, ~p s left", [Left]),
+    gen_statem:cast(self(), {'pause', Left}).
+
+%% A peer is paused but nothing was restored here (its status had not reached
+%% the datastore): follow the peer rather than put the agent back in rotation.
+-spec peer_paused(state()) -> state().
+peer_paused(#state{agent_state_updates=Queue}=State) ->
+    case lists:any(fun({'pause', _}) -> 'true'; (_) -> 'false' end, Queue) of
+        'true' -> State;
+        'false' -> State#state{agent_state_updates=[{'pause', 'infinity'} | Queue]}
+    end.
+
 -spec wait_for_listener(pid(), pid(), kz_term:proplist(), boolean()) -> 'ok'.
 wait_for_listener(Supervisor, ServerRef, Props, IsThief) ->
     case acdc_agent_sup:listener(Supervisor) of
@@ -640,9 +662,12 @@ callback_mode() ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec wait(gen_statem:event_type(), any(), state()) -> kz_types:handle_fsm_ret(state()).
-wait('cast', {'listener', AgentListener, NextState, SyncRef}, State) ->
+wait('cast', {'listener', AgentListener, NextState, SyncRef}, #state{account_id=AccountId
+                                                                   ,agent_id=AgentId
+                                                                   }=State) ->
     lager:debug("setting agent proc to ~p", [AgentListener]),
     acdc_agent_listener:fsm_started(AgentListener, self()),
+    restore_pause(acdc_agent_util:restorable_pause(AccountId, AgentId)),
     {'next_state', NextState, State#state{agent_listener=AgentListener
                                          ,sync_ref=SyncRef
                                          ,agent_listener_id=acdc_util:proc_id()
@@ -700,6 +725,16 @@ sync('cast', {'sync_resp', JObj}, #state{sync_ref=Ref
             {Next, SwitchTo, State1} =
                 apply_state_updates(State#state{sync_ref='undefined'}),
             {Next, SwitchTo, State1, 'hibernate'};
+        'paused' ->
+            %% Paused is a steady state, not a call in progress: delaying for
+            %% it kept this replica in sync for as long as the agent stayed on
+            %% break (private applications node kill, September 18, 2026). The
+            %% restored pause, or the peer's open-ended one, decides the state.
+            lager:debug("other agent is paused, joining"),
+            _ = erlang:cancel_timer(Ref),
+            {NextPaused, SwitchToPaused, StatePaused} =
+                apply_state_updates(peer_paused(State#state{sync_ref='undefined'})),
+            {NextPaused, SwitchToPaused, StatePaused, 'hibernate'};
         {'EXIT', _} ->
             lager:debug("other agent sent unusable state, ignoring"),
             {'next_state', 'sync', State};

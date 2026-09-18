@@ -15,6 +15,7 @@
 
         ,most_recent_status/2
         ,most_recent_status_strict/2
+        ,restorable_pause/2, pause_left/3
         ,most_recent_statuses/1, most_recent_statuses/2, most_recent_statuses/3
 
         ,most_recent_ets_status/2
@@ -48,6 +49,41 @@ update_status(?NE_BINARY = AccountId, AgentId, Status, Options) ->
           {'ok', kz_term:ne_binary()}.
 most_recent_status(AccountId, AgentId) ->
     most_recent_status(AccountId, AgentId, 'legacy').
+
+%% An agent on break must still be on break after its processes restart. Until
+%% this existed, a restarted applications node returned every paused agent to
+%% rotation and overwrote the stored status with ready (private single-node
+%% restart, September 18, 2026). Returns the seconds of pause still owed,
+%% 'infinity' for an open-ended pause, or 'undefined' when there is none to restore.
+-spec restorable_pause(kz_term:ne_binary(), kz_term:ne_binary()) -> 'undefined' | timeout().
+restorable_pause(AccountId, AgentId) ->
+    case most_recent_statuses(AccountId, AgentId) of
+        {'ok', Statuses} -> latest_pause(kz_json:get_json_value(AgentId, Statuses));
+        _Error -> 'undefined'
+    end.
+
+-spec latest_pause(kz_term:api_object()) -> 'undefined' | timeout().
+latest_pause('undefined') -> 'undefined';
+latest_pause(AgentStatuses) ->
+    {_, Latest} = kz_json:foldl(fun find_most_recent_fold/3, {0, kz_json:new()}, AgentStatuses),
+    case kz_json:get_ne_binary_value(<<"status">>, Latest) of
+        <<"paused">> ->
+            pause_left(kz_json:get_integer_value(<<"pause_time">>, Latest)
+                      ,kz_json:get_integer_value(<<"timestamp">>, Latest)
+                      ,kz_time:now_s()
+                      );
+        _Status -> 'undefined'
+    end.
+
+-spec pause_left(kz_term:api_integer(), kz_term:api_integer(), non_neg_integer()) -> 'undefined' | timeout().
+pause_left('undefined', _Started, _Now) -> 'infinity';
+pause_left(PauseTime, _Started, _Now) when PauseTime =< 0 -> 'infinity';
+pause_left(_PauseTime, 'undefined', _Now) -> 'undefined';
+pause_left(PauseTime, Started, Now) ->
+    case PauseTime - (Now - Started) of
+        Left when Left > 0 -> Left;
+        _Expired -> 'undefined'
+    end.
 
 %% Startup cannot treat a failed datastore read as a legitimately unknown
 %% (never logged-in) agent. Preserve the historical public API for other callers.

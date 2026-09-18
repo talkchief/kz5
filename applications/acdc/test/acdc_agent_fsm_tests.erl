@@ -145,3 +145,24 @@ disabled_failure_limit_never_logs_an_agent_out_test() ->
     after
         meck:unload(Modules)
     end.
+
+%% A restarted node's replica must follow a paused peer instead of waiting in
+%% sync forever, and must keep a pause it restored itself (with its time left).
+peer_paused_test_() ->
+    [?_assertEqual([{'pause', 'infinity'}], acdc_agent_fsm:peer_paused_updates([]))
+    ,?_assertEqual([{'pause', 'infinity'}, {'update_presence', <<"p">>, <<"s">>}]
+                  ,acdc_agent_fsm:peer_paused_updates([{'update_presence', <<"p">>, <<"s">>}]))
+    ,?_assertEqual([{'pause', 240}], acdc_agent_fsm:peer_paused_updates([{'pause', 240}]))
+    ].
+
+%% Seconds of pause still owed after a restart.
+pause_left_test_() ->
+    [?_assertEqual('infinity', acdc_agent_util:pause_left('undefined', 1000, 1100))
+    ,?_assertEqual('infinity', acdc_agent_util:pause_left(0, 1000, 1100))
+    ,?_assertEqual(200, acdc_agent_util:pause_left(300, 1000, 1100))
+    ,?_assertEqual(1, acdc_agent_util:pause_left(300, 1000, 1299))
+     %% The break ended while the node was down: nothing to restore.
+    ,?_assertEqual('undefined', acdc_agent_util:pause_left(300, 1000, 1300))
+    ,?_assertEqual('undefined', acdc_agent_util:pause_left(300, 1000, 5000))
+    ,?_assertEqual('undefined', acdc_agent_util:pause_left(300, 'undefined', 1100))
+    ].
