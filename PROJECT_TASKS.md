@@ -33,6 +33,18 @@ work postponed; do not generate voices at runtime or during deployment.
   per-node system_config sections, FreeSWITCH/Kamailio node names); a public SIP
   listener must be an installer option, not `local.cfg` lines.
 
+- **INST / Kamailio public SIP listener — DEPLOYED on main44 + native PASS, September18:**
+  Normal `KAMAILIO_PUBLIC_SIP_IP=46.225.31.248 install-kazoo5.sh kamailio` on
+  `d30df04` exit0 with zero channels; only Kamailio was regenerated and restarted.
+  Installer reports the public listener PASS and all Kamailio SIP/AMQP/dispatcher
+  checks. Independent: UDP+TCP sockets on 46.225.31.248 and 10.1.0.44 ports
+  5060/7000; an actual SIP OPTIONS sent to 46.225.31.248:5060 is answered `200`;
+  restarts0; the value is persisted in `/etc/kazoo/deployment.env`. Log and previous
+  files: `/root/kz5-kamailio-public-listener-20260918`. No carrier call was placed.
+  New tracked `scripts/verify-dev-stack-after-boot.sh` (18 checks pass now; `--arm`
+  runs it once at the next boot and starts the lab guests) covers the reboot that
+  the staged SELinux `permissive` setting needs.
+
 - **INST / Kamailio public SIP listener option — source + real-parser PASS, September18:**
   New `KAMAILIO_PUBLIC_SIP_IP` replaces the hand-added `local.cfg` lines that
   caused the outage above. It writes explicit `MY_EXTERNAL_IP`, external ports and
