@@ -30,6 +30,7 @@ shim sup 'if [[ $* == *is_available* ]]; then
   [[ $* == *"-n ecallmgr"* ]] && echo "${T_ECALLMGR_AMQP-true}" || echo "${T_APPS_AMQP-true}"
 elif [[ $* == *list_fs_nodes* ]]; then printf "%s" "${T_MEDIA-freeswitch@node1}"; fi'
 shim curl 'printf "%s" "${T_HTTP:-401}"'
+shim pgrep 'printf "%s\n" ${T_STRAY-}'
 shim epmd 'printf "name %s at port 1\n" ${T_EPMD-couchdb rabbit kazoo_apps ecallmgr freeswitch}'
 shim ss 'printf "%s\n" "${T_LISTEN-UNCONN 0 0 10.0.0.5:5060 0.0.0.0:*}"'
 shim logger 'printf "%s\n" "$*" >> "$T_LOGGER"'
@@ -69,7 +70,7 @@ expect 'inactive role' 'kazoo-freeswitch is inactive' 'T_INACTIVE=kazoo-freeswit
 expect 'no media link' 'connected to no FreeSWITCH node' 'T_MEDIA='
 # The failed main promotion: a Kazoo restart replaced the port mapper and FreeSWITCH never registered again.
 expect 'media node lost from the port mapper' 'freeswitch is not registered with the Erlang port mapper: restart kazoo-freeswitch' 'T_EPMD=couchdb rabbit kazoo_apps ecallmgr'
-expect 'port mapper owned by a Kazoo service' 'owned by pid 386407, not epmd.service' 'T_LISTEN=LISTEN 0 0 10.0.0.5:5060 0.0.0.0:* users:(("epmd",pid=386407,fd=3))'
+expect 'port mapper owned by a Kazoo service' 'runs outside epmd.service (pid 386407)' 'T_STRAY=386407'
 expect 'SIP edge not listening' 'Kamailio is not listening on 10.0.0.5:5060/udp' 'T_LISTEN='
 pass 'twelve failure classes, including every "active but dead" condition of the outage, fail with an err line'
 

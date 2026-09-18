@@ -659,15 +659,31 @@ freeswitch_channel_count() {
     /usr/local/freeswitch/bin/fs_cli -x 'show channels count' 2>/dev/null | awk '/total/{print $1}'
 }
 
+# Port mappers in this network namespace that are not epmd.service. Found by
+# process, not by "ss -p": a container guest sees no socket owners (private
+# eCallMgr guest, install 6, September 18, 2026), and a host also sees the
+# mappers of its guests, which listen in other namespaces.
+epmd_stray_pids() {
+    local own main pid theirs
+    own=$(readlink /proc/self/ns/net)
+    main=$(systemctl show -p MainPID --value epmd.service 2>/dev/null)
+    for pid in $(pgrep -x 'epmd|fs_epmd' || true); do
+        [[ $pid != "${main:-0}" ]] || continue
+        # Unreadable without CAP_SYS_PTRACE inside a guest, where every visible
+        # process is the guest's own; only a proven foreign namespace is skipped.
+        theirs=$(readlink "/proc/${pid}/ns/net" 2>/dev/null || true)
+        [[ -z $theirs || $theirs == "$own" ]] || continue
+        printf '%s\n' "$pid"
+    done
+}
+
 epmd_listener_is_stable() {
-    local main listener
+    local listener
     [[ $(systemctl is-active epmd.socket 2>/dev/null) == active ]] || return 1
-    listener=$(ss -H -ltnp 'sport = :4369' 2>/dev/null || true)
+    listener=$(ss -H -ltn 'sport = :4369' 2>/dev/null || true)
     [[ $listener != *'0.0.0.0:4369'* && $listener != *'[::]:4369'* && $listener != *'*:4369'* ]] || return 1
     grep -Fq '127.0.0.1:4369' <<<"$listener" || return 1
-    # Before the first client the socket is held by systemd itself.
-    main=$(systemctl show -p MainPID --value epmd.service 2>/dev/null)
-    [[ ${main:-0} == 0 ]] || grep -Fq "pid=${main}," <<<"$listener"
+    [[ -z $(epmd_stray_pids) ]]
 }
 
 # epmd_wait_registered unit seconds
@@ -717,7 +733,7 @@ EOF
             die "Moving the Erlang port mapper restarts FreeSWITCH once, and it has ${channels:-an unknown number of} channels; rerun when it is idle"
     fi
     systemctl stop epmd.service epmd.socket 2>/dev/null || true
-    for stray in $(ss -H -ltnp 'sport = :4369' 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u); do
+    for stray in $(epmd_stray_pids); do
         log "Stopping the port mapper owned by $(cut -d: -f3 "/proc/${stray}/cgroup" 2>/dev/null || printf 'pid %s' "$stray")"
         kill "$stray" 2>/dev/null || true
     done

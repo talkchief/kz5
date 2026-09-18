@@ -50,10 +50,16 @@ for pair in couchdb:couchdb rabbitmq-server:rabbit kazoo-apps:kazoo_apps kazoo-e
         fail "${pair##*:} is not registered with the Erlang port mapper: restart ${pair%%:*} when it is idle"
 done
 if installed epmd.socket; then
-    owner=$(ss -H -ltnp 'sport = :4369' 2>/dev/null | grep -o 'pid=[0-9]*' | head -n 1 | cut -d= -f2)
-    main=$(systemctl show -p MainPID --value epmd.service 2>/dev/null)
-    [[ -z $owner || $owner == "${main:-0}" ]] && ok 'the Erlang port mapper runs in its own service' || \
-        fail "the Erlang port mapper is owned by pid ${owner}, not epmd.service: restarting that service drops FreeSWITCH"
+    # By process, not "ss -p": a container guest sees no socket owners, and a
+    # host also sees its guests' mappers, which live in other network namespaces.
+    own=$(readlink /proc/self/ns/net 2>/dev/null); main=$(systemctl show -p MainPID --value epmd.service 2>/dev/null); strays=
+    for pid in $(pgrep -x 'epmd|fs_epmd' 2>/dev/null); do
+        [[ $pid != "${main:-0}" ]] || continue
+        theirs=$(readlink "/proc/${pid}/ns/net" 2>/dev/null)
+        [[ -z $theirs || $theirs == "$own" ]] && strays+="${strays:+ }${pid}"
+    done
+    [[ -z $strays ]] && ok 'the Erlang port mapper runs in its own service' || \
+        fail "an Erlang port mapper runs outside epmd.service (pid ${strays}): restarting its service drops FreeSWITCH"
 fi
 
 if installed rabbitmq-server.service; then

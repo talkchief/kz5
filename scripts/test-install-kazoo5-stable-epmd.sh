@@ -16,7 +16,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 pass() { se_pass=$((se_pass + 1)); printf 'PASS: %s\n' "$*"; }
 function_body() { sed -n "/^$1() {\$/,/^}\$/p" "$se_installer"; }
 bash -n "$se_installer"
-for name in epmd_role_units epmd_role_name epmd_selected_roles epmd_listener_is_stable epmd_wait_registered \
+for name in epmd_role_units epmd_role_name epmd_selected_roles epmd_stray_pids epmd_listener_is_stable epmd_wait_registered \
             configure_stable_epmd verify_stable_epmd freeswitch_channel_count; do
     [[ -n $(function_body "$name") ]] || fail "installer function ${name} is missing or not extractable"
 done
@@ -28,7 +28,7 @@ scenario() {   # name function assignments...
     (
         set +e
         DRY_RUN=false KAZOO_ERLANG_DIST_IP=10.0.0.5
-        T_SOCKET=inactive T_MAIN=0 T_LISTEN='' T_ENABLED=enabled T_CHANNELS=0 T_UNIT_FILE=present
+        T_SOCKET=inactive T_MAIN=0 T_LISTEN='' T_STRAYS='' T_ENABLED=enabled T_CHANNELS=0 T_UNIT_FILE=present
         T_ACTIVE='couchdb rabbitmq-server kazoo-apps kazoo-ecallmgr kazoo-freeswitch'
         T_NAMES='couchdb rabbit kazoo_apps ecallmgr freeswitch' T_NAMES_AFTER=''
         declare -A SELECTED=([kazoo-apps]=1 [ecallmgr]=1)
@@ -41,7 +41,7 @@ scenario() {   # name function assignments...
         is_loopback_address() { [[ $1 == 127.* ]]; }
         write_file() { mkdir -p "$se_work/$name$(dirname "$2")"; cat > "$se_work/$name$2"; }
         sleep() { :; }
-        kill() { act "kill $*"; T_LISTEN=''; }
+        kill() { act "kill $*"; T_LISTEN=''; T_STRAYS=''; }
         epmd() { printf 'name %s at port 1\n' $T_NAMES; }
         ss() { [[ -n $T_LISTEN ]] && printf '%s\n' "$T_LISTEN"; return 0; }
         systemctl() {
@@ -61,6 +61,7 @@ scenario() {   # name function assignments...
         eval "$(function_body epmd_wait_registered)"; eval "$(function_body configure_stable_epmd)"
         eval "$(function_body verify_stable_epmd)"
         freeswitch_channel_count() { printf '%s' "$T_CHANNELS"; }
+        epmd_stray_pids() { printf '%s\n' $T_STRAYS; }
         # The real test for the packaged unit is a fixed path; honour the scenario instead.
         eval "$(declare -f configure_stable_epmd verify_stable_epmd | sed 's#-e /usr/lib/systemd/system/epmd.socket#$T_UNIT_FILE == present#')"
         SECONDS=0
@@ -71,12 +72,15 @@ scenario() {   # name function assignments...
     ) 2>&1
 }
 actions() { cat "$se_work/$1.actions"; }
-readonly vm_owned='LISTEN 0 4096 0.0.0.0:4369 0.0.0.0:* users:(("epmd",pid=386407,fd=3))'
-readonly stable='LISTEN 0 4096 127.0.0.1:4369 0.0.0.0:* users:(("epmd",pid=900,fd=3))
-LISTEN 0 4096 10.0.0.5:4369 0.0.0.0:* users:(("epmd",pid=900,fd=4))'
+# Listeners deliberately carry no owner: a container guest's "ss -p" shows none,
+# which made the first native migration find nothing to stop (private eCallMgr
+# guest, install 6, September 18, 2026). Ownership comes from epmd_stray_pids.
+readonly vm_owned="T_STRAYS=386407 T_LISTEN='LISTEN 0 4096 0.0.0.0:4369 0.0.0.0:*'"
+readonly stable='LISTEN 0 4096 127.0.0.1:4369 0.0.0.0:*
+LISTEN 0 4096 10.0.0.5:4369 0.0.0.0:*'
 
 # 1. The September 18 host: epmd inside a Kazoo unit, wildcard listener, idle media.
-out=$(scenario migrate configure_stable_epmd "T_LISTEN='$vm_owned'" "T_NAMES='couchdb rabbit kazoo_apps ecallmgr'") || \
+out=$(scenario migrate configure_stable_epmd "$vm_owned" "T_NAMES='couchdb rabbit kazoo_apps ecallmgr'") || \
     { printf '%s\n' "$out"; fail 'idle migration failed'; }
 dropin="$se_work/migrate/etc/systemd/system/epmd.socket.d/kazoo5-bind.conf"
 grep -Fxq 'ListenStream=' "$dropin" && grep -Fxq 'ListenStream=127.0.0.1:4369' "$dropin" && \
@@ -92,26 +96,26 @@ grep -Fq 'PASS every running Erlang role registered' <<<"$out" || fail 'migratio
 pass 'a mapper owned by a Kazoo service is replaced by epmd.service; idle FreeSWITCH is restarted once so it registers'
 
 # 2. A live call must never be cut: refuse before anything is changed.
-status=0; out=$(scenario busy configure_stable_epmd "T_LISTEN='$vm_owned'" T_CHANNELS=3) || status=$?
+status=0; out=$(scenario busy configure_stable_epmd "$vm_owned" T_CHANNELS=3) || status=$?
 [[ $status != 0 ]] && grep -Fq 'it has 3 channels; rerun when it is idle' <<<"$out" || fail 'a busy FreeSWITCH did not refuse the migration'
 ! grep -Eq 'kill|stop|restart|start epmd' "$se_work/busy.actions" || { actions busy; fail 'a refused migration changed the host'; }
-status=0; out=$(scenario unknown configure_stable_epmd "T_LISTEN='$vm_owned'" T_CHANNELS=) || status=$?
+status=0; out=$(scenario unknown configure_stable_epmd "$vm_owned" T_CHANNELS=) || status=$?
 [[ $status != 0 ]] && ! grep -q kill "$se_work/unknown.actions" || fail 'an unknown channel count must refuse, not proceed'
 pass 'live or unknown channels refuse the migration before any change'
 
 # 3. Converged host: repeat installs do nothing.
 out=$(scenario repeat configure_stable_epmd T_SOCKET=active T_MAIN=900 "T_LISTEN='$stable'") || fail 'converged host failed'
 ! grep -Eq 'kill|stop|restart|start epmd' "$se_work/repeat.actions" || { actions repeat; fail 'a converged host was disturbed'; }
-out=$(scenario lo configure_stable_epmd KAZOO_ERLANG_DIST_IP=127.0.0.1 "T_LISTEN='$vm_owned'")
+out=$(scenario lo configure_stable_epmd KAZOO_ERLANG_DIST_IP=127.0.0.1 "$vm_owned")
 [[ $(grep -c '^ListenStream=.' "$se_work/lo/etc/systemd/system/epmd.socket.d/kazoo5-bind.conf") == 1 ]] || fail 'loopback install must listen once'
-out=$(scenario nounit configure_stable_epmd T_UNIT_FILE=absent "T_LISTEN='$vm_owned'") || fail 'a host without the packaged unit failed'
+out=$(scenario nounit configure_stable_epmd T_UNIT_FILE=absent "$vm_owned") || fail 'a host without the packaged unit failed'
 [[ ! -s $se_work/nounit.actions ]] || fail 'a single-role host without the packaged unit was changed'
-out=$(scenario edge configure_stable_epmd 'SELECTED=([kamailio]=1)' "T_LISTEN='$vm_owned'") && [[ ! -s $se_work/edge.actions ]] || \
+out=$(scenario edge configure_stable_epmd 'SELECTED=([kamailio]=1)' "$vm_owned") && [[ ! -s $se_work/edge.actions ]] || \
     fail 'an install without Erlang roles touched the port mapper'
 pass 'repeat, loopback, unit-less and non-Erlang installs are left undisturbed'
 
 # 4. A role that does not come back is named with its remedy.
-status=0; out=$(scenario stuck configure_stable_epmd "T_LISTEN='$vm_owned'" "T_NAMES_AFTER='couchdb kazoo_apps ecallmgr'") || status=$?
+status=0; out=$(scenario stuck configure_stable_epmd "$vm_owned" "T_NAMES_AFTER='couchdb kazoo_apps ecallmgr'") || status=$?
 [[ $status != 0 ]] && grep -Fq 'rabbit did not register with the new Erlang port mapper; run: systemctl restart rabbitmq-server' <<<"$out" || \
     { printf '%s\n' "$out"; fail 'an unregistered role was not reported with its remedy'; }
 pass 'a role missing after migration fails the install and names the restart'
@@ -124,8 +128,8 @@ reject() {   # description expected assignments...
     [[ $status != 0 ]] && grep -Fq "$expected" <<<"$out" || { printf '%s\n' "$out"; fail "$description"; }
     [[ ! -s $se_work/reject.actions ]] || fail "$description: verification changed the host"
 }
-reject 'the September 18 state passed verification' 'restarting a Kazoo service would drop FreeSWITCH' "T_LISTEN='$vm_owned'"
-reject 'a foreign owner of a correct listener passed' 'not owned by epmd.service' T_SOCKET=active T_MAIN=900 "T_LISTEN='${stable//pid=900/pid=386407}'"
+reject 'the September 18 state passed verification' 'restarting a Kazoo service would drop FreeSWITCH' "$vm_owned"
+reject 'a second mapper beside a correct listener passed' 'not owned by epmd.service' T_SOCKET=active T_MAIN=900 T_STRAYS=134 "T_LISTEN='$stable'"
 reject 'a wildcard listener passed' 'without a wildcard listener' T_SOCKET=active T_MAIN=900 "T_LISTEN='${stable//127.0.0.1:4369/0.0.0.0:4369}'"
 reject 'a socket that a reboot would lose passed' 'epmd.socket is not enabled' T_ENABLED=disabled T_SOCKET=active T_MAIN=900 "T_LISTEN='$stable'"
 reject 'an unregistered FreeSWITCH passed' 'freeswitch is running but not registered' T_SOCKET=active T_MAIN=900 "T_LISTEN='$stable'" "T_NAMES='couchdb rabbit kazoo_apps ecallmgr'"
