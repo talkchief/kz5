@@ -15,7 +15,6 @@ const keys = ['you_are_at_position', 'in_the_queue', 'the_estimated_wait_time_is
 const callbackKeys = ['offer', 'menu', 'number_readback', 'confirmation', 'success', 'returned_confirmation'];
 const fields = keys.map(key => 'announcements.media.' + key)
     .concat(callbackKeys.map(key => 'callback.media.' + key));
-const defaults = Object.fromEntries(keys.map(key => [key, 'queue-' + key]));
 const template = fs.readFileSync(path.join(sourceRoot, 'monster-ui/acdc/views/queue-form.html'), 'utf8');
 const translations = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'monster-ui/acdc/i18n/en-US.json'), 'utf8'));
 const voiceMap = fs.readFileSync(englishCandidate ? path.join(englishCandidate, 'acdc_gemini_map.hrl')
@@ -27,7 +26,7 @@ const geminiMedia = [...voiceMap.matchAll(/\{<<"en-us">>,<<"([^"]+)">>,<<"([^"]+
         source_map_sha256: voiceMapHash, sha256: m[3], import_metadata_verified: true}));
 // The focused inheritance mode supplies a controlled readiness catalog and
 // makes no claim about this older full-suite media fixture's asset count.
-if (!inheritanceOnly) assert.equal(geminiMedia.length, 29, 'English fixture must match all fixed immutable assets');
+if (!inheritanceOnly) assert.equal(geminiMedia.length, 42, 'English fixture must match all fixed immutable assets');
 const schema = JSON.parse(fs.readFileSync(path.join(sourceRoot, 'applications/crossbar/priv/couchdb/schemas/queues.json'), 'utf8'));
 const requiredMedia = schema.properties.announcements.properties.media.required;
 assert.deepEqual(requiredMedia.slice().sort(), keys.slice().sort(), 'Test must cover every schema-required announcement prompt');
@@ -219,7 +218,10 @@ async function main() {
         let result = await submit();
         assert(result.checked && result.reported, 'Canonical new queue must pass native validation');
         assert.equal(result.saved.length, 1);
-        assert.deepEqual(result.saved[0].payload.announcements.media, defaults);
+        // Adoption contract (61bf505, monster-ui/acdc/README.md): a new queue saved with a
+        // ready language uses the built-in prompts, so no queue media map is created.
+        assert.equal(result.saved[0].payload.announcements.language, 'en-us');
+        assert.equal(Object.hasOwn(result.saved[0].payload.announcements, 'media'), false, 'Fresh ready-language queue uses built-in prompts');
         assert.equal(Object.hasOwn(result.saved[0].payload.callback, 'media'), false, 'Fresh callback uses backend prompt defaults');
         assert.deepEqual(result.formErrors, []);
         cases++;
@@ -291,20 +293,36 @@ async function main() {
             await page.evaluate(key => { document.querySelector('[name="announcements.media.' + key + '"]').value = ''; }, key);
             result = await submit();
             assert(result.checked && result.reported && result.saved.length === 1);
-            assert.deepEqual(result.saved[0].payload.announcements.media, defaults);
+            assert.equal(Object.hasOwn(result.saved[0].payload.announcements, 'media'), false, 'Empty audio IDs must never be serialized');
             cases++;
         }
         const legacy = await render({legacy: true, callback: true});
         assert.equal(await page.locator('.acdc-legacy-prompt-warning').isVisible(), true);
-        assert((await page.locator('.acdc-legacy-prompt-warning').innerText()).includes('preserved'));
+        // 61bf505 reworded the warning to state the adoption contract truthfully.
+        const legacyWarning = await page.locator('.acdc-legacy-prompt-warning').innerText();
+        for (const statement of ['replaces those queue prompt overrides with its built-in voice',
+            'Your recordings are not deleted', 'unrelated edits preserve the current settings']) {
+            assert(legacyWarning.includes(statement), 'Legacy prompt warning must state: ' + statement);
+        }
         await page.locator('[name="name"]').fill('Unsaved unrelated rename');
-        await page.locator('[name="announcements.language"]').selectOption('en-us');
+        // An unrelated edit that selects no built-in language preserves every legacy override.
         result = await submit();
         assert(result.checked && result.reported && result.saved.length === 1);
         assert.deepEqual(result.saved[0].payload.announcements.media, legacy.announcements.media);
         assert.deepEqual(result.saved[0].payload.callback.media, legacy.callback.media);
-        assert.equal(result.saved[0].payload.announcements.language, 'en-us');
+        assert.equal(Object.hasOwn(result.saved[0].payload.announcements, 'language'), false);
         assert.equal(result.saved[0].queueId, 'fixture-queue');
+        cases++;
+        // Explicitly choosing the ready language adopts the built-ins: PATCH null tombstones
+        // clear the obsolete queue references (no media document is deleted).
+        await page.locator('[name="announcements.language"]').selectOption('en-us');
+        result = await submit();
+        assert(result.checked && result.reported && result.saved.length === 2);
+        assert.equal(result.saved[1].payload.announcements.language, 'en-us');
+        assert.equal(result.saved[1].payload.announcements.media, null);
+        assert.equal(result.saved[1].payload.callback.media, null);
+        assert.equal(result.saved[1].payload.callback.return_confirmation_prompt, null);
+        assert.equal(result.saved[1].queueId, 'fixture-queue');
         cases++;
 
         for (const scenario of ['name', 'callback-user', 'custom-caller-id', 'retry-delay']) {

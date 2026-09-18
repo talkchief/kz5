@@ -89,7 +89,11 @@ assert.notEqual(run(verifier, {FIXTURE_FAIL: 'true'}).status, 0); cases++;
 assert(section('verify_monster_ui').includes('verify_monster_ui_api_endpoint'));
 assert(section('preflight').indexOf('validate_monster_endpoints') < section('preflight').indexOf('log "Endpoints:'));
 const main = source.slice(source.indexOf('\nmain() {'), source.indexOf('\nif [[ ${BASH_SOURCE[0]}'));
-assert(main.indexOf('preflight') >= 0 && main.indexOf('preflight') < main.indexOf('install_requested'));
+// 9764bc2 moved the install step behind `with_dnf_guard install_and_persist_requested`,
+// so main no longer names install_requested itself; follow the wrapper instead.
+const installStep = main.indexOf('install_and_persist_requested');
+assert(main.indexOf('\n    preflight\n') >= 0 && installStep >= 0 && main.indexOf('\n    preflight\n') < installStep);
+assert(/^install_and_persist_requested\(\) \{\n\s+install_requested\n/.test(section('install_and_persist_requested')));
 assert.deepEqual(fs.readdirSync(scratch), [], 'Preflight must not create deployment/config/secrets files');
 fs.rmdirSync(scratch);
 console.log(`PASS ${cases} endpoint validation and external Crossbar response cases; no network or install`);

@@ -4,8 +4,19 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const validator = require('./validate-acdc-language-capabilities.cjs');
 const {cardinalCapabilities} = require('./test-fixtures/acdc-cardinal-capabilities.cjs');
 const root = path.resolve(__dirname, '..');
+// The installer no longer keeps $KAZOO_BUILD_ROOT/monster-ui; it builds in a fresh
+// monster-owned-build.*/source each time. Default to the newest one that holds the
+// needed file, and say so plainly when a host has none.
+function newestMonsterSource(needed) {
+    const buildRoot = process.env.KAZOO_BUILD_ROOT || '/usr/local/src/kazoo5-installer';
+    const builds = fs.existsSync(buildRoot) ? fs.readdirSync(buildRoot).filter(name => name.startsWith('monster-owned-build.'))
+        .map(name => path.join(buildRoot, name, 'source')).filter(dir => fs.existsSync(path.join(dir, needed)))
+        .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs) : [];
+    assert(builds.length, 'No Monster UI build source holding ' + needed + ' on this host: install monster-ui or supply the path explicitly');
+    return builds[0];
+}
 const lodash = require(path.join(process.env.KAZOO_MONSTER_VENDOR_ROOT
-    || '/usr/local/src/kazoo5-installer/monster-ui/src/js/vendor', 'lodash-4.17.4.js'));
+    || path.join(newestMonsterSource('src/js/vendor/lodash-4.17.4.js'), 'src/js/vendor'), 'lodash-4.17.4.js'));
 let app;
 vm.runInNewContext(fs.readFileSync(path.join(root, 'monster-ui/acdc/app.js'), 'utf8'), {define(factory) {
     app = factory(name => ({lodash, jquery() { throw Error('Unexpected DOM access'); }, monster: {}})[name]);

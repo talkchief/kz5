@@ -24,12 +24,20 @@ assert.equal(r.status,0);assert.deepEqual(r.stdout.trim().split('\n'),[
 r=run(helper+'\nnode() { exit 76; }\ninstall_acdc_editor_capabilities\n');assert.equal(r.status,76);
 r=run(helper+'\nnode() { return 1; }\ninstall_acdc_editor_capabilities\n');assert.equal(r.status,77);
 r=run(helper+'\nDRY_RUN=true\nnode() { exit 76; }\ninstall_acdc_editor_capabilities\n');assert.equal(r.status,0);
-const operations=['install_acdc_language_packs','install_acdc_editor_capabilities','build_kazoo',
-    'install_kazoo_systemd_units','install_sup_cli','service_enable_restart','sleep',
-    'persist_kazoo_apps_config','ensure_master_account','configure_kazoo_api_modules',
-    'install_kazoo_prompts','activate_acdc_voice_mappings','verify_kazoo_apps'];
-r=run(apps+'\n'+operations.map(name=>`${name}() { printf '%s\\n' '${name}'; }`).join('\n')+'\ninstall_kazoo_apps\n');
-assert.equal(r.status,0);assert.deepEqual(r.stdout.trim().split('\n'),operations);
+// Exact current apps sequence. The fixed sleep became the datastore/bootstrap
+// readiness gates, and the toolchain, broker preflight (before the build and again
+// before the restart), call-forward pack, catalog receiver, DNS default and
+// prerecorded finalization steps were added since this oracle was written.
+const operations=['install_nodejs_toolchain','acdc_broker_upgrade_preflight','install_call_forward_confirmation_pack',
+    'install_acdc_language_packs','install_acdc_editor_capabilities','build_kazoo',
+    'install_kazoo_systemd_units','install_sup_cli','install_monster_catalog_receiver',
+    'acdc_broker_upgrade_preflight','service_enable_restart','wait_kazoo_datastore_ready',
+    'persist_kazoo_apps_config','wait_kazoo_bootstrap_ready','ensure_master_account','configure_kazoo_api_modules',
+    'ensure_dns_validation_disabled','install_kazoo_prompts','activate_acdc_voice_mappings',
+    'finalize_acdc_prerecorded_capabilities','verify_kazoo_apps'];
+r=run(apps+'\n'+[...new Set(operations)].map(name=>`${name}() { printf '%s\\n' '${name}'; }`).join('\n')+'\ninstall_kazoo_apps\n');
+assert.equal(r.status,0,r.stderr);assert.deepEqual(r.stdout.trim().split('\n'),operations);
+assert(operations.indexOf('install_acdc_editor_capabilities')<operations.indexOf('build_kazoo'),'Capabilities must be installed before the build');
 const units=source.split('write_file 0644 /etc/systemd/system/kazoo-apps.service <<EOF')[1];
 const appsUnit=units.split('\nEOF')[0],ecallUnit=units.split('write_file 0644 /etc/systemd/system/kazoo-ecallmgr.service <<EOF')[1].split('\nEOF')[0];
 assert(appsUnit.includes('Environment=KAZOO_ACDC_EDITOR_CAPABILITIES=${KAZOO_CONFIG_DIR}/acdc/language-capabilities.json'));

@@ -122,6 +122,7 @@ main_fixture preflight
 });
 for(const [source,name]of [[calls,'run_callback_acceptance'],[retry,'retry_run']])test(name+' checks prerequisite before agent mutation or fixture setup',()=>{
   const script=`set -Eeuo pipefail
+RETRY_REGISTRATION_MODE=confirm-current
 ${fn(source,name)}
 callback_fixture(){ [[ $1 == preflight ]] || { printf 'unexpected-fixture\\n';exit 91; };exit 73; }
 agent_status(){ printf 'unexpected-agent\\n';exit 92; }
@@ -135,13 +136,20 @@ test('no retained callback or cleanup policy was altered',()=>{
     cleanup_fixture:'be23b1b60e365cccfad2e4bd64586e359d1859bfbd7d9b56edb93d262b701534',
     cancel_original_callback:'a3132007dad62069b1977558ac83f18b0e003c6d73d951d436d956b7db0c08aa',
     fixture_assert_quiescent:'a3cb74b4623724766aa12ece1fa3fd9fd1531394574d150e0c1f36e8f9aa7929',
-    retry_cleanup:'4a68ee271be1879262e53841863c42297f77b62546577ef061ea03b49558e4cf'
+    // 6bc40ef and 0615e50 added two mode-gated queue-edit restoration blocks.
+    retry_cleanup:'28121de5bb780296cedfada409c8abbd176dbf6ccb3e79fea71a3a574bb20746'
   };
   for(const [name,digest]of Object.entries(baseline))a.equal(crypto.createHash('sha256').update(fn(name==='retry_cleanup'?retry:fixture,name)).digest('hex'),digest);
+  // Without exactly those two additive blocks the cancel/busy/cleanup policy is byte-identical to the original baseline.
+  const restoration=/^    if \[\[ \$RETRY_(?:EDIT_PENDING_LANGUAGE|SHORT_CONFIRMATION_WINDOW) == true && -f [^\n]+\n        node [^\n]+ restore [^\n]+\n            warn [^\n]+\n            status=1\n        \}\n    fi\n/gm;
+  a.equal(fn(retry,'retry_cleanup').match(restoration).length,2);
+  a.equal(crypto.createHash('sha256').update(fn(retry,'retry_cleanup').replace(restoration,'')).digest('hex'),
+    '4a68ee271be1879262e53841863c42297f77b62546577ef061ea03b49558e4cf');
 });
 test('caller prerequisite failure remains terminal even in a conditional shell context',()=>{
   for(const [source,name]of [[calls,'run_callback_acceptance'],[retry,'retry_run']]){
     const script=`set -Eeuo pipefail
+RETRY_REGISTRATION_MODE=confirm-current
 ${fn(source,name)}
 callback_fixture(){ return 73; }
 die(){ exit 74; }

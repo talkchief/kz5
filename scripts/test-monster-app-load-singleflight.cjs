@@ -7,7 +7,18 @@ const fs = require('node:fs'), path = require('node:path'), os = require('node:o
 const vm = require('node:vm'), cp = require('node:child_process'), crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 assert(process.argv.length <= 3, 'Only an optional framework cache path is accepted');
-const cache = process.argv[2] || '/usr/local/src/kazoo5-installer/monster-ui';
+// The installer no longer keeps $KAZOO_BUILD_ROOT/monster-ui; it builds in a fresh
+// monster-owned-build.*/source each time. Default to the newest one that holds the
+// needed file, and say so plainly when a host has none.
+function newestMonsterSource(needed) {
+    const buildRoot = process.env.KAZOO_BUILD_ROOT || '/usr/local/src/kazoo5-installer';
+    const builds = fs.existsSync(buildRoot) ? fs.readdirSync(buildRoot).filter(name => name.startsWith('monster-owned-build.'))
+        .map(name => path.join(buildRoot, name, 'source')).filter(dir => fs.existsSync(path.join(dir, needed)))
+        .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs) : [];
+    assert(builds.length, 'No Monster UI build source holding ' + needed + ' on this host: install monster-ui or supply the path explicitly');
+    return builds[0];
+}
+const cache = process.argv[2] || newestMonsterSource('node_modules/lodash');
 assert(path.isAbsolute(cache));
 const pin = '7ef735eada6fd0e2b96c06f32c0bb868867f7d18';
 const target = 'src/js/lib/monster.apps.js';

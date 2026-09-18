@@ -15,6 +15,8 @@ SECONDS=0 ready_at=181
 if wait_concurrent_call_legs missing 30 35 180; then exit 1; fi
 # Also verify real orchestration computes the allowance only for excess calls.
 eval "$(sed -n '/^run_stress_stage() {/,/^}/p' "$source_path")"
+# c875758 made the hold configurable; use the actual default-hold helper.
+eval "$(sed -n '/^capacity_hold_ms() {/,/^}/p' "$source_path")"
 for operation in log agent_status capture_log_baseline start_monitor start_rtp_capture \
     register_agents start_agent_uas register_caller start_callers wait_answered_calls \
     wait_checked stop_waiting_agents_checked wait_agents_checked stop_rtp_capture \
@@ -27,7 +29,7 @@ declare -A STATE=([ACCEPTANCE_AGENT_COUNT]=30)
 RUN_DIR=/fixture CALLER_PORT=15064 CALLER_MEDIA_MIN=42000 CALLER_MEDIA_MAX=42998
 CAPACITY_HOLD_MS=360000 STAGE_HOLD_MS=60000 MAX_ANSWERED_CALLS=30
 QUEUED_EXCESS_DELAY_MS=120000 QUEUED_EXCESS_HOLD_MS=360000 CALLER_PID=1
-CAPACITY_SOAK_SECONDS=180
+CAPACITY_SOAK_SECONDS=180 SOAK_SECONDS=180
 run_stress_stage 30 5
 [[ $actual_budget == 180 && $actual_hold == 180 ]]
 run_stress_stage 30 0

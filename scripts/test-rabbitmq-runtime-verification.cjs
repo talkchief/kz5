@@ -29,6 +29,11 @@ fixture_error() { printf 'FIXTURE ERROR: %s\n' "$*" >&3; exit 98; }
 trace() { printf 'CALL:%s\n' "$*" >&3; }
 die() { printf 'REJECT: %s\n' "$*" >&2; exit 42; }
 log() { printf '%s\n' "$*"; }
+# The verifier gained two sibling checks after this contract was written
+# (8601f57 helper comparison, c9e73c7 node-name pin). Each has its own suite;
+# here they are bounded stand-ins that must be called bare, exactly once.
+verify_rabbitmq_node_name() { [[ $# == 0 ]] || fixture_error 'unexpected node-name arguments'; trace node-name; }
+verify_broker_maintenance_tools() { [[ $# == 0 ]] || fixture_error 'unexpected helper arguments'; trace maintenance-tools; }
 assert_service() {
     [[ $# == 1 && $1 == rabbitmq-server.service ]] || fixture_error 'unexpected service assertion'
     trace service-check
@@ -114,7 +119,7 @@ function check(name, options = {}, accepted = false) {
     const result = run(options);
     assert.equal(result.status, accepted ? 0 : 42, name + '\n' + result.stdout + result.stderr);
     if (accepted && !options.dryRun) {
-        for (const operation of ['authenticate-user', 'permissions', 'amqp-listeners',
+        for (const operation of ['node-name', 'maintenance-tools', 'authenticate-user', 'permissions', 'amqp-listeners',
             'bounded-rabbitmqctl', 'bounded-rabbitmq-diagnostics']) {
             assert.equal(result.calls.filter(value => value === operation).length, 1,
                 name + ': expected exactly one ' + operation);

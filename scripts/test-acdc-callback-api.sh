@@ -13,12 +13,13 @@ trap cleanup EXIT
 
 mkdir -p "$test_dir/src" "$test_dir/ebin"
 install -m 0644 "$project_root/applications/acdc/src/cb_queues.erl" "$test_dir/src/cb_queues.erl"
-if git -C "$test_dir" apply --check "$project_root/scripts/patches/acdc-callback-crossbar-api.patch" 2>/dev/null; then
-    git -C "$test_dir" apply "$project_root/scripts/patches/acdc-callback-crossbar-api.patch"
-elif ! git -C "$test_dir" apply --reverse --check "$project_root/scripts/patches/acdc-callback-crossbar-api.patch" 2>/dev/null; then
-    printf '%s\n' 'Callback API source does not match the tested patch' >&2
+# ACDC is bundled kz5 source (doc/acdc_source_ownership.md); the installer no
+# longer applies acdc-callback-crossbar-api.patch, so the bundled cb_queues.erl
+# is the tested input and the historical patch is not a gate.
+grep -q "callbacks" "$test_dir/src/cb_queues.erl" || {
+    printf '%s\n' 'Bundled cb_queues.erl lacks the callback API' >&2
     exit 1
-fi
+}
 
 export ERL_LIBS="$project_root/deps:$project_root/core:$project_root/applications"
 export ERL_FLAGS="+S 1:1 +SDcpu 1 +SDio 1 +A 1"

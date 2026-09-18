@@ -31,20 +31,27 @@ const fs = require('node:fs'), path = require('node:path'), {spawnSync} = requir
 const retrySource = fs.readFileSync(path.join(__dirname, 'test-acdc-callback-retry.sh'), 'utf8');
 const argsFunction = retrySource.slice(retrySource.indexOf('retry_args() {'), retrySource.indexOf('\nretry_snapshot() {'));
 assert(argsFunction.startsWith('retry_args() {')); checks++;
+// retry_args reads the script's own mode/language/account defaults (981f317 and the
+// later retry modes); take them from the real script rather than restating them.
+const retryDefaults = [...retrySource.matchAll(/^RETRY_[A-Z_]+=.*$/gm)].map(match => match[0]);
+assert(retryDefaults.includes('RETRY_LANGUAGE=en-us') && retryDefaults.includes('RETRY_REGISTRATION_MODE=confirm-current')); checks++;
+// Since 981f317 the reference proof must also name the selected fixture language.
 for (const [proof, expected] of [
-    ['{"voice_family":"gemini-sulafat"}', 0],
-    ['{"voice_family":"legacy"}', 78], ['{}', 78], ['not-json', 78]
+    ['{"voice_family":"gemini-sulafat","language":"en-us"}', 0],
+    ['{"voice_family":"gemini-sulafat"}', 78], ['{"voice_family":"gemini-sulafat","language":"fr-fr"}', 78],
+    ['{"voice_family":"legacy","language":"en-us"}', 78], ['{"voice_family":"legacy"}', 78], ['{}', 78], ['not-json', 78]
 ]) {
     const result = spawnSync('/usr/bin/bash', ['-c', `set -euo pipefail
 CALLBACK_PREPARE=false; CALLBACK_LIVE=false; KEEP_FIXTURE=false
-CALLBACK_TEST_TRANSPORT=external; RETRY_REGISTRATION_MODE=confirm-current
-retry_script_dir=/synthetic; RETRY_REFERENCE=
+CALLBACK_TEST_TRANSPORT=external
+${retryDefaults.join('\n')}
+retry_script_dir=/synthetic
 die() { exit 78; }
 validate_protected_file() { :; }
 node() { printf '%s\\n' "$FIXTURE_PROOF"; }
 ${argsFunction}
 retry_args --prepare-only --confirmation-reference "$1"
 `, 'fixture', __filename], {env: {PATH: '/usr/bin:/bin', FIXTURE_PROOF: proof}, timeout: 5000, encoding: 'utf8'});
-    assert.ifError(result.error); assert.equal(result.status, expected); checks += 2;
+    assert.ifError(result.error); assert.equal(result.status, expected, proof + ': ' + result.stderr); checks += 2;
 }
 console.log('PASS ' + checks + ' callback Gemini reference identity/conversion and legacy compatibility checks');

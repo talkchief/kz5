@@ -152,7 +152,9 @@ class ProcessIdentityTests(unittest.TestCase):
         self.assertIn("provision-live-test-agents.cjs phone-process-identity.py sip-tests/", installer)
         self.assertLess(installer.index('"$SCRIPT_DIR/phone-process-identity.py" --probe'), installer.index('unit_text >"$UNIT_PATH"'))
         run_service = supervisor.split("run_service() {", 1)[1].split("main() {", 1)[0]
-        self.assertIn("flock timeout python3;", run_service)
+        # The dependency gate may grow (49ccb98 added curl); require the helper's
+        # interpreter and its lock/deadline tools, not an exact tail.
+        self.assertRegex(run_service, r"for command in [^;\n]*\bflock timeout python3\b[^;\n]*; do command -v ")
         self.assertLess(run_service.index('"$PHONE_PROCESS_HELPER" --probe'), run_service.index("    load_state"))
         self.assertNotIn('kill -', supervisor)
 

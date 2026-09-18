@@ -49,6 +49,7 @@ getent(){ return 0; }
 id(){ return 0; }
 reject_secret_symlink(){ :; }
 install_kazoo_pivot_port_reservation(){ :; }
+install_kazoo_identity_guard(){ :; }
 write_file(){ printf '\\036%s\\037' "$2"; command cat; }
 """
         env = {**cls.env, "DRY_RUN": "true", "SCRIPT_DIR": str(cls.checkout / "scripts"),
@@ -116,14 +117,18 @@ write_file(){ printf '\\036%s\\037' "$2"; command cat; }
 
     def test_uninitialized_naming_mode_refuses_all_host_mutation(self):
         generator = re.findall(r"^install_kazoo_systemd_units\(\) \{[\s\S]*?^\}", self.source, re.M)[0]
+        # The actual identity guard installer is the generator's first mutation.
+        guard = re.findall(r"^install_kazoo_identity_guard\(\) \{[\s\S]*?^\}", self.source, re.M)
+        self.assertEqual(len(guard), 1)
         stubs = """set -euo pipefail
 die(){ exit 77; }
 getent(){ return 1; }
 run(){ exit 88; }
-"""
+""" + guard[0] + "\n"
         for mode in [None, "", "name", "-name extra", "-name", "-sname"]:
             with self.subTest(mode=mode):
-                env = {**self.env, "KAZOO_HOSTNAME": "fixture.invalid", "DRY_RUN": "false"}
+                env = {**self.env, "KAZOO_HOSTNAME": "fixture.invalid", "DRY_RUN": "false",
+                       "SCRIPT_DIR": str(self.checkout / "scripts")}
                 if mode is not None:
                     env["KAZOO_NODE_NAME_TYPE"] = mode
                 result = subprocess.run(["bash", "--noprofile", "--norc", "-s"], env=env,

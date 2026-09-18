@@ -58,6 +58,7 @@ install_acdc_editor_capabilities(){ :; }
 persist_kazoo_apps_config(){ record write-apps; }
 ensure_master_account(){ record write-master; }
 configure_kazoo_api_modules(){ record write-api; }
+ensure_dns_validation_disabled(){ record write-dns; }
 install_kazoo_prompts(){ record prompts; }
 activate_acdc_voice_mappings(){ record mappings; }
 finalize_acdc_prerecorded_capabilities(){ record capabilities; }
@@ -65,6 +66,7 @@ verify_kazoo_apps(){ record verify-apps; }
 configure_ecallmgr_dialplan_applications(){ record write-dialplan; }
 configure_ecallmgr_callback_cleanup(){ record write-callback; }
 configure_ecallmgr_event_stream_framing(){ record write-framing; }
+configure_ecallmgr_sbc_discovery(){ record write-sbc; }
 register_configured_freeswitch_nodes(){ record write-nodes; }
 verify_ecallmgr(){ record verify-ecallmgr; }
 `;

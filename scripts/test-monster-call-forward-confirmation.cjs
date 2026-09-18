@@ -2,7 +2,10 @@
 'use strict';
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
 const cp = require('node:child_process'), vm = require('node:vm'), assert = require('node:assert/strict');
-const cache = '/usr/local/src/kazoo5-installer/monster-ui';
+// The installer stopped keeping a persistent framework cache in 5184dbc; pass a
+// prepared stage (…/monster-owned-build.*/source) like the sibling Monster suites.
+const cache = process.argv[2] || '/usr/local/src/kazoo5-installer/monster-ui';
+assert(fs.existsSync(path.join(cache, 'src/apps/callflows/.git')), 'Supply a prepared pinned Monster UI source with its Callflows checkout');
 const source = path.join(cache, 'src/apps/callflows');
 const patch = path.join(__dirname, 'patches/monster-ui-call-forward-confirmation.patch');
 const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'monster-cfwd-test.'));

@@ -3,7 +3,18 @@
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
 const candidate=process.env.KAZOO_ENGLISH_MEDIA_CANDIDATE;
 const project=process.env.KAZOO_PROJECT_ROOT || path.resolve(__dirname,'..');
-const lodash=require(path.join(process.env.KAZOO_MONSTER_VENDOR_ROOT || '/usr/local/src/kazoo5-installer/monster-ui/src/js/vendor','lodash-4.17.4.js'));
+// The installer no longer keeps $KAZOO_BUILD_ROOT/monster-ui; it builds in a fresh
+// monster-owned-build.*/source each time. Default to the newest one that holds the
+// needed file, and say so plainly when a host has none.
+function newestMonsterSource(needed) {
+    const buildRoot = process.env.KAZOO_BUILD_ROOT || '/usr/local/src/kazoo5-installer';
+    const builds = fs.existsSync(buildRoot) ? fs.readdirSync(buildRoot).filter(name => name.startsWith('monster-owned-build.'))
+        .map(name => path.join(buildRoot, name, 'source')).filter(dir => fs.existsSync(path.join(dir, needed)))
+        .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs) : [];
+    assert(builds.length, 'No Monster UI build source holding ' + needed + ' on this host: install monster-ui or supply the path explicitly');
+    return builds[0];
+}
+const lodash=require(path.join(process.env.KAZOO_MONSTER_VENDOR_ROOT || path.join(newestMonsterSource('src/js/vendor/lodash-4.17.4.js'),'src/js/vendor'),'lodash-4.17.4.js'));
 const validator=require(path.join(project,'scripts/validate-acdc-language-capabilities.cjs'));
 function load(file) {
     let app;
@@ -20,7 +31,7 @@ const gemini=[...map.matchAll(/\{<<"en-us">>,<<"([^"]+)">>,<<"([^"]+)">>,<<"([a-
     id:'en-us/'+m[2], name:m[1],language:'en-us',has_attachments:true,prompt_id:m[2],canonical_prompt_id:m[1],
     source_type:'kazoo5_acdc_gemini_voice_installer',source_map_sha256:mapHash,sha256:m[3],import_metadata_verified:true
 }));
-assert.equal(gemini.length,29);
+assert.equal(gemini.length,42);
 const canonical=validator.requiredPromptIds.filter(id=>id.startsWith('acdc-queue-')&&id!=='acdc-queue-your-current-position-is')
     .map(id=>id.slice(5)).concat(['agent-invalid_choice','menu-invalid_entry','cf-enter_number'])
     .map(id=>({id:'en-us/'+id,language:'en-us',has_attachments:true}));
@@ -42,10 +53,10 @@ const oldCanonical=validator.requiredPromptIds.map(id=>({id:'en-us/'+(id.startsW
 // Stable explicit baseline oracle, independent of the functions under test.
 const expectedEnglishOptions=[
     {value:'en-us',disabled:false,ready:true,label:'English (United States) — Ready'},
-    {value:'ar-sa',disabled:true,ready:false,label:'العربية — Arabic — Not installed or incomplete'},
     {value:'he-il',disabled:true,ready:false,label:'עברית — Hebrew — Not installed or incomplete'},
+    {value:'fr-fr',disabled:true,ready:false,label:'Français — French — Not installed or incomplete'},
     {value:'es-es',disabled:true,ready:false,label:'Español — Spanish — Not installed or incomplete'},
-    {value:'fr-fr',disabled:true,ready:false,label:'Français — French — Not installed or incomplete'}
+    {value:'ar-sa',disabled:true,ready:false,label:'العربية — Arabic — Not installed or incomplete'}
 ];
 assert.deepEqual(options(media),expectedEnglishOptions,'Fresh actual-assets English options changed');
 assert.deepEqual(options(media.concat(oldCanonical)),expectedEnglishOptions,
@@ -81,4 +92,4 @@ assert.deepEqual(JSON.parse(JSON.stringify(app.mergeEditorDraft(saved,{callback:
     'Unrelated patch must preserve both saved prompt overrides and explicit language');
 assert.deepEqual(saved,{announcements:{media:{you_are_at_position:'customer-position'},language:'en-us'},
     callback:{media:{offer:'customer-offer'}}},'Draft merge must not mutate its source');
-console.log('PASS fresh44 prerequisites, each missing asset, nine provenance/identity negatives, no fake aliases, stable supplied-English/full-mode/default oracles and exact custom-setting preservation; zero network');
+console.log('PASS fresh '+media.length+' prerequisites, each missing asset, nine provenance/identity negatives, no fake aliases, stable supplied-English/full-mode/default oracles and exact custom-setting preservation; zero network');

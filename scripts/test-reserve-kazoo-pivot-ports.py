@@ -130,6 +130,7 @@ class InstallerTests(unittest.TestCase):
 run(){ printf '\\036RUN\\037%s\\n' "$*"; }
 write_file(){ printf '\\036%s\\037' "$2"; command cat; }
 reject_secret_symlink(){ :; }
+install_kazoo_identity_guard(){ :; }
 getent(){ return 0; }
 id(){ return 0; }
 stat(){ if [[ $UNSAFE == true ]]; then printf '1000 777\\n'; else printf '0 755\\n'; fi; }

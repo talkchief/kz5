@@ -5,7 +5,17 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const crypto = require('node:crypto');
 const cp = require('node:child_process'), assert = require('node:assert/strict');
 const {configure} = require('./configure-monster-runtime.cjs');
-const framework = process.argv[2] || '/usr/local/src/kazoo5-installer/monster-ui';
+// The installer no longer keeps $KAZOO_BUILD_ROOT/monster-ui (5184dbc); it builds in a
+// fresh monster-owned-build.*/source each time. Default to the newest one.
+function newestMonsterSource() {
+    const buildRoot = process.env.KAZOO_BUILD_ROOT || '/usr/local/src/kazoo5-installer';
+    const builds = fs.existsSync(buildRoot) ? fs.readdirSync(buildRoot).filter(name => name.startsWith('monster-owned-build.'))
+        .map(name => path.join(buildRoot, name, 'source')).filter(dir => fs.existsSync(path.join(dir, '.git')))
+        .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs) : [];
+    assert(builds.length, 'No Monster UI build source on this host: install monster-ui or supply the path explicitly');
+    return builds[0];
+}
+const framework = process.argv[2] || newestMonsterSource();
 const installer = fs.readFileSync(path.join(__dirname, 'install-kazoo5.sh'), 'utf8');
 const options = {api: 'https://api.fixture.invalid/v2/', socket: 'auto', branding: 'auto', braintree: 'auto'};
 function evaluate(source, host = 'ui.fixture.invalid', protocol = 'https:') {
@@ -247,14 +257,21 @@ test('Real transport verification rejects HTML200 and upstream5xx while allowing
 test('Transition + readiness + branding/billing + socket/lifecycle + optional patches replay pinned framework byte-exactly', () => {
     const pin = '7ef735eada6fd0e2b96c06f32c0bb868867f7d18';
     assert.equal(cp.execFileSync('git', ['-C', framework, 'rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(), pin);
-    const files = new Map(), patches = ['monster-ui-myaccount-transition.patch', 'monster-ui-branding-billing.patch', 'monster-ui-account-picker-readiness.patch',
-        'monster-ui-websocket-config.patch', 'monster-ui-websocket-subscription-lifecycle.patch', 'monster-ui-dialog-resize-lifecycle.patch', 'monster-ui-request-indicator-lifecycle.patch', 'monster-ui-optional-integrations.patch'];
+    // Derived from the installer in its own order, not listed here: framework
+    // patches added after this replay was written (background app load first)
+    // touch the same files, so a fixed list no longer reproduces the checkout.
+    const sync = functionSource('sync_monster_ui_sources');
+    const files = new Map(), patches = [...new Set(sync.match(/(?<=(?:myaccount_patch=|apply_required_source_patch "\$source_dir" )"\$SCRIPT_DIR\/patches\/)monster-ui-[a-z0-9-]+\.patch/g))];
+    assert(patches[0] === 'monster-ui-myaccount-transition.patch' && patches.length >= 15, 'Installer framework patch order was not extracted');
     for (const patchName of patches) {
         const patchPath = path.join(__dirname, 'patches', patchName);
         const patch = fs.readFileSync(patchPath, 'utf8');
-        for (const section of patch.split(/(?=^diff --git )/m).filter(Boolean)) {
+        // One reviewed patch is a plain unified diff without the git header line.
+        const gitStyle = /^diff --git /m.test(patch);
+        for (const section of patch.split(gitStyle ? /(?=^diff --git )/m : /(?=^--- a\/)/m).filter(Boolean)) {
             const lines = section.replace(/\n$/, '').split('\n');
-            const match = /^diff --git a\/(\S+) b\/\1$/.exec(lines[0]);
+            const match = gitStyle ? /^diff --git a\/(\S+) b\/\1$/.exec(lines[0])
+                : lines[1] === '+++ b/' + lines[0].slice(6) && /^--- a\/(\S+)$/.exec(lines[0]);
             assert(match, 'Unexpected non-text/rename patch section');
             const file = match[1];
             if (!files.has(file)) files.set(file, cp.execFileSync('git', ['-C', framework, 'show', pin + ':' + file], {encoding: 'utf8'}));
@@ -264,9 +281,19 @@ test('Transition + readiness + branding/billing + socket/lifecycle + optional pa
             while (index < lines.length) {
                 const hunk = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(lines[index++]);
                 assert(hunk, 'Malformed patch hunk');
-                const oldStart = Number(hunk[1]) - 1, oldCount = Number(hunk[2] || 1), newCount = Number(hunk[4] || 1);
-                assert(oldStart >= cursor); result.push(...baseline.slice(cursor, oldStart)); cursor = oldStart;
-                assert.equal(Number(hunk[3]) - 1, result.length, 'Wrong destination offset');
+                const oldCount = Number(hunk[2] || 1), newCount = Number(hunk[4] || 1);
+                // Like git apply, accept a hunk moved by earlier patches to the same
+                // file, but only where its complete old side matches byte-exactly.
+                let end = index; while (end < lines.length && !lines[end].startsWith('@@ ')) end++;
+                const oldSide = lines.slice(index, end).filter(line => line[0] !== '+').map(line => line.slice(1));
+                const fits = at => at >= cursor && oldSide.every((line, n) => baseline[at + n] === line);
+                let oldStart = -1;
+                for (let delta = 0; oldStart < 0 && delta <= baseline.length; delta++)
+                    oldStart = [Number(hunk[1]) - 1 + delta, Number(hunk[1]) - 1 - delta].find(fits) ?? -1;
+                assert(oldStart >= cursor, patchName + ': ' + file + ': hunk old side not found at or after line ' + (cursor + 1));
+                const moved = oldStart - (Number(hunk[1]) - 1);
+                result.push(...baseline.slice(cursor, oldStart)); cursor = oldStart;
+                assert.equal(Number(hunk[3]) - 1 + moved, result.length, 'Wrong destination offset');
                 let removed = 0, added = 0;
                 while (index < lines.length && !lines[index].startsWith('@@ ')) {
                     const line = lines[index++], kind = line[0];
@@ -279,9 +306,21 @@ test('Transition + readiness + branding/billing + socket/lifecycle + optional pa
             result.push(...baseline.slice(cursor)); files.set(file, result.join('\n'));
         }
     }
-    assert.equal(files.size, 12, 'Unexpected framework patch scope');
+    assert.equal(files.size, 19, 'Unexpected framework patch scope: ' + [...files.keys()].join(' '));
     for (const [file, bytes] of files) assertTextEqual(fs.readFileSync(path.join(framework, file), 'utf8'), bytes, 'Byte mismatch: ' + file);
-    cp.execFileSync('git', ['-C', framework, 'apply', '--check', '--reverse',
-        ...patches.map(name => path.join(__dirname, 'patches', name))], {stdio: 'pipe'});
+    // Several patches now change the same lines of one file, which a single
+    // `git apply --check --reverse` of all of them cannot follow. Reverse them
+    // newest first on private copies of the touched files and require the pin back.
+    const scratch = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'monster-wiring-reverse.'));
+    try {
+        for (const file of files.keys()) {
+            fs.mkdirSync(path.dirname(path.join(scratch, file)), {recursive: true});
+            fs.copyFileSync(path.join(framework, file), path.join(scratch, file));
+        }
+        for (const name of [...patches].reverse())
+            cp.execFileSync('git', ['apply', '--reverse', path.join(__dirname, 'patches', name)], {cwd: scratch, stdio: 'pipe'});
+        for (const file of files.keys()) assertTextEqual(fs.readFileSync(path.join(scratch, file), 'utf8'),
+            cp.execFileSync('git', ['-C', framework, 'show', pin + ':' + file], {encoding: 'utf8'}), 'Reverse mismatch: ' + file);
+    } finally { fs.rmSync(scratch, {recursive: true, force: true}); }
 });
 console.log(`PASS: ${passed} no-deployment Monster installer/configuration/patch groups`);

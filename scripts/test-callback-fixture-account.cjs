@@ -24,8 +24,13 @@ for (const change of [{ACCEPTANCE_ACCOUNT_ID:other}, {ACCEPTANCE_ACCOUNT_NAME:'T
     {ACCEPTANCE_CALLER_SIP_USERNAME:'admin'}, {ACCEPTANCE_QUEUE_EXTENSION:'2001'}, {ACCEPTANCE_QUEUE_ID:'bad'}])
     assert.throws(() => validateState({...state(candidate), ...change}, candidate));
 const retry = fs.readFileSync(process.argv[2] || path.join(__dirname, 'test-acdc-callback-retry.sh'), 'utf8');
+// Every boolean mode default comes from the real script, so a new retry mode
+// cannot leave retry_args reading an unbound variable here again.
+const retryDefaults = [...retry.matchAll(/^RETRY_[A-Z_]+=(?:false|true)$/gm)].map(match => match[0]);
+assert(retryDefaults.includes('RETRY_EDIT_PENDING_LANGUAGE=false'), 'Missing actual retry mode defaults');
 function args(options) {
     const input = `set -Eeuo pipefail
+${retryDefaults.join('\n')}
 CALLBACK_PREPARE=false CALLBACK_LIVE=false KEEP_FIXTURE=false RETRY_REFERENCE='' RETRY_REGISTRATION_MODE=confirm-current
 CALLBACK_TEST_TRANSPORT=external RETRY_LANGUAGE=en-us RETRY_LANGUAGE_EXPLICIT=false RETRY_LANGUAGE_ARGS=()
 RETRY_ACCOUNT_ID=${LEGACY} RETRY_ACCOUNT_EXPLICIT=false retry_script_dir=/synthetic

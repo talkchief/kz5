@@ -48,14 +48,26 @@ test('Carrier process budget includes the complete XML waits, dynamic holds and 
     assert(120000 < minimum); assert(208000 < minimum);
     assert(definition(source, 'start_returned_carrier').includes('-timeout "${CALLBACK_CARRIER_TIMEOUT_S}s" -timeout_error'));
     const csv = definition(source, 'write_returned_carrier_csv');
-    assert(csv.includes('"$CALLBACK_CARRIER_CONFIRM_DELAY_MS" "$CALLBACK_BRIDGE_HOLD_MS"'));
+    // 0615e50 made the delay an optional argument for the short confirmation-window
+    // mode. It still defaults to the declared delay, only that value or the shorter
+    // 6000 ms is admitted, so the process budget above remains an upper bound.
+    assert(csv.includes('delay=${2:-$CALLBACK_CARRIER_CONFIRM_DELAY_MS}'));
+    assert(csv.includes("[[ $# -le 2 && ( $delay == 8000 || $delay == 6000 ) ]] || die"));
+    assert(6000 <= confirmDelay && confirmDelay === 8000);
+    assert(/"\$delay" "\$CALLBACK_BRIDGE_HOLD_MS"/.test(csv));
 });
 test('Sentinel, agent and registration deadlines outlive their required successful lifetimes', () => {
     const sentinelSeconds = Number(definition(source, 'start_sentinel_caller').match(/-timeout (\d+)s/)[1]);
     const answerSeconds = Number(definition(common, 'wait_answered_calls').match(/SECONDS \+ (\d+)/)[1]);
     assert(sentinelSeconds * 1000 >= answerSeconds * 1000 + sentinelHold + 10000);
     const agentBye = Number(agent.match(/<recv request="BYE" timeout="(\d+)"/)[1]);
-    const agentSeconds = Number(definition(common, 'start_agent_uas').match(/-timeout (\d+)s/)[1]);
+    // c875758 moved the literal into a default that only the extended capacity soak
+    // replaces; callback acceptance runs with the default.
+    const agentUas = definition(common, 'start_agent_uas');
+    const agentSeconds = Number(agentUas.match(/ agent_timeout=(\d+)$/m)[1]);
+    assert(agentUas.includes('-timeout "${agent_timeout}s" -timeout_error'));
+    assert.equal(agentUas.match(/agent_timeout=/g).length, 2, 'Only the extended soak may replace the default agent deadline');
+    assert(agentUas.includes('if ((SOAK_SECONDS > CAPACITY_SOAK_SECONDS)); then'));
     assert(agentBye > processSeconds * 1000); assert(agentSeconds > processSeconds);
     assert(definition(source, 'run_callback_acceptance').includes('register_agents callback 1 600'));
     assert(600 > processSeconds);

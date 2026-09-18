@@ -35,6 +35,7 @@ wait_kazoo_datastore_ready(){ printf 'datastore-ready %s\\n' "$1"; }
 configure_ecallmgr_dialplan_applications(){ :; }
 configure_ecallmgr_callback_cleanup(){ :; }
 configure_ecallmgr_event_stream_framing(){ :; }
+configure_ecallmgr_sbc_discovery(){ :; }
 register_configured_freeswitch_nodes(){ :; }
 verify_ecallmgr(){ printf 'runtime-verify\\n'; }
 `;

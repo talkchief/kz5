@@ -59,16 +59,24 @@ function jsInvocations(text){
         let start=match.index+match[0].length;
         if(text[start]!=='['){
             assert(/^args\b/.test(text.slice(start)),'Unreviewed dynamic SIPp argument variable');
-            const builders=[...text.matchAll(/const args\s*=\s*\[/g)];
-            assert.equal(builders.length,1,'Ambiguous dynamic SIPp argument builder');
-            start=builders[0].index+builders[0][0].length-1;
+            // A file may build other `args` arrays (d25f895 added a kamcmd one).
+            // The SIPp vector is the single builder inside the launching function:
+            // the nearest one before the launch, with no function boundary between.
+            const builders=[...text.matchAll(/const args\s*=\s*\[/g)].filter(b=>b.index<match.index);
+            assert(builders.length>=1,'Missing dynamic SIPp argument builder');
+            const builder=builders[builders.length-1];
+            assert(!/\bfunction\b|=>\s*\{/.test(text.slice(builder.index,match.index).replace(/\([^()]*=>[^()]*\)/g,'')),
+                'Ambiguous dynamic SIPp argument builder');
+            start=builder.index+builder[0].length-1;
         }
         const expression=arrayAt(text,start);
         const args=Array.from(vm.runInNewContext(expression,{
             state:{ACCEPTANCE_SIP_PROXY_HOST:'198.51.100.9'},path:{join:(...p)=>p.join('/')},
             SCENARIOS:'scenario',__dirname:'scripts',csv:'fixture.csv',scenario:'fixture.xml',file:'fixture.xml',
             audio:{IP:'127.0.0.51'},IP:'127.0.0.62',e:{role:'customer',port:19000,rtp:49000},
-            port:19000,index:'0',name:'fixture.xml',peer:{address:()=>({port:19001})}
+            port:19000,index:'0',name:'fixture.xml',peer:{address:()=>({port:19001})},
+            // 0ac6fb9 made the receiver call limit a helper; mirror its two values.
+            phoneCallLimit:role=>role==='customer'?'1':'100',limit:'100'
         },{timeout:1000}));
         if(args.length===1&&['-v','-h'].includes(args[0]))continue;
         out.push(args);
@@ -89,8 +97,11 @@ for(const file of files){
     args.forEach((a,i)=>assert.deepEqual(withoutControl(a),withoutControl(baseline[i]),'SIP/media/timing arguments changed: '+file));
     invocations+=args.length;covered++;
 }
-assert.equal(invocations,28,'SIPp launch inventory changed; audit every new socket-creating path');
-assert.equal(covered,13,'SIPp fixture file inventory changed');
+// Audited September 18, 2026: two launches were added after the inventory was
+// fixed at 28/13 -- the confirmation-expiry carrier in test-acdc-callback-retry.sh
+// (85fd6c2) and test-monitor-options.cjs (0ac6fb9). Both pass control() above.
+assert.equal(invocations,30,'SIPp launch inventory changed; audit every new socket-creating path');
+assert.equal(covered,14,'SIPp fixture file inventory changed');
 for(const args of [[],['-i','127.0.0.1'],['-ci','0.0.0.0'],['-ci','198.51.100.9'],
     ['-ci','127.0.0.999'],['-ci','127.0.0.1','-ci','127.0.0.2']])assert.throws(()=>control(args));
 control(['-ci','127.0.0.1']);control(['-ci','127.0.0.40']);

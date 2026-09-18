@@ -58,11 +58,12 @@ const translations = JSON.parse(fs.readFileSync(path.join(appRoot, 'i18n/en-US.j
                     catalogs: Object.fromEntries(['users', 'media', 'numbers', 'system_media', 'callflows'].map(k => [k, {complete: true, reason: 'complete', count: 0, limit: 500}])),
                     revisions: {queue: '1-initial', users: Object.fromEntries(users.map(u => [u.id, '1-user'])), callflows: {}}};
             };
-            window.openEditor = ({create = false, error = null, partialCatalog = null} = {}) => {
+            window.openEditor = ({create = false, error = null, partialCatalog = null, language = null} = {}) => {
                 window.requests = []; window.successes = 0; window.navigations = 0; window.writeError = error;
                 window.deferEditorGet = false; window.deferredEditorReads = [];
                 app.accountId = 'a'.repeat(32); app.appFlags.acdc.currentTab = 'queues';
                 window.next = window.resultData();
+                if (language) window.next.queue.announcements.language = language;
                 if (create) { window.next.queue = {}; window.next.roster = []; window.next.revisions.queue = null; }
                 if (partialCatalog) window.next.catalogs[partialCatalog] = {complete: false, reason: 'limit_exceeded', count: 0, limit: 500};
                 window.monster.request = options => {
@@ -95,13 +96,26 @@ const translations = JSON.parse(fs.readFileSync(path.join(appRoot, 'i18n/en-US.j
         await page.evaluate(() => window.openEditor());
         assert.deepEqual((await page.evaluate(() => requests)).map(x => x.resource), ['acdc.editor.get']); cases++;
         const controls = await page.locator('select[name="announcements.language"] option').evaluateAll(items => items.map(x => ({value: x.value, disabled: x.disabled})));
-        assert.deepEqual(controls.filter(x => x.value).map(x => x.value), ['en-us', 'ar-sa', 'he-il', 'es-es', 'fr-fr']); cases++;
+        assert.deepEqual(controls.filter(x => x.value).map(x => x.value), ['en-us', 'he-il', 'fr-fr', 'es-es', 'ar-sa']); cases++;
         let result = await page.evaluate(() => window.submitEditor());
         assert(result.valid); assert.deepEqual(result.requests.map(x => x.resource), ['acdc.editor.get', 'acdc.editor.update']);
         const body = result.requests[1].data.data;
-        assert.equal(body.roster.length, 30); assert.equal(body.queue.announcements.media.you_are_at_position, 'legacy-position');
-        assert.equal(body.queue.callback.media.offer, 'legacy-callback'); assert.match(body.request_id, /^[a-f0-9]{32}$/);
+        // Documented adoption contract (61bf505, monster-ui/acdc/README.md): saving a READY
+        // selected language adopts the built-ins even when its value is unchanged, so the
+        // PATCH carries null tombstones for the obsolete queue prompt references.
+        assert.equal(body.roster.length, 30); assert.equal(body.queue.announcements.language, 'en-us');
+        assert.equal(body.queue.announcements.media, null); assert.equal(body.queue.callback.media, null);
+        assert.equal(body.queue.callback.return_confirmation_prompt, null); assert.match(body.request_id, /^[a-f0-9]{32}$/);
         assert.equal(body.revisions.queue, '1-initial'); assert.equal(result.successes, 1); cases++;
+        // The other half of that contract: with an UNAVAILABLE selected pack the legacy
+        // prompt settings survive an unrelated save and the pack is not adopted.
+        await page.evaluate(() => window.openEditor({language: 'fr-fr'}));
+        result = await page.evaluate(() => window.submitEditor());
+        assert(result.valid); assert.deepEqual(result.requests.map(x => x.resource), ['acdc.editor.get', 'acdc.editor.update']);
+        const unready = result.requests[1].data.data.queue;
+        assert.equal(unready.announcements.language, 'fr-fr');
+        assert.equal(unready.announcements.media.you_are_at_position, 'legacy-position');
+        assert.equal(unready.callback.media.offer, 'legacy-callback'); cases++;
         await page.evaluate(() => window.openEditor({create: true}));
         await page.locator('[name="name"]').fill('New isolated queue');
         result = await page.evaluate(() => window.submitEditor());

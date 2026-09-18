@@ -430,15 +430,11 @@ native_federation_binding_and_reply_routing() ->
     meck:new(kz_amqp_util,[passthrough,no_link]),
     try
         meck:expect(amqp,debug,fun(_,_)->ok end),
-        meck:expect(gen_listener,start_link,fun(acdc_stats,Params,[])->
-            Bindings=props:get_value(bindings,Params),
-            ?assertEqual([federate],props:get_value(acdc_dashboard,Bindings)),
-            ?assertEqual([],props:get_value(acdc_stats,Bindings)),
-            ?assertEqual([],props:get_value(self,Bindings)),
-            Responders=props:get_value(responders,Params),
-            ?assert(lists:member({{acdc_dashboard_snapshot,handle_req},[{<<"acdc_dashboard">>,<<"snapshot_req">>}]},Responders)),
-            {ok,Parent}
-        end),
+        %% 87ed290 defers listener activation until retained ETS is verified:
+        %% start_link/0 carries no bindings, and the federated dashboard
+        %% binding/responder arrive through gen_listener:start_listener/2
+        %% (asserted by acdc_stats_startup_tests:activation/0).
+        meck:expect(gen_listener,start_link,fun(acdc_stats,[],[])->{ok,Parent} end),
         ?assertEqual({ok,Parent},acdc_stats:start_link()),
         meck:expect(kz_amqp_util,bind_q_to_callmgr,fun(<<"listener">>,<<"acdc.dashboard.snapshot.*">>)->ok end),
         meck:expect(kz_amqp_util,unbind_q_from_callmgr,fun(<<"listener">>,<<"acdc.dashboard.snapshot.*">>)->ok end),
