@@ -26,10 +26,19 @@ source_id=$(git rev-parse HEAD)
 exec 9<>/etc/kazoo/monitor-acceptance.lock
 flock -n 9 || refuse 'an acceptance run holds the shared lock'
 
+# Idle means no call and no agent on, or being offered, a call. Logged-in agents
+# are restored from the database when the node starts, so their mere presence is
+# not work in progress; the strict snapshot refuses if any worker is unobserved.
 idle() {
+    local snapshot address busy
     [[ $("$fs_cli" -x 'show channels as json' | jq -r '.row_count') == 0 ]] || refuse 'main FreeSWITCH has live channels'
-    [[ $(timeout --signal=KILL 30 sup -e acdc_agents_sup agents_running </dev/null | tr -d '[:space:]') == '[]' ]] || \
-        refuse 'main ACDC has running agents'
+    address=$(getent ahostsv4 "$(hostname)" | awk 'NR==1{print $1}')
+    snapshot=$(timeout --signal=KILL 120 escript /usr/local/libexec/kazoo5-maintenance-snapshot --snapshot "$address" 2>/dev/null) || \
+        refuse 'the strict ACDC agent snapshot refused or is not installed'
+    jq -e '.schema_version == 2 and .all_agent_workers_observed == true and (.agents | type) == "array"' <<<"$snapshot" >/dev/null || \
+        refuse 'the ACDC agent snapshot is incomplete'
+    busy=$(jq -r '[.agents[] | select(.state != "ready" and .state != "paused")] | length' <<<"$snapshot")
+    [[ $busy == 0 ]] || refuse "${busy} main ACDC agents are neither ready nor paused"
 }
 idle
 run_dir=$(mktemp -d "/root/kz5-main-promotion-$(date -u +%Y%m%d).XXXXXXXX")
