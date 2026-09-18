@@ -12,7 +12,7 @@ source "$script_dir/install-kazoo5.sh" __acceptance_provisioner__
 
 ACCEPTANCE_STATE_FILE=${KAZOO_ACCEPTANCE_STATE_FILE:-/etc/kazoo/acceptance-secrets.env}
 readonly ACCEPTANCE_API_BASE=http://127.0.0.1:8000/v2
-readonly ACCEPTANCE_MAX_AGENT_COUNT=30
+readonly ACCEPTANCE_MAX_AGENT_COUNT=100
 readonly ACCEPTANCE_CALLER_EXTENSION_EXPECTED=1001
 readonly ACCEPTANCE_FIRST_AGENT_EXTENSION=1002
 readonly ACCEPTANCE_QUEUE_EXTENSION_EXPECTED=2000
@@ -32,7 +32,7 @@ declare -a ACCEPTANCE_STATE_KEYS=(
     ACCEPTANCE_AGENT_COUNT ACCEPTANCE_MAX_ANSWERED_CALLS
     ACCEPTANCE_SIP_PROXY_HOST ACCEPTANCE_SIP_PROXY_PORT ACCEPTANCE_SIP_TRANSPORT
 )
-for agent_index in {1..30}; do
+for ((agent_index = 1; agent_index <= ACCEPTANCE_MAX_AGENT_COUNT; agent_index++)); do
     ACCEPTANCE_STATE_KEYS+=(
         "ACCEPTANCE_AGENT_${agent_index}_USER_ID"
         "ACCEPTANCE_AGENT_${agent_index}_DEVICE_ID"
@@ -53,7 +53,7 @@ agents 1002-1031, and ACDC queue 2000.
 Options:
   --verify-only          Read-only validation of saved tenant resources
   --verify-capacity      Also require the long wait policy for the capacity test
-  --agent-count COUNT    Provision 1-30 agents (new tenants default to 30)
+  --agent-count COUNT    Provision 1-100 agents (new tenants default to 30)
   --agent-status ACTION  Set acceptance agents to login, logout, or verify
   --agent-range START:END  Limit --agent-status to an indexed agent range
   -h, --help             Show this help
@@ -78,7 +78,7 @@ parse_acceptance_arguments() {
                 shift
                 ;;
             --agent-count)
-                (($# >= 2)) || die '--agent-count requires an integer from 1 to 30'
+                (($# >= 2)) || die '--agent-count requires an integer from 1 to 100'
                 requested_agent_count=$2
                 shift
                 ;;
@@ -95,7 +95,7 @@ parse_acceptance_arguments() {
     if [[ -n $requested_agent_count ]]; then
         if [[ ! $requested_agent_count =~ ^[1-9][0-9]*$ ]] || \
            ((requested_agent_count > ACCEPTANCE_MAX_AGENT_COUNT)); then
-            die '--agent-count must be an integer from 1 to 30'
+            die '--agent-count must be an integer from 1 to 100'
         fi
     fi
 }
@@ -223,7 +223,7 @@ validate_acceptance_state() {
         die 'Acceptance state does not contain the fixed caller and queue extensions'
     if [[ ! ${ACCEPTANCE_AGENT_COUNT:-} =~ ^[1-9][0-9]*$ ]] || \
        ((ACCEPTANCE_AGENT_COUNT > ACCEPTANCE_MAX_AGENT_COUNT)); then
-        die 'Acceptance state agent count must be from 1 to 30'
+        die 'Acceptance state agent count must be from 1 to 100'
     fi
     [[ ${ACCEPTANCE_MAX_ANSWERED_CALLS:-} == "$ACCEPTANCE_AGENT_COUNT" ]] || \
         die 'Acceptance maximum answered calls must match its agent count'

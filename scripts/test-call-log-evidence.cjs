@@ -7,10 +7,16 @@ const path = require('node:path');
 const cp = require('node:child_process');
 const assert = require('node:assert/strict');
 const source = fs.readFileSync(path.join(__dirname, 'test-kazoo-calls.sh'), 'utf8');
-const fn = source.match(/^new_error_log_matches\(\) \{[\s\S]*?^\}/m)?.[0];
-assert(fn, 'Missing actual file-log counter');
-const journalFn = source.match(/^count_journal_error_messages\(\) \{[\s\S]*?^\}/m)?.[0];
-assert(journalFn, 'Missing actual journal counter');
+const fileFn = source.match(/^new_error_log_matches\(\) \{[\s\S]*?^\}/m)?.[0];
+assert(fileFn, 'Missing actual file-log counter');
+// Both counters pass their input through the expected-line filter first.
+const gateFn = source.match(/^log_gate_unexpected\(\) \{[\s\S]*?^\}/m)?.[0];
+assert(gateFn, 'Missing actual expected-line filter');
+const counterFn = source.match(/^count_journal_error_messages\(\) \{[\s\S]*?^\}/m)?.[0];
+assert(counterFn, 'Missing actual journal counter');
+const journalFn = gateFn + '\n' + counterFn;
+// Without the filter the file counter's pipeline reads nothing and silently reports 0.
+const fn = gateFn + '\n' + fileFn;
 assert(source.includes('count_journal_error_messages)'), 'Acceptance must use the journal counter');
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'kazoo-call-log-evidence.'));
 const cases = [

@@ -12,7 +12,13 @@ readonly DEFAULT_HELPER=${SCRIPT_DIR}/test-kazoo-call-provision.sh
 readonly SIPP_VERSION=3.7.7
 readonly SIPP_COMMIT=369b3c187f0ff96f3ec9795650820e80cf17c776
 readonly SIPP_SOURCE=/usr/local/src/kazoo5-tests/sipp-${SIPP_VERSION}
-readonly MAX_ANSWERED_CALLS=30
+# The capacity stage: every agent answers one call and the hold is verified.
+# 30 is the default fixture; --capacity raises it up to the ceiling for a
+# production-target soak (100 concurrent for two hours, owner's target).
+readonly DEFAULT_ANSWERED_CALLS=30
+readonly MAX_CAPACITY_CALLS=100
+readonly MAX_SOAK_SECONDS=7200
+MAX_ANSWERED_CALLS=$DEFAULT_ANSWERED_CALLS
 readonly AGENT_CONTACT_PORT_BASE=15100
 readonly CALLER_PORT=15064
 readonly NEGATIVE_REGISTER_PORT=15068
@@ -62,9 +68,10 @@ Options:
   --live               Required before any SIP traffic or agent-state mutation
   --config FILE        Root-owned 0600 base64 state file
   --state-helper FILE  Acceptance provisioner/status helper
-  --stages LIST        Increasing answered concurrency, maximum 30
-  --queued-excess N    Extra callers held while 30 agents are busy (default 5)
-  --soak-seconds N     Verified hold, 180..1800s; >180 requires --stress --stages 30 --queued-excess 0
+  --capacity N         Capacity stage, 30..100 answered calls (default 30; needs that many provisioned agents)
+  --stages LIST        Increasing answered concurrency, maximum the capacity
+  --queued-excess N    Extra callers held while every capacity agent is busy (default 5)
+  --soak-seconds N     Verified hold, 180..7200s; >180 requires --stress --stages CAPACITY --queued-excess 0
   --no-install-deps    Do not build SIPp when v3.7.7 is absent
   --run-root DIR       Protected results directory (default /var/log/kazoo-acceptance)
   --local-ip ADDRESS   SIPp source/media address (auto-selects 127.0.0.20 for local proxy)
@@ -92,6 +99,7 @@ parse_args() {
             --live) LIVE=true ;;
             --config) (($# >= 2)) || die '--config requires a file'; STATE_FILE=$2; shift ;;
             --state-helper) (($# >= 2)) || die '--state-helper requires a file'; STATE_HELPER=$2; shift ;;
+            --capacity) (($# >= 2)) || die '--capacity requires a number'; MAX_ANSWERED_CALLS=$2; shift ;;
             --stages) (($# >= 2)) || die '--stages requires a list'; STAGES=$2; shift ;;
             --queued-excess) (($# >= 2)) || die '--queued-excess requires a number'; QUEUED_EXCESS=$2; shift ;;
             --soak-seconds) (($# >= 2)) || die '--soak-seconds requires a number'; SOAK_SECONDS=$2; shift ;;
@@ -154,7 +162,7 @@ validate_state() {
     validate_sip_credential ACCEPTANCE_CALLER_SIP_USERNAME
     validate_sip_credential ACCEPTANCE_CALLER_SIP_PASSWORD
     count=${STATE[ACCEPTANCE_AGENT_COUNT]}
-    if [[ ! $count =~ ^[0-9]+$ ]] || ((count < 1 || count > MAX_ANSWERED_CALLS)); then
+    if [[ ! $count =~ ^[0-9]+$ ]] || ((count < 1 || count > MAX_CAPACITY_CALLS)); then
         die 'Invalid acceptance agent count'
     fi
     for ((index=1; index<=count; index++)); do
@@ -176,12 +184,20 @@ validate_sip_credential() {
     [[ $value =~ ^[A-Za-z0-9._~!$\&\'\(\)*+,/:=@%-]+$ ]] || die "Unsafe SIP credential characters for $key"
 }
 
+validate_capacity() {
+    if [[ ! $MAX_ANSWERED_CALLS =~ ^[1-9][0-9]{1,2}$ ]] ||
+       ((MAX_ANSWERED_CALLS < DEFAULT_ANSWERED_CALLS || MAX_ANSWERED_CALLS > MAX_CAPACITY_CALLS)); then
+        die "Capacity must be an integer in ${DEFAULT_ANSWERED_CALLS}..${MAX_CAPACITY_CALLS}"
+    fi
+}
+
 validate_stages() {
     local previous=0 stage
+    validate_capacity
     [[ $STAGES =~ ^[0-9]+(,[0-9]+)*$ ]] || die 'Stages must be a comma-separated integer list'
     IFS=, read -r -a STAGE_LIST <<< "$STAGES"
     for stage in "${STAGE_LIST[@]}"; do
-        ((stage >= 1 && stage <= MAX_ANSWERED_CALLS)) || die "Stage $stage is outside 1..30"
+        ((stage >= 1 && stage <= MAX_ANSWERED_CALLS)) || die "Stage $stage is outside 1..${MAX_ANSWERED_CALLS}"
         ((stage > previous)) || die 'Stages must be strictly increasing'
         ((stage <= STATE[ACCEPTANCE_AGENT_COUNT])) || die "Stage $stage exceeds provisioned agents"
         previous=$stage
@@ -193,12 +209,13 @@ validate_stages() {
 }
 
 validate_soak() {
-    if [[ ! $SOAK_SECONDS =~ ^[1-9][0-9]{2,3}$ ]] || ((SOAK_SECONDS < 180 || SOAK_SECONDS > 1800)); then
-        die 'Soak seconds must be an integer in 180..1800'
+    validate_capacity
+    if [[ ! $SOAK_SECONDS =~ ^[1-9][0-9]{2,3}$ ]] || ((SOAK_SECONDS < 180 || SOAK_SECONDS > MAX_SOAK_SECONDS)); then
+        die "Soak seconds must be an integer in 180..${MAX_SOAK_SECONDS}"
     fi
     if ((SOAK_SECONDS > CAPACITY_SOAK_SECONDS)); then
-        [[ $MODE == stress && $STAGES == 30 && $QUEUED_EXCESS == 0 ]] ||
-            die 'Extended soak requires --stress --stages 30 --queued-excess 0; do not exceed the queue wait budget'
+        [[ $MODE == stress && $STAGES == "$MAX_ANSWERED_CALLS" && $QUEUED_EXCESS == 0 ]] ||
+            die "Extended soak requires --stress --stages ${MAX_ANSWERED_CALLS} --queued-excess 0; do not exceed the queue wait budget"
     fi
 }
 
@@ -727,7 +744,8 @@ start_rtp_capture() {
     local label=$1
     RTP_PCAP=$RUN_DIR/$label-rtp.pcap
     RTP_CAPTURE_LOG=$RUN_DIR/$label-rtp-capture.log
-    tcpdump -q -n -i any -U -w "$RTP_PCAP" \
+    # Headers only: two hours of 100 calls is about 150 million packets.
+    tcpdump -q -n -i any -U -s 96 -w "$RTP_PCAP" \
         'udp and portrange 40000-44998' >"$RTP_CAPTURE_LOG" 2>&1 &
     RTP_CAPTURE_PID=$!
     ACTIVE_PIDS+=("$RTP_CAPTURE_PID")
@@ -745,18 +763,33 @@ pcap_count() {
     tcpdump -q -nn -r "$RTP_PCAP" "$filter" 2>/dev/null | awk 'END{print NR+0}'
 }
 
+# One pass over the capture: packets per UDP source and destination port.
+pcap_port_counts() {
+    tcpdump -q -nn -r "$RTP_PCAP" udp 2>/dev/null | awk '
+        { for (i = 1; i <= NF; i++) if ($i == ">") { src = $(i - 1); dst = $(i + 1); break }
+          sub(/:$/, "", dst); sub(/.*\./, "", src); sub(/.*\./, "", dst)
+          out[src]++; into[dst]++ }
+        END { for (p in out) print "src", p, out[p]; for (p in into) print "dst", p, into[p] }'
+}
+
+pcap_port_sum() {   # counts-file direction first-port last-port
+    awk -v d="$2" -v lo="$3" -v hi="$4" '$1 == d && $2 + 0 >= lo && $2 + 0 <= hi { n += $3 } END { print n + 0 }' "$1"
+}
+
 assert_rtp_capture() {
     local label=$1 agent_count=$2 caller_count=$3 index port agent_in agent_out caller_in caller_out minimum
+    local counts=$RUN_DIR/$label-rtp-port-counts.txt
     [[ -s $RTP_PCAP ]] || die "$label did not capture RTP packets"
+    pcap_port_counts > "$counts"; chmod 600 "$counts"
     for ((index=1; index<=agent_count; index++)); do
         port=$((AGENT_MEDIA_MIN + (index - 1) * 4))
-        agent_in=$(pcap_count "udp dst port $port")
-        agent_out=$(pcap_count "udp src port $port")
+        agent_in=$(pcap_port_sum "$counts" dst "$port" "$port")
+        agent_out=$(pcap_port_sum "$counts" src "$port" "$port")
         ((agent_in >= 10 && agent_out >= 10)) ||
             die "$label agent $index RTP was not bidirectional (in=$agent_in out=$agent_out)"
     done
-    caller_in=$(pcap_count "udp dst portrange $CALLER_MEDIA_MIN-$CALLER_MEDIA_MAX")
-    caller_out=$(pcap_count "udp src portrange $CALLER_MEDIA_MIN-$CALLER_MEDIA_MAX")
+    caller_in=$(pcap_port_sum "$counts" dst "$CALLER_MEDIA_MIN" "$CALLER_MEDIA_MAX")
+    caller_out=$(pcap_port_sum "$counts" src "$CALLER_MEDIA_MIN" "$CALLER_MEDIA_MAX")
     minimum=$((caller_count * 10))
     ((caller_in >= minimum && caller_out >= minimum)) ||
         die "$label caller RTP packet floor failed (in=$caller_in out=$caller_out expected-at-least=$minimum)"
