@@ -48,7 +48,7 @@ async function request(method,p,data){forward();let r,j;try{r=await fetch(API+'/
     if(![200,201,202].includes(r.status)){const e=Error(`API ${method} failed HTTP${r.status}`);e.http_status=r.status;throw e;}assert(j.status==='success','API response did not succeed');return j;}
 async function authenticate(){const vals={};for(const l of privateRead('/etc/kazoo/installer-secrets.env').split('\n')){if(!l||l.startsWith('#'))continue;const at=l.indexOf('=');assert(at>0,'Invalid credential data');vals[l.slice(0,at)]=l.slice(at+1);}
     const result=await request('PUT','user_auth',{credentials:crypto.createHash('md5').update(vals.KAZOO_MASTER_ADMIN_USER+':'+vals.KAZOO_MASTER_ADMIN_PASSWORD).digest('hex'),method:'md5',realm:vals.KAZOO_MASTER_ACCOUNT_REALM});
-    assert(result.data.account_id===base.MASTER&&typeof result.auth_token==='string','Unexpected authentication account');token=result.auth_token;}
+    assert(result.data.account_id===MASTER&&typeof result.auth_token==='string','Unexpected authentication account');token=result.auth_token;}
 async function inventory(c){const j=await request('GET',route(c)+'?paginate=false');assert(Array.isArray(j.data)&&!j.next_start_key&&j.data.length<500,'Incomplete fixture inventory');return j.data;}
 async function verifyBorrowed(){const a=(await request('GET',`accounts/${state.ACCEPTANCE_ACCOUNT_ID}`)).data;
     assert(a.id===state.ACCEPTANCE_ACCOUNT_ID&&a.name===state.ACCEPTANCE_ACCOUNT_NAME&&a.realm===state.ACCEPTANCE_REALM&&!a.call_forward?.enabled,'Acceptance account drift');
@@ -213,7 +213,7 @@ async function dashboardBrowserStage(summary=false){
         await request('PATCH',route('queues',saved.queue_id),{agent_ring_timeout:12});
         await sleep(1200);await readyAgents();
         result=await runBrowser({accountId:state.ACCEPTANCE_ACCOUNT_ID,queueId:saved.queue_id,
-            loginAccountId:base.MASTER,loginQueueId:inputs.loginQueueId,
+            loginAccountId:MASTER,loginQueueId:inputs.loginQueueId,
             runCall:async observer=>{
                 forward();
                 return runCall(label+'-natural-call',()=>6000,p=>assert.equal(offers(p).length,1),observer);
@@ -276,7 +276,12 @@ function prepare(){state=parseState(privateRead(BASE));const local=JSON.parse(co
     assert(local.includes(state.ACCEPTANCE_SIP_PROXY_HOST),'SIP proxy must be local');assert(fs.existsSync(FSCLI),'FS diagnostic client missing');
     const sipp=cp.spawnSync('sipp',['-v'],{encoding:'utf8',timeout:5000});assert(!sipp.error&&(sipp.stdout+sipp.stderr).includes('SIPp v3.7.7-TLS-PCAP-SHA256'),'Pinned SIPp version required');
     log('Prepared only: isolated borrowed1001–1004 and marked queue2700; no API writes, registrations or calls');return local;}
-async function main(args){assert(args.length===1&&['--prepare-only','--check-live','--live','--dashboard-live','--dashboard-browser-live','--dashboard-browser-summary-live','--cleanup'].includes(args[0]),'Use --prepare-only, --check-live, --live, --dashboard-live, --dashboard-browser-live, --dashboard-browser-summary-live or --cleanup');
+// The monitor driver's master identity is that of the original host. On the main
+// development runtime the local master comes from the reviewed main-dev profile,
+// exactly as `test-channel-monitor-live.cjs --main-dev` resolves it.
+let MASTER=base.MASTER;
+async function main(args){if(args[0]==='--main-dev'){MASTER=require('./test-fixtures/main-dev-monitor-profile.cjs').prepare().master;args=args.slice(1);}
+    assert(args.length===1&&['--prepare-only','--check-live','--live','--dashboard-live','--dashboard-browser-live','--dashboard-browser-summary-live','--cleanup'].includes(args[0]),'Use --prepare-only, --check-live, --live, --dashboard-live, --dashboard-browser-live, --dashboard-browser-summary-live or --cleanup');
     if(['--dashboard-browser-live','--dashboard-browser-summary-live'].includes(args[0]))browserInputs(process.env,Number(process.versions.node.split('.')[0]));
     assert(process.getuid()===0,'Root required');const peers=prepare();if(args[0]==='--prepare-only')return;
     if(args[0]==='--check-live'){
