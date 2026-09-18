@@ -7,6 +7,20 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **ACDC C3/C5 on main — broker outage with 30 concurrent queued calls, 3 cycles, NATIVE PASS, September18:**
+  Unit `kz5-main-broker-fault-30x3-0918` (`test-acdc-node-loss.sh --live --fault broker
+  --concurrent 30 --cycles 3`), evidence `/var/log/kazoo-acceptance/node-loss/20260918T152635Z`
+  (`cycle-1..3`). Each cycle: `rabbitmq-server.service stopped after real bridge`, `PASS ended
+  call remained conservatively busy while node evidence was unavailable`, `PASS same
+  applications node recovered agent without logout/login or FSM reset`, next-call SIP/RTP
+  PASS; final `PASS 3 native fault cycles with unchanged apps/FSM identities`. During the run
+  the agent listeners logged `agent leg ... is still tracked but has terminated; retiring it`
+  68 times: every one is a leg whose end was lost with the broker and that, before `b722015`,
+  would have stayed tracked until the agent's processes were restarted. Afterwards: stack
+  health `failures=0`, strict snapshot `all_agent_workers_observed:true`, the 30 tenant agents
+  logged out by the campaign's own cleanup (15:43, 30 status calls). This is a 30-call fault
+  run, not a soak: C5 at the owner's target concurrency and duration is still open.
+
 - **CALLBACKS D1 — recovery under failure, NATIVE PASS on main (`b511c02` runtime), September18:**
   All on the isolated tenant with the loopback carrier, `test-acdc-callback-retry.sh --live
   --keep-fixture --transport internal --language en-us --registration-mode entry-only`; every
