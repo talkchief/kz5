@@ -83,6 +83,8 @@
 %% When an agent starts up, how long do we wait for other agents to respond with their status?
 -define(SYNC_RESPONSE_TIMEOUT, 5000).
 -define(SYNC_RESPONSE_MESSAGE, 'sync_response_timeout').
+%% How many extra sync periods an agent may wait for its start-up live-call search.
+-define(LIVE_PROBE_SYNC_EXTENSIONS, 5).
 
 %% We weren't able to join our brethren, how long to wait to check again
 -define(RESYNC_RESPONSE_TIMEOUT, 15000).
@@ -135,6 +137,7 @@
                ,connect_failures = 0 :: non_neg_integer()
                ,agent_state_updates = [] :: list()
                ,restored_pause :: 'undefined' | timeout() % pause found in the stored status at start
+               ,live_probe = 'done' :: 'done' | {'pending', non_neg_integer()} % start-up search for calls the agent is already in
                ,monitoring = 'false' :: boolean() % process is not handling call, but following state transitions
                ,member_connect_id :: kz_term:api_binary()
                ,call_check_ref :: kz_term:api_reference()
@@ -625,11 +628,26 @@ invalid_failure_limit(Limit, Fallback) ->
 find_live_calls(AccountId, AgentId) ->
     Self = self(),
     kz_process:spawn(fun() ->
-                             {'ok', _} = timer:kill_after(20 * ?MILLISECONDS_IN_SECOND),
+                             {'ok', _} = timer:kill_after(?LIVE_PROBE_SYNC_EXTENSIONS * ?SYNC_RESPONSE_TIMEOUT),
+                             'ok' = wait_for_media_controllers(30),
                              Devices = kz_attributes:owned_by_docs(AgentId, <<"device">>, AccountId),
                              CallIds = query_live_calls(AccountId, device_usernames(Devices), 3),
                              gen_statem:cast(Self, {'live_calls', CallIds})
                      end).
+
+%% An empty answer before the node has heard from any media controller means
+%% "nobody was asked", not "no calls" (main, September 18, 2026: the search ran
+%% right after the node start and found nothing; the same code found the leg
+%% once the node was up).
+-spec wait_for_media_controllers(non_neg_integer()) -> 'ok'.
+wait_for_media_controllers(0) -> 'ok';
+wait_for_media_controllers(Tries) ->
+    case kz_nodes:whapp_count(<<"ecallmgr">>, 'true') > 0 of
+        'true' -> 'ok';
+        'false' ->
+            timer:sleep(500),
+            wait_for_media_controllers(Tries - 1)
+    end.
 
 %% The messaging layer may still be starting with the node: ask again, briefly.
 -spec query_live_calls(kz_term:ne_binary(), kz_term:ne_binaries(), non_neg_integer()) -> kz_term:ne_binaries().
@@ -730,6 +748,7 @@ wait('cast', {'listener', AgentListener, NextState, SyncRef}, #state{account_id=
                         ,sync_ref=SyncRef
                         ,agent_listener_id=acdc_util:proc_id()
                         ,restored_pause=Restored
+                        ,live_probe={'pending', ?LIVE_PROBE_SYNC_EXTENSIONS}
                         },
     case NextState of
         %% No peers are asked: the stored status is all there is.
@@ -827,6 +846,14 @@ sync('info', ?NEW_CHANNEL_FROM(CallId), State) ->
 sync('info', ?NEW_CHANNEL_TO(CallId, _), State) ->
     lager:debug("sync call_to outbound: ~s", [CallId]),
     {'next_state', 'outbound', start_outbound_call_handling(CallId, State), 'hibernate'};
+sync('info', {'timeout', Ref, ?SYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref
+                                                             ,live_probe={'pending', Extensions}
+                                                             }=State) when is_reference(Ref), Extensions > 0 ->
+    %% Right after a node start the media controllers are not known yet and the
+    %% search for the agent's live calls has not answered. Becoming ready now
+    %% could offer a call to an agent who is talking; wait, a bounded number of times.
+    lager:debug("still searching for the agent's live calls, staying in sync"),
+    {'next_state', 'sync', State#state{sync_ref=start_sync_timer(), live_probe={'pending', Extensions - 1}}};
 sync('info', {'timeout', Ref, ?SYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref
                                                              ,agent_listener=AgentListener
                                                              }=State) when is_reference(Ref) ->
@@ -1860,8 +1887,9 @@ handle_event('load_endpoints', StateName, #state{agent_id=AgentId
         {'ok', EPs} -> {'next_state', StateName, State#state{endpoints=EPs}};
         {'error', E} -> {'stop', E, State}
     end;
-handle_event({'live_calls', [_|_]=CallIds}, StateName, State)
+handle_event({'live_calls', [_|_]=CallIds}, StateName, State0)
   when StateName =:= 'sync'; StateName =:= 'ready' ->
+    State = State0#state{live_probe='done'},
     %% The agent's processes started while the agent was already talking (an
     %% applications node restart during a bridged call returned the agent as
     %% ready, main, September 18, 2026). Those calls are handled like any call
@@ -1870,7 +1898,7 @@ handle_event({'live_calls', [_|_]=CallIds}, StateName, State)
     Busy = lists:foldl(fun start_outbound_call_handling/2, State, CallIds),
     {'next_state', 'outbound', Busy, 'hibernate'};
 handle_event({'live_calls', _CallIds}, StateName, State) ->
-    {'next_state', StateName, State};
+    {'next_state', StateName, State#state{live_probe='done'}};
 handle_event({'originate_uuid', ACallId, ACtrlQ}, StateName,
              #state{agent_listener=AgentListener}=State) ->
     %% A native bridge may precede the control-queue notification. Deliver it
