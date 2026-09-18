@@ -202,8 +202,13 @@ function context(h) {
         const quiet=fn=>()=>{try{return fn();}catch(_){return false;}};
         const recovered=await h.until(quiet(()=>both('ready')),300);
         // No unrelated agent state change: the two paused agents are still paused on both nodes.
-        const paused=await h.until(quiet(()=>others.every(u=>nodes.every(n=>probe(n,u).state==='paused'))),120)
-            .catch(()=>{throw Error('An unrelated paused agent did not come back paused after '+f.name);});
+        let seen;
+        const observe=()=>{seen=others.map(u=>nodes.map(n=>{try{const v=probe(n,u);return {node:n.ip,agent:u,state:v.state};}
+            catch(e){return {node:n.ip,agent:u,error:String(e.message).slice(0,120)};}}));return seen.flat().every(v=>v.state==='paused');};
+        const paused=await h.until(observe,120).catch(()=>{
+            h.writePrivate('queue-fault-unrelated-agents.json',JSON.stringify(seen,null,2)+'\n');
+            throw Error('An unrelated paused agent did not come back paused after '+f.name+': '+JSON.stringify(seen.flat().map(v=>v.node+'='+(v.state||v.error))));
+        });
         h.log('Both agent replicas ready again without re-login after '+f.name+'; unrelated agents still paused');
         return {fault:f.name,unit:f.unit,action:f.action,owner:owner||null,injected_at:injected,
             bridge_survived:survived,recovered_after_s:Math.round(Date.now()/1000-injected),recovered,others_still_paused:paused};

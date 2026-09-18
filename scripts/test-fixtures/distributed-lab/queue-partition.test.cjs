@@ -58,7 +58,7 @@ const faults=require('./queue-partition.cjs');
 assert.deepEqual(Object.keys(faults.SERVICE_FAULTS),['apps-kill','broker-restart','ecallmgr-kill','couchdb-outage']);
 assert.equal(faults.serviceFault('apps-kill').guest,'owner');
 for(const bad of [undefined,'','partition','apps-kill;reboot','__proto__'])assert.throws(()=>faults.serviceFault(bad),/KZ5_QUEUE_FAULT must be one of/);
-assert(source.includes("others.every(u=>nodes.every(n=>probe(n,u).state==='paused'))"),'Unrelated agents must be proven unchanged');
+assert(source.includes("return seen.flat().every(v=>v.state==='paused');")&&source.includes("'queue-fault-unrelated-agents.json'"),'Unrelated agents must be proven unchanged, with the observed states retained on failure');
 assert(source.includes('bridge_survived:survived'),'Bridge survival is recorded as evidence, never assumed');
 assert(!source.includes("status:'login'")&&!source.includes("status:'logout'")&&!source.includes('systemctl restart'));
 assert(source.includes("async function run({partition=true,serviceFaultMode=false}={})"));
