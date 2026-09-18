@@ -34,8 +34,16 @@ work postponed; do not generate voices at runtime or during deployment.
   the agent's processes were restarted. Fix `b722015`: while no call is in progress, a leg
   still tracked after 30s is checked every 60s against complete channel evidence and retired
   through the ordinary destroy path. Offline: 38 FSM, 14 leg, 76 unit, 27 recovery tests.
-  Open: native broker-restart rerun with `b722015` (installing), then `ecallmgr-kill` and
-  `couchdb-outage`; a FreeSWITCH restart needs its own assertions (the call cannot survive).
+  NATIVE with `909e697` on both applications guests (kazoo-apps install28, apps-peer22):
+  | Unit | Fault | Result |
+  | --- | --- | --- |
+  | `kz5-stage-queue-fault-broker-restart-2` | restart RabbitMQ | **PASS**; bridge survived, recovered in 65s. DEFECT2 recurred on the other node and healed itself: `13:20:49.600 notice acdc_agent_listener agent leg ... is still tracked but has terminated; retiring it`. Evidence `/var/log/kazoo-monitor-acceptance-80139E` |
+  | `kz5-stage-queue-fault-ecallmgr-kill-1` | SIGKILL eCallMgr | **PASS** first run; bridge survived, 70s. `/var/log/kazoo-monitor-acceptance-QkErAG` |
+  | `kz5-stage-queue-fault-couchdb-outage-1` | CouchDB stopped 30s | **PASS** first run; bridge survived, 39s. `/var/log/kazoo-monitor-acceptance-gwCZ3b` |
+  Each PASS means: both agent replicas ready again without re-login, the two unrelated agents
+  still paused on both nodes, a second real call with directional audio, strict inventory on
+  both nodes. Open: a FreeSWITCH restart needs its own assertions (the call cannot survive);
+  an applications node kill mid-RING (before answer); none of this is on main until promoted.
   Smaller finding: `sup acdc_maintenance agent_pause ACCOUNT AGENT 900` silently does
   nothing (the third argument arrives as a binary); the two-argument form works.
 

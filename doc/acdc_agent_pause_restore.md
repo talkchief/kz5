@@ -75,6 +75,13 @@ value, and the remaining-time arithmetic including an expired break.
 `bash scripts/test-acdc-unit.sh` 76 and `bash scripts/test-acdc-agent-recovery.sh`
 27 pass.
 
-## Native
+## Native (private lab, September 18, 2026)
 
-See the register entry in `PROJECT_TASKS.md`.
+| Check | Before | After (`93b6a3a`) |
+| --- | --- | --- |
+| One node: paused, then `systemctl restart kazoo-apps` | `sync` -> `ready`, stored status overwritten with `ready` | `paused` after about 20 s and still `paused` 45 s later; stored status `paused`; one `restoring the agent's pause` log line |
+| Two nodes: resumed while the peer is down, then the peer starts | first fix `ba80c61`: `ready` / `paused` | `ready` / `ready` |
+| Two nodes: peer restarted while the agent is still paused | restarted replica stuck in `sync` | `paused` / `paused` |
+| `apps-kill` campaign with real calls | runs 1-3 FAIL | run 4 **PASS**, recovered in 19 s, unrelated agents still paused on both nodes |
+
+Register: `PROJECT_TASKS.md`, fault-matrix entry of September 18.
