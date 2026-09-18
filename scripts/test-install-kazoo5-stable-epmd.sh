@@ -143,9 +143,16 @@ pass 'verification accepts the stable mapper and rejects five unsafe states with
 
 # 6. Wiring: converge before any role starts; verify in install and verify-only.
 install=$(function_body install_requested); verify=$(function_body verify_requested)
-[[ $(grep -n 'configure_stable_epmd' <<<"$install" | cut -d: -f1) -lt $(grep -n 'install_couchdb' <<<"$install" | cut -d: -f1) ]] || \
+[[ $(grep -n 'configure_stable_epmd' <<<"$install" | head -n 1 | cut -d: -f1) -lt $(grep -n 'install_couchdb' <<<"$install" | cut -d: -f1) ]] || \
     fail 'the port mapper must be stable before the first Erlang role is installed'
 [[ $(sed -n '2p' <<<"$verify") == '    verify_stable_epmd' ]] || fail 'verification must start with the port mapper'
 ! grep -q 'local_epmd_socket' "$se_installer" || fail 'the loopback-only predecessor is still referenced'
+# A brand-new host gets the packaged socket only when a role installs Erlang, so the
+# mapper is converged a second time after the roles and before verification.
+calls=$(grep -n '^    configure_stable_epmd$' <<<"$install" | cut -d: -f1 | tr '\n' ' ')
+read -r first_call second_call extra <<<"$calls"
+[[ -n ${second_call:-} && -z ${extra:-} ]] || fail 'the port mapper must be converged exactly twice: before and after the roles'
+[[ $second_call -gt $(grep -n 'install_push_bridge' <<<"$install" | cut -d: -f1) && $second_call -lt $(grep -n '^    verify_requested$' <<<"$install" | cut -d: -f1) ]] || \
+    fail 'the second convergence must come after every role and before verification'
 pass 'the mapper is converged before any role and verified first'
 printf 'All %d stable port mapper groups passed\n' "$se_pass"

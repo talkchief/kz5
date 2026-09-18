@@ -56,8 +56,16 @@ done
 # A role that is running but absent from the port mapper still works until its
 # peers next reconnect, then cannot be found. FreeSWITCH never registers again
 # by itself, which failed the September 18, 2026 main promotion.
-names=$(bounded epmd -names 2>/dev/null)
+# A CouchDB-only host has no Erlang package and so no epmd on PATH; CouchDB brings
+# its own. Without any client the registrations cannot be judged and are not failed
+# (a fresh CouchDB guest failed its install on an empty answer, September 18, 2026).
+epmd_client=$(command -v epmd 2>/dev/null || ls /opt/couchdb/erts-*/bin/epmd 2>/dev/null | head -n 1)
+names=
+if [[ -n $epmd_client ]]; then names=$(bounded "$epmd_client" -names 2>/dev/null); else
+    printf 'SKIP port mapper registrations: this host has no epmd client\n'
+fi
 for pair in couchdb:couchdb rabbitmq-server:rabbit kazoo-apps:kazoo_apps kazoo-ecallmgr:ecallmgr kazoo-freeswitch:freeswitch; do
+    [[ -n $epmd_client ]] || break
     installed "${pair%%:*}.service" || continue
     grep -q "^name ${pair##*:} " <<<"$names" && ok "${pair##*:} is registered with the Erlang port mapper" || \
         fail "${pair##*:} is not registered with the Erlang port mapper: restart ${pair%%:*} when it is idle"

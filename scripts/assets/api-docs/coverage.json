@@ -2984,7 +2984,7 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "b432391e83de6f1f6cdafd745638fe6967dae0525a4fdd5e91eaea795450b136"
+      "sha256": "97b312ece819d0134e0d87fc631a9edf1da755283e5b7517a8f98deecf2473c9"
     },
     {
       "file": "scripts/patches/blackhole-before-stream-guard.patch",

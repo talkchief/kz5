@@ -76,6 +76,23 @@ expect 'port mapper owned by a Kazoo service' 'runs outside epmd.service (pid 38
 expect 'SIP edge not listening' 'Kamailio is not listening on 10.0.0.5:5060/udp' 'T_LISTEN='
 pass 'thirteen failure classes, including every "active but dead" condition of the outage, fail with an err line'
 
+# A CouchDB-only host: no epmd on PATH, only CouchDB's bundled client.
+mkdir -p "$sh_work/couch/erts-1/bin"; printf '#!/usr/bin/env bash\necho "name couchdb at port 1"\n' > "$sh_work/couch/erts-1/bin/epmd"; chmod +x "$sh_work/couch/erts-1/bin/epmd"
+couch_only() {   # bundled-client-glob assignments... -> runs the check with no epmd on PATH
+    local glob=$1; shift
+    ( export PATH="$sh_work/bin:$PATH" KAZOO_DEPLOYMENT_CONFIG="$sh_work/deployment.env" KAZOO_NODE_IDENTITY_FILE="$sh_work/identity" T_LOGGER="$sh_work/logger.out"
+      for assignment in "$@"; do export "${assignment?}"; done
+      sed -e "s#/etc/rabbitmq/rabbitmq-env.conf#$sh_work/rabbitmq-env.conf#" -e 's#command -v epmd 2>/dev/null#false#' \
+          -e "s#/opt/couchdb/erts-\*/bin/epmd#$glob#" "$sh_health" > "$sh_work/health-couch.sh"
+      bash "$sh_work/health-couch.sh" 2>&1 )
+}
+only_couch='T_DISABLED=rabbitmq-server haproxy kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio nginx kazoo-push-bridge epmd.socket'
+out=$(couch_only "$sh_work/couch/erts-*/bin/epmd" "$only_couch") || { printf '%s\n' "$out"; fail 'a CouchDB-only host with its bundled epmd client was reported unhealthy'; }
+grep -Fq 'PASS couchdb is registered with the Erlang port mapper' <<<"$out" || fail 'the bundled epmd client was not used'
+out=$(couch_only "$sh_work/absent/erts-*/bin/epmd" "$only_couch") || { printf '%s\n' "$out"; fail 'a host without any epmd client must not fail on registrations'; }
+grep -Fxq 'SKIP port mapper registrations: this host has no epmd client' <<<"$out" || fail 'the skipped judgement is not visible'
+pass 'a CouchDB-only host is judged with its bundled epmd client, and never failed for having none'
+
 # Roles that are not installed on this host are not judged.
 out=$(run 'T_DISABLED=kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio nginx kazoo-push-bridge couchdb haproxy' 'T_HTTP=000' 'T_APPS_AMQP=' 'T_MEDIA=' 'T_LISTEN=') || \
     { printf '%s\n' "$out"; fail 'a broker-only host was judged on roles it does not run'; }

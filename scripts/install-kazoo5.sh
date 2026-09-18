@@ -7137,6 +7137,11 @@ install_requested() {
     if [[ ${SELECTED[kamailio]:-} ]]; then install_kamailio; fi
     if [[ ${SELECTED[monster-ui]:-} ]]; then install_monster_ui; fi
     if [[ ${SELECTED[push-bridge]:-} ]]; then install_push_bridge; fi
+    # Again, now that the roles have installed their packages: on a brand-new host
+    # the packaged epmd.socket does not exist until a role installs Erlang, so the
+    # first call found nothing to configure and verification then refused (fresh
+    # broker guest, September 18, 2026). A converged host is left untouched.
+    configure_stable_epmd
     verify_requested
 }
 
