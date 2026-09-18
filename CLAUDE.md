@@ -32,8 +32,10 @@ soften recorded failures — failed evidence is retained deliberately.
 - Fixes to fetched components live as patches in `scripts/patches/` (127 of them) and
   are applied by the installer via `apply_required_source_patch` (see
   `scripts/install-kazoo5.sh` around the `apply_required_source_patch` calls). Adding a
-  core/crossbar/blackhole/ecallmgr fix means adding or updating a patch there plus its
-  regression test, never editing `core/` in place.
+  core/crossbar/blackhole/ecallmgr fix means adding a patch there plus its regression test,
+  never editing `core/` in place. A patch that has shipped is never edited (hosts recognise
+  an applied patch by reversing it): stack a new patch after it and append its line to
+  `scripts/patches/MANIFEST.sha256` (`bash scripts/test-patch-immutability.sh`).
 
 ## Build
 
