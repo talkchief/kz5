@@ -7,6 +7,32 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **ACDC C5 — SOAK PASS on main: 30 concurrent answered queue calls held 1800s, September18:**
+  Unit `kz5-main-soak-30x1800-0918` (`test-kazoo-calls.sh --live --stress --stages 30
+  --queued-excess 0 --soak-seconds 1800`), `/var/log/kazoo-acceptance/20260918T163528Z`,
+  `summary.tsv`: `answered-30 30/30`, caller_success30 failed0, agent_success30 failed0,
+  peak_cpu_pct65, min_mem_available_kb17330412, error_logs `0/0` (the strict fresh-error
+  gate), new_cores0, verified_concurrent_hold_s1800; 60 channels during the hold. 30 calls
+  and 30 minutes are the fixture's ceiling (30 agents; the tool caps the hold at 1800s), used
+  as the default because the owner's production target has not been given. Runtime `c0383f6`
+  (promotion `kz5-promo-0918g` PASS, `/root/kz5-main-promotion-20260918.5IlceUjs`).
+
+- **CALLBACKS D1/D2 — applications node restarted while the callback is BRIDGED: callback side NATIVE PASS; it exposed ACDC DEFECT3, September18:**
+  Unit `kz5-main-callback-apps-restart-bridge-0918` PASS
+  (`/var/log/kazoo-acceptance/20260918T171348Z`): `Applications node restarted while the
+  callback was bridged; ticket unchanged, no new attempt` — the ticket stayed `completed` with
+  the same caller and agent legs, attempts2 of2, no duplicate originate after recovery, the
+  media bridge lived until the carrier ended it, full SIP/RTP evidence and log gate PASS.
+  DEFECT3 from its samples (`callback-apps-restart-bridge-samples.tsv`): the agent's state
+  after the restart was `sync` then **`ready` for the rest of the call** while its channels
+  were still up. With one applications node there is no peer to answer `answered`, so after
+  any node restart or crash an agent could be offered another call mid-conversation. Fix
+  `d5c9bf0`: when the agent's endpoints are first loaded a bounded helper asks the media
+  controllers for live channels on the agent's devices (the user-channel query Crossbar uses);
+  any live call puts the agent in the existing `outbound` state, which already returns to
+  ready when those channels end. Offline: 42 FSM, 80 unit, 27 recovery tests. Native proof
+  owed: rerun this unit after promotion and require a non-ready state while the call lives.
+
 - **ACDC C3 COMPLETE — applications node killed while the agent phone is RINGING, NATIVE PASS first run, September18:**
   Unit `kz5-stage-queue-fault-apps-kill-ringing-1`, evidence `/var/log/kazoo-monitor-acceptance-g9tZuT`:
   slow-answering agent phone (9s ring), the delivery owner 172.30.253.20 SIGKILLed while the
