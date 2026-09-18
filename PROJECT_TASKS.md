@@ -33,6 +33,17 @@ work postponed; do not generate voices at runtime or during deployment.
   per-node system_config sections, FreeSWITCH/Kamailio node names); a public SIP
   listener must be an installer option, not `local.cfg` lines.
 
+- **INST / Kamailio public SIP listener option — source + real-parser PASS, September18:**
+  New `KAMAILIO_PUBLIC_SIP_IP` replaces the hand-added `local.cfg` lines that
+  caused the outage above. It writes explicit `MY_EXTERNAL_IP`, external ports and
+  `WITH_EXTERNAL_LISTENER` into the installer-owned file (stock Kamailio6.1 does
+  not expand the nested `$def()` defaults), requires the address to be on the
+  host, verifies four sockets and rejects listener macros in `local.cfg`. Four
+  regression groups pass, including Kamailio's own check on private copies and a
+  reproduction of the outage form. Deployment recorded separately. Exposure
+  (no host firewall, no antiflood role) is an open operator decision. See
+  `doc/kamailio_public_sip_listener.md`.
+
 - **P0-08 / redelivered member call rings agents for a dead caller — FOUND natively, SOURCE FIXED, September17-18:**
   `kz5-stage-queue-partition-8` exit1 on private pair `e8b7344`: the healthy node
   received the partitioned node's redelivery, rang agent1 three times for a caller

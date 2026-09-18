@@ -44,7 +44,7 @@ readonly KAZOO_PERSISTED_KEYS=(
     FREESWITCH_VERSION FREESWITCH_REF SPANDSP_REF SOFIA_SIP_REF MOD_KAZOO_REF
     FREESWITCH_CONFIG_REF KAZOO_CORE_CONFIG_REF KAZOO_CORE_REF KAZOO_CROSSBAR_REF KAZOO_BLACKHOLE_REF KAZOO_ECALLMGR_REF KAZOO_STEPSWITCH_REF KAZOO_CDR_REF KAZOO_SOUNDS_REF ACDC_REF KAMAILIO_VERSION
     KAMAILIO_CONFIG_REF KAMAILIO_CHILDREN KAMAILIO_TCP_CHILDREN
-    KAMAILIO_AMQP_CONSUMERS KAMAILIO_AMQP_WORKERS MONSTER_UI_REF
+    KAMAILIO_AMQP_CONSUMERS KAMAILIO_AMQP_WORKERS KAMAILIO_PUBLIC_SIP_IP MONSTER_UI_REF
     MONSTER_UI_NODE_MAJOR MONSTER_UI_WEB_ROOT MONSTER_UI_REGISTER_APPS MONSTER_UI_LOCK_SHA256
     MONSTER_UI_CATALOG_SSH_HOST MONSTER_UI_CATALOG_SSH_USER MONSTER_UI_CATALOG_SSH_PORT
     MONSTER_UI_CATALOG_IDENTITY_FILE MONSTER_UI_CATALOG_KNOWN_HOSTS_FILE MONSTER_UI_CATALOG_MASTER_ID
@@ -185,6 +185,9 @@ ACDC_REF=${ACDC_REF:-6f71c85f67ee2228efb0edceb5248b6334ba1998}
 KAMAILIO_VERSION=${KAMAILIO_VERSION:-${KAMAILIO_SERIES:-6.1.4}}
 KAMAILIO_CONFIG_REF=${KAMAILIO_CONFIG_REF:-9d61bded9890325182f1783aeb4bd2182eb2d846}
 KAMAILIO_CHILDREN=${KAMAILIO_CHILDREN:-4}
+# Optional second SIP listener on a public address assigned to this host, for
+# carriers and phones that cannot reach the private KAZOO_PUBLIC_IP listener.
+KAMAILIO_PUBLIC_SIP_IP=${KAMAILIO_PUBLIC_SIP_IP:-}
 KAMAILIO_TCP_CHILDREN=${KAMAILIO_TCP_CHILDREN:-4}
 KAMAILIO_AMQP_CONSUMERS=${KAMAILIO_AMQP_CONSUMERS:-2}
 KAMAILIO_AMQP_WORKERS=${KAMAILIO_AMQP_WORKERS:-4}
@@ -271,6 +274,7 @@ Configuration is supplied through environment variables. Useful overrides:
   KAZOO_MAKE_JOBS, KAZOO_MIN_BUILD_FREE_MB, COUCHDB_VERSION, ERLANG_VERSION,
   FREESWITCH_VERSION,
   KAMAILIO_VERSION, KAMAILIO_CONFIG_REF, KAMAILIO_CHILDREN,
+  KAMAILIO_PUBLIC_SIP_IP (extra public SIP listener; must be assigned to this host),
   MONSTER_UI_REF, MONSTER_UI_APPS_LIST, MONSTER_UI_REGISTER_APPS,
   MONSTER_UI_CATALOG_SSH_HOST, MONSTER_UI_CATALOG_SSH_USER, MONSTER_UI_CATALOG_SSH_PORT,
   MONSTER_UI_CATALOG_IDENTITY_FILE, MONSTER_UI_CATALOG_KNOWN_HOSTS_FILE,
@@ -1272,6 +1276,11 @@ preflight() {
     is_ipv4_address "$KAZOO_RABBITMQ_BIND" || die 'KAZOO_RABBITMQ_BIND must be an IPv4 address'
     is_ipv4_address "$KAZOO_HAPROXY_BIND" || die 'KAZOO_HAPROXY_BIND must be an IPv4 address'
     is_ipv4_address "$KAZOO_PUBLIC_IP" || die 'KAZOO_PUBLIC_IP must be an IPv4 address'
+    if [[ -n $KAMAILIO_PUBLIC_SIP_IP ]]; then
+        is_ipv4_address "$KAMAILIO_PUBLIC_SIP_IP" || die 'KAMAILIO_PUBLIC_SIP_IP must be an IPv4 address'
+        [[ $KAMAILIO_PUBLIC_SIP_IP != "$KAZOO_PUBLIC_IP" ]] || \
+            die 'KAMAILIO_PUBLIC_SIP_IP must differ from the primary listener address KAZOO_PUBLIC_IP'
+    fi
     is_ipv4_address "$KAZOO_ERLANG_DIST_IP" || \
         die 'KAZOO_ERLANG_DIST_IP must be an IPv4 address'
     if cookie_component_selected && [[ $KAZOO_ERLANG_DIST_IP == 0.0.0.0 ]]; then
@@ -5414,6 +5423,7 @@ configure_kazoo_kamailio() {
 # value keeps diagnostic log formatting valid; the compatibility rewrite
 # omits the optional registrar AMQP-header argument from the actual calls.
 #!define REGISTRAR_AMQP_FLAGS ""
+$(kamailio_public_listener_settings)
 EOF
     run chown root:kamailio "$installer_config"
     write_file 0640 "$KAZOO_CONFIG_DIR/kamailio/extras.d/99-kazoo5-compat.cfg" <<'EOF'
@@ -5624,6 +5634,39 @@ wait_kamailio_dispatcher_ready() {
     die 'Kamailio has no active destination in its effective primary/secondary INVITE groups'
 }
 
+# Listener macro names are defined in listener-defs.cfg, AFTER local.cfg and
+# this installer file are read, so `listen=UDP_SIP ...` written there is an
+# unresolvable word and Kamailio refuses to start (September 18, 2026 outage).
+# The supported switch is WITH_EXTERNAL_LISTENER. Stock Kamailio 6.1 does not
+# expand the nested $def() defaults of MY_EXTERNAL_IP and the external ports, so
+# all three are given explicitly. The address must be assigned to this host;
+# a 1:1 NAT address needs the advertise listeners instead and is refused here
+# rather than silently producing a listener that cannot bind.
+kamailio_public_listener_settings() {
+    [[ -n $KAMAILIO_PUBLIC_SIP_IP ]] || return 0
+    if [[ $DRY_RUN != true ]]; then
+        ip -o -4 address show | grep -Fq " ${KAMAILIO_PUBLIC_SIP_IP}/" || \
+            die "KAMAILIO_PUBLIC_SIP_IP ${KAMAILIO_PUBLIC_SIP_IP} is not assigned to this host"
+    fi
+    printf '%s\n' \
+        "#!define MY_EXTERNAL_IP ${KAMAILIO_PUBLIC_SIP_IP}" \
+        '#!define SIP_EXTERNAL_PORT 5060' \
+        '#!define ALG_EXTERNAL_PORT 7000' \
+        '#!trydef WITH_EXTERNAL_LISTENER'
+}
+
+verify_kamailio_public_listener() {
+    [[ -n $KAMAILIO_PUBLIC_SIP_IP ]] || return 0
+    local port
+    for port in 5060 7000; do
+        ss -H -lun "sport = :${port}" | grep -Fq "${KAMAILIO_PUBLIC_SIP_IP}:${port}" || \
+            die "Kamailio is not listening on ${KAMAILIO_PUBLIC_SIP_IP}:${port}/udp"
+        ss -H -ltn "sport = :${port}" | grep -Fq "${KAMAILIO_PUBLIC_SIP_IP}:${port}" || \
+            die "Kamailio is not listening on ${KAMAILIO_PUBLIC_SIP_IP}:${port}/tcp"
+    done
+    log "PASS Kamailio public SIP listener on ${KAMAILIO_PUBLIC_SIP_IP} ports 5060 and 7000"
+}
+
 verify_kamailio() {
     if [[ $DRY_RUN == true ]]; then log 'Would verify Kazoo Kamailio'; return 0; fi
     local pid seconds_alive wait_seconds
@@ -5631,6 +5674,10 @@ verify_kamailio() {
     /usr/sbin/kamailio -v 2>&1 | grep -F "$KAMAILIO_VERSION" >/dev/null || \
         die "Installed Kamailio is not version ${KAMAILIO_VERSION}"
     /usr/sbin/kazoo-kamailio check >/dev/null || die 'Kazoo Kamailio configuration check failed'
+    if grep -Eq '^listen=(UDP|TCP|TLS)_[A-Z_]+' "$KAZOO_CONFIG_DIR/kamailio/local.cfg"; then
+        die 'Kamailio local.cfg uses listener macro names before they are defined; set KAMAILIO_PUBLIC_SIP_IP instead'
+    fi
+    verify_kamailio_public_listener
     if grep -ER 'kazoo_(async_query|publish)\(.*REGISTRAR_AMQP_FLAGS' \
         "$KAZOO_CONFIG_DIR/kamailio" >/dev/null; then
         die 'Kamailio registrar still passes an incompatible optional AMQP-header argument'
