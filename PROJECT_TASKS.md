@@ -33,6 +33,27 @@ work postponed; do not generate voices at runtime or during deployment.
   per-node system_config sections, FreeSWITCH/Kamailio node names); a public SIP
   listener must be an installer option, not `local.cfg` lines.
 
+- **GOAL / owner, September18:** the September17-18 failures are not acceptable; host,
+  installer, reboot behavior, ACDC and callbacks must be production ready.
+  `doc/PRODUCTION_READINESS_PLAN.md` lists the thirteen failures exposed, the
+  gates (A host/service resilience, B installer, C ACDC, D callbacks, E cutover)
+  and the native evidence that closes each. Host items1-5 and8 were recovered by
+  hand and are NOT yet prevented; A1-A4 are next.
+
+- **OPS / carrier ACL command forwarding — private pair NATIVE PASS, September18:**
+  On `301deca` (primary install22 exit0; the stack helper applied only
+  `ecallmgr-acl-forwarding-node-registry.patch`, the first-patch-only path). From
+  `kz5-stage-kazoo-apps`, which runs no ecallmgr and was connected to no ecallmgr
+  node, plain `sup ecallmgr_maintenance allow_carrier kz5-forward-probe
+  192.0.2.77/32 true` discovered both media controllers through the node registry,
+  connected on demand and ran on each; the entry listed on both
+  `ecallmgr_fs_acls:trusted_acls/0`; `remove_acl ... true` cleared both. The retained
+  primary eCallMgr guest had not started after the reboot (`kazoo-pivot-port-
+  reservation`: read-only sysctl in a container created before `--sysctl`); restored
+  with the existing `--repair-legacy-pivot ecallmgr`, role verify PASS
+  (`ecallmgr-verify-1789721323420.log`). That guest still does not boot unaided
+  (plan gate A7). Not yet on main44.
+
 - **INST / evolving a deployed patch broke private install21 — FIXED, September18:**
   `kz5-stage-install-kazoo-apps-21` on `00bda6f` FAILED, exit1, before any build:
   `Source does not match required patch: ecallmgr-acl-command-forwarding.patch`.
