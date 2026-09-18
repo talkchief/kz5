@@ -225,6 +225,7 @@ MONSTER_UI_VOIP_REF=${MONSTER_UI_VOIP_REF:-514ec370faf0063f42862f31c087ab484c122
 
 DRY_RUN=false
 VERIFY_ONLY=false
+INTERACTIVE=false
 KAZOO_HOSTNAME=
 KAZOO_NODE_NAME_TYPE=
 KAZOO_FREESWITCH_SHORTNAME=false
@@ -234,6 +235,9 @@ declare -A SELECTED=()
 usage() {
     cat <<EOF
 Usage: sudo ./${SCRIPT_NAME} [OPTIONS] COMPONENT [COMPONENT ...]
+       sudo ./${SCRIPT_NAME} [OPTIONS]        (on a terminal: choose from a menu)
+
+This is the only installation entry point: one component, several, or all.
 
 Installable components:
   couchdb       Apache CouchDB configured as a single Kazoo node
@@ -253,6 +257,9 @@ Options:
   --dry-run      Print the resolved installation without changing the host
   --verify-only  Do not install; verify the requested components
   --list         Print component names and exit
+  --interactive  Choose components and the action from a menu. This is also what
+                 happens when no component is named on a terminal; without a
+                 terminal the components must be named.
   --couchdb-host HOST  CouchDB host used by Kazoo/HAProxy
   --amqp-host HOST     RabbitMQ host used by Kazoo/media/SIP
   --api-url URL        Crossbar URL used by Monster UI
@@ -1172,6 +1179,82 @@ select_component() {
     esac
 }
 
+component_unit() {
+    case $1 in
+        couchdb) printf couchdb ;;
+        rabbitmq) printf rabbitmq-server ;;
+        haproxy) printf haproxy ;;
+        kazoo-apps) printf kazoo-apps ;;
+        ecallmgr) printf kazoo-ecallmgr ;;
+        freeswitch) printf kazoo-freeswitch ;;
+        kamailio) printf kazoo-kamailio ;;
+        monster-ui) printf nginx ;;
+        push-bridge) printf kazoo-push-bridge ;;
+    esac
+}
+
+component_state() {
+    local unit
+    unit="$(component_unit "$1").service"
+    if [[ $(systemctl is-enabled "$unit" 2>/dev/null || true) == enabled ]]; then
+        printf 'installed, %s' "$(systemctl is-active "$unit" 2>/dev/null || true)"
+    else
+        printf 'not installed on this host'
+    fi
+}
+
+# Menu for an operator at a terminal. It only fills REQUESTED, DRY_RUN and
+# VERIFY_ONLY, exactly as the command line would, so every later step is the
+# same code path. Nothing is changed before the final "yes".
+interactive_select() {
+    local -a components=(couchdb rabbitmq haproxy kazoo-apps ecallmgr freeswitch kamailio monster-ui push-bridge)
+    local index answer token attempts=0
+    printf '\nKazoo 5 installer on %s\n\n' "$(hostname)" >&2
+    for index in "${!components[@]}"; do
+        printf '  %d) %-12s %s\n' "$((index + 1))" "${components[index]}" "$(component_state "${components[index]}")" >&2
+    done
+    printf '  a) %-12s every component above\n  q) quit\n\n' all >&2
+    while ((${#REQUESTED[@]} == 0)); do
+        attempts=$((attempts + 1))
+        ((attempts <= 3)) || die 'No valid component selection after three attempts'
+        printf 'Components (numbers or names, separated by spaces): ' >&2
+        read -r answer || die 'No component selection was entered'
+        for token in ${answer//,/ }; do
+            case ${token,,} in
+                q|quit) log 'Nothing selected; nothing was changed'; exit 0 ;;
+                a) REQUESTED+=(all) ;;
+                [1-9]) REQUESTED+=("${components[token - 1]}") ;;
+                *)
+                    if normalize_component "$token" >/dev/null; then
+                        REQUESTED+=("$token")
+                    else
+                        printf 'Unknown component: %s\n' "$token" >&2
+                        REQUESTED=()
+                        break
+                    fi
+                    ;;
+            esac
+        done
+    done
+    if [[ $DRY_RUN != true && $VERIFY_ONLY != true ]]; then
+        printf '\n  1) install or upgrade   converges the host and RESTARTS the selected services\n' >&2
+        printf '  2) verify only          read-only checks of the selected components\n' >&2
+        printf '  3) dry run              print what an install would do\n\nAction [1-3]: ' >&2
+        read -r answer || die 'No action was entered'
+        case ${answer,,} in
+            1|install) ;;
+            2|verify|verify-only) VERIFY_ONLY=true ;;
+            3|dry|dry-run) DRY_RUN=true ;;
+            *) die "Unknown action: ${answer}" ;;
+        esac
+    fi
+    if [[ $DRY_RUN != true && $VERIFY_ONLY != true ]]; then
+        printf '\nThis installs [%s] and restarts their services. Type yes to proceed: ' "${REQUESTED[*]}" >&2
+        read -r answer || die 'The installation was not confirmed'
+        [[ $answer == yes ]] || { log 'Not confirmed; nothing was changed'; exit 0; }
+    fi
+}
+
 parse_arguments() {
     local normalized
     while (($#)); do
@@ -1221,6 +1304,7 @@ parse_arguments() {
                 printf '%s\n' couchdb rabbitmq haproxy kazoo-apps ecallmgr freeswitch kamailio monster-ui push-bridge all
                 exit 0
                 ;;
+            --interactive) INTERACTIVE=true ;;
             -h|--help) usage; exit 0 ;;
             --) shift; REQUESTED+=("$@"); break ;;
             -*) die "Unknown option: $1" ;;
@@ -1228,6 +1312,13 @@ parse_arguments() {
         esac
         shift
     done
+    if [[ $INTERACTIVE == true ]]; then
+        ((${#REQUESTED[@]} == 0)) || die '--interactive chooses the components; do not also name them'
+        [[ -t 0 ]] || die '--interactive needs a terminal; name the components instead'
+        interactive_select
+    elif ((${#REQUESTED[@]} == 0)) && [[ -t 0 && -t 1 ]]; then
+        interactive_select
+    fi
     ((${#REQUESTED[@]})) || { usage >&2; exit 2; }
     for component in "${REQUESTED[@]}"; do
         normalized=$(normalize_component "$component") || die "Unknown component: ${component}"
