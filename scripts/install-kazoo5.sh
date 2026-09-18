@@ -1884,7 +1884,14 @@ EOF
 # user, every login refused, while the unit is active (September 18, 2026).
 # An existing different pin is never rewritten: that would orphan its database.
 rabbitmq_node_name() {
-    printf 'rabbit@%s\n' "${KAZOO_NODE_HOST%%.*}"
+    local host=${KAZOO_NODE_HOST%%.*}
+    # An offline fixture ran the real broker step as root with no host set and
+    # pinned "rabbit@" in the live environment file of the development host
+    # (September 18, 2026): the broker's next start would have used an empty
+    # database. Never produce, and therefore never write, a name without a host.
+    [[ $host =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]] || \
+        die "Refusing a RabbitMQ node name without a valid host (KAZOO_NODE_HOST='${KAZOO_NODE_HOST:-}')"
+    printf 'rabbit@%s\n' "$host"
 }
 
 pin_rabbitmq_node_name() {

@@ -111,6 +111,15 @@ pin "$ni_work/existing.conf" broker1 >/dev/null
 grep -Fxq 'RABBITMQ_NODE_PORT=5672' "$ni_work/existing.conf" && grep -Fxq 'NODENAME=rabbit@broker1' "$ni_work/existing.conf" || \
     fail 'existing operator settings were not preserved'
 [[ $(pin "$ni_work/dry.conf" broker1 true) == 'Would pin the RabbitMQ node name rabbit@broker1' && ! -e $ni_work/dry.conf ]] || fail 'dry run wrote a file'
+# No host, no pin: the file must not even be created.
+for bad in '' '.example.net' 'bad host' '-lead'; do
+    set +e
+    ( set -Eeuo pipefail; pin "$ni_work/nohost.conf" "$bad" > "$ni_work/nohost.out" 2>&1 )
+    status=$?
+    set -e
+    [[ $status != 0 && ! -e $ni_work/nohost.conf ]] && grep -Fq 'without a valid host' "$ni_work/nohost.out" || \
+        fail "a node name without a valid host ('$bad') was pinned or not refused"
+done
 grep -Fq 'pin_rabbitmq_node_name' <<<"$(function_body install_rabbitmq)" || fail 'broker installation does not pin the node name'
 grep -Fq 'verify_rabbitmq_node_name' <<<"$(function_body verify_rabbitmq)" || fail 'broker verification does not check the node name'
 pass 'broker node name pinned once, idempotent, never re-keyed, operator settings kept, dry run inert, installed and verified'

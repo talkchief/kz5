@@ -10,6 +10,12 @@ export KAZOO_RABBITMQ_PASSWORD
 export KAZOO_AMQP_URI="amqp://fixture:${KAZOO_RABBITMQ_PASSWORD}@remote.invalid/fixture"
 export KAZOO_RABBITMQ_USER=fixture-user KAZOO_RABBITMQ_VHOST=fixture-vhost
 export KAZOO_RABBITMQ_BIND=10.20.0.12 KAZOO_AMQP_PORT=5679
+# The node-name pin (c9e73c7) appends to its environment file directly, not
+# through write_file/run. Without these two lines this fixture pinned
+# "rabbit@" in the live /etc/rabbitmq/rabbitmq-env.conf of the host running it.
+export KAZOO_RABBITMQ_ENV_FILE="$KAZOO_TEST_WORK/rabbitmq-env.conf"
+KAZOO_NODE_HOST=fixture.example.invalid
+[[ $KAZOO_RABBITMQ_ENV_FILE == "$KAZOO_TEST_WORK"/* && $KAZOO_RABBITMQ_ENV_FILE != /etc/* ]] || exit 93
 record() { printf '{"operation":"%s"}\n' "$1" >>"$KAZOO_TEST_TRACE"; }
 dnf_install() { record package; }
 download() { record download; }
@@ -18,6 +24,10 @@ write_file() { [[ $2 == /etc/rabbitmq/rabbitmq.conf ]]; local ignored; ignored=$
 service_enable_restart() { [[ $1 == rabbitmq-server.service ]]; record restart; }
 timeout() {
     if [[ $1 == 120 ]]; then record health; return 0; fi
+    if [[ $* == "--signal=KILL 30 rabbitmqctl -q eval node()." ]]; then
+        # verify_rabbitmq_node_name: the running node, never the real broker.
+        printf "'rabbit@fixture'\n"; return 0
+    fi
     if [[ $# == 10 && $1 == --signal=TERM && $2 == --kill-after=5 && $3 == 30 &&
           $4 == rabbitmqctl && $5 == -q && $6 == list_permissions && $7 == -p &&
           $8 == "$KAZOO_RABBITMQ_VHOST" && $9 == --formatter && ${10} == json ]]; then
@@ -67,7 +77,7 @@ runuser() {
 DRY_RUN=false
 case $KAZOO_TEST_SCENARIO in
     create|update) install_rabbitmq ;;
-    verify) verify_rabbitmq ;;
+    verify) printf 'NODENAME=rabbit@fixture\n' >"$KAZOO_RABBITMQ_ENV_FILE"; verify_rabbitmq ;;
     dry-run) DRY_RUN=true; verify_rabbitmq ;;
     *)
         # Secret assignment/export occurs before tracing. Only the helper and
