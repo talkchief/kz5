@@ -1,0 +1,31 @@
+--- a/src/node/ecallmgr_fs_nodes.erl
++++ b/src/node/ecallmgr_fs_nodes.erl
+@@ -670,12 +670,28 @@
+                                                           }})
+     end.
+ 
++%% The connect attempt below asks mod_kazoo for its version with a five-second
++%% timeout. Made while FreeSWITCH's Erlang listener is up but mod_kazoo is not
++%% answering yet, it loses the whole five seconds and the node is left to the
++%% pinger. Ask briefly first, a bounded number of times; a node that is really
++%% away answers at once and costs only the pauses.
++-spec wait_until_answering(atom(), non_neg_integer()) -> 'ok'.
++wait_until_answering(_NodeName, 0) -> 'ok';
++wait_until_answering(NodeName, Tries) ->
++    case mod_kazoo:version(NodeName, ?MILLISECONDS_IN_SECOND) of
++        {'ok', _Version} -> 'ok';
++        _NotYet ->
++            timer:sleep(500),
++            wait_until_answering(NodeName, Tries - 1)
++    end.
++
+ -spec maybe_connect_to_node(fs_node()) -> 'ok' | {'error', any()}.
+ maybe_connect_to_node(#node{node=NodeName}=Node) ->
+     %% FreeSWITCH accepts SIP a few seconds after its Erlang listener. Fixed
+     %% three-second waits here and in the pinger left it routable for about ten
+     %% seconds with no controller connected, and calls got 486.
+     timer:sleep(kapps_config:get_integer(?APP_NAME, <<"fs_node_connect_delay_ms">>, ?MILLISECONDS_IN_SECOND)),
++    'ok' = wait_until_answering(NodeName, kapps_config:get_integer(?APP_NAME, <<"fs_node_answer_tries">>, 6)),
+     lager:debug("attempting to connect to freeswitch node ~s", [NodeName]),
+     case maybe_ping_node(Node) of
+         {'error', _R}=E -> E;
