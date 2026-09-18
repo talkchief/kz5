@@ -95,11 +95,26 @@
                ,agent_call_ids = [] :: kz_term:api_binaries() | kz_term:proplist()
                ,cdr_urls = dict:new() :: dict:dict() %% {CallId, Url}
                ,agent_presence_id :: kz_term:api_binary()
+               ,leg_reconcile = #{} :: map() %% stranded agent leg reconciliation
                }).
 -type state() :: #state{}.
 
+%% An agent leg is tracked until its CHANNEL_DESTROY arrives. When the broker
+%% restarts during a call that event is lost with it, and the entry stayed
+%% forever: the listener was never drained again and the strict inventory
+%% refused until the agent's processes were restarted (private broker restart
+%% during a bridged queue call, September 18, 2026). While no call is in
+%% progress here, a leg still tracked after a minimum age is checked against
+%% complete channel evidence and retired through the ordinary destroy path.
+-define(LEG_RECONCILE_MS, 60 * ?MILLISECONDS_IN_SECOND).
+-define(LEG_RECONCILE_PROBE_MS, 20 * ?MILLISECONDS_IN_SECOND).
+-define(LEG_RECONCILE_MIN_AGE_MS, 30 * ?MILLISECONDS_IN_SECOND).
+-define(LEG_RECONCILE_BATCH, 5).
+
 -ifdef(TEST).
--export([maybe_connect_to_agent/7]).
+-export([maybe_connect_to_agent/7
+        ,legs_due/4, leg_gone/2
+        ]).
 -endif.
 
 -type agent() :: kapps_call:call() | kz_json:object().
@@ -393,6 +408,7 @@ init([Supervisor, Agent, Queues]) ->
                  ,agent=Agent
                  ,agent_queues=Queues
                  ,agent_presence_id=AgentId
+                 ,leg_reconcile=arm_leg_reconcile(#{})
                  }}.
 
 %%------------------------------------------------------------------------------
@@ -969,11 +985,73 @@ handle_cast(_Msg, State) ->
     lager:debug("unhandled cast: ~p", [_Msg]),
     {'noreply', State, 'hibernate'}.
 
+-spec arm_leg_reconcile(map()) -> map().
+arm_leg_reconcile(Reconcile) ->
+    Reconcile#{'timer' => erlang:start_timer(?LEG_RECONCILE_MS, self(), 'leg_reconcile')}.
+
+-spec tracked_leg_ids(kz_term:api_binaries() | kz_term:proplist()) -> kz_term:ne_binaries().
+tracked_leg_ids(ACallIds) ->
+    [Id || Id <- [case Leg of {CallId, _} -> CallId; CallId -> CallId end || Leg <- ACallIds]
+           ,is_binary(Id), byte_size(Id) > 0
+    ].
+
+%% First sight only starts the clock; nothing is examined while a call is in
+%% progress on this listener.
+-spec legs_due(kz_term:ne_binaries(), map(), integer(), boolean()) -> {kz_term:ne_binaries(), map()}.
+legs_due(Ids, Seen, Now, InCall) ->
+    Seen1 = maps:from_list([{Id, maps:get(Id, Seen, Now)} || Id <- Ids]),
+    Due = [Id || Id <- Ids, not InCall, Now - maps:get(Id, Seen1) >= ?LEG_RECONCILE_MIN_AGE_MS],
+    {lists:sublist(Due, ?LEG_RECONCILE_BATCH), Seen1}.
+
+-spec start_leg_reconcile(state()) -> state().
+start_leg_reconcile(#state{acct_id=AccountId, call=Call, agent_call_ids=ACallIds, leg_reconcile=Reconcile}=State) ->
+    %% Re-arm first: a probe killed by its watchdog never reports.
+    _ = case maps:get('probe_pid', Reconcile, 'undefined') of
+            Old when is_pid(Old) -> exit(Old, 'kill');
+            _ -> 'ok'
+        end,
+    {Due, Seen} = legs_due(tracked_leg_ids(ACallIds), maps:get('seen', Reconcile, #{})
+                          ,erlang:monotonic_time('millisecond'), Call =/= 'undefined'),
+    Armed = arm_leg_reconcile(maps:without(['probe_ref', 'probe_pid'], Reconcile#{'seen' => Seen})),
+    case Due of
+        [] -> State#state{leg_reconcile=Armed};
+        _ ->
+            Parent = self(), Ref = make_ref(),
+            Pid = spawn(fun() ->
+                {'ok', Watchdog} = timer:kill_after(?LEG_RECONCILE_PROBE_MS, self()),
+                Results = [{Id, try acdc_callback_recovery_io:observe_channels(AccountId, [Id])
+                                catch _:_ -> {'error', 'unknown'} end} || Id <- Due],
+                _ = timer:cancel(Watchdog),
+                Parent ! {'leg_liveness', Ref, Results}
+            end),
+            State#state{leg_reconcile=Armed#{'probe_ref' => Ref, 'probe_pid' => Pid}}
+    end.
+
+%% Only complete evidence that the leg has terminated retires it. An active,
+%% unknown or partially observed leg is left alone.
+-spec leg_gone(any(), kz_term:ne_binary()) -> boolean().
+leg_gone({'ok', #{'complete' := 'true', 'channels' := Channels}}, CallId) when is_list(Channels) ->
+    case [O || #{'call_id' := Id}=O <- Channels, Id =:= CallId] of
+        [#{'state' := 'terminated', 'responders' := [_|_]}] -> 'true';
+        _ -> 'false'
+    end;
+leg_gone(_, _) -> 'false'.
+
+-spec retire_stranded_leg(kz_term:ne_binary()) -> 'ok'.
+retire_stranded_leg(CallId) ->
+    lager:notice("agent leg ~s is still tracked but has terminated; retiring it", [CallId]),
+    gen_listener:cast(self(), {'channel_destroyed', CallId}).
+
 %%------------------------------------------------------------------------------
 %% @doc Handling all non call/cast messages.
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_info(any(), state()) -> kz_types:handle_info_ret_state(state()).
+handle_info({'timeout', Ref, 'leg_reconcile'}, #state{leg_reconcile=#{'timer' := Ref}}=State) ->
+    {'noreply', start_leg_reconcile(State)};
+handle_info({'leg_liveness', Ref, Results}, #state{leg_reconcile=#{'probe_ref' := Ref}=Reconcile}=State) ->
+    _ = [retire_stranded_leg(CallId) || {CallId, Result} <- Results, leg_gone(Result, CallId)],
+    {'noreply', State#state{leg_reconcile=maps:without(['probe_ref', 'probe_pid'], Reconcile)}};
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
