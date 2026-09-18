@@ -656,9 +656,10 @@ retry_run() {
         retry_restart_queue_in_backoff || die 'Queue restart boundary failed; never blindly repeat a possibly completed restart'
     fi
     if [[ $RETRY_APPS_RESTART == true ]]; then
-        # The restarted node's own start-up info lines contain the word "error" in a
-        # file name and in four configuration key names. Nothing else is expected.
-        LOG_GATE_EXPECTED='handler \{lager_file_backend,"log/error\.log"\} already logging at error|info kapps_config\.[0-9]+ .{0,8}migrating \{<<"reorder">>,<<"(un)?known-error-(code|message)">>\}'
+        # The restarted node's own lines, in console and file format: its start-up info
+        # lines contain the word "error" in a file name and in four configuration key
+        # names, and the stopping node logs its node listener's exit. Nothing else.
+        LOG_GATE_EXPECTED='handler \{lager_file_backend,"log/error\.log"\} already logging at error|kapps_config[.:][0-9]+.{0,24}migrating \{<<"reorder">>,<<"(un)?known-error-(code|message)">>\}|kz_nodes_listener[.:][0-9]+.{0,24}error creating node exit : terminating'
         retry_restart_apps_in_backoff || die 'Applications restart boundary failed; never blindly repeat a possibly completed restart'
     fi
     if [[ $RETRY_CONFIRMATION_EXPIRY == true ]]; then
