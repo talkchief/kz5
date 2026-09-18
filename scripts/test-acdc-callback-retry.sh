@@ -658,7 +658,7 @@ retry_run() {
     if [[ $RETRY_APPS_RESTART == true ]]; then
         # The restarted node's own start-up info lines contain the word "error" in a
         # file name and in four configuration key names. Nothing else is expected.
-        LOG_GATE_EXPECTED='handler \{lager_file_backend,"log/error\.log"\} already logging at error|info kapps_config\.[0-9]+ migrating \{<<"reorder">>,<<"(un)?known-error-(code|message)">>\}'
+        LOG_GATE_EXPECTED='handler \{lager_file_backend,"log/error\.log"\} already logging at error|info kapps_config\.[0-9]+ .{0,8}migrating \{<<"reorder">>,<<"(un)?known-error-(code|message)">>\}'
         retry_restart_apps_in_backoff || die 'Applications restart boundary failed; never blindly repeat a possibly completed restart'
     fi
     if [[ $RETRY_CONFIRMATION_EXPIRY == true ]]; then
