@@ -203,7 +203,8 @@ function context(h) {
         let survived=true;try{alive();}catch(_){survived=false;}
         if(f.callLost)assert.equal(survived,false,'A call cannot outlive its media server; the observation is wrong');
         await h.clearStage();
-        if(f.mediaControllers)await h.until(quietly(()=>f.mediaControllers.every(c=>
+        // KZ5_QUEUE_FAULT_NO_MEDIA_WAIT=1 is a diagnostic: call again as soon as the agents are ready.
+        if(f.mediaControllers&&process.env.KZ5_QUEUE_FAULT_NO_MEDIA_WAIT!=='1')await h.until(quietly(()=>f.mediaControllers.every(c=>
             // list_fs_nodes keeps listing a node it has lost; only connected() proves the link.
             /freeswitch@/.test(h.command('podman',['exec',c,'bash','-lc','sup -n ecallmgr -e ecallmgr_fs_nodes connected'],30000)))),240);
         // A killed node starts new agent processes, so the pinned pids no longer apply.
