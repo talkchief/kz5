@@ -738,7 +738,17 @@ retry_run() {
         log 'First attempt unanswered; durable retry_wait observed; second attempt completed with reciprocal native bridge'
         if [[ $RETRY_APPS_RESTART_BRIDGE == true ]]; then
             LOG_GATE_EXPECTED=$RETRY_RESTART_EXPECTED_LINES
-            retry_restart_apps_during_bridge || die 'Applications restart during the bridge failed; never blindly repeat a possibly completed restart'
+            if ! retry_restart_apps_during_bridge; then
+                # A failed boundary ends the run while its two exact legs are still
+                # bridged; their phones are then killed without BYE and the legs
+                # stayed up on the media server (twice on September 18, 2026).
+                local leg
+                for leg in $(jq -r '.caller.id, .agent.id' "$RUN_DIR/retry-bridge-evidence.json" 2>/dev/null); do
+                    [[ $leg =~ ^[A-Za-z0-9_.:@-]{1,128}$ ]] || continue
+                    timeout 5 /usr/local/freeswitch/bin/fs_cli -x "uuid_kill $leg NORMAL_CLEARING" >/dev/null 2>&1 || true
+                done
+                die 'Applications restart during the bridge failed; never blindly repeat a possibly completed restart'
+            fi
         fi
         retry_wait_checked 'second returned carrier' "$CARRIER_PID"
         wait_agents_checked callback
