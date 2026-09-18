@@ -7,6 +7,40 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **CALLBACKS D1 — recovery under failure, NATIVE PASS on main (`b511c02` runtime), September18:**
+  All on the isolated tenant with the loopback carrier, `test-acdc-callback-retry.sh --live
+  --keep-fixture --transport internal --language en-us --registration-mode entry-only`; every
+  PASS means busy agent -> callback registered with the installed confirmation audio proven
+  -> first returned call unanswered -> durable `retry_wait` with positive settlement -> second
+  attempt confirmed and bridged natively with two-way RTP -> agent ready -> the strict
+  fresh-error log gate clean.
+  | Unit | Fault while the callback waits or rings | Result |
+  | --- | --- | --- |
+  | `kz5-main-callback-retry-0918b` | none (after the telemetry and health-probe fixes) | **PASS**, `/var/log/kazoo-acceptance/20260918T144315Z` |
+  | `kz5-main-callback-queue-restart-0918` | queue supervisor replaced during `retry_wait` | **PASS**, `.../20260918T144741Z` |
+  | `kz5-main-callback-worker-loss-0918` | the exact active callback worker terminated during ringing | **PASS**, `.../20260918T145227Z` |
+  | `kz5-main-callback-apps-restart-0918e` | NEW: `systemctl restart kazoo-apps` during `retry_wait` (what every deployment does) | **PASS**, `.../20260918T151811Z`; node back with ACDC startup `ready` in about 12s; same ticket, attempt count and order; no third attempt |
+  The apps-restart case needed four attempts, all retained (`-0918`, `-0918b`, `-0918c`,
+  `-0918d` FAIL): in every one the callback lifecycle itself PASSED; the failures were the
+  campaign's own guards, which had never seen a deliberate node restart (service-identity
+  check, then the restarted node's start-up info lines and the stopping node's
+  `kz_nodes_listener ... error creating node exit : terminating`). The mode now accepts exactly
+  the recorded `kazoo-apps` main-process change and names exactly those lines, in console and
+  file format; everything else is still a failure. Promotion `kz5-promo-0918f` PASS
+  (`/root/kz5-main-promotion-20260918.NvPZ1hoP`); private applications install29 PASS with
+  `third-party telemetry is disabled` logged and zero attempts to reach telemetry.2600hz.org.
+  Open in D: the returned-leg and bridge phases under NODE loss, an explicit duplicate
+  injection (D2), the historical ambiguous ticket (D3, owner decision), five-language audio
+  on the final media build (D4); the external-carrier campaign variant (SIPp exit253).
+
+- **ACDC C3 on single-node main — eCallMgr loss NATIVE PASS, September18:**
+  Unit `kz5-main-node-loss-0918` (`test-acdc-node-loss.sh --live`): eCallMgr stopped after a
+  real bridge, `PASS ended call remained conservatively busy while node evidence was
+  unavailable`, `PASS same applications node recovered agent without logout/login or FSM
+  reset`, next call SIP/RTP PASS; evidence
+  `/var/log/kazoo-acceptance/node-loss/20260918T152234Z`. eCallMgr active and linked to
+  `freeswitch@dev-testing` afterwards.
+
 - **AFTER-REBOOT CASE — whole-host reboot of main PASS, September18 13:47 UTC:**
   Verifier armed, `systemctl reboot`, boot 13:47:27. Receipt
   `/root/kz5-post-boot-20260918T134737Z.GpISad/receipt.txt`: 30 PASS, `RESULT failures=0`
