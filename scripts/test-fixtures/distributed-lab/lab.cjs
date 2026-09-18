@@ -53,7 +53,7 @@ function overlapsSubnet(destination,prefix=PREFIX) {
     assert(/^\d+\.\d+\.\d+\.\d+$/.test(ip)&&ip.split('.').every(v=>Number(v)<=255));
     assert(Number.isInteger(mask)&&mask>=0&&mask<=32);
     const num=s=>s.split('.').reduce((n,v)=>(n*256+Number(v))>>>0,0);
-    assert(['172.30.253.','172.30.252.','172.30.251.'].includes(prefix));
+    assert(['172.30.253.','172.30.252.','172.30.251.','172.30.250.'].includes(prefix));
     const start=num(prefix+'0'),size=2**(32-mask),low=Math.floor(num(ip)/size)*size;
     return !(start+255<low||start>low+size-1);
 }
