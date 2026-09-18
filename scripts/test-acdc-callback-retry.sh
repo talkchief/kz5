@@ -20,6 +20,9 @@ RETRY_CONFIRMATION_EXPIRY=false
 RETRY_QUEUE_RESTART=false
 RETRY_WORKER_LOSS=false
 RETRY_APPS_RESTART=false
+RETRY_APPS_RESTART_BRIDGE=false
+# The restarted node's own lines, console and file format; see the restart boundaries.
+RETRY_RESTART_EXPECTED_LINES='handler \{lager_file_backend,"log/error\.log"\} already logging at error|kapps_config[.:][0-9]+.{0,24}migrating \{<<"reorder">>,<<"(un)?known-error-(code|message)">>\}|kz_nodes_listener[.:][0-9]+.{0,24}error creating node exit : terminating'
 RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=false
 RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=false
 RETRY_BUSY_PID=
@@ -41,6 +44,7 @@ retry_usage() {
         '       [--short-confirmation-window] (main isolated EN fixture only; response timeout3, full existing prompt, conditional restore)' \
         '       [--confirmation-expiry] (requires short window; answer retry without digit; assert timeout and no agent call)' \
         '       [--queue-restart-during-backoff] (main isolated fixture only; restart its queue with no active legs, retain retry)' \
+        '       [--apps-restart-during-bridge] (main isolated fixture only; restart kazoo-apps while the callback is bridged: no duplicate, bridge survives)' \
         '       [--apps-restart-during-backoff] (main isolated fixture only; restart kazoo-apps while the callback waits, retain retry)' \
         '       [--worker-loss-during-ringing] (main isolated fixture only; kill exactly its first active callback worker)' \
         '       [--fixture-account ACCOUNT_ID] (must match canonical protected isolated state)' \
@@ -80,6 +84,7 @@ retry_args() {
             --short-confirmation-window) [[ $RETRY_SHORT_CONFIRMATION_WINDOW == false ]] || die 'Repeated short-confirmation mode'; RETRY_SHORT_CONFIRMATION_WINDOW=true ;;
             --confirmation-expiry) [[ ${RETRY_CONFIRMATION_EXPIRY:-false} == false ]] || die 'Repeated confirmation-expiry mode'; RETRY_CONFIRMATION_EXPIRY=true ;;
             --queue-restart-during-backoff) [[ ${RETRY_QUEUE_RESTART:-false} == false ]] || die 'Repeated queue-restart mode'; RETRY_QUEUE_RESTART=true ;;
+            --apps-restart-during-bridge) [[ $RETRY_APPS_RESTART_BRIDGE == false ]] || die 'Repeated apps-restart-bridge mode'; RETRY_APPS_RESTART_BRIDGE=true ;;
             --apps-restart-during-backoff) [[ $RETRY_APPS_RESTART == false ]] || die 'Repeated apps-restart mode'; RETRY_APPS_RESTART=true ;;
             --worker-loss-during-ringing) [[ $RETRY_WORKER_LOSS == false ]] || die 'Repeated worker-loss mode'; RETRY_WORKER_LOSS=true ;;
             --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
@@ -101,7 +106,8 @@ retry_args() {
     [[ ${RETRY_CONFIRMATION_EXPIRY:-false} != true || $RETRY_SHORT_CONFIRMATION_WINDOW == true ]] || die 'Confirmation expiry requires explicit short confirmation window'
     [[ $RETRY_WORKER_LOSS != true || $RETRY_QUEUE_RESTART != true ]] || die 'Choose one callback fault boundary'
     [[ $RETRY_APPS_RESTART != true || ( $RETRY_QUEUE_RESTART != true && $RETRY_WORKER_LOSS != true ) ]] || die 'Choose one callback fault boundary'
-    if [[ ${RETRY_QUEUE_RESTART:-false} == true || $RETRY_WORKER_LOSS == true || $RETRY_APPS_RESTART == true ]]; then
+    [[ $RETRY_APPS_RESTART_BRIDGE != true || ( $RETRY_QUEUE_RESTART != true && $RETRY_WORKER_LOSS != true && $RETRY_APPS_RESTART != true ) ]] || die 'Choose one callback fault boundary'
+    if [[ ${RETRY_QUEUE_RESTART:-false} == true || $RETRY_WORKER_LOSS == true || $RETRY_APPS_RESTART == true || $RETRY_APPS_RESTART_BRIDGE == true ]]; then
         [[ $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 && $RETRY_LANGUAGE_EXPLICIT == true &&
            $RETRY_LANGUAGE == en-us && $CALLBACK_TEST_TRANSPORT == internal && $RETRY_REGISTRATION_MODE == entry-only &&
            $RETRY_EDIT_PENDING_LANGUAGE == false && ${RETRY_CONFIRMATION_EXPIRY:-false} == false &&
@@ -403,6 +409,53 @@ retry_restart_queue_in_backoff() {
     log 'Isolated queue supervisor replaced during durable retry_wait; no services restarted'
 }
 
+# The applications node is lost while the returned callback is BRIDGED to the
+# agent. The media bridge must live on until the carrier ends it, the ticket must
+# stay completed with the same legs and attempt count (recovery must not originate
+# a duplicate), and the agent must not be offered as ready while still talking.
+retry_restart_apps_during_bridge() {
+    local doc before after deadline status sample state account_arg agent_arg identity
+    [[ $RETRY_APPS_RESTART_BRIDGE == true && $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 &&
+       ${STATE[ACCEPTANCE_ACCOUNT_ID]} == "$RETRY_ACCOUNT_ID" && -s $RUN_DIR/retry-bridge-evidence.json &&
+       ! -e $RUN_DIR/callback-apps-restart-started.json ]] || return 1
+    identity='{id,status,attempts,max_attempts,caller_call_id,agent_call_id,enqueue_sequence,originate_success_recorded}'
+    doc=$(callback_document) || return 1
+    jq -e '.status=="completed" and .attempts==2' <<<"$doc" >/dev/null || return 1
+    before=$(systemctl show -p MainPID --value kazoo-apps.service) || return 1
+    [[ $before =~ ^[1-9][0-9]*$ ]] || return 1
+    jq -n --arg pid "$before" --argjson doc "$doc" --argjson started "$(date +%s)" \
+        '{main_pid_before:$pid,started_at:$started,callback:$doc,restart_requests:1,phase:"bridged"}' \
+        > "$RUN_DIR/callback-apps-restart-started.json" || return 1
+    systemctl restart kazoo-apps.service || return 1
+    after=$(systemctl show -p MainPID --value kazoo-apps.service) || return 1
+    [[ $after =~ ^[1-9][0-9]*$ && $after != "$before" ]] || return 1
+    deadline=$((SECONDS + 300)); status=
+    while ((SECONDS < deadline)); do
+        status=$(sup -n kazoo_apps -t 5 acdc_init startup_status 2>/dev/null | tail -n 1) || status=
+        [[ $status == ready ]] && break
+        [[ $status != failed ]] || return 1
+        sleep 2
+    done
+    [[ $status == ready ]] || return 1
+    printf -v account_arg '<<"%s">>' "$RETRY_ACCOUNT_ID"
+    printf -v agent_arg '<<"%s">>' "${STATE[ACCEPTANCE_AGENT_1_USER_ID]}"
+    : > "$RUN_DIR/callback-apps-restart-bridge-samples.tsv"
+    for sample in 1 2 3 4 5 6; do
+        kill -0 "$CARRIER_PID" 2>/dev/null || break
+        state=$(timeout 15 sup -e acdc_agent_maintenance agent_status "$account_arg" "$agent_arg" </dev/null 2>/dev/null |
+            sed -n 's/.*state:[[:space:]]*\([a-z_]*\).*/\1/p' | head -n 1)
+        printf '%s\t%s\t%s\t%s\n' "$(date +%s)" "${state:-unknown}" \
+            "$(jq -c "$identity" <<<"$(callback_document)")" "$(jq -r '.row_count' <<<"$(retry_snapshot)")" \
+            >> "$RUN_DIR/callback-apps-restart-bridge-samples.tsv"
+        sleep 5
+    done
+    [[ $(jq -c "$identity" <<<"$(callback_document)") == "$(jq -c "$identity" <<<"$doc")" ]] || return 1
+    jq --arg pid "$after" --argjson finished "$(date +%s)" \
+        '. + {main_pid_after:$pid,finished_at:$finished,acdc_startup_ready:true,ticket_unchanged:true}' \
+        "$RUN_DIR/callback-apps-restart-started.json" > "$RUN_DIR/callback-apps-restart.json" || return 1
+    log 'Applications node restarted while the callback was bridged; ticket unchanged, no new attempt'
+}
+
 # The whole applications node is lost while the callback waits for its retry:
 # what every deployment and every crash does to a waiting callback. The ticket
 # must come back from the durable store alone, keep its order and attempt count,
@@ -659,7 +712,7 @@ retry_run() {
         # The restarted node's own lines, in console and file format: its start-up info
         # lines contain the word "error" in a file name and in four configuration key
         # names, and the stopping node logs its node listener's exit. Nothing else.
-        LOG_GATE_EXPECTED='handler \{lager_file_backend,"log/error\.log"\} already logging at error|kapps_config[.:][0-9]+.{0,24}migrating \{<<"reorder">>,<<"(un)?known-error-(code|message)">>\}|kz_nodes_listener[.:][0-9]+.{0,24}error creating node exit : terminating'
+        LOG_GATE_EXPECTED=$RETRY_RESTART_EXPECTED_LINES
         retry_restart_apps_in_backoff || die 'Applications restart boundary failed; never blindly repeat a possibly completed restart'
     fi
     if [[ $RETRY_CONFIRMATION_EXPIRY == true ]]; then
@@ -676,6 +729,10 @@ retry_run() {
     else
         retry_wait_bridge || die 'Second returned attempt did not durably complete an exact native bridge'
         log 'First attempt unanswered; durable retry_wait observed; second attempt completed with reciprocal native bridge'
+        if [[ $RETRY_APPS_RESTART_BRIDGE == true ]]; then
+            LOG_GATE_EXPECTED=$RETRY_RESTART_EXPECTED_LINES
+            retry_restart_apps_during_bridge || die 'Applications restart during the bridge failed; never blindly repeat a possibly completed restart'
+        fi
         retry_wait_checked 'second returned carrier' "$CARRIER_PID"
         wait_agents_checked callback
         assert_stats 'second returned carrier' "$RUN_DIR/callback-carrier-stats.csv" 1
@@ -695,7 +752,7 @@ retry_run() {
     wait_agent_ready 1 || die 'Agent did not return ready after retry'
     systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p LoadState -p ActiveState -p SubState -p MainPID -p NRestarts \
         > "$RUN_DIR/retry-service-after.txt"
-    if [[ $RETRY_APPS_RESTART == true ]]; then
+    if [[ $RETRY_APPS_RESTART == true || $RETRY_APPS_RESTART_BRIDGE == true ]]; then
         # Exactly the one deliberate restart: kazoo-apps has the recorded new main
         # process and nothing else differs, including every restart counter.
         local apps_before apps_after
