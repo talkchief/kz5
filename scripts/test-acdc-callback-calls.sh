@@ -83,6 +83,13 @@ validate_callback_scenarios() {
     command -v node >/dev/null || die 'Node.js is required for the callback packet-evidence gate'
     node --check "$callback_test_dir/test-fixtures/assert-callback-confirmation-pcap.cjs"
     bash -n "$CALLBACK_FIXTURE_HELPER"
+    # Like tcpdump and SIPp in the shared library: a missing test tool is installed
+    # unless --no-install-deps was given, instead of failing with "command not found".
+    if ! command -v shellcheck >/dev/null 2>&1; then
+        [[ $INSTALL_DEPS == true ]] || die 'ShellCheck is required for the callback fixture gate'
+        command -v dnf >/dev/null 2>&1 || die 'Automatic ShellCheck installation requires dnf'
+        dnf -q install -y ShellCheck >/dev/null
+    fi
     shellcheck -x "$CALLBACK_FIXTURE_HELPER"
     scratch=$(mktemp -d /tmp/kazoo-callback-sipp-parse.XXXXXX)
     chmod 700 "$scratch"
