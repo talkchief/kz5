@@ -7,6 +7,44 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **ACDC C3 COMPLETE — applications node killed while the agent phone is RINGING, NATIVE PASS first run, September18:**
+  Unit `kz5-stage-queue-fault-apps-kill-ringing-1`, evidence `/var/log/kazoo-monitor-acceptance-g9tZuT`:
+  slow-answering agent phone (9s ring), the delivery owner 172.30.253.20 SIGKILLed while the
+  agent FSM was observed `ringing`; the caller was bridged to the agent 8s after the kill with
+  the surviving replica holding the exact member and agent legs; both replicas ready again
+  after 34s without re-login, unrelated agents still paused, second real call with
+  directional audio, strict inventory on both nodes.
+
+- **Media restart window — MITIGATED, not eliminated (`d216f62`), September18:**
+  Cause measured, not assumed: eCallMgr's reconnect "ping" is a `version` call with a fixed 5s
+  timeout, and around it sat fixed waits of 3s (before the first attempt), 3s (pinger's first
+  check), 1s (after the pong) and 3s again on node-up. `ecallmgr-media-reconnect-delay.patch`
+  makes the connect wait configurable (`fs_node_connect_delay_ms`, default 1s) and starts the
+  pinger and its retries at 1s, keeping the back-off. It stacks on two files the integration
+  patch owns, clear of its hunks; `test-ecallmgr-media-reconnect.sh` proves the integration
+  patch is still recognised as applied, and private eCallMgr install9 and peer install5 (both
+  REPEAT installs over an applied integration patch) PASS. Native: node down -> both
+  controllers connected again in 7s (unit `kz5-stage-queue-fault-freeswitch-restart-4`, run
+  WITHOUT the harness's media wait: next call placed 13s after the restart, 200 OK, PASS),
+  against 19s before. When the first attempt lands while FreeSWITCH's Erlang listener is up
+  but `mod_kazoo` is not yet answering, 5s are still lost (16s in a manual restart). That
+  timeout sits inside the integration patch's own hunks; changing it needs that patch's delta
+  mechanism. Not yet on main.
+
+- **CALLBACKS D4 five languages and the offnet path — NATIVE PASS on main, September18:**
+  Per-locale lifecycle with the installed confirmation audio captured and proven per locale
+  (`/root/kz5-callback-languages-20260918/results.tsv`): he-il `.../20260918T155154Z`, fr-fr
+  `.../20260918T155617Z`, es-es `.../20260918T160036Z`, ar-sa `.../20260918T160456Z`, en-us
+  earlier. OFFNET: unit `kz5-main-callback-external-0918` (`--transport external`, callback
+  through the tenant's carrier resource to the loopback carrier) PASS,
+  `/var/log/kazoo-acceptance/20260918T161513Z`. The older driver
+  `test-acdc-callback-calls.sh --live` still fails (unit `-0918c`, `later queue sentinel SIPp
+  process failed (exit 253)`): SIPp 3.7's `rtp_stream` pattern compares every received payload
+  with the pattern sent, which a caller hearing prompts or hold music can never match; its
+  original-caller leg is fixed (`the retry generator already strips the same actions`), its
+  sentinel uses a scenario shared with passing campaigns and is left; the offnet product path
+  is covered by the run above.
+
 - **ACDC C3 — FreeSWITCH restart during a bridged queue call, NATIVE PASS; one open product finding, September18:**
   Unit `kz5-stage-queue-fault-freeswitch-restart-2` PASS (`/var/log/kazoo-monitor-acceptance-Z7Hq2m`):
   the call is lost with its media server (asserted), both agent replicas ready again without
