@@ -85,11 +85,15 @@ callback_offer_is_cached_and_localized_test() -> with_store(fun() ->
     end,locales())
 end).
 
-returned_confirmation_prefers_queue_language_without_alias_lookup_test() -> with_store(fun() ->
+%% 73cd173: the queue language is applied when the caller is admitted
+%% (cf_acdc_member) and snapshotted at registration. The confirmation follows that
+%% admitted language; a later edit of the queue must not switch a pending caller.
+returned_confirmation_follows_admitted_language_without_alias_lookup_test() -> with_store(fun() ->
     lists:foreach(fun(Language) ->
-        Queue=kz_json:set_value([<<"announcements">>,<<"language">>],Language,queue()),
-        ?assertEqual({ok,path(Language,<<"acdc-callback-returned-confirmation">>)},
-                     acdc_callback_caller:confirmation_prompt(Queue,call(<<"en-us">>)))
+        [?assertEqual({ok,path(Language,<<"acdc-callback-returned-confirmation">>)},
+                      acdc_callback_caller:confirmation_prompt(
+                        kz_json:set_value([<<"announcements">>,<<"language">>],Edited,queue()),call(Language)))
+         || Edited <- locales()]
     end,locales()),
     put({fake_datamgr,open},fun(_,_) -> {error,not_found} end),
     ?assertEqual({error,missing_localized_media},acdc_callback_caller:confirmation_prompt(queue(),call(<<"en-us">>)))
