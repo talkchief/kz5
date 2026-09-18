@@ -7,6 +7,70 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Installer and after-boot defects found by taking the final revision through every private guest, September18 — all fixed in source, native results below:**
+  1. FRESH BROKER INSTALL WOULD FAIL (mine, `c9e73c7`): `pin_rabbitmq_node_name` read
+     `/etc/rabbitmq/rabbitmq-env.conf` with `sed`; without the file sed exits2 and errexit
+     with pipefail ended the install (`command failed at line 1894 (exit 2)`, private broker
+     install5). Main already had the file. The regression missed it because a function called
+     in a pipeline, a condition or `( ... ) || status=$?` runs with errexit suspended; it now
+     reads the status from a plain command and FAILS against the old code. Fixed `6cdb6f1`;
+     private broker install6 PASS (`/var/lib/kazoo5-install-lab/rabbitmq-install-6.log`).
+  2. OOM on a 1GiB broker host: `dnf` (692MB then 707MB resident) was killed beside RabbitMQ
+     (366MB) at the base-tooling step (install3) and again at `dnf install <cached rpm>`
+     (install4), before anything changed. `dnf install` never upgrades, so `dnf_install` now
+     skips plain names rpm reports installed and a package file whose exact build is
+     installed (`b9f2a6f`, `5b6de73`); groups, URLs and options always reach dnf. Natively on
+     main the cached `rabbitmq-server-3.13.7.rpm` is judged present. Repeat installs no longer
+     need repository metadata or the network for satisfied packages.
+  3. Post-boot verifier killed the lab monitors: at the 08:16 boot every check passed
+     (`/root/kz5-post-boot-20260918T081607Z.vQwEZa/receipt.txt`), then the one-shot unit
+     ended and systemd SIGKILLed the conmon of nine guests that a bare `podman start` had left
+     in its cgroup; a later `podman restart` failed with `conmon process killed`. Reproduced
+     with a throwaway container (bare start: monitor gone; own scope: alive), fixed `24b0250`,
+     and the receipt now fails when a guest has no surviving monitor.
+  4. Single-shot health gate: private apps-peer install18 passed every step, then failed on
+     `no broker connection` while the lab broker was being restarted by its own install;
+     healthy seconds later. The gate now waits six attempts over a minute and prints the FAIL
+     lines of a persistent fault (`7e6922e`); peer install19 PASS.
+  5. Monster app on a stale API address went unnoticed: registration preserves an existing
+     document by design, and verification never compared `api_url`. It now refuses with the
+     stale address and the reviewed migration (`0a34995`); main's apps all match (read-only).
+  Private installs from these revisions: broker6, `kazoo-apps`25, apps-peer19, eCallMgr-peer4,
+  FreeSWITCH8 — all PASS with `epmd.service owns port 4369`. COLD BOOT OF ALL TEN GUESTS
+  (stopped in reverse order, started data tier first): ten live monitors; broker, FreeSWITCH
+  and apps peer came back unaided with one mapper in `epmd.service`, the role registered,
+  loopback plus guest-address listeners only and no failed unit. The two PRIMARY guests did
+  not: `kazoo-pivot-port-reservation.service` cannot write the read-only
+  `/proc/sys/net/ipv4/ip_local_reserved_ports` of these older containers (known lab
+  artifact; `--repair-legacy-pivot kazoo-apps` -> `RESTORED`, `bootPassed:false` by design),
+  and the primary eCallMgr guest, still on `8ded71d`, failed `epmd.service` with the
+  pre-fix `Resource temporarily unavailable`; it is being reinstalled (install8).
+  Open: main's `--verify-only monster-ui` fails with `nginx.service is missing the persistent
+  maintenance startup guard` — main's Monster UI predates that installer step and must be
+  reinstalled through the installer; whole-host reboot of main still to do.
+
+- **Offline suite sweep — 435 suites, sequential, detached (`kz5-suite-sweep-0918`, `/root/kz5-suite-sweep-20260918/results.tsv`), IN PROGRESS, September18:**
+  Started because stale harnesses kept surfacing one at a time. Repaired so far, none a
+  production defect except item1 above: `test-rabbitmq-plugin-permissions.sh` (broken by my
+  node-name pin), `test-nodejs-clean-install.sh` (stale since `9f945a7`),
+  `test-monster-installer-preservation.cjs` (hard-coded 16 of 19 fingerprinted patches and a
+  source cache the installer no longer creates; the list is now derived from the installer),
+  `test-acdc-queue-members.sh` (its TEST `kapps_call` lacked debug info for meck; 30 pass),
+  and two CALLBACK suites: the returned-call confirmation test still expected the queue
+  document's language to win, while `73cd173` deliberately follows the language the caller
+  was admitted with (now proven for all 25 language pairs, 90 pass); the callflow menu runner
+  relied on a fixture module that production-only BEAMs no longer ship (8 pass). Many
+  remaining "failures" are acceptance drivers that need arguments or a guard, and Python
+  suites the sweep wrongly ran under python3.9; full triage follows its completion.
+
+- **Readiness plan C3 tooling — service-fault profile for the real-call queue campaign, offline only (`9108172`):**
+  `test-channel-monitor-live.cjs --distributed --queue-fault --live` with
+  `KZ5_QUEUE_FAULT=apps-kill|broker-restart|ecallmgr-kill|couchdb-outage` loses one role
+  while a queued call is bridged (for `apps-kill`, the applications node that owns the
+  delivery), records whether the media bridge survived, then requires both agent replicas
+  ready again without re-login, the two unrelated agents still paused on both nodes, a second
+  real call with directional audio and the strict inventory on both nodes. No native run yet.
+
 - **MAIN PROMOTION `kz5-promo-0918d` PASS on `fb6792a` after two retained failures — port mapper proven on the shared host, September18:**
   Receipt `/root/kz5-main-promotion-20260918.Ct8aWpkr/receipt.json`: `status: PASS`,
   `ingress: active`, finished 11:09:01 UTC; installer `All requested Kazoo 5 components
