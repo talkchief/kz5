@@ -28,7 +28,12 @@ reset_case() {
 }
 # Installed packages never open a transaction (about 700 MB of metadata; the
 # private broker guest's dnf was OOM-killed beside RabbitMQ on September 18, 2026).
-rpm() { [[ $1 == -q && $2 == -- ]] || return 97; shift 2; for name in "$@"; do [[ " $present " == *" $name "* ]] || return 1; done; }
+rpm() {
+    if [[ $1 == -qp ]]; then [[ $4 == "$package_file" ]] || return 96; printf '%s\n' "$file_build"; return 0; fi
+    [[ $1 == -q && $2 == -- ]] || return 97; shift 2
+    for name in "$@"; do [[ " $present " == *" $name "* ]] || return 1; done
+}
+package_file=$(mktemp /tmp/kazoo-dnf-package.XXXXXX.rpm); file_build=rabbitmq-server-3.13.7-1.el8.noarch
 reset_case; present='jq tar'
 [[ $(dnf_install jq tar) == '[kazoo5] Packages already installed: jq tar' && ! -s $trace ]]
 dnf_install jq missing-one >/dev/null 2>&1
@@ -38,6 +43,12 @@ for spec in '@development' 'https://example.net/x.rpm' '--enablerepo=crb'; do
     reset_case; present="$spec"; dnf_install "$spec" >/dev/null 2>&1
     grep -Fq -- "install -y $spec" "$trace"
 done
+# A downloaded package file is present only as that exact build (the broker
+# guest's second OOM kill was "dnf install /cache/rabbitmq-server-...rpm").
+reset_case; present="$file_build"; dnf_install "$package_file" >/dev/null 2>&1; [[ ! -s $trace ]]
+reset_case; present=rabbitmq-server-3.12.0-1.el8.noarch; dnf_install "$package_file" >/dev/null 2>&1
+grep -Fq -- "install -y $package_file" "$trace"
+rm -f -- "$package_file"
 present=
 reset_case
 dnf_install bash-completion >/dev/null 2>&1

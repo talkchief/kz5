@@ -916,11 +916,18 @@ dnf_transaction() {
 # OOM-killed beside RabbitMQ on a 1 GiB host (private broker guest, install 3,
 # September 18, 2026), and it needs the network on a converged host.
 dnf_packages_present() {
-    local package
+    local package build
     for package in "$@"; do
-        [[ $package =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || return 1
+        if [[ $package == /*.rpm && -f $package ]]; then
+            # A downloaded package file: present only as that exact build.
+            build=$(rpm -qp --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' "$package" 2>/dev/null) || return 1
+            [[ -n $build ]] && rpm -q -- "$build" >/dev/null 2>&1 || return 1
+        elif [[ $package =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+            rpm -q -- "$package" >/dev/null 2>&1 || return 1
+        else
+            return 1
+        fi
     done
-    rpm -q -- "$@" >/dev/null 2>&1
 }
 
 dnf_install() {
