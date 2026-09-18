@@ -58,5 +58,9 @@ never probed); unknown retries twice then falls back, ignoring stale and foreign
 results. Unit 60, strategies 21/20, callback-queue 27, markers 8,
 agent-maintenance 138, callback-announcements 12 and dashboard-events 24 pass.
 
-Native proof is the same partition campaign after deployment: the healthy
+**Native PASS September 18** (`kz5-stage-queue-partition-11`, private pair
+`c9e73c7`, owner-targeted 120 s partition): the healthy node verified and
+dropped the redelivered terminated caller in 8 ms without ringing, and no agent
+was logged out. Details in `PROJECT_TASKS.md`. The original acceptance text was:
+the same partition campaign after deployment: the healthy
 node must log the verification and the drop, and must not log an agent out.

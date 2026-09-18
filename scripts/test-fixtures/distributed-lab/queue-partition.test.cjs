@@ -41,7 +41,11 @@ for(const change of [{agents:inventory.agents.slice(1)},{all_agent_workers_obser
     {agents:inventory.agents.map(a=>({...a,queues:[]}))}])assert.throws(()=>strictInventory({...inventory,...change},s));
 assert(source.includes('strict_all_replica_agent_drain:true'));
 assert(source.includes("timeout:300")&&source.includes('while(Date.now()<end)')&&source.includes('Date.now()+partitionHoldMs()'));
-const {partitionHoldMs}=require('./queue-partition.cjs');
+const {partitionHoldMs,partitionTarget}=require('./queue-partition.cjs');
+assert.equal(partitionTarget(undefined),'owner');assert.equal(partitionTarget(''),'owner');
+assert.equal(partitionTarget('owner'),'owner');assert.equal(partitionTarget('other'),'other');
+for(const bad of ['Owner','both','172.30.253.14','other ','0'])assert.throws(()=>partitionTarget(bad),bad);
+assert(source.includes('deliveryOwner()')&&source.includes("'queue-owner-rpc.escript'"),'Partition must target a node relative to the delivery owner');
 assert.equal(partitionHoldMs(undefined),35000);assert.equal(partitionHoldMs(''),35000);
 assert.equal(partitionHoldMs('120000'),120000);assert.equal(partitionHoldMs('150000'),150000);
 for(const bad of ['34999','150001','180000','0','-1','12e4','120000 ','abc','1200000'])assert.throws(()=>partitionHoldMs(bad),bad);

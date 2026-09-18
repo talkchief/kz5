@@ -49,6 +49,11 @@ function partitionHoldMs(value=process.env.KZ5_QUEUE_PARTITION_HOLD_MS) {
     assert(hold>=35000&&hold<=150000,'Partition hold must be 35000..150000 ms, below the 3-minute restore watchdog');
     return hold;
 }
+function partitionTarget(value=process.env.KZ5_QUEUE_PARTITION_TARGET) {
+    if(value===undefined||value==='')return 'owner';
+    assert(['owner','other'].includes(value),'Partition target must be owner or other');
+    return value;
+}
 function strictInventory(v,s) {
     assert.equal(v.schema_version,2);assert.equal(v.all_agent_workers_observed,true);
     assert.equal(v.complete_cluster_drain_proven,false);
@@ -82,6 +87,18 @@ function context(h) {
             assert.equal(v.agent_call_id,h.getCurrent().agent_id,'Uncorrelated queue agent leg');
         }
         return values;
+    }
+    function deliveryOwner() {
+        const owners=nodes.filter(n=>{
+            h.command('podman',['cp',path.join(__dirname,'queue-owner-rpc.escript'),n.id+':/var/lib/kazoo-stage/queue-owner-rpc.escript']);
+            h.command('podman',['exec',n.id,'chmod','0600','/var/lib/kazoo-stage/queue-owner-rpc.escript']);
+            const v=JSON.parse(h.command('podman',['exec',n.id,'escript','/var/lib/kazoo-stage/queue-owner-rpc.escript',
+                s.ACCEPTANCE_QUEUE_ID,h.getCurrent().caller_id],12000));
+            assert(Number.isSafeInteger(v.workers)&&v.workers>0&&typeof v.owns==='boolean','Invalid queue owner observation');
+            return v.owns;
+        });
+        assert(owners.length<=1,'A member delivery cannot be owned by both applications nodes');
+        return owners[0]?.ip;
     }
     async function status(user) {
         const v=(await h.request('GET',h.route('agents',user)+'/status',undefined,h.adminToken)).data;
@@ -163,7 +180,20 @@ function context(h) {
         for(const e of es)h.registration(e,600);
         h.log('Queue2000: both native agent replicas pinned; alternate synthetic agents temporarily paused');
         const first=await call(partition?'queue-before-partition':'queue-first',partition?async()=>{
-            h.setFault(fault);await fault.start();h.log('Applications14 broker disconnected; peer20 healthy; ending exact synthetic conversation');
+            // Partition the node whose worker holds this caller's unacknowledged
+            // delivery: only that strands, and later redelivers, the call.
+            const owner=deliveryOwner(),wanted=partitionTarget();
+            // owner: strands and later redelivers the call (redelivery admission).
+            // other: the cut-off manager misses the non-durable removal broadcast
+            // and used to keep a phantom waiting member (member reconciliation).
+            const target=!owner?nodes[0].ip:wanted==='owner'?owner:nodes.find(n=>n.ip!==owner).ip;
+            if(target!==nodes[0].ip) {
+                fault=partitions.prepare('kazoo-apps',target);nodes=fault.nodes;pinned.reverse();
+            }
+            h.log(owner?'Member delivery owned by '+owner+'; partitioning the '+wanted+' applications node '+target:
+                'Member delivery already settled on both nodes; no broker redelivery can occur in this run');
+            h.setFault(fault);await fault.start();
+            h.log('Applications node '+nodes[0].ip+' broker disconnected; '+nodes[1].ip+' healthy; ending exact synthetic conversation');
             await h.clearStage();
             const samples=[],end=Date.now()+partitionHoldMs();
             while(Date.now()<end) {
@@ -197,4 +227,4 @@ function context(h) {
     }
     return {run,restorePauses};
 }
-module.exports={context,identity,snapshot,inspectAudio,ownedAgent,strictInventory,partitionHoldMs};
+module.exports={context,identity,snapshot,inspectAudio,ownedAgent,strictInventory,partitionHoldMs,partitionTarget};
