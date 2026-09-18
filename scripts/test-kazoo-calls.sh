@@ -780,7 +780,7 @@ new_error_log_matches() {
     local label=$1 path lines count=0 found
     while IFS=$'\t' read -r path lines; do
         [[ -r $path && $lines =~ ^[0-9]+$ ]] || continue
-        found=$(tail -n "+$((lines + 1))" -- "$path" 2>/dev/null |
+        found=$(tail -n "+$((lines + 1))" -- "$path" 2>/dev/null | log_gate_unexpected |
             # Event identifiers such as CHANNEL_EXECUTE_ERROR occur in normal
             # subscription logs. Match diagnostic words, not identifier parts.
             grep -Eic '\[(err|crit|alert|emerg)\]|(^|[^[:alnum:]_])(error|fatal|crash|segfault|core dumped)([^[:alnum:]_]|$)' || true)
@@ -789,7 +789,14 @@ new_error_log_matches() {
     printf '%s\n' "$count"
 }
 
+# A campaign that deliberately restarts a node names the exact start-up lines it
+# expects (LOG_GATE_EXPECTED, an ERE). Everything else stays a failure.
+log_gate_unexpected() {
+    if [[ -n ${LOG_GATE_EXPECTED:-} ]]; then grep -Ev -- "$LOG_GATE_EXPECTED" || true; else cat; fi
+}
+
 count_journal_error_messages() {
+    log_gate_unexpected |
     # Kamailio uses "ERROR:" as well as bracketed native severities. Preserve
     # routing/AMQP failure checks without mistaking event identifiers for errors.
     awk 'BEGIN{IGNORECASE=1}
