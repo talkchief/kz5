@@ -72,7 +72,7 @@
 -ifdef(TEST).
 -export([changed_endpoints/2, strategy_test_state/1, strategy_test_field/2, connect_failure_limit/2
         ,peer_paused_updates/2, restore_pause_updates/2
-        ,endpoint_usernames/1, live_call_ids/1
+        ,device_usernames/1, live_call_ids/1
         ]).
 -endif.
 
@@ -617,19 +617,25 @@ invalid_failure_limit(Limit, Fallback) ->
     lager:warning("ignoring invalid ~s ~p; using ~p", [?MAX_CONNECT_FAILURES, Limit, Fallback]),
     Fallback.
 
-%% Asked once, when the agent's endpoints are first loaded, in a bounded helper
-%% process: the media controllers know which calls the agent's devices are in.
--spec find_live_calls(kz_term:ne_binary(), kz_json:objects()) -> pid().
-find_live_calls(AccountId, EPs) ->
+%% Asked once, when the agent's processes start, in a bounded helper process:
+%% the media controllers know which calls the agent's devices are in. The
+%% usernames come from the agent's own device documents, not from built
+%% endpoints, which need a registration and can be empty at start.
+-spec find_live_calls(kz_term:ne_binary(), kz_term:ne_binary()) -> pid().
+find_live_calls(AccountId, AgentId) ->
     Self = self(),
     kz_process:spawn(fun() ->
-                             {'ok', _} = timer:kill_after(10 * ?MILLISECONDS_IN_SECOND),
-                             gen_statem:cast(Self, {'live_calls', query_live_calls(AccountId, endpoint_usernames(EPs))})
+                             {'ok', _} = timer:kill_after(20 * ?MILLISECONDS_IN_SECOND),
+                             Devices = kz_attributes:owned_by_docs(AgentId, <<"device">>, AccountId),
+                             CallIds = query_live_calls(AccountId, device_usernames(Devices), 3),
+                             gen_statem:cast(Self, {'live_calls', CallIds})
                      end).
 
--spec query_live_calls(kz_term:ne_binary(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
-query_live_calls(_AccountId, []) -> [];
-query_live_calls(AccountId, Usernames) ->
+%% The messaging layer may still be starting with the node: ask again, briefly.
+-spec query_live_calls(kz_term:ne_binary(), kz_term:ne_binaries(), non_neg_integer()) -> kz_term:ne_binaries().
+query_live_calls(_AccountId, [], _Tries) -> [];
+query_live_calls(_AccountId, _Usernames, 0) -> [];
+query_live_calls(AccountId, Usernames, Tries) ->
     Req = [{<<"Realm">>, kzd_accounts:fetch_realm(AccountId)}
           ,{<<"Usernames">>, Usernames}
           ,{<<"Account-ID">>, AccountId}
@@ -637,16 +643,19 @@ query_live_calls(AccountId, Usernames) ->
            | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
           ],
     case kz_amqp_worker:call_collect(Req, fun kapi_call:publish_query_user_channels_req/1, {'ecallmgr', 'true'}) of
-        {'error', _R} -> [];
+        {'error', _R} ->
+            timer:sleep(2 * ?MILLISECONDS_IN_SECOND),
+            query_live_calls(AccountId, Usernames, Tries - 1);
         {_OK, Resps} -> live_call_ids(Resps)
     end.
 
--spec endpoint_usernames(kz_json:objects()) -> kz_term:ne_binaries().
-endpoint_usernames(EPs) ->
+-spec device_usernames(kz_term:api_objects()) -> kz_term:ne_binaries().
+device_usernames('undefined') -> [];
+device_usernames(Devices) ->
     lists:usort([Username
-                 || EP <- EPs,
-                    Username <- [kz_json:get_ne_binary_value(<<"To-User">>, EP)],
-                    Username =/= 'undefined'
+                 || Device <- Devices,
+                    Username <- [kzd_devices:sip_username(Device)],
+                    is_binary(Username), byte_size(Username) > 0
                 ]).
 
 -spec live_call_ids(kz_json:objects()) -> kz_term:ne_binaries().
@@ -716,6 +725,7 @@ wait('cast', {'listener', AgentListener, NextState, SyncRef}, #state{account_id=
     lager:debug("setting agent proc to ~p", [AgentListener]),
     acdc_agent_listener:fsm_started(AgentListener, self()),
     Restored = acdc_agent_util:restorable_pause(AccountId, AgentId),
+    _ = find_live_calls(AccountId, AgentId),
     State1 = State#state{agent_listener=AgentListener
                         ,sync_ref=SyncRef
                         ,agent_listener_id=acdc_util:proc_id()
@@ -1847,9 +1857,7 @@ handle_event('load_endpoints', StateName, #state{agent_id=AgentId
 
     case get_endpoints([], Call, AgentId, 'undefined') of
         {'error', 'no_endpoints'} -> {'next_state', StateName, State};
-        {'ok', EPs} ->
-            _ = find_live_calls(AccountId, EPs),
-            {'next_state', StateName, State#state{endpoints=EPs}};
+        {'ok', EPs} -> {'next_state', StateName, State#state{endpoints=EPs}};
         {'error', E} -> {'stop', E, State}
     end;
 handle_event({'live_calls', [_|_]=CallIds}, StateName, State)
