@@ -112,5 +112,14 @@ classes) covers the two health conditions.
 Receipts: `/var/lib/kazoo5-install-lab/ecallmgr-install-7.log`,
 `/var/lib/kazoo5-install-lab/freeswitch-install-8.log`.
 
-Not yet proven: FreeSWITCH and eCallMgr sharing one host exists only on main.
-The register records that result when main is promoted.
+## Native evidence (main development host, September 18, 2026)
+
+| Run | Result |
+| --- | --- |
+| `kz5-promo-0918c` (`194f882`) | Migration on the shared FreeSWITCH-plus-eCallMgr host **passed**: `Stopping the port mapper owned by /system.slice/kazoo-ecallmgr.service`, `Restarting idle FreeSWITCH`, `PASS every running Erlang role registered with the new port mapper`, `PASS epmd.service owns port 4369`, framing PASS. The promotion itself **failed** afterwards on the new health gate, which judged the SIP ingress the wrapper had closed (fixed in `fb6792a`). |
+| `kz5-promo-0918d` (`fb6792a`) | **PASS**, receipt `/root/kz5-main-promotion-20260918.Ct8aWpkr/receipt.json`. No migration needed. |
+| The failed promotion's sequence, repeated | Mapper pid 479455 in `epmd.service` since 10:41:03 survived the restarts of `kazoo-apps` (11:02:21) and `kazoo-ecallmgr` (11:06:52). `kazoo-freeswitch` untouched since 10:41:08; `list_fs_nodes` = `freeswitch@dev-testing`. |
+| Listeners | `127.0.0.1:4369`, `10.1.0.44:4369`; `46.225.31.248:4369` refuses. Five roles registered. No mapper outside `epmd.service`. |
+
+Not yet performed: a whole-host reboot of main with the new socket (guest cold
+boot only), and reinstalling the remaining private guests from this revision.

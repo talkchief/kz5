@@ -7,7 +7,55 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
-- **MAIN PROMOTION `kz5-promo-0918b` FAILED, recovered by hand; root cause fixed in the installer — PRIVATE NATIVE PASS, main deployment PENDING, September18:**
+- **MAIN PROMOTION `kz5-promo-0918d` PASS on `fb6792a` after two retained failures — port mapper proven on the shared host, September18:**
+  Receipt `/root/kz5-main-promotion-20260918.Ct8aWpkr/receipt.json`: `status: PASS`,
+  `ingress: active`, finished 11:09:01 UTC; installer `All requested Kazoo 5 components
+  passed validation`; the wrapper's full health check after reopening ingress
+  `RESULT failures=0`. Sequence, all retained:
+  1. `kz5-promo-0918b` (`b809eec`) FAIL 10:03:33 — port mapper replaced by the
+     eCallMgr restart (entry below).
+  2. `kz5-promo-0918c` (`194f882`, `/root/kz5-main-promotion-20260918.GZnKlr3P`) FAIL
+     10:52:55. The installer passed everything, including the one-time migration on
+     this shared FreeSWITCH-plus-eCallMgr host (`Stopping the port mapper owned by
+     /system.slice/kazoo-ecallmgr.service`, `Restarting idle FreeSWITCH`, `PASS every
+     running Erlang role registered`, `PASS epmd.service owns port 4369`, framing PASS),
+     then died on the NEW stack health gate: `FAIL kazoo-kamailio is inactive` and two
+     listener lines — the ingress the wrapper itself had closed. A defect in my gate,
+     not in the stack. Ingress reopened by hand; health `failures=0`.
+  3. Fix `fb6792a`: the wrapper declares `KAZOO_INGRESS_CLOSED=true`, the health check
+     skips only the Kamailio checks and prints `SKIP kazoo-kamailio: SIP ingress was
+     deliberately closed by the caller`, the timer is never scoped, and the wrapper runs
+     the full check after reopening ingress and before `receipt PASS`.
+  Independent proof of the original defect on main after run3: mapper pid479455 in
+  `/system.slice/epmd.service` since 10:41:03 survived the restarts of `kazoo-apps`
+  (11:02:21) and `kazoo-ecallmgr` (11:06:52); `kazoo-freeswitch` untouched since
+  10:41:08 and `list_fs_nodes` = `freeswitch@dev-testing`; listeners `127.0.0.1:4369`
+  and `10.1.0.44:4369` only, `46.225.31.248:4369` connection refused; five roles
+  registered; zero mappers outside `epmd.service`. The health timer ran during the
+  closed-ingress window (11:05:35, 11:07:45 `RESULT failures=3`, unit failed) and the
+  next run returned to `Result=success`: the alarm and its self-clearing both work.
+  SIP ingress was closed from 10:41:00 until it was reopened by hand after the 10:52:55 failure, and 10:57:03-11:08:50 UTC (development host).
+  Open: private guests `kazoo-apps`, both peers and `rabbitmq` have not yet been
+  reinstalled from this revision (the broker guest carries only a transient probe
+  drop-in under `/run`); a whole-host reboot of main with the new socket is not yet
+  performed (guest cold boot only).
+
+- **Single installation entry point — nine side paths removed, guard added, September18 (`d3b359c`):**
+  Read-only audit of `scripts/`: nine tracked scripts changed a host beside
+  `install-kazoo5.sh`. `setup-dev.sh` (stock upstream) would `rm -rf /var/lib/rabbitmq`
+  unguarded against `/opt/kazoo`, a symlink to this tree on main: the live broker
+  database. `sync_to_release.bash`/`sync_to_remote.bash` hot-loaded arbitrary BEAMs into
+  both nodes. Six focused helpers were superseded by tracked source or patches
+  (`deploy-revision-safety-fixes.sh`, `deploy-scope-management-guard.sh`,
+  `deploy-internal-callback.cjs`, `deploy-single-key-callback.cjs`,
+  `deploy-monster-standalone-component.cjs`, `patch-monster-myaccount-bundle.cjs`); two
+  tests went with them. Evidence documents keep their record with a removal note.
+  `test-single-install-entry-point.sh`4 groups. All 26 installer-related suites PASS on
+  the final tree. Open: installer verification does not compare a registered Monster
+  app's `api_url` with the configured API URL (`migrate-monster-app-api-url.cjs` stays a
+  reviewed one-time migration). See `doc/single_install_entry_point.md`.
+
+- **MAIN PROMOTION `kz5-promo-0918b` FAILED, recovered by hand; root cause fixed in the installer — PRIVATE NATIVE PASS, September18 (main: see `kz5-promo-0918d` above):**
   Source `b809eec`, run directory `/root/kz5-main-promotion-20260918.rw1khk1v`, receipt
   `status: FAIL` (retained). Build, restarts and identity checks passed; the last check
   failed at 10:03:33 UTC: `eCallMgr and FreeSWITCH node freeswitch@dev-testing did not
