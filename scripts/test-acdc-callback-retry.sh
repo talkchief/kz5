@@ -691,7 +691,17 @@ retry_run() {
     wait_agent_ready 1 || die 'Agent did not return ready after retry'
     systemctl show kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio kazoo-live-test-agents -p Id -p LoadState -p ActiveState -p SubState -p MainPID -p NRestarts \
         > "$RUN_DIR/retry-service-after.txt"
-    [[ $(< "$RUN_DIR/retry-service-after.txt") == "$before" ]] || die 'A service changed during the retry diagnostic'
+    if [[ $RETRY_APPS_RESTART == true ]]; then
+        # Exactly the one deliberate restart: kazoo-apps has the recorded new main
+        # process and nothing else differs, including every restart counter.
+        local apps_before apps_after
+        apps_before=$(jq -er '.main_pid_before' "$RUN_DIR/callback-apps-restart.json") || die 'Missing applications restart receipt'
+        apps_after=$(jq -er '.main_pid_after' "$RUN_DIR/callback-apps-restart.json") || die 'Missing applications restart receipt'
+        [[ $(sed "0,/^MainPID=${apps_after}\$/s//MainPID=${apps_before}/" "$RUN_DIR/retry-service-after.txt") == "$before" ]] || \
+            die 'A service other than the deliberately restarted kazoo-apps changed during the retry diagnostic'
+    else
+        [[ $(< "$RUN_DIR/retry-service-after.txt") == "$before" ]] || die 'A service changed during the retry diagnostic'
+    fi
     record_stage callback 1 2 "$RUN_DIR/callback-original-stats.csv" 1 "$cores" "$since" "$RUN_DIR/retry-busy-stats.csv"
     log "Retained-fixture callback retry diagnostic passed; NOT full cleanup or production acceptance: $RUN_DIR"
 }
