@@ -714,6 +714,14 @@ ListenStream=127.0.0.1:4369
 $(is_loopback_address "$KAZOO_ERLANG_DIST_IP" || printf 'ListenStream=%s:4369\n' "$KAZOO_ERLANG_DIST_IP")
 FreeBind=true
 EOF
+    # The packaged LimitNPROC=1 counts every process of the account's numeric
+    # uid in the user namespace, which rootful container guests share with their
+    # host and each other: the third mapper failed to exec with EAGAIN (private
+    # FreeSWITCH guest, install 7, September 18, 2026). epmd never forks.
+    write_file 0644 /etc/systemd/system/epmd.service.d/kazoo5-limits.conf <<'EOF'
+[Service]
+LimitNPROC=infinity
+EOF
     while read -r unit; do
         write_file 0644 "/etc/systemd/system/${unit}.service.d/kazoo5-epmd.conf" <<'EOF'
 [Unit]
@@ -744,6 +752,10 @@ EOF
     ! ss -H -ltn 'sport = :4369' 2>/dev/null | grep -q . || die 'The previous Erlang port mapper did not release port 4369'
     systemctl reset-failed epmd.socket epmd.service 2>/dev/null || true
     systemctl start epmd.socket
+    # The first client activates the service; a mapper that cannot start would
+    # otherwise surface only as roles that never register.
+    epmd -names >/dev/null 2>&1 || { sleep 2; epmd -names >/dev/null 2>&1; } || \
+        die 'epmd.service does not answer behind its socket; see: journalctl -u epmd.service'
     # mod_kazoo registers only when it loads.
     if systemctl is-active --quiet kazoo-freeswitch.service; then
         log 'Restarting idle FreeSWITCH so mod_kazoo registers with the new port mapper'

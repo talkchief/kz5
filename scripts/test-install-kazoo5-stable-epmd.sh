@@ -30,7 +30,7 @@ scenario() {   # name function assignments...
         DRY_RUN=false KAZOO_ERLANG_DIST_IP=10.0.0.5
         T_SOCKET=inactive T_MAIN=0 T_LISTEN='' T_STRAYS='' T_ENABLED=enabled T_CHANNELS=0 T_UNIT_FILE=present
         T_ACTIVE='couchdb rabbitmq-server kazoo-apps kazoo-ecallmgr kazoo-freeswitch'
-        T_NAMES='couchdb rabbit kazoo_apps ecallmgr freeswitch' T_NAMES_AFTER=''
+        T_NAMES='couchdb rabbit kazoo_apps ecallmgr freeswitch' T_NAMES_AFTER='' T_MAPPER_STARTS=true
         declare -A SELECTED=([kazoo-apps]=1 [ecallmgr]=1)
         for assignment in "$@"; do eval "$assignment"; done
         actions="$se_work/$name.actions"; : > "$actions"
@@ -42,7 +42,7 @@ scenario() {   # name function assignments...
         write_file() { mkdir -p "$se_work/$name$(dirname "$2")"; cat > "$se_work/$name$2"; }
         sleep() { :; }
         kill() { act "kill $*"; T_LISTEN=''; T_STRAYS=''; }
-        epmd() { printf 'name %s at port 1\n' $T_NAMES; }
+        epmd() { [[ $T_MAPPER_STARTS == true ]] || return 1; printf 'name %s at port 1\n' $T_NAMES; }
         ss() { [[ -n $T_LISTEN ]] && printf '%s\n' "$T_LISTEN"; return 0; }
         systemctl() {
             case $1 in
@@ -86,6 +86,8 @@ dropin="$se_work/migrate/etc/systemd/system/epmd.socket.d/kazoo5-bind.conf"
 grep -Fxq 'ListenStream=' "$dropin" && grep -Fxq 'ListenStream=127.0.0.1:4369' "$dropin" && \
     grep -Fxq 'ListenStream=10.0.0.5:4369' "$dropin" || fail 'socket is not bound to exactly loopback and the Erlang interface'
 grep -Fxq 'FreeBind=true' "$dropin" || fail 'without FreeBind the socket fails after a reboot, before the address exists'
+grep -Fxq 'LimitNPROC=infinity' "$se_work/migrate/etc/systemd/system/epmd.service.d/kazoo5-limits.conf" || \
+    fail 'the packaged LimitNPROC=1 stops the third mapper of one numeric uid in a shared user namespace'
 for unit in couchdb rabbitmq-server kazoo-apps kazoo-ecallmgr kazoo-freeswitch; do
     grep -Fxq 'After=epmd.socket' "$se_work/migrate/etc/systemd/system/${unit}.service.d/kazoo5-epmd.conf" || \
         fail "${unit} may start before the port mapper socket and spawn its own epmd"
@@ -118,7 +120,11 @@ pass 'repeat, loopback, unit-less and non-Erlang installs are left undisturbed'
 status=0; out=$(scenario stuck configure_stable_epmd "$vm_owned" "T_NAMES_AFTER='couchdb kazoo_apps ecallmgr'") || status=$?
 [[ $status != 0 ]] && grep -Fq 'rabbit did not register with the new Erlang port mapper; run: systemctl restart rabbitmq-server' <<<"$out" || \
     { printf '%s\n' "$out"; fail 'an unregistered role was not reported with its remedy'; }
-pass 'a role missing after migration fails the install and names the restart'
+status=0; out=$(scenario dead configure_stable_epmd "$vm_owned" T_MAPPER_STARTS=false) || status=$?
+[[ $status != 0 ]] && grep -Fq 'epmd.service does not answer behind its socket; see: journalctl -u epmd.service' <<<"$out" || \
+    { printf '%s\n' "$out"; fail 'a mapper that cannot start was not reported'; }
+! grep -q 'restart kazoo-freeswitch' "$se_work/dead.actions" || fail 'FreeSWITCH was restarted against a mapper that does not answer'
+pass 'a role missing after migration, or a mapper that cannot start, fails the install with its remedy'
 
 # 5. Verification, including verify-only, rejects each unsafe state.
 scenario good verify_stable_epmd T_SOCKET=active T_MAIN=900 "T_LISTEN='$stable'" | grep -Fq 'PASS epmd.service owns port 4369' || fail 'stable host not verified'
