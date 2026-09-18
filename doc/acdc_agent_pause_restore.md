@@ -67,9 +67,38 @@ and on a graceful shutdown. After a hard kill of a *single* node, a pause made
 within the last archive period may not be there to restore. With two nodes the
 surviving peer supplies it.
 
+## Defect introduced by this fix, found at 100 agents
+
+The first 100-call capacity run on main (unit `kz5-main-capacity-100x180-0918`,
+September 18, 2026, runtime `1721369`) **failed at the login step**:
+`curl: (22) The requested URL returned error: 401` for an agent status read.
+
+`restorable_pause/2` asked `most_recent_statuses/2`. With a cold cache that reads
+`agent_stats/most_recent_by_timestamp` with `include_docs` and no key: every status
+document of the account's month. Every agent asks as its processes start, so 100
+agents logging in together started 100 such scans. CouchDB logged them at
+**48-55 s each**; they held all 100 datastore connections of the node
+(`hackney` `checkout_timeout`), the applications node logged almost nothing from
+21:09:34 to 21:09:49, and Crossbar answered `401 invalid_credentials` because its
+identity lookup timed out (`unable to verify identity claims: {500,datastore_fault}`).
+The same would happen at a shift start or after any node restart with that many
+agents. The 30-agent campaigns never showed it.
+
+Fixed in `fd8a86d`: `newest_db_status/2` reads exactly one row,
+`agent_stats/most_recent_by_agent` from `[AgentId, {}]` down to `[AgentId, 0]`,
+`limit=1`, merged with the peers' live statistics as before.
+`acdc_agent_fsm_tests:restorable_pause_lookup_test_/0` pins the view, the keys and
+the limit, and that a datastore error restores nothing.
+
+Native, private lab (`kazoo-apps-install-33`, `apps-peer-install-26`, both PASS):
+paused, peer stopped, `systemctl restart kazoo-apps` at 21:41:54 -> `paused` at
+21:42:14 and 30 s later; peer started -> `paused`/`paused`; resumed ->
+`ready`/`ready`. CouchDB in that window: three `most_recent_by_agent … limit=1`
+requests, no `most_recent_by_timestamp` request.
+
 ## Offline
 
-`make -C applications/acdc test.acdc_agent_fsm_tests` (38 tests): the restored
+`make -C applications/acdc test.acdc_agent_fsm_tests` (53 tests): the restored
 pause alone, after a newer update, with a paused peer with and without a stored
 value, and the remaining-time arithmetic including an expired break.
 `bash scripts/test-acdc-unit.sh` 76 and `bash scripts/test-acdc-agent-recovery.sh`
