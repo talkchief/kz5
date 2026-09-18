@@ -13,6 +13,8 @@ bash -n "$vb"
 grep -Fq 'systemd-run --quiet --scope --slice=machine.slice podman start "$1"' "$vb" || fail 'a guest must start in its own scope, outside the unit'
 [[ $(grep -c 'start_guest "\$guest"' "$vb") == 3 ]] || fail 'all three start groups must use start_guest'
 grep -Fq 'lab guests have no monitor that outlives this unit' "$vb" || fail 'the receipt must fail when a guest has no surviving monitor'
+grep -Fq "port mapper is not the socket-activated epmd.service" "$vb" && grep -Fq '/usr/local/libexec/kazoo5-stack-health' "$vb" && \
+    grep -Fq 'broker node name pin is missing or wrong' "$vb" || fail 'the receipt must judge the port mapper, functional health and the broker pin'
 grep -Fq 'ExecStartPost=/usr/bin/systemctl disable' "$vb" || fail 'the verifier must disarm itself after one boot'
 ! grep -Eq 'systemctl (restart|stop) (kazoo|rabbitmq|couchdb)|set-hostname|setenforce' "$vb" || fail 'the verifier must never reconfigure the main stack'
 printf 'PASS: guests start in their own scope, a missing monitor fails the receipt, one boot only, main stack untouched\nAll 1 post-boot verifier groups passed\n'

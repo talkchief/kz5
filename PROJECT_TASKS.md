@@ -7,6 +7,27 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **MAIN fully converged with the installer: promotion `kz5-promo-0918e` PASS, `--verify-only all` PASS (nine components, 67 checks), September18:**
+  Promotion on `30ad79c` PASS at the first attempt, 13:37:43 UTC
+  (`/root/kz5-main-promotion-20260918.lOmMBFO8/receipt.json`), wrapper's full health
+  `failures=0`; repeat installs now log `Packages already installed: ...` instead of opening
+  package transactions. Paused-agent fix proven on main, the only true SINGLE applications
+  node: fixture agent `7f65a9...` paused (FSM and stored status), `systemctl restart
+  kazoo-apps` 13:38:16 with zero channels -> `paused` after about 25s and 30s later, stored
+  status `paused`, 29 others `ready`; resumed cleanly.
+  `--verify-only all` then exposed two roles main had never received from the installer, both
+  converged through it: `monster-ui` (`nginx.service is missing the persistent maintenance
+  startup guard`; unit `kz5-main-monster-ui-0918`, log `/root/kz5-main-monster-ui-20260918.log`,
+  PASS incl. `api_url https://kz5-dev.talkchief.io/v2/` for all ten apps) and `kamailio`
+  (`The Kamailio configuration start guard is missing`; unit `kz5-main-kamailio-0918`, PASS,
+  `ExecStart=... kazoo5-kamailio-config-guard && exec ...`, `RestartPreventExitStatus=78`).
+  Final `--verify-only all`: exit0, `/root/kz5-main-verify-all-20260918.log`.
+  Post-boot verifier extended (port mapper is `epmd.service`, five roles registered, no
+  wildcard listener, functional stack health, broker pin, guest monitors) and run without a
+  reboot as baseline: `failures=0`, `/root/kz5-post-boot-20260918T134513Z.YvPUZV/receipt.txt`.
+  NEXT: whole-host reboot of main with the verifier armed; read the newest
+  `/root/kz5-post-boot-*/receipt.txt` and `systemctl --failed` afterwards.
+
 - **ACDC / readiness plan C3 — first native fault-matrix runs found TWO real agent defects, September18 (private lab, real calls):**
   Profile `test-channel-monitor-live.cjs --distributed --queue-fault --live`, one role lost
   while a queued call is bridged. Units and results, all retained:

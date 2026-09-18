@@ -70,6 +70,19 @@ done
 restarts=$(systemctl show -p NRestarts --value kazoo-kamailio)
 [[ $restarts -lt 5 ]] && ok "Kamailio restarts $restarts" || bad "Kamailio restarted $restarts times"
 
+# The Erlang port mapper must be the socket-activated service after a boot, not
+# a daemon inside whichever Kazoo unit started first, and every role must be in it.
+mapper=$(systemctl show -p MainPID --value epmd.service 2>/dev/null)
+[[ $(systemctl is-active epmd.socket) == active && ${mapper:-0} != 0 ]] && ok "port mapper is epmd.service (pid $mapper)" || bad 'port mapper is not the socket-activated epmd.service'
+for name in couchdb rabbit kazoo_apps ecallmgr freeswitch; do
+    until_ok 24 bash -c "epmd -names 2>/dev/null | grep -q '^name $name '" && ok "$name registered with the port mapper" || bad "$name is not registered with the port mapper"
+done
+listeners=$(ss -H -ltn 'sport = :4369' | awk '{print $4}' | sort | tr '\n' ' ')
+[[ $listeners != *'0.0.0.0:4369'* && $listeners != *'[::]:4369'* && $listeners == *'127.0.0.1:4369'* ]] && ok "port mapper listeners: $listeners" || bad "port mapper listeners: $listeners"
+# The functional check the timer runs; here once, with its FAIL lines in the receipt.
+if health=$(/usr/local/libexec/kazoo5-stack-health 2>&1); then ok 'stack health: failures=0'; else bad "stack health: $(grep '^FAIL' <<<"$health" | tr '\n' ';')"; fi
+[[ $(sed -n 's/^[[:space:]]*NODENAME=//p' /etc/rabbitmq/rabbitmq-env.conf 2>/dev/null | tail -n 1) == "rabbit@${node_host}" ]] && ok 'broker node name pin intact' || bad 'broker node name pin is missing or wrong'
+
 if [[ $(getenforce 2>/dev/null) == Disabled ]]; then
     note 'SKIP lab guests: SELinux is disabled and their stored mount labels cannot be mounted'
 else
