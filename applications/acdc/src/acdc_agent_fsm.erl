@@ -71,7 +71,7 @@
 
 -ifdef(TEST).
 -export([changed_endpoints/2, strategy_test_state/1, strategy_test_field/2, connect_failure_limit/2
-        ,peer_paused_updates/1
+        ,peer_paused_updates/2, restore_pause_updates/2
         ]).
 -endif.
 
@@ -133,6 +133,7 @@
                ,max_connect_failures :: timeout()
                ,connect_failures = 0 :: non_neg_integer()
                ,agent_state_updates = [] :: list()
+               ,restored_pause :: 'undefined' | timeout() % pause found in the stored status at start
                ,monitoring = 'false' :: boolean() % process is not handling call, but following state transitions
                ,member_connect_id :: kz_term:api_binary()
                ,call_check_ref :: kz_term:api_reference()
@@ -152,9 +153,15 @@ strategy_test_field(Name, State) ->
     Fields = lists:zip(record_info(fields, state), lists:seq(2, record_info(size, state))),
     element(props:get_value(Name, Fields), State).
 
--spec peer_paused_updates(list()) -> list().
-peer_paused_updates(Queue) ->
-    strategy_test_field('agent_state_updates', peer_paused(strategy_test_state([{'agent_state_updates', Queue}]))).
+-spec peer_paused_updates('undefined' | timeout(), list()) -> list().
+peer_paused_updates(Restored, Queue) ->
+    strategy_test_field('agent_state_updates'
+                       ,peer_paused(strategy_test_state([{'agent_state_updates', Queue}, {'restored_pause', Restored}]))).
+
+-spec restore_pause_updates('undefined' | timeout(), list()) -> list().
+restore_pause_updates(Restored, Queue) ->
+    strategy_test_field('agent_state_updates'
+                       ,restore_pause(strategy_test_state([{'agent_state_updates', Queue}, {'restored_pause', Restored}]))).
 -endif.
 
 %%%=============================================================================
@@ -609,21 +616,20 @@ invalid_failure_limit(Limit, Fallback) ->
     lager:warning("ignoring invalid ~s ~p; using ~p", [?MAX_CONNECT_FAILURES, Limit, Fallback]),
     Fallback.
 
-%% The pause is queued like any other update received before the agent is ready.
--spec restore_pause('undefined' | timeout()) -> 'ok'.
-restore_pause('undefined') -> 'ok';
-restore_pause(Left) ->
+%% The pause found in the stored status is applied only when no live peer says
+%% otherwise. It is queued oldest, so an update received since then still wins.
+-spec restore_pause(state()) -> state().
+restore_pause(#state{restored_pause='undefined'}=State) -> State;
+restore_pause(#state{restored_pause=Left, agent_state_updates=Queue}=State) ->
     lager:info("restoring the agent's pause after a restart, ~p s left", [Left]),
-    gen_statem:cast(self(), {'pause', Left}).
+    State#state{restored_pause='undefined', agent_state_updates=Queue ++ [{'pause', Left}]}.
 
-%% A peer is paused but nothing was restored here (its status had not reached
-%% the datastore): follow the peer rather than put the agent back in rotation.
+%% A peer is paused. Use the time left found at start, or follow the peer
+%% open-ended when the pause had not reached the datastore.
 -spec peer_paused(state()) -> state().
-peer_paused(#state{agent_state_updates=Queue}=State) ->
-    case lists:any(fun({'pause', _}) -> 'true'; (_) -> 'false' end, Queue) of
-        'true' -> State;
-        'false' -> State#state{agent_state_updates=[{'pause', 'infinity'} | Queue]}
-    end.
+peer_paused(#state{restored_pause='undefined'}=State) ->
+    restore_pause(State#state{restored_pause='infinity'});
+peer_paused(State) -> restore_pause(State).
 
 -spec wait_for_listener(pid(), pid(), kz_term:proplist(), boolean()) -> 'ok'.
 wait_for_listener(Supervisor, ServerRef, Props, IsThief) ->
@@ -667,11 +673,17 @@ wait('cast', {'listener', AgentListener, NextState, SyncRef}, #state{account_id=
                                                                    }=State) ->
     lager:debug("setting agent proc to ~p", [AgentListener]),
     acdc_agent_listener:fsm_started(AgentListener, self()),
-    restore_pause(acdc_agent_util:restorable_pause(AccountId, AgentId)),
-    {'next_state', NextState, State#state{agent_listener=AgentListener
-                                         ,sync_ref=SyncRef
-                                         ,agent_listener_id=acdc_util:proc_id()
-                                         }};
+    Restored = acdc_agent_util:restorable_pause(AccountId, AgentId),
+    State1 = State#state{agent_listener=AgentListener
+                        ,sync_ref=SyncRef
+                        ,agent_listener_id=acdc_util:proc_id()
+                        ,restored_pause=Restored
+                        },
+    case NextState of
+        %% No peers are asked: the stored status is all there is.
+        'ready' -> {'next_state', 'ready', restore_pause(State1)};
+        _ -> {'next_state', NextState, State1}
+    end;
 wait('cast', 'send_sync_event', State) ->
     gen_statem:cast(self(), 'send_sync_event'),
     {'next_state', 'wait', State};
@@ -719,11 +731,12 @@ sync('cast', {'sync_resp', JObj}, #state{sync_ref=Ref
             lager:debug("other agent is in sync too"),
             {'next_state', 'sync', State};
         'ready' ->
+            %% A live peer outranks the stored status, which may predate a resume.
             lager:debug("other agent is in ready state, joining"),
             _ = erlang:cancel_timer(Ref),
             acdc_agent_listener:presence_update(AgentListener, ?PRESENCE_GREEN),
             {Next, SwitchTo, State1} =
-                apply_state_updates(State#state{sync_ref='undefined'}),
+                apply_state_updates(State#state{sync_ref='undefined', restored_pause='undefined'}),
             {Next, SwitchTo, State1, 'hibernate'};
         'paused' ->
             %% Paused is a steady state, not a call in progress: delaying for
@@ -770,7 +783,8 @@ sync('info', {'timeout', Ref, ?SYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref
 
     %% This timeout has been consumed. Keeping its reference in ready/paused
     %% makes a completed sync look like pending work during maintenance.
-    apply_state_updates(State#state{sync_ref='undefined'});
+    %% Nobody answered, so the stored status is all there is.
+    apply_state_updates(restore_pause(State#state{sync_ref='undefined'}));
 sync('info', {'timeout', Ref, ?RESYNC_RESPONSE_MESSAGE}, #state{sync_ref=Ref}=State) when is_reference(Ref) ->
     lager:debug("resync timer expired, lets check with the others again"),
     SyncRef = start_sync_timer(),

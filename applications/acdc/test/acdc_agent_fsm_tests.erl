@@ -146,13 +146,17 @@ disabled_failure_limit_never_logs_an_agent_out_test() ->
         meck:unload(Modules)
     end.
 
-%% A restarted node's replica must follow a paused peer instead of waiting in
-%% sync forever, and must keep a pause it restored itself (with its time left).
-peer_paused_test_() ->
-    [?_assertEqual([{'pause', 'infinity'}], acdc_agent_fsm:peer_paused_updates([]))
-    ,?_assertEqual([{'pause', 'infinity'}, {'update_presence', <<"p">>, <<"s">>}]
-                  ,acdc_agent_fsm:peer_paused_updates([{'update_presence', <<"p">>, <<"s">>}]))
-    ,?_assertEqual([{'pause', 240}], acdc_agent_fsm:peer_paused_updates([{'pause', 240}]))
+%% The stored pause is applied only when no live peer says otherwise. Updates are
+%% applied oldest first from the reversed queue, so the restored pause goes last
+%% in the list and anything received since start still wins.
+restored_pause_test_() ->
+    Resume = {'resume'},
+    [?_assertEqual([], acdc_agent_fsm:restore_pause_updates('undefined', []))
+    ,?_assertEqual([{'pause', 240}], acdc_agent_fsm:restore_pause_updates(240, []))
+    ,?_assertEqual([Resume, {'pause', 'infinity'}], acdc_agent_fsm:restore_pause_updates('infinity', [Resume]))
+     %% A paused peer: the time left found at start, else follow the peer open-ended.
+    ,?_assertEqual([{'pause', 240}], acdc_agent_fsm:peer_paused_updates(240, []))
+    ,?_assertEqual([{'pause', 'infinity'}], acdc_agent_fsm:peer_paused_updates('undefined', []))
     ].
 
 %% Seconds of pause still owed after a restart.
