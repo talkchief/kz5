@@ -72,6 +72,7 @@
 -ifdef(TEST).
 -export([changed_endpoints/2, strategy_test_state/1, strategy_test_field/2, connect_failure_limit/2
         ,peer_paused_updates/2, restore_pause_updates/2
+        ,endpoint_usernames/1, live_call_ids/1
         ]).
 -endif.
 
@@ -615,6 +616,47 @@ connect_failure_limit(Limit, Fallback) -> invalid_failure_limit(Limit, Fallback)
 invalid_failure_limit(Limit, Fallback) ->
     lager:warning("ignoring invalid ~s ~p; using ~p", [?MAX_CONNECT_FAILURES, Limit, Fallback]),
     Fallback.
+
+%% Asked once, when the agent's endpoints are first loaded, in a bounded helper
+%% process: the media controllers know which calls the agent's devices are in.
+-spec find_live_calls(kz_term:ne_binary(), kz_json:objects()) -> pid().
+find_live_calls(AccountId, EPs) ->
+    Self = self(),
+    kz_process:spawn(fun() ->
+                             {'ok', _} = timer:kill_after(10 * ?MILLISECONDS_IN_SECOND),
+                             gen_statem:cast(Self, {'live_calls', query_live_calls(AccountId, endpoint_usernames(EPs))})
+                     end).
+
+-spec query_live_calls(kz_term:ne_binary(), kz_term:ne_binaries()) -> kz_term:ne_binaries().
+query_live_calls(_AccountId, []) -> [];
+query_live_calls(AccountId, Usernames) ->
+    Req = [{<<"Realm">>, kzd_accounts:fetch_realm(AccountId)}
+          ,{<<"Usernames">>, Usernames}
+          ,{<<"Account-ID">>, AccountId}
+          ,{<<"Active-Only">>, 'true'}
+           | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
+          ],
+    case kz_amqp_worker:call_collect(Req, fun kapi_call:publish_query_user_channels_req/1, {'ecallmgr', 'true'}) of
+        {'error', _R} -> [];
+        {_OK, Resps} -> live_call_ids(Resps)
+    end.
+
+-spec endpoint_usernames(kz_json:objects()) -> kz_term:ne_binaries().
+endpoint_usernames(EPs) ->
+    lists:usort([Username
+                 || EP <- EPs,
+                    Username <- [kz_json:get_ne_binary_value(<<"To-User">>, EP)],
+                    Username =/= 'undefined'
+                ]).
+
+-spec live_call_ids(kz_json:objects()) -> kz_term:ne_binaries().
+live_call_ids(Resps) ->
+    lists:usort([CallId
+                 || Resp <- Resps,
+                    Channel <- kz_json:get_list_value(<<"Channels">>, Resp, []),
+                    CallId <- [kz_json:get_ne_binary_value(<<"uuid">>, Channel)],
+                    CallId =/= 'undefined'
+                ]).
 
 %% The pause found in the stored status is applied only when no live peer says
 %% otherwise. It is queued oldest, so an update received since then still wins.
@@ -1805,9 +1847,22 @@ handle_event('load_endpoints', StateName, #state{agent_id=AgentId
 
     case get_endpoints([], Call, AgentId, 'undefined') of
         {'error', 'no_endpoints'} -> {'next_state', StateName, State};
-        {'ok', EPs} -> {'next_state', StateName, State#state{endpoints=EPs}};
+        {'ok', EPs} ->
+            _ = find_live_calls(AccountId, EPs),
+            {'next_state', StateName, State#state{endpoints=EPs}};
         {'error', E} -> {'stop', E, State}
     end;
+handle_event({'live_calls', [_|_]=CallIds}, StateName, State)
+  when StateName =:= 'sync'; StateName =:= 'ready' ->
+    %% The agent's processes started while the agent was already talking (an
+    %% applications node restart during a bridged call returned the agent as
+    %% ready, main, September 18, 2026). Those calls are handled like any call
+    %% that did not come from this queue process: busy until they end.
+    lager:notice("agent has ~b live call(s) at start; not available until they end", [length(CallIds)]),
+    Busy = lists:foldl(fun start_outbound_call_handling/2, State, CallIds),
+    {'next_state', 'outbound', Busy, 'hibernate'};
+handle_event({'live_calls', _CallIds}, StateName, State) ->
+    {'next_state', StateName, State};
 handle_event({'originate_uuid', ACallId, ACtrlQ}, StateName,
              #state{agent_listener=AgentListener}=State) ->
     %% A native bridge may precede the control-queue notification. Deliver it

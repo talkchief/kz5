@@ -170,3 +170,16 @@ pause_left_test_() ->
     ,?_assertEqual('undefined', acdc_agent_util:pause_left(300, 1000, 5000))
     ,?_assertEqual('undefined', acdc_agent_util:pause_left(300, 'undefined', 1100))
     ].
+
+%% An agent whose processes start while its devices are in calls is busy, not ready.
+live_calls_at_start_test_() ->
+    EP = fun(User) -> kz_json:from_list([{<<"To-User">>, User}, {<<"To-Realm">>, <<"r.example">>}]) end,
+    Resp = fun(Ids) -> kz_json:from_list([{<<"Channels">>, [kz_json:from_list([{<<"uuid">>, Id}]) || Id <- Ids]}]) end,
+    [?_assertEqual([<<"dev_a">>, <<"dev_b">>], acdc_agent_fsm:endpoint_usernames([EP(<<"dev_b">>), EP(<<"dev_a">>), EP(<<"dev_b">>)]))
+    ,?_assertEqual([], acdc_agent_fsm:endpoint_usernames([kz_json:new()]))
+     %% Two media controllers report the same leg; one reports nothing.
+    ,?_assertEqual([<<"leg-1">>, <<"leg-2">>]
+                  ,acdc_agent_fsm:live_call_ids([Resp([<<"leg-2">>, <<"leg-1">>]), Resp([<<"leg-1">>]), Resp([]), kz_json:new()]))
+    ,?_assertEqual([], acdc_agent_fsm:live_call_ids([]))
+    ].
+
