@@ -58,6 +58,7 @@
         ]).
 
 -include("acdc.hrl").
+-include_lib("kazoo_amqp/include/kz_amqp.hrl").
 
 -define(SERVER, ?MODULE).
 
@@ -80,6 +81,12 @@
 %% budget must stay below the interval so at most one probe is ever in flight.
 -define(ORDINARY_RECONCILE_MS, 30 * ?MILLISECONDS_IN_SECOND).
 -define(ORDINARY_RECONCILE_PROBE_MS, 10 * ?MILLISECONDS_IN_SECOND).
+
+%% A broker redelivery means another worker held this caller unacknowledged
+%% and lost its broker connection. Verify the caller before ringing anyone.
+-define(REDELIVERY_PROBE_MS, 5 * ?MILLISECONDS_IN_SECOND).
+-define(REDELIVERY_PROBE_ATTEMPTS, 3).
+-define(REDELIVERY_RETRY_MS, 2 * ?MILLISECONDS_IN_SECOND).
 
 -record(state, {listener_proc :: kz_term:api_pid()
                ,manager_proc :: pid()
@@ -320,15 +327,31 @@ ready('cast', {'check_if_next', CallJObj, Delivery}, #state{listener_proc=Listen
                                                            }=State) ->
     case acdc_queue_manager:should_ignore_member_call(MgrSrv, Call, CallJObj) of
         'false' ->
-            maybe_abort_connect_req(fun maybe_delay_connect_req/3
-                                   ,[CallJObj, Delivery]
-                                   ,State
-                                   );
+            case is_redelivery(Delivery) of
+                'true' -> redelivery_probe(CallJObj, Delivery, 1, State);
+                'false' ->
+                    maybe_abort_connect_req(fun maybe_delay_connect_req/3
+                                           ,[CallJObj, Delivery]
+                                           ,State
+                                           )
+            end;
         'true' ->
             lager:debug("queue mgr said to ignore this call: ~s", [kapps_call:call_id(Call)]),
             acdc_queue_listener:ignore_member_call(ListenerSrv, Call, Delivery),
             {'next_state', 'ready', clear_member_call(State)}
     end;
+ready('cast', {'redelivery_admission', Ref, Caller, Result}
+     ,#state{bridge_ctx=#{'redelivery' := #{'ref' := Ref}=Probe}=Context, member_call=Call}=State) ->
+    case Call =/= 'undefined' andalso kapps_call:call_id(Call) =:= Caller of
+        'true' -> redelivery_decision(Result, Probe, State#state{bridge_ctx=maps:remove('redelivery', Context)});
+        'false' -> {'keep_state', State}
+    end;
+ready('cast', {'redelivery_admission', _, _, _}, State) -> {'keep_state', State};
+ready('info', {'timeout', Ref, 'redelivery_retry'}
+     ,#state{bridge_ctx=#{'redelivery' := #{'retry_ref' := Ref, 'message' := CallJObj, 'delivery' := Delivery
+                                           ,'attempt' := Attempt}}=Context}=State) ->
+    redelivery_probe(CallJObj, Delivery, Attempt + 1, State#state{bridge_ctx=maps:remove('redelivery', Context)});
+ready('info', {'timeout', _, 'redelivery_retry'}, State) -> {'keep_state', State};
 ready('cast', {'member_call_cancel', _}, State) ->
     %% Let check_if_next handle this call being cancelled
     {'next_state', 'ready', State};
@@ -953,6 +976,15 @@ clear_member_call(#state{connection_timer_ref=ConnRef
     maybe_stop_timer(maps:get('bridge_probe_ref', Callback, 'undefined')),
     maybe_stop_timer(maps:get('timer_ref', State#state.bridge_ctx, 'undefined')),
     maybe_stop_timer(maps:get('reconcile_ref', State#state.bridge_ctx, 'undefined')),
+    _ = case maps:get('redelivery', State#state.bridge_ctx, 'undefined') of
+            #{'retry_ref' := RedeliveryRef}=Probe ->
+                maybe_stop_timer(RedeliveryRef),
+                case maps:get('pid', Probe, 'undefined') of
+                    ProbePid when is_pid(ProbePid) -> exit(ProbePid, 'kill');
+                    _ -> 'ok'
+                end;
+            _ -> 'ok'
+        end,
     ordinary_stop_bridge_probe(State#state.bridge_ctx),
     State#state{connect_resps=[]
                ,connect_wins=[]
@@ -2286,6 +2318,74 @@ ordinary_caller_terminated({'ok', #{'complete' := 'true', 'channels' := Channels
         _ -> 'false'
     end;
 ordinary_caller_terminated(_, _) -> 'false'.
+
+%% A redelivered member call was held unacknowledged by a worker that lost its
+%% broker connection, typically during a partition. That caller may already have
+%% hung up, or may be in a conversation the original worker still owns. Ringing
+%% agents for it produces "failed connects" for nobody, which can log agents out
+%% on the healthy node. Only a waiting caller, active and not bridged, proceeds.
+-spec is_redelivery(any()) -> boolean().
+is_redelivery(#'basic.deliver'{redelivered=Redelivered}) -> Redelivered =:= 'true';
+is_redelivery(_) -> 'false'.
+
+-spec redelivery_probe(kz_json:object(), gen_listener:basic_deliver(), pos_integer(), state()) ->
+          kz_types:handle_fsm_ret(state()).
+redelivery_probe(CallJObj, Delivery, Attempt, #state{bridge_ctx=Context, member_call=Call, account_id=AccountId}=State) ->
+    Parent = self(), Ref = make_ref(), Caller = kapps_call:call_id(Call),
+    lager:notice("member call ~s was redelivered by the broker; verifying the caller before ringing (attempt ~b)"
+                ,[Caller, Attempt]),
+    Pid = spawn(fun() ->
+        {'ok', Watchdog} = timer:kill_after(?REDELIVERY_PROBE_MS, self()),
+        Observed = try acdc_callback_recovery_io:observe_channels(AccountId, [Caller])
+                   catch _:_ -> {'error', 'unknown'} end,
+        _ = timer:cancel(Watchdog),
+        gen_statem:cast(Parent, {'redelivery_admission', Ref, Caller, Observed})
+    end),
+    %% The probe cannot report if its watchdog kills it: the retry timer bounds it.
+    RetryRef = erlang:start_timer(?REDELIVERY_PROBE_MS + ?REDELIVERY_RETRY_MS, self(), 'redelivery_retry'),
+    Probe = #{'ref' => Ref, 'pid' => Pid, 'retry_ref' => RetryRef, 'attempt' => Attempt
+             ,'message' => CallJObj, 'delivery' => Delivery},
+    {'next_state', 'ready', State#state{bridge_ctx=Context#{'redelivery' => Probe}}}.
+
+-spec redelivery_decision(any(), map(), state()) -> kz_types:handle_fsm_ret(state()).
+redelivery_decision(Result, #{'retry_ref' := RetryRef, 'attempt' := Attempt, 'message' := CallJObj, 'delivery' := Delivery}
+                   ,#state{member_call=Call, listener_proc=Listener}=State) ->
+    maybe_stop_timer(RetryRef),
+    Caller = kapps_call:call_id(Call),
+    case redelivered_caller(Result, Caller) of
+        'waiting' ->
+            lager:notice("redelivered caller ~s is active and unbridged; continuing to agents", [Caller]),
+            maybe_abort_connect_req(fun maybe_delay_connect_req/3, [CallJObj, Delivery], State);
+        'terminated' ->
+            lager:notice("redelivered caller ~s has terminated; dropping the stale delivery without ringing", [Caller]),
+            acdc_queue_listener:ignore_member_call(Listener, Call, Delivery),
+            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
+        'bridged' ->
+            lager:notice("redelivered caller ~s is bridged and owned elsewhere; releasing the delivery without ringing", [Caller]),
+            acdc_queue_listener:ignore_member_call(Listener, Call, Delivery),
+            {'next_state', 'ready', clear_member_call(State), 'hibernate'};
+        'unknown' when Attempt < ?REDELIVERY_PROBE_ATTEMPTS ->
+            Ref = erlang:start_timer(?REDELIVERY_RETRY_MS, self(), 'redelivery_retry'),
+            Probe = #{'ref' => make_ref(), 'retry_ref' => Ref, 'attempt' => Attempt
+                     ,'message' => CallJObj, 'delivery' => Delivery},
+            {'next_state', 'ready', State#state{bridge_ctx=(State#state.bridge_ctx)#{'redelivery' => Probe}}};
+        'unknown' ->
+            %% Liveness could not be established either way; keep the pre-existing
+            %% behavior rather than stranding a possibly waiting caller.
+            lager:warning("redelivered caller ~s could not be verified after ~b attempts; ringing as before"
+                         ,[Caller, Attempt]),
+            maybe_abort_connect_req(fun maybe_delay_connect_req/3, [CallJObj, Delivery], State)
+    end.
+
+-spec redelivered_caller(any(), kz_term:ne_binary()) -> 'waiting' | 'terminated' | 'bridged' | 'unknown'.
+redelivered_caller({'ok', #{'complete' := 'true', 'channels' := Channels}}, Caller) when is_list(Channels) ->
+    case [O || #{'call_id' := Id}=O <- Channels, Id =:= Caller] of
+        [#{'state' := 'terminated', 'responders' := [_|_]}] -> 'terminated';
+        [#{'state' := 'active', 'other_leg_call_id' := Leg}] when is_binary(Leg), byte_size(Leg) > 0 -> 'bridged';
+        [#{'state' := 'active'}] -> 'waiting';
+        _ -> 'unknown'
+    end;
+redelivered_caller(_, _) -> 'unknown'.
 
 ordinary_stop_bridge_probe(Context) ->
     maybe_stop_timer(maps:get('probe_retry_ref', Context, 'undefined')),

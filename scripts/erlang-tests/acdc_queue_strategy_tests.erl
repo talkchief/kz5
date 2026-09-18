@@ -2,6 +2,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("acdc.hrl").
 -include("acdc_queue_manager.hrl").
+-include_lib("kazoo_amqp/include/kz_amqp.hrl").
 
 j(P) -> kz_json:from_list(P).
 r(Id, P, Idle) -> j([{<<"Agent-ID">>, Id}, {<<"Process-ID">>, P}, {<<"Idle-Time">>, Idle}]).
@@ -489,6 +490,93 @@ ordinary_unresolved_inconclusive_evidence_retains_caller_and_timer_test() -> wit
     probe_stopped(Next),
     ?assertEqual(false,erlang:read_timer(maps:get(reconcile_ref,qfield(bridge_ctx,Next)))),
     ?assert(meck:called(acdc_stats,call_abandoned,[<<"account">>,<<"queue">>,<<"caller">>,<<"member_hangup">>]))
+end).
+
+%% Broker redelivery: another worker held this caller unacknowledged and lost
+%% its broker connection. Natively (kz5-stage-queue-partition-8) the healthy
+%% node rang the agent three times for a caller who had already hung up and
+%% logged the agent out. Verify the caller before ringing anyone.
+redelivery_state() ->
+    qstate([{member_call,kapps_call:set_call_id(<<"caller">>,kapps_call:new())},{account_id,<<"account">>},{queue_id,<<"queue">>}
+           ,{listener_proc,self()},{manager_proc,self()},{connection_timeout,3600000}]).
+redelivery_message() -> j([{<<"Call">>,j([{<<"Call-ID">>,<<"caller">>}])},{<<"Account-ID">>,<<"account">>},{<<"Queue-ID">>,<<"queue">>}]).
+with_redelivery_mocks(Fun) -> with_mocks(fun() ->
+    meck:new(acdc_queue_manager,[non_strict,no_link]), meck:new(kapps_config,[non_strict,no_link]),
+    try
+        meck:expect(kapps_config,get_integer,fun(_,_,Default) -> Default end),
+        meck:expect(acdc_queue_manager,should_ignore_member_call,fun(_,_,_) -> false end),
+        meck:expect(acdc_queue_manager,has_agents,fun(_) -> true end),
+        meck:expect(acdc_queue_manager,up_next,fun(_,_) -> true end),
+        meck:expect(acdc_queue_listener,ignore_member_call,fun(_,_,_) -> ok end),
+        meck:expect(acdc_queue_listener,member_connect_req,fun(_) -> ok end),
+        meck:expect(webseq,note,fun(_,_,_,_) -> ok end),
+        Fun()
+    after meck:unload([acdc_queue_manager,kapps_config]) end
+end).
+admission_message(State) ->
+    Ref=maps:get(ref,maps:get(redelivery,qfield(bridge_ctx,State))),
+    receive {'$gen_cast',{redelivery_admission,Ref,_,_}=Msg}->Msg after 2000->?assert(false) end.
+caller_observation(Fields) ->
+    {ok,#{complete=>true,bridge=>#{state=>none},reasons=>[],
+          channels=>[maps:merge(#{call_id=><<"caller">>,responders=>[<<"ecallmgr@a">>,<<"ecallmgr@b">>],responder_count=>2},Fields)]}}.
+
+ordinary_redelivery_of_a_terminated_caller_is_dropped_without_ringing_test() -> with_redelivery_mocks(fun() ->
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(<<"account">>,[<<"caller">>]) -> caller_observation(#{state=>terminated}) end),
+    Delivery=#'basic.deliver'{redelivered=true},
+    {next_state,ready,Probing}=acdc_queue_fsm:ready(cast,{check_if_next,redelivery_message(),Delivery},redelivery_state()),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,member_connect_req,'_')),
+    {next_state,ready,Done,hibernate}=acdc_queue_fsm:ready(cast,admission_message(Probing),Probing),
+    ?assertEqual(undefined,qfield(member_call,Done)),
+    ?assertEqual(1,meck:num_calls(acdc_queue_listener,ignore_member_call,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,member_connect_req,'_')),
+    ?assertEqual(false,erlang:read_timer(maps:get(retry_ref,maps:get(redelivery,qfield(bridge_ctx,Probing)))))
+end).
+
+ordinary_redelivery_of_a_bridged_caller_is_left_to_its_owner_test() -> with_redelivery_mocks(fun() ->
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) -> caller_observation(#{state=>active,answered=>true,other_leg_call_id=><<"a-leg">>,switch_node=><<"fs">>}) end),
+    {next_state,ready,Probing}=acdc_queue_fsm:ready(cast,{check_if_next,redelivery_message(),#'basic.deliver'{redelivered=true}},redelivery_state()),
+    {next_state,ready,_,hibernate}=acdc_queue_fsm:ready(cast,admission_message(Probing),Probing),
+    ?assertEqual(1,meck:num_calls(acdc_queue_listener,ignore_member_call,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,member_connect_req,'_'))
+end).
+
+ordinary_redelivery_of_a_waiting_caller_and_normal_delivery_still_ring_test() -> with_redelivery_mocks(fun() ->
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) -> caller_observation(#{state=>active,answered=>true,switch_node=><<"fs">>}) end),
+    {next_state,ready,Probing}=acdc_queue_fsm:ready(cast,{check_if_next,redelivery_message(),#'basic.deliver'{redelivered=true}},redelivery_state()),
+    {next_state,connect_req,Connecting}=acdc_queue_fsm:ready(cast,admission_message(Probing),Probing),
+    ?assertEqual(1,meck:num_calls(acdc_queue_listener,member_connect_req,'_')),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,ignore_member_call,'_')),
+    ?assertNot(maps:is_key(redelivery,qfield(bridge_ctx,Connecting))),
+    [erlang:cancel_timer(qfield(F,Connecting)) || F <- [collect_ref,connection_timer_ref]],
+    %% A first delivery is never probed: no latency is added to normal calls.
+    meck:reset(acdc_callback_recovery_io),
+    {next_state,connect_req,C2}=acdc_queue_fsm:ready(cast,{check_if_next,redelivery_message(),#'basic.deliver'{redelivered=false}},redelivery_state()),
+    ?assertEqual(0,meck:num_calls(acdc_callback_recovery_io,observe_channels,'_')),
+    [erlang:cancel_timer(qfield(F,C2)) || F <- [collect_ref,connection_timer_ref]]
+end).
+
+ordinary_redelivery_unknown_retries_then_falls_back_to_ringing_test() -> with_redelivery_mocks(fun() ->
+    Parent=self(),
+    meck:expect(acdc_callback_recovery_io,observe_channels,fun(_,_) -> Parent!probe_started, {error,unknown} end),
+    {next_state,ready,P1}=acdc_queue_fsm:ready(cast,{check_if_next,redelivery_message(),#'basic.deliver'{redelivered=true}},redelivery_state()),
+    receive probe_started->ok after 1000->?assert(false) end,
+    {next_state,ready,R1}=acdc_queue_fsm:ready(cast,admission_message(P1),P1),
+    Retry1=maps:get(retry_ref,maps:get(redelivery,qfield(bridge_ctx,R1))),
+    ?assertEqual(2,maps:get(attempt,maps:get(redelivery,qfield(bridge_ctx,R1)))+1),
+    ?assertEqual(0,meck:num_calls(acdc_queue_listener,member_connect_req,'_')),
+    {next_state,ready,P2}=acdc_queue_fsm:ready(info,{timeout,Retry1,redelivery_retry},R1),
+    receive probe_started->ok after 1000->?assert(false) end,
+    {next_state,ready,R2}=acdc_queue_fsm:ready(cast,admission_message(P2),P2),
+    Retry2=maps:get(retry_ref,maps:get(redelivery,qfield(bridge_ctx,R2))),
+    {next_state,ready,P3}=acdc_queue_fsm:ready(info,{timeout,Retry2,redelivery_retry},R2),
+    receive probe_started->ok after 1000->?assert(false) end,
+    ?assertEqual(3,maps:get(attempt,maps:get(redelivery,qfield(bridge_ctx,P3)))),
+    {next_state,connect_req,C}=acdc_queue_fsm:ready(cast,admission_message(P3),P3),
+    ?assertEqual(1,meck:num_calls(acdc_queue_listener,member_connect_req,'_')),
+    %% Stale and foreign admissions are ignored while probing.
+    ?assertEqual({keep_state,P3},acdc_queue_fsm:ready(cast,{redelivery_admission,make_ref(),<<"caller">>,caller_observation(#{state=>terminated})},P3)),
+    ?assertEqual({keep_state,P3},acdc_queue_fsm:ready(info,{timeout,make_ref(),redelivery_retry},P3)),
+    [erlang:cancel_timer(qfield(F,C)) || F <- [collect_ref,connection_timer_ref]]
 end).
 
 reciprocal_snapshot(Leg) ->
