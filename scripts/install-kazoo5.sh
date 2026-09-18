@@ -629,64 +629,135 @@ resolve_kazoo_cookie() {
     return 0
 }
 
-configure_local_epmd_socket() {
-    local listener unit node names
-    coordinated_local_cookie_install || return 0
-    # CouchDB and RabbitMQ also register with this host-wide mapper. A partial
-    # install must not strand those unselected services during migration.
-    [[ ${SELECTED[couchdb]:-} && ${SELECTED[rabbitmq]:-} ]] || return 0
-    log "Binding EPMD to the all-local Erlang interface ${KAZOO_ERLANG_DIST_IP}:4369"
+# The Erlang port mapper must outlive every node that registers with it. Left
+# alone, the first Erlang VM to start spawns "epmd -daemon" inside its own
+# service cgroup, so restarting that one service kills the mapper for the whole
+# host. Erlang nodes register again by themselves; FreeSWITCH's mod_kazoo C node
+# never does, so the next eCallMgr start cannot find it (main development
+# promotion, September 18, 2026). The packaged socket-activated epmd.service
+# owns the listener instead, bound to loopback and the Erlang interface only.
+epmd_role_units() {
+    printf '%s\n' couchdb rabbitmq-server kazoo-apps kazoo-ecallmgr kazoo-freeswitch
+}
+
+epmd_role_name() {
+    case $1 in
+        couchdb) printf couchdb ;;
+        rabbitmq-server) printf rabbit ;;
+        kazoo-apps) printf kazoo_apps ;;
+        kazoo-ecallmgr) printf ecallmgr ;;
+        kazoo-freeswitch) printf freeswitch ;;
+    esac
+}
+
+epmd_selected_roles() {
+    [[ ${SELECTED[couchdb]:-} || ${SELECTED[rabbitmq]:-} || ${SELECTED[kazoo-apps]:-} || \
+       ${SELECTED[ecallmgr]:-} || ${SELECTED[freeswitch]:-} ]]
+}
+
+freeswitch_channel_count() {
+    /usr/local/freeswitch/bin/fs_cli -x 'show channels count' 2>/dev/null | awk '/total/{print $1}'
+}
+
+epmd_listener_is_stable() {
+    local main listener
+    [[ $(systemctl is-active epmd.socket 2>/dev/null) == active ]] || return 1
+    listener=$(ss -H -ltnp 'sport = :4369' 2>/dev/null || true)
+    [[ $listener != *'0.0.0.0:4369'* && $listener != *'[::]:4369'* && $listener != *'*:4369'* ]] || return 1
+    grep -Fq '127.0.0.1:4369' <<<"$listener" || return 1
+    # Before the first client the socket is held by systemd itself.
+    main=$(systemctl show -p MainPID --value epmd.service 2>/dev/null)
+    [[ ${main:-0} == 0 ]] || grep -Fq "pid=${main}," <<<"$listener"
+}
+
+# epmd_wait_registered unit seconds
+epmd_wait_registered() {
+    local name deadline
+    name=$(epmd_role_name "$1")
+    deadline=$((SECONDS + $2))
+    while ((SECONDS < deadline)); do
+        if epmd -names 2>/dev/null | grep -q "^name ${name} "; then return 0; fi
+        sleep 2
+    done
+    return 1
+}
+
+configure_stable_epmd() {
+    local unit stray channels
+    epmd_selected_roles || return 0
+    if [[ ! -e /usr/lib/systemd/system/epmd.socket ]]; then
+        log 'The packaged epmd.socket is absent; this host keeps the port mapper of its single Erlang role'
+        return 0
+    fi
+    log "Giving the Erlang port mapper its own service on 127.0.0.1 and ${KAZOO_ERLANG_DIST_IP}"
+    # FreeBind: sockets.target precedes network configuration after a reboot.
     write_file 0644 /etc/systemd/system/epmd.socket.d/kazoo5-bind.conf <<EOF
 [Socket]
 ListenStream=
-ListenStream=${KAZOO_ERLANG_DIST_IP}:4369
+ListenStream=127.0.0.1:4369
+$(is_loopback_address "$KAZOO_ERLANG_DIST_IP" || printf 'ListenStream=%s:4369\n' "$KAZOO_ERLANG_DIST_IP")
+FreeBind=true
 EOF
+    while read -r unit; do
+        write_file 0644 "/etc/systemd/system/${unit}.service.d/kazoo5-epmd.conf" <<'EOF'
+[Unit]
+Wants=epmd.socket
+After=epmd.socket
+EOF
+    done < <(epmd_role_units)
     run systemctl daemon-reload
-    if [[ $DRY_RUN == true || ! -e /usr/lib/systemd/system/epmd.socket ]]; then
-        return 0
+    [[ $DRY_RUN == true ]] && return 0
+    systemctl enable epmd.socket >/dev/null
+    epmd_listener_is_stable && return 0
+
+    # Migration. Refuse before changing anything if it would cut a call.
+    if systemctl is-active --quiet kazoo-freeswitch.service; then
+        channels=$(freeswitch_channel_count)
+        [[ ${channels:-} == 0 ]] || \
+            die "Moving the Erlang port mapper restarts FreeSWITCH once, and it has ${channels:-an unknown number of} channels; rerun when it is idle"
     fi
-    systemctl enable epmd.socket
-    listener=$(ss -H -ltn 'sport = :4369' 2>/dev/null || true)
-    if [[ $listener == *"${KAZOO_ERLANG_DIST_IP}:4369"* && \
-          $listener != *'0.0.0.0:4369'* && $listener != *'[::]:4369'* ]]; then
-        return 0
-    fi
-    names=$(epmd -names 2>/dev/null || true)
-    while read -r node; do
-        case $node in couchdb|rabbit|kazoo_apps|ecallmgr|freeswitch|'') ;;
-            *) die "Cannot migrate EPMD while unrelated Erlang node ${node} is registered" ;;
-        esac
-    done < <(awk '$1 == "name" {print $2}' <<<"$names")
-    # CouchDB may have started its own detached epmd before systemd's socket.
-    # Gracefully stop only selected roles, then use epmd's guarded shutdown
-    # (which refuses while any node remains registered) before taking ownership.
-    for unit in kazoo-ecallmgr kazoo-freeswitch kazoo-apps rabbitmq-server couchdb; do
-        if systemctl is-active --quiet "$unit.service"; then
-            systemctl stop "$unit.service"
-        fi
+    systemctl stop epmd.service epmd.socket 2>/dev/null || true
+    for stray in $(ss -H -ltnp 'sport = :4369' 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u); do
+        log "Stopping the port mapper owned by $(cut -d: -f3 "/proc/${stray}/cgroup" 2>/dev/null || printf 'pid %s' "$stray")"
+        kill "$stray" 2>/dev/null || true
     done
-    systemctl stop epmd.service epmd.socket
-    if ss -H -ltn 'sport = :4369' | grep -q .; then
-        epmd -kill >/dev/null || die 'EPMD is still in use; cannot safely migrate its listener'
-    fi
-    systemctl reset-failed epmd.socket epmd.service
+    for _ in {1..20}; do
+        ss -H -ltn 'sport = :4369' 2>/dev/null | grep -q . || break
+        sleep 1
+    done
+    ! ss -H -ltn 'sport = :4369' 2>/dev/null | grep -q . || die 'The previous Erlang port mapper did not release port 4369'
+    systemctl reset-failed epmd.socket epmd.service 2>/dev/null || true
     systemctl start epmd.socket
+    # mod_kazoo registers only when it loads.
+    if systemctl is-active --quiet kazoo-freeswitch.service; then
+        log 'Restarting idle FreeSWITCH so mod_kazoo registers with the new port mapper'
+        systemctl restart kazoo-freeswitch.service
+    fi
+    while read -r unit; do
+        systemctl is-active --quiet "${unit}.service" || continue
+        epmd_wait_registered "$unit" 120 || \
+            die "$(epmd_role_name "$unit") did not register with the new Erlang port mapper; run: systemctl restart ${unit}"
+    done < <(epmd_role_units)
+    log 'PASS every running Erlang role registered with the new port mapper'
 }
 
-verify_local_epmd_socket() {
-    local listener
-    coordinated_local_cookie_install || return 0
-    [[ ${SELECTED[couchdb]:-} && ${SELECTED[rabbitmq]:-} ]] || return 0
+verify_stable_epmd() {
+    local unit
+    epmd_selected_roles || return 0
+    [[ -e /usr/lib/systemd/system/epmd.socket ]] || return 0
     if [[ $DRY_RUN == true ]]; then
-        log "Would verify EPMD on ${KAZOO_ERLANG_DIST_IP}:4369 without a wildcard listener"
+        log 'Would verify that epmd.service owns port 4369 without a wildcard listener and lists every running Erlang role'
         return 0
     fi
-    listener=$(ss -H -ltn 'sport = :4369' 2>/dev/null || true)
-    grep -F "${KAZOO_ERLANG_DIST_IP}:4369" <<<"$listener" >/dev/null ||
-        die "EPMD is not bound to ${KAZOO_ERLANG_DIST_IP}:4369"
-    [[ $listener != *'0.0.0.0:4369'* && $listener != *'[::]:4369'* ]] ||
-        die 'EPMD still has a wildcard listener'
-    log "PASS EPMD bound to ${KAZOO_ERLANG_DIST_IP}:4369"
+    systemctl is-enabled --quiet epmd.socket || die 'epmd.socket is not enabled; a reboot would hand the port mapper to the first Erlang service again'
+    epmd_listener_is_stable || \
+        die 'The Erlang port mapper is not owned by epmd.service on loopback without a wildcard listener; restarting a Kazoo service would drop FreeSWITCH'
+    while read -r unit; do
+        systemctl is-active --quiet "${unit}.service" || continue
+        epmd_wait_registered "$unit" 30 || \
+            die "$(epmd_role_name "$unit") is running but not registered with the Erlang port mapper; run: systemctl restart ${unit}"
+    done < <(epmd_role_units)
+    log 'PASS epmd.service owns port 4369, no wildcard listener, every running Erlang role is registered'
 }
 
 verify_cookie_copy() {
@@ -2789,6 +2860,50 @@ RemainAfterExit=yes
 TimeoutStartSec=15
 NoNewPrivileges=yes
 EOF
+}
+
+# systemd "active" only means a process exists. The health unit asks every
+# installed role to do its job, after boot and every two minutes; a failure is an
+# err-priority journal line and a failed unit. See scripts/kazoo5-stack-health.sh.
+install_stack_health() {
+    run install -D -o root -g root -m 0755 "$SCRIPT_DIR/kazoo5-stack-health.sh" /usr/local/libexec/kazoo5-stack-health
+    write_file 0644 /etc/systemd/system/kazoo5-stack-health.service <<'EOF'
+[Unit]
+Description=Kazoo 5 functional health of the roles installed on this host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HOME=/root
+ExecStart=/usr/local/libexec/kazoo5-stack-health
+TimeoutStartSec=300
+EOF
+    write_file 0644 /etc/systemd/system/kazoo5-stack-health.timer <<'EOF'
+[Unit]
+Description=Run the Kazoo 5 functional health check after boot and periodically
+
+[Timer]
+OnBootSec=4min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target
+EOF
+    run systemctl daemon-reload
+    run systemctl enable --now kazoo5-stack-health.timer
+}
+
+verify_stack_health() {
+    if [[ $DRY_RUN == true ]]; then log 'Would verify the Kazoo stack health check'; return 0; fi
+    cmp -s "$SCRIPT_DIR/kazoo5-stack-health.sh" /usr/local/libexec/kazoo5-stack-health || \
+        die 'The Kazoo stack health check is missing or differs from the reviewed source'
+    [[ $(systemctl is-enabled kazoo5-stack-health.timer 2>/dev/null) == enabled && \
+       $(systemctl is-active kazoo5-stack-health.timer 2>/dev/null) == active ]] || \
+        die 'kazoo5-stack-health.timer is not enabled and active'
+    /usr/local/libexec/kazoo5-stack-health >/dev/null || die 'The Kazoo stack health check reports a failing role'
+    log 'PASS Kazoo stack health check installed, scheduled and currently healthy'
 }
 
 # The start guard and the identity it checks. See scripts/kazoo5-identity-guard.sh.
@@ -6812,7 +6927,7 @@ verify_push_bridge() {
 }
 
 verify_requested() {
-    verify_local_epmd_socket
+    verify_stable_epmd
     if [[ ${SELECTED[couchdb]:-} ]]; then verify_couchdb; fi
     if [[ ${SELECTED[rabbitmq]:-} ]]; then verify_rabbitmq; fi
     if [[ ${SELECTED[haproxy]:-} ]]; then verify_haproxy; fi
@@ -6826,7 +6941,7 @@ verify_requested() {
 
 install_requested() {
     install_base_dependencies
-    configure_local_epmd_socket
+    configure_stable_epmd
     if [[ ${SELECTED[couchdb]:-} ]]; then install_couchdb; fi
     if [[ ${SELECTED[rabbitmq]:-} ]]; then install_rabbitmq; fi
     if [[ ${SELECTED[haproxy]:-} ]]; then install_haproxy; fi
@@ -6875,10 +6990,13 @@ main() {
     log "Resolved components: ${!SELECTED[*]}"
     if [[ $VERIFY_ONLY == true ]]; then
         verify_requested
+        verify_stack_health
     else
         # Keep one metadata pause across nested package/media/build steps.
         # Repeated timer stop/start can exhaust systemd's start-rate limit.
         with_dnf_guard install_and_persist_requested
+        install_stack_health
+        verify_stack_health
     fi
     if [[ $DRY_RUN == true ]]; then
         log 'Dry run complete; no components were installed or live health checks performed'
