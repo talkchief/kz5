@@ -89,7 +89,18 @@ pin() {   # env-file node-host [dry]
     )
 }
 env_file="$ni_work/rabbitmq-env.conf"
-pin "$env_file" broker1.example.net | grep -Fq 'Pinned the RabbitMQ node name rabbit@broker1' || fail 'first pin'
+# The installer runs under errexit and pipefail. A function called inside a
+# pipeline or a condition runs with errexit suspended, which hid a fresh-host
+# failure (no environment file yet: sed exit 2). Run it as the installer does.
+# Even "( ... ) || status=$?" suspends errexit inside the subshell, so the status
+# is read from a plain command with errexit off in this shell only.
+fresh_out="$ni_work/fresh.out"
+set +e
+( set -Eeuo pipefail; pin "$env_file" broker1.example.net > "$fresh_out" 2>&1 )
+status=$?
+set -e
+[[ $status == 0 ]] || { cat "$fresh_out"; fail "first pin on a host without an environment file exited $status under errexit"; }
+grep -Fq 'Pinned the RabbitMQ node name rabbit@broker1' "$fresh_out" || fail 'first pin'
 grep -Fxq 'NODENAME=rabbit@broker1' "$env_file" || fail 'pin not written as the short node name'
 before=$(sha256sum < "$env_file"); pin "$env_file" broker1.example.net >/dev/null
 [[ $(sha256sum < "$env_file") == "$before" ]] || fail 'repeat pin rewrote the file'

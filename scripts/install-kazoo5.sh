@@ -1891,7 +1891,13 @@ pin_rabbitmq_node_name() {
     local wanted existing env_file=${KAZOO_RABBITMQ_ENV_FILE:-/etc/rabbitmq/rabbitmq-env.conf}
     wanted=$(rabbitmq_node_name)
     if [[ $DRY_RUN == true ]]; then log "Would pin the RabbitMQ node name ${wanted}"; return 0; fi
-    existing=$(sed -n 's/^[[:space:]]*NODENAME=//p' "$env_file" 2>/dev/null | tail -n 1)
+    # A fresh broker host has no environment file yet: sed would exit 2 and,
+    # under errexit and pipefail, end the installation (private broker guest,
+    # install 5, September 18, 2026).
+    existing=
+    if [[ -f $env_file ]]; then
+        existing=$(sed -n 's/^[[:space:]]*NODENAME=//p' "$env_file" | tail -n 1)
+    fi
     if [[ -n $existing && $existing != "$wanted" ]]; then
         die "RabbitMQ is pinned to ${existing} in ${env_file}, not ${wanted}; refusing to orphan its database"
     fi
