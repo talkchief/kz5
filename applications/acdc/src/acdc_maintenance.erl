@@ -497,9 +497,11 @@ agent_summary(AcctId, AgentId) ->
 
 -spec show_agents_summary([{pid(), acdc_agent_listener:config()}]) -> 'ok'.
 show_agents_summary([]) -> 'ok';
-show_agents_summary([{P, {AcctId, QueueId, _AMQPQueue}}|Qs]) ->
-    lager:info("  Supervisor: ~p Acct: ~s Agent: ~s", [P, AcctId, QueueId]),
-    show_queues_summary(Qs).
+show_agents_summary([{P, {AcctId, AgentId, _AMQPQueue}}|As]) ->
+    %% Printed, and continued with the agents: this used to log instead and hand
+    %% the remaining agents to the queue printer, which crashed on the second one.
+    ?PRINT("  Supervisor: ~p Acct: ~s Agent: ~s", [P, AcctId, AgentId]),
+    show_agents_summary(As).
 
 -spec agents_detail() -> 'ok'.
 agents_detail() ->
@@ -552,11 +554,15 @@ agent_pause(AcctId, AgentId, Timeout) ->
     Update = props:filter_undefined(
                [{<<"Account-ID">>, AcctId}
                ,{<<"Agent-ID">>, AgentId}
-               ,{<<"Time-Limit">>, Timeout}
+                %% The console passes text; as text the request failed validation and
+                %% a timed pause silently did nothing.
+               ,{<<"Time-Limit">>, kz_term:to_integer(Timeout)}
                 | kz_api:default_headers(?APP_NAME, ?APP_VERSION)
                ]),
-    _ = kz_amqp_worker:cast(Update, fun kapi_acdc_agent:publish_pause/1),
-    lager:info("published pause for agent").
+    case kz_amqp_worker:cast(Update, fun kapi_acdc_agent:publish_pause/1) of
+        'ok' -> ?PRINT("published pause for agent ~s", [AgentId]);
+        {'error', _Reason} -> ?PRINT("pause for agent ~s was NOT published: ~p", [AgentId, _Reason])
+    end.
 
 -spec agent_resume(kz_term:ne_binary(), kz_term:ne_binary()) -> 'ok'.
 agent_resume(AcctId, AgentId) ->
