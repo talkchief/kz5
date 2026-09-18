@@ -93,19 +93,19 @@ Then C1–C2, which are already in flight. Then C3 and D1 together, since they
 share the fault-injection harness. B2–B3 and C5 need the longest wall-clock time
 and run alongside.
 
-## Status on September 18, 2026 (evidence in `PROJECT_TASKS.md`)
+## Status on September 18, 2026, end of day (evidence in `PROJECT_TASKS.md`)
 
 | Gate | Status |
 |---|---|
 | A1-A4 host and service resilience | Done natively: node identity and Kamailio start guards, broker name pin (refuses a name without a host), socket-activated port mapper, functional health timer, third-party telemetry opt-in. |
 | A7 reboot | **PASS**: whole-host reboot of main, 30 checks, no failed unit, every lab guest monitor alive. Legacy lab primaries still need `--repair-legacy-pivot` (lab artifact). |
-| B deployment script | Single entry point with interactive menu; nine side paths removed; fresh-broker and low-memory defects fixed; `--verify-only all` PASS on main (9 components); all offline suites triaged (no product defect). Open: B1 patch immutability manifest, fresh/upgrade install matrix on new hosts. |
+| B deployment script | Single entry point with interactive menu; nine side paths removed; fresh-broker and low-memory defects fixed; `--verify-only all` PASS on main (9 components); all offline suites triaged (no product defect); **B1 done** (133 patches pinned). Open: fresh and upgrade install matrix on brand-new hosts. |
 | C1-C2 | Done earlier and promoted. |
-| C3 fault matrix | **COMPLETE natively**: node kill mid-ring and mid-call, broker restart and outage under 30 calls, eCallMgr kill/loss, CouchDB outage, FreeSWITCH restart. Two agent defects found and fixed. The 486 window after a media restart is mitigated (19 s -> 7 s typical), see `doc/media_server_restart_window.md`. |
-| C4 ring strategies | **PASS natively** on main. |
-| C5 load and soak | See the register: 30 concurrent answered calls held 30 minutes on main (the fixture's ceiling). The owner's production target is still needed for a final number. |
-| D1 callback recovery | **PASS natively**: queue supervisor loss, worker loss during ringing, applications node restart during `retry_wait`. Open: node loss during the returned leg and the bridge. |
-| D2 duplicate injection | Not done. |
+| C3 fault matrix | **COMPLETE natively**: node kill mid-ring and mid-call, broker restart and outage under 30 calls, eCallMgr kill and loss, CouchDB outage, FreeSWITCH restart. THREE agent defects found and fixed: paused agents returning to rotation after a restart; an agent leg stranded by a lost event; an agent offered as ready while still talking after a node restart. The 486 window after a media restart is mitigated (19 s -> 7 s typical), `doc/media_server_restart_window.md`. |
+| C4 ring strategies | **PASS natively** on main, twice (before and after the agent start-up changes). |
+| C5 load and soak | **PASS at the fixture's ceiling**: 30 concurrent answered calls held 1800 s on main, 0 failures, peak CPU 65 %, no fresh error line; plus 30 calls with 5 queued in excess. The owner's production target is still needed for a final number. |
+| D1 callback recovery | **PASS natively**: queue supervisor loss, worker loss during ringing, applications node restart during `retry_wait`, applications node restart while the callback is bridged. |
+| D2 duplicates | Covered for restart: after a node restart with the callback bridged the ticket stays `completed`, same legs, no new attempt. An injected duplicate AMQP registration is not done. |
 | D3 historical ambiguous ticket | Owner decision; never force-settled. |
 | D4 five-language audio | **PASS natively** on main for en-us, he-il, fr-fr, es-es, ar-sa; offnet (carrier) path PASS. |
 | E cutover rehearsal | Not started; needs a copy of production and the owner's window. |

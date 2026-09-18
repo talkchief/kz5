@@ -7,6 +7,16 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **FINAL REGRESSION on main's final runtime (`7fcd386`, agent start-up changed three times today) — 5 of5 NATIVE PASS, September18:**
+  Unit `kz5-main-final-regression-0918`, `/root/kz5-final-regression-20260918/results.tsv`:
+  ring strategies PASS; plain callback lifecycle PASS; callback with `kazoo-apps` restarted
+  during `retry_wait` PASS; eCallMgr loss PASS; stress 30 concurrent answered calls plus5
+  queued in excess PASS (`/var/log/kazoo-acceptance/20260918T191701Z`). Afterwards: stack
+  health `failures=0`, no failed unit, zero channels.
+  B1 closed: `scripts/patches/MANIFEST.sha256` pins all 133 patches and
+  `test-patch-immutability.sh` fails on a changed, missing or unlisted patch (shown to catch
+  a one-byte edit) (`4fdcc46`).
+
 - **ACDC C5 — SOAK PASS on main: 30 concurrent answered queue calls held 1800s, September18:**
   Unit `kz5-main-soak-30x1800-0918` (`test-kazoo-calls.sh --live --stress --stages 30
   --queued-excess 0 --soak-seconds 1800`), `/var/log/kazoo-acceptance/20260918T163528Z`,
