@@ -158,8 +158,17 @@ start_callback_request() {
     local csv=$RUN_DIR/callback-original-input.csv stats=$RUN_DIR/callback-original-stats.csv
     local output=$RUN_DIR/callback-original.log
     write_callback_request_csv "$csv"
+    # The original caller hears queue prompts, never its own audio. SIPp 3.7's
+    # rtp_stream pattern compares every received payload with the pattern sent and
+    # exits 253 on a mismatch, so this leg could not pass although SIP, the callback
+    # and two-way RTP all succeeded (main, September 18, 2026). The retry campaign's
+    # generator already removes the same two actions.
+    sed -e '/<exec rtp_stream="apattern,1,0,PCMU\/8000"\/>/d' -e '/<exec rtp_stream="pauseapattern"\/>/d' \
+        "$SCENARIO_DIR/callback-request.xml" > "$RUN_DIR/callback-request.xml"
+    [[ $(grep -c 'rtp_stream=' "$RUN_DIR/callback-request.xml") == 0 &&
+       $(grep -c 'play_dtmf=' "$RUN_DIR/callback-request.xml") == 2 ]] || die 'Unexpected callback request scenario'
     sipp -ci 127.0.0.1 "${STATE[ACCEPTANCE_SIP_PROXY_HOST]}:${STATE[ACCEPTANCE_SIP_PROXY_PORT]}" \
-        -sf "$SCENARIO_DIR/callback-request.xml" -inf "$csv" -i "$LOCAL_IP" -p "$CALLER_PORT" \
+        -sf "$RUN_DIR/callback-request.xml" -inf "$csv" -i "$LOCAL_IP" -p "$CALLER_PORT" \
         -mi "$LOCAL_IP" -mp "$CALLBACK_ORIGINAL_MEDIA_PORT" -min_rtp_port "$CALLBACK_ORIGINAL_MEDIA_PORT" \
         -max_rtp_port "$((CALLBACK_ORIGINAL_MEDIA_PORT + 3))" \
         -m 1 -l 1 -r 1 -rp 1000 -nostdin -aa -timeout 75s -timeout_error \
