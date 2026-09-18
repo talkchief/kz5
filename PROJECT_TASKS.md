@@ -7,6 +7,65 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **MAIN PROMOTION `kz5-promo-0918b` FAILED, recovered by hand; root cause fixed in the installer — PRIVATE NATIVE PASS, main deployment PENDING, September18:**
+  Source `b809eec`, run directory `/root/kz5-main-promotion-20260918.rw1khk1v`, receipt
+  `status: FAIL` (retained). Build, restarts and identity checks passed; the last check
+  failed at 10:03:33 UTC: `eCallMgr and FreeSWITCH node freeswitch@dev-testing did not
+  negotiate four-byte event-stream framing`. SIP ingress stayed closed by design from
+  09:50:20 to about 10:09 UTC. Cause: nothing owned the Erlang port mapper. Host `epmd`
+  pid386407 was in cgroup `/system.slice/kazoo-ecallmgr.service` (started 10:00:15,
+  `KillMode=control-group`), so the restart replaced it. Erlang nodes registered again
+  by themselves; FreeSWITCH's C node (started 08:16:07) never does, so `epmd -names` had
+  no `freeswitch` and the new eCallMgr got `pang`. It also listened on `0.0.0.0:4369` and
+  `[::]:4369`. Recovery: zero channels confirmed, `systemctl restart kazoo-freeswitch`,
+  then `install-kazoo5.sh --verify-only kazoo-apps ecallmgr` passed every check and
+  `kazoo-kamailio` was started; `kazoo5-stack-health.sh` `failures=0`. Main runs `b809eec`;
+  the promotion is failed-then-recovered, not passed.
+  Fix (`9d0f7df`, `8ded71d`, `555a2a2`): `configure_stable_epmd`/`verify_stable_epmd`
+  give the packaged socket-activated `epmd.service` the listener on loopback plus the
+  Erlang interface (`FreeBind=true`), order every Erlang role after `epmd.socket`, refuse
+  the one-time migration while FreeSWITCH has live or unknown channels, and verify
+  ownership, listeners and registrations in install and `--verify-only`. On main before
+  deployment `--verify-only` now refuses: `epmd.socket is not enabled; a reboot would hand
+  the port mapper to the first Erlang service again`.
+  Two native failures on the way, both retained: private eCallMgr install6 `The previous
+  Erlang port mapper did not release port 4369` (a guest's `ss -p` shows no socket owners;
+  guest unchanged; now found by process and network namespace — host lists1 of7 visible
+  mappers, guests their own); private FreeSWITCH install7 `epmd.service: Failed to execute
+  /usr/bin/epmd: Resource temporarily unavailable`, guest left without a mapper (packaged
+  `LimitNPROC=1` is counted per numeric uid across the user namespace that rootful guests
+  share; two guests already ran a mapper as uid997; drop-in `LimitNPROC=infinity`, and the
+  migration now requires the service to answer before FreeSWITCH is restarted).
+  Native passes: eCallMgr install7 and FreeSWITCH install8 `PASS epmd.service owns port
+  4369, no wildcard listener, every running Erlang role is registered`
+  (`/var/lib/kazoo5-install-lab/ecallmgr-install-7.log`, `freeswitch-install-8.log`);
+  `systemctl restart kazoo-ecallmgr` in the guest kept mapper pid2477, spawned no second
+  mapper and found `freeswitch@kz5-stage-freeswitch` again in about 18s; cold boot of the
+  FreeSWITCH guest: socket listening at 8586.73s before FreeSWITCH at 8587.11s, one mapper
+  in `epmd.service`, `freeswitch` registered unaided, eCallMgr relinked in about 40s;
+  RabbitMQ registered again about 4s after its mapper was replaced. Offline:
+  `test-install-kazoo5-stable-epmd.sh`6 groups, `test-install-kazoo5-stack-health.sh`
+  4 groups (twelve failure classes). Open: the shared FreeSWITCH-plus-eCallMgr host case
+  exists only on main and is proven only when main is promoted. See
+  `doc/erlang_port_mapper.md`.
+
+- **Installer suites — two stale harnesses repaired, all 23 `test-install-*` PASS, September18 (`8c7b8f1`):**
+  `test-install-kazoo5-cardinal-release.sh` and `test-install-kazoo5-gemini.cjs` failed
+  identically on HEAD. Neither was an installer bug: the first expected the dnf command
+  from before `9f945a7` and let the real dnf guard stop/start `dnf-makecache.timer`; the
+  Gemini fixture predated ten installer steps, ran real `node` through `timeout` with an
+  empty AMQP URI, and further on would have run a real `sup ... set_default` on the live
+  node. Function-level stubs and a refusing `timeout` wrapper close that class.
+
+- **Single entry point — interactive menu, offline PASS on a real pseudo-terminal, September18 (`8332d32`):**
+  Owner target: every install through `install-kazoo5.sh`, all or a single module, with
+  interactive options. On a terminal with no component named (or `--interactive`) the
+  installer lists the nine components with their state on the host, takes numbers, names
+  or `a`, asks for install / verify-only / dry run, and requires a literal `yes` before
+  anything that restarts services; it only fills the variables the command line fills.
+  Without a terminal nothing changes (usage, exit2). `test-install-kazoo5-interactive.py`
+  7 groups. Open: side deployment paths outside the installer — audit below.
+
 - **OUTAGE / main44 down 00:50-07:58 UTC September18 — RECOVERED, cause was host changes, not a deployment:**
   Root shell history shows `hostnamectl set-hostname kz5-dev.talkchief.io`, manual
   edits to Kamailio `local.cfg` (00:42), `/etc/hosts` (00:49), `config.ini` (00:54),

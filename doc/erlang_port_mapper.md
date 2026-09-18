@@ -98,6 +98,19 @@ register, five rejected unsafe states in verification, and the wiring.
 `bash scripts/test-install-kazoo5-stack-health.sh` (4 groups, twelve failure
 classes) covers the two health conditions.
 
-## Native evidence
+## Native evidence (private lab, September 18, 2026)
 
-See the register entry in `PROJECT_TASKS.md` for the lab and main results.
+| Run | Result |
+| --- | --- |
+| eCallMgr guest, install 6 (`9d0f7df`) | **FAIL** `The previous Erlang port mapper did not release port 4369`. A guest's `ss -p` shows no socket owners, so nothing was stopped. Guest unchanged. Fixed in `8ded71d`: mappers are found by process, excluding only a proven foreign network namespace (host: 1 of 7 visible mappers; guests: their own). |
+| eCallMgr guest, install 7 (`8ded71d`) | **PASS** `epmd.service owns port 4369, no wildcard listener, every running Erlang role is registered`; mapper pid 2477 as user `epmd`, listeners `127.0.0.1:4369` and `172.30.253.16:4369`. |
+| `systemctl restart kazoo-ecallmgr` in that guest | Mapper pid 2477 before and after, no second mapper, `freeswitch@kz5-stage-freeswitch` found again in about 18 s. This is the failed promotion's sequence. |
+| FreeSWITCH guest, install 7 (`8ded71d`) | **FAIL** `epmd.service: Failed to execute /usr/bin/epmd: Resource temporarily unavailable`; the guest was left without a mapper. The packaged `LimitNPROC=1` is counted per numeric uid across the user namespace, which rootful guests share with the host and each other; two guests already ran a mapper as uid 997. Fixed in `555a2a2`: drop-in `LimitNPROC=infinity` (epmd never forks), and the migration requires the service to answer before FreeSWITCH is restarted. |
+| FreeSWITCH guest, install 8 (`555a2a2`) | **PASS**, guest repaired: `fs_epmd` replaced, idle FreeSWITCH restarted once, `freeswitch` registered, eCallMgr relinked. |
+| Cold boot of the FreeSWITCH guest | Socket listening at 8586.73 s, FreeSWITCH started at 8587.11 s (monotonic); one mapper, in `epmd.service`; `freeswitch` registered unaided; eCallMgr relinked in about 40 s. |
+
+Receipts: `/var/lib/kazoo5-install-lab/ecallmgr-install-7.log`,
+`/var/lib/kazoo5-install-lab/freeswitch-install-8.log`.
+
+Not yet proven: FreeSWITCH and eCallMgr sharing one host exists only on main.
+The register records that result when main is promoted.
