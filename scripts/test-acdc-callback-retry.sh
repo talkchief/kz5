@@ -19,6 +19,7 @@ RETRY_SHORT_CONFIRMATION_WINDOW=false
 RETRY_CONFIRMATION_EXPIRY=false
 RETRY_QUEUE_RESTART=false
 RETRY_WORKER_LOSS=false
+RETRY_APPS_RESTART=false
 RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=false
 RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=false
 RETRY_BUSY_PID=
@@ -40,6 +41,7 @@ retry_usage() {
         '       [--short-confirmation-window] (main isolated EN fixture only; response timeout3, full existing prompt, conditional restore)' \
         '       [--confirmation-expiry] (requires short window; answer retry without digit; assert timeout and no agent call)' \
         '       [--queue-restart-during-backoff] (main isolated fixture only; restart its queue with no active legs, retain retry)' \
+        '       [--apps-restart-during-backoff] (main isolated fixture only; restart kazoo-apps while the callback waits, retain retry)' \
         '       [--worker-loss-during-ringing] (main isolated fixture only; kill exactly its first active callback worker)' \
         '       [--fixture-account ACCOUNT_ID] (must match canonical protected isolated state)' \
         '       [--transport external|internal] (default: external; internal uses isolated1001)' \
@@ -78,6 +80,7 @@ retry_args() {
             --short-confirmation-window) [[ $RETRY_SHORT_CONFIRMATION_WINDOW == false ]] || die 'Repeated short-confirmation mode'; RETRY_SHORT_CONFIRMATION_WINDOW=true ;;
             --confirmation-expiry) [[ ${RETRY_CONFIRMATION_EXPIRY:-false} == false ]] || die 'Repeated confirmation-expiry mode'; RETRY_CONFIRMATION_EXPIRY=true ;;
             --queue-restart-during-backoff) [[ ${RETRY_QUEUE_RESTART:-false} == false ]] || die 'Repeated queue-restart mode'; RETRY_QUEUE_RESTART=true ;;
+            --apps-restart-during-backoff) [[ $RETRY_APPS_RESTART == false ]] || die 'Repeated apps-restart mode'; RETRY_APPS_RESTART=true ;;
             --worker-loss-during-ringing) [[ $RETRY_WORKER_LOSS == false ]] || die 'Repeated worker-loss mode'; RETRY_WORKER_LOSS=true ;;
             --allow-paused-master-test-phones) RETRY_ALLOW_PAUSED_MASTER_TEST_PHONES=true ;;
             --allow-absent-master-test-phones) RETRY_ALLOW_ABSENT_MASTER_TEST_PHONES=true ;;
@@ -97,7 +100,8 @@ retry_args() {
     [[ $RETRY_EDIT_PENDING_LANGUAGE != true || $RETRY_SHORT_CONFIRMATION_WINDOW != true ]] || die 'Choose only one pending queue edit case'
     [[ ${RETRY_CONFIRMATION_EXPIRY:-false} != true || $RETRY_SHORT_CONFIRMATION_WINDOW == true ]] || die 'Confirmation expiry requires explicit short confirmation window'
     [[ $RETRY_WORKER_LOSS != true || $RETRY_QUEUE_RESTART != true ]] || die 'Choose one callback fault boundary'
-    if [[ ${RETRY_QUEUE_RESTART:-false} == true || $RETRY_WORKER_LOSS == true ]]; then
+    [[ $RETRY_APPS_RESTART != true || ( $RETRY_QUEUE_RESTART != true && $RETRY_WORKER_LOSS != true ) ]] || die 'Choose one callback fault boundary'
+    if [[ ${RETRY_QUEUE_RESTART:-false} == true || $RETRY_WORKER_LOSS == true || $RETRY_APPS_RESTART == true ]]; then
         [[ $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 && $RETRY_LANGUAGE_EXPLICIT == true &&
            $RETRY_LANGUAGE == en-us && $CALLBACK_TEST_TRANSPORT == internal && $RETRY_REGISTRATION_MODE == entry-only &&
            $RETRY_EDIT_PENDING_LANGUAGE == false && ${RETRY_CONFIRMATION_EXPIRY:-false} == false &&
@@ -399,6 +403,48 @@ retry_restart_queue_in_backoff() {
     log 'Isolated queue supervisor replaced during durable retry_wait; no services restarted'
 }
 
+# The whole applications node is lost while the callback waits for its retry:
+# what every deployment and every crash does to a waiting callback. The ticket
+# must come back from the durable store alone, keep its order and attempt count,
+# and complete exactly one more attempt. Only kazoo-apps is restarted.
+retry_restart_apps_in_backoff() {
+    local doc snapshot queue now before after deadline status
+    [[ $RETRY_APPS_RESTART == true && $RETRY_ACCOUNT_ID == 8310dc3170a18de37f205d0da172df65 &&
+       ${STATE[ACCEPTANCE_ACCOUNT_ID]} == "$RETRY_ACCOUNT_ID" &&
+       ! -e $RUN_DIR/callback-apps-restart-started.json ]] || return 1
+    queue=${STATE[ACCEPTANCE_QUEUE_ID]}
+    [[ $queue == 67c5f3fb115bdd1dd574d6a604a7d29f ]] || return 1
+    doc=$(callback_document) || return 1
+    snapshot=$(retry_snapshot) || return 1
+    now=$(date +%s) || return 1
+    jq -e --argjson registered "$CALLBACK_REGISTRATION_EVIDENCE" --arg account "$RETRY_ACCOUNT_ID" --arg queue "$queue" '
+        .account_id==$account and .queue_id==$queue and .id==$registered.id and
+        .original_call_id==$registered.original_call_id and .status=="retry_wait" and .attempts==1 and
+        .caller_call_id==null and .agent_call_id==null and .reconciliation_required!=true' <<<"$doc" >/dev/null || return 1
+    jq -e '.row_count==0' <<<"$snapshot" >/dev/null || return 1
+    before=$(systemctl show -p MainPID --value kazoo-apps.service) || return 1
+    [[ $before =~ ^[1-9][0-9]*$ ]] || return 1
+    jq -n --arg account "$RETRY_ACCOUNT_ID" --arg queue "$queue" --arg pid "$before" \
+        --argjson doc "$doc" --argjson snapshot "$snapshot" --argjson started "$now" \
+        '{account_id:$account,queue_id:$queue,main_pid_before:$pid,started_at:$started,
+          callback:$doc,channels:$snapshot,restart_requests:1}' > "$RUN_DIR/callback-apps-restart-started.json" || return 1
+    systemctl restart kazoo-apps.service || return 1
+    after=$(systemctl show -p MainPID --value kazoo-apps.service) || return 1
+    [[ $after =~ ^[1-9][0-9]*$ && $after != "$before" ]] || return 1
+    deadline=$((SECONDS + 300)); status=
+    while ((SECONDS < deadline)); do
+        status=$(sup -n kazoo_apps -t 5 acdc_init startup_status 2>/dev/null | tail -n 1) || status=
+        [[ $status == ready ]] && break
+        [[ $status != failed ]] || return 1
+        sleep 2
+    done
+    [[ $status == ready ]] || return 1
+    jq --arg pid "$after" --argjson finished "$(date +%s)" \
+        '. + {main_pid_after:$pid,finished_at:$finished,acdc_startup_ready:true}' \
+        "$RUN_DIR/callback-apps-restart-started.json" > "$RUN_DIR/callback-apps-restart.json" || return 1
+    log 'Applications node restarted during durable retry_wait; ACDC startup ready again'
+}
+
 # The first attempt is still unanswered. Only the returned second attempt is
 # changed: answer, receive the full prompt, send no confirmation and await BYE.
 retry_start_expiry_carrier() {
@@ -608,6 +654,9 @@ retry_run() {
     retry_wait_backoff || die 'First unanswered attempt did not durably enter retry_wait with positive settlement'
     if [[ $RETRY_QUEUE_RESTART == true ]]; then
         retry_restart_queue_in_backoff || die 'Queue restart boundary failed; never blindly repeat a possibly completed restart'
+    fi
+    if [[ $RETRY_APPS_RESTART == true ]]; then
+        retry_restart_apps_in_backoff || die 'Applications restart boundary failed; never blindly repeat a possibly completed restart'
     fi
     if [[ $RETRY_CONFIRMATION_EXPIRY == true ]]; then
         retry_wait_expiry || die 'No-confirmation retry did not cleanly expire without an agent leg'
