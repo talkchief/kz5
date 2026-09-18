@@ -49,13 +49,23 @@ assert(source.includes('deliveryOwner()')&&source.includes("'queue-owner-rpc.esc
 assert.equal(partitionHoldMs(undefined),35000);assert.equal(partitionHoldMs(''),35000);
 assert.equal(partitionHoldMs('120000'),120000);assert.equal(partitionHoldMs('150000'),150000);
 for(const bad of ['34999','150001','180000','0','-1','12e4','120000 ','abc','1200000'])assert.throws(()=>partitionHoldMs(bad),bad);
-assert(source.includes("both('ready'),90")&&source.includes('no_sip_reregistration:true'));
+assert(source.includes("both('ready'),90")&&source.includes('no_sip_reregistration:!serviceFaultMode')&&source.includes('same_fsm_replicas:!serviceFaultMode'))
+// Service-fault mode (readiness plan C3): re-registration and new agent processes are
+// permitted only there; the partition and plain profiles keep their strict claims.
+assert(source.includes("if(serviceFaultMode)for(const e of es){if(h.contacts(e).length===0)h.registration(e,600);}"));
+assert(source.includes("!(partition&&serviceFaultMode)"),'One profile at a time');
+const faults=require('./queue-partition.cjs');
+assert.deepEqual(Object.keys(faults.SERVICE_FAULTS),['apps-kill','broker-restart','ecallmgr-kill','couchdb-outage']);
+assert.equal(faults.serviceFault('apps-kill').guest,'owner');
+for(const bad of [undefined,'','partition','apps-kill;reboot','__proto__'])assert.throws(()=>faults.serviceFault(bad),/KZ5_QUEUE_FAULT must be one of/);
+assert(source.includes("others.every(u=>nodes.every(n=>probe(n,u).state==='paused'))"),'Unrelated agents must be proven unchanged');
+assert(source.includes('bridge_survived:survived'),'Bridge survival is recorded as evidence, never assumed');
 assert(!source.includes("status:'login'")&&!source.includes("status:'logout'")&&!source.includes('systemctl restart'));
-assert(source.includes("async function run({partition=true}={})"));
-assert(source.includes("partition?'queue-before-partition':'queue-first',partition?async()=>"));
-assert(source.includes("partition?'queue-after-partition':'queue-second'"));
+assert(source.includes("async function run({partition=true,serviceFaultMode=false}={})"));
+assert(source.includes("partition?'queue-before-partition':serviceFaultMode?'queue-before-fault':'queue-first',serviceFaultMode?injectServiceFault:partition?async()=>"));
+assert(source.includes("partition?'queue-after-partition':serviceFaultMode?'queue-after-fault':'queue-second'"));
 assert(source.includes('partition_exercised:partition'));
 const harness=fs.readFileSync(__dirname+'/../../test-channel-monitor-live.cjs','utf8');
 assert(harness.includes("if(args[0]==='--queue-calls')"));
-assert(harness.includes('queueContext().run({partition:queuePartitionEnabled})'));
+assert(harness.includes('queueContext().run({partition:queuePartitionEnabled,serviceFaultMode:queueFaultEnabled})')&&harness.includes("args[0]==='--queue-fault'"));
 console.log('PASS exact synthetic queue identity, same-FSM guard, directional audio rejection, bounded owned pauses and no manual recovery');

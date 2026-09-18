@@ -54,6 +54,18 @@ function partitionTarget(value=process.env.KZ5_QUEUE_PARTITION_TARGET) {
     assert(['owner','other'].includes(value),'Partition target must be owner or other');
     return value;
 }
+// Fault matrix (readiness plan C3): one role is lost while a queued call is
+// bridged. "owner" is the applications node holding the caller's delivery.
+const SERVICE_FAULTS={
+    'apps-kill':{guest:'owner',unit:'kazoo-apps.service',action:'kill'},
+    'broker-restart':{guest:'kz5-stage-rabbitmq',unit:'rabbitmq-server.service',action:'restart'},
+    'ecallmgr-kill':{guest:'kz5-stage-ecallmgr',unit:'kazoo-ecallmgr.service',action:'kill'},
+    'couchdb-outage':{guest:'kz5-stage-couchdb',unit:'couchdb.service',action:'outage'}
+};
+function serviceFault(value=process.env.KZ5_QUEUE_FAULT) {
+    assert(Object.hasOwn(SERVICE_FAULTS,String(value)),'KZ5_QUEUE_FAULT must be one of '+Object.keys(SERVICE_FAULTS).join(', '));
+    return {name:value,...SERVICE_FAULTS[value]};
+}
 function strictInventory(v,s) {
     assert.equal(v.schema_version,2);assert.equal(v.all_agent_workers_observed,true);
     assert.equal(v.complete_cluster_drain_proven,false);
@@ -171,15 +183,41 @@ function context(h) {
         for(const file of Object.values(input))fs.unlinkSync(file);
         h.writePrivate(label+'-evidence.json',JSON.stringify(proof,null,2)+'\n');return proof;
     }
-    async function run({partition=true}={}) {
-        assert(typeof partition==='boolean');
+    async function injectServiceFault() {
+        const f=serviceFault(),owner=deliveryOwner();
+        const guest=f.guest==='owner'?nodes.find(n=>n.ip===(owner||nodes[0].ip)).id:f.guest;
+        const unit=(...a)=>h.command('podman',['exec',guest,'systemctl',...a],60000);
+        const others=[2,3].map(i=>s[`ACCEPTANCE_AGENT_${i}_USER_ID`]);
+        h.log('Service fault '+f.name+': '+f.action+' '+f.unit+' in '+(f.guest==='owner'?'the delivery owner '+(owner||nodes[0].ip):guest)+' during the bridged queue call');
+        const injected=Date.now()/1000;
+        if(f.action==='kill')unit('kill','-s','KILL',f.unit);
+        else if(f.action==='restart')unit('restart',f.unit);
+        else {unit('stop',f.unit);await h.sleep(30000);unit('start',f.unit);}
+        await h.sleep(3000);
+        // Evidence, not an assumption: whether the media bridge outlived the role.
+        let survived=true;try{alive();}catch(_){survived=false;}
+        await h.clearStage();
+        // A killed node starts new agent processes, so the pinned pids no longer apply.
+        pinned=undefined;
+        const quiet=fn=>()=>{try{return fn();}catch(_){return false;}};
+        const recovered=await h.until(quiet(()=>both('ready')),300);
+        // No unrelated agent state change: the two paused agents are still paused on both nodes.
+        const paused=await h.until(quiet(()=>others.every(u=>nodes.every(n=>probe(n,u).state==='paused'))),120)
+            .catch(()=>{throw Error('An unrelated paused agent did not come back paused after '+f.name);});
+        h.log('Both agent replicas ready again without re-login after '+f.name+'; unrelated agents still paused');
+        return {fault:f.name,unit:f.unit,action:f.action,owner:owner||null,injected_at:injected,
+            bridge_survived:survived,recovered_after_s:Math.round(Date.now()/1000-injected),recovered,others_still_paused:paused};
+    }
+    async function run({partition=true,serviceFaultMode=false}={}) {
+        assert(typeof partition==='boolean'&&typeof serviceFaultMode==='boolean'&&!(partition&&serviceFaultMode));
+        if(serviceFaultMode)serviceFault();
         fault=partitions.prepare('kazoo-apps');nodes=fault.nodes;
         const es=h.endpoints(s).slice(0,2);
         es.forEach(e=>assert.equal(h.contacts(e).length,0,'Synthetic phone already registered'));
         await verifyAndPause();
         for(const e of es)h.registration(e,600);
         h.log('Queue2000: both native agent replicas pinned; alternate synthetic agents temporarily paused');
-        const first=await call(partition?'queue-before-partition':'queue-first',partition?async()=>{
+        const first=await call(partition?'queue-before-partition':serviceFaultMode?'queue-before-fault':'queue-first',serviceFaultMode?injectServiceFault:partition?async()=>{
             // Partition the node whose worker holds this caller's unacknowledged
             // delivery: only that strands, and later redelivers, the call.
             const owner=deliveryOwner(),wanted=partitionTarget();
@@ -206,10 +244,12 @@ function context(h) {
             h.log('Both original FSM replicas recovered ready without re-login or SIP re-registration');
             return {...proof,busy_samples:samples,recovered};
         }:undefined);
-        if(!partition)await h.until(()=>both('ready'),30);
-        // Existing contacts must remain exact; do not REGISTER between calls.
+        if(!partition&&!serviceFaultMode)await h.until(()=>both('ready'),30);
+        // Existing contacts must remain exact; do not REGISTER between calls. A
+        // lost registrar (eCallMgr) or its datastore may legitimately need one.
+        if(serviceFaultMode)for(const e of es){if(h.contacts(e).length===0)h.registration(e,600);}
         for(const e of es)assert.deepEqual(h.contacts(e),[`sip:${e.username}@${h.audio.IP}:${e.port}`]);
-        const second=await call(partition?'queue-after-partition':'queue-second');
+        const second=await call(partition?'queue-after-partition':serviceFaultMode?'queue-after-fault':'queue-second');
         const ready=await h.until(()=>both('ready'),30);
         await restorePauses();
         // Public "ready" alone cannot establish listener drain. This installed
@@ -220,11 +260,12 @@ function context(h) {
             catch(_){return false;}
         },45);
         h.writePrivate('queue-post-call-agent-inventories.json',JSON.stringify(drained,null,2)+'\n');
-        h.writePrivate(partition?'queue-partition-evidence.json':'queue-calls-evidence.json',JSON.stringify({first,second,ready,
-            strict_all_replica_agent_drain:true,partition_exercised:partition,same_fsm_replicas:true,no_agent_relogin:true,no_sip_reregistration:true},null,2)+'\n');
-        h.log(partition?'PASS two actual queued calls, directional audio, missed-hangup partition and same-FSM recovery':
+        h.writePrivate(partition?'queue-partition-evidence.json':serviceFaultMode?'queue-fault-evidence.json':'queue-calls-evidence.json',JSON.stringify({first,second,ready,
+            strict_all_replica_agent_drain:true,partition_exercised:partition,service_fault:serviceFaultMode?serviceFault().name:null,
+            same_fsm_replicas:!serviceFaultMode,no_agent_relogin:true,no_sip_reregistration:!serviceFaultMode},null,2)+'\n');
+        h.log(serviceFaultMode?'PASS queued call through '+serviceFault().name+': automatic agent recovery, unrelated agents unchanged, second real call with directional audio, strict inventory on both nodes':partition?'PASS two actual queued calls, directional audio, missed-hangup partition and same-FSM recovery':
             'PASS two actual queued calls and directional audio without agent re-login, SIP re-registration or broker interruption');
     }
     return {run,restorePauses};
 }
-module.exports={context,identity,snapshot,inspectAudio,ownedAgent,strictInventory,partitionHoldMs,partitionTarget};
+module.exports={context,identity,snapshot,inspectAudio,ownedAgent,strictInventory,partitionHoldMs,partitionTarget,serviceFault,SERVICE_FAULTS};
