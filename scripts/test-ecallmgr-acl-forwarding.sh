@@ -19,18 +19,20 @@ cd "$acl_root"
 export ERL_LIBS="$acl_root/deps:$acl_root/core:$acl_root/applications"
 export HOME="$acl_work" ERL_CRASH_DUMP=/dev/null
 acl_source=applications/ecallmgr/src/ecallmgr_maintenance.erl
-acl_patch="$acl_root/scripts/patches/ecallmgr-acl-command-forwarding.patch"
+# An ordered stack: the first patch is deployed and immutable, the second adds
+# node-registry discovery (scripts/test-install-kazoo5-patch-stack.sh).
+acl_patches=("$acl_root/scripts/patches/ecallmgr-acl-command-forwarding.patch"
+    "$acl_root/scripts/patches/ecallmgr-acl-forwarding-node-registry.patch")
 # Always rebuild from the pinned file so the patch itself is what is tested.
 mkdir -p "$acl_work/repo/src" "$acl_work/ebin"
 git -C applications/ecallmgr show "HEAD:src/ecallmgr_maintenance.erl" > "$acl_work/repo/src/ecallmgr_maintenance.erl"
 git -C "$acl_work/repo" init -q
 if [[ $acl_mode == current ]]; then
-    git -C "$acl_work/repo" apply "$acl_patch"
-    git -C "$acl_work/repo" apply --reverse --check "$acl_patch"
+    for acl_patch in "${acl_patches[@]}"; do git -C "$acl_work/repo" apply "$acl_patch"; done
     cmp -s "$acl_work/repo/src/ecallmgr_maintenance.erl" "$acl_source" || \
         { echo 'Working ecallmgr source differs from pinned source plus the required patch' >&2; exit 1; }
 fi
-grep -Fq 'patches/ecallmgr-acl-command-forwarding.patch' scripts/install-kazoo5.sh || \
+grep -Fq 'patches/ecallmgr-acl-forwarding-node-registry.patch' scripts/install-kazoo5.sh || \
     { echo 'The forwarding patch is not a required installer patch' >&2; exit 1; }
 erlc -Werror +debug_info +warn_unused_vars +warn_missing_spec -I applications/ecallmgr/src -I applications/ecallmgr/include \
     -I applications -pa deps/lager/ebin '+{parse_transform,lager_transform}' -o "$acl_work/ebin" \

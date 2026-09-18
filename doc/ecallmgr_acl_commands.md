@@ -43,7 +43,8 @@ successful while the carriers stayed untrusted.
 
 ## Correction
 
-Required installer patch `scripts/patches/ecallmgr-acl-command-forwarding.patch`
+Required installer patch stack `scripts/patches/ecallmgr-acl-command-forwarding.patch`
+(deployed, immutable) then `ecallmgr-acl-forwarding-node-registry.patch`
 (fetched `ecallmgr`, applied after the integration patch). Every ACL command —
 `allow_carrier`, `deny_carrier`, `allow_sbc`, `deny_sbc`, `remove_acl`,
 `carrier_acls`, `sbc_acls`, `acl_summary`, `reload_acls`, `test_carrier_ip`,

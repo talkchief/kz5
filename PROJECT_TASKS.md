@@ -33,6 +33,25 @@ work postponed; do not generate voices at runtime or during deployment.
   per-node system_config sections, FreeSWITCH/Kamailio node names); a public SIP
   listener must be an installer option, not `local.cfg` lines.
 
+- **INST / evolving a deployed patch broke private install21 — FIXED, September18:**
+  `kz5-stage-install-kazoo-apps-21` on `00bda6f` FAILED, exit1, before any build:
+  `Source does not match required patch: ecallmgr-acl-command-forwarding.patch`.
+  Cause was this session's own change: `b7064f2` edited that patch in place after
+  `e8b7344` had deployed its first text to the private pair, so that source matched
+  neither side. Main44 was unaffected (its source already equalled the final text).
+  The first patch is restored byte-identical to `e8b7344` and is now immutable; the
+  node-registry change is a second patch. New `apply_required_source_patch_stack`
+  finds the applied depth on a private copy (undo the first N newest-first, require
+  the rest to apply) because an earlier patch no longer reverse-checks once a later
+  one overlaps it. `scripts/test-install-kazoo5-patch-stack.sh` passes five groups
+  on the real patches and pinned source: fresh, first-only (the install21 state),
+  fully applied and untouched on repeat, drifted source and missing patch refused
+  without modification, dry run. The failed install stays recorded. Rule for this
+  repo: never edit a patch that has been deployed; add another patch to its stack.
+  After the September18 reboot the armed verifier passed20/0
+  (`/root/kz5-post-boot-20260918T081607Z.vQwEZa`): SELinux permissive, node identity,
+  broker database, API, SUP, media link, both SIP listeners, ten lab guests.
+
 - **INST / Kamailio public SIP listener — DEPLOYED on main44 + native PASS, September18:**
   Normal `KAMAILIO_PUBLIC_SIP_IP=46.225.31.248 install-kazoo5.sh kamailio` on
   `d30df04` exit0 with zero channels; only Kamailio was regenerated and restarted.

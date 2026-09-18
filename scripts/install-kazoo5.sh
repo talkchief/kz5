@@ -1922,8 +1922,9 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$KAZOO_ROOT/applications/stepswitch" \
         "$SCRIPT_DIR/patches/stepswitch-callback-origination.patch"
     apply_kazoo_integration_patch ecallmgr
-    apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
-        "$SCRIPT_DIR/patches/ecallmgr-acl-command-forwarding.patch"
+    apply_required_source_patch_stack "$KAZOO_ROOT/applications/ecallmgr" \
+        "$SCRIPT_DIR/patches/ecallmgr-acl-command-forwarding.patch" \
+        "$SCRIPT_DIR/patches/ecallmgr-acl-forwarding-node-registry.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
         "$SCRIPT_DIR/patches/ecallmgr-bridge-peer-identity.patch"
     apply_required_source_patch "$KAZOO_ROOT/applications/ecallmgr" \
@@ -2401,6 +2402,55 @@ apply_required_source_patch() {
     else
         die "Source does not match required patch: ${patch_file}"
     fi
+}
+
+# A deployed patch is immutable: changing it in place leaves every host that
+# already applied the earlier text matching neither side of the new one (the
+# private apps pair refused install 21 for exactly this reason). Later changes
+# to the same lines are added as further patches of one ordered stack. Once a
+# later patch is applied, an earlier one no longer reverse-checks on its own, so
+# the applied depth is found on a private copy: undo the first N patches
+# newest-first, and require the remaining ones to apply to the real files.
+apply_required_source_patch_stack() {
+    local source_dir=$1; shift
+    local patches=("$@") count=$# applied index scratch path ok
+    ((count > 0)) || die 'Required source patch stack is empty'
+    for path in "${patches[@]}"; do
+        [[ -f $path ]] || die "Required source patch is missing: ${path}"
+    done
+    if [[ $DRY_RUN == true ]]; then
+        log "Would apply required source patch stack ending in $(basename "${patches[count-1]}")"
+        return 0
+    fi
+    scratch=$(mktemp -d /tmp/kazoo-patch-stack.XXXXXX)
+    for ((applied = count; applied >= 0; applied--)); do
+        ok=true
+        rm -rf -- "$scratch/undo" "$scratch/redo"; mkdir "$scratch/undo" "$scratch/redo"
+        while IFS=$'\t' read -r _ _ path; do
+            [[ -f $source_dir/$path ]] || { ok=false; break; }
+            for index in undo redo; do
+                mkdir -p "$scratch/$index/$(dirname "$path")"; cp -- "$source_dir/$path" "$scratch/$index/$path"
+            done
+        done < <(cat "${patches[@]}" | git apply --numstat | sort -u -k3)
+        for ((index = applied - 1; index >= 0; index--)); do
+            [[ $ok == true ]] || break
+            (cd "$scratch/undo" && git apply --reverse "${patches[index]}") 2>/dev/null || ok=false
+        done
+        for ((index = applied; index < count; index++)); do
+            [[ $ok == true ]] || break
+            (cd "$scratch/redo" && git apply "${patches[index]}") 2>/dev/null || ok=false
+        done
+        [[ $ok == true ]] || continue
+        for ((index = applied; index < count; index++)); do
+            git -C "$source_dir" apply "${patches[index]}" || { rm -rf -- "$scratch"; die "Could not apply ${patches[index]}"; }
+            log "Applied required source patch $(basename "${patches[index]}")"
+        done
+        ((applied < count)) || log "Required source patch stack is already applied: $(basename "${patches[count-1]}")"
+        rm -rf -- "$scratch"
+        return 0
+    done
+    rm -rf -- "$scratch"
+    die "Source does not match any state of the required patch stack ending in ${patches[count-1]}"
 }
 
 configure_kazoo() {

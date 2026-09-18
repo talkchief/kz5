@@ -1,0 +1,32 @@
+diff --git a/src/ecallmgr_maintenance.erl b/src/ecallmgr_maintenance.erl
+index 070bc0b..7a89e3f 100644
+--- a/src/ecallmgr_maintenance.erl
++++ b/src/ecallmgr_maintenance.erl
+@@ -689,12 +689,26 @@ on_ecallmgr(Function, Args, Local) ->
+         'false' -> forward_to_ecallmgr(Function, Args, ecallmgr_nodes())
+     end.
+ 
++%% Already connected nodes plus every node the AMQP node registry advertises as
++%% running ecallmgr: on separate hosts the applications node is normally not
++%% connected to it yet, and the call below connects on demand with the cluster
++%% cookie. Only a node that really runs ecallmgr_fs_nodes is used.
+ -spec ecallmgr_nodes() -> [node()].
+ ecallmgr_nodes() ->
+-    [Node || Node <- lists:sort(nodes()),
++    [Node || Node <- lists:usort(nodes() ++ advertised_ecallmgr_nodes()),
++             Node =/= node(),
+              is_pid(rpc:call(Node, 'erlang', 'whereis', ['ecallmgr_fs_nodes'], 5 * ?MILLISECONDS_IN_SECOND))
+     ].
+ 
++-spec advertised_ecallmgr_nodes() -> [node()].
++advertised_ecallmgr_nodes() ->
++    try [Node || #kz_node{node=Node, kapps=Kapps} <- kz_nodes:nodes(),
++                 is_atom(Node), is_list(Kapps), props:is_defined(?APP_NAME, Kapps)
++        ]
++    catch
++        _:_ -> []
++    end.
++
+ -spec forward_to_ecallmgr(atom(), list(), [node()]) -> 'no_return'.
+ forward_to_ecallmgr(Function, _Args, []) ->
+     io:format("~s does not run ecallmgr and no connected ecallmgr node was found; nothing was changed.~n"
