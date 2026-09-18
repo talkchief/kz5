@@ -10,6 +10,15 @@
 # condition is visible in `systemctl --failed` and to any log alerting; the next
 # healthy run clears it. Read-only: it never restarts or reconfigures anything.
 set -uo pipefail
+# --ingress-closed: the caller has deliberately stopped the SIP edge for a
+# maintenance window (the main development promotion does). Only the Kamailio
+# checks are skipped, and the output says so. The timer never passes it.
+ingress_closed=false
+case ${1:-} in
+    '') ;;
+    --ingress-closed) ingress_closed=true ;;
+    *) printf 'Usage: %s [--ingress-closed]\n' "$0" >&2; exit 2 ;;
+esac
 deployment=${KAZOO_DEPLOYMENT_CONFIG:-/etc/kazoo/deployment.env}
 identity=${KAZOO_NODE_IDENTITY_FILE:-/etc/kazoo/node-identity}
 failures=0
@@ -34,6 +43,10 @@ fi
 
 for unit in couchdb rabbitmq-server haproxy kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio nginx kazoo-push-bridge; do
     installed "${unit}.service" || continue
+    if [[ $unit == kazoo-kamailio && $ingress_closed == true ]]; then
+        printf 'SKIP kazoo-kamailio: SIP ingress was deliberately closed by the caller\n'
+        continue
+    fi
     state=$(systemctl is-active "${unit}.service" 2>/dev/null)
     [[ $state == active ]] && ok "${unit} active" || fail "${unit} is ${state:-unknown}"
     restarts=$(systemctl show -p NRestarts --value "${unit}.service" 2>/dev/null)
@@ -92,7 +105,7 @@ if installed kazoo-ecallmgr.service; then
         [[ ${media:-0} -ge 1 ]] && ok "eCallMgr is connected to ${media} FreeSWITCH node(s)" || fail 'eCallMgr is connected to no FreeSWITCH node'
     fi
 fi
-if installed kazoo-kamailio.service; then
+if installed kazoo-kamailio.service && [[ $ingress_closed != true ]]; then
     for address in "$(setting KAZOO_PUBLIC_IP)" "$(setting KAMAILIO_PUBLIC_SIP_IP)"; do
         [[ -n $address ]] || continue
         ss -H -lun 'sport = :5060' 2>/dev/null | grep -Fq "${address}:5060" && ok "Kamailio listens on ${address}:5060/udp" || \

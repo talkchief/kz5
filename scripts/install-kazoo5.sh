@@ -3015,14 +3015,20 @@ EOF
 }
 
 verify_stack_health() {
+    local -a scope=()
     if [[ $DRY_RUN == true ]]; then log 'Would verify the Kazoo stack health check'; return 0; fi
+    # A caller that closed SIP ingress for the install says so explicitly and
+    # owes the full check once it reopens it (promote-main-dev-runtime.sh). The
+    # first health-gated main promotion failed on its own closed ingress.
+    [[ ${KAZOO_INGRESS_CLOSED:-false} != true ]] || scope=(--ingress-closed)
     cmp -s "$SCRIPT_DIR/kazoo5-stack-health.sh" /usr/local/libexec/kazoo5-stack-health || \
         die 'The Kazoo stack health check is missing or differs from the reviewed source'
     [[ $(systemctl is-enabled kazoo5-stack-health.timer 2>/dev/null) == enabled && \
        $(systemctl is-active kazoo5-stack-health.timer 2>/dev/null) == active ]] || \
         die 'kazoo5-stack-health.timer is not enabled and active'
-    /usr/local/libexec/kazoo5-stack-health >/dev/null || die 'The Kazoo stack health check reports a failing role'
-    log 'PASS Kazoo stack health check installed, scheduled and currently healthy'
+    /usr/local/libexec/kazoo5-stack-health "${scope[@]}" >/dev/null || \
+        die 'The Kazoo stack health check reports a failing role; its FAIL lines are above'
+    log "PASS Kazoo stack health check installed, scheduled and currently healthy${scope:+ (SIP ingress closed by the caller, not judged)}"
 }
 
 # The start guard and the identity it checks. See scripts/kazoo5-identity-guard.sh.

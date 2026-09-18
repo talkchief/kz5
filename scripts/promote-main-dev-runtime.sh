@@ -60,10 +60,14 @@ note 'Checksummed runtime and configuration backups written'
 idle
 systemctl stop "$ingress"
 note 'SIP ingress stopped; starting the normal installer'
-bash scripts/install-kazoo5.sh kazoo-apps ecallmgr >> "$run_dir/install.log" 2>&1
+# Ingress is closed by this script, so the installer's health gate must not judge it.
+KAZOO_INGRESS_CLOSED=true bash scripts/install-kazoo5.sh kazoo-apps ecallmgr >> "$run_dir/install.log" 2>&1
 grep -Fq 'All requested Kazoo 5 components passed validation' "$run_dir/install.log" || { note 'Installer did not report validation'; false; }
 systemctl start "$ingress"
 [[ $(systemctl is-active "$ingress") == active ]] || { note 'SIP ingress did not return'; false; }
+# The exemption above is repaid here: every role, including the SIP edge.
+sleep 8
+/usr/local/libexec/kazoo5-stack-health >> "$run_dir/health.log" 2>&1 || { note "Stack health failed after reopening ingress: $run_dir/health.log"; false; }
 trap - ERR
 receipt PASS
 note "PASS normal installer on $source_id; SIP ingress reopened"

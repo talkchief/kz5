@@ -44,7 +44,8 @@ run() {   # VAR=value ... ; prints output, returns the check's status
              T_LOGGER="$sh_work/logger.out"
       for assignment in "$@"; do export "${assignment?}"; done
       sed "s#/etc/rabbitmq/rabbitmq-env.conf#$sh_work/rabbitmq-env.conf#" "$sh_health" > "$sh_work/health.sh"
-      bash "$sh_work/health.sh" 2>&1 )
+      # shellcheck disable=SC2086
+      bash "$sh_work/health.sh" ${T_ARGS:-} 2>&1 )
 }
 out=$(run) || { printf '%s\n' "$out"; fail 'a healthy host was reported unhealthy'; }
 grep -Fq 'RESULT failures=0' <<<"$out" || fail 'healthy result line'
@@ -78,6 +79,27 @@ pass 'twelve failure classes, including every "active but dead" condition of the
 out=$(run 'T_DISABLED=kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio nginx kazoo-push-bridge couchdb haproxy' 'T_HTTP=000' 'T_APPS_AMQP=' 'T_MEDIA=' 'T_LISTEN=') || \
     { printf '%s\n' "$out"; fail 'a broker-only host was judged on roles it does not run'; }
 pass 'a split host is judged only on the roles it runs'
+
+# The first health-gated main promotion failed on the ingress it had closed
+# itself. The scope is explicit, visible, and covers the SIP edge only.
+closed=('T_INACTIVE=kazoo-kamailio' 'T_LISTEN=')
+if out=$(run "${closed[@]}"); then fail 'a stopped SIP edge passed without the explicit scope'; fi
+out=$(run "${closed[@]}" 'T_ARGS=--ingress-closed') || { printf '%s\n' "$out"; fail 'a deliberately closed ingress failed the scoped check'; }
+grep -Fxq 'SKIP kazoo-kamailio: SIP ingress was deliberately closed by the caller' <<<"$out" || fail 'the scope is not visible in the output'
+if out=$(run "${closed[@]}" 'T_ARGS=--ingress-closed' 'T_MEDIA='); then fail 'the ingress scope hid an unrelated failure'; fi
+status=0; out=$(run 'T_ARGS=--anything-else') || status=$?
+[[ $status == 2 ]] || fail 'an unknown argument must be refused, not ignored'
+verify=$(function_body verify_stack_health)
+grep -Fq '[[ ${KAZOO_INGRESS_CLOSED:-false} != true ]] || scope=(--ingress-closed)' <<<"$verify" || fail 'installer does not pass the explicit scope'
+! grep -Eq 'ingress|KAZOO_INGRESS' <<<"$(function_body install_stack_health)" || fail 'the timer must always run the full check'
+promote="$sh_root/scripts/promote-main-dev-runtime.sh"
+closed_line=$(grep -n '^KAZOO_INGRESS_CLOSED=true bash scripts/install-kazoo5.sh ' "$promote" | cut -d: -f1)
+start_line=$(grep -n '^systemctl start "\$ingress"$' "$promote" | cut -d: -f1)
+full_line=$(grep -n '^/usr/local/libexec/kazoo5-stack-health >> ' "$promote" | cut -d: -f1)
+pass_line=$(grep -n '^receipt PASS$' "$promote" | cut -d: -f1)
+[[ -n $closed_line && -n $start_line && -n $full_line && -n $pass_line ]] || fail 'promotion does not scope the installer and repay the full check'
+((closed_line < start_line && start_line < full_line && full_line < pass_line)) || fail 'promotion must run the full check after reopening ingress and before PASS'
+pass 'closed ingress is an explicit, visible, SIP-only scope; the timer is never scoped; the promotion repays the full check before PASS'
 
 install=$(function_body install_stack_health)
 grep -Fq 'kazoo5-stack-health.sh' <<<"$install" || fail 'health check is not installed'
