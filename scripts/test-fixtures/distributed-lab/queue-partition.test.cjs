@@ -57,7 +57,7 @@ assert(source.includes("!(partition&&serviceFaultMode)"),'One profile at a time'
 const faults=require('./queue-partition.cjs');
 assert.deepEqual(Object.keys(faults.SERVICE_FAULTS),['apps-kill','broker-restart','ecallmgr-kill','couchdb-outage','freeswitch-restart']);
 assert.equal(faults.serviceFault('freeswitch-restart').callLost,true);
-assert(source.includes("A call cannot outlive its media server")&&source.includes('list_fs_nodes'),'Media restart must lose the call and wait for both controllers');
+assert(source.includes("A call cannot outlive its media server")&&source.includes('ecallmgr_fs_nodes connected'),'Media restart must lose the call and wait for both controllers to be CONNECTED');
 assert.equal(faults.serviceFault('apps-kill').guest,'owner');
 for(const bad of [undefined,'','partition','apps-kill;reboot','__proto__'])assert.throws(()=>faults.serviceFault(bad),/KZ5_QUEUE_FAULT must be one of/);
 assert(source.includes("return seen.flat().every(v=>v.state==='paused');")&&source.includes("'queue-fault-unrelated-agents.json'"),'Unrelated agents must be proven unchanged, with the observed states retained on failure');

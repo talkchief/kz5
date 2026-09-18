@@ -204,7 +204,8 @@ function context(h) {
         if(f.callLost)assert.equal(survived,false,'A call cannot outlive its media server; the observation is wrong');
         await h.clearStage();
         if(f.mediaControllers)await h.until(quietly(()=>f.mediaControllers.every(c=>
-            /freeswitch@/.test(h.command('podman',['exec',c,'bash','-lc','sup -n ecallmgr ecallmgr_maintenance list_fs_nodes'],30000)))),240);
+            // list_fs_nodes keeps listing a node it has lost; only connected() proves the link.
+            /freeswitch@/.test(h.command('podman',['exec',c,'bash','-lc','sup -n ecallmgr -e ecallmgr_fs_nodes connected'],30000)))),240);
         // A killed node starts new agent processes, so the pinned pids no longer apply.
         pinned=undefined;
         const quiet=quietly;
