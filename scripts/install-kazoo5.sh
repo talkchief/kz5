@@ -5574,6 +5574,9 @@ SHM_MEMORY=64
 PKG_MEMORY=16
 EOF
     run install -D -m 0755 "$config_source/system/sbin/kazoo-kamailio" /usr/sbin/kazoo-kamailio
+    # An invalid configuration must fail once and visibly, never restart-loop.
+    run install -D -o root -g root -m 0755 "$SCRIPT_DIR/kazoo5-kamailio-config-guard.sh" \
+        /usr/local/libexec/kazoo5-kamailio-config-guard
     write_file 0644 /etc/systemd/system/kazoo-kamailio.service <<'EOF'
 [Unit]
 Description=Kamailio SIP Server Configured for Kazoo
@@ -5585,9 +5588,11 @@ Type=simple
 User=kamailio
 Group=kamailio
 ExecStartPre=+/usr/local/libexec/kazoo-kamailio-prepare
+ExecStartPre=/usr/local/libexec/kazoo5-kamailio-config-guard
 ExecStart=/usr/sbin/kazoo-kamailio foreground
 ExecStop=/usr/sbin/kamcmd core.kill
 Restart=on-failure
+RestartPreventExitStatus=78
 RestartSec=5
 LimitNOFILE=65536
 LimitCORE=infinity
@@ -5796,6 +5801,10 @@ verify_kamailio() {
     /usr/sbin/kamailio -v 2>&1 | grep -F "$KAMAILIO_VERSION" >/dev/null || \
         die "Installed Kamailio is not version ${KAMAILIO_VERSION}"
     /usr/sbin/kazoo-kamailio check >/dev/null || die 'Kazoo Kamailio configuration check failed'
+    cmp -s "$SCRIPT_DIR/kazoo5-kamailio-config-guard.sh" /usr/local/libexec/kazoo5-kamailio-config-guard || \
+        die 'The Kamailio configuration start guard is missing or differs from the reviewed source'
+    systemctl cat kazoo-kamailio.service | grep -Fxq 'RestartPreventExitStatus=78' || \
+        die 'kazoo-kamailio.service would restart-loop on an invalid configuration'
     if grep -Eq '^listen=(UDP|TCP|TLS)_[A-Z_]+' "$KAZOO_CONFIG_DIR/kamailio/local.cfg"; then
         die 'Kamailio local.cfg uses listener macro names before they are defined; set KAMAILIO_PUBLIC_SIP_IP instead'
     fi

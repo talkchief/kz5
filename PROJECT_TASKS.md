@@ -33,6 +33,33 @@ work postponed; do not generate voices at runtime or during deployment.
   per-node system_config sections, FreeSWITCH/Kamailio node names); a public SIP
   listener must be an installer option, not `local.cfg` lines.
 
+- **ACDC / redelivery admission — private pair NATIVE PASS, September18:** on `c9e73c7`
+  (installs23/17 exit0; the installer's new identity check passed natively on both
+  guests). The queue-partition harness now finds which node's worker holds the
+  caller's unacknowledged delivery (`queue-owner-rpc.escript`, read-only) and
+  partitions that node (`KZ5_QUEUE_PARTITION_TARGET=owner`, default) or the other
+  one. `kz5-stage-queue-partition-11`, owner apps14, hold120s, exit0, evidence in
+  `/var/lib/kazoo5-install-lab/queue-partition-11.log`: healthy apps20 logged
+  09:34:41.870 `was redelivered by the broker; verifying the caller before ringing`
+  and09:34:41.878 `has terminated; dropping the stale delivery without ringing`;
+  no `automatic logout of agent` on either node (run8 rang the agent three times
+  and logged it out at this point). Partitioned apps14: unresolved09:34:19,
+  released on complete terminated evidence09:36:49 after the route returned. Both
+  calls had directional audio; inventory PASS
+  (`queue-inventory-1789724241273-c6294841.json`). The bridged-elsewhere and
+  unknown-retry branches of the admission are covered offline only.
+
+- **PLAN A4 / Kamailio invalid configuration must not restart-loop — SOURCE + real-parser PASS, September18:**
+  `scripts/kazoo5-kamailio-config-guard.sh` runs the configuration check as
+  `ExecStartPre` after prepare; failure is one `err` line with the parser's cause
+  and remedy and exit78, and the unit gains `RestartPreventExitStatus=78`, so a bad
+  configuration stays failed and visible while runtime crashes still restart.
+  Against the real parser the September18 `local.cfg` line refuses naming
+  `could not resolve 'UDP_SIP'`. Three regression groups and the installer suites
+  pass. The installer's existing check was confirmed sound (the wrapper does
+  propagate a failed check). Not deployed; native proof is the injected line in the
+  lab Kamailio guest.
+
 - **ACDC / phantom waiting member after a broker outage — FOUND natively, SOURCE FIXED, September18:**
   Private pair on `301deca`. `kz5-stage-queue-partition-9` (35s) PASS, evidence
   `/var/log/kazoo-monitor-acceptance-WggD4L`, apps14 unresolved08:52:42 released
