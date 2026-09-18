@@ -7,6 +7,67 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **ACDC / readiness plan C3 — first native fault-matrix runs found TWO real agent defects, September18 (private lab, real calls):**
+  Profile `test-channel-monitor-live.cjs --distributed --queue-fault --live`, one role lost
+  while a queued call is bridged. Units and results, all retained:
+  | Unit | Fault | Result |
+  | --- | --- | --- |
+  | `kz5-stage-queue-fault-apps-kill-1` | SIGKILL the applications node owning the delivery | FAIL `An unrelated paused agent did not come back paused` |
+  | `kz5-stage-queue-fault-apps-kill-2` | same, observed states retained | FAIL `["172.30.253.14=sync","172.30.253.20=paused",...]` |
+  | `kz5-stage-queue-fault-apps-kill-3` | same | FAIL at its own precondition: my first fix left the agent `ready` on .14 and `paused` on .20 |
+  | `kz5-stage-queue-fault-apps-kill-4` (`93b6a3a`) | same | **PASS**: media bridge survived the kill, both replicas ready again after 19s without re-login, unrelated agents still paused on both nodes, second real call with directional audio, strict inventory on both nodes. Evidence `/var/log/kazoo-monitor-acceptance-DhCyoM` |
+  | `kz5-stage-queue-fault-broker-restart-1` | restart RabbitMQ | FAIL `Bounded live observation timed out`: recovery and the second call passed, then the strict inventory refused for good on .14 |
+  DEFECT1, paused agents return to rotation (`doc/acdc_agent_pause_restore.md`). Reproduced
+  by hand with ONE applications node: agent `paused` (FSM and stored status), `systemctl
+  restart kazoo-apps` at 12:10:52 -> `sync` -> **`ready`**, stored status overwritten with
+  `ready`. Nothing read the stored status when an agent's processes started, so every restart,
+  crash or installer run put agents on break back into rotation. With two nodes the restarted
+  replica instead stayed in `sync` for as long as the agent was paused. Fix `ba80c61` then
+  `93b6a3a` (the first version ignored a live peer answering `ready`; caught natively). Native
+  after the fix: single node paused -> restart 12:28:32 -> `paused`, stored status `paused`,
+  one `restoring the agent's pause` log line; two nodes, resumed while the peer was down ->
+  `ready/ready`; peer restarted while still paused -> `paused/paused`.
+  DEFECT2, agent leg stranded by a lost event: on .14 the call-taking agent's listener kept
+  one leg in shape `pending_control_queue` (drain diagnostic: `listener_status:
+  agent_listener_not_drained`); its CHANNEL_DESTROY was lost with the broker and nothing else
+  removes it, so the strict inventory (maintenance and the promotion idle gate) refused until
+  the agent's processes were restarted. Fix `b722015`: while no call is in progress, a leg
+  still tracked after 30s is checked every 60s against complete channel evidence and retired
+  through the ordinary destroy path. Offline: 38 FSM, 14 leg, 76 unit, 27 recovery tests.
+  Open: native broker-restart rerun with `b722015` (installing), then `ecallmgr-kill` and
+  `couchdb-outage`; a FreeSWITCH restart needs its own assertions (the call cannot survive).
+  Smaller finding: `sup acdc_maintenance agent_pause ACCOUNT AGENT 900` silently does
+  nothing (the third argument arrives as a binary); the two-argument form works.
+
+- **INCIDENT on main caused by my suite sweep, found by a triage agent, repaired — September18 11:40:06 UTC:**
+  `test-rabbitmq-password-stdin.cjs` runs the real `install_rabbitmq` as root; my node-name pin
+  (`c9e73c7`) writes its file directly, not through the stubbed writers, and with no host set it
+  created `/etc/rabbitmq/rabbitmq-env.conf` = `NODENAME=rabbit@` on main. The running broker
+  (`rabbit@dev-testing`) was unaffected; its next start or a reboot would have used an empty
+  database. The stack health timer reported it 76s later (`FAIL broker runs as
+  rabbit@dev-testing, pinned rabbit@`, first at 11:41:22) and kept failing; I was not watching
+  `systemctl --failed`. Repaired by hand to `NODENAME=rabbit@dev-testing` (as-found copy
+  `/root/kz5-rabbitmq-env.conf.as-found-20260918T1140`), health `Result=success`.
+  `rabbitmq_node_name` now refuses an empty or malformed host so the file is never created
+  (four bad values in the regression), and the fixture pins inside its own work directory;
+  the suite passes with the live file's mtime unchanged.
+
+- **Offline suite sweep COMPLETE and triaged — no production, installer or patch defect, September18:**
+  435 suites sequentially (`/root/kz5-suite-sweep-20260918/results.tsv`): 271 PASS, 104 FAIL.
+  Every failure rerun alone by three read-only agents: 43 were run wrongly by the sweep itself
+  (drivers needing an argument, `unshare -n`, a resource guard, the push-bridge venv
+  interpreter, or a live target; several must never be run bare, e.g.
+  `test-monster-console.cjs` targets a public URL). About 30 were harnesses that had not
+  followed deliberate changes; all repaired and verified: installer steps missing from stub
+  lists and step oracles, the Monster source cache the installer stopped keeping in `5184dbc`
+  (suites default to the newest `monster-owned-build.*/source`), 15 not 8 framework patches,
+  42 not 29 English clips, the ready-language adoption contract of `61bf505`, the deferred
+  statistics listener activation of `87ed290`, retry-mode defaults taken from the real script.
+  `test-acdc-gemini-runtime.sh` is historical by design and left failing. Design note for the
+  owner from the triage: saving a queue whose selected language is ready sends null tombstones
+  for its custom `announcements.media`/`callback.media` references even on an unrelated edit
+  (documented as deliberate in `monster-ui/acdc/README.md`; no media document is deleted).
+
 - **Installer and after-boot defects found by taking the final revision through every private guest, September18 — all fixed in source, native results below:**
   1. FRESH BROKER INSTALL WOULD FAIL (mine, `c9e73c7`): `pin_rabbitmq_node_name` read
      `/etc/rabbitmq/rabbitmq-env.conf` with `sed`; without the file sed exits2 and errexit
