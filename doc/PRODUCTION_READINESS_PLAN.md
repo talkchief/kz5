@@ -92,3 +92,21 @@ A1–A4 first: they turn silent multi-hour outages into prevented or loud ones.
 Then C1–C2, which are already in flight. Then C3 and D1 together, since they
 share the fault-injection harness. B2–B3 and C5 need the longest wall-clock time
 and run alongside.
+
+## Status on September 18, 2026 (evidence in `PROJECT_TASKS.md`)
+
+| Gate | Status |
+|---|---|
+| A1-A4 host and service resilience | Done natively: node identity and Kamailio start guards, broker name pin (refuses a name without a host), socket-activated port mapper, functional health timer. |
+| A7 reboot | **PASS**: whole-host reboot of main, 30 checks, no failed unit, every lab guest monitor alive. Legacy lab primaries still need `--repair-legacy-pivot` (lab artifact). |
+| B deployment script | Single entry point with interactive menu; nine side paths removed; fresh-broker and low-memory defects fixed; `--verify-only all` PASS on main (9 components); all offline suites triaged (no product defect). Open: B1 patch immutability manifest, fresh/upgrade install matrix on new hosts. |
+| C1-C2 | Done earlier and promoted. |
+| C3 fault matrix | **PASS natively** for node kill mid-call, broker, eCallMgr, CouchDB, FreeSWITCH. Two real agent defects found and fixed (paused agents returning to rotation after any restart; agent leg stranded by a lost event). Open: node kill mid-ring; the 486 window after a media restart. |
+| C4 ring strategies | **PASS natively** on main. |
+| C5 load and soak | Only a 30-call, 3-cycle broker-outage run. Needs the owner's target concurrency, agent count and duration. |
+| D1 callback recovery | **PASS natively**: queue supervisor loss, worker loss during ringing, applications node restart during `retry_wait`. Open: node loss during the returned leg and the bridge. |
+| D2 duplicate injection | Not done. |
+| D3 historical ambiguous ticket | Owner decision; never force-settled. |
+| D4 five-language audio on the final media build | Not re-run after today's changes (no media change today). |
+| E cutover rehearsal | Not started; needs a copy of production and the owner's window. |
+

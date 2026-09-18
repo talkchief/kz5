@@ -7,6 +7,24 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **ACDC C3 — FreeSWITCH restart during a bridged queue call, NATIVE PASS; one open product finding, September18:**
+  Unit `kz5-stage-queue-fault-freeswitch-restart-2` PASS (`/var/log/kazoo-monitor-acceptance-Z7Hq2m`):
+  the call is lost with its media server (asserted), both agent replicas ready again without
+  re-login, unrelated agents still paused, second real call with directional audio, strict
+  inventory on both nodes. Run1 (`-1`, `/var/log/kazoo-monitor-acceptance-NGbf1y`) FAILED and is
+  retained: the next call got `486 Unable to Comply` after 5s. Timeline from both eCallMgr
+  logs: restart 15:46:57.3, `node down` 15:46:58.8, first reconnect attempt failed 15:47:09.8,
+  reconnected 15:47:17.9; the call arrived 15:47:12.4. My harness waited on `list_fs_nodes`,
+  which keeps listing a node it has lost; it now waits on `ecallmgr_fs_nodes:connected/0`.
+  OPEN PRODUCT FINDING (upstream behaviour, not fixed): for about 20s after a media server
+  restart Kamailio already routes to FreeSWITCH (its OPTIONS answer) while no eCallMgr is
+  connected to serve its route requests, so new calls in that window fail with 486 instead of
+  waiting or failing over. Bounded by eCallMgr's reconnect interval; a fix would shorten that
+  interval or keep the media server out of the dispatcher until a controller is connected.
+  C3 matrix natively covered: applications node kill mid-call, broker restart (lab) and broker
+  outage x3 with 30 concurrent calls (main), eCallMgr kill (lab) and loss (main), CouchDB
+  outage, FreeSWITCH restart. Not covered: an applications node kill mid-RING.
+
 - **ACDC C3/C5 on main — broker outage with 30 concurrent queued calls, 3 cycles, NATIVE PASS, September18:**
   Unit `kz5-main-broker-fault-30x3-0918` (`test-acdc-node-loss.sh --live --fault broker
   --concurrent 30 --cycles 3`), evidence `/var/log/kazoo-acceptance/node-loss/20260918T152635Z`
