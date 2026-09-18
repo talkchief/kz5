@@ -672,17 +672,6 @@ Init.d script for rabbitmq
 
 Finds all docs in the repo and checks which are included in the [mkdocs.yml](https://github.com/2600hz/kazoo/blob/master/doc/mkdocs/mkdocs.yml) index
 
-## setup-dev.sh
-
-Script to setup a dev environment including:
-
--   Symlink SUP to /usr/bin
--   Symlink rabbitmq init.d script to /etc/init.d
--   Symlink kazoo init.d scripts to /etc/init.d
--   Reset RabbitMQ mnesia databases, logs
--   Setup users for rabbitmq and kazoo
-
-
 ## setup-git.sh
 
 Setup the username/email to use in Git commits and other Git settings
@@ -786,25 +775,6 @@ Searches for undocumented source files:
 ## `sync_mkdocs_pages.sh`
 
 A script to missing pages (Markdown files) from `mkdocs.yml` to other YAML files. Flag those files which are deleted or rename.
-
-## `sync_to_remote.bash`
-
-```bash
-HOST="server.com" ERL_FILES="path/to/source.erl" BEAM_PATH="/tmp/beams" ./scripts/sync_to_remote.bash
-```
-
-Takes the provided Erlang files, finds their .beam and syncs those to the remote server provided.
-
--   `ERL_FILES`: which source files to sync (the changed files (against master) are used by default).
--   `HOST`: The Host to use for the scp command
--   `BEAM_PATH`: Where on the Host to put the beam files
-
-## `sync_to_release.bash`
-
-Useful in conjunction with `sync_to_remote`. Takes .beam files in a directory and moves them into a release, into the proper application ebin, and reloads them in the default VMs
-
--   `BEAMS`: Path to beam files, defaults to `/tmp/beams/*.beam`
--   `DEST`: Path to the release's lib/ directory, defaults to `/opt/kazoo/lib`
 
 ## tags.escript
 

@@ -95,3 +95,10 @@ Root restored the helper after the completed test and zero native channels:
 Gemini remains one-time authoring only; no provider was invoked by these code,
 API or call-harness checks. Five-language/real-MOH/30-second and release gates
 remain separate from this focused fix.
+
+## Removed helper (September 18, 2026)
+
+The development-only helper `scripts/deploy-single-key-callback.cjs` and its test described above was removed. The record above is
+kept as the evidence of that run. `scripts/install-kazoo5.sh` is the only installation entry
+point and already builds and installs this change from tracked source or its patch; see
+`doc/single_install_entry_point.md`.

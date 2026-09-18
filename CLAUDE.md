@@ -114,11 +114,16 @@ it restarts selected services, so it needs a maintenance window and must never b
 as a status check.
 
 ```sh
+sudo ./scripts/install-kazoo5.sh                 # on a terminal: menu (components, action, confirm)
 sudo ./scripts/install-kazoo5.sh --list
 sudo ./scripts/install-kazoo5.sh --dry-run kazoo-apps
 sudo ./scripts/install-kazoo5.sh --verify-only all
 sudo ./scripts/install-kazoo5.sh couchdb rabbitmq
 ```
+
+Nothing else may change a host: no side `deploy-*` scripts and no hot-loading of BEAMs
+(`doc/single_install_entry_point.md`, guarded by `scripts/test-single-install-entry-point.sh`).
+A new deployment need becomes an installer step plus its `scripts/test-install-*` regression.
 
 Components: `couchdb`, `rabbitmq`, `haproxy`, `kazoo-apps`, `ecallmgr`, `freeswitch`,
 `kamailio`, `monster-ui`, `push-bridge`, `all`. Inputs come from environment variables

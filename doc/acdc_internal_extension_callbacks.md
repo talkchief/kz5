@@ -145,3 +145,10 @@ same parameterized harness: `c26844/session62944/efcaac` exit0, evidence
 unanswered-first retry, reciprocal agent bridge and service/log checks pass.
 That route uses the isolated loopback carrier, not real PSTN, and retains its
 fixture too.
+
+## Removed helper (September 18, 2026)
+
+The development-only helper `scripts/deploy-internal-callback.cjs` described above was removed. The record above is
+kept as the evidence of that run. `scripts/install-kazoo5.sh` is the only installation entry
+point and already builds and installs this change from tracked source or its patch; see
+`doc/single_install_entry_point.md`.

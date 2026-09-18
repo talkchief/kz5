@@ -106,3 +106,10 @@ are met. Native scope-policy reads return a view array; their view ETag is not a
 document revision. Capture strong revisions from write envelopes and verify
 absence independently. Never delete an assigned scope policy while its issued
 tokens can still authenticate.
+
+## Removed helper (September 18, 2026)
+
+The development-only helper `scripts/deploy-scope-management-guard.sh` described above was removed. The record above is
+kept as the evidence of that run. `scripts/install-kazoo5.sh` is the only installation entry
+point and already builds and installs this change from tracked source or its patch; see
+`doc/single_install_entry_point.md`.
