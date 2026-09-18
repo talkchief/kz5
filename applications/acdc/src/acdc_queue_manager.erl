@@ -441,6 +441,7 @@ init([Super, AccountId, QueueId]) ->
                                               ,supervisor=Super
                                               ,strategy=Strategy
                                               ,strategy_state=StrategyState
+                                              ,member_reconcile=arm_member_reconcile(#{})
                                               })}.
 
 %%------------------------------------------------------------------------------
@@ -928,6 +929,13 @@ add_new_queue_member(JObj, Priority, StampedCall, StampedCalls, Position,
 %% @end
 %%------------------------------------------------------------------------------
 -spec handle_info(any(), mgr_state()) -> kz_types:handle_info_ret_state(mgr_state()).
+handle_info({'timeout', Ref, 'member_reconcile'}, #state{member_reconcile=#{'timer' := Ref}}=State) ->
+    {'noreply', start_member_reconcile(State)};
+handle_info({'member_liveness', Ref, Results}, #state{member_reconcile=#{'probe_ref' := Ref}=Reconcile}=State) ->
+    Cleared = State#state{member_reconcile=maps:without(['probe_ref', 'probe_pid'], Reconcile)},
+    {'noreply', lists:foldl(fun reconcile_member/2, Cleared, Results)};
+handle_info({'member_liveness', _, _}, State) ->
+    {'noreply', State};
 handle_info(_Info, State) ->
     lager:debug("unhandled message: ~p", [_Info]),
     {'noreply', State}.
@@ -1021,6 +1029,76 @@ prune_settled_members(Settled, Now) ->
             Newest = lists:sublist(lists:reverse(lists:keysort(2, maps:to_list(Fresh))), ?SETTLED_MEMBER_MAX),
             maps:from_list(Newest)
     end.
+
+%% Membership is replicated between managers only by non-durable broadcasts. A
+%% manager that loses its broker connection misses member_remove and
+%% call_success for good, and kept a finished caller as a waiting member
+%% forever (kz5-stage-queue-partition-10): wrong positions, wrong "up next" and a
+%% maintenance gate that never drains. The switch is the authority on whether a
+%% caller still waits, so each manager periodically checks its oldest ordinary
+%% members there. Only complete evidence removes one, and only locally; the
+%% owning worker still publishes its own events. Callback members deliberately
+%% have no caller channel while they wait and are never examined.
+-define(MEMBER_RECONCILE_MS, 60 * ?MILLISECONDS_IN_SECOND).
+-define(MEMBER_RECONCILE_PROBE_MS, 20 * ?MILLISECONDS_IN_SECOND).
+-define(MEMBER_RECONCILE_MIN_AGE_MS, 30 * ?MILLISECONDS_IN_SECOND).
+-define(MEMBER_RECONCILE_BATCH, 5).
+
+-spec arm_member_reconcile(map()) -> map().
+arm_member_reconcile(Reconcile) ->
+    Reconcile#{'timer' => erlang:start_timer(?MEMBER_RECONCILE_MS, self(), 'member_reconcile')}.
+
+-spec start_member_reconcile(mgr_state()) -> mgr_state().
+start_member_reconcile(#state{account_id=AccountId, current_member_calls=Calls, member_reconcile=Reconcile}=State) ->
+    %% Re-arm first: a probe killed by its watchdog never reports.
+    _ = case maps:get('probe_pid', Reconcile, 'undefined') of
+            Old when is_pid(Old) -> exit(Old, 'kill');
+            _ -> 'ok'
+        end,
+    Seen = maps:get('seen', Reconcile, #{}),
+    Now = erlang:monotonic_time('millisecond'),
+    Ids = [acdc_queue_member:physical_id(Call) || Call <- Calls, not acdc_queue_member:is_callback(Call)],
+    %% First sight only starts the clock, so a caller that has just been added
+    %% and is about to be answered is never examined.
+    Seen1 = maps:from_list([{Id, maps:get(Id, Seen, Now)} || Id <- Ids]),
+    Due = lists:sublist([Id || Id <- Ids, Now - maps:get(Id, Seen1) >= ?MEMBER_RECONCILE_MIN_AGE_MS]
+                       ,?MEMBER_RECONCILE_BATCH),
+    Armed = arm_member_reconcile(maps:without(['probe_ref', 'probe_pid'], Reconcile#{'seen' => Seen1})),
+    case Due of
+        [] -> State#state{member_reconcile=Armed};
+        _ ->
+            Parent = self(), Ref = make_ref(),
+            Pid = spawn(fun() ->
+                {'ok', Watchdog} = timer:kill_after(?MEMBER_RECONCILE_PROBE_MS, self()),
+                Results = [{Id, try acdc_callback_recovery_io:observe_channels(AccountId, [Id])
+                                catch _:_ -> {'error', 'unknown'} end} || Id <- Due],
+                _ = timer:cancel(Watchdog),
+                Parent ! {'member_liveness', Ref, Results}
+            end),
+            State#state{member_reconcile=Armed#{'probe_ref' => Ref, 'probe_pid' => Pid}}
+    end.
+
+-spec reconcile_member({kz_term:ne_binary(), any()}, mgr_state()) -> mgr_state().
+reconcile_member({CallId, Result}, #state{current_member_calls=Calls}=State) ->
+    Member = [Call || Call <- Calls, acdc_queue_member:physical_id(Call) =:= CallId
+                      , not acdc_queue_member:is_callback(Call)],
+    case {Member, member_liveness(Result, CallId)} of
+        {[Call], 'gone'} ->
+            lager:notice("waiting member ~s no longer has a waiting caller; removing the stale member locally", [CallId]),
+            remove_queue_member(acdc_queue_member:logical_id(Call), State);
+        _ -> State
+    end.
+
+%% Terminated, or already bridged to another leg, is not a waiting caller.
+-spec member_liveness(any(), kz_term:ne_binary()) -> 'gone' | 'waiting' | 'unknown'.
+member_liveness({'ok', #{'complete' := 'true', 'channels' := Channels}}, CallId) when is_list(Channels) ->
+    case [O || #{'call_id' := Id}=O <- Channels, Id =:= CallId] of
+        [#{'state' := 'terminated', 'responders' := [_|_]}] -> 'gone';
+        [#{'state' := 'active', 'other_leg_call_id' := Leg}] when is_binary(Leg), byte_size(Leg) > 0 -> 'gone';
+        [#{'state' := 'active'}] -> 'waiting';
+        _ -> 'unknown'
+    end;
+member_liveness(_, _) -> 'unknown'.
 
 -spec queue_member(kz_term:ne_binary(), [kapps_call:call()]) -> kapps_call:call() | 'undefined'.
 queue_member(LogicalId, Calls) ->

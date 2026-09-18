@@ -40,7 +40,11 @@ for(const change of [{agents:inventory.agents.slice(1)},{all_agent_workers_obser
     {agents:inventory.agents.map(a=>({...a,state:'paused'}))},
     {agents:inventory.agents.map(a=>({...a,queues:[]}))}])assert.throws(()=>strictInventory({...inventory,...change},s));
 assert(source.includes('strict_all_replica_agent_drain:true'));
-assert(source.includes("timeout:300")&&source.includes('while(Date.now()<end)')&&source.includes('Date.now()+35000'));
+assert(source.includes("timeout:300")&&source.includes('while(Date.now()<end)')&&source.includes('Date.now()+partitionHoldMs()'));
+const {partitionHoldMs}=require('./queue-partition.cjs');
+assert.equal(partitionHoldMs(undefined),35000);assert.equal(partitionHoldMs(''),35000);
+assert.equal(partitionHoldMs('120000'),120000);assert.equal(partitionHoldMs('150000'),150000);
+for(const bad of ['34999','150001','180000','0','-1','12e4','120000 ','abc','1200000'])assert.throws(()=>partitionHoldMs(bad),bad);
 assert(source.includes("both('ready'),90")&&source.includes('no_sip_reregistration:true'));
 assert(!source.includes("status:'login'")&&!source.includes("status:'logout'")&&!source.includes('systemctl restart'));
 assert(source.includes("async function run({partition=true}={})"));

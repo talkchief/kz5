@@ -306,3 +306,112 @@ with_config_defaults(Fun) ->
     meck:expect(kapps_config, get_binary, fun(_, _, Default) -> Default end),
     meck:expect(kapps_config, get_binary, fun(_, _, Default, _) -> Default end),
     try Fun() after meck:unload(kapps_config) end.
+
+%%% Member liveness reconciliation: a manager that missed member_remove or
+%%% call_success (broker outage) kept a finished caller as a waiting member
+%%% forever (kz5-stage-queue-partition-10).
+reconcile_member(Id) -> kapps_call:set_call_id(Id, kapps_call:new()).
+reconcile_callback_member(Id) ->
+    kapps_call:kvs_store(<<"acdc_callback_id">>, <<"callback-1">>, reconcile_member(Id)).
+reconcile_state(Calls, Seen) ->
+    Ref = make_ref(),
+    {Ref, #state{account_id = <<"account">>, queue_id = <<"queue">>, current_member_calls = Calls
+                ,member_reconcile = #{'timer' => Ref, 'seen' => Seen}}}.
+observation(Id, Fields) ->
+    {'ok', #{'complete' => 'true', 'bridge' => #{}, 'reasons' => []
+            ,'channels' => [maps:merge(#{'call_id' => Id, 'responders' => [<<"ecallmgr@a">>]}, Fields)]}}.
+long_ago() -> erlang:monotonic_time('millisecond') - 120000.
+tick(Ref, State) ->
+    {'noreply', Next} = acdc_queue_manager:handle_info({'timeout', Ref, 'member_reconcile'}, State),
+    Next.
+member_ids(#state{current_member_calls=Calls}) -> [kapps_call:call_id(C) || C <- Calls].
+liveness(State) ->
+    Ref = maps:get('probe_ref', State#state.member_reconcile),
+    receive {'member_liveness', Ref, _}=Msg -> Msg after 3000 -> error('no_liveness_result') end.
+
+with_observations(Fun) ->
+    meck:new('acdc_callback_recovery_io', ['non_strict', 'no_link']),
+    try Fun() after meck:unload('acdc_callback_recovery_io') end.
+
+stale_members_are_removed_only_on_complete_evidence_test() ->
+    with_observations(
+      fun() ->
+          Answers = #{<<"ended">> => observation(<<"ended">>, #{'state' => 'terminated'})
+                     ,<<"talking">> => observation(<<"talking">>, #{'state' => 'active', 'answered' => 'true'
+                                                                     ,'other_leg_call_id' => <<"agent-leg">>})
+                     ,<<"waiting">> => observation(<<"waiting">>, #{'state' => 'active', 'answered' => 'true'})
+                     ,<<"unknown">> => {'unknown', #{'complete' => 'false'}}
+                     ,<<"no-responders">> => observation(<<"no-responders">>, #{'state' => 'terminated', 'responders' => []})
+                     },
+          meck:expect('acdc_callback_recovery_io', 'observe_channels'
+                     ,fun(<<"account">>, [Id]) -> maps:get(Id, Answers) end),
+          Ids = maps:keys(Answers),
+          {Ref, State} = reconcile_state([reconcile_member(Id) || Id <- Ids]
+                                        ,maps:from_list([{Id, long_ago()} || Id <- Ids])),
+          Probing = tick(Ref, State),
+          ?assertEqual(lists:sort(Ids), lists:sort(member_ids(Probing))),
+          {'noreply', Done} = acdc_queue_manager:handle_info(liveness(Probing), Probing),
+          ?assertEqual([<<"no-responders">>, <<"unknown">>, <<"waiting">>], lists:sort(member_ids(Done))),
+          ?assertNot(maps:is_key('probe_ref', Done#state.member_reconcile)),
+          %% The timer is re-armed on every tick and a stale result changes nothing.
+          ?assertNotEqual(Ref, maps:get('timer', Probing#state.member_reconcile)),
+          ?assert(is_integer(erlang:read_timer(maps:get('timer', Probing#state.member_reconcile)))),
+          Stale = {'member_liveness', make_ref(), [{<<"waiting">>, maps:get(<<"ended">>, Answers)}]},
+          ?assertEqual({'noreply', Done}, acdc_queue_manager:handle_info(Stale, Done)),
+          ?assertEqual({'noreply', Done}, acdc_queue_manager:handle_info({'timeout', make_ref(), 'member_reconcile'}, Done))
+      end).
+
+new_and_callback_members_are_never_examined_test() ->
+    with_observations(
+      fun() ->
+          meck:expect('acdc_callback_recovery_io', 'observe_channels'
+                     ,fun(_, [Id]) -> observation(Id, #{'state' => 'terminated'}) end),
+          %% A callback member has no caller channel by design; a new caller may be answered any moment.
+          Calls = [reconcile_callback_member(<<"callback-wait">>), reconcile_member(<<"just-arrived">>)],
+          {Ref, State} = reconcile_state(Calls, #{<<"callback-wait">> => long_ago()}),
+          First = tick(Ref, State),
+          ?assertNot(maps:is_key('probe_ref', First#state.member_reconcile)),
+          ?assertEqual(0, meck:num_calls('acdc_callback_recovery_io', 'observe_channels', '_')),
+          ?assertEqual([<<"just-arrived">>], maps:keys(maps:get('seen', First#state.member_reconcile))),
+          ?assertEqual([<<"callback-wait">>, <<"just-arrived">>], lists:sort(member_ids(First))),
+          %% A forged result for the callback member is ignored as well.
+          Forged = First#state{member_reconcile=(First#state.member_reconcile)#{'probe_ref' => Ref}},
+          {'noreply', Kept} = acdc_queue_manager:handle_info(
+                                {'member_liveness', Ref, [{<<"callback-wait">>, observation(<<"callback-wait">>, #{'state' => 'terminated'})}]}
+                               ,Forged),
+          ?assertEqual([<<"callback-wait">>, <<"just-arrived">>], lists:sort(member_ids(Kept)))
+      end).
+
+reconciliation_is_bounded_and_replaces_a_hung_probe_test() ->
+    with_observations(
+      fun() ->
+          Parent = self(),
+          meck:expect('acdc_callback_recovery_io', 'observe_channels'
+                     ,fun(_, [Id]) -> Parent ! {'probed', Id}, receive 'never' -> 'ok' end end),
+          Ids = [<<"m", (integer_to_binary(N))/binary>> || N <- lists:seq(1, 9)],
+          {Ref, State} = reconcile_state([reconcile_member(Id) || Id <- Ids]
+                                        ,maps:from_list([{Id, long_ago()} || Id <- Ids])),
+          Hung = tick(Ref, State),
+          HungPid = maps:get('probe_pid', Hung#state.member_reconcile),
+          receive {'probed', <<"m1">>} -> 'ok' after 2000 -> error('probe_not_started') end,
+          Monitor = erlang:monitor('process', HungPid),
+          Next = tick(maps:get('timer', Hung#state.member_reconcile), Hung),
+          receive {'DOWN', Monitor, 'process', HungPid, 'killed'} -> 'ok' after 2000 -> error('hung_probe_survived') end,
+          ?assertNotEqual(HungPid, maps:get('probe_pid', Next#state.member_reconcile)),
+          exit(maps:get('probe_pid', Next#state.member_reconcile), 'kill'),
+          ?assertEqual(9, length(member_ids(Next)))
+      end).
+
+reconciliation_examines_at_most_five_members_per_tick_test() ->
+    with_observations(
+      fun() ->
+          meck:expect('acdc_callback_recovery_io', 'observe_channels'
+                     ,fun(_, [Id]) -> observation(Id, #{'state' => 'terminated'}) end),
+          Ids = [<<"m", (integer_to_binary(N))/binary>> || N <- lists:seq(1, 9)],
+          {Ref, State} = reconcile_state([reconcile_member(Id) || Id <- Ids]
+                                        ,maps:from_list([{Id, long_ago()} || Id <- Ids])),
+          Probing = tick(Ref, State),
+          {'noreply', Done} = acdc_queue_manager:handle_info(liveness(Probing), Probing),
+          ?assertEqual(5, meck:num_calls('acdc_callback_recovery_io', 'observe_channels', '_')),
+          ?assertEqual(4, length(member_ids(Done)))
+      end).

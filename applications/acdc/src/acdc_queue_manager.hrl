@@ -32,6 +32,7 @@
                ,announcements_pids = #{} :: announcements_pids()
                ,agent_order = [] :: kz_term:ne_binaries()
                ,settled_member_calls = #{} :: #{tuple() => integer()} % delivery acknowledged by its owner; monotonic ms
+               ,member_reconcile = #{} :: map() % liveness reconciliation of ordinary waiting members
                }).
 -type mgr_state() :: #state{}.
 

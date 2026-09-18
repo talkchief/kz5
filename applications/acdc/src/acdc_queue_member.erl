@@ -26,6 +26,7 @@
         ,lookup/2
         ,position/2
         ,remove/2
+        ,is_callback/1
         ]).
 
 -include("acdc.hrl").
@@ -116,6 +117,11 @@ logical_id(Call) ->
 
 -spec logical_member_id(kapps_call:call()) -> kz_term:ne_binary().
 logical_member_id(Call) -> logical_id(Call).
+
+%% A callback member deliberately has no live caller channel while it waits.
+-spec is_callback(kapps_call:call()) -> boolean().
+is_callback(Call) ->
+    kapps_call:kvs_fetch(?CALLBACK_ID, Call) =/= 'undefined'.
 
 -spec physical_id(kapps_call:call()) -> kz_term:ne_binary().
 physical_id(Call) -> kapps_call:call_id(Call).

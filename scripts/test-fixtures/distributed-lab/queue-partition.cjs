@@ -37,6 +37,18 @@ function inspectAudio(audio,buffer,start,end) {
     }
     return proof;
 }
+// The default hold spans the agent's reconciliation interval. RabbitMQ only
+// drops the unreachable node's connection, and REDELIVERS its unacknowledged
+// member call to the healthy node, after a longer silence; run8 showed that
+// path ringing an agent for a dead caller and logging it out. An explicit longer
+// hold exercises it. It must end before the independent 3-minute route watchdog.
+function partitionHoldMs(value=process.env.KZ5_QUEUE_PARTITION_HOLD_MS) {
+    if(value===undefined||value==='')return 35000;
+    assert(/^[1-9][0-9]{4,5}$/.test(value),'Partition hold must be whole milliseconds');
+    const hold=Number(value);
+    assert(hold>=35000&&hold<=150000,'Partition hold must be 35000..150000 ms, below the 3-minute restore watchdog');
+    return hold;
+}
 function strictInventory(v,s) {
     assert.equal(v.schema_version,2);assert.equal(v.all_agent_workers_observed,true);
     assert.equal(v.complete_cluster_drain_proven,false);
@@ -153,7 +165,7 @@ function context(h) {
         const first=await call(partition?'queue-before-partition':'queue-first',partition?async()=>{
             h.setFault(fault);await fault.start();h.log('Applications14 broker disconnected; peer20 healthy; ending exact synthetic conversation');
             await h.clearStage();
-            const samples=[],end=Date.now()+35000;
+            const samples=[],end=Date.now()+partitionHoldMs();
             while(Date.now()<end) {
                 assert(!fault.available(nodes[0])&&fault.available(nodes[1]));
                 const v=probe(nodes[0],agent,pinned[0]);assert.equal(v.state,'answered','Unknown disconnected call must remain conservatively busy');
@@ -185,4 +197,4 @@ function context(h) {
     }
     return {run,restorePauses};
 }
-module.exports={context,identity,snapshot,inspectAudio,ownedAgent,strictInventory};
+module.exports={context,identity,snapshot,inspectAudio,ownedAgent,strictInventory,partitionHoldMs};
