@@ -910,7 +910,24 @@ dnf_transaction() {
     with_dnf_guard run dnf --setopt=exit_on_lock=True "$@"
 }
 
+# "dnf install" never upgrades an installed package, so when every requested
+# plain package name is already installed the transaction changes nothing, yet
+# it still loads all repository metadata: about 700 MB resident, enough to be
+# OOM-killed beside RabbitMQ on a 1 GiB host (private broker guest, install 3,
+# September 18, 2026), and it needs the network on a converged host.
+dnf_packages_present() {
+    local package
+    for package in "$@"; do
+        [[ $package =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]] || return 1
+    done
+    rpm -q -- "$@" >/dev/null 2>&1
+}
+
 dnf_install() {
+    if dnf_packages_present "$@"; then
+        log "Packages already installed: $*"
+        return 0
+    fi
     dnf_transaction install -y "$@"
 }
 

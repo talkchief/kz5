@@ -12,6 +12,7 @@ dnf() {
     if [[ $case_name == other ]]; then printf '%s\n' 'nodejs 20 [e] common [d] [i] Javascript runtime'; fi
 }
 run() { commands+=("$*"); }
+dnf_transaction() { commands+=("dnf $*"); }
 dnf_install() { [[ $* == 'nodejs npm' ]]; commands+=(packages); }
 for case_name in fresh existing other; do
     commands=()

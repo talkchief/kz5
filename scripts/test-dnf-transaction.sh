@@ -26,6 +26,19 @@ reset_case() {
     cache_exec='{ path=/usr/bin/dnf ; argv[]=/usr/bin/dnf makecache --timer ; ignore_errors=no ; }'
     DRY_RUN=false
 }
+# Installed packages never open a transaction (about 700 MB of metadata; the
+# private broker guest's dnf was OOM-killed beside RabbitMQ on September 18, 2026).
+rpm() { [[ $1 == -q && $2 == -- ]] || return 97; shift 2; for name in "$@"; do [[ " $present " == *" $name "* ]] || return 1; done; }
+reset_case; present='jq tar'
+[[ $(dnf_install jq tar) == '[kazoo5] Packages already installed: jq tar' && ! -s $trace ]]
+dnf_install jq missing-one >/dev/null 2>&1
+grep -Fxq 'dnf --setopt=exit_on_lock=True install -y jq missing-one' "$trace"
+# A group, URL or option is never judged by rpm -q: it always reaches dnf.
+for spec in '@development' 'https://example.net/x.rpm' '--enablerepo=crb'; do
+    reset_case; present="$spec"; dnf_install "$spec" >/dev/null 2>&1
+    grep -Fq -- "install -y $spec" "$trace"
+done
+present=
 reset_case
 dnf_install bash-completion >/dev/null 2>&1
 [[ $(tail -n 3 "$trace") == $'stop dnf-makecache.service\ndnf --setopt=exit_on_lock=True install -y bash-completion\nstart dnf-makecache.timer' ]]

@@ -12,6 +12,7 @@ KAZOO_RABBITMQ_BIND=127.0.0.1 KAZOO_AMQP_PORT=5672 DRY_RUN=false
 log() { :; }
 die() { printf '%s\n' "$*" >&2; exit 1; }
 dnf_install() { :; }
+pin_rabbitmq_node_name() { :; }   # covered by test-install-kazoo5-node-identity.sh
 download() { :; }
 write_file() { while IFS= read -r _; do :; done; }
 run() {

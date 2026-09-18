@@ -10,6 +10,7 @@ DRY_RUN=false
 install_nodejs_toolchain() { :; }
 # The real guard stops/restarts dnf-makecache.timer; test-dnf-transaction.sh owns it.
 with_dnf_guard() { "$@"; }
+dnf_packages_present() { return 1; }   # this host has sox; exercise the dependency step
 run() {
     [[ "$*" == 'dnf --setopt=exit_on_lock=True install -y sox' ]] || return 91
     printf '%s\n' dependency:sox >>"$cardinal_fixture/events"
