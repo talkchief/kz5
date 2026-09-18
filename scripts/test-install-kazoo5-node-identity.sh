@@ -48,16 +48,19 @@ expect_refusal 'unknown role' 'unknown role' "$ni_work/identity" "$ni_work/good.
 pass 'seven inconsistent identities refuse with exit 78 and one explicit line each'
 
 units=$(function_body install_kazoo_systemd_units)
+# systemd honours RestartPreventExitStatus only for the MAIN process. Natively,
+# a refusing ExecStartPre guard still restart-looped (private peer, September 18,
+# 2026), so the guard must be the first step of ExecStart and exec the node.
 for role in kazoo_apps ecallmgr; do
-    grep -Fq "ExecStartPre=+/usr/local/libexec/kazoo5-identity-guard ${role}" <<<"$units" || fail "unit for ${role} lacks the start guard"
+    grep -Eq "^ExecStart=/usr/bin/bash -c '/usr/local/libexec/kazoo5-identity-guard ${role} && exec [^']+ ${role}'\$" <<<"$units" || \
+        fail "unit for ${role} does not run the guard as the first step of its main process"
 done
+! grep -Eq '^ExecStartPre=.*kazoo5-identity-guard' <<<"$units" || fail 'an ExecStartPre guard restart-loops; it must be in ExecStart'
 [[ $(grep -c '^RestartPreventExitStatus=78$' <<<"$units") == 2 ]] || fail 'a refused start must stay failed, not loop'
 grep -Fq 'install_kazoo_identity_guard' <<<"$units" || fail 'guard is not installed with the units'
-# The guard must run before anything else can start the node on defaults.
-awk '/ExecStartPre=/{print; exit}' <<<"$units" | grep -Fq 'kazoo5-identity-guard' || fail 'guard is not the first ExecStartPre'
 grep -Fq 'verify_kazoo_identity_guard kazoo_apps' <<<"$(function_body verify_kazoo_apps)" || fail 'apps verification omits identity'
 grep -Fq 'verify_kazoo_identity_guard ecallmgr' <<<"$(function_body verify_ecallmgr)" || fail 'ecallmgr verification omits identity'
-pass 'both units run the guard first, stay failed on refusal, and verification checks identity'
+pass 'both units run the guard inside the main process, stay failed on refusal, and verification checks identity'
 
 # Installer refuses a changed hostname before doing anything, in every mode.
 config="$ni_work/deployment.env"

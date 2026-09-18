@@ -33,6 +33,34 @@ work postponed; do not generate voices at runtime or during deployment.
   per-node system_config sections, FreeSWITCH/Kamailio node names); a public SIP
   listener must be an installer option, not `local.cfg` lines.
 
+- **PLAN A2/A4 / start guards — design CORRECTED after native failure, then NATIVE PASS, September18:**
+  First native injection (private apps peer, the September18 `config.ini` host edit):
+  the identity guard refused with the right single error, but the unit
+  RESTART-LOOPED (restarts2->6, `activating`). systemd applies
+  `RestartPreventExitStatus` only to the MAIN process, not to `ExecStartPre`; the
+  offline tests had asserted unit text only. Both guards now run as the first step
+  of `ExecStart` (`guard && exec <node>`). Applied by hand in the lab guests and
+  re-injected: kazoo-apps -> `failed`, status78, restarts0 and still0 after45s,
+  listed by `systemctl --failed`, exactly one `err` line; healthy start execs the
+  Erlang VM as the service user. Kamailio guest with the actual
+  `listen=UDP_SIP advertise ...` line -> `failed`, status78, restarts0 (was4,367),
+  cause `could not resolve 'UDP_SIP'`; both guests restored and active. The
+  offline suites now require the ExecStart form and reject an ExecStartPre guard.
+  Not yet installed by the installer on any host; hostname-change injection and
+  the RabbitMQ pin (A1) still need native proof.
+
+- **ACDC / member reconciliation — private pair NATIVE PASS, September18:**
+  `kz5-stage-queue-partition-12`, `KZ5_QUEUE_PARTITION_TARGET=other`, hold120s,
+  exit0: apps20 owned the delivery, non-owner apps14 was cut off (the run10
+  scenario). Apps14 logged09:40:58 `waiting member 1-301206@... no longer has a
+  waiting caller; removing the stale member locally`; strict drain and inventory
+  PASS (`queue-inventory-1789724494734-814def6d.json`). Run10 failed at this point.
+
+- **TEST / `test-kazoo-address-gate-wiring.cjs` was already failing — FIXED, September18:**
+  fails against the pre-session installer `d14880e` too: `88bf049` added
+  `dnf_install binutils` to the FreeSWITCH path of `service_enable_restart` and the
+  suite never stubbed it. Stub added; passes. A failing suite hides regressions.
+
 - **ACDC / redelivery admission — private pair NATIVE PASS, September18:** on `c9e73c7`
   (installs23/17 exit0; the installer's new identity check passed natively on both
   guests). The queue-partition harness now finds which node's worker holds the

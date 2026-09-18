@@ -2792,6 +2792,9 @@ EOF
 }
 
 # The start guard and the identity it checks. See scripts/kazoo5-identity-guard.sh.
+# systemd honours RestartPreventExitStatus only for the MAIN process, not for
+# ExecStartPre (natively: a refusing ExecStartPre guard still restart-looped).
+# Each guard therefore runs as the first step of ExecStart and execs the node.
 install_kazoo_identity_guard() {
     run install -D -o root -g root -m 0755 "$SCRIPT_DIR/kazoo5-identity-guard.sh" \
         /usr/local/libexec/kazoo5-identity-guard
@@ -2864,10 +2867,9 @@ Environment="KAZOO_APPS=${KAZOO_APPS_LIST}"
 Environment="KAZOO_NODE_NAME_TYPE=${KAZOO_NODE_NAME_TYPE}"
 Environment="KAZOO_ERLANG_DIST_IP=${KAZOO_ERLANG_DIST_IP}"
 Environment="ERL_FLAGS=-noshell -noinput"
-ExecStartPre=+/usr/local/libexec/kazoo5-identity-guard kazoo_apps
 ExecStartPre=/usr/local/libexec/kazoo5-reserve-pivot-ports --check
 ExecStartPre=/usr/bin/env KAZOO_DEPLOYMENT_CONFIG=/nonexistent /usr/bin/bash -c 'source ${SCRIPT_DIR}/install-kazoo5.sh; verify_kazoo_production_beams'
-ExecStart=${KAZOO_ROOT}/scripts/dev-start-apps.sh kazoo_apps
+ExecStart=/usr/bin/bash -c '/usr/local/libexec/kazoo5-identity-guard kazoo_apps && exec ${KAZOO_ROOT}/scripts/dev-start-apps.sh kazoo_apps'
 Restart=on-failure
 RestartPreventExitStatus=78
 RestartSec=5
@@ -2903,10 +2905,9 @@ Environment=KAZOO_APPS=ecallmgr
 Environment="KAZOO_NODE_NAME_TYPE=${KAZOO_NODE_NAME_TYPE}"
 Environment="KAZOO_ERLANG_DIST_IP=${KAZOO_ERLANG_DIST_IP}"
 Environment="ERL_FLAGS=-noshell -noinput"
-ExecStartPre=+/usr/local/libexec/kazoo5-identity-guard ecallmgr
 ExecStartPre=/usr/local/libexec/kazoo5-reserve-pivot-ports --check
 ExecStartPre=/usr/bin/env KAZOO_DEPLOYMENT_CONFIG=/nonexistent /usr/bin/bash -c 'source ${SCRIPT_DIR}/install-kazoo5.sh; verify_kazoo_production_beams'
-ExecStart=${KAZOO_ROOT}/scripts/dev-start-ecallmgr.sh ecallmgr
+ExecStart=/usr/bin/bash -c '/usr/local/libexec/kazoo5-identity-guard ecallmgr && exec ${KAZOO_ROOT}/scripts/dev-start-ecallmgr.sh ecallmgr'
 Restart=on-failure
 RestartPreventExitStatus=78
 RestartSec=5
@@ -5588,8 +5589,7 @@ Type=simple
 User=kamailio
 Group=kamailio
 ExecStartPre=+/usr/local/libexec/kazoo-kamailio-prepare
-ExecStartPre=/usr/local/libexec/kazoo5-kamailio-config-guard
-ExecStart=/usr/sbin/kazoo-kamailio foreground
+ExecStart=/usr/bin/bash -c '/usr/local/libexec/kazoo5-kamailio-config-guard && exec /usr/sbin/kazoo-kamailio foreground'
 ExecStop=/usr/sbin/kamcmd core.kill
 Restart=on-failure
 RestartPreventExitStatus=78

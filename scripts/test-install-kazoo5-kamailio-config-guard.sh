@@ -30,14 +30,18 @@ status=0; out=$(KAZOO_KAMAILIO_CHECK=$(fake silent 'exit 3') bash "$kg_guard" 2>
 pass 'valid configuration starts; invalid refuses with exit 78, one line, parser detail and remedy'
 
 unit=$(sed -n '/write_file 0644 \/etc\/systemd\/system\/kazoo-kamailio.service/,/^EOF$/p' "$kg_installer")
-grep -Fxq 'ExecStartPre=/usr/local/libexec/kazoo5-kamailio-config-guard' <<<"$unit" || fail 'unit lacks the configuration guard'
+# RestartPreventExitStatus is honoured only for the main process: natively an
+# ExecStartPre guard still restart-looped, so the guard execs Kamailio itself.
+grep -Fxq "ExecStart=/usr/bin/bash -c '/usr/local/libexec/kazoo5-kamailio-config-guard && exec /usr/sbin/kazoo-kamailio foreground'" <<<"$unit" || \
+    fail 'unit does not run the configuration guard as the first step of its main process'
+! grep -Eq '^ExecStartPre=.*kazoo5-kamailio-config-guard' <<<"$unit" || fail 'an ExecStartPre guard restart-loops; it must be in ExecStart'
 grep -Fxq 'RestartPreventExitStatus=78' <<<"$unit" || fail 'unit would restart-loop on an invalid configuration'
 grep -Fxq 'Restart=on-failure' <<<"$unit" || fail 'runtime crashes must still restart'
-# prepare creates the runtime directory the check needs, so it must come first.
-[[ $(grep -n 'ExecStartPre' <<<"$unit" | head -1) == *kazoo-kamailio-prepare* ]] || fail 'prepare must precede the guard'
+# prepare creates the runtime directory the check needs; ExecStartPre precedes ExecStart.
+grep -Fxq 'ExecStartPre=+/usr/local/libexec/kazoo-kamailio-prepare' <<<"$unit" || fail 'prepare must still run before the main process'
 grep -Fq 'kazoo5-kamailio-config-guard.sh' "$kg_installer" || fail 'guard is not installed'
 grep -Fq "would restart-loop on an invalid configuration" "$kg_installer" || fail 'verification does not require the no-loop setting'
-pass 'unit runs the guard after prepare, never restarts on exit 78, still restarts on crashes; installer verifies both'
+pass 'unit runs the guard inside the main process after prepare, never restarts on exit 78, still restarts on crashes'
 
 config=/etc/kazoo/kamailio
 if [[ -x /usr/sbin/kamailio && -f $config/kamailio.cfg && -f $config/local.d/00-kazoo5-installer.cfg ]]; then
