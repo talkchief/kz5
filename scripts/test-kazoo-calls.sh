@@ -578,8 +578,11 @@ start_callers() {
 }
 
 wait_checked() {
-    local label=$1 pid=$2
-    if ! wait "$pid"; then die "$label SIPp process failed; see protected run diagnostics"; fi
+    local label=$1 pid=$2 status=0
+    # SIPp: 1 = a call failed, 97 = internal exit, 99 = no call processed,
+    # 253-255 = fatal/bind/RTP errors, 128+N = killed by signal N.
+    wait "$pid" || status=$?
+    ((status == 0)) || die "$label SIPp process failed (exit ${status}); see protected run diagnostics"
 }
 
 wait_agents_checked() {
