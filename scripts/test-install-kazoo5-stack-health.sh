@@ -29,7 +29,7 @@ shim rabbitmqctl 'if [[ $* == *"node()."* ]]; then echo "${T_BROKER_NODE:-rabbit
 shim sup 'if [[ $* == *is_available* ]]; then
   [[ $* == *"-n ecallmgr"* ]] && echo "${T_ECALLMGR_AMQP-true}" || echo "${T_APPS_AMQP-true}"
 elif [[ $* == *list_fs_nodes* ]]; then printf "%s" "${T_MEDIA-freeswitch@node1}"; fi'
-shim curl 'printf "%s" "${T_HTTP:-401}"'
+shim curl '[[ $* == *"http://127.0.0.1:8000/" ]] || { echo "unexpected probe URL: $*" >&2; exit 9; }; printf "%s" "${T_HTTP:-200}"'
 shim pgrep 'printf "%s\n" ${T_STRAY-}'
 shim epmd 'printf "name %s at port 1\n" ${T_EPMD-couchdb rabbit kazoo_apps ecallmgr freeswitch}'
 shim ss 'printf "%s\n" "${T_LISTEN-UNCONN 0 0 10.0.0.5:5060 0.0.0.0:*}"'
@@ -65,6 +65,7 @@ expect 'broker on a new node name' 'broker runs as rabbit@kz5-dev, pinned rabbit
 expect 'apps node on defaults' 'kazoo_apps: SUP cannot be reached' 'T_APPS_AMQP='
 expect 'ecallmgr login refused' 'ecallmgr: SUP cannot be reached' 'T_ECALLMGR_AMQP=false'
 expect 'dead API' 'Crossbar does not answer' 'T_HTTP=000'
+expect 'API answering with an error' 'Crossbar does not answer' 'T_HTTP=503'
 expect 'changed hostname' 'hostname is kz5-dev.talkchief.io, installed as node1' 'T_HOSTNAME=kz5-dev.talkchief.io'
 expect 'restart loop' 'kazoo-kamailio has restarted 4367 times' 'T_LOOPING=kazoo-kamailio'
 expect 'inactive role' 'kazoo-freeswitch is inactive' 'T_INACTIVE=kazoo-freeswitch'
@@ -73,7 +74,7 @@ expect 'no media link' 'connected to no FreeSWITCH node' 'T_MEDIA='
 expect 'media node lost from the port mapper' 'freeswitch is not registered with the Erlang port mapper: restart kazoo-freeswitch' 'T_EPMD=couchdb rabbit kazoo_apps ecallmgr'
 expect 'port mapper owned by a Kazoo service' 'runs outside epmd.service (pid 386407)' 'T_STRAY=386407'
 expect 'SIP edge not listening' 'Kamailio is not listening on 10.0.0.5:5060/udp' 'T_LISTEN='
-pass 'twelve failure classes, including every "active but dead" condition of the outage, fail with an err line'
+pass 'thirteen failure classes, including every "active but dead" condition of the outage, fail with an err line'
 
 # Roles that are not installed on this host are not judged.
 out=$(run 'T_DISABLED=kazoo-apps kazoo-ecallmgr kazoo-freeswitch kazoo-kamailio nginx kazoo-push-bridge couchdb haproxy' 'T_HTTP=000' 'T_APPS_AMQP=' 'T_MEDIA=' 'T_LISTEN=') || \

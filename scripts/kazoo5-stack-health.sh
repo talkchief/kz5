@@ -94,8 +94,11 @@ node_check() {   # sup-node human-name
 }
 if installed kazoo-apps.service; then
     node_check kazoo_apps 'kazoo_apps: SUP'
-    code=$(bounded curl -s -o /dev/null -w '%{http_code}' --max-time 8 http://127.0.0.1:8000/v2/ 2>/dev/null)
-    [[ $code =~ ^[234][0-9][0-9]$ ]] && ok "Crossbar answers (HTTP ${code})" || fail "Crossbar does not answer on 127.0.0.1:8000 (HTTP ${code:-none})"
+    # The unauthenticated root answers 200. Probing /v2/ made Crossbar log
+    # "generating error 401" every two minutes, which failed the call
+    # campaigns' fresh-error log gate (main, September 18, 2026).
+    code=$(bounded curl -s -o /dev/null -w '%{http_code}' --max-time 8 http://127.0.0.1:8000/ 2>/dev/null)
+    [[ $code =~ ^[23][0-9][0-9]$ ]] && ok "Crossbar answers (HTTP ${code})" || fail "Crossbar does not answer on 127.0.0.1:8000 (HTTP ${code:-none})"
 fi
 if installed kazoo-ecallmgr.service; then
     node_check ecallmgr 'ecallmgr: SUP'

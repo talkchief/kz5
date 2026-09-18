@@ -2348,7 +2348,7 @@
     },
     {
       "file": "applications/acdc/src/acdc_agent_listener.erl",
-      "sha256": "854a437bd8928bf525ca7c70cda0666d193d0ae6bb98d02bf6aa7670dd215425"
+      "sha256": "ed52debb14b10ddfacc48ba7f8fcb5ac1c24a401a992b7b45bca59de3460b0d8"
     },
     {
       "file": "applications/acdc/src/acdc_callback_caller.erl",
@@ -2984,7 +2984,7 @@
     },
     {
       "file": "scripts/install-kazoo5.sh",
-      "sha256": "2d3802277f8f0f554ba9b55e6e2feb421000c6d56765af87d80a0832d1b38b5e"
+      "sha256": "62daf554fe4ca9a9f00f24a76664874a1972a3111efe4a2b1c0fd39351f66d6f"
     },
     {
       "file": "scripts/patches/blackhole-before-stream-guard.patch",

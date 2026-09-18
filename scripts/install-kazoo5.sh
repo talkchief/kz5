@@ -2164,6 +2164,9 @@ ensure_kazoo_sources() {
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-call-forward-confirmation.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-media-scoped-migration.patch"
     apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-dns-validation-default.patch"
+    # Stock Kazoo reports cluster inventory to telemetry.2600hz.org with no switch
+    # to turn it off. It is opt-in here (system_config telemetry, key enabled).
+    apply_required_source_patch "$core_dir" "$SCRIPT_DIR/patches/kazoo-telemetry-opt-in.patch"
     # One patch per overlapping source stack makes reinstallation idempotent:
     # later callback edits must not invalidate reverse checks of earlier OTP
     # and announcement hunks. Feature patches remain review/test provenance.

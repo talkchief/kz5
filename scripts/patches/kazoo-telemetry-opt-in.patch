@@ -1,0 +1,29 @@
+diff --git a/kazoo_telemetry/src/kazoo_telemetry_leader.erl b/kazoo_telemetry/src/kazoo_telemetry_leader.erl
+index 8da3518d5..7d0880c2d 100644
+--- a/kazoo_telemetry/src/kazoo_telemetry_leader.erl
++++ b/kazoo_telemetry/src/kazoo_telemetry_leader.erl
+@@ -110,11 +110,23 @@ init([]) ->
+     'ok' = kz_nodes_bindings:bind_info(?MODULE, 'node_info'),
+     lager:notice("starting kazoo_telemetry leader"),
+     LeaderCheck = erlang:start_timer(?TM_LEADER_TICK, self(), 'leader_poll'),
+-    {'ok', #state{responders=?TM_RESPONDERS
++    {'ok', #state{responders=configured_responders()
+                  ,leader_poll_tref = LeaderCheck
+                  ,startup = kz_process:startup()
+                  }}.
+ 
++%% Reporting cluster inventory (applications, database, media and SIP servers,
++%% services) to a third party is opt-in. Without responders the leader election
++%% still runs, but nothing is collected or sent.
++-spec configured_responders() -> kz_term:atoms().
++configured_responders() ->
++    case kapps_config:get_boolean(?TELEMETRY_CAT, <<"enabled">>, 'false', <<"default">>) of
++        'true' -> ?TM_RESPONDERS;
++        'false' ->
++            lager:notice("third-party telemetry is disabled (system_config telemetry, key enabled)"),
++            []
++    end.
++
+ %%------------------------------------------------------------------------------
+ %% @doc Handling call messages
+ %% @end
