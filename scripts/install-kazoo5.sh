@@ -3056,8 +3056,19 @@ verify_stack_health() {
     [[ $(systemctl is-enabled kazoo5-stack-health.timer 2>/dev/null) == enabled && \
        $(systemctl is-active kazoo5-stack-health.timer 2>/dev/null) == active ]] || \
         die 'kazoo5-stack-health.timer is not enabled and active'
-    /usr/local/libexec/kazoo5-stack-health "${scope[@]}" >/dev/null || \
-        die 'The Kazoo stack health check reports a failing role; its FAIL lines are above'
+    # A role may be reconnecting at this instant (a broker restart elsewhere
+    # failed an otherwise complete private apps-peer install). Like every other
+    # readiness check here, wait for health; a persistent failure still fails.
+    local attempt
+    for attempt in 1 2 3 4 5 6; do
+        if /usr/local/libexec/kazoo5-stack-health "${scope[@]}" >/dev/null 2>"$KAZOO_CACHE_DIR/stack-health.err"; then
+            break
+        fi
+        ((attempt < 6)) || { cat "$KAZOO_CACHE_DIR/stack-health.err" >&2
+            die 'The Kazoo stack health check reports a failing role after six attempts over a minute; its FAIL lines are above'; }
+        log "Stack health attempt ${attempt} of 6 not yet healthy; waiting"
+        sleep 12
+    done
     log "PASS Kazoo stack health check installed, scheduled and currently healthy${scope:+ (SIP ingress closed by the caller, not judged)}"
 }
 

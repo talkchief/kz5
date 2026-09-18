@@ -101,6 +101,26 @@ pass_line=$(grep -n '^receipt PASS$' "$promote" | cut -d: -f1)
 ((closed_line < start_line && start_line < full_line && full_line < pass_line)) || fail 'promotion must run the full check after reopening ingress and before PASS'
 pass 'closed ingress is an explicit, visible, SIP-only scope; the timer is never scoped; the promotion repays the full check before PASS'
 
+# The gate waits through a transient and still fails on a persistent fault.
+gate() {   # failures-before-healthy -> prints log, returns the gate's status
+    ( set +e
+      DRY_RUN=false SCRIPT_DIR=$sh_root/scripts KAZOO_CACHE_DIR=$sh_work; count="$sh_work/attempts"; : > "$count"
+      log() { printf '%s\n' "$*"; }; die() { printf 'ERROR: %s\n' "$*"; exit 1; }
+      cmp() { return 0; }; sleep() { :; }
+      systemctl() { [[ $1 == is-enabled ]] && echo enabled || echo active; }
+      printf '#!/usr/bin/env bash\necho x >> %q\n(( $(wc -l < %q) > %d )) || { echo "FAIL ecallmgr: reconnecting" >&2; exit 1; }\n' "$count" "$count" "$1" > "$sh_work/health-stub"
+      chmod +x "$sh_work/health-stub"
+      eval "$(function_body verify_stack_health | sed "s#/usr/local/libexec/kazoo5-stack-health \"#$sh_work/health-stub \"#")"
+      verify_stack_health )
+}
+set +e; out=$(gate 3); status=$?; set -e
+[[ $status == 0 && $(wc -l < "$sh_work/attempts") == 4 ]] && grep -Fq 'attempt 3 of 6 not yet healthy' <<<"$out" && grep -Fq 'PASS Kazoo stack health' <<<"$out" || \
+    { printf '%s\n' "$out"; fail 'a role that reconnects within the wait must not fail the install'; }
+set +e; out=$(gate 99 2>&1); status=$?; set -e
+[[ $status != 0 && $(wc -l < "$sh_work/attempts") == 6 ]] && grep -Fq 'after six attempts' <<<"$out" && grep -Fq 'FAIL ecallmgr: reconnecting' <<<"$out" || \
+    { printf '%s\n' "$out"; fail 'a persistent failure must fail after six attempts and show the FAIL lines'; }
+pass 'the install gate waits through a transient, and fails with the FAIL lines on a persistent fault'
+
 install=$(function_body install_stack_health)
 grep -Fq 'kazoo5-stack-health.sh' <<<"$install" || fail 'health check is not installed'
 grep -Fxq 'OnBootSec=4min' <<<"$install" && grep -Fxq 'OnUnitActiveSec=2min' <<<"$install" || fail 'timer does not cover boot and steady state'
