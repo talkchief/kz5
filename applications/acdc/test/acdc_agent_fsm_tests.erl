@@ -171,6 +171,45 @@ pause_left_test_() ->
     ,?_assertEqual('undefined', acdc_agent_util:pause_left(300, 'undefined', 1100))
     ].
 
+%% The stored pause is read as ONE row for this agent. The account-wide scan it
+%% replaced held every datastore connection when 100 agents logged in together.
+restorable_pause_lookup_test_() ->
+    Account = <<"11111111111111111111111111111111">>,
+    Agent = <<"22222222222222222222222222222222">>,
+    Row = fun(Status, Extra) ->
+                  kz_json:from_list([{<<"doc">>, kz_json:from_list([{<<"agent_id">>, Agent}
+                                                                 ,{<<"status">>, Status}
+                                                                 ,{<<"timestamp">>, kz_time:now_s() - 100}
+                                                                  | Extra
+                                                                 ])}])
+          end,
+    Lookup = fun(Result) ->
+                     'ok' = meck:new('kz_datamgr', ['passthrough', 'no_link']),
+                     'ok' = meck:new('kz_amqp_worker', ['passthrough', 'no_link']),
+                     meck:expect('kz_amqp_worker', 'call_collect', fun(_, _, _, _) -> {'error', 'no_broker'} end),
+                     meck:expect('kz_datamgr', 'get_results', fun(_Db, _View, _Options) -> Result end),
+                     try
+                         Pause = acdc_agent_util:restorable_pause(Account, Agent),
+                         {Pause, [{View, Options} || {_, {'kz_datamgr', 'get_results', [_, View, Options]}, _} <- meck:history('kz_datamgr')]}
+                     after
+                         meck:unload('kz_amqp_worker'),
+                         meck:unload('kz_datamgr')
+                     end
+             end,
+    {Left, Queries} = Lookup({'ok', [Row(<<"paused">>, [{<<"pause_time">>, 300}])]}),
+    [{View, Options}] = Queries,
+    [?_assert(Left > 190 andalso Left =< 200)
+    ,?_assertEqual(<<"agent_stats/most_recent_by_agent">>, View)
+    ,?_assertEqual(1, props:get_value('limit', Options))
+    ,?_assertEqual([Agent, kz_json:new()], props:get_value('startkey', Options))
+    ,?_assertEqual([Agent, 0], props:get_value('endkey', Options))
+    ,?_assert(lists:member('descending', Options))
+    ,?_assertMatch({'infinity', [_]}, Lookup({'ok', [Row(<<"paused">>, [])]}))
+    ,?_assertMatch({'undefined', [_]}, Lookup({'ok', [Row(<<"ready">>, [])]}))
+    ,?_assertMatch({'undefined', [_]}, Lookup({'ok', []}))
+    ,?_assertMatch({'undefined', [_]}, Lookup({'error', 'checkout_timeout'}))
+    ].
+
 %% An agent whose processes start while its devices are in calls is busy, not ready.
 live_calls_at_start_test_() ->
     Device = fun(User) -> kz_json:from_list([{<<"sip">>, kz_json:from_list([{<<"username">>, User}])}]) end,

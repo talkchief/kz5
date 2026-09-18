@@ -57,10 +57,42 @@ most_recent_status(AccountId, AgentId) ->
 %% 'infinity' for an open-ended pause, or 'undefined' when there is none to restore.
 -spec restorable_pause(kz_term:ne_binary(), kz_term:ne_binary()) -> 'undefined' | timeout().
 restorable_pause(AccountId, AgentId) ->
-    case most_recent_statuses(AccountId, AgentId) of
-        {'ok', Statuses} -> latest_pause(kz_json:get_json_value(AgentId, Statuses));
-        _Error -> 'undefined'
+    Live = statuses_or_empty(most_recent_ets_statuses(AccountId, AgentId, [])),
+    Stored = statuses_or_empty(newest_db_status(AccountId, AgentId)),
+    latest_pause(kz_json:get_json_value(AgentId, kz_json:merge(Stored, Live))).
+
+-spec statuses_or_empty(statuses_return() | {'error', any()}) -> kz_json:object().
+statuses_or_empty({'ok', Statuses}) -> Statuses;
+statuses_or_empty({'error', _}) -> kz_json:new().
+
+%% Exactly one row: this agent's newest stored status. most_recent_statuses/2
+%% reads the account's whole month of statuses with their documents whenever
+%% its cache is cold. Every agent asks as its processes start, so 100 agents
+%% logging in together ran 100 of those scans (about 50s each), held every
+%% datastore connection of the node, and the API answered 401 on the timed-out
+%% identity lookup (main development host, 100-call capacity run, September 18,
+%% 2026).
+-spec newest_db_status(kz_term:ne_binary(), kz_term:ne_binary()) ->
+          statuses_return() | {'error', any()}.
+newest_db_status(AccountId, AgentId) ->
+    case kz_datamgr:get_results(acdc_stats_util:db_name(AccountId)
+                               ,<<"agent_stats/most_recent_by_agent">>
+                               ,newest_status_view_options(AgentId)
+                               )
+    of
+        {'error', _}=E -> E;
+        {'ok', Stats} -> {'ok', cleanup_db_statuses(Stats, [{<<"Agent-ID">>, AgentId}])}
     end.
+
+-spec newest_status_view_options(kz_term:ne_binary()) -> kz_term:proplist().
+newest_status_view_options(AgentId) ->
+    [{'startkey', [AgentId, kz_json:new()]}
+    ,{'endkey', [AgentId, 0]}
+    ,{'limit', 1}
+    ,'descending'
+    ,'include_docs'
+    ,{'reduce', 'false'}
+    ].
 
 -spec latest_pause(kz_term:api_object()) -> 'undefined' | timeout().
 latest_pause('undefined') -> 'undefined';
