@@ -263,7 +263,9 @@ function context(h) {
             try{return nodes.map(n=>strictInventory(JSON.parse(h.command('podman',
                 ['exec',n.id,'escript','/usr/local/libexec/kazoo5-maintenance-snapshot','--snapshot',n.ip],20000)),s));}
             catch(_){return false;}
-        },45);
+        // A leg whose end was lost with the fault is retired by the listener's
+        // reconciliation: 30 s minimum age, the next 60 s tick, then the probe.
+        },serviceFaultMode?200:45);
         h.writePrivate('queue-post-call-agent-inventories.json',JSON.stringify(drained,null,2)+'\n');
         h.writePrivate(partition?'queue-partition-evidence.json':serviceFaultMode?'queue-fault-evidence.json':'queue-calls-evidence.json',JSON.stringify({first,second,ready,
             strict_all_replica_agent_drain:true,partition_exercised:partition,service_fault:serviceFaultMode?serviceFault().name:null,
