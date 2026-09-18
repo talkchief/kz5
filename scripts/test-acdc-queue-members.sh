@@ -17,7 +17,7 @@ cd "$project_root"
 export ERL_LIBS="$project_root/deps:$project_root/core:$project_root/applications"
 export ERL_FLAGS='+S 1:1 +SDcpu 1 +SDio 1 +A 1'
 export ERL_CRASH_DUMP=/dev/null
-erlc -DTEST -Werror -I core/kazoo_call/include \
+erlc -DTEST +debug_info -Werror -I core/kazoo_call/include \
     -I applications/acdc/src -I applications/acdc/include \
     -pa deps/lager/ebin +'{parse_transform,lager_transform}' -o "$test_dir" \
     core/kazoo_call/src/kapps_call.erl \
