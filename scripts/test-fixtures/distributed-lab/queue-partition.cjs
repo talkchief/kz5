@@ -60,7 +60,11 @@ const SERVICE_FAULTS={
     'apps-kill':{guest:'owner',unit:'kazoo-apps.service',action:'kill'},
     'broker-restart':{guest:'kz5-stage-rabbitmq',unit:'rabbitmq-server.service',action:'restart'},
     'ecallmgr-kill':{guest:'kz5-stage-ecallmgr',unit:'kazoo-ecallmgr.service',action:'kill'},
-    'couchdb-outage':{guest:'kz5-stage-couchdb',unit:'couchdb.service',action:'outage'}
+    'couchdb-outage':{guest:'kz5-stage-couchdb',unit:'couchdb.service',action:'outage'},
+    // The media server takes the call down with it: the bridge must NOT survive, and
+    // both media controllers must see the node again before the next call is judged.
+    'freeswitch-restart':{guest:'kz5-stage-freeswitch',unit:'kazoo-freeswitch.service',action:'restart',callLost:true,
+        mediaControllers:['kz5-stage-ecallmgr','kz5-stage-ecallmgr-peer']}
 };
 function serviceFault(value=process.env.KZ5_QUEUE_FAULT) {
     assert(Object.hasOwn(SERVICE_FAULTS,String(value)),'KZ5_QUEUE_FAULT must be one of '+Object.keys(SERVICE_FAULTS).join(', '));
@@ -183,6 +187,7 @@ function context(h) {
         for(const file of Object.values(input))fs.unlinkSync(file);
         h.writePrivate(label+'-evidence.json',JSON.stringify(proof,null,2)+'\n');return proof;
     }
+    const quietly=fn=>()=>{try{return fn();}catch(_){return false;}};
     async function injectServiceFault() {
         const f=serviceFault(),owner=deliveryOwner();
         const guest=f.guest==='owner'?nodes.find(n=>n.ip===(owner||nodes[0].ip)).id:f.guest;
@@ -196,10 +201,13 @@ function context(h) {
         await h.sleep(3000);
         // Evidence, not an assumption: whether the media bridge outlived the role.
         let survived=true;try{alive();}catch(_){survived=false;}
+        if(f.callLost)assert.equal(survived,false,'A call cannot outlive its media server; the observation is wrong');
         await h.clearStage();
+        if(f.mediaControllers)await h.until(quietly(()=>f.mediaControllers.every(c=>
+            /freeswitch@/.test(h.command('podman',['exec',c,'bash','-lc','sup -n ecallmgr ecallmgr_maintenance list_fs_nodes'],30000)))),240);
         // A killed node starts new agent processes, so the pinned pids no longer apply.
         pinned=undefined;
-        const quiet=fn=>()=>{try{return fn();}catch(_){return false;}};
+        const quiet=quietly;
         const recovered=await h.until(quiet(()=>both('ready')),300);
         // No unrelated agent state change: the two paused agents are still paused on both nodes.
         let seen;
