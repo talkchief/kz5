@@ -7,6 +7,42 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **OUTAGE / main44 down 00:50-07:58 UTC September18 — RECOVERED, cause was host changes, not a deployment:**
+  Root shell history shows `hostnamectl set-hostname kz5-dev.talkchief.io`, manual
+  edits to Kamailio `local.cfg` (00:42), `/etc/hosts` (00:49), `config.ini` (00:54),
+  `SELINUX=disabled` (23:28) and reboots at 00:47/00:50. RabbitMQ keeps its database
+  under `rabbit@<hostname>`: it started an EMPTY broker (`rabbit@kz5-dev`), so
+  eCallMgr got `ACCESS_REFUSED` and kazoo-apps fell back to `127.0.0.1`; the API
+  was down while systemd reported both active. Seven `listen=UDP_SIP advertise ...`
+  lines in `local.cfg` (read before `listener-defs.cfg` defines those names) made
+  Kamailio refuse to start: 4,367 restarts. The private-address mapping for
+  `dev-testing` had been removed from `/etc/hosts`. New tracked
+  `scripts/recover-dev-node-identity.sh` restored the installed node identity
+  (hostname, hosts mapping, two `host =` lines, disabled the seven lines with a
+  note, broker restart verified on `rabbit@dev-testing` with the kazoo user,
+  services restarted, API/SUP/FreeSWITCH link/Kamailio verified). Independent
+  checks: nine services active, Kamailio restarts0, Crossbar401, both nodes
+  `@dev-testing`, FreeSWITCH linked, UI HTTPS200, the three operator carriers still
+  trusted, DNS validation still false. As-found files:
+  `/root/kz5-hostname-recovery-20260918` and
+  `/root/kz5-node-identity-recovery-20260918.GSne3xgi`. SELinux had been
+  PERMISSIVE before (all7,629 retained denials `permissive=1`, so it never blocked
+  carrier traffic); `disabled` stops every lab guest (`failed to mount shm tmpfs:
+  invalid argument`). Staged back to `permissive` with `/.autorelabel`; needs one
+  reboot. Open: a real hostname change needs a tested migration (broker data,
+  per-node system_config sections, FreeSWITCH/Kamailio node names); a public SIP
+  listener must be an installer option, not `local.cfg` lines.
+
+- **P0-08 / redelivered member call rings agents for a dead caller — FOUND natively, SOURCE FIXED, September17-18:**
+  `kz5-stage-queue-partition-8` exit1 on private pair `e8b7344`: the healthy node
+  received the partitioned node's redelivery, rang agent1 three times for a caller
+  who had hung up and auto-logged the agent out at 23:19:39. Queue FSM now verifies
+  the caller only for broker redeliveries: terminated or bridged-elsewhere is
+  acknowledged and dropped, a waiting caller proceeds, unknown retries then falls
+  back. Thirteen ordinary groups pass (four new fail on `b7064f2`); all affected
+  suites pass. Not deployed; native proof is the same campaign. See
+  `doc/acdc_redelivered_member_calls.md`. The failed campaign is retained.
+
 - **OPS / carrier whitelisting command — FIXED in source + native repair, September17:**
   Operator ran `sup ecallmgr_maintenance allow_carrier` for three carriers; each
   ended in `noproc ... ecallmgr_fs_nodes` and the entries were stored under
