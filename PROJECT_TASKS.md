@@ -33,6 +33,35 @@ work postponed; do not generate voices at runtime or during deployment.
   per-node system_config sections, FreeSWITCH/Kamailio node names); a public SIP
   listener must be an installer option, not `local.cfg` lines.
 
+- **ACDC / phantom waiting member after a broker outage — FOUND natively, SOURCE FIXED, September18:**
+  Private pair on `301deca`. `kz5-stage-queue-partition-9` (35s) PASS, evidence
+  `/var/log/kazoo-monitor-acceptance-WggD4L`, apps14 unresolved08:52:42 released
+  08:53:42, no automatic logout, inventory PASS
+  (`queue-inventory-1789721726141-630125c7.json`). `kz5-stage-queue-partition-10`
+  with the new bounded `KZ5_QUEUE_PARTITION_HOLD_MS=120000` FAILED, exit1, in the
+  strict drain (`/var/log/kazoo-monitor-acceptance-OtArTT`): both calls bridged
+  with audio, both agent replicas ready, zero channels, markers0, but apps14's
+  manager kept the finished first caller as a waiting member because it missed
+  the non-durable removal broadcast. Managers now reconcile ordinary members
+  against the switch every60s, at most five, removing locally only on complete
+  terminated or bridged evidence; callback and new members are never examined.
+  Unit64 (four new groups) and all affected suites pass. Not deployed.
+  **Redelivery admission is still NOT exercised natively**: in both runs the healthy
+  node owned the delivery; the harness must partition the owning node. See
+  `doc/acdc_member_reconciliation.md`. The failed campaign is retained.
+
+- **PLAN A1/A2 / installed node identity — SOURCE + offline PASS, September18:**
+  The installer now persists `KAZOO_NODE_HOST` and refuses, in every mode, when the
+  hostname differs (cause and `hostnamectl` remedy) instead of re-keying part of
+  the system; pins `NODENAME=rabbit@<host>` in `rabbitmq-env.conf` once, never
+  re-keys an existing pin, and verifies the running node name; installs
+  `scripts/kazoo5-identity-guard.sh` as the first `ExecStartPre` of kazoo-apps and
+  eCallMgr with `RestartPreventExitStatus=78`, so an inconsistent identity is one
+  explicit error and a failed unit, never "active" on `127.0.0.1`. The guard
+  refuses the actual September18 `config.ini`. `scripts/test-install-kazoo5-node-
+  identity.sh` passes five groups; ten installer suites pass. Not deployed; native
+  proof is a hostname change injected in a lab guest (plan gate A1/A2).
+
 - **GOAL / owner, September18:** the September17-18 failures are not acceptable; host,
   installer, reboot behavior, ACDC and callbacks must be production ready.
   `doc/PRODUCTION_READINESS_PLAN.md` lists the thirteen failures exposed, the

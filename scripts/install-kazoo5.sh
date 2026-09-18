@@ -26,7 +26,7 @@ readonly DEFAULT_KAZOO_ROOT
 # remote endpoints while still accepting intentional overrides.
 KAZOO_DEPLOYMENT_CONFIG=${KAZOO_DEPLOYMENT_CONFIG:-/etc/kazoo/deployment.env}
 readonly KAZOO_PERSISTED_KEYS=(
-    KAZOO_ROOT KAZOO_BUILD_ROOT KAZOO_CACHE_DIR KAZOO_CONFIG_DIR KAZOO_COOKIE_FILE
+    KAZOO_ROOT KAZOO_BUILD_ROOT KAZOO_CACHE_DIR KAZOO_CONFIG_DIR KAZOO_COOKIE_FILE KAZOO_NODE_HOST
     KAZOO_AMQP_HOST KAZOO_AMQP_PORT KAZOO_RABBITMQ_USER KAZOO_RABBITMQ_PASSWORD
     KAZOO_RABBITMQ_VHOST KAZOO_AMQP_URI KAZOO_COUCHDB_HOST KAZOO_COUCHDB_PORT
     KAZOO_RABBITMQ_API_URL KAZOO_RABBITMQ_API_USER KAZOO_RABBITMQ_API_PASSWORD
@@ -141,6 +141,10 @@ KAZOO_COUCHDB_BIND=${KAZOO_COUCHDB_BIND:-127.0.0.1}
 KAZOO_RABBITMQ_BIND=${KAZOO_RABBITMQ_BIND:-127.0.0.1}
 KAZOO_HAPROXY_BIND=${KAZOO_HAPROXY_BIND:-127.0.0.1}
 KAZOO_PUBLIC_IP=${KAZOO_PUBLIC_IP:-}
+# Host name this node was first installed with. RabbitMQ's database, Erlang node
+# names, config.ini host sections and per-node system_config documents are keyed
+# by it, so it is recorded once and never silently re-derived.
+KAZOO_NODE_HOST=${KAZOO_NODE_HOST:-}
 KAZOO_ERLANG_DIST_IP=${KAZOO_ERLANG_DIST_IP:-127.0.0.1}
 KAZOO_API_URL=${KAZOO_API_URL:-}
 KAZOO_PUBLIC_HOSTNAME=${KAZOO_PUBLIC_HOSTNAME:-}
@@ -1235,6 +1239,10 @@ preflight() {
         KAZOO_MAKE_JOBS=2
     fi
     KAZOO_HOSTNAME=$(hostname -f 2>/dev/null || hostname)
+    if [[ -n $KAZOO_NODE_HOST && $KAZOO_NODE_HOST != "$KAZOO_HOSTNAME" ]]; then
+        die "This host was installed as '${KAZOO_NODE_HOST}' but its hostname is now '${KAZOO_HOSTNAME}'. RabbitMQ data, Erlang node names, config.ini host sections and per-node system_config documents are keyed by the installed name; continuing would re-key only part of them. Restore it with: hostnamectl set-hostname ${KAZOO_NODE_HOST} (a hostname migration is not implemented, see doc/PRODUCTION_READINESS_PLAN.md gate A6)"
+    fi
+    KAZOO_NODE_HOST=$KAZOO_HOSTNAME
     if [[ $KAZOO_HOSTNAME == *.* ]]; then
         KAZOO_NODE_NAME_TYPE=-name
         KAZOO_FREESWITCH_SHORTNAME=false
@@ -1625,6 +1633,7 @@ loopback_users.guest = true
 collect_statistics = coarse
 collect_statistics_interval = 60000
 EOF
+    pin_rabbitmq_node_name
     run rabbitmq-plugins enable --offline rabbitmq_management rabbitmq_consistent_hash_exchange
     # The root CLI creates this file with the caller's umask. With umask 077
     # a fresh install otherwise fails at boot with enabled_plugins/eacces.
@@ -1655,9 +1664,45 @@ EOF
     verify_rabbitmq
 }
 
+# RabbitMQ stores users, permissions, exchanges and queues under
+# mnesia/rabbit@<host>. Left to its default it derives <host> from the current
+# hostname, so a hostname change makes it start a new EMPTY broker: no Kazoo
+# user, every login refused, while the unit is active (September 18, 2026).
+# An existing different pin is never rewritten: that would orphan its database.
+rabbitmq_node_name() {
+    printf 'rabbit@%s\n' "${KAZOO_NODE_HOST%%.*}"
+}
+
+pin_rabbitmq_node_name() {
+    local wanted existing env_file=${KAZOO_RABBITMQ_ENV_FILE:-/etc/rabbitmq/rabbitmq-env.conf}
+    wanted=$(rabbitmq_node_name)
+    if [[ $DRY_RUN == true ]]; then log "Would pin the RabbitMQ node name ${wanted}"; return 0; fi
+    existing=$(sed -n 's/^[[:space:]]*NODENAME=//p' "$env_file" 2>/dev/null | tail -n 1)
+    if [[ -n $existing && $existing != "$wanted" ]]; then
+        die "RabbitMQ is pinned to ${existing} in ${env_file}, not ${wanted}; refusing to orphan its database"
+    fi
+    if [[ -z $existing ]]; then
+        printf '# Managed by install-kazoo5.sh: keeps the broker database across hostname changes.\nNODENAME=%s\n' \
+            "$wanted" >> "$env_file"
+        chown root:rabbitmq "$env_file" 2>/dev/null || true; chmod 0644 "$env_file"
+        log "Pinned the RabbitMQ node name ${wanted}"
+    fi
+}
+
+verify_rabbitmq_node_name() {
+    local wanted running
+    wanted=$(rabbitmq_node_name)
+    grep -Fxq "NODENAME=${wanted}" "${KAZOO_RABBITMQ_ENV_FILE:-/etc/rabbitmq/rabbitmq-env.conf}" 2>/dev/null || \
+        die "RabbitMQ node name is not pinned to ${wanted}; rerun the rabbitmq installation"
+    running=$(timeout --signal=KILL 30 rabbitmqctl -q eval 'node().' 2>/dev/null | tr -d "'[:space:]")
+    [[ $running == "$wanted" ]] || die "RabbitMQ runs as ${running:-unknown}, expected ${wanted}"
+    log "PASS RabbitMQ node name pinned and running as ${wanted}"
+}
+
 verify_rabbitmq() {
     local installed_version installed_erlang listener permissions amqp_listeners
     if [[ $DRY_RUN == true ]]; then log 'Would verify RabbitMQ'; return 0; fi
+    verify_rabbitmq_node_name
     verify_broker_maintenance_tools
     assert_service rabbitmq-server.service
     listener=$(ss -H -ltn 'sport = :25672')
@@ -2746,6 +2791,26 @@ NoNewPrivileges=yes
 EOF
 }
 
+# The start guard and the identity it checks. See scripts/kazoo5-identity-guard.sh.
+install_kazoo_identity_guard() {
+    run install -D -o root -g root -m 0755 "$SCRIPT_DIR/kazoo5-identity-guard.sh" \
+        /usr/local/libexec/kazoo5-identity-guard
+    write_file 0644 "$KAZOO_CONFIG_DIR/node-identity" <<EOF
+# Written by install-kazoo5.sh. Not a secret. Read by kazoo5-identity-guard.
+NODE_HOST=${KAZOO_NODE_HOST}
+EOF
+}
+
+verify_kazoo_identity_guard() {
+    local role=$1
+    [[ -x /usr/local/libexec/kazoo5-identity-guard ]] || die 'The Kazoo identity start guard is not installed'
+    cmp -s "$SCRIPT_DIR/kazoo5-identity-guard.sh" /usr/local/libexec/kazoo5-identity-guard || \
+        die 'The installed Kazoo identity start guard differs from the reviewed source'
+    KAZOO_CONFIG="$KAZOO_CONFIG_DIR/core/config.ini" KAZOO_NODE_IDENTITY_FILE="$KAZOO_CONFIG_DIR/node-identity" \
+        /usr/local/libexec/kazoo5-identity-guard "$role" || die "Kazoo node identity is inconsistent for ${role}"
+    log "PASS Kazoo node identity is consistent for ${role}"
+}
+
 install_kazoo_systemd_units() {
     local fqdn role=${1:-}
     [[ $# == 1 ]] || die 'Specify exactly one service-unit role: kazoo-apps, ecallmgr, or all'
@@ -2757,6 +2822,7 @@ install_kazoo_systemd_units() {
         -name|-sname) ;;
         *) die 'Run installer preflight before writing Kazoo service units; Erlang naming mode is not initialized' ;;
     esac
+    install_kazoo_identity_guard
     fqdn=$KAZOO_HOSTNAME
     if ! getent group kazoo >/dev/null; then
         run groupadd --system kazoo
@@ -2798,10 +2864,12 @@ Environment="KAZOO_APPS=${KAZOO_APPS_LIST}"
 Environment="KAZOO_NODE_NAME_TYPE=${KAZOO_NODE_NAME_TYPE}"
 Environment="KAZOO_ERLANG_DIST_IP=${KAZOO_ERLANG_DIST_IP}"
 Environment="ERL_FLAGS=-noshell -noinput"
+ExecStartPre=+/usr/local/libexec/kazoo5-identity-guard kazoo_apps
 ExecStartPre=/usr/local/libexec/kazoo5-reserve-pivot-ports --check
 ExecStartPre=/usr/bin/env KAZOO_DEPLOYMENT_CONFIG=/nonexistent /usr/bin/bash -c 'source ${SCRIPT_DIR}/install-kazoo5.sh; verify_kazoo_production_beams'
 ExecStart=${KAZOO_ROOT}/scripts/dev-start-apps.sh kazoo_apps
 Restart=on-failure
+RestartPreventExitStatus=78
 RestartSec=5
 TimeoutStartSec=180
 LimitNOFILE=65536
@@ -2835,10 +2903,12 @@ Environment=KAZOO_APPS=ecallmgr
 Environment="KAZOO_NODE_NAME_TYPE=${KAZOO_NODE_NAME_TYPE}"
 Environment="KAZOO_ERLANG_DIST_IP=${KAZOO_ERLANG_DIST_IP}"
 Environment="ERL_FLAGS=-noshell -noinput"
+ExecStartPre=+/usr/local/libexec/kazoo5-identity-guard ecallmgr
 ExecStartPre=/usr/local/libexec/kazoo5-reserve-pivot-ports --check
 ExecStartPre=/usr/bin/env KAZOO_DEPLOYMENT_CONFIG=/nonexistent /usr/bin/bash -c 'source ${SCRIPT_DIR}/install-kazoo5.sh; verify_kazoo_production_beams'
 ExecStart=${KAZOO_ROOT}/scripts/dev-start-ecallmgr.sh ecallmgr
 Restart=on-failure
+RestartPreventExitStatus=78
 RestartSec=5
 TimeoutStartSec=180
 LimitNOFILE=65536
@@ -4136,6 +4206,7 @@ verify_kazoo_apps() {
     if [[ $DRY_RUN == true ]]; then log 'Would verify Kazoo apps'; return 0; fi
     local api_result api_body api_status deadline
     verify_kazoo_pivot_port_reservation kazoo-apps.service
+    verify_kazoo_identity_guard kazoo_apps
     verify_kazoo_production_beams
     verify_erlang_node kazoo-apps.service kazoo_apps
     verify_erlang_applications kazoo_apps "$KAZOO_APPS_LIST"
@@ -4413,6 +4484,7 @@ verify_ecallmgr_atomic_media() {
 verify_ecallmgr() {
     if [[ $DRY_RUN == true ]]; then log 'Would verify eCallMgr'; return 0; fi
     verify_kazoo_pivot_port_reservation kazoo-ecallmgr.service
+    verify_kazoo_identity_guard ecallmgr
     verify_kazoo_production_beams
     verify_erlang_node kazoo-ecallmgr.service ecallmgr
     verify_erlang_applications ecallmgr ecallmgr
