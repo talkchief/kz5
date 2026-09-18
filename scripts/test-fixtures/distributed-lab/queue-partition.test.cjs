@@ -55,7 +55,7 @@ assert(source.includes("both('ready'),90")&&source.includes('no_sip_reregistrati
 assert(source.includes("if(serviceFaultMode)for(const e of es){if(h.contacts(e).length===0)h.registration(e,600);}"));
 assert(source.includes("!(partition&&serviceFaultMode)"),'One profile at a time');
 const faults=require('./queue-partition.cjs');
-assert.deepEqual(Object.keys(faults.SERVICE_FAULTS),['apps-kill','broker-restart','ecallmgr-kill','couchdb-outage','freeswitch-restart']);
+assert.deepEqual(Object.keys(faults.SERVICE_FAULTS),['apps-kill','broker-restart','ecallmgr-kill','couchdb-outage','apps-kill-ringing','freeswitch-restart']);
 assert.equal(faults.serviceFault('freeswitch-restart').callLost,true);
 assert(source.includes("A call cannot outlive its media server")&&source.includes('ecallmgr_fs_nodes connected'),'Media restart must lose the call and wait for both controllers to be CONNECTED');
 assert.equal(faults.serviceFault('apps-kill').guest,'owner');
@@ -64,7 +64,10 @@ assert(source.includes("return seen.flat().every(v=>v.state==='paused');")&&sour
 assert(source.includes('bridge_survived:survived'),'Bridge survival is recorded as evidence, never assumed');
 assert(!source.includes("status:'login'")&&!source.includes("status:'logout'")&&!source.includes('systemctl restart'));
 assert(source.includes("async function run({partition=true,serviceFaultMode=false}={})"));
-assert(source.includes("partition?'queue-before-partition':serviceFaultMode?'queue-before-fault':'queue-first',serviceFaultMode?injectServiceFault:partition?async()=>"));
+assert.equal(faults.serviceFault('apps-kill-ringing').phase,'ringing');
+assert(source.includes("probe(n,agent).state==='ringing'")&&source.includes("'monitor-agent-slow.xml'"),'Mid-ring fault must be injected while the agent is observed ringing');
+assert(source.includes("x.member_call_id===h.getCurrent().caller_id&&x.agent_call_id===h.getCurrent().agent_id"),'The surviving replica must hold the exact call');
+assert(source.includes("partition?'queue-before-partition':serviceFaultMode?'queue-before-fault':'queue-first',ringing?recoverAfterRinging:serviceFaultMode?injectServiceFault:partition?async()=>"));
 assert(source.includes("partition?'queue-after-partition':serviceFaultMode?'queue-after-fault':'queue-second'"));
 assert(source.includes('partition_exercised:partition'));
 const harness=fs.readFileSync(__dirname+'/../../test-channel-monitor-live.cjs','utf8');

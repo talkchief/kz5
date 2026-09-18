@@ -61,6 +61,9 @@ const SERVICE_FAULTS={
     'broker-restart':{guest:'kz5-stage-rabbitmq',unit:'rabbitmq-server.service',action:'restart'},
     'ecallmgr-kill':{guest:'kz5-stage-ecallmgr',unit:'kazoo-ecallmgr.service',action:'kill'},
     'couchdb-outage':{guest:'kz5-stage-couchdb',unit:'couchdb.service',action:'outage'},
+    // The owning applications node dies while the agent's phone is still ringing:
+    // the caller must still reach the agent, with audio, without a second offer storm.
+    'apps-kill-ringing':{guest:'owner',unit:'kazoo-apps.service',action:'kill',phase:'ringing'},
     // The media server takes the call down with it: the bridge must NOT survive, and
     // both media controllers must see the node again before the next call is judged.
     'freeswitch-restart':{guest:'kz5-stage-freeswitch',unit:'kazoo-freeswitch.service',action:'restart',callLost:true,
@@ -83,7 +86,7 @@ function strictInventory(v,s) {
 }
 function context(h) {
     identity(h.state);
-    let fault,nodes,pinned,lastNative;
+    let fault,nodes,pinned,lastNative,ringingFault,bridgedAt;
     const s=h.state,agent=s.ACCEPTANCE_AGENT_1_USER_ID;
     function alive() {
         const c=h.getCurrent(),es=h.endpoints(s),a=h.channel(c.caller_id),b=h.channel(c.agent_id);
@@ -155,7 +158,7 @@ function context(h) {
             await h.until(()=>nodes.every(n=>probe(n,user).state==='paused'),20);
         }
     }
-    async function call(label,onAnswered) {
+    async function call(label,onAnswered,onRinging) {
         const es=h.endpoints(s).slice(0,2),input={};
         input.customer=h.writePrivate(label+'-customer.csv',`SEQUENTIAL\n${es[0].username};[authentication username=${es[0].username} password=${es[0].password}];${s.ACCEPTANCE_REALM};2000;120000;0;${path.join(h.runDir,'tone-440.ulaw')}\n`);
         input.agent=h.writePrivate(label+'-agent.csv',`SEQUENTIAL\n${path.join(h.runDir,'tone-660.ulaw')}\n`);
@@ -163,19 +166,28 @@ function context(h) {
         const tcpdump=cp.spawn('tcpdump',['-i',h.distributed.iface,'-Z','root','-n','-U','-s','512','-w',capture,
             'udp','and','host',h.audio.IP,'and','portrange','49000-49003'],{stdio:'ignore'});
         h.children.add(tcpdump);tcpdump.once('exit',()=>h.children.delete(tcpdump));
-        const phone=h.spawnPhone(es[1],'monitor-agent.xml',input.agent);
+        const phone=h.spawnPhone(es[1],onRinging?'monitor-agent-slow.xml':'monitor-agent.xml',input.agent);
         await h.sleep(500);assert(phone.exitCode===null&&tcpdump.exitCode===null);
         const caller=h.spawnPhone(es[0],'monitor-customer.xml',input.customer);
         h.setCurrent({mode:'queue_partition',caller_id:`1-${caller.pid}@${h.audio.IP}`});
+        if(onRinging) {
+            await h.until(quietly(()=>nodes.some(n=>probe(n,agent).state==='ringing')),30);
+            await onRinging();
+        }
         let last;
         const target=await h.until(()=>{
             const c=h.channel(h.getCurrent().caller_id);last={caller:c};if(!c?.bridge||!c.answered)return false;
             assert(h.ownedChannel(c,es[0]),'Queue caller ownership');const a=h.channel(c.bridge);last.agent=a;
             return ownedAgent(a,es[1],s,h.getCurrent().caller_id,h.audio.IP)&&a.answered?a:false;
-        },35).catch(error=>{h.writePrivate(label+'-observation.json',JSON.stringify(last));throw error;});
+        },onRinging?120:35).catch(error=>{h.writePrivate(label+'-observation.json',JSON.stringify(last));throw error;});
+        bridgedAt=Date.now()/1000;
         h.getCurrent().agent_id=target.id;h.saveFixture();alive();
         h.log(label+': exact SIP queue bridge verified; observing native replica states');
-        const answered=await h.until(()=>both('answered',true),15).catch(error=>{
+        // After a node was killed mid-ring its replica is a new process that never saw
+        // this call; the surviving replica must hold it, correlated to both legs.
+        const answered=await h.until(onRinging?quietly(()=>{const v=nodes.map(n=>probe(n,agent)).filter(x=>x.state==='answered'&&
+                x.member_call_id===h.getCurrent().caller_id&&x.agent_call_id===h.getCurrent().agent_id);return v.length?v:false;})
+            :()=>both('answered',true),onRinging?40:15).catch(error=>{
             h.writePrivate(label+'-fsm-observation.json',JSON.stringify(lastNative,null,2)+'\n');throw error;
         });
         const start=Date.now()/1000+0.5;await h.sleep(3500);alive();
@@ -188,6 +200,26 @@ function context(h) {
         h.writePrivate(label+'-evidence.json',JSON.stringify(proof,null,2)+'\n');return proof;
     }
     const quietly=fn=>()=>{try{return fn();}catch(_){return false;}};
+    // Inject only; used while the agent is ringing. Recovery is judged after the call.
+    async function injectWhileRinging() {
+        const f=serviceFault(),owner=deliveryOwner();
+        const guest=nodes.find(n=>n.ip===(owner||nodes[0].ip)).id;
+        h.log('Service fault '+f.name+': kill '+f.unit+' in the delivery owner '+(owner||nodes[0].ip)+' while the agent phone is ringing');
+        ringingFault={fault:f.name,unit:f.unit,owner:owner||null,injected_at:Date.now()/1000};
+        h.command('podman',['exec',guest,'systemctl','kill','-s','KILL',f.unit],60000);
+        pinned=undefined;
+    }
+    async function recoverAfterRinging() {
+        const f=serviceFault(),others=[2,3].map(i=>s[`ACCEPTANCE_AGENT_${i}_USER_ID`]);
+        await h.clearStage();
+        const recovered=await h.until(quietly(()=>both('ready')),300);
+        let seen;
+        const observe=()=>{seen=others.map(u=>nodes.map(n=>{try{return {node:n.ip,agent:u,state:probe(n,u).state};}
+            catch(e){return {node:n.ip,agent:u,error:String(e.message).slice(0,120)};}}));return seen.flat().every(v=>v.state==='paused');};
+        await h.until(observe,120).catch(()=>{throw Error('An unrelated paused agent did not come back paused after '+f.name+': '+JSON.stringify(seen.flat().map(v=>v.node+'='+(v.state||v.error))));});
+        h.log('Caller reached the agent through '+f.name+'; both replicas ready again without re-login; unrelated agents still paused');
+        return {...ringingFault,bridged_after_s:Math.round(bridgedAt-ringingFault.injected_at),recovered_after_s:Math.round(Date.now()/1000-ringingFault.injected_at),recovered};
+    }
     async function injectServiceFault() {
         const f=serviceFault(),owner=deliveryOwner();
         const guest=f.guest==='owner'?nodes.find(n=>n.ip===(owner||nodes[0].ip)).id:f.guest;
@@ -232,7 +264,8 @@ function context(h) {
         await verifyAndPause();
         for(const e of es)h.registration(e,600);
         h.log('Queue2000: both native agent replicas pinned; alternate synthetic agents temporarily paused');
-        const first=await call(partition?'queue-before-partition':serviceFaultMode?'queue-before-fault':'queue-first',serviceFaultMode?injectServiceFault:partition?async()=>{
+        const ringing=serviceFaultMode&&serviceFault().phase==='ringing';
+        const first=await call(partition?'queue-before-partition':serviceFaultMode?'queue-before-fault':'queue-first',ringing?recoverAfterRinging:serviceFaultMode?injectServiceFault:partition?async()=>{
             // Partition the node whose worker holds this caller's unacknowledged
             // delivery: only that strands, and later redelivers, the call.
             const owner=deliveryOwner(),wanted=partitionTarget();
@@ -258,7 +291,7 @@ function context(h) {
             const recovered=await h.until(()=>both('ready'),90);
             h.log('Both original FSM replicas recovered ready without re-login or SIP re-registration');
             return {...proof,busy_samples:samples,recovered};
-        }:undefined);
+        }:undefined,ringing?injectWhileRinging:undefined);
         if(!partition&&!serviceFaultMode)await h.until(()=>both('ready'),30);
         // Existing contacts must remain exact; do not REGISTER between calls. A
         // lost registrar (eCallMgr) or its datastore may legitimately need one.
