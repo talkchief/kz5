@@ -40,6 +40,14 @@ assert.throws(()=>configFor('unknown',testSecrets));
 const cold=settingsFor(true),normal=settingsFor(false);
 const final=settingsFor(true,true);
 assert.throws(()=>settingsFor(false,true));
+const fresh=settingsFor(true,false,true);
+assert.throws(()=>settingsFor(false,false,true));assert.throws(()=>settingsFor(true,true,true));
+assert.equal(fresh.cold,true);assert.equal(fresh.dir,'/var/lib/kazoo5-cold-bootstrap-fresh');
+assert.equal(new Set([normal.dir,cold.dir,final.dir,fresh.dir]).size,4);
+assert.equal(new Set([normal.prefix,cold.prefix,final.prefix,fresh.prefix]).size,4);
+assert.equal(new Set([normal.name,cold.name,final.name,fresh.name]).size,4);
+assert.equal(new Set([normal.network,cold.network,final.network,fresh.network]).size,4);
+assert.equal(configFor('kazoo-apps',testSecrets,fresh).KAZOO_COUCHDB_HOST,'172.30.250.11');
 for(const field of ['dir','owner','network','prefix','name','realm']) {
     assert.notEqual(final[field],normal[field]);assert.notEqual(final[field],cold[field]);
 }

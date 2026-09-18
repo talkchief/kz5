@@ -4,9 +4,14 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const cp=require('node:child_process'),assert=require('node:assert/strict'),os=require('node:os');
 const ROOT=path.resolve(__dirname,'../../..');
-function settingsFor(cold=false,final=false) {
+function settingsFor(cold=false,final=false,fresh=false) {
     assert.equal(typeof cold,'boolean');
     assert.equal(typeof final,'boolean');assert(!final||cold);
+    assert.equal(typeof fresh,'boolean');assert(!fresh||(cold&&!final));
+    // A third empty-host bootstrap, for installing brand-new guests from scratch with
+    // the current installer while the two earlier rehearsals stay parked as evidence.
+    if(fresh)return {cold,dir:'/var/lib/kazoo5-cold-bootstrap-fresh',owner:'distributed-install-v1-cold-fresh',
+        network:'kz5-cold-fresh',prefix:'172.30.250.',name:'kz5-fresh-',realm:'cold-fresh-stage.invalid'};
     if(final)return {cold,dir:'/var/lib/kazoo5-cold-bootstrap-final',owner:'distributed-install-v1-cold-final',
         network:'kz5-cold-final',prefix:'172.30.251.',name:'kz5-final-',realm:'cold-final-stage.invalid'};
     return cold?{cold,dir:'/var/lib/kazoo5-cold-bootstrap-lab',owner:'distributed-install-v1-cold',
@@ -14,8 +19,8 @@ function settingsFor(cold=false,final=false) {
         {cold,dir:'/var/lib/kazoo5-install-lab',owner:'distributed-install-v1',
             network:'kz5-install-stage',prefix:'172.30.253.',name:'kz5-stage-',realm:'installer-stage.invalid'};
 }
-const SETTINGS=settingsFor(['--cold-bootstrap','--cold-bootstrap-final'].includes(process.argv[2]),
-    process.argv[2]==='--cold-bootstrap-final');
+const SETTINGS=settingsFor(['--cold-bootstrap','--cold-bootstrap-final','--cold-bootstrap-fresh'].includes(process.argv[2]),
+    process.argv[2]==='--cold-bootstrap-final',process.argv[2]==='--cold-bootstrap-fresh');
 const {dir:DIR,owner:OWNER,network:NETWORK,prefix:PREFIX}=SETTINGS,SUBNET=PREFIX+'0/24';
 const ROLES=['couchdb','rabbitmq','haproxy','kazoo-apps','freeswitch','ecallmgr','kamailio','monster-ui','push-bridge'];
 const UNITS={couchdb:'couchdb',rabbitmq:'rabbitmq-server',haproxy:'haproxy','kazoo-apps':'kazoo-apps',
