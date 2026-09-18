@@ -40,6 +40,16 @@ node() {
 }
 couchdb_curl() { "$KAZOO_TEST_NODE" "$KAZOO_TEST_SOURCE_ROOT/scripts/test-install-kazoo5-gemini.cjs" --fixture-couch "$@"; }
 install_nodejs_toolchain() { record node-tooling; }
+acdc_broker_upgrade_preflight() { record broker-preflight; }
+install_call_forward_confirmation_pack() { record call-forward-pack; }
+run_acdc_cardinal_pack() { record "cardinal-${1#--}"; }
+validate_acdc_cardinal_receipt() { /usr/bin/cat >/dev/null; }
+run_acdc_cardinal_mapping_check() { record "cardinal-cache-${1#--}"; }
+install_monster_catalog_receiver() { record catalog-receiver; }
+wait_kazoo_datastore_ready() { [[ $1 == kazoo_apps ]]; record datastore-ready; }
+wait_kazoo_bootstrap_ready() { record bootstrap-ready; }
+ensure_dns_validation_disabled() { record dns-validation; }
+finalize_acdc_prerecorded_capabilities() { [[ $1 == --install ]]; record capability-finalize; }
 build_kazoo() { record build; }
 install_kazoo_systemd_units() { record units; }
 install_sup_cli() { record sup-install; }
@@ -52,6 +62,9 @@ install_kazoo_prompts() { record official-prompts; }
 verify_kazoo_apps() { record apps-verify; }
 verify_erlang_applications() { [[ $1 == kazoo_apps ]]; record apps-ready; }
 write_file() {
+    if [[ $1 == 0644 && $2 == /usr/local/share/kazoo5-installer/acdc-cardinal-media.json ]]; then
+        /usr/bin/cat >/dev/null; record cardinal-published; return 0
+    fi
     [[ $1 == 0644 && $2 == /usr/local/share/kazoo5-installer/acdc-gemini-media.json ]]
     node "$SCRIPT_DIR/validate-acdc-gemini-receipt.cjs" \
         --fixed-pack "$SCRIPT_DIR/assets/acdc-gemini-fixed-20260905" \
@@ -59,7 +72,9 @@ write_file() {
         --supplemental-pack "$SCRIPT_DIR/assets/acdc-gemini-supplemental-20260906"
     record receipt-published
 }
-dnf_install() { printf 'Unexpected direct dependency installation\n' >&2; return 1; }
+dnf_install() { [[ $* == sox ]] || { printf 'Unexpected direct dependency installation\n' >&2; return 1; }; record dependency-sox; }
+# External wrappers execute binaries and would bypass the function stubs above.
+timeout() { printf 'Unexpected unstubbed external command wrapper\n' >&2; return 1; }
 run() { printf 'Unexpected installer external command\n' >&2; return 1; }
 curl() { printf 'Unexpected unstubbed network access\n' >&2; return 1; }
 systemctl() { printf 'Unexpected unstubbed service operation\n' >&2; return 1; }

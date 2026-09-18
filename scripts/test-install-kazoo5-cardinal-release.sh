@@ -8,8 +8,10 @@ cardinal_fixture=$(mktemp -d /tmp/kazoo-cardinal-shell.XXXXXX)
 trap 'printf "Cardinal shell fixture: %s\n" "$cardinal_fixture"' EXIT
 DRY_RUN=false
 install_nodejs_toolchain() { :; }
+# The real guard stops/restarts dnf-makecache.timer; test-dnf-transaction.sh owns it.
+with_dnf_guard() { "$@"; }
 run() {
-    [[ "$*" == 'dnf -y install sox' ]] || return 91
+    [[ "$*" == 'dnf --setopt=exit_on_lock=True install -y sox' ]] || return 91
     printf '%s\n' dependency:sox >>"$cardinal_fixture/events"
     [[ ${CARDINAL_REJECT_DEPENDENCY:-false} != true ]]
 }

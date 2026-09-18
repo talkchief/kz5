@@ -142,11 +142,15 @@ async function main() {
     assert(!/fixture-password|fixture-user/.test(logs), 'Credential leaked to output');
     if (['success', 'database-exists'].includes(scenario)) {
       assert.equal(run.status, 0, logs);
-      assert.deepEqual(steps, ['node-tooling', 'plan', 'db-ensure', 'db-identity', 'import', 'receipt-validated',
+      assert.deepEqual(steps, ['node-tooling', 'broker-preflight', 'call-forward-pack', 'node-tooling', 'dependency-sox',
+        'plan', 'cardinal-plan', 'db-ensure', 'db-identity', 'import', 'receipt-validated',
         'verify-only', 'receipt-validated', 'receipt-validated', 'receipt-published',
-        'editor-capabilities', 'build', 'units', 'sup-install', 'restart', 'apps-config', 'master-account', 'api-modules', 'official-prompts', 'apps-ready', 'cache-activate', 'apps-verify']);
+        'cardinal-import', 'cardinal-verify-only', 'cardinal-published',
+        'editor-capabilities', 'build', 'units', 'sup-install', 'catalog-receiver', 'broker-preflight', 'restart',
+        'datastore-ready', 'apps-config', 'bootstrap-ready', 'master-account', 'api-modules', 'dns-validation',
+        'official-prompts', 'apps-ready', 'cache-activate', 'cardinal-cache-activate', 'capability-finalize', 'apps-verify']);
     } else if (scenario === 'verify-only') {
-      assert.equal(run.status, 0, logs); assert.deepEqual(steps, ['verify-only', 'receipt-validated', 'cache-check']);
+      assert.equal(run.status, 0, logs); assert.deepEqual(steps, ['verify-only', 'receipt-validated', 'cache-check', 'cardinal-verify-only', 'cardinal-cache-check']);
     } else if (scenario === 'cache-failure') {
       assert.notEqual(run.status, 0, logs);
       assert(steps.includes('restart') && steps.includes('cache-activate') && !steps.includes('apps-verify'));
@@ -164,7 +168,7 @@ async function main() {
       assert.notEqual(run.status, 0, `${scenario}: failure did not abort installation`);
       for (const forbidden of ['build', 'units', 'sup-install', 'restart', 'receipt-published'])
         assert(!steps.includes(forbidden), `${scenario}: old application state changed`);
-      if (scenario === 'missing-assets') assert.deepEqual(steps, ['node-tooling', 'plan']);
+      if (scenario === 'missing-assets') assert.deepEqual(steps, ['node-tooling', 'broker-preflight', 'call-forward-pack', 'node-tooling', 'dependency-sox', 'plan']);
     }
     console.log(`PASS installer ${scenario}: ${steps.join(' > ') || 'no effects'}`);
   }
@@ -175,7 +179,8 @@ async function main() {
     officialSection.includes('git -C "$KAZOO_BUILD_ROOT/kazoo-sounds" show') && officialSection.includes('prompt_documents "$manifest"') &&
     officialSection.includes('kazoo_media_maintenance import_prompts') && officialSection.includes('verify_kazoo_prompts'));
   const voicesSection = source.slice(source.indexOf('install_acdc_language_packs() ('), source.indexOf('\nconfigure_kazoo_api_modules()'));
-  assert(!/prepare-acdc-speech|generate-acdc-|--generate|--key-file|dnf_install/.test(voicesSection));
+  assert(!/prepare-acdc-speech|generate-acdc-|--generate|--key-file|espeak/.test(voicesSection));
+  assert.deepEqual(voicesSection.match(/dnf_install \S+/g), ['dnf_install sox']);
   assert(!/write_file[^\n]*language-capabilities|write_file[^\n]*acdc-language-media/.test(voicesSection));
   console.log('PASS ordinary prompt/import verification preserved; no synthetic ACDC generator or runtime capability publication');
   console.log(`All offline installer tests passed. No live I/O; retained fixture traces: ${workspace}`);
