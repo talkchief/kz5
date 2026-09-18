@@ -30,8 +30,20 @@ work postponed; do not generate voices at runtime or during deployment.
   `d5c9bf0`: when the agent's endpoints are first loaded a bounded helper asks the media
   controllers for live channels on the agent's devices (the user-channel query Crossbar uses);
   any live call puts the agent in the existing `outbound` state, which already returns to
-  ready when those channels end. Offline: 42 FSM, 80 unit, 27 recovery tests. Native proof
-  owed: rerun this unit after promotion and require a non-ready state while the call lives.
+  ready when those channels end. Offline: 42 FSM, 80 unit, 27 recovery tests.
+  NATIVE, three attempts, the first two retained as FAIL (`doc/acdc_agent_live_calls_at_start.md`):
+  `...-bridge-0918b` (`d5c9bf0`) still `ready/2` — built endpoints can be empty at start;
+  `...-bridge-0918c` (`e091a2b`, usernames from device documents) still `ready/2` — right
+  after a node start the channel query is answered empty because no media controller is known
+  yet, while with the node fully up the same code gave `agent has 1 live call(s) at start`,
+  `outbound`, and `ready` when the leg ended; `...-bridge-0918d` (`c357900`: wait for a known
+  controller, agent stays in `sync` until the search has answered) **PASS**,
+  `/var/log/kazoo-acceptance/20260918T185637Z`, samples `sync/2 outbound/2 outbound/2
+  outbound/2 outbound/2 outbound/2`, notice at 18:58:42.126, agent ready afterwards, ticket
+  unchanged, zero channels left. The campaign now FAILS on any `ready` sample while the
+  callback's channels are up, and hangs up its own two legs if that boundary fails (twice an
+  aborted run had left them bridged; hung up by hand with `uuid_kill`). Promotions
+  `kz5-promo-0918h/i/j` PASS; private regressions `kz5-stage-queue-fault-apps-kill-5/6/7` PASS.
 
 - **ACDC C3 COMPLETE — applications node killed while the agent phone is RINGING, NATIVE PASS first run, September18:**
   Unit `kz5-stage-queue-fault-apps-kill-ringing-1`, evidence `/var/log/kazoo-monitor-acceptance-g9tZuT`:

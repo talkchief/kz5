@@ -27,7 +27,7 @@ channels end. What was missing is finding the agent's live calls at start.
 | --- | --- | --- |
 | `d5c9bf0` | Ask the media controllers (the user-channel query Crossbar uses) for channels on the usernames of the agent's **built endpoints**. | FAIL, unit `...-bridge-0918b`: still `ready`. Built endpoints need a registration lookup and can be empty when the agent's processes start. |
 | `e091a2b` | Usernames from the agent's own **device documents**, asked when the processes start, up to three times. | FAIL, unit `...-bridge-0918c`: still `ready`. With the node fully up the same code worked (agent logged in while its leg was live: `agent has 1 live call(s) at start`, `outbound`, and `ready` again when the leg ended). Right after a node start the query is answered empty because no media controller is known yet. |
-| `c357900` | The helper waits until a media controller is known before asking, and the agent **stays in `sync`**, for at most five extra periods, until the search has answered. | see the register |
+| `c357900` | The helper waits until a media controller is known before asking, and the agent **stays in `sync`**, for at most five extra periods, until the search has answered. | **PASS**, unit `...-bridge-0918d`, `/var/log/kazoo-acceptance/20260918T185637Z`: `sync/2 outbound/2 outbound/2 outbound/2 outbound/2 outbound/2`, notice `agent has 1 live call(s) at start` at 18:58:42, `ready` again after the call, ticket unchanged, no channel left. |
 
 The campaign itself now fails when any sample shows the agent `ready` while its
 callback's channels are up, and hangs up its own two legs when that boundary
