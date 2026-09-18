@@ -437,7 +437,8 @@ verify_acceptance_resources() {
         '.data.numbers == [$number] and .data.flow.module == "user" and .data.flow.data.id == $id' \
         <<<"$response" >/dev/null || die 'Acceptance caller callflow verification failed'
 
-    response=$(acceptance_api GET "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID/roster")
+    # Crossbar pages listings at 50; a roster of more agents than that must be read whole.
+    response=$(acceptance_api GET "accounts/$ACCEPTANCE_ACCOUNT_ID/queues/$ACCEPTANCE_QUEUE_ID/roster?paginate=false")
     for ((agent_index = 1; agent_index <= ACCEPTANCE_AGENT_COUNT; agent_index++)); do
         extension=$((ACCEPTANCE_FIRST_AGENT_EXTENSION + agent_index - 1))
         id_key="ACCEPTANCE_AGENT_${agent_index}_USER_ID"; user_id=${!id_key}
