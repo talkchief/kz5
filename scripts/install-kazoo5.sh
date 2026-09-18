@@ -6411,8 +6411,14 @@ verify_monster_app_registration() {
         jq -e --arg app "$app" '(.rows | type == "array") and ([.rows[] | select(.key == $app)] | length == 1)' \
             <<<"$registered" >/dev/null || \
             die "Monster UI app ${app} must have exactly one registration in the Kazoo master account"
+        # Registration preserves an existing document, so a changed API URL is
+        # never written by an install. Undetected, the app keeps calling the
+        # old address. Detect it; the change itself stays a reviewed migration.
+        jq -e --arg app "$app" --arg url "$KAZOO_API_URL" \
+            '[.rows[] | select(.key == $app) | .value.api_url] == [$url]' <<<"$registered" >/dev/null || \
+            die "Monster UI app ${app} is registered with api_url $(jq -r --arg app "$app" '[.rows[] | select(.key == $app) | .value.api_url // "none"] | join(",")' <<<"$registered"), not the configured ${KAZOO_API_URL}; registration never rewrites an existing app, see doc/monster_app_api_url_migration.md"
     done
-    log "PASS Monster UI app catalog registration: ${MONSTER_UI_APPS_LIST}"
+    log "PASS Monster UI app catalog registration and api_url ${KAZOO_API_URL}: ${MONSTER_UI_APPS_LIST}"
 }
 
 register_monster_apps() {

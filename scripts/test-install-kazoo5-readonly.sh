@@ -9,7 +9,8 @@ source "$SCRIPT_DIR/install-kazoo5.sh"
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 export VERIFY_ONLY=true
 master_reply='<<"0123456789abcdef0123456789abcdef">>'
-catalog_reply='{"rows":[{"key":"acdc"},{"key":"callflows"}]}'
+api=https://api.example.net/v2/
+catalog_reply='{"rows":[{"key":"acdc","value":{"api_url":"'$api'"}},{"key":"callflows","value":{"api_url":"'$api'"}}]}'
 timeout() {
     [[ $# == 8 && $1 == --signal=KILL && $2 == 30 && $3 == sup ]] || fail 'Unexpected SUP timeout invocation'
     shift 2
@@ -39,6 +40,7 @@ export KAZOO_COUCHDB_HOST=database.invalid
 export KAZOO_COUCHDB_PORT=15984
 export MONSTER_UI_REGISTER_APPS=auto
 export MONSTER_UI_APPS_LIST=acdc,callflows
+export KAZOO_API_URL=$api
 master_reply='<<"0123456789abcdef0123456789abcdef">>'
 verify_monster_app_registration
 [[ $(wc -l <"$test_dir/couch-reads") == 1 ]] || fail 'Catalog query count is not one'
@@ -51,6 +53,18 @@ for catalog_reply in '{"rows":[]}' '{"rows":[{"key":"acdc"}]}' '{"rows":"invalid
     '{"rows":[{"key":"acdc"},{"key":"callflows"},{"key":"callflows"}]}'; do
     if (verify_monster_app_registration >"$test_dir/bad-catalog" 2>&1); then fail 'Malformed/incomplete/duplicate catalog accepted'; fi
 done
+# Registration preserves existing documents, so only verification can notice an
+# app that still points at a previous API address. It reports, never repairs.
+good_catalog='{"rows":[{"key":"acdc","value":{"api_url":"'$api'"}},{"key":"callflows","value":{"api_url":"'$api'"}}]}'
+for catalog_reply in "${good_catalog/$api/http://198.51.100.9:8000/v2/}" \
+    '{"rows":[{"key":"acdc","value":{"api_url":"'$api'"}},{"key":"callflows","value":{}}]}'; do
+    if (verify_monster_app_registration >"$test_dir/stale-url" 2>&1); then fail 'An app on another or missing api_url was accepted'; fi
+    grep -Fq "not the configured $api" "$test_dir/stale-url" && grep -Fq 'doc/monster_app_api_url_migration.md' "$test_dir/stale-url" || \
+        fail 'The api_url refusal lacks the cause and the reviewed remedy'
+done
+grep -Fq 'api_url http://198.51.100.9:8000/v2/' <(catalog_reply="${good_catalog/$api/http://198.51.100.9:8000/v2/}"; verify_monster_app_registration 2>&1 || true) || \
+    fail 'The refusal does not name the stale address'
+printf 'PASS an app registered with another or no api_url is refused with the stale address and the reviewed migration, never rewritten\n'
 printf 'PASS existing app-catalog GET, missing prerequisites, incomplete collections and duplicate selected names fail without repair\n'
 
 if sqlite3 -readonly "$test_dir/missing-kamailio.db" 'PRAGMA integrity_check;' >"$test_dir/sqlite" 2>&1; then

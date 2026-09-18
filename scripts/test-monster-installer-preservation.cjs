@@ -50,11 +50,13 @@ try {
             fs.copyFileSync(path.join(__dirname,file),path.join(scripts,file));
         write(path.join(scripts,'assets/monster-ui/package-lock.npm10.json'),fs.readFileSync(path.join(__dirname,'assets/monster-ui/package-lock.npm10.json')));
         write(path.join(scripts,'assets/monster-ui/minifier-profile.json'),fs.readFileSync(path.join(__dirname,'assets/monster-ui/minifier-profile.json')));
-        const patches=['monster-ui-myaccount-transition.patch','monster-ui-branding-billing.patch','monster-ui-account-picker-readiness.patch','monster-ui-background-app-load.patch','monster-ui-app-load-singleflight.patch','monster-ui-call-forward-confirmation.patch','monster-ui-websocket-config.patch','monster-ui-websocket-subscription-lifecycle.patch',
-            'monster-ui-dialog-resize-lifecycle.patch','monster-ui-request-indicator-lifecycle.patch','monster-ui-optional-integrations.patch','monster-ui-callflows-acdc-queue.patch','monster-ui-callflows-css-nesting.patch','monster-ui-npm-native-overrides.patch','monster-ui-isolated-minify.patch','monster-ui-preloaded-apps.patch'];
+        // Derived from the installer, not listed here: three patches added to the
+        // fingerprint after this fixture was written made it fail on a missing file.
+        const patches=[...new Set(funcs('monster_ui_build_fingerprint').match(/monster-ui-[a-z0-9-]+\.patch/g))];
+        assert(patches.length>=19,'Installer fingerprint patch list was not extracted');
         for(const file of patches)write(path.join(scripts,'patches',file),fs.readFileSync(path.join(['monster-ui-npm-native-overrides.patch','monster-ui-isolated-minify.patch'].includes(file)?__dirname:path.join(project,'scripts'),'patches',file)));
         const env={SCRIPT_DIR:scripts,MONSTER_UI_REF:'a'.repeat(40),MONSTER_UI_NODE_MAJOR:'18',MONSTER_UI_LOCK_SHA256:'b'.repeat(64),
-            MONSTER_UI_APPS_LIST:'callflows',MONSTER_UI_CALLFLOWS_REF:'c'.repeat(40),KAZOO_API_URL:options.api,
+            MONSTER_UI_APPS_LIST:'callflows,voip',MONSTER_UI_CALLFLOWS_REF:'c'.repeat(40),MONSTER_UI_VOIP_REF:'d'.repeat(40),KAZOO_API_URL:options.api,
             MONSTER_UI_WEBSOCKET_URL:options.socket,MONSTER_UI_REMOTE_BRANDING:options.branding,MONSTER_UI_BRAINTREE:options.braintree};
         const code=funcs('monster_app_ref','monster_ui_build_fingerprint')+'\nmonster_ui_build_fingerprint\n';
         const original=succeeds(shell(code,env));assert(original.includes('node_actual='));assert(original.includes('npm_actual='));
@@ -76,8 +78,16 @@ try {
     });
     test('reviewed lock staging rejects changed source/artifact/package and does no dependency resolution',()=>{
         const root=path.join(temp,'lock-boundary');fs.mkdirSync(root,{mode:0o700});
-        const cache=process.env.KAZOO_MONSTER_SOURCE_CACHE||'/usr/local/src/kazoo5-installer/monster-ui';
+        // The installer builds in a fresh monster-owned-build.*/source each time; the
+        // fixed cache this group used to read no longer exists. Use the newest build
+        // source holding the pin, and say so plainly when a host has none.
         const pin='7ef735eada6fd0e2b96c06f32c0bb868867f7d18';
+        const holdsPin=dir=>{try{execFileSync('git',['-C',dir,'cat-file','-e',pin],{stdio:'ignore'});return true;}catch(e){return false;}};
+        const buildRoot=process.env.KAZOO_BUILD_ROOT||'/usr/local/src/kazoo5-installer';
+        const builds=fs.existsSync(buildRoot)?fs.readdirSync(buildRoot).filter(n=>n.startsWith('monster-owned-build.'))
+            .map(n=>path.join(buildRoot,n,'source')).filter(d=>fs.existsSync(d)).sort((a,b)=>fs.statSync(b).mtimeMs-fs.statSync(a).mtimeMs):[];
+        const cache=[process.env.KAZOO_MONSTER_SOURCE_CACHE,...builds].filter(Boolean).find(holdsPin);
+        if(!cache){console.log('SKIP reviewed lock staging: no Monster UI source holding the pinned revision on this host (install monster-ui, or set KAZOO_MONSTER_SOURCE_CACHE)');return;}
         const original=execFileSync('git',['-C',cache,'show',pin+':package-lock.json']);
         const sourcePackage=execFileSync('git',['-C',cache,'show',pin+':package.json'],{encoding:'utf8'});
         write(path.join(root,'package-lock.json'),original);write(path.join(root,'package.json'),sourcePackage);
