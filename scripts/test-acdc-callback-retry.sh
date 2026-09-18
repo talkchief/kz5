@@ -450,6 +450,13 @@ retry_restart_apps_during_bridge() {
         sleep 5
     done
     [[ $(jq -c "$identity" <<<"$(callback_document)") == "$(jq -c "$identity" <<<"$doc")" ]] || return 1
+    # While the call's channels are up the agent must never be offered as ready
+    # (before d5c9bf0 every sample after the restart was "ready").
+    [[ -s $RUN_DIR/callback-apps-restart-bridge-samples.tsv ]] || return 1
+    if awk -F'\t' '$2 == "ready" && $4 >= 2 {found=1} END{exit !found}' "$RUN_DIR/callback-apps-restart-bridge-samples.tsv"; then
+        warn 'The agent was ready while its callback was still bridged'
+        return 1
+    fi
     jq --arg pid "$after" --argjson finished "$(date +%s)" \
         '. + {main_pid_after:$pid,finished_at:$finished,acdc_startup_ready:true,ticket_unchanged:true}' \
         "$RUN_DIR/callback-apps-restart-started.json" > "$RUN_DIR/callback-apps-restart.json" || return 1
