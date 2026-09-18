@@ -7,6 +7,47 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **AFTER-REBOOT CASE — whole-host reboot of main PASS, September18 13:47 UTC:**
+  Verifier armed, `systemctl reboot`, boot 13:47:27. Receipt
+  `/root/kz5-post-boot-20260918T134737Z.GpISad/receipt.txt`: 30 PASS, `RESULT failures=0`
+  at 13:49:09; the unit finished `success` and disabled itself. `systemctl --failed` empty;
+  stack health `success`; one port mapper, pid2590 in `/system.slice/epmd.service`, started
+  13:47:37 before every role; `rabbit`, `freeswitch`, `couchdb`, `kazoo_apps`, `ecallmgr`
+  registered unaided; listeners `10.1.0.44:4369` and `127.0.0.1:4369` only; broker pin
+  `rabbit@dev-testing` intact; SELinux Permissive; hostname `dev-testing`. All ten private
+  guests came back with a LIVE monitor (the fix of `24b0250` proven by a real boot; at the
+  morning boot nine were killed). The two legacy primary guests again needed
+  `--repair-legacy-pivot` (`RESTORED`, `bootPassed:false`): read-only `/proc/sys` of those
+  older containers, a lab artifact, not a host defect.
+
+- **ACDC C4 ring strategies — NATIVE PASS on main with the new agent code, September18:**
+  Unit `kz5-main-strategies-0918b`, `test-acdc-strategies-live.cjs --main-dev --live`:
+  `PASS ring-all concurrent offers/race and loser cleanup, in-order progression/skip, two RR
+  cycles, most-idle single offer`, evidence `/var/log/kazoo-strategy-acceptance-7VgMqG`,
+  owned queue and flow removed, borrowed agents restored. First attempt
+  `kz5-main-strategies-0918` FAIL `Unexpected authentication account`: the driver compared
+  the login with the ORIGINAL host's master account; it now resolves the local master through
+  the reviewed main-dev profile like the monitor driver (harness gap, not product).
+
+- **CALLBACKS — live lifecycle PASS on main with the new agent code; log gate FAIL, causes fixed, September18:**
+  Unit `kz5-main-callback-retry-0918` (`test-acdc-callback-retry.sh --live --keep-fixture
+  --transport internal --language en-us --registration-mode entry-only`, run
+  `/var/log/kazoo-acceptance/20260918T140958Z`): `Busy call bridged; queued callback
+  confirmation audio proved`, `First attempt unanswered; durable retry_wait observed; second
+  attempt completed with reciprocal native bridge`, `PASS exact busy/confirmation/retry
+  lifecycle and phase-scoped SIP/RTP evidence`. The run then FAILED its gate `callback
+  generated fresh service/file log errors (10/10)`; none came from the call: stock Kazoo tried
+  to report cluster inventory to `telemetry.2600hz.org` every minute (no off switch; now
+  opt-in, `kazoo-telemetry-opt-in.patch`), and my stack health timer probed `/v2/`, making
+  Crossbar log `generating error 401` every two minutes (now probes `/`, HTTP200). Fix
+  `4e46134`; native rerun owed after promotion. The external-carrier variant
+  `test-acdc-callback-calls.sh --live` (units `kz5-main-callback-calls-0918`, `-0918b`) FAILED
+  with SIPp exit253 (its RTP stream bookkeeping) although SIP succeeded, the callback was
+  registered and RTP flowed both ways (386/418 packets); of the fixture's 24 tickets only
+  today's is external-mode, so that variant has never completed on this host — open, tool
+  side. The library now reports the SIPp exit status, and installs ShellCheck like its other
+  tools instead of dying with `command not found`.
+
 - **MAIN fully converged with the installer: promotion `kz5-promo-0918e` PASS, `--verify-only all` PASS (nine components, 67 checks), September18:**
   Promotion on `30ad79c` PASS at the first attempt, 13:37:43 UTC
   (`/root/kz5-main-promotion-20260918.lOmMBFO8/receipt.json`), wrapper's full health

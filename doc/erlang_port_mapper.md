@@ -121,5 +121,8 @@ Receipts: `/var/lib/kazoo5-install-lab/ecallmgr-install-7.log`,
 | The failed promotion's sequence, repeated | Mapper pid 479455 in `epmd.service` since 10:41:03 survived the restarts of `kazoo-apps` (11:02:21) and `kazoo-ecallmgr` (11:06:52). `kazoo-freeswitch` untouched since 10:41:08; `list_fs_nodes` = `freeswitch@dev-testing`. |
 | Listeners | `127.0.0.1:4369`, `10.1.0.44:4369`; `46.225.31.248:4369` refuses. Five roles registered. No mapper outside `epmd.service`. |
 
-Not yet performed: a whole-host reboot of main with the new socket (guest cold
-boot only), and reinstalling the remaining private guests from this revision.
+Whole-host reboot of main, 13:47:27 UTC: receipt
+`/root/kz5-post-boot-20260918T134737Z.GpISad/receipt.txt`, 30 PASS, `failures=0`; mapper pid
+2590 in `epmd.service`, started 13:47:37 before every role; five roles registered unaided;
+listeners `10.1.0.44:4369` and `127.0.0.1:4369`; no failed unit. Every private guest was
+reinstalled from the final revisions and cold-booted (see the register).
