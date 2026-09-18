@@ -28,7 +28,9 @@ esac'
 shim rabbitmqctl 'if [[ $* == *"node()."* ]]; then echo "${T_BROKER_NODE:-rabbit@node1}"; else printf "%s\n" ${T_BROKER_USERS:-kazoo guest}; fi'
 shim sup 'if [[ $* == *is_available* ]]; then
   [[ $* == *"-n ecallmgr"* ]] && echo "${T_ECALLMGR_AMQP-true}" || echo "${T_APPS_AMQP-true}"
-elif [[ $* == *list_fs_nodes* ]]; then printf "%s" "${T_MEDIA-freeswitch@node1}"; fi'
+elif [[ $* == *"-e ecallmgr_fs_nodes connected"* ]]; then printf "%s" "${T_MEDIA-[\x27freeswitch@node1\x27]}"
+elif [[ $* == *list_fs_nodes* ]]; then echo "freeswitch@stale-listing"; fi'
+shim fs_cli '[[ $* == "-x sofia status" ]] || exit 9; printf "%b" "${T_SOFIA-  sipinterface_1\tprofile\tsip:mod_sofia@10.0.0.5:11000\tRUNNING (0)\n}"'
 shim curl '[[ $* == *"http://127.0.0.1:8000/" ]] || { echo "unexpected probe URL: $*" >&2; exit 9; }; printf "%s" "${T_HTTP:-200}"'
 shim pgrep 'printf "%s\n" ${T_STRAY-}'
 shim epmd 'printf "name %s at port 1\n" ${T_EPMD-couchdb rabbit kazoo_apps ecallmgr freeswitch}'
@@ -42,6 +44,7 @@ mkdir -p "$sh_work/etc"; printf 'NODENAME=rabbit@node1\n' > "$sh_work/rabbitmq-e
 run() {   # VAR=value ... ; prints output, returns the check's status
     ( export PATH="$sh_work/bin:$PATH" KAZOO_DEPLOYMENT_CONFIG="$sh_work/deployment.env" KAZOO_NODE_IDENTITY_FILE="$sh_work/identity" \
              T_LOGGER="$sh_work/logger.out"
+      export KAZOO_FS_CLI="$sh_work/bin/fs_cli"
       for assignment in "$@"; do export "${assignment?}"; done
       sed "s#/etc/rabbitmq/rabbitmq-env.conf#$sh_work/rabbitmq-env.conf#" "$sh_health" > "$sh_work/health.sh"
       # shellcheck disable=SC2086
@@ -70,11 +73,14 @@ expect 'changed hostname' 'hostname is kz5-dev.talkchief.io, installed as node1'
 expect 'restart loop' 'kazoo-kamailio has restarted 4367 times' 'T_LOOPING=kazoo-kamailio'
 expect 'inactive role' 'kazoo-freeswitch is inactive' 'T_INACTIVE=kazoo-freeswitch'
 expect 'no media link' 'connected to no FreeSWITCH node' 'T_MEDIA='
+expect 'media link lost but still listed' 'connected to no FreeSWITCH node' 'T_MEDIA=[]'
+expect 'media server without a SIP profile' 'FreeSWITCH has no running SIP profile' 'T_SOFIA=0 profiles 0 aliases\n'
+expect 'media server not answering its console' 'FreeSWITCH has no running SIP profile' 'T_SOFIA='
 # The failed main promotion: a Kazoo restart replaced the port mapper and FreeSWITCH never registered again.
 expect 'media node lost from the port mapper' 'freeswitch is not registered with the Erlang port mapper: restart kazoo-freeswitch' 'T_EPMD=couchdb rabbit kazoo_apps ecallmgr'
 expect 'port mapper owned by a Kazoo service' 'runs outside epmd.service (pid 386407)' 'T_STRAY=386407'
 expect 'SIP edge not listening' 'Kamailio is not listening on 10.0.0.5:5060/udp' 'T_LISTEN='
-pass 'thirteen failure classes, including every "active but dead" condition of the outage, fail with an err line'
+pass 'sixteen failure classes, including every "active but dead" condition of the outage, fail with an err line'
 
 # A CouchDB-only host: no epmd on PATH, only CouchDB's bundled client.
 mkdir -p "$sh_work/couch/erts-1/bin"; printf '#!/usr/bin/env bash\necho "name couchdb at port 1"\n' > "$sh_work/couch/erts-1/bin/epmd"; chmod +x "$sh_work/couch/erts-1/bin/epmd"

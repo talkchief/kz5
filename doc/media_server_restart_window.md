@@ -53,10 +53,58 @@ copies, and both private eCallMgr guests were repeat-installed with it
 | `kz5-stage-queue-fault-freeswitch-restart-4`, run without the harness's media wait | 7 s; next call placed 13 s after the restart: 200 OK, campaign PASS |
 | manual restart, first attempt landed in the not-answering phase | 16 s |
 
-Mitigated, not eliminated. The remaining 5 s is the `version` timeout, which sits
-inside the integration patch's own hunks; changing it means evolving that patch
-through its old/delta/new mechanism. A deployment with several media servers
-should also consider making Kamailio fail over on this reply.
+The remaining 5 s `version` timeout sits inside the integration patch's own hunks, so
+it was not changed. Instead `scripts/patches/ecallmgr-media-reconnect-ready.patch`
+(`1e1511d`) asks `mod_kazoo:version/2` with a 1 s timeout, up to
+`ecallmgr.fs_node_answer_tries` (6) times 500 ms apart, **before** that attempt, so the
+attempt is only made against a node that answers.
+
+| Run (private lab, both controllers patched) | Result |
+| --- | --- |
+| `kz5-stage-queue-fault-freeswitch-restart-5`, diagnostic mode | landed in the not-answering phase (`failed to get mod_kazoo version … timeout` after 1 s); linked 9.2 s after node-down instead of 16 s. Campaign **FAIL** for another reason, below |
+| `kz5-stage-queue-fault-freeswitch-restart-6`, normal mode | same phase, linked 9.0 s after node-down; campaign **PASS** (`/var/log/kazoo-monitor-acceptance-hvlHg5`) |
+
+## Linked is not callable: the whole window, measured
+
+Run 5 placed its next call 13.7 s after the restart and got `486 Unable to Comply`
+three seconds *after* both controllers had logged `successfully connected`.
+FreeSWITCH's log for that second: `bgexec: load(mod_sofia)` at 19:58:04.74,
+`The system cannot create any sessions at this time` at 19:58:06.26, `Adding
+Endpoint 'sofia'` at 19:58:06.46. In Kazoo FreeSWITCH has no SIP stack until a
+controller tells it to load one; while `mod_sofia` loads, its profile already
+receives packets but the endpoint is not registered yet (about 1.5 s).
+
+Run 6, second by second (restart ordered at 20:04:11.6):
+
+| Phase | Ends | Cost |
+| --- | --- | --- |
+| FreeSWITCH stops and starts | 20:04:16.9 | 5.3 s |
+| `mod_kazoo` answers; brief probes, no lost 5 s attempt | 20:04:18.5 | 1.6 s |
+| controller attaches: `node.info`, event streams, fetch handlers | 20:04:22.1 | 3.6 s |
+| `fs_cmds_wait_ms`, then `load mod_sofia` and its configuration | 20:04:26.0 | 3.9 s |
+| **SIP callable** | | **14.4 s** |
+
+`fs_cmds_wait_ms` (stock default 5000, counted from the node listener's start) is
+deliberately **not** lowered. It is the only thing guaranteeing that the
+configuration fetch handlers are bound before `mod_sofia` asks for its profiles;
+the handlers bind asynchronously about 3 s after the node listener starts, and a
+`mod_sofia` that loads first comes up with no profile and stays that way (the
+second controller's `load` is answered `Module mod_sofia Already Loaded!`). That
+would trade 2 s of a restart for a standing outage.
+
+Restarting the only media server is therefore a SIP outage of about 15 s, of which
+about a third is FreeSWITCH itself. It recovers without an operator, agents return
+to `ready` without logging in again, and the next call is bridged with audio in both
+directions (run 6). A deployment that must not reject calls during a media restart
+needs a second media server behind Kamailio's dispatcher.
+
+What changed because of run 5: "linked" is no longer accepted as "callable".
+
+- The campaign waits for `sofia status` to show a running profile before it calls again.
+- `kazoo5-stack-health.sh` reads the live link from `ecallmgr_fs_nodes connected`
+  (`list_fs_nodes` keeps listing a node it has lost) and fails with `FreeSWITCH has
+  no running SIP profile` when the media server is active and linked but cannot
+  take calls. `bash scripts/test-install-kazoo5-stack-health.sh`: 16 failure classes.
 
 The campaign itself waits on `ecallmgr_fs_nodes:connected/0`.
 `ecallmgr_maintenance list_fs_nodes` keeps listing a node it has lost and must

@@ -126,3 +126,14 @@ Whole-host reboot of main, 13:47:27 UTC: receipt
 2590 in `epmd.service`, started 13:47:37 before every role; five roles registered unaided;
 listeners `10.1.0.44:4369` and `127.0.0.1:4369`; no failed unit. Every private guest was
 reinstalled from the final revisions and cold-booted (see the register).
+
+## Brand-new hosts (fresh lab `kz5-fresh-*`, September 18, 2026)
+
+| Run | Result |
+| --- | --- |
+| `rabbitmq-install-1` (`22129bf`) | **FAIL** `epmd.socket is not enabled; a reboot would hand the port mapper to the first Erlang service again`. The packaged unit arrives with Erlang, so the convergence that runs before the roles had nothing to enable. Fixed in `bed904d`: it runs again after the roles. |
+| `couchdb-install-1` (`22129bf`) | **FAIL** on the health gate: no `epmd` on PATH on a CouchDB-only host, so every registration read as missing. Fixed in `bed904d`: CouchDB's bundled client, and an explicit SKIP when there is none. |
+| `couchdb-install-2`, `rabbitmq-install-2` (`bed904d`) | **PASS** |
+| `kazoo-apps-install-1` (`bed904d`), from-scratch build | **PASS** first attempt: `Stopping the port mapper owned by /system.slice/kazoo-apps.service`, `PASS every running Erlang role registered with the new port mapper`, `PASS epmd.service owns port 4369`; `epmd.socket` enabled; health `failures=0`. |
+
+Logs: `/var/lib/kazoo5-cold-bootstrap-fresh/`.

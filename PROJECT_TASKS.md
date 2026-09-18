@@ -7,6 +7,45 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Brand-new hosts, duplicate callback registration, and the media restart window measured end to end — September18 (evening):**
+  *Fresh installs.* New lab variant `--cold-bootstrap-fresh` (guests `kz5-fresh-*`, 172.30.250.0/24,
+  `/var/lib/kazoo5-cold-bootstrap-fresh`) installs roles on guests that never held Kazoo.
+  `couchdb-install-1` **FAIL** (`The Kazoo stack health check reports a failing role`: a
+  CouchDB-only host has no `epmd` on PATH, so the health check read an empty answer) and
+  `rabbitmq-install-1` **FAIL** (`epmd.socket is not enabled`: the packaged unit does not exist
+  until Erlang is installed, so the first convergence had nothing to enable). Both fixed in
+  `bed904d` (bundled CouchDB client; the mapper convergence runs again after the roles);
+  `couchdb-install-2` and `rabbitmq-install-2` **PASS**. `kazoo-apps-install-1` — source fetch,
+  full build, 69 PASS lines — **PASS at the first attempt**: `Stopping the port mapper owned by
+  /system.slice/kazoo-apps.service`, `PASS epmd.service owns port 4369`, stack health
+  `failures=0`, no failed unit. The failed logs are retained beside the passing ones.
+  *Callbacks D2, injected duplicate.* `node scripts/test-acdc-callback-duplicate-live.cjs`
+  (private lab, both applications nodes at once, real CouchDB): 64 identical registrations fired
+  concurrently, all 64 acknowledged with the same ticket and the first write's creation time, the
+  stored ticket still at revision `1-…` and `registering`; the same caller with another number
+  answered `{error,registration_conflict}` without changing it; ticket cancelled and removed.
+  Receipt `/root/kz5-callback-duplicate-20260918/run-2-nodes-32.log` (9 PASS). Offline:
+  `acdc_callback_store_tests:idempotent_registration_test`. See
+  `doc/callback_duplicate_registration.md`.
+  *Media restart window.* Third eCallMgr patch `ecallmgr-media-reconnect-ready.patch` (`1e1511d`)
+  installed on both private eCallMgr guests (`ecallmgr-install-10`, `ecallmgr-peer-install-6`,
+  PASS). Unit `kz5-stage-queue-fault-freeswitch-restart-5` (diagnostic mode, no media wait)
+  **FAIL**, retained: `Bounded live observation timed out`; the next call was placed 13.7s after
+  the restart and answered `486 Unable to Comply`, 3s **after** both controllers logged
+  `successfully connected`. Cause, from FreeSWITCH's own log: a controller loads `mod_sofia`
+  `fs_cmds_wait_ms` (5s) after it connects, and while that load runs the profile already answers
+  but `The system cannot create any sessions at this time`. Not an eCallMgr-link defect, and the
+  5s is kept on purpose (see the doc). What was wrong was judging "linked" as "callable":
+  the campaign now also waits for a running SIP profile, and the stack health check now (a) reads
+  the live link from `ecallmgr_fs_nodes connected` instead of `list_fs_nodes`, which keeps
+  listing a lost node, and (b) fails when FreeSWITCH has no running SIP profile (16 failure
+  classes offline; native PASS on main and in the split guests).
+  Unit `kz5-stage-queue-fault-freeswitch-restart-6` (normal mode) **PASS**,
+  `/var/log/kazoo-monitor-acceptance-hvlHg5`. Both runs landed in the "listener up, `mod_kazoo`
+  not answering" phase that cost 16s before the patch; both linked 9s after node-down
+  (4.6s of that is FreeSWITCH stopping and starting), and SIP was callable 14.4s after the restart
+  was ordered. Breakdown and the decision in `doc/media_server_restart_window.md`.
+
 - **FINAL REGRESSION on main's final runtime (`7fcd386`, agent start-up changed three times today) — 5 of5 NATIVE PASS, September18:**
   Unit `kz5-main-final-regression-0918`, `/root/kz5-final-regression-20260918/results.tsv`:
   ring strategies PASS; plain callback lifecycle PASS; callback with `kazoo-apps` restarted

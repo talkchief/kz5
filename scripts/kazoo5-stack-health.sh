@@ -112,9 +112,20 @@ if installed kazoo-ecallmgr.service; then
     node_check ecallmgr 'ecallmgr: SUP'
     wanted=$(setting KAZOO_FREESWITCH_NODES)
     if [[ -n $wanted ]] || installed kazoo-freeswitch.service; then
-        media=$(bounded sup -n ecallmgr ecallmgr_maintenance list_fs_nodes </dev/null 2>/dev/null | grep -c '@')
+        # Not list_fs_nodes: it keeps listing a node whose link is lost (private
+        # lab, FreeSWITCH restart campaign 1, September 18, 2026).
+        media=$(bounded sup -n ecallmgr -e ecallmgr_fs_nodes connected </dev/null 2>/dev/null | grep -o '@' | wc -l)
         [[ ${media:-0} -ge 1 ]] && ok "eCallMgr is connected to ${media} FreeSWITCH node(s)" || fail 'eCallMgr is connected to no FreeSWITCH node'
     fi
+fi
+# A controller loads mod_sofia about five seconds after it connects. Until then,
+# or if that load ever found no configuration, FreeSWITCH is "active" and linked
+# but has no SIP profile and takes no calls.
+fs_cli=${KAZOO_FS_CLI:-/usr/local/freeswitch/bin/fs_cli}
+if installed kazoo-freeswitch.service && [[ -x $fs_cli ]]; then
+    profiles=$(bounded "$fs_cli" -x 'sofia status' 2>/dev/null | awk '$2 == "profile" && /RUNNING/' | wc -l)
+    [[ ${profiles:-0} -ge 1 ]] && ok "FreeSWITCH has ${profiles} running SIP profile(s)" || \
+        fail 'FreeSWITCH has no running SIP profile: it takes no calls until a controller has loaded mod_sofia'
 fi
 if installed kazoo-kamailio.service && [[ $ingress_closed != true ]]; then
     for address in "$(setting KAZOO_PUBLIC_IP)" "$(setting KAMAILIO_PUBLIC_SIP_IP)"; do

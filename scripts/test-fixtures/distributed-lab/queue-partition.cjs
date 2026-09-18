@@ -239,6 +239,10 @@ function context(h) {
         if(f.mediaControllers&&process.env.KZ5_QUEUE_FAULT_NO_MEDIA_WAIT!=='1')await h.until(quietly(()=>f.mediaControllers.every(c=>
             // list_fs_nodes keeps listing a node it has lost; only connected() proves the link.
             /freeswitch@/.test(h.command('podman',['exec',c,'bash','-lc','sup -n ecallmgr -e ecallmgr_fs_nodes connected'],30000)))),240);
+        // Linked is not yet callable: a controller loads mod_sofia about five seconds after it
+        // connects, and an INVITE during that load is answered 486 (freeswitch-restart-5).
+        if(f.mediaControllers&&f.callLost&&process.env.KZ5_QUEUE_FAULT_NO_MEDIA_WAIT!=='1')await h.until(quietly(()=>
+            /\bprofile\b.*RUNNING/.test(h.command('podman',['exec',guest,'/usr/local/freeswitch/bin/fs_cli','-x','sofia status'],30000))),120);
         // A killed node starts new agent processes, so the pinned pids no longer apply.
         pinned=undefined;
         const quiet=quietly;
