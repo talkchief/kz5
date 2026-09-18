@@ -73,16 +73,30 @@ restarts=$(systemctl show -p NRestarts --value kazoo-kamailio)
 if [[ $(getenforce 2>/dev/null) == Disabled ]]; then
     note 'SKIP lab guests: SELinux is disabled and their stored mount labels cannot be mounted'
 else
-    for guest in kz5-stage-couchdb kz5-stage-rabbitmq; do podman start "$guest" >/dev/null 2>&1; done
+    # podman leaves conmon in the calling service's cgroup. When this one-shot
+    # unit ended on September 18, 2026 systemd killed the monitors of nine
+    # guests; they kept running unmonitored and the next "podman restart"
+    # failed with "conmon process killed". Each guest gets its own scope.
+    start_guest() {
+        systemd-run --quiet --scope --slice=machine.slice podman start "$1" >/dev/null 2>&1
+    }
+    for guest in kz5-stage-couchdb kz5-stage-rabbitmq; do start_guest "$guest"; done
     sleep 25
-    for guest in kz5-stage-haproxy kz5-stage-freeswitch; do podman start "$guest" >/dev/null 2>&1; done
+    for guest in kz5-stage-haproxy kz5-stage-freeswitch; do start_guest "$guest"; done
     sleep 15
     for guest in kz5-stage-kazoo-apps kz5-stage-ecallmgr kz5-stage-kamailio kz5-stage-kazoo-apps-peer kz5-stage-ecallmgr-peer kz5-stage-push-bridge; do
-        podman start "$guest" >/dev/null 2>&1
+        start_guest "$guest"
     done
     sleep 10
     running=$(podman ps --format '{{.Names}}' | grep -c '^kz5-stage-')
     [[ $running -ge 10 ]] && ok "lab guests running: $running" || bad "only $running lab guests are running"
+    unmonitored=0
+    for guest in $(podman ps --format '{{.Names}}' | grep '^kz5-stage-'); do
+        monitor=$(podman inspect -f '{{.State.ConmonPid}}' "$guest")
+        [[ $(cat "/proc/${monitor}/comm" 2>/dev/null) == conmon && $(cut -d: -f3 "/proc/${monitor}/cgroup") != *"$unit"* ]] || \
+            unmonitored=$((unmonitored + 1))
+    done
+    [[ $unmonitored == 0 ]] && ok 'every lab guest monitor is alive outside this unit' || bad "$unmonitored lab guests have no monitor that outlives this unit"
     until_ok 36 podman exec kz5-stage-couchdb systemctl is-active --quiet couchdb && ok 'lab CouchDB active' || bad 'lab CouchDB is not active'
 fi
 
