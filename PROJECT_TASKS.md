@@ -7,6 +7,54 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **ACDC C5 CLOSED at the owner's target — 100 concurrent answered queue calls held 7200s on main: NATIVE PASS; the way there exposed a datastore starvation introduced on September18 and two console defects — September18/19:**
+  Owner's target (given September18): 100 concurrent, two hours. Tooling (`993069a`, `dd3e1d7`):
+  `test-kazoo-calls.sh --capacity N` (30..100), soak up to 7200s, headers-only RTP capture
+  counted in one pass, provisioning helper up to 100 agents and reading the queue roster whole
+  (Crossbar pages it at 50: first expansion **FAILED** `Acceptance queue roster is missing agent
+  1002`, retained). Isolated tenant on main expanded 30 -> 100 agents; previous state kept at
+  `/root/acceptance-secrets.env.before-100-agents-20260918`.
+  Run 1, unit `kz5-main-capacity-100x180-0918` (runtime `1721369`): **FAIL at the login step**,
+  `/var/log/kazoo-acceptance/20260918T210841Z`, `curl: (22) … 401`. Cause: **my own pause-restore
+  fix of September18** (`ba80c61`/`93b6a3a`) read the account's whole month of agent statuses
+  with documents once per starting agent; 100 agents logging in together ran 100 scans of
+  48-55s each (CouchDB log), held all 100 datastore connections of the node
+  (`checkout_timeout`), the applications node was silent 21:09:34-21:09:49 and Crossbar
+  answered 401 on the timed-out identity lookup. Any shift start or node restart at this size
+  would have done the same; 30 agents never showed it. Fixed in `fd8a86d` (one row per agent,
+  `most_recent_by_agent`, `limit=1`; eunit 53, `test-acdc-unit.sh` 91,
+  `test-acdc-agent-recovery.sh` 27). Lab: `kazoo-apps-install-33`, `apps-peer-install-26` PASS;
+  pause restore re-proven natively (single node restart -> `paused`; peer back ->
+  `paused`/`paused`; resume -> `ready`/`ready`; CouchDB saw only `limit=1` requests).
+  `doc/acdc_agent_pause_restore.md`.
+  Found on the way, fixed in `e442c66` with regressions that fail on the old module, verified
+  natively in the lab (`kazoo-apps-install-34` PASS): `sup acdc_maintenance agents_summary`
+  crashed (`function_clause`) with two or more agents and logged instead of printing;
+  `agent_pause ACCOUNT AGENT 900` published the console's text value, failed validation and
+  did nothing while reporting success. Also repaired: `test-call-log-evidence.cjs` had been
+  failing since the expected-line filter was added (it extracted the counters without it).
+  Promotion `kz5-promo-0918l` PASS (`99146d1`, `/root/kz5-main-promotion-20260918.ooqwdZFl`).
+  Run 2, unit `kz5-main-capacity-100x180-0918b`: **PASS**, `/var/log/kazoo-acceptance/20260918T220859Z`,
+  `answered-100 100/100`, failed 0/0, peak CPU 62 (avg 26), error_logs `0/0`, hold 180s.
+  **SOAK, unit `kz5-main-soak-100x7200-0918`: PASS**, `/var/log/kazoo-acceptance/20260918T222404Z`,
+  `summary.tsv`: `answered-100 100/100`, caller_success 100 failed 0, agent_success 100 failed 0,
+  peak_cpu_pct 72 (average 30, median 29, p95 45 over 7393 samples, load generator and capture
+  on the same host), min_mem_available_kb 16321424, error_logs `0/0` (strict fresh-error gate),
+  new_cores 0, verified_concurrent_hold_s 7200; 200 channels at every checkpoint;
+  caller RTP 36745812 in / 36600354 out (100 calls x 50 packets/s x 7320s = 36.6M: no measurable
+  loss); all 100 agents bidirectional. Afterwards: stack health `failures=0`, no failed unit,
+  zero channels, zero `checkout_timeout`.
+  Earlier the same evening: promotion `kz5-promo-0918k` PASS (`1721369`,
+  `/root/kz5-main-promotion-20260918.jUY0XvaN`) and `--verify-only all` exit 0 with 68 PASS
+  (`/root/kz5-verify-only-all-20260918T2055Z.log`).
+  **D3 closed by owner decision (September18): the historical ambiguous callback ticket is left
+  as it is; never force-settled.**
+  **E cutover rehearsal:** owner authorized a read-only replication from production. This
+  session is not permitted to contact production at all (a metadata-only read was refused), so
+  nothing was read. Prepared instead (`698f25f`): `scripts/cutover-rehearsal-plan.py`
+  (GET-only, metadata-only sizing; offline proof `test-cutover-rehearsal-plan.py`, 5 groups) and
+  `doc/cutover_rehearsal_runbook.md`. NOT RUN; next step is the owner running the sizing command.
+
 - **Brand-new hosts, duplicate callback registration, and the media restart window measured end to end — September18 (evening):**
   *Fresh installs.* New lab variant `--cold-bootstrap-fresh` (guests `kz5-fresh-*`, 172.30.250.0/24,
   `/var/lib/kazoo5-cold-bootstrap-fresh`) installs roles on guests that never held Kazoo.
