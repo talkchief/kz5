@@ -17,7 +17,18 @@ work postponed; do not generate voices at runtime or during deployment.
   health `failures=0`. Timeline: `/root/kz5-apps-restart-100-agents-20260919/timeline.txt`.
   Next, owner-approved: whole-host reboot with the 100 agents logged in; one-shot units
   `kz5-post-boot-verify` and `kz5-post-boot-capacity` write the receipts
-  (`/root/kz5-post-boot-*`, `/var/log/kazoo-acceptance/*`). RESULT TO BE RECORDED AFTER THE BOOT.
+  (`/root/kz5-post-boot-*`, `/var/log/kazoo-acceptance/*`).
+  **WHOLE-HOST REBOOT WITH 100 AGENTS LOGGED IN — NATIVE PASS, unattended.** Reboot requested
+  2026-09-19T15:22:50Z, host up 15:23:14, hostname `dev-testing`, SELinux `Permissive`.
+  One-shot `kz5-post-boot-verify`: receipt `/root/kz5-post-boot-20260919T152325Z.VYoX3P/receipt.txt`,
+  `RESULT failures=0`, 10 lab guests running with their monitors alive. At 15:24:49, before
+  anything touched agent state (`/root/kz5-post-boot-100-agents.txt`): 100 agent processes
+  running by themselves, helper `PASS ACDC queue and agents 1:100 are running`,
+  `checkout_timeout` 0 since boot. One-shot `kz5-post-boot-capacity` (waits for stack health,
+  then the 100-call stage) `Result=success`: `/var/log/kazoo-acceptance/20260919T152534Z`,
+  `answered-100 100/100`, caller and agent failures 0, error_logs `0/0`, 180s verified hold.
+  Afterwards: no failed unit, stack health `failures=0`. The test-only capacity unit file was
+  removed; both one-shot units had disabled themselves.
 
 - **Main on the final revision, verified end to end — September19, 01:40-02:00 UTC:**
   Lab first: `kazoo-apps-install-35` and `apps-peer-install-28` PASS at `8800b2b`. Promotion
