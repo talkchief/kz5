@@ -51,8 +51,15 @@ class Source(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    drop = 0   # close this many connections without answering, like a reset
+
     def handle_any(self):
         SOURCE_SEEN.append((self.command, self.path, int(self.headers.get('Content-Length') or 0)))
+        if Source.drop and '_all_docs' in self.path:
+            Source.drop -= 1
+            self.close_connection = True
+            self.connection.close()
+            return None
         parsed = urllib.parse.urlsplit(self.path)
         path = urllib.parse.unquote(parsed.path)
         query = urllib.parse.parse_qs(parsed.query)
@@ -148,6 +155,8 @@ def main():
     print('PASS: main, the older labs, production itself, names, https and paths are refused as targets before any request')
 
     tool.TARGET_NETWORKS = [ipaddress.ip_network('127.0.0.0/8')]   # the stub stands in for the rehearsal lab
+    tool.BACKOFF_SECONDS = 0.01
+    Source.drop = 2   # the first copy attempt in production died on one connection reset
     status, out, err = run(base + ['--target', target, '--receipt-dir', os.path.join(work, 'r1')])
     if status != 0:
         fail('copy failed: ' + err)
@@ -167,11 +176,14 @@ def main():
             fail('production saw %s %s' % (method, path))
         if any(word in path for word in ('_replicate', '_bulk', '_local', '_security', '_changes', '_revs_diff')):
             fail('production saw a non-read path: ' + path)
-    if receipt['source_get_requests'] != len(SOURCE_SEEN):
+    if receipt['source_get_requests'] != len(SOURCE_SEEN) - 2:   # answered requests; the two dropped ones got none
         fail('request count is not reported faithfully')
     if {method for method, _ in TARGET_SEEN} - {'GET', 'PUT', 'POST'}:
         fail('unexpected method on the target')
-    print('PASS: production saw %d requests, all bodiless GETs of lists, info documents and _all_docs pages' % len(SOURCE_SEEN))
+    if Source.drop != 0:
+        fail('the dropped connections were not exercised')
+    print('PASS: production saw %d requests, all bodiless GETs of lists, info documents and _all_docs pages; '
+          'two dropped connections were retried' % len(SOURCE_SEEN))
 
     receipt_path = os.path.join(work, 'r1', 'receipt.json')
     text = out + err + open(receipt_path, encoding='utf-8').read()

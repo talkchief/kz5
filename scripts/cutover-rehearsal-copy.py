@@ -45,12 +45,29 @@ _spec.loader.exec_module(plan)
 TARGET_NETWORKS = [ipaddress.ip_network('172.30.249.0/24')]   # the cutover rehearsal lab only
 EXCLUDED_GLOBALS = {'token_auth'}                              # live session tokens: never needed, never copied
 PAGE = 50
-MAX_BATCH_BYTES = 48 * 1024 * 1024
+MAX_BATCH_BYTES = 8 * 1024 * 1024
+ATTEMPTS = 6                  # a reset or timeout is retried; every request here is idempotent
+BACKOFF_SECONDS = 2.0
 COPIED_KINDS = ('global', 'account', 'numbers', 'account_month_selected')
 
 
 class CopyError(Exception):
     pass
+
+
+def retrying(side, call):
+    """Run one idempotent request, again after a transport fault. GETs are safe to repeat;
+    so are the writes, because documents carry their revision ids (new_edits: false)."""
+    for attempt in range(1, ATTEMPTS + 1):
+        try:
+            return call()
+        except urllib.error.HTTPError as error:
+            if error.code < 500 or attempt == ATTEMPTS:
+                raise
+        except (ConnectionError, TimeoutError, urllib.error.URLError, json.JSONDecodeError) as error:
+            if attempt == ATTEMPTS:
+                raise CopyError('%s kept failing after %d attempts (%s)' % (side, ATTEMPTS, type(error).__name__))
+        time.sleep(BACKOFF_SECONDS * attempt)
 
 
 class Target:
@@ -106,7 +123,8 @@ def pages(reader, name):
         query = {'include_docs': 'true', 'attachments': 'true', 'limit': str(PAGE + 1)}
         if start is not None:
             query['startkey'] = json.dumps(start)
-        rows = reader.get(quoted(name) + '/_all_docs?' + urllib.parse.urlencode(query)).get('rows', [])
+        path = quoted(name) + '/_all_docs?' + urllib.parse.urlencode(query)
+        rows = retrying('the source', lambda: reader.get(path)).get('rows', [])
         more = len(rows) > PAGE
         docs = [row['doc'] for row in rows[:PAGE] if row.get('doc')]
         if docs:
@@ -130,17 +148,18 @@ def batches(docs):
 
 
 def copy_database(reader, target, name):
-    expected = int(reader.get(quoted(name)).get('doc_count') or 0)
-    if target.call('GET', quoted(name), missing_ok=True) is None:
+    expected = int(retrying('the source', lambda: reader.get(quoted(name))).get('doc_count') or 0)
+    if retrying('the target', lambda: target.call('GET', quoted(name), missing_ok=True)) is None:
         target.call('PUT', quoted(name))
     copied = 0
     for docs in pages(reader, name):
         for batch in batches(docs):
-            errors = target.call('POST', quoted(name) + '/_bulk_docs', {'docs': batch, 'new_edits': False})
+            errors = retrying('the target', lambda: target.call('POST', quoted(name) + '/_bulk_docs',
+                                                              {'docs': batch, 'new_edits': False}))
             if errors:
                 raise CopyError('Target rejected %d document(s)' % len(errors))
             copied += len(batch)
-    stored = int(target.call('GET', quoted(name)).get('doc_count') or 0)
+    stored = int(retrying('the target', lambda: target.call('GET', quoted(name))).get('doc_count') or 0)
     return {'source_documents': expected, 'read': copied, 'target_documents': stored,
             'complete': stored >= copied and copied >= expected}
 
