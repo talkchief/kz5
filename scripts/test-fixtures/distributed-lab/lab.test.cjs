@@ -48,6 +48,13 @@ assert.equal(new Set([normal.prefix,cold.prefix,final.prefix,fresh.prefix]).size
 assert.equal(new Set([normal.name,cold.name,final.name,fresh.name]).size,4);
 assert.equal(new Set([normal.network,cold.network,final.network,fresh.network]).size,4);
 assert.equal(configFor('kazoo-apps',testSecrets,fresh).KAZOO_COUCHDB_HOST,'172.30.250.11');
+const rehearsal=settingsFor(true,false,false,true);
+assert.equal(rehearsal.cold,true);assert.equal(rehearsal.productionCopy,true);assert.equal(fresh.productionCopy,undefined);
+assert.equal(rehearsal.dir,'/var/lib/kazoo5-cutover-rehearsal');
+for(const key of ['dir','prefix','name','network','owner','realm'])
+    assert.equal(new Set([normal,cold,final,fresh,rehearsal].map(v=>v[key])).size,5,key+' must be unique per lab');
+assert.equal(configFor('kazoo-apps',testSecrets,rehearsal).KAZOO_COUCHDB_HOST,'172.30.249.11');
+assert.throws(()=>settingsFor(true,false,true,true));assert.throws(()=>settingsFor(false,false,false,true));
 for(const field of ['dir','owner','network','prefix','name','realm']) {
     assert.notEqual(final[field],normal[field]);assert.notEqual(final[field],cold[field]);
 }

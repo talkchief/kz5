@@ -4,10 +4,16 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const cp=require('node:child_process'),assert=require('node:assert/strict'),os=require('node:os');
 const ROOT=path.resolve(__dirname,'../../..');
-function settingsFor(cold=false,final=false,fresh=false) {
+function settingsFor(cold=false,final=false,fresh=false,rehearsal=false) {
     assert.equal(typeof cold,'boolean');
     assert.equal(typeof final,'boolean');assert(!final||cold);
     assert.equal(typeof fresh,'boolean');assert(!fresh||(cold&&!final));
+    assert.equal(typeof rehearsal,'boolean');assert(!rehearsal||(cold&&!final&&!fresh));
+    // Cutover rehearsal: the same three roles, but the datastore is filled with a
+    // read-only copy of production before the applications are installed on it, so
+    // the empty-datastore admission and the master-account bootstrap do not apply.
+    if(rehearsal)return {cold,productionCopy:true,dir:'/var/lib/kazoo5-cutover-rehearsal',owner:'distributed-install-v1-cutover',
+        network:'kz5-cutover',prefix:'172.30.249.',name:'kz5-cutover-',realm:'cutover-rehearsal.invalid'};
     // A third empty-host bootstrap, for installing brand-new guests from scratch with
     // the current installer while the two earlier rehearsals stay parked as evidence.
     if(fresh)return {cold,dir:'/var/lib/kazoo5-cold-bootstrap-fresh',owner:'distributed-install-v1-cold-fresh',
@@ -19,8 +25,8 @@ function settingsFor(cold=false,final=false,fresh=false) {
         {cold,dir:'/var/lib/kazoo5-install-lab',owner:'distributed-install-v1',
             network:'kz5-install-stage',prefix:'172.30.253.',name:'kz5-stage-',realm:'installer-stage.invalid'};
 }
-const SETTINGS=settingsFor(['--cold-bootstrap','--cold-bootstrap-final','--cold-bootstrap-fresh'].includes(process.argv[2]),
-    process.argv[2]==='--cold-bootstrap-final',process.argv[2]==='--cold-bootstrap-fresh');
+const SETTINGS=settingsFor(['--cold-bootstrap','--cold-bootstrap-final','--cold-bootstrap-fresh','--cutover-rehearsal'].includes(process.argv[2]),
+    process.argv[2]==='--cold-bootstrap-final',process.argv[2]==='--cold-bootstrap-fresh',process.argv[2]==='--cutover-rehearsal');
 const {dir:DIR,owner:OWNER,network:NETWORK,prefix:PREFIX}=SETTINGS,SUBNET=PREFIX+'0/24';
 const ROLES=['couchdb','rabbitmq','haproxy','kazoo-apps','freeswitch','ecallmgr','kamailio','monster-ui','push-bridge'];
 const UNITS={couchdb:'couchdb',rabbitmq:'rabbitmq-server',haproxy:'haproxy','kazoo-apps':'kazoo-apps',
@@ -53,7 +59,7 @@ function overlapsSubnet(destination,prefix=PREFIX) {
     assert(/^\d+\.\d+\.\d+\.\d+$/.test(ip)&&ip.split('.').every(v=>Number(v)<=255));
     assert(Number.isInteger(mask)&&mask>=0&&mask<=32);
     const num=s=>s.split('.').reduce((n,v)=>(n*256+Number(v))>>>0,0);
-    assert(['172.30.253.','172.30.252.','172.30.251.','172.30.250.'].includes(prefix));
+    assert(['172.30.253.','172.30.252.','172.30.251.','172.30.250.','172.30.249.'].includes(prefix));
     const start=num(prefix+'0'),size=2**(32-mask),low=Math.floor(num(ip)/size)*size;
     return !(start+255<low||start>low+size-1);
 }
