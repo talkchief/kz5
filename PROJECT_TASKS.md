@@ -7,6 +7,18 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Applications node restarted with 100 agents logged in, final runtime `b276309` — NATIVE PASS, September19 02:04 UTC:**
+  The path on which the September18 datastore starvation would bite. `systemctl restart
+  kazoo-apps` on main at 02:04:36 with agents 1:100 of the isolated tenant logged in: 100 agent
+  processes running at 02:04:50, Crossbar answering at 02:05:02 (26s), helper `--agent-status
+  verify` `PASS ACDC queue and agents 1:100 are running`, CouchDB saw 100
+  `most_recent_by_agent … limit=1` requests and no `most_recent_by_timestamp` scan, slowest
+  datastore request 248ms (48-55s per request before `fd8a86d`), `checkout_timeout` 0, stack
+  health `failures=0`. Timeline: `/root/kz5-apps-restart-100-agents-20260919/timeline.txt`.
+  Next, owner-approved: whole-host reboot with the 100 agents logged in; one-shot units
+  `kz5-post-boot-verify` and `kz5-post-boot-capacity` write the receipts
+  (`/root/kz5-post-boot-*`, `/var/log/kazoo-acceptance/*`). RESULT TO BE RECORDED AFTER THE BOOT.
+
 - **Main on the final revision, verified end to end — September19, 01:40-02:00 UTC:**
   Lab first: `kazoo-apps-install-35` and `apps-peer-install-28` PASS at `8800b2b`. Promotion
   `kz5-promo-0919a` **PASS** (`b276309`, `/root/kz5-main-promotion-20260919.nRCXtw2l/receipt.json`,
