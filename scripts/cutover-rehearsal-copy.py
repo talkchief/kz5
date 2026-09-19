@@ -26,6 +26,7 @@ printed; the receipt holds counts only.
 """
 import argparse
 import base64
+import http.client
 import importlib.util
 import ipaddress
 import json
@@ -64,7 +65,8 @@ def retrying(side, call):
         except urllib.error.HTTPError as error:
             if error.code < 500 or attempt == ATTEMPTS:
                 raise
-        except (ConnectionError, TimeoutError, urllib.error.URLError, json.JSONDecodeError) as error:
+        except (ConnectionError, TimeoutError, urllib.error.URLError, http.client.HTTPException,
+                json.JSONDecodeError) as error:
             if attempt == ATTEMPTS:
                 raise CopyError('%s kept failing after %d attempts (%s)' % (side, ATTEMPTS, type(error).__name__))
         time.sleep(BACKOFF_SECONDS * attempt)
@@ -93,14 +95,23 @@ class Target:
         if method not in ('GET', 'PUT', 'POST'):
             raise CopyError('Method not allowed on the target')
         data = None if body is None else json.dumps(body).encode()
-        request = urllib.request.Request(self.base + path, data=data, headers=self.headers, method=method)
-        try:
-            with self.opener.open(request, timeout=300) as response:
-                return json.loads(response.read(plan.MAX_RESPONSE + 1))
-        except urllib.error.HTTPError as error:
-            if missing_ok and error.code == 404:
-                return None
-            raise
+
+        def once():
+            request = urllib.request.Request(self.base + path, data=data, headers=self.headers, method=method)
+            try:
+                with self.opener.open(request, timeout=300) as response:
+                    return json.loads(response.read(plan.MAX_RESPONSE + 1))
+            except urllib.error.HTTPError as error:
+                if missing_ok and error.code == 404:
+                    return None
+                if method == 'PUT' and error.code == 412:   # created by an attempt whose answer was lost
+                    return {'ok': True}
+                raise
+        return retrying('the target', once)
+
+
+def read(reader, path):
+    return retrying('the source', lambda: reader.get(path))
 
 
 def quoted(name):
@@ -124,7 +135,7 @@ def pages(reader, name):
         if start is not None:
             query['startkey'] = json.dumps(start)
         path = quoted(name) + '/_all_docs?' + urllib.parse.urlencode(query)
-        rows = retrying('the source', lambda: reader.get(path)).get('rows', [])
+        rows = read(reader, path).get('rows', [])
         more = len(rows) > PAGE
         docs = [row['doc'] for row in rows[:PAGE] if row.get('doc')]
         if docs:
@@ -148,27 +159,26 @@ def batches(docs):
 
 
 def copy_database(reader, target, name):
-    expected = int(retrying('the source', lambda: reader.get(quoted(name))).get('doc_count') or 0)
-    if retrying('the target', lambda: target.call('GET', quoted(name), missing_ok=True)) is None:
+    expected = int(read(reader, quoted(name)).get('doc_count') or 0)
+    if target.call('GET', quoted(name), missing_ok=True) is None:
         target.call('PUT', quoted(name))
     copied, rejected = 0, {}
     for docs in pages(reader, name):
         for batch in batches(docs):
-            errors = retrying('the target', lambda: target.call('POST', quoted(name) + '/_bulk_docs',
-                                                              {'docs': batch, 'new_edits': False}))
+            errors = target.call('POST', quoted(name) + '/_bulk_docs', {'docs': batch, 'new_edits': False})
             # A rejected document is counted by CouchDB's error class (never its id or body)
             # and the copy goes on; the database is then reported as incomplete.
             for error in errors or []:
                 kind = str(error.get('error') or 'unknown')[:40]
                 rejected[kind] = rejected.get(kind, 0) + 1
             copied += len(batch) - len(errors or [])
-    stored = int(retrying('the target', lambda: target.call('GET', quoted(name))).get('doc_count') or 0)
+    stored = int(target.call('GET', quoted(name)).get('doc_count') or 0)
     return {'source_documents': expected, 'read': copied, 'target_documents': stored, 'rejected': rejected,
             'complete': not rejected and stored >= copied and copied >= expected}
 
 
 def run(reader, target, months, resume, receipt_dir):
-    names = reader.get('/_all_dbs')
+    names = read(reader, '/_all_dbs')
     chosen = select(names, months)
     occupied = 0
     for _, name in chosen:
@@ -181,7 +191,7 @@ def run(reader, target, months, resume, receipt_dir):
     for index, (kind, name) in enumerate(chosen, 1):
         if resume:
             info = target.call('GET', quoted(name), missing_ok=True)
-            source_count = int(reader.get(quoted(name)).get('doc_count') or 0)
+            source_count = int(read(reader, quoted(name)).get('doc_count') or 0)
             if info and int(info.get('doc_count') or 0) >= source_count:
                 result = {'source_documents': source_count, 'read': 0, 'rejected': {},
                           'target_documents': int(info.get('doc_count') or 0), 'complete': True}
