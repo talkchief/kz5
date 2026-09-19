@@ -8,7 +8,7 @@ paged `_all_docs?include_docs=true&attachments=true`. No replication is started
 on production, so no checkpoint or any other document is written there.
 
 The target is written with PUT (create database) and POST `_bulk_docs`
-(`new_edits: false`, so revisions are preserved). It must be inside the fresh
+(`new_edits: false`, so revisions are preserved). It must be inside the cutover
 lab network and must not already hold any of the selected databases with
 documents, unless --resume is given. Main's and the older lab's CouchDB are
 outside that network and are refused.
@@ -20,8 +20,8 @@ revisions are not copied. Account database names and credentials are never
 printed; the receipt holds counts only.
 
   sudo python3 scripts/cutover-rehearsal-copy.py --source http://10.1.0.10:5984 \\
-       --credentials /opt/kz5/key --target http://172.30.250.11:5984 \\
-       --target-credentials /root/kz5-fresh-couchdb.key --months 202609,202608 \\
+       --credentials /opt/kz5/key --target http://172.30.249.11:5984 \\
+       --target-credentials /root/kz5-cutover-couchdb.key --months 202609,202608 \\
        --receipt-dir /root/kz5-cutover-copy-YYYYMMDD
 """
 import argparse
@@ -42,7 +42,7 @@ _spec = importlib.util.spec_from_file_location('cutover_plan', os.path.join(HERE
 plan = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(plan)
 
-TARGET_NETWORKS = [ipaddress.ip_network('172.30.250.0/24')]   # the fresh cold-bootstrap lab only
+TARGET_NETWORKS = [ipaddress.ip_network('172.30.249.0/24')]   # the cutover rehearsal lab only
 EXCLUDED_GLOBALS = {'token_auth'}                              # live session tokens: never needed, never copied
 PAGE = 50
 MAX_BATCH_BYTES = 48 * 1024 * 1024
@@ -65,7 +65,7 @@ class Target:
         except ValueError:
             raise CopyError('Target must be given as an IP address')
         if not any(address in network for network in TARGET_NETWORKS):
-            raise CopyError('Target is outside the fresh lab network; refusing to write there')
+            raise CopyError('Target is outside the cutover rehearsal lab network; refusing to write there')
         self.base = url.rstrip('/')
         token = base64.b64encode(('%s:%s' % (username, password)).encode()).decode()
         self.headers = {'Authorization': 'Basic ' + token, 'Accept': 'application/json',

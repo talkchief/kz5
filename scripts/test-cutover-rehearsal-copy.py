@@ -137,17 +137,17 @@ def main():
     base = ['--source', source, '--credentials', key, '--target-credentials', key, '--months', '202609']
 
     # The real allow-list: only the fresh lab. Nothing may be contacted when the target is refused.
-    if [str(n) for n in tool.TARGET_NETWORKS] != ['172.30.250.0/24']:
-        fail('the target allow-list must be exactly the fresh lab network')
-    for refused in (target, 'http://10.1.0.44:5984', 'http://10.1.0.44:15984', 'http://172.30.253.11:5984',
-                    'http://10.1.0.10:5984', 'http://kz5-fresh-couchdb:5984', 'https://172.30.250.11:5984',
-                    'http://172.30.250.11:5984/db'):
+    if [str(n) for n in tool.TARGET_NETWORKS] != ['172.30.249.0/24']:
+        fail('the target allow-list must be exactly the cutover rehearsal lab network')
+    for refused in (target, 'http://10.1.0.44:5984', 'http://10.1.0.44:15984', 'http://172.30.253.11:5984', 'http://172.30.250.11:5984',
+                    'http://10.1.0.10:5984', 'http://kz5-fresh-couchdb:5984', 'https://172.30.249.11:5984',
+                    'http://172.30.249.11:5984/db'):
         status, out, err = run(base + ['--target', refused, '--receipt-dir', os.path.join(work, 'r0')])
         if status == 0 or SOURCE_SEEN or TARGET_SEEN:
             fail('target accepted or a host contacted: ' + refused)
-    print('PASS: main, the older lab, production itself, names, https and paths are refused as targets before any request')
+    print('PASS: main, the older labs, production itself, names, https and paths are refused as targets before any request')
 
-    tool.TARGET_NETWORKS = [ipaddress.ip_network('127.0.0.0/8')]   # the stub stands in for the fresh lab
+    tool.TARGET_NETWORKS = [ipaddress.ip_network('127.0.0.0/8')]   # the stub stands in for the rehearsal lab
     status, out, err = run(base + ['--target', target, '--receipt-dir', os.path.join(work, 'r1')])
     if status != 0:
         fail('copy failed: ' + err)
