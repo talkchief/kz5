@@ -202,6 +202,21 @@ init_acct_agents(AccountDb, AccountId) ->
                                       ,[{'reduce', 'false'}])
                ).
 
+%% The acdc database keeps an entry for every account that ever used ACDC, also
+%% after the account was deleted and its database removed. One such entry in a
+%% copy of production failed initialization for the whole node, and with it the
+%% install (cutover rehearsal, September 19, 2026). An account without a database
+%% has no queues or agents to start; a missing view in a database that exists is
+%% still a failure.
+-spec account_db_is_gone(kz_term:ne_binary()) -> boolean().
+account_db_is_gone(AccountId) ->
+    case kz_datamgr:db_exists(kzs_util:format_account_db(AccountId)) of
+        'true' -> 'false';
+        'false' ->
+            lager:warning("account ~s is registered for acdc but has no database; skipping it", [AccountId]),
+            'true'
+    end.
+
 -spec init_queues(kz_term:ne_binary(), kazoo_data:get_results_return()) -> 'ok'.
 init_queues(_, {'ok', []}) -> 'ok';
 init_queues(AccountId, {'error', 'gateway_timeout'}) ->
@@ -210,8 +225,12 @@ init_queues(AccountId, {'error', 'gateway_timeout'}) ->
     wait_a_bit(),
     'ok';
 init_queues(AccountId, {'error', 'not_found'}) ->
-    lager:error("the queues view for ~s appears to be missing; you should probably fix that", [AccountId]),
-    error('queue_view_not_found');
+    case account_db_is_gone(AccountId) of
+        'true' -> 'ok';
+        'false' ->
+            lager:error("the queues view for ~s appears to be missing; you should probably fix that", [AccountId]),
+            error('queue_view_not_found')
+    end;
 init_queues(AccountId, {'error', _E}) ->
     lager:debug("error fetching queues: ~p", [_E]),
     try_queues_again(AccountId),
@@ -230,8 +249,12 @@ init_agents(AccountId, {'error', 'gateway_timeout'}) ->
     wait_a_bit(),
     'ok';
 init_agents(AccountId, {'error', 'not_found'}) ->
-    lager:error("the agents view for ~s appears to be missing; you should probably fix that", [AccountId]),
-    error('agent_view_not_found');
+    case account_db_is_gone(AccountId) of
+        'true' -> 'ok';
+        'false' ->
+            lager:error("the agents view for ~s appears to be missing; you should probably fix that", [AccountId]),
+            error('agent_view_not_found')
+    end;
 init_agents(AccountId, {'error', _E}) ->
     lager:debug("error fetching agents: ~p", [_E]),
     try_agents_again(AccountId),

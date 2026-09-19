@@ -14,6 +14,7 @@ initialization_tracking_test_() ->
                       ,{"failed agent lookup is not ready",fun failed_agent/0}
                       ,{"failed supervisor creation is not ready",fun failed_start/0}
                       ,{"missing queue view is not empty-ready",fun missing_view/0}
+                      ,{"a registered account whose database is gone is skipped, not a failure",fun deleted_account/0}
                       ,{"new public initialization invalidates the token",fun new_job/0}
                       ,{"normal owner stop terminates its pending jobs",fun stop_owner/0}
                       ,{"abnormal owner death cannot leave retry jobs alive",fun kill_owner/0}]].
@@ -93,7 +94,14 @@ fresh_database() ->
 failed_start() ->
     agents(),meck:expect(acdc_agents_sup,new,fun(_,_) -> {error,already_present} end),_=start(),failed().
 missing_view() ->
-    account(),meck:expect(kz_datamgr,get_results,fun(_,_,_) -> {error,not_found} end),_=start(),failed().
+    account(),meck:expect(kz_datamgr,get_results,fun(_,_,_) -> {error,not_found} end),
+    meck:expect(kz_datamgr,db_exists,fun(_) -> true end),_=start(),failed().
+%% Production's acdc database still listed a deleted account (cutover rehearsal).
+deleted_account() ->
+    account(),meck:expect(kz_datamgr,get_results,fun(_,_,_) -> {error,not_found} end),
+    meck:expect(kz_datamgr,db_exists,fun(_) -> false end),_=start(),_=ready(),
+    ?assert(meck:called(kz_datamgr,db_exists,'_')),
+    ?assertNot(meck:called(acdc_queues_sup,new,'_')),?assertNot(meck:called(acdc_agents_sup,new,'_')).
 new_job() ->
     _=start(),Before=ready(),ok=acdc_init:init_acct_queues(<<"account">>),After=ready(),
     ?assertEqual(maps:get(epoch,Before),maps:get(epoch,After)),
