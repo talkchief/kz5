@@ -7,6 +7,19 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **DEPLOYMENT SCRIPT — a timing-dependent build failure found and fixed: the forced rebuild raced with itself — September19:**
+  Private lab `apps-peer-install-27` (`fd8a86d`) **FAIL**, retained:
+  `src/kz_auth_listener.erl:13: behaviour gen_listener undefined` under `-Werror`; guest kept
+  its previous runtime (health `failures=0`). Cause: `KAZOO_FORCE_RECOMPILE=1` forced every
+  visit of an application, and the behaviour providers the installer builds first
+  (`kazoo_stdlib`, `kazoo_amqp`, `kazoo_data`, `webhooks`) are visited again by the parallel
+  passes, so `gen_listener.beam` was being rewritten while `kazoo_auth` compiled against it.
+  Fixed in `8800b2b`: one build identifier per install (never inherited) and a per-application
+  stamp in `make/kz.mk`; forced once per build. Offline: `test-kazoo-force-recompile.cjs`
+  (real erlc, 21 commands), `test-ecallmgr-current-build.cjs`. Native:
+  `apps-peer-install-28` **PASS**, `gen_listener.erl` compiled once (twice before),
+  `gen_webhook.erl` once (three times before). `doc/installer_build_order_race.md`.
+
 - **ACDC C5 CLOSED at the owner's target — 100 concurrent answered queue calls held 7200s on main: NATIVE PASS; the way there exposed a datastore starvation introduced on September18 and two console defects — September18/19:**
   Owner's target (given September18): 100 concurrent, two hours. Tooling (`993069a`, `dd3e1d7`):
   `test-kazoo-calls.sh --capacity N` (30..100), soak up to 7200s, headers-only RTP capture
