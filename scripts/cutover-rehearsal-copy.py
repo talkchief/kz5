@@ -151,17 +151,20 @@ def copy_database(reader, target, name):
     expected = int(retrying('the source', lambda: reader.get(quoted(name))).get('doc_count') or 0)
     if retrying('the target', lambda: target.call('GET', quoted(name), missing_ok=True)) is None:
         target.call('PUT', quoted(name))
-    copied = 0
+    copied, rejected = 0, {}
     for docs in pages(reader, name):
         for batch in batches(docs):
             errors = retrying('the target', lambda: target.call('POST', quoted(name) + '/_bulk_docs',
                                                               {'docs': batch, 'new_edits': False}))
-            if errors:
-                raise CopyError('Target rejected %d document(s)' % len(errors))
-            copied += len(batch)
+            # A rejected document is counted by CouchDB's error class (never its id or body)
+            # and the copy goes on; the database is then reported as incomplete.
+            for error in errors or []:
+                kind = str(error.get('error') or 'unknown')[:40]
+                rejected[kind] = rejected.get(kind, 0) + 1
+            copied += len(batch) - len(errors or [])
     stored = int(retrying('the target', lambda: target.call('GET', quoted(name))).get('doc_count') or 0)
-    return {'source_documents': expected, 'read': copied, 'target_documents': stored,
-            'complete': stored >= copied and copied >= expected}
+    return {'source_documents': expected, 'read': copied, 'target_documents': stored, 'rejected': rejected,
+            'complete': not rejected and stored >= copied and copied >= expected}
 
 
 def run(reader, target, months, resume, receipt_dir):
@@ -180,13 +183,16 @@ def run(reader, target, months, resume, receipt_dir):
             info = target.call('GET', quoted(name), missing_ok=True)
             source_count = int(reader.get(quoted(name)).get('doc_count') or 0)
             if info and int(info.get('doc_count') or 0) >= source_count:
-                result = {'source_documents': source_count, 'read': 0,
+                result = {'source_documents': source_count, 'read': 0, 'rejected': {},
                           'target_documents': int(info.get('doc_count') or 0), 'complete': True}
             else:
                 result = copy_database(reader, target, name)
         else:
             result = copy_database(reader, target, name)
-        group = totals.setdefault(kind, {'databases': 0, 'source_documents': 0, 'target_documents': 0, 'incomplete': 0})
+        group = totals.setdefault(kind, {'databases': 0, 'source_documents': 0, 'target_documents': 0,
+                                         'incomplete': 0, 'rejected': {}})
+        for error_kind, count in result['rejected'].items():
+            group['rejected'][error_kind] = group['rejected'].get(error_kind, 0) + count
         group['databases'] += 1
         group['source_documents'] += result['source_documents']
         group['target_documents'] += result['target_documents']
@@ -222,7 +228,10 @@ def main():
         reader = plan.Reader(args.source, *plan.credentials(args.credentials))
         if urllib.parse.urlsplit(args.source).hostname == urllib.parse.urlsplit(args.target).hostname:
             raise CopyError('Source and target are the same host')
-        print(json.dumps(run(reader, target, months, args.resume, args.receipt_dir), indent=2, sort_keys=True))
+        receipt = run(reader, target, months, args.resume, args.receipt_dir)
+        print(json.dumps(receipt, indent=2, sort_keys=True))
+        if receipt['status'] != 'PASS':
+            return 3   # finished, but not everything arrived: see the receipt's counts
     except Exception as error:   # never echo URLs, names or credentials
         status = getattr(error, 'code', None)
         sys.stderr.write('Cutover copy failed (%s, HTTP %s)%s\n' % (

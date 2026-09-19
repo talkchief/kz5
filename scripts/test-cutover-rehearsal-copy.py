@@ -80,6 +80,8 @@ class Source(http.server.BaseHTTPRequestHandler):
 
 
 class TargetStub(http.server.BaseHTTPRequestHandler):
+    reject = None   # one document id the target refuses
+
     def log_message(self, *args):
         pass
 
@@ -94,9 +96,13 @@ class TargetStub(http.server.BaseHTTPRequestHandler):
         if self.command == 'POST' and path.endswith('/_bulk_docs'):
             if body.get('new_edits') is not False:
                 return reply(self, 400, {})
+            refused = []
             for doc in body['docs']:
-                TARGET[path[1:-len('/_bulk_docs')]][doc['_id']] = doc
-            return reply(self, 201, [])
+                if doc['_id'] == TargetStub.reject:
+                    refused.append({'id': doc['_id'], 'error': 'forbidden', 'reason': 'secret reason text'})
+                else:
+                    TARGET[path[1:-len('/_bulk_docs')]][doc['_id']] = doc
+            return reply(self, 201, refused)
         if self.command == 'GET' and path[1:] in TARGET:
             return reply(self, 200, {'doc_count': len(TARGET[path[1:]])})
         return reply(self, 404, {})
@@ -205,6 +211,20 @@ def main():
         fail('resume wrote to databases that were already complete')
     print('PASS: a non-empty target is refused; --resume skips complete databases without re-reading or rewriting them')
 
+    # The first real copy aborted on one rejected document. It must be counted by class and the copy go on.
+    TARGET.clear()
+    TargetStub.reject = 'doc-007'
+    status, out, err = run(base + ['--target', target, '--receipt-dir', os.path.join(work, 'r4')])
+    TargetStub.reject = None
+    rejected = json.loads(out)
+    if status != 3 or rejected['status'] != 'INCOMPLETE' or rejected['incomplete_databases'] != 1:
+        fail('a rejected document must make the result INCOMPLETE, not abort: ' + err)
+    if rejected['groups']['account']['rejected'] != {'forbidden': 1} or len(TARGET[ACCOUNT]) != 119:
+        fail('the rejection is not counted by class, or the rest of the database was not copied')
+    if 'doc-007' in out + err or 'secret reason text' in out + err:
+        fail('a rejected document id or reason was printed')
+    print('PASS: a rejected document is counted by error class, nothing about it is printed, the copy continues and reports INCOMPLETE')
+
     source_text = open(os.path.join(ROOT, 'cutover-rehearsal-copy.py'), encoding='utf-8').read()
     code = source_text.split('"""', 2)[2]
     if code.count('urllib.request.Request(') != 1 or 'urllib.request.Request(' in code.split('class Target:')[0]:
@@ -218,7 +238,7 @@ def main():
     print('PASS: production is reachable only through the GET-only reader; no delete, no replication, never source = target')
     for server in servers:
         server.shutdown()
-    print('All 6 cutover copy groups passed')
+    print('All 7 cutover copy groups passed')
 
 
 if __name__ == '__main__':
