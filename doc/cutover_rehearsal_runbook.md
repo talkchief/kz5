@@ -1,10 +1,10 @@
 # Cutover rehearsal runbook (readiness plan, gate E)
 
 Status on September 19, 2026: **sized and prepared; the copy and the rehearsal itself are not run**. The owner authorized a read-only
-replication from production on this date. The assistant's session is not permitted
-to contact production `10.1.0.10` at all (even a metadata read was refused by the
-permission system), so step 1 must be started by the owner. Nothing here writes to
-production, and nothing here may be pointed at main's CouchDB.
+copy from production. The assistant's session could run the metadata-only sizing but
+is refused permission to move customer data, so the copy is started by the owner (see
+"State on September 19"). Nothing here writes to production, and nothing here may be
+pointed at main's CouchDB.
 
 Standing facts this builds on (`doc/kazoo4_kazoo5_couchdb_findings.md`):
 production is Kazoo 4.3.124 on CouchDB 3.3.2; a Kazoo 5 refresh rewrites design
@@ -37,9 +37,9 @@ needed for the rehearsal.
    A full copy puts every customer's data (including voicemail) on the development
    host; say so explicitly, and say how long it may be retained.
 2. **Window**: replication reads hard from production's disks. Pick a quiet period.
-3. **Target**: a new, empty CouchDB guest in the fresh lab (`kz5-fresh-*`,
-   172.30.250.0/24). Not main's CouchDB, not an existing lab CouchDB that already
-   holds Kazoo 5 bootstrap documents (the globals would merge and conflict).
+3. **Target**: the empty CouchDB guest of the dedicated rehearsal lab (`kz5-cutover-*`,
+   172.30.249.0/24). Not main's CouchDB, not a lab CouchDB that already holds Kazoo 5
+   bootstrap documents (the globals would merge and conflict).
 
 ## State on September 19, 2026
 
@@ -79,21 +79,18 @@ sudo systemd-run --unit kz5-cutover-copy -p RemainAfterExit=yes -p WorkingDirect
   lab's empty-datastore admission and the master-account bootstrap (the variant's
   settings already carry `productionCopy`).
 
-## 3. Copy (design notes)
+## 3. Why the copy is host-driven
 
-- CouchDB's own replicator, **pull**, started on the target with
-  `"use_checkpoints": false` so that no `_local` checkpoint document is written on
-  production; one-shot `_replicate` requests, not `_replicator` documents, so the
-  production credentials are not stored anywhere; at most two databases at a time.
-- The fresh lab's isolation rules admit exactly one flow for the duration:
-  target guest -> `10.1.0.10:5984/tcp`, removed afterwards.
-- Verification is read-only on both sides: per database `doc_count`,
-  `doc_del_count` and a sampled revision comparison; the source's `update_seq`
-  before and after shows how much production moved during the copy.
+The first design was CouchDB's own pull replication started on the target. It was
+dropped: lab guests blackhole `10.1.0.0/16` by design, and opening that for one guest
+would weaken the isolation every other lab test relies on. The host-driven copy keeps
+the guests isolated and gives a stronger property on the source side: production is
+reached only through one GET primitive, which the offline proof enforces. Its limits:
+winning revisions only, no deleted documents, not a point-in-time snapshot.
 
 ## 4. Rehearsal proper
 
-1. Install `rabbitmq` and then `kazoo-apps` from scratch in the fresh lab against
+1. Install `rabbitmq` and then `kazoo-apps` from scratch in the rehearsal lab against
    the copied CouchDB (this is the upgrade-install matrix: the installer's
    migrations run on real production-shaped data for the first time).
 2. Record what the first start changes: design documents, `system_config`,
