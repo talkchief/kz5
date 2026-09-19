@@ -218,7 +218,9 @@ function configFor(role,secrets,settings=SETTINGS) {
         KAZOO_FREESWITCH_NODES:role==='ecallmgr'?'freeswitch@'+settings.name+'freeswitch':'',
         KAZOO_MASTER_ACCOUNT_NAME:'IsolatedInstallerAcceptance',KAZOO_MASTER_ACCOUNT_REALM:settings.realm,
         KAZOO_MASTER_ADMIN_USER:'admin',KAMAILIO_CHILDREN:'2',KAMAILIO_TCP_CHILDREN:'2',
-        KAMAILIO_AMQP_CONSUMERS:'1',KAMAILIO_AMQP_WORKERS:'2'};
+        KAMAILIO_AMQP_CONSUMERS:'1',KAMAILIO_AMQP_WORKERS:'2',
+        // On a copy of production the master account is production's own: never create one.
+        ...(settings.productionCopy&&role==='kazoo-apps'?{KAZOO_BOOTSTRAP_MASTER_ACCOUNT:'false'}:{})};
 }
 function installRole(role,detached=false) {
     assert(Object.hasOwn(UNITS,role),'Role provisioning not implemented');
@@ -278,6 +280,14 @@ function installRole(role,detached=false) {
         const config='url = "http://'+couch.ip+':5984/_all_dbs"\nuser = "admin:'+s.secrets.couch+'"\n';
         const databases=JSON.parse(podman(['exec','-i',couch.id,'curl','--fail','--silent','--show-error','--config','-'],{input:config}));
         let existingMaster=false;
+        if(SETTINGS.productionCopy) {
+            // The rehearsal installs on a datastore that was filled from production first.
+            // Record counts only: database names are customer data and stay out of lab state.
+            assertProductionCopy(databases);
+            const admission={time:new Date().toISOString(),productionCopy:true,databaseCount:databases.length,
+                source:r.source||s.source,attempt};
+            s.coldBootstrapAdmissions=[...(s.coldBootstrapAdmissions||[]),admission];saveState(s);
+        } else {
         if(databases.some(name=>!['_users','_replicator','_global_changes'].includes(name))) {
             // A failed post-create discovery must not trigger duplicate account
             // creation. Resume only the exact already-configured cold master.
@@ -294,6 +304,7 @@ function installRole(role,detached=false) {
         const admission={time:new Date().toISOString(),databases,source:r.source||s.source,attempt,existingMaster};
         if(!s.coldBootstrapBaseline)s.coldBootstrapBaseline=admission;
         s.coldBootstrapAdmissions=[...(s.coldBootstrapAdmissions||[]),admission];saveState(s);
+        }
     }
     if(detached) {
         assert(!r.installUnit,'Collect the previous detached installer first');
@@ -487,6 +498,14 @@ function assertFreshDatabases(databases) {
     assert(databases.every(name=>['_users','_replicator','_global_changes'].includes(name)),
         'Cold bootstrap requires a fresh CouchDB with no Kazoo databases');
 }
+// The opposite admission: a rehearsal on an empty datastore would prove nothing.
+function assertProductionCopy(databases) {
+    assert(Array.isArray(databases),'Database inventory must be an array');
+    for(const required of ['accounts','system_config','services'])
+        assert(databases.includes(required),'Cutover rehearsal requires the copied production datastore ('+required+' is missing)');
+    assert(databases.some(name=>/^account\/[0-9a-f]{2}\/[0-9a-f]{2}\/[0-9a-f]{28}$/.test(name)),
+        'Cutover rehearsal requires copied account databases');
+}
 function requirePersistentPivot(role,argv) {
     if(['kazoo-apps','ecallmgr'].includes(role))
         assert(Array.isArray(argv)&&argv.includes('net.ipv4.ip_local_reserved_ports=34512-34513'),
@@ -521,7 +540,7 @@ function parkCold() {
     console.log(JSON.stringify({status:'PARKED',profile:SETTINGS.name,roles:3,dataRemoved:false,
         reason:'Completed bootstrap evidence retained; release shared kernel/container resources'}));
 }
-module.exports={overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases,requirePersistentPivot,assertColdPark};
+module.exports={overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases,assertProductionCopy,requirePersistentPivot,assertColdPark};
 if(require.main===module) {
 try {
     assert.equal(process.getuid(),0);assert(Object.values(os.networkInterfaces()).flat().some(n=>n.address==='10.1.0.44'),'Only development44 allowed');

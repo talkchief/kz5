@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs');
-const {overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases,requirePersistentPivot,assertColdPark}=require('./lab.cjs');
+const {overlapsSubnet,ROLES,configFor,separateNamespace,settingsFor,assertFreshDatabases,assertProductionCopy,requirePersistentPivot,assertColdPark}=require('./lab.cjs');
 assert.throws(()=>separateNamespace({dev:1,ino:2},{dev:1,ino:2}));
 separateNamespace({dev:1,ino:3},{dev:1,ino:2});
 separateNamespace({dev:2,ino:2},{dev:1,ino:2});
@@ -55,6 +55,13 @@ for(const key of ['dir','prefix','name','network','owner','realm'])
     assert.equal(new Set([normal,cold,final,fresh,rehearsal].map(v=>v[key])).size,5,key+' must be unique per lab');
 assert.equal(configFor('kazoo-apps',testSecrets,rehearsal).KAZOO_COUCHDB_HOST,'172.30.249.11');
 assert.throws(()=>settingsFor(true,false,true,true));assert.throws(()=>settingsFor(false,false,false,true));
+assert.equal(configFor('kazoo-apps',testSecrets,rehearsal).KAZOO_BOOTSTRAP_MASTER_ACCOUNT,'false');
+assert.equal(configFor('kazoo-apps',testSecrets,fresh).KAZOO_BOOTSTRAP_MASTER_ACCOUNT,undefined);
+assert.equal(configFor('couchdb',testSecrets,rehearsal).KAZOO_BOOTSTRAP_MASTER_ACCOUNT,undefined);
+const copied=['_users','accounts','system_config','services','account/ab/cd/'+'e'.repeat(28)];
+assertProductionCopy(copied);
+for(const bad of [[],['_users','_replicator'],copied.filter(n=>n!=='accounts'),copied.filter(n=>!n.startsWith('account/')),'accounts'])
+    assert.throws(()=>assertProductionCopy(bad));
 for(const field of ['dir','owner','network','prefix','name','realm']) {
     assert.notEqual(final[field],normal[field]);assert.notEqual(final[field],cold[field]);
 }
