@@ -121,7 +121,9 @@ function create(role) {
     assert(!s.roles[role],'Role already recorded; inspect it instead of replacing it');
     const name=SETTINGS.name+role,ip=PREFIX+(11+ROLES.indexOf(role));
     assert(!json(['ps','--all','--format','json']).some(c=>c.Names?.includes(name)),'Existing container name refused');
-    const memory=['kazoo-apps','ecallmgr','freeswitch'].includes(role)?'6g':'1g';
+    // A datastore holding a copy of production indexes about a million documents on first
+    // use; at the lab's 1 GiB it was OOM-killed 51 times (cutover rehearsal, September 19, 2026).
+    const memory=['kazoo-apps','ecallmgr','freeswitch'].includes(role)||(SETTINGS.productionCopy&&role==='couchdb')?'6g':'1g';
     command('python3',[__dirname+'/inotify-headroom.py','--check']);
     const id=podman(['run','--detach','--name',name,'--hostname',name,'--network',NETWORK,'--ip',ip,
         '--label','io.talkchief.kazoo.acceptance='+OWNER,'--label','io.talkchief.kazoo.role='+role,
