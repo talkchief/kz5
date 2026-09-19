@@ -98,3 +98,6 @@ __pycache__/
 # asdf-vm "local" versions handler
 /make/more_apps.mk
 /applications/Makefile
+
+# Per-build forced-recompile stamps written by make/kz.mk
+.kazoo-forced-*
