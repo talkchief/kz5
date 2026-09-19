@@ -17,7 +17,9 @@ die(){ printf '%s\\n' "$*" >&2; exit 1; }
 run(){ :; }
 make(){
     printf 'make %s\\n' "$*"
-    if [[ -n "\${MAKE_FAIL_ARGS:-}" && "$*" == "$MAKE_FAIL_ARGS" ]]; then return 71; fi
+    # Every run generates its own build identifier; compare with it masked.
+    local masked; masked=$(sed -E 's/KAZOO_FORCE_BUILD_ID=[^ ]+/KAZOO_FORCE_BUILD_ID=ID/' <<<"$*")
+    if [[ -n "\${MAKE_FAIL_ARGS:-}" && "$masked" == "$MAKE_FAIL_ARGS" ]]; then return 71; fi
 }
 rm(){ :; }
 sleep(){ :; }
@@ -46,11 +48,15 @@ verify_ecallmgr(){ printf 'runtime-verify\\n'; }
     assert.equal(result.stdout.split('build-start').length,2,'Existing app files/environment cannot skip current build');
     assert(result.stdout.indexOf('source-patches')<result.stdout.indexOf('production-verify'));
     assert(result.stdout.indexOf('production-verify')<result.stdout.indexOf('service'));
+    // One fresh identifier per build, shared by the three forced passes and never inherited.
+    const ids=new Set([...result.stdout.matchAll(/ KAZOO_FORCE_BUILD_ID=(\S+)/g)].map(m=>m[1]));
+    assert.equal(ids.size,1,'one build identifier for every forced pass');
+    const buildId=[...ids][0];assert.match(buildId,/^[0-9]{8}T[0-9]{6}Z\.[0-9]+$/);
     const builds=result.stdout.split('\n').filter(line=>line.startsWith('make '));
     const compileArgs=[
-        `-C ${temp} JOBS=1 KAZOO_FORCE_RECOMPILE=1 core fetch-apps`,
-        `-C ${temp}/applications/webhooks KAZOO_FORCE_RECOMPILE=1 all`,
-        `-C ${temp}/applications ROOT=${temp} -j1 KAZOO_FORCE_RECOMPILE=1 all`,
+        `-C ${temp} JOBS=1 KAZOO_FORCE_RECOMPILE=1 KAZOO_FORCE_BUILD_ID=${buildId} core fetch-apps`,
+        `-C ${temp}/applications/webhooks KAZOO_FORCE_RECOMPILE=1 KAZOO_FORCE_BUILD_ID=${buildId} all`,
+        `-C ${temp}/applications ROOT=${temp} -j1 KAZOO_FORCE_RECOMPILE=1 KAZOO_FORCE_BUILD_ID=${buildId} all`,
     ];
     const releaseArgs=`-C ${temp} JOBS=1 build-dev-release`;
     const forced=builds.filter(line=>line.includes('KAZOO_FORCE_RECOMPILE='));
@@ -61,18 +67,23 @@ verify_ecallmgr(){ printf 'runtime-verify\\n'; }
     assert(result.stdout.indexOf('make '+releaseArgs)<result.stdout.indexOf('production-verify'));
     assert(result.stderr.includes('snapshot-called'),'successful build records its source/artifact snapshot');
     for(let stage=0;stage<compileArgs.length;stage++) {
-        const failed=run('',{MAKE_FAIL_ARGS:compileArgs[stage]});
+        const mask=text=>text.replace(/KAZOO_FORCE_BUILD_ID=\S+/g,'KAZOO_FORCE_BUILD_ID=ID');
+        const failed=run('',{MAKE_FAIL_ARGS:mask(compileArgs[stage])});
         assert.equal(failed.status,71,'compile failure propagates at stage '+stage);
-        assert(failed.stdout.includes('make '+compileArgs[stage]));
-        for(const later of compileArgs.slice(stage+1))assert(!failed.stdout.includes('make '+later),'no later compile after stage '+stage);
+        assert(mask(failed.stdout).includes('make '+mask(compileArgs[stage])));
+        for(const later of compileArgs.slice(stage+1))assert(!mask(failed.stdout).includes('make '+mask(later)),'no later compile after stage '+stage);
         assert(!failed.stdout.includes('build-dev-release'),'no release after compile failure');
         assert(!failed.stdout.includes('production-verify'),'no production success gate after compile failure');
         assert(!failed.stderr.includes('snapshot-called'),'no successful build snapshot after compile failure');
         for(const marker of ['units','service','runtime-verify'])assert(!failed.stdout.includes(marker),'no activation after compile failure');
     }
     const parallel=run('',{KAZOO_MAKE_JOBS:'3'});assert.equal(parallel.status,0,parallel.stderr);
-    assert(parallel.stdout.includes(`make -C ${temp} JOBS=3 KAZOO_FORCE_RECOMPILE=1 core fetch-apps`));
-    assert(parallel.stdout.includes(`make -C ${temp}/applications ROOT=${temp} -j3 KAZOO_FORCE_RECOMPILE=1 all`),'direct aggregate consumes bounded parallelism, not unused JOBS');
+    const parallelBuilds=parallel.stdout.replace(/KAZOO_FORCE_BUILD_ID=\S+/g,'KAZOO_FORCE_BUILD_ID=ID');
+    assert(parallelBuilds.includes(`make -C ${temp} JOBS=3 KAZOO_FORCE_RECOMPILE=1 KAZOO_FORCE_BUILD_ID=ID core fetch-apps`));
+    assert(parallelBuilds.includes(`make -C ${temp}/applications ROOT=${temp} -j3 KAZOO_FORCE_RECOMPILE=1 KAZOO_FORCE_BUILD_ID=ID all`),'direct aggregate consumes bounded parallelism, not unused JOBS');
+    // An identifier inherited from the environment would find old stamps and skip the forced rebuild.
+    const inherited=run('',{KAZOO_FORCE_BUILD_ID:'inherited-from-environment'});assert.equal(inherited.status,0,inherited.stderr);
+    assert(!inherited.stdout.includes('inherited-from-environment'),'the build identifier is never inherited');
     assert(builds.some(line=>line.includes('--eval=.PHONY: src/kz_mime.erl')),'force local MIME regeneration');
     assert(builds.some(line=>line.includes('--eval=.PHONY: src/knm_iso3166a2_itu.erl src/knm_iso3166_util.erl')),'force local number regeneration');
     result=run('build_kazoo');assert.equal(result.status,0,result.stderr);assert.equal(result.stdout.split('build-start').length,2,'All-in-one reuses this invocation successful build');

@@ -192,12 +192,24 @@ compile-timed: compile
 # Reuse the full-source recipe for compile and compile-direct; keep ordinary
 # developer builds incremental. Serialize per-BEAM recipes behind that batch
 # when parallel make is active, without making the .app a freshness dependency.
+#
+# Once per application per build. The installer builds behaviour providers
+# first (core: kazoo_stdlib, kazoo_amqp, kazoo_data; applications: webhooks) and
+# the parallel pass then visits them again. Forced a second time, erlc rewrote
+# gen_listener.beam while kazoo_auth was compiling against it: "behaviour
+# gen_listener undefined", fatal under -Werror (private lab, apps-peer install
+# 27, September 18, 2026). With KAZOO_FORCE_BUILD_ID the first forced rebuild
+# leaves a stamp and a later visit in the same build is an ordinary
+# incremental make.
+KAZOO_FORCE_STAMP := $(if $(KAZOO_FORCE_BUILD_ID),ebin/.kazoo-forced-$(KAZOO_FORCE_BUILD_ID))
 ifeq ($(KAZOO_FORCE_RECOMPILE),1)
+ifeq ($(and $(KAZOO_FORCE_STAMP),$(wildcard $(KAZOO_FORCE_STAMP))),)
 .PHONY: kazoo-force-recompile
 kazoo-force-recompile:
 ebin/$(PROJECT).app: kazoo-force-recompile
 ifneq ($(strip $(BEAMS)),)
 $(BEAMS): | ebin/$(PROJECT).app
+endif
 endif
 endif
 
@@ -206,6 +218,7 @@ ebin/$(PROJECT).app:
 	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) $(APPS_PA) -o ebin/ $(SOURCES)
 	@sed "s/{modules,[[:space:]]*\[\]}/{modules, \[$(MODULES)\]}/" src/$(PROJECT).app.src \
 	| sed -e "s!{vsn,\([^}]*\)}!\{vsn,\"$(KZ_VERSION)\"}!" > $@
+	@$(if $(KAZOO_FORCE_STAMP),rm -f ebin/.kazoo-forced-* && touch $(KAZOO_FORCE_STAMP))
 
 ebin/%.beam: src/%.erl
 	ERL_LIBS=$(ELIBS) erlc -v $(ERLC_OPTS) $(PA) $(APPS_PA) -o ebin/ $<

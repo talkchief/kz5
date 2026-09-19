@@ -34,7 +34,7 @@ function verify(value,helper=value){
 }
 function artifactState(){return names.map(n=>{const p=path.join(out,'ebin',n+'.beam');return {sha:sha(p),mtime:fs.statSync(p).mtimeMs};});}
 try {
- const flagStart=source.indexOf('ifeq ($(KAZOO_FORCE_RECOMPILE),1)\n');assert(flagStart>=0);
+ const flagStart=source.indexOf('KAZOO_FORCE_STAMP := ');assert(flagStart>=0&&source.indexOf('ifeq ($(KAZOO_FORCE_RECOMPILE),1)\n')>flagStart);
  const recipeStart=source.lastIndexOf('\nebin/$(PROJECT).app:\n');assert(recipeStart>flagStart);
  const flagRule=source.slice(flagStart,recipeStart);
  assert(flagRule.includes('.PHONY: kazoo-force-recompile')&&flagRule.includes('$(BEAMS): | ebin/$(PROJECT).app'));
@@ -67,6 +67,25 @@ try {
  const invalid=path.join(out,'src/force_fixture_main.erl');fs.writeFileSync(invalid,'this is not valid Erlang.\n',{mode:0o600});fs.utimesSync(invalid,oldTime,oldTime);
  command('/usr/bin/make',['--no-print-directory','-j2','-f','Makefile','compile-direct','KAZOO_FORCE_RECOMPILE=1'],1);
  assert.deepEqual({sha:sha(app),mtime:fs.statSync(app).mtimeMs},before,'failed compiler must stop before writing .app');
+ // One forced rebuild per application per build: the installer visits behaviour
+ // providers twice, and the second visit must not rewrite beams that dependents are reading.
+ stage='build-id-forces-once';writeSources('stamped');   // the failed compile above removed a beam
+ const id=['KAZOO_FORCE_RECOMPILE=1','KAZOO_FORCE_BUILD_ID=20260918T000000Z.1'];
+ const makeWith=(...vars)=>command('/usr/bin/make',['--no-print-directory','-j2','-f','Makefile','compile-direct',...vars]);
+ result=makeWith(...id);assert(result.stdout.includes('-o ebin/ src/force_fixture_helper.erl src/force_fixture_main.erl'));verify('stamped');
+ assert(fs.existsSync(path.join(out,'ebin/.kazoo-forced-20260918T000000Z.1')),'first forced rebuild leaves its stamp');
+ const once=artifactState();result=makeWith(...id);
+ assert(!result.stdout.includes('erlc -v'),'second visit in the same build must not recompile');assert.deepEqual(artifactState(),once,'beams untouched on the second visit');
+ stage='new-build-id-forces-again';writeSources('next_build');futureArtifacts();
+ result=makeWith('KAZOO_FORCE_RECOMPILE=1','KAZOO_FORCE_BUILD_ID=20260918T000001Z.2');assert(result.stdout.includes('-o ebin/ src/force_fixture_helper.erl'));verify('next_build');
+ assert(!fs.existsSync(path.join(out,'ebin/.kazoo-forced-20260918T000000Z.1')),'old stamps are removed');
+ stage='no-build-id-always-forces';writeSources('unstamped');futureArtifacts();
+ result=makeWith('KAZOO_FORCE_RECOMPILE=1');assert(result.stdout.includes('-o ebin/ src/force_fixture_helper.erl'));verify('unstamped');
+ result=makeWith('KAZOO_FORCE_RECOMPILE=1');assert(result.stdout.includes('-o ebin/ src/force_fixture_helper.erl'),'without an identifier every visit is forced, as before');
+ stage='failed-forced-build-leaves-no-stamp';
+ const broken=path.join(out,'src/force_fixture_main.erl');fs.writeFileSync(broken,'this is not valid Erlang.\n',{mode:0o600});fs.utimesSync(broken,oldTime,oldTime);
+ command('/usr/bin/make',['--no-print-directory','-j2','-f','Makefile','compile-direct','KAZOO_FORCE_RECOMPILE=1','KAZOO_FORCE_BUILD_ID=20260918T000002Z.3'],1);
+ assert(!fs.existsSync(path.join(out,'ebin/.kazoo-forced-20260918T000002Z.3')),'a failed build must be forced again');
  stage='complete';passed=true;
 } catch(e){error=e.stack||String(e);process.exitCode=1;}
 finally {

@@ -2970,15 +2970,24 @@ build_kazoo() {
     # Makefile does not encode inter-application ordering and places webhooks
     # after skel.  Build the behaviour provider once before the parallel app
     # pass so OTP 26's undefined-behaviour warning cannot fail under -Werror.
+    #
+    # The providers built first (kazoo_stdlib, kazoo_amqp, kazoo_data, webhooks)
+    # are visited again by the parallel passes. One identifier per build lets
+    # kz.mk force each application once; forced twice, a provider's beam was
+    # being rewritten while its dependents compiled (private lab, apps-peer
+    # install 27, September 18, 2026). Always generated here, never inherited:
+    # a reused identifier would find old stamps and skip the forced rebuild.
+    local force_build_id
+    force_build_id="$(date -u +%Y%m%dT%H%M%SZ).$$"
     FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT" \
-        JOBS="$KAZOO_MAKE_JOBS" KAZOO_FORCE_RECOMPILE=1 core fetch-apps
-    make -C "$KAZOO_ROOT/applications/webhooks" KAZOO_FORCE_RECOMPILE=1 all
+        JOBS="$KAZOO_MAKE_JOBS" KAZOO_FORCE_RECOMPILE=1 KAZOO_FORCE_BUILD_ID="$force_build_id" core fetch-apps
+    make -C "$KAZOO_ROOT/applications/webhooks" KAZOO_FORCE_RECOMPILE=1 KAZOO_FORCE_BUILD_ID="$force_build_id" all
     # Core and app dependencies were already built/fetched above. The root
     # `apps` target depends on `core` and would force that entire build twice.
     # Use its exact applications aggregate recipe while retaining a fresh
     # compilation of every application and the webhooks-before-skel ordering.
     FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT/applications" \
-        ROOT="$KAZOO_ROOT" -j"$KAZOO_MAKE_JOBS" KAZOO_FORCE_RECOMPILE=1 all
+        ROOT="$KAZOO_ROOT" -j"$KAZOO_MAKE_JOBS" KAZOO_FORCE_RECOMPILE=1 KAZOO_FORCE_BUILD_ID="$force_build_id" all
     FETCH_AS=https://github.com/ make -C "$KAZOO_ROOT" JOBS="$KAZOO_MAKE_JOBS" build-dev-release
     prepare_kazoo_runtime_artifact_permissions
     verify_kazoo_production_beams
