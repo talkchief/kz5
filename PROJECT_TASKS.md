@@ -7,6 +7,17 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **E cutover rehearsal — prepared, COPY NOT RUN, September19:**
+  The owner authorized the assistant to proceed. Done: GET-only sizing of production (figures
+  kept only in a root-only file on dev44, deliberately not in this repository; size is not a
+  constraint); `scripts/cutover-rehearsal-copy.py` with its offline proof (6 groups); a fifth
+  isolated lab variant `--cutover-rehearsal` (172.30.249.0/24) whose CouchDB guest is installed
+  from scratch and empty (`couchdb-install-1` PASS). Refused by the permission system and left
+  that way: emptying another lab's CouchDB (a separate lab was built instead) and starting the
+  copy of customer data itself. The owner starts the copy with the command in
+  `doc/cutover_rehearsal_runbook.md`. Not yet built: the rehearsal variant's applications
+  install against a non-empty datastore. Gate E remains OPEN.
+
 - **Applications node restarted with 100 agents logged in, final runtime `b276309` — NATIVE PASS, September19 02:04 UTC:**
   The path on which the September18 datastore starvation would bite. `systemctl restart
   kazoo-apps` on main at 02:04:36 with agents 1:100 of the isolated tenant logged in: 100 agent

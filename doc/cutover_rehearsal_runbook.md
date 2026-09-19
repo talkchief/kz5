@@ -1,6 +1,6 @@
 # Cutover rehearsal runbook (readiness plan, gate E)
 
-Status on September 18, 2026: **not run**. The owner authorized a read-only
+Status on September 19, 2026: **sized and prepared; the copy and the rehearsal itself are not run**. The owner authorized a read-only
 replication from production on this date. The assistant's session is not permitted
 to contact production `10.1.0.10` at all (even a metadata read was refused by the
 permission system), so step 1 must be started by the owner. Nothing here writes to
@@ -41,7 +41,45 @@ needed for the rehearsal.
    172.30.250.0/24). Not main's CouchDB, not an existing lab CouchDB that already
    holds Kazoo 5 bootstrap documents (the globals would merge and conflict).
 
-## 3. Copy (design; to be implemented once 1 and 2 are answered)
+## State on September 19, 2026
+
+- Sizing was run with the owner's authorization. The figures are production-derived
+  and stay in the root-only file `/root/kz5-cutover-sizing-20260919.json` on dev44;
+  they are deliberately not recorded in this repository. Production is small enough
+  that scope and disk space are not constraints.
+- The copy tool exists: `scripts/cutover-rehearsal-copy.py`, proven offline by
+  `python3 scripts/test-cutover-rehearsal-copy.py` (6 groups). Lab guests blackhole
+  production's network on purpose, so the copy is driven from the host: production is
+  read only through the sizing tool's GET-only reader (database list, info documents,
+  paged `_all_docs`), and the only writable network is the rehearsal lab
+  `172.30.249.0/24`. Main, the other labs, production itself, host names, https and
+  paths are refused before any request; a non-empty target is refused; `token_auth`
+  (live session tokens) is never copied; the receipt holds counts only.
+- The rehearsal lab exists: variant `--cutover-rehearsal` of
+  `scripts/prepare-distributed-install-lab.sh` (guests `kz5-cutover-*`, state in
+  `/var/lib/kazoo5-cutover-rehearsal`). `kz5-cutover-couchdb` is installed from
+  scratch and empty (`couchdb-install-1` PASS); its credentials are in
+  `/root/kz5-cutover-couchdb.key` (0600).
+- **The copy has not been run.** The assistant's session is refused permission to move
+  customer data, so the owner starts it:
+
+```sh
+sudo systemd-run --unit kz5-cutover-copy -p RemainAfterExit=yes -p WorkingDirectory=/opt/kz5 \
+  /usr/bin/python3 scripts/cutover-rehearsal-copy.py --source http://10.1.0.10:5984 \
+  --credentials /opt/kz5/key --target http://172.30.249.11:5984 \
+  --target-credentials /root/kz5-cutover-couchdb.key --months 202609,202608 \
+  --receipt-dir /root/kz5-cutover-copy-20260919
+```
+
+  Progress: `journalctl -u kz5-cutover-copy -f`. Result: `receipt.json` in the receipt
+  directory, `status: PASS`. An interrupted copy is continued by adding `--resume`.
+- Parked to stay inside the host's inotify limit: `kz5-fresh-couchdb`,
+  `kz5-stage-push-bridge`, `kz5-stage-kazoo-apps-peer`.
+- Still to build for step 4: the rehearsal variant's applications install must skip the
+  lab's empty-datastore admission and the master-account bootstrap (the variant's
+  settings already carry `productionCopy`).
+
+## 3. Copy (design notes)
 
 - CouchDB's own replicator, **pull**, started on the target with
   `"use_checkpoints": false` so that no `_local` checkpoint document is written on
