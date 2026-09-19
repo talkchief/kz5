@@ -7,6 +7,16 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Main on the final revision, verified end to end — September19, 01:40-02:00 UTC:**
+  Lab first: `kazoo-apps-install-35` and `apps-peer-install-28` PASS at `8800b2b`. Promotion
+  `kz5-promo-0919a` **PASS** (`b276309`, `/root/kz5-main-promotion-20260919.nRCXtw2l/receipt.json`,
+  health after reopening ingress `failures=0`; `gen_listener.erl` compiled once).
+  `install-kazoo5.sh --verify-only all` exit 0, 68 PASS, 0 ERROR
+  (`/root/kz5-verify-only-all-20260919T0145Z.log`). Real-call regression on that runtime, unit
+  `kz5-main-final-capacity-0919`, `/var/log/kazoo-acceptance/20260919T014340Z`: 1/1, 30/30 and
+  100/100 answered, caller and agent failures 0, error_logs `0/0`, 180s verified hold at 100.
+  Afterwards: stack health `failures=0`, no failed unit, zero channels.
+
 - **DEPLOYMENT SCRIPT — a timing-dependent build failure found and fixed: the forced rebuild raced with itself — September19:**
   Private lab `apps-peer-install-27` (`fd8a86d`) **FAIL**, retained:
   `src/kz_auth_listener.erl:13: behaviour gen_listener undefined` under `-Werror`; guest kept
