@@ -3,8 +3,8 @@
 // action. On the target this runs scripts/install-kazoo5.sh and nothing else (see
 // scripts/remote-install-kazoo5.sh and doc/jenkins_remote_install.md).
 //
-// Per server, create two credentials in Jenkins once:
-//   * "SSH Username with private key" for root on that server;
+// Per server, create credentials in Jenkins once:
+//   * its root login: "Username with password", or "SSH Username with private key";
 //   * "Secret file" with that server's installer inputs (KAZOO_*=value lines).
 def MODULES = ['couchdb', 'rabbitmq', 'haproxy', 'kazoo-apps', 'ecallmgr', 'freeswitch', 'kamailio', 'monster-ui', 'push-bridge']
 
@@ -18,7 +18,8 @@ pipeline {
     }
     parameters {
         string(name: 'TARGET_HOST', defaultValue: '', trim: true, description: 'Server to install on: IPv4 address or host name reachable from Jenkins')
-        credentials(name: 'SSH_CREDENTIAL', credentialType: 'com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey', required: true, description: 'Root SSH key of that server')
+        credentials(name: 'SSH_PASSWORD_CREDENTIAL', credentialType: 'com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl', required: false, description: 'Root login of that server as user + password. Give this or SSH_KEY_CREDENTIAL.')
+        credentials(name: 'SSH_KEY_CREDENTIAL', credentialType: 'com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey', required: false, description: 'Root login of that server as an SSH private key. Give this or SSH_PASSWORD_CREDENTIAL.')
         credentials(name: 'SETTINGS_CREDENTIAL', credentialType: 'org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl', required: false, description: 'Secret file with that server\'s installer inputs (KAZOO_*=value). Leave empty on a repeat install: the server keeps its saved settings.')
         choice(name: 'ACTION', choices: ['dry-run', 'install', 'verify-only'], description: 'dry-run changes nothing; install restarts the selected services')
         booleanParam(name: 'couchdb', defaultValue: false, description: 'Apache CouchDB')
@@ -39,6 +40,7 @@ pipeline {
                     if (!(params.TARGET_HOST ==~ /[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?/)) { error 'TARGET_HOST is not a host name or IPv4 address' }
                     env.KZ5_MODULES = MODULES.findAll { params[it] }.join(' ')
                     if (!env.KZ5_MODULES) { error 'Tick at least one module' }
+                    if (!params.SSH_PASSWORD_CREDENTIAL == !params.SSH_KEY_CREDENTIAL) { error 'Give exactly one of SSH_PASSWORD_CREDENTIAL and SSH_KEY_CREDENTIAL' }
                     currentBuild.displayName = "#${env.BUILD_NUMBER} ${params.ACTION} ${params.TARGET_HOST}"
                     currentBuild.description = env.KZ5_MODULES
                 }
@@ -60,13 +62,17 @@ pipeline {
         stage('Run the installer on the server') {
             steps {
                 script {
-                    def bindings = [sshUserPrivateKey(credentialsId: params.SSH_CREDENTIAL, keyFileVariable: 'KZ5_SSH_KEY', usernameVariable: 'KZ5_SSH_USER')]
+                    def bindings = params.SSH_KEY_CREDENTIAL ?
+                        [sshUserPrivateKey(credentialsId: params.SSH_KEY_CREDENTIAL, keyFileVariable: 'KZ5_SSH_KEY', usernameVariable: 'KZ5_SSH_USER')] :
+                        [usernamePassword(credentialsId: params.SSH_PASSWORD_CREDENTIAL, usernameVariable: 'KZ5_SSH_USER', passwordVariable: 'KZ5_SSH_PASSWORD')]
                     if (params.SETTINGS_CREDENTIAL) { bindings << file(credentialsId: params.SETTINGS_CREDENTIAL, variable: 'KZ5_SETTINGS') }
                     withCredentials(bindings) {
                         // Single-quoted on purpose: the shell, not Groovy, expands the secrets.
                         sh '''
                             set -eu
-                            set -- --host "$TARGET_HOST" --user "$KZ5_SSH_USER" --identity "$KZ5_SSH_KEY" --action "$ACTION"
+                            set -- --host "$TARGET_HOST" --user "$KZ5_SSH_USER" --action "$ACTION"
+                            # The password stays in the environment; only the variable's name is passed.
+                            if [ -n "${KZ5_SSH_KEY:-}" ]; then set -- "$@" --identity "$KZ5_SSH_KEY"; else set -- "$@" --password-env KZ5_SSH_PASSWORD; fi
                             if [ -n "${KZ5_SETTINGS:-}" ]; then set -- "$@" --env-file "$KZ5_SETTINGS"; fi
                             if [ "$ALLOW_ACTIVE_CALLS" = true ]; then set -- "$@" --allow-active-calls; fi
                             # shellcheck disable=SC2086

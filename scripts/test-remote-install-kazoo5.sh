@@ -23,6 +23,9 @@ cat > "$rt_work/bin/ssh" <<'STUB'
 #!/usr/bin/env bash
 command=${!#}
 printf '%s\n' "$command" >> "$RT_LOG"
+# Everything ssh was given, and what its password helper would answer, for the login checks.
+printf '%s\n' "$*" >> "$RT_LOG.args"
+[[ -z ${SSH_ASKPASS:-} ]] || printf 'askpass=%s require=%s\n' "$("$SSH_ASKPASS")" "${SSH_ASKPASS_REQUIRE:-}" >> "$RT_LOG.askpass"
 case $command in
     *'id -u'*) [[ ${RT_NOT_ROOT:-} != 1 ]] ;;
     *os-release*) [[ ${RT_NOT_ROCKY:-} != 1 ]] ;;
@@ -46,9 +49,9 @@ printf 'KAZOO_PUBLIC_IP=10.0.0.21\nKAZOO_COOKIE=abc123\n# comment\n' > "$rt_work
 run() {   # ENV=value ... -- args...
     local -a assignments=()
     while [[ $1 != -- ]]; do assignments+=("$1"); shift; done; shift
-    : > "$rt_work/log"
+    : > "$rt_work/log"; : > "$rt_work/log.args"; : > "$rt_work/log.askpass"
     env PATH="$rt_work/bin:$PATH" RT_LOG="$rt_work/log" RI_POLL_SECONDS=0 TMPDIR="$rt_work" "${assignments[@]}" \
-        bash "$rt_script" --host 10.0.0.21 --identity "$rt_work/key" "$@" > "$rt_work/out" 2>&1
+        bash "$rt_script" --host 10.0.0.21 ${RT_LOGIN:---identity "$rt_work/key"} "$@" > "$rt_work/out" 2>&1
 }
 
 run -- --env-file "$rt_work/settings.env" ecallmgr freeswitch || { cat "$rt_work/out"; fail 'a healthy install failed'; }
@@ -117,6 +120,18 @@ tail -n 1 "$rt_work/log" | grep -Fq 'rm -f -- /var/lib/kazoo-remote-install/inpu
 if run RT_ENABLED=disabled -- haproxy; then fail 'a disabled service passed'; fi
 grep -Fq 'would not come back after a reboot' "$rt_work/out" || fail 'disabled service not explained'
 pass 'a failed installer and a service that is not enabled fail the run; settings are removed either way'
+
+# Servers that only have a user and a password: the password may never be an argument.
+RT_LOGIN='--password-env RT_SECRET' run RT_SECRET='p@ss w0rd/secret' -- --user deploy rabbitmq || { cat "$rt_work/out"; fail 'password login failed'; }
+grep -Fq 'PubkeyAuthentication=no' "$rt_work/log.args" && grep -Fq 'deploy@10.0.0.21' "$rt_work/log.args" || fail 'password login options'
+! grep -Fq 'BatchMode=yes' "$rt_work/log.args" || fail 'BatchMode would forbid the password prompt'
+grep -Fxq 'askpass=p@ss w0rd/secret require=force' "$rt_work/log.askpass" || fail 'the helper does not hand ssh the password'
+! grep -Fq 'w0rd' "$rt_work/log.args" "$rt_work/log" "$rt_work/out" || fail 'the password reached a command line, a remote command or the output'
+[[ -z $(find "$rt_work" -name askpass -print -quit) ]] || fail 'the password helper was left behind'
+if RT_LOGIN='--password-env RT_SECRET' run RT_SECRET= -- rabbitmq; then fail 'an empty password variable was accepted'; fi
+if RT_LOGIN="--password-env RT_SECRET --identity $rt_work/key" run RT_SECRET=x -- rabbitmq; then fail 'key and password together were accepted'; fi
+if RT_LOGIN=' ' run -- rabbitmq; then fail 'a run without any login was accepted'; fi
+pass 'password login: ssh is asked through a private helper, the password never reaches an argument, a remote command or the output'
 
 echo 'edit' >> "$rt_work/repo/README.md"
 if run -- couchdb; then fail 'an uncommitted tree was deployed'; fi

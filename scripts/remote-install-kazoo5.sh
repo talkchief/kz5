@@ -10,9 +10,12 @@
 # and healthy. Wiring a new eCallMgr or FreeSWITCH into the cluster (sup
 # commands) is deliberately left to the operator.
 #
-#   remote-install-kazoo5.sh --host 10.0.0.21 --identity KEY [--user root] [--port 22]
-#       [--env-file FILE] [--action install|dry-run|verify-only]
+#   remote-install-kazoo5.sh --host 10.0.0.21 (--identity KEY | --password-env VAR) [--user root]
+#       [--port 22] [--env-file FILE] [--action install|dry-run|verify-only]
 #       [--allow-active-calls] COMPONENT [COMPONENT ...]
+#
+# --password-env VAR: log in with the password held in environment variable VAR. It is
+# never put on a command line: ssh asks a private helper for it (SSH_ASKPASS).
 #
 # --env-file: KEY=value lines with the installer's inputs for that host (addresses,
 # cookie, passwords; see install-kazoo5.sh --help). It is copied root-only, given to
@@ -42,7 +45,7 @@ component_unit() {
     esac
 }
 
-ri_host='' ri_user=root ri_port=22 ri_identity='' ri_env_file='' ri_action=install ri_allow_calls=false
+ri_host='' ri_user=root ri_port=22 ri_identity='' ri_password_env='' ri_env_file='' ri_action=install ri_allow_calls=false
 ri_components=()
 while (($#)); do
     case $1 in
@@ -50,10 +53,11 @@ while (($#)); do
         --user) (($# >= 2)) || die '--user needs a value'; ri_user=$2; shift ;;
         --port) (($# >= 2)) || die '--port needs a value'; ri_port=$2; shift ;;
         --identity) (($# >= 2)) || die '--identity needs a file'; ri_identity=$2; shift ;;
+        --password-env) (($# >= 2)) || die '--password-env needs a variable name'; ri_password_env=$2; shift ;;
         --env-file) (($# >= 2)) || die '--env-file needs a file'; ri_env_file=$2; shift ;;
         --action) (($# >= 2)) || die '--action needs a value'; ri_action=$2; shift ;;
         --allow-active-calls) ri_allow_calls=true ;;
-        -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --*) die "Unknown option: $1" ;;
         *) ri_components+=("$1") ;;
     esac
@@ -64,7 +68,12 @@ done
 [[ $ri_user =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die 'Invalid --user'
 if [[ ! $ri_port =~ ^[0-9]{1,5}$ ]] || ((ri_port < 1 || ri_port > 65535)); then die 'Invalid --port'; fi
 [[ $ri_action == install || $ri_action == dry-run || $ri_action == verify-only ]] || die '--action is install, dry-run or verify-only'
-[[ -n $ri_identity && -f $ri_identity && ! -L $ri_identity ]] || die '--identity must be an SSH private key file'
+if [[ -n $ri_password_env ]]; then
+    [[ -z $ri_identity ]] || die 'Give --identity or --password-env, not both'
+    [[ $ri_password_env =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n ${!ri_password_env:-} ]] || die '--password-env must name a non-empty environment variable'
+else
+    [[ -n $ri_identity && -f $ri_identity && ! -L $ri_identity ]] || die 'Give --identity (an SSH private key file) or --password-env'
+fi
 ((${#ri_components[@]} >= 1)) || die 'Name at least one component'
 [[ " ${ri_components[*]} " != *' all '* ]] || read -r -a ri_components <<<"$RI_COMPONENTS"
 declare -A ri_seen=()
@@ -86,12 +95,22 @@ readonly ri_source
 ri_run="$(date -u +%Y%m%dT%H%M%SZ)-${ri_source:0:7}"
 readonly ri_run
 
-ri_ssh=(ssh -p "$ri_port" -i "$ri_identity" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new
-        -o ConnectTimeout=15 -o ServerAliveInterval=30 "${ri_user}@${ri_host}")
-ri_scp=(scp -q -P "$ri_port" -i "$ri_identity" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15)
+ri_work=$(mktemp -d "${TMPDIR:-/tmp}/kz5-remote-install.XXXXXX")
+ri_common=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -o ServerAliveInterval=30)
+if [[ -n $ri_password_env ]]; then
+    # ssh asks this helper instead of a terminal; the password travels in the environment only.
+    printf '#!/bin/sh\nprintf "%%s\\n" "$RI_SSH_PASSWORD"\n' > "$ri_work/askpass"
+    chmod 0700 "$ri_work/askpass"
+    RI_SSH_PASSWORD=${!ri_password_env}
+    export RI_SSH_PASSWORD SSH_ASKPASS="$ri_work/askpass" SSH_ASKPASS_REQUIRE=force DISPLAY="${DISPLAY:-none}"
+    ri_common+=(-o PubkeyAuthentication=no -o "PreferredAuthentications=password,keyboard-interactive" -o NumberOfPasswordPrompts=1)
+else
+    ri_common+=(-i "$ri_identity" -o BatchMode=yes -o IdentitiesOnly=yes)
+fi
+ri_ssh=(ssh -p "$ri_port" "${ri_common[@]}" "${ri_user}@${ri_host}")
+ri_scp=(scp -q -P "$ri_port" "${ri_common[@]}")
 remote() { "${ri_ssh[@]}" "$@"; }
 
-ri_work=$(mktemp -d "${TMPDIR:-/tmp}/kz5-remote-install.XXXXXX")
 cleanup() {
     rm -rf -- "$ri_work"
     # The host's settings never stay behind, whatever happened.

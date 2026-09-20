@@ -30,11 +30,11 @@ as on Kazoo 4.
 
 ## Defining a server in Jenkins
 
-Per server, two credentials (Manage Jenkins -> Credentials):
+Per server, its login and its settings (Manage Jenkins -> Credentials):
 
 | Kind | Content |
 | --- | --- |
-| SSH Username with private key | user `root`, the private key whose public half is in the server's `/root/.ssh/authorized_keys` |
+| Username with password, **or** SSH Username with private key | the server's root login. With a password, `ssh` is asked through a private `SSH_ASKPASS` helper: the password is never an argument, never in a remote command and never in the build log, and nothing extra (no `sshpass`) is needed on the Jenkins host |
 | Secret file | that server's installer inputs, `KEY=value` lines |
 
 Example settings for a new eCallMgr + FreeSWITCH server joining an existing cluster
@@ -61,8 +61,8 @@ install the settings credential can be left empty: the server keeps its saved se
 
 ## Running it
 
-Build with parameters: `TARGET_HOST`, the two credentials, the action, and tick the
-modules. Start with `dry-run`; `install` asks for approval before anything restarts.
+Build with parameters: `TARGET_HOST`, one login credential (password or key), the settings
+credential, the action, and tick the modules. Start with `dry-run`; `install` asks for approval before anything restarts.
 One build at a time. The build is named after the action and host and keeps
 `remote-install.log` as its receipt.
 
@@ -75,7 +75,7 @@ bash scripts/remote-install-kazoo5.sh --host 10.0.0.21 --identity ~/.ssh/kz5_dep
 
 ## Proof
 
-`bash scripts/test-remote-install-kazoo5.sh` (7 groups, recording ssh/scp stand-ins, no
+`bash scripts/test-remote-install-kazoo5.sh` (8 groups, recording ssh/scp stand-ins, no
 host contacted): exact commit, one installer unit, settings handed over and always
 removed, thirteen unsafe requests refused before the installer starts, failed installer
 and not-enabled service fail the run, only a commit is deployed, unit names match the
