@@ -7,6 +7,28 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Remote installation through Jenkins — built, proven natively over SSH; credentials import left to the owner, September20:**
+  `jenkins/Jenkinsfile` (pick a server, tick the Kazoo modules, dry-run / install / verify-only,
+  approval before an install) and `scripts/remote-install-kazoo5.sh`, the only thing that reaches
+  a host: ships the pinned commit as a bundle, hands over the server's settings root-only, runs
+  `install-kazoo5.sh` as a systemd unit, requires the selected services enabled, active and
+  healthy, always removes the settings; never runs `sup` or wires the cluster (operator's step,
+  as on Kazoo4). Login by SSH key or by user + password (private `SSH_ASKPASS` helper, no
+  `sshpass`, password never in an argument, remote command or log). Offline:
+  `test-remote-install-kazoo5.sh` 8 groups; `test-single-install-entry-point.sh` now 5 groups and
+  covers the wrapper and the pipeline. Native, bare Rocky9 target over real SSH
+  (`/root/kz5-remote-install-proof-20260920/install-rabbitmq.log`): dry-run PASS, from-scratch
+  `rabbitmq` install PASS (service enabled and active, health `failures=0`, no settings file
+  left, root-only log on the target), verify-only PASS by key and by password, wrong password
+  refused with a clear message. The first native run found a real defect the stub had hidden
+  (systemd prints properties in its own order; fixed `532558e`). Jenkins 2.568.3: job
+  `kz5-remote-install` created through the API; build 1 checked out the repository, loaded the
+  pipeline and refused at the request check as designed (no server given). The job reads the
+  repository with the generic credential id `github-pat`. Writing the owner's other secrets into
+  Jenkins was refused by the permission system; `scripts/jenkins-import-credentials.py` does it
+  when the owner runs it (generic, reusable ids). NOT yet done: a Jenkins build against a real
+  server (the lab networks are not reachable from the Jenkins host). `doc/jenkins_remote_install.md`.
+
 - **E CUTOVER REHEARSAL — what Kazoo5 does to a Kazoo4 datastore, measured after the FULL migration; NOT backward compatible, September20:**
   Snapshot of the copy after `kapps_maintenance migrate` compared with the pristine copy
   (private `compare-migrate.json`; field names and types only were inspected, never values).
