@@ -25,6 +25,7 @@ cleanup() {
         "$fixture_root/core/normal/priv/couchdb/account.json" \
         "$fixture_root/core/normal/priv/defaults/system.json" \
         "$fixture_root/core/normal/priv/private-config.json" \
+        "$fixture_root/core/normal/priv/native_nif.so" \
         "$fixture_dir/outside/private.json" \
         "$fixture_root/core/linked" "$fixture_dir/outside/ebin/beam_build_marker.beam"
     rmdir -- "$fixture_root/core/normal/priv/couchdb/views" \
