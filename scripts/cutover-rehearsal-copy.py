@@ -44,7 +44,7 @@ plan = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(plan)
 
 TARGET_NETWORKS = [ipaddress.ip_network('172.30.249.0/24')]   # the cutover rehearsal lab only
-EXCLUDED_GLOBALS = {'token_auth'}                              # live session tokens: never needed, never copied
+EXCLUDED_GLOBALS = {'token_auth', 'pending_notifications'}   # live session tokens; customer e-mails a first start would re-send
 PAGE = 50
 MAX_BATCH_BYTES = 8 * 1024 * 1024
 ATTEMPTS = 6                  # a reset or timeout is retried; every request here is idempotent
