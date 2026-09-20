@@ -7,6 +7,24 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **E CUTOVER REHEARSAL — what Kazoo5 does to a Kazoo4 datastore, measured after the FULL migration; NOT backward compatible, September20:**
+  Snapshot of the copy after `kapps_maintenance migrate` compared with the pristine copy
+  (private `compare-migrate.json`; field names and types only were inspected, never values).
+  *Every* account, month and number database is touched. Design documents are rewritten or
+  added everywhere (thousands); none of the account databases' design documents was removed in
+  this run, but the September8 assessment measured two Kazoo4 view endpoints that Kazoo5 removes.
+  Customer documents: no document deleted. `account` documents gain `notifications`,
+  `descendants_count` (additive). **`user` and `device` documents are rewritten: the migration
+  removes `call_forward.failover` and, where it was set, adds a top-level `call_failover`.**
+  Kazoo4 reads `call_forward.failover`, so on migrated data Kazoo4 silently loses failover
+  forwarding for the users who had it. `system_config`: many categories changed, some added, none
+  removed. New current-month databases, four new global databases, ledger entries.
+  CONCLUSION: the migration is one-way. Kazoo5 works on Kazoo4 data (install, migration, API
+  authentication and listings, queue start-up all pass on the copy); Kazoo4 must NOT be pointed
+  at a datastore Kazoo5 has migrated. Rollback = the untouched Kazoo4 stack on its own untouched
+  CouchDB, plus replaying whatever was written after the cutover moment. This confirms the
+  separate-datastore decision of `doc/kazoo4_kazoo5_couchdb_findings.md`.
+
 - **E CUTOVER REHEARSAL — migration timed, API verified on the migrated copy; verdict CONDITIONAL, gate E stays OPEN — September20:**
   On the neutralized copy in the rehearsal lab: full `sup kapps_maintenance migrate` exit 0 in
   **1527s**. During it the datastore guest reached its 6GiB ceiling once and was OOM-killed; the

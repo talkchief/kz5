@@ -98,6 +98,15 @@ Order that worked, and the order to use next time:
 Findings are in `PROJECT_TASKS.md` (two entries of September 19/20). Deletion of the copy:
 `kz5-cutover-copy-delete.timer`, or `bash scripts/cutover-rehearsal-delete-copy.sh` by hand.
 
+## What the migration does to Kazoo 4 data (measured September 20, 2026)
+
+One-way. After `kapps_maintenance migrate` every database is touched: design documents are
+rewritten or added everywhere; `account` documents gain fields; `user` and `device` documents
+lose `call_forward.failover` (moved to a top-level `call_failover` where it was set), which
+Kazoo 4 still reads; `system_config` categories change. No customer document is deleted.
+Kazoo 5 works on the migrated data; Kazoo 4 must never be pointed at it. Rollback is the
+untouched Kazoo 4 stack on its own untouched CouchDB.
+
 ## 3. Why the copy is host-driven
 
 The first design was CouchDB's own pull replication started on the target. It was
