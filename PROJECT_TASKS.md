@@ -7,6 +7,26 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **E CUTOVER REHEARSAL — migration timed, API verified on the migrated copy; verdict CONDITIONAL, gate E stays OPEN — September20:**
+  On the neutralized copy in the rehearsal lab: full `sup kapps_maintenance migrate` exit 0 in
+  **1527s**. During it the datastore guest reached its 6GiB ceiling once and was OOM-killed; the
+  databases whose refresh failed on `econnrefused`/`closed` all refreshed cleanly on a second
+  pass with the guest at 10GiB. **Sizing fact for the cutover: give the Kazoo5 datastore host at
+  least 16GiB**, or the refresh is killed and must be repeated. API on the migrated copy:
+  authentication with the copied master API key HTTP201; descendant accounts, users, callflows
+  listed; queue and agent listings answer for every live ACDC account and every listed queue was
+  started; the remaining ACDC registrations belong to deleted accounts (production clean-up item).
+  Rehearsal applications node stopped and disabled afterwards. Private evidence:
+  `/root/kz5-cutover-rehearsal-20260919/` (`before.json`, `after.json`, `compare.json`,
+  `detail.json`), guest files `migrate.out`/`migrate.result`.
+  NOT YET A GO. Owed: a second rehearsal that passes in one run (fresh copy, neutralized before
+  anything starts, datastore at 10GiB); the call path on production data (the rehearsal lab has
+  no eCallMgr, FreeSWITCH or Kamailio yet); the rollback drill; the owner's cutover decisions
+  (pending-notification queue, single-writer order, window = first start + ~26min migration +
+  margin). Copy deletion is scheduled for 2026-09-26 22:00 UTC.
+  Owner report (HTML, private): https://claude.ai/artifact/FKWuzRS1n4e68FL3sob6g9 ; copy on
+  dev44 `/root/kz5-readiness-report-20260920.html`.
+
 - **E CUTOVER REHEARSAL — first run on a read-only copy of production: install PASS on the third attempt; ONE PRODUCT DEFECT and ONE SAFETY GAP found and fixed — September19/20:**
   Owner authorized the copy and set retention to one week (persistent timer
   `kz5-cutover-copy-delete.timer`, 2026-09-26 22:00 UTC, `scripts/cutover-rehearsal-delete-copy.sh`).

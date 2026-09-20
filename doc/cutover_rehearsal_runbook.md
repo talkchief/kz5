@@ -1,6 +1,6 @@
 # Cutover rehearsal runbook (readiness plan, gate E)
 
-Status on September 19, 2026: **sized and prepared; the copy and the rehearsal itself are not run**. The owner authorized a read-only
+Status on September 20, 2026: **first rehearsal run; conditional; see "First rehearsal" below**. The owner authorized a read-only
 copy from production. The assistant's session could run the metadata-only sizing but
 is refused permission to move customer data, so the copy is started by the owner (see
 "State on September 19"). Nothing here writes to production, and nothing here may be
@@ -78,6 +78,25 @@ sudo systemd-run --unit kz5-cutover-copy -p RemainAfterExit=yes -p WorkingDirect
 - Still to build for step 4: the rehearsal variant's applications install must skip the
   lab's empty-datastore admission and the master-account bootstrap (the variant's
   settings already carry `productionCopy`).
+
+## First rehearsal (September 19-20, 2026)
+
+Order that worked, and the order to use next time:
+
+1. `--cutover-rehearsal --prepare`, `--create couchdb`, `--begin-install couchdb` (the variant
+   now gives this guest 6 GiB; raise it to 10 GiB with `podman update --memory 10g
+   --memory-swap 10g kz5-cutover-couchdb` before the migration).
+2. `scripts/cutover-rehearsal-copy.py` (add `--resume` after an interruption).
+3. **`scripts/cutover-rehearsal-neutralize.py` before anything starts on the copy.** The first
+   run skipped this step because it did not exist yet: the node re-sent pending customer
+   notifications on its first start. Nothing left the lab, by luck.
+4. `scripts/cutover-rehearsal-snapshot.py snapshot … --out before.json`.
+5. `--create rabbitmq`, install; `--create kazoo-apps`, `--sync-source`, `--begin-install`.
+6. Snapshot again and `compare`; timed `sup -t 14400 kapps_maintenance migrate`; API checks.
+7. Stop and disable `kazoo-apps` in the rehearsal guest when done.
+
+Findings are in `PROJECT_TASKS.md` (two entries of September 19/20). Deletion of the copy:
+`kz5-cutover-copy-delete.timer`, or `bash scripts/cutover-rehearsal-delete-copy.sh` by hand.
 
 ## 3. Why the copy is host-driven
 
