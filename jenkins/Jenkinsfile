@@ -69,8 +69,9 @@ pipeline {
                         if (params.SETTINGS_CREDENTIAL_ID) { bindings << file(credentialsId: params.SETTINGS_CREDENTIAL_ID, variable: 'KZ5_SETTINGS') }
                         withCredentials(bindings) {
                             // Single-quoted on purpose: the shell, not Groovy, expands the secrets.
-                            sh '''
-                                set -eu
+                            sh '''#!/usr/bin/env bash
+                                # pipefail: without it the tee below turned a failed installation into a green build (build 4).
+                                set -euo pipefail
                                 set -- --host "$TARGET_HOST" --user "$KZ5_SSH_USER" --action "$ACTION"
                                 # The password stays in the environment; only the variable's name is passed.
                                 if [ -n "${KZ5_SSH_KEY:-}" ]; then set -- "$@" --identity "$KZ5_SSH_KEY"; else set -- "$@" --password-env KZ5_SSH_PASSWORD; fi

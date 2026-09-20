@@ -148,6 +148,10 @@ for pair in couchdb:couchdb rabbitmq:rabbitmq-server haproxy:haproxy kazoo-apps:
         fail "the installer's unit for ${pair%%:*} is no longer ${pair##*:}"
 done
 grep -Fq 'scripts/remote-install-kazoo5.sh' "$rt_root/jenkins/Jenkinsfile" || fail 'the Jenkins pipeline does not use the wrapper'
+# Build 4 on the real Jenkins was green although the wrapper had failed: its output was piped into tee without pipefail.
+awk '/remote-install-kazoo5.sh "\$@"/{found=1} /set -euo pipefail/{strict=NR} END{exit !(found && strict)}' "$rt_root/jenkins/Jenkinsfile" || \
+    fail 'the Jenkins step that runs the wrapper must run under pipefail'
+grep -B12 'remote-install-kazoo5.sh "\$@"' "$rt_root/jenkins/Jenkinsfile" | grep -Fq '#!/usr/bin/env bash' || fail 'pipefail needs bash: the Jenkins step must name it'
 ! grep -Eq "sh ['\"].*(ssh|scp) " "$rt_root/jenkins/Jenkinsfile" || fail 'the Jenkins pipeline reaches a host beside the wrapper'
 pass 'service names match the installer; the Jenkins pipeline reaches hosts only through the wrapper'
 printf 'All %d remote install groups passed\n' "$rt_pass"
