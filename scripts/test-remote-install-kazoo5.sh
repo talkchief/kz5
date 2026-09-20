@@ -25,12 +25,16 @@ command=${!#}
 printf '%s\n' "$command" >> "$RT_LOG"
 # Everything ssh was given, and what its password helper would answer, for the login checks.
 printf '%s\n' "$*" >> "$RT_LOG.args"
+# A real ssh cannot log in once its password helper is gone: the first wrapper removed it
+# before its last remote command, and the settings stayed on the server.
+if [[ -n ${SSH_ASKPASS:-} && ! -x ${SSH_ASKPASS} ]]; then printf 'LOGIN IMPOSSIBLE: %s\n' "$command" >> "$RT_LOG.askpass"; exit 255; fi
 [[ -z ${SSH_ASKPASS:-} ]] || printf 'askpass=%s require=%s\n' "$("$SSH_ASKPASS")" "${SSH_ASKPASS_REQUIRE:-}" >> "$RT_LOG.askpass"
 case $command in
     true) [[ ${RT_NO_LOGIN:-} != 1 ]] ;;
     *'id -u'*) [[ ${RT_NOT_ROOT:-} != 1 ]] ;;
     *os-release*) [[ ${RT_NOT_ROCKY:-} != 1 ]] ;;
     *'list-units'*) [[ ${RT_BUSY:-} == 1 ]] ;;
+    *'test -s /etc/kazoo/deployment.env'*) [[ ${RT_SAVED_SETTINGS:-} == 1 ]] ;;
     *'show channels count'*) echo "${RT_CALLS-0}" ;;
     *'git -C /opt/kz5 checkout'*) [[ ${RT_DIRTY_TARGET:-} != 1 ]] || { echo 'tracked files were edited on the target' >&2; exit 3; } ;;
     *'systemd-run'*) : ;;
@@ -74,7 +78,7 @@ pass 'install: exact commit placed, installer started once as a unit with the se
 while IFS= read -r line; do
     case $line in
         true|'test "$(id -u)" = 0'|*os-release*|install\ -d\ -m\ 0700*|*list-units*|*'show channels count'*|scp\ *|\
-        'command -v git'*|'set -e'|*'git -C /opt/kz5'*|*'git clone -q'*|*'rm -f -- /var/lib/kazoo-remote-install/'*|'    '*|\
+        'test -s /etc/kazoo/deployment.env'|'command -v git'*|'set -e'|*'git -C /opt/kz5'*|*'git clone -q'*|*'rm -f -- /var/lib/kazoo-remote-install/'*|'    '*|\
         chmod\ 0600*|systemd-run*|*'systemctl show -p SubState'*|sed\ -n*|*reset-failed*|*is-enabled*|*is-active*|*kazoo5-stack-health*) ;;
         *) fail "unexpected remote command: ${line}" ;;
     esac
@@ -87,7 +91,7 @@ grep -F 'systemd-run' "$rt_work/log" | grep -Fq 'install-kazoo5.sh --dry-run kam
 ! grep -Eq 'is-enabled|show channels' "$rt_work/log" || fail 'dry-run must not judge services or calls'
 run -- --action verify-only couchdb || fail 'verify-only failed'
 grep -F 'systemd-run' "$rt_work/log" | grep -Fq 'install-kazoo5.sh --verify-only couchdb' || fail 'verify-only flag'
-run -- all || fail 'all failed'
+run RT_SAVED_SETTINGS=1 -- all || fail 'all failed'
 grep -F 'systemd-run' "$rt_work/log" | grep -Fq 'couchdb rabbitmq haproxy kazoo-apps ecallmgr freeswitch kamailio monster-ui push-bridge' || fail 'all is not the nine components'
 pass 'dry-run and verify-only pass the installer flag and skip service judgement; all expands to the nine components'
 
@@ -97,13 +101,16 @@ refuse() {   # description expected-text ENV... -- args...
     grep -Fq -- "$expected" "$rt_work/out" || { cat "$rt_work/out"; fail "${description}: missing '${expected}'"; }
     ! grep -Fq 'systemd-run' "$rt_work/log" || fail "${description}: the installer was started anyway"
 }
-refuse 'live calls' 'carries 7 live channel(s)' RT_CALLS=7 -- ecallmgr
-refuse 'unknown call count' 'refusing to restart services blind' RT_CALLS= -- freeswitch
+refuse 'live calls' 'carries 7 live channel(s)' RT_CALLS=7 RT_SAVED_SETTINGS=1 -- ecallmgr
+refuse 'unknown call count' 'refusing to restart services blind' RT_CALLS= RT_SAVED_SETTINGS=1 -- freeswitch
 refuse 'login refused' 'Could not log in to the target' RT_NO_LOGIN=1 -- couchdb
 refuse 'not root' 'must be root' RT_NOT_ROOT=1 -- couchdb
 refuse 'other OS' 'Rocky Linux 9 only' RT_NOT_ROCKY=1 -- couchdb
 refuse 'install already running' 'Another remote installation' RT_BUSY=1 -- couchdb
-refuse 'edited target tree' 'Could not place commit' RT_DIRTY_TARGET=1 -- couchdb
+refuse 'edited target tree' 'Could not place commit' RT_DIRTY_TARGET=1 RT_SAVED_SETTINGS=1 -- couchdb
+refuse 'first install without settings' 'no saved settings yet' -- kamailio
+run RT_SAVED_SETTINGS=1 -- kamailio || fail 'a repeat install on a server with saved settings needs no settings file'
+run -- --action verify-only kamailio || fail 'verify-only must not need settings'
 refuse 'unknown component' 'Unknown component: mysql' -- mysql
 refuse 'repeated component' 'named twice' -- couchdb couchdb
 refuse 'no component' 'at least one component' --
@@ -115,23 +122,25 @@ refuse 'foreign variable in settings' 'may hold only' -- --env-file "$rt_work/ba
 : > "$rt_work/log"
 if env PATH="$rt_work/bin:$PATH" RT_LOG="$rt_work/log" bash "$rt_script" --host '10.0.0.21;reboot' --identity "$rt_work/key" couchdb >/dev/null 2>&1; then fail 'a host with shell characters was accepted'; fi
 [[ ! -s $rt_work/log ]] || fail 'a bad host was contacted'
-run RT_CALLS=7 -- --allow-active-calls ecallmgr || fail 'the explicit live-call override was refused'
-pass 'fourteen unsafe requests are refused before the installer starts; live calls need the explicit override'
+run RT_CALLS=7 RT_SAVED_SETTINGS=1 -- --allow-active-calls ecallmgr || fail 'the explicit live-call override was refused'
+pass 'fifteen unsafe requests are refused before the installer starts; live calls need the explicit override'
 
 if run RT_INSTALL_STATUS=1 -- --env-file "$rt_work/settings.env" kazoo-apps; then fail 'a failed installer was reported as success'; fi
 grep -Fq 'The installer exited 1 on the target' "$rt_work/out" || fail 'installer failure not reported'
 tail -n 1 "$rt_work/log" | grep -Fq 'rm -f -- /var/lib/kazoo-remote-install/input-' || fail 'settings left behind after a failed install'
-if run RT_ENABLED=disabled -- haproxy; then fail 'a disabled service passed'; fi
+if run RT_ENABLED=disabled RT_SAVED_SETTINGS=1 -- haproxy; then fail 'a disabled service passed'; fi
 grep -Fq 'would not come back after a reboot' "$rt_work/out" || fail 'disabled service not explained'
 pass 'a failed installer and a service that is not enabled fail the run; settings are removed either way'
 
 # Servers that only have a user and a password: the password may never be an argument.
-RT_LOGIN='--password-env RT_SECRET' run RT_SECRET='p@ss w0rd/secret' -- --user deploy rabbitmq || { cat "$rt_work/out"; fail 'password login failed'; }
+RT_LOGIN='--password-env RT_SECRET' run RT_SECRET='p@ss w0rd/secret' -- --user deploy --env-file "$rt_work/settings.env" rabbitmq || { cat "$rt_work/out"; fail 'password login failed'; }
 grep -Fq 'PubkeyAuthentication=no' "$rt_work/log.args" && grep -Fq 'deploy@10.0.0.21' "$rt_work/log.args" || fail 'password login options'
 ! grep -Fq 'BatchMode=yes' "$rt_work/log.args" || fail 'BatchMode would forbid the password prompt'
 grep -Fxq 'askpass=p@ss w0rd/secret require=force' "$rt_work/log.askpass" || fail 'the helper does not hand ssh the password'
 ! grep -Fq 'w0rd' "$rt_work/log.args" "$rt_work/log" "$rt_work/out" || fail 'the password reached a command line, a remote command or the output'
 [[ -z $(find "$rt_work" -name askpass -print -quit) ]] || fail 'the password helper was left behind'
+! grep -Fq 'LOGIN IMPOSSIBLE' "$rt_work/log.askpass" || fail 'a remote command ran after the password helper was removed (the settings clean-up cannot log in)'
+tail -n 1 "$rt_work/log" | grep -Fq 'rm -f -- /var/lib/kazoo-remote-install/input-' || fail 'password login: the settings clean-up is not the last remote command'
 if RT_LOGIN='--password-env RT_SECRET' run RT_SECRET= -- rabbitmq; then fail 'an empty password variable was accepted'; fi
 if RT_LOGIN="--password-env RT_SECRET --identity $rt_work/key" run RT_SECRET=x -- rabbitmq; then fail 'key and password together were accepted'; fi
 if RT_LOGIN=' ' run -- rabbitmq; then fail 'a run without any login was accepted'; fi

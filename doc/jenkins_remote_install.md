@@ -57,7 +57,12 @@ Only `KAZOO_*`, `KAMAILIO_*`, `FREESWITCH_*`, `COUCHDB_*`, `RABBITMQ_*`, `MONSTE
 `PUSH_BRIDGE_*` and `ACDC_*` assignments are accepted, and no `$` or backticks: the file
 is given to systemd as an `EnvironmentFile`, never evaluated by a shell. The Erlang cookie
 must be the cluster's (`KAZOO_COOKIE_FILE` content on the existing nodes). On a repeat
-install the settings credential can be left empty: the server keeps its saved settings.
+install the settings can be left out: the server keeps its saved settings. That is true only
+after an installation that **passed** (the installer saves them at the end). The wrapper
+therefore refuses an `install` without settings on a server that has none: on the first real
+server a failed first install left nothing saved, the next run detected addresses by itself and
+put Kamailio on the host's public interface (filtered by the provider there, so nothing was
+exposed). Always state `KAZOO_PUBLIC_IP` for a host with more than one interface.
 
 ## Credentials in Jenkins
 
@@ -97,7 +102,7 @@ bash scripts/remote-install-kazoo5.sh --host 10.0.0.21 --identity ~/.ssh/kz5_dep
 
 `bash scripts/test-remote-install-kazoo5.sh` (8 groups, recording ssh/scp stand-ins, no
 host contacted): exact commit, one installer unit, settings handed over and always
-removed, fourteen unsafe requests refused before the installer starts, failed installer
+removed, fifteen unsafe requests refused before the installer starts, failed installer
 and not-enabled service fail the run, only a commit is deployed, unit names match the
 installer. `bash scripts/test-single-install-entry-point.sh` holds the wrapper and the
 Jenkinsfile to the single-entry-point rule.

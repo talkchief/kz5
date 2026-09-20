@@ -112,9 +112,12 @@ ri_scp=(scp -q -P "$ri_port" "${ri_common[@]}")
 remote() { "${ri_ssh[@]}" "$@"; }
 
 cleanup() {
+    # The host's settings never stay behind, whatever happened. This must come before the
+    # work directory goes: it holds the password helper, and without it this last login
+    # failed silently and four settings files stayed on the first real server
+    # (September 20, 2026).
+    remote "rm -f -- ${RI_STATE}/input-*.env" >/dev/null 2>&1 || true
     rm -rf -- "$ri_work"
-    # The host's settings never stay behind, whatever happened.
-    remote "rm -f -- ${RI_STATE}/input-${ri_run}.env" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -125,6 +128,14 @@ remote 'grep -Eq "^ID=\"?rocky\"?$" /etc/os-release && grep -Eq "^VERSION_ID=\"?
 remote "install -d -m 0700 ${RI_STATE} ${RI_LOGS}"
 if remote 'systemctl list-units --no-legend --state=activating,active "kz5-remote-install-*" | grep -q .'; then
     die 'Another remote installation is still running on that host'
+fi
+
+# A server keeps its settings only after an installation that passed. Without them the
+# installer detects addresses itself, and on a host with a public interface it chose that
+# one for SIP (first real server, Jenkins build 12).
+if [[ $ri_action == install && -z $ri_env_file ]]; then
+    remote 'test -s /etc/kazoo/deployment.env' || \
+        die 'This server has no saved settings yet (no installation has passed on it): give its settings with --env-file'
 fi
 
 if [[ $ri_action != dry-run && $ri_allow_calls != true ]]; then
