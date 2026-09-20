@@ -60,6 +60,7 @@ ln -s "$fixture_dir/outside/private.json" "$fixture_root/core/normal/priv/couchd
 chmod 0600 "$fixture_root/core/normal/ebin/beam_build_marker.beam"
 # The directories of such a build are 0700 as well: readable beams below them were
 # still invisible to the runtime user (bare server, Jenkins build 9, September 20, 2026).
+install -m 0600 "$script_dir/test-fixtures/beam_build_marker.erl" "$fixture_root/core/normal/priv/native_nif.so"
 chmod 0700 "$fixture_root/core/normal" "$fixture_root/core/normal/ebin" "$fixture_root/core/normal/priv" \
     "$fixture_root/core/normal/priv/couchdb" "$fixture_root/core/normal/priv/couchdb/views"
 prepare_kazoo_runtime_artifact_permissions
@@ -71,6 +72,7 @@ for artifact in core/normal/ebin/normal.app core/normal/ebin/beam_build_marker.b
     core/normal/priv/couchdb/account.json core/normal/priv/defaults/system.json; do
     [[ $(stat -c '%a' "$fixture_root/$artifact") == 644 ]] || fail 'public runtime artifact is unreadable'
 done
+[[ $(stat -c '%a' "$fixture_root/core/normal/priv/native_nif.so") == 755 ]] || fail 'a native library left unreadable: its module would be undefined at runtime'
 [[ $(stat -c '%a' "$fixture_root/core/normal/priv/private-config.json") == 600 ]] || fail 'private config permissions changed'
 [[ $(stat -c '%a' "$fixture_dir/outside/private.json") == 600 ]] || fail 'permission repair followed a symlink'
 if (KAZOO_ROOT=/; prepare_kazoo_runtime_artifact_permissions) >/dev/null 2>&1; then

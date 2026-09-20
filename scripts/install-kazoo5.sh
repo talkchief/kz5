@@ -2874,6 +2874,12 @@ prepare_kazoo_runtime_artifact_permissions() {
         \( -path '*/ebin/*.beam' -o -path '*/ebin/*.app' \
            -o -path '*/priv/couchdb/*.json' -o -path '*/priv/defaults/*.json' \) \
         -exec chmod 0644 -- {} +
+    # Native code of the dependencies (jiffy, and others with a priv/*.so) is not rebuilt by
+    # the forced recompile. Left 0600 by an earlier restrictive build, the NIF does not load
+    # and the module is simply undefined: the applications node died in a restart loop on
+    # {undef,[{jiffy,encode,...}]} (bare Rocky 9 server, Jenkins build 10, September 20, 2026).
+    find "$runtime_root/core" "$runtime_root/applications" "$runtime_root/deps" -type f \
+        -path '*/priv/*.so' -exec chmod 0755 -- {} +
 }
 
 # Invocation-local reuse check, not a persistent build cache. Include generated
