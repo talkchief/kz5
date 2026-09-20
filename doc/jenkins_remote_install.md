@@ -77,7 +77,7 @@ bash scripts/remote-install-kazoo5.sh --host 10.0.0.21 --identity ~/.ssh/kz5_dep
 
 `bash scripts/test-remote-install-kazoo5.sh` (8 groups, recording ssh/scp stand-ins, no
 host contacted): exact commit, one installer unit, settings handed over and always
-removed, thirteen unsafe requests refused before the installer starts, failed installer
+removed, fourteen unsafe requests refused before the installer starts, failed installer
 and not-enabled service fail the run, only a commit is deployed, unit names match the
 installer. `bash scripts/test-single-install-entry-point.sh` holds the wrapper and the
 Jenkinsfile to the single-entry-point rule.

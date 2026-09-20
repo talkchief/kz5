@@ -27,6 +27,7 @@ printf '%s\n' "$command" >> "$RT_LOG"
 printf '%s\n' "$*" >> "$RT_LOG.args"
 [[ -z ${SSH_ASKPASS:-} ]] || printf 'askpass=%s require=%s\n' "$("$SSH_ASKPASS")" "${SSH_ASKPASS_REQUIRE:-}" >> "$RT_LOG.askpass"
 case $command in
+    true) [[ ${RT_NO_LOGIN:-} != 1 ]] ;;
     *'id -u'*) [[ ${RT_NOT_ROOT:-} != 1 ]] ;;
     *os-release*) [[ ${RT_NOT_ROCKY:-} != 1 ]] ;;
     *'list-units'*) [[ ${RT_BUSY:-} == 1 ]] ;;
@@ -70,7 +71,7 @@ pass 'install: exact commit placed, installer started once as a unit with the se
 # Nothing but the installer may change the target: every remote command is one of a known few.
 while IFS= read -r line; do
     case $line in
-        'test "$(id -u)" = 0'|*os-release*|install\ -d\ -m\ 0700*|*list-units*|*'show channels count'*|scp\ *|\
+        true|'test "$(id -u)" = 0'|*os-release*|install\ -d\ -m\ 0700*|*list-units*|*'show channels count'*|scp\ *|\
         'command -v git'*|'set -e'|*'git -C /opt/kz5'*|*'git clone -q'*|*'rm -f -- /var/lib/kazoo-remote-install/'*|'    '*|\
         chmod\ 0600*|systemd-run*|*'systemctl show -p SubState'*|sed\ -n*|*reset-failed*|*is-enabled*|*is-active*|*kazoo5-stack-health*) ;;
         *) fail "unexpected remote command: ${line}" ;;
@@ -96,6 +97,7 @@ refuse() {   # description expected-text ENV... -- args...
 }
 refuse 'live calls' 'carries 7 live channel(s)' RT_CALLS=7 -- ecallmgr
 refuse 'unknown call count' 'refusing to restart services blind' RT_CALLS= -- freeswitch
+refuse 'login refused' 'Could not log in to the target' RT_NO_LOGIN=1 -- couchdb
 refuse 'not root' 'must be root' RT_NOT_ROOT=1 -- couchdb
 refuse 'other OS' 'Rocky Linux 9 only' RT_NOT_ROCKY=1 -- couchdb
 refuse 'install already running' 'Another remote installation' RT_BUSY=1 -- couchdb
@@ -112,7 +114,7 @@ refuse 'foreign variable in settings' 'may hold only' -- --env-file "$rt_work/ba
 if env PATH="$rt_work/bin:$PATH" RT_LOG="$rt_work/log" bash "$rt_script" --host '10.0.0.21;reboot' --identity "$rt_work/key" couchdb >/dev/null 2>&1; then fail 'a host with shell characters was accepted'; fi
 [[ ! -s $rt_work/log ]] || fail 'a bad host was contacted'
 run RT_CALLS=7 -- --allow-active-calls ecallmgr || fail 'the explicit live-call override was refused'
-pass 'thirteen unsafe requests are refused before the installer starts; live calls need the explicit override'
+pass 'fourteen unsafe requests are refused before the installer starts; live calls need the explicit override'
 
 if run RT_INSTALL_STATUS=1 -- --env-file "$rt_work/settings.env" kazoo-apps; then fail 'a failed installer was reported as success'; fi
 grep -Fq 'The installer exited 1 on the target' "$rt_work/out" || fail 'installer failure not reported'

@@ -119,6 +119,7 @@ cleanup() {
 trap cleanup EXIT
 
 log "Target ${ri_user}@${ri_host}, action ${ri_action}, components: ${ri_components[*]}, source ${ri_source}"
+remote true || die 'Could not log in to the target: check the address, the user and the credential'
 remote 'test "$(id -u)" = 0' || die 'The remote user must be root (the installer requires it)'
 remote 'grep -Eq "^ID=\"?rocky\"?$" /etc/os-release && grep -Eq "^VERSION_ID=\"?9" /etc/os-release' || die 'The installer supports Rocky Linux 9 only'
 remote "install -d -m 0700 ${RI_STATE} ${RI_LOGS}"
