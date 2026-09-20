@@ -67,6 +67,8 @@ grep -F 'systemd-run' "$rt_work/log" | grep -Fq "/opt/kz5/scripts/install-kazoo5
 ! grep -F 'systemd-run' "$rt_work/log" | grep -Fq 'umask' || fail 'the installer must run under the ordinary umask (077 made its build unreadable to the kazoo user)'
 grep -F 'systemd-run' "$rt_work/log" | grep -Fq 'install -m 0600 /dev/null /var/log/kazoo-remote-install/' || fail 'the log is not created private'
 grep -F 'systemd-run' "$rt_work/log" | grep -Fq 'EnvironmentFile=/var/lib/kazoo-remote-install/input-' || fail 'the settings are not handed to the unit'
+# An aborted Jenkins build cannot clean up: the unit on the target must remove the settings itself, keeping the installer's status.
+grep -F 'systemd-run' "$rt_work/log" | grep -Eq 'install-kazoo5\.sh [^;]*; status=\$\?; rm -f -- /var/lib/kazoo-remote-install/input-[^ ]+\.env; exit \$status' || fail 'the unit does not remove the settings itself when the installer ends'
 grep -Fq "checkout -q --detach ${rt_sha}" "$rt_work/log" || fail 'the exact commit is not checked out'
 grep -Eq 'is-enabled kazoo-ecallmgr.service' "$rt_work/log" && grep -Eq 'is-enabled kazoo-freeswitch.service' "$rt_work/log" || fail 'enabled state not checked per service'
 grep -Fq 'kazoo5-stack-health' "$rt_work/log" || fail 'health not checked'
