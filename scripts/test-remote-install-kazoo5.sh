@@ -30,7 +30,8 @@ case $command in
     *'show channels count'*) echo "${RT_CALLS-0}" ;;
     *'git -C /opt/kz5 checkout'*) [[ ${RT_DIRTY_TARGET:-} != 1 ]] || { echo 'tracked files were edited on the target' >&2; exit 3; } ;;
     *'systemd-run'*) : ;;
-    *'systemctl show -p SubState'*) printf 'exited %s 3\n' "${RT_INSTALL_STATUS:-0}" ;;
+    # systemd's own order, not the order asked: the first native run misread it.
+    *'systemctl show -p SubState'*) printf 'ExecMainStatus=%s\nSubState=exited\nLines=3\n' "${RT_INSTALL_STATUS:-0}" ;;
     *"grep -E '^\\[kazoo5\\] '"*) printf '[kazoo5] PASS stub installer line\n' ;;
     *'is-enabled'*) echo "${RT_ENABLED:-enabled}" ;;
     *'is-active'*) echo active ;;

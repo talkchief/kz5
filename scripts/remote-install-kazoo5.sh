@@ -150,13 +150,17 @@ log "Installer running on the target as ${ri_unit}; full log there: ${ri_log}"
 ri_shown=0 ri_lost=0
 while :; do
     sleep "${RI_POLL_SECONDS:-15}"
-    if ! ri_state=$(remote "systemctl show -p SubState -p ExecMainStatus --value ${ri_unit} | tr '\n' ' '; grep -c '' ${ri_log}"); then
+    # By property name: systemd prints properties in its own order, not the order asked.
+    if ! ri_state=$(remote "systemctl show -p SubState -p ExecMainStatus ${ri_unit}; printf 'Lines=%s\n' \"\$(grep -c '' ${ri_log})\""); then
         ri_lost=$((ri_lost + 1))
         ((ri_lost < 40)) || die "Lost contact with the target for ten minutes; the installer keeps running there as ${ri_unit}"
         continue
     fi
     ri_lost=0
-    read -r ri_substate ri_status ri_lines <<<"$ri_state"
+    ri_substate=$(sed -n 's/^SubState=//p' <<<"$ri_state")
+    ri_status=$(sed -n 's/^ExecMainStatus=//p' <<<"$ri_state")
+    ri_lines=$(sed -n 's/^Lines=//p' <<<"$ri_state")
+    [[ $ri_lines =~ ^[0-9]+$ && -n $ri_substate ]] || die "Unreadable unit state on the target; the installer keeps running there as ${ri_unit}"
     if ((ri_lines > ri_shown)); then
         # Only the installer's own status lines: the full log can name settings.
         remote "sed -n '$((ri_shown + 1)),${ri_lines}p' ${ri_log} | grep -E '^\[kazoo5\] '" || true
