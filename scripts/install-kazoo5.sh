@@ -4628,10 +4628,21 @@ configure_ecallmgr_sbc_discovery() {
     # Standalone Kamailio advertises exact Proxy listener addresses on the
     # authenticated zone broker. Native discovery persists these authoritative
     # ACL entries and reloads media ACLs, including SBCs installed later.
-    output=$(timeout --signal=KILL 30 sup -n ecallmgr -e kapps_config set_default \
-        '<<"ecallmgr">>' '<<"enable_discovery_server">>' true </dev/null 2>/dev/null) ||
-        die 'Could not persist eCallMgr SBC discovery'
-    [[ $output == \{ok,* ]] || die 'eCallMgr rejected SBC discovery configuration'
+    # Seconds after eCallMgr's first start on an empty datastore the node is still
+    # writing its own configuration document and this write collides with it. No
+    # earlier install met that (bare Rocky 9 server, Jenkins build 11, September 20,
+    # 2026). Bounded, like the applications node's list; a persistent refusal still fails.
+    local deadline=$((SECONDS + ${KAZOO_ECALLMGR_CONFIG_SECONDS:-60}))
+    while :; do
+        output=$(timeout --signal=KILL 30 sup -n ecallmgr -e kapps_config set_default \
+            '<<"ecallmgr">>' '<<"enable_discovery_server">>' true </dev/null 2>/dev/null) || output=''
+        [[ $output != \{ok,* ]] || break
+        ((SECONDS < deadline)) || {
+            [[ -n $output ]] || die 'Could not persist eCallMgr SBC discovery'
+            die 'eCallMgr rejected SBC discovery configuration'
+        }
+        sleep 2
+    done
     current=$(timeout --signal=KILL 30 sup -n ecallmgr -e erlang whereis \
         ecallmgr_discovery </dev/null 2>/dev/null) || die 'Could not inspect SBC discovery'
     if [[ $current == undefined ]]; then

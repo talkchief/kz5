@@ -9,10 +9,13 @@ const script=`set -Eeuo pipefail
 die(){ echo "$*" >&2; exit 42; }
 log(){ echo "$*"; }
 timeout(){ shift 2; "$@"; }
+sleep(){ :; }
 sup(){
  case "$*" in
   *'kapps_config set_default'*)
    [[ $CASE != write_error ]] || { echo SECRET; return 1; }
+   # A first start on an empty datastore: the first two writes collide with the node's own.
+   if [[ $CASE == first_start ]]; then echo x >> "$MARK.writes"; (( $(wc -l < "$MARK.writes") > 2 )) || return 1; fi
    [[ $CASE != rejected ]] || { echo SECRET; return; }
    echo '{ok,{[]}}' ;;
   *'erlang whereis'*)
@@ -29,9 +32,9 @@ configure_ecallmgr_sbc_discovery
 `;
 const dir=fs.mkdtempSync('/tmp/kz5-discovery-test.');
 try {
-    for(const [name,status] of [['start',0],['already',0],['write_error',42],['rejected',42],['failed_start',42],['override',42],['dry',0]]) {
+    for(const [name,status] of [['start',0],['first_start',0],['already',0],['write_error',42],['rejected',42],['failed_start',42],['override',42],['dry',0]]) {
         const r=spawnSync('bash',['--noprofile','--norc','-s'],{input:script,encoding:'utf8',timeout:3000,
-            env:{PATH:'/usr/bin:/bin',CASE:name,MARK:dir+'/'+name,DRY_RUN:name==='dry'?'true':'false'}});
+            env:{PATH:'/usr/bin:/bin',KAZOO_ECALLMGR_CONFIG_SECONDS:name==='first_start'?'60':'0',CASE:name,MARK:dir+'/'+name,DRY_RUN:name==='dry'?'true':'false'}});
         assert.ifError(r.error);assert.equal(r.status,status,name+': '+r.stdout+r.stderr);
         assert(!(r.stdout+r.stderr).includes('SECRET'));
     }
@@ -39,4 +42,4 @@ try {
 const install=source.match(/^install_ecallmgr\(\) \{[\s\S]*?^\}/m)[0];
 assert(install.indexOf('configure_ecallmgr_sbc_discovery')<install.indexOf('register_configured_freeswitch_nodes'));
 assert(source.match(/^verify_ecallmgr\(\) \{[\s\S]*?^\}/m)[0].includes('verify_ecallmgr_sbc_discovery'));
-console.log('PASS seven discovery installer cases, normal install and verification wiring');
+console.log('PASS eight discovery installer cases (incl. the first-start write collision), normal install and verification wiring');
