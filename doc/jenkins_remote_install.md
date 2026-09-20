@@ -78,8 +78,11 @@ with any id you like (for example `fs2-root`).
 
 ## Running it
 
-Build with parameters: `TARGET_HOST`, one login credential (password or key), the settings
-credential, the action, and tick the modules. Start with `dry-run`; `install` asks for approval before anything restarts.
+Build with parameters: `TARGET_HOST`, `LOGIN_CREDENTIAL` (password or key; required), the id of
+the settings credential in `SETTINGS_CREDENTIAL_ID` (may be empty), the action, and tick the
+modules. The settings credential is named by id, not picked from a list: the Credentials plugin
+throws a NullPointerException before the pipeline starts when a credentials parameter is left
+empty (seen on Jenkins 2.568.3, build 2), so nothing optional may be one. Start with `dry-run`; `install` asks for approval before anything restarts.
 One build at a time. The build is named after the action and host and keeps
 `remote-install.log` as its receipt.
 
