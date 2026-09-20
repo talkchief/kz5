@@ -7,6 +7,47 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **E CUTOVER REHEARSAL — first run on a read-only copy of production: install PASS on the third attempt; ONE PRODUCT DEFECT and ONE SAFETY GAP found and fixed — September19/20:**
+  Owner authorized the copy and set retention to one week (persistent timer
+  `kz5-cutover-copy-delete.timer`, 2026-09-26 22:00 UTC, `scripts/cutover-rehearsal-delete-copy.sh`).
+  Production figures stay in root-only files on dev44 (`/root/kz5-cutover-*`), not in this repository.
+  *Copy.* `scripts/cutover-rehearsal-copy.py`, GET-only on production, rehearsal lab only as
+  target. Attempts 1-3 **FAILED** and are retained in the journal (`kz5-cutover-copy-0919`, `b`,
+  `c`): a connection reset the tool could not survive, one document rejected by the target, and
+  an unwrapped request path. Fixed (`fc04844`, `cbecbf7`, `fab42f9`): idempotent retries on every
+  request, rejections counted by class without aborting. Attempt 4 `kz5-cutover-copy-0919d`
+  **PASS**: every selected database copied, source and target document counts identical in all
+  four groups, nothing rejected (`/root/kz5-cutover-copy-20260919/receipt.json`). Root cause of
+  the resets: the lab CouchDB guest was capped at 1GiB and OOM-killed repeatedly under
+  production-sized indexing; the rehearsal variant now gives it 6GiB (`13e2ea5`).
+  *Install on the copy (rehearsal lab `--cutover-rehearsal`, master-account bootstrap off,
+  empty-datastore admission replaced by a copied-datastore admission, `eb829b4`).*
+  `kazoo-apps-install-1` **FAIL** (`Could not register guarded scope management`: the datastore
+  guest was being OOM-killed under it). `kazoo-apps-install-2` **FAIL**: `An ACDC initialization
+  job failed`. **Product defect:** production's `acdc` database still lists an account deleted
+  long ago (`pvt_deleted`, no account database); one such entry failed ACDC initialization for
+  the whole node and the install. This would have blocked the real cutover. Fixed in `adebf25`
+  (`acdc_init:account_db_is_gone/1`: skipped with a warning; a missing view in an existing
+  database still fails; suite 19 tests incl. the new case). `kazoo-apps-install-3` **PASS**
+  (`/var/lib/kazoo5-cutover-rehearsal/kazoo-apps-install-3.log`).
+  *Safety gap.* On its first start the rehearsal node re-sent dozens of pending customer
+  notification e-mails and held several hundred enabled customer webhooks. Audited: every mail
+  attempt failed inside the lab (`econnrefused` at `localhost:25`, or invalid addresses), zero
+  webhook attempts; nothing
+  reached a customer, but by luck (the relay resolved to localhost), not by design. Node stopped
+  at once. Fixed in `338f875`: the copy no longer takes `pending_notifications`, and
+  `scripts/cutover-rehearsal-neutralize.py` (rehearsal lab only, counts only, 4 offline groups)
+  disables every webhook, removes pending notifications and points every mail relay at discard.
+  Applied; restart on the neutralized copy: API in 11s, stale account skipped, 0 initialization
+  failures, 0 error lines, 0 mail attempts, production queues started, stack health `failures=0`.
+  *What the first start changes* (`scripts/cutover-rehearsal-snapshot.py`, private
+  `compare.json`): design documents rewritten or added in the account, month, number and global
+  databases; many `system_config` categories changed and some added; a small number of account documents
+  and the `accounts` aggregate touched; current-month databases created for accounts that had none; four
+  new global databases; ledger entries written. THE SAME STEP ON THE REAL CUTOVER WILL RE-SEND
+  PENDING NOTIFICATIONS AND WRITE LEDGERS: that is for the owner's cutover plan.
+  Migration timing and GO/NO-GO: see the following entry.
+
 - **E cutover rehearsal — prepared, COPY NOT RUN, September19:**
   The owner authorized the assistant to proceed. Done: GET-only sizing of production (figures
   kept only in a root-only file on dev44, deliberately not in this repository; size is not a
