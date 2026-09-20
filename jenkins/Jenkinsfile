@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: MPL-2.0
+// Remote installation of Kazoo 5 modules. Pick a server, tick the modules, choose the
+// action. On the target this runs scripts/install-kazoo5.sh and nothing else (see
+// scripts/remote-install-kazoo5.sh and doc/jenkins_remote_install.md).
+//
+// Per server, create two credentials in Jenkins once:
+//   * "SSH Username with private key" for root on that server;
+//   * "Secret file" with that server's installer inputs (KAZOO_*=value lines).
+def MODULES = ['couchdb', 'rabbitmq', 'haproxy', 'kazoo-apps', 'ecallmgr', 'freeswitch', 'kamailio', 'monster-ui', 'push-bridge']
+
+pipeline {
+    agent any
+    options {
+        disableConcurrentBuilds()
+        timestamps()
+        timeout(time: 120, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '100'))
+    }
+    parameters {
+        string(name: 'TARGET_HOST', defaultValue: '', trim: true, description: 'Server to install on: IPv4 address or host name reachable from Jenkins')
+        credentials(name: 'SSH_CREDENTIAL', credentialType: 'com.cloudbees.jenkins.plugins.sshcredentials.impl.BasicSSHUserPrivateKey', required: true, description: 'Root SSH key of that server')
+        credentials(name: 'SETTINGS_CREDENTIAL', credentialType: 'org.jenkinsci.plugins.plaincredentials.impl.FileCredentialsImpl', required: false, description: 'Secret file with that server\'s installer inputs (KAZOO_*=value). Leave empty on a repeat install: the server keeps its saved settings.')
+        choice(name: 'ACTION', choices: ['dry-run', 'install', 'verify-only'], description: 'dry-run changes nothing; install restarts the selected services')
+        booleanParam(name: 'couchdb', defaultValue: false, description: 'Apache CouchDB')
+        booleanParam(name: 'rabbitmq', defaultValue: false, description: 'RabbitMQ')
+        booleanParam(name: 'haproxy', defaultValue: false, description: 'HAProxy in front of CouchDB')
+        booleanParam(name: 'kazoo-apps', defaultValue: false, description: 'Kazoo applications node (Crossbar, ACDC, callflows, ...)')
+        booleanParam(name: 'ecallmgr', defaultValue: false, description: 'eCallMgr node')
+        booleanParam(name: 'freeswitch', defaultValue: false, description: 'Kazoo FreeSWITCH media server')
+        booleanParam(name: 'kamailio', defaultValue: false, description: 'Kazoo Kamailio SIP edge')
+        booleanParam(name: 'monster-ui', defaultValue: false, description: 'Monster UI behind nginx')
+        booleanParam(name: 'push-bridge', defaultValue: false, description: 'FCM/APNs push bridge')
+        booleanParam(name: 'ALLOW_ACTIVE_CALLS', defaultValue: false, description: 'Install even though the server carries live calls (they will be dropped)')
+    }
+    stages {
+        stage('Check the request') {
+            steps {
+                script {
+                    if (!(params.TARGET_HOST ==~ /[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?/)) { error 'TARGET_HOST is not a host name or IPv4 address' }
+                    env.KZ5_MODULES = MODULES.findAll { params[it] }.join(' ')
+                    if (!env.KZ5_MODULES) { error 'Tick at least one module' }
+                    currentBuild.displayName = "#${env.BUILD_NUMBER} ${params.ACTION} ${params.TARGET_HOST}"
+                    currentBuild.description = env.KZ5_MODULES
+                }
+            }
+        }
+        stage('Guard the source') {
+            steps {
+                sh 'bash -n scripts/install-kazoo5.sh && bash -n scripts/remote-install-kazoo5.sh'
+                sh 'bash scripts/test-patch-immutability.sh'
+                sh 'bash scripts/test-remote-install-kazoo5.sh'
+            }
+        }
+        stage('Approve') {
+            when { expression { params.ACTION == 'install' } }
+            steps {
+                input message: "Install ${env.KZ5_MODULES} on ${params.TARGET_HOST}? The selected services restart.", ok: 'Install'
+            }
+        }
+        stage('Run the installer on the server') {
+            steps {
+                script {
+                    def bindings = [sshUserPrivateKey(credentialsId: params.SSH_CREDENTIAL, keyFileVariable: 'KZ5_SSH_KEY', usernameVariable: 'KZ5_SSH_USER')]
+                    if (params.SETTINGS_CREDENTIAL) { bindings << file(credentialsId: params.SETTINGS_CREDENTIAL, variable: 'KZ5_SETTINGS') }
+                    withCredentials(bindings) {
+                        // Single-quoted on purpose: the shell, not Groovy, expands the secrets.
+                        sh '''
+                            set -eu
+                            set -- --host "$TARGET_HOST" --user "$KZ5_SSH_USER" --identity "$KZ5_SSH_KEY" --action "$ACTION"
+                            if [ -n "${KZ5_SETTINGS:-}" ]; then set -- "$@" --env-file "$KZ5_SETTINGS"; fi
+                            if [ "$ALLOW_ACTIVE_CALLS" = true ]; then set -- "$@" --allow-active-calls; fi
+                            # shellcheck disable=SC2086
+                            bash scripts/remote-install-kazoo5.sh "$@" $KZ5_MODULES 2>&1 | tee remote-install.log
+                        '''
+                    }
+                }
+            }
+        }
+    }
+    post {
+        always { archiveArtifacts artifacts: 'remote-install.log', allowEmptyArchive: true }
+        success { echo "PASS ${params.ACTION} of ${env.KZ5_MODULES} on ${params.TARGET_HOST}. Cluster wiring (sup commands) is the operator's next step." }
+    }
+}

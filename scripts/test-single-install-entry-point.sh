@@ -51,6 +51,16 @@ while read -r name; do
 done < <(tracked)
 pass 'no tracked script loads code into a running node beside the installer'
 
+# The remote wrapper (Jenkins or by hand) reaches another host, so it is held to the
+# same rule: on the target it starts the installer, once, and nothing else.
+ep_remote="$ep_root/scripts/remote-install-kazoo5.sh"
+[[ $(grep -c 'systemd-run' "$ep_remote") == 1 ]] || fail 'the remote wrapper must start exactly one unit on the target'
+grep -F 'systemd-run' -A1 "$ep_remote" | grep -Fq '/scripts/install-kazoo5.sh ' || fail 'the remote wrapper no longer runs the installer'
+! grep -Ev '^[[:space:]]*#' "$ep_remote" | grep -Eq '(^|[^-])\b(sup|rabbitmqctl|fs_cli -x .(reload|load|sofia))\b|systemctl (restart|start|enable|disable) ' || \
+    fail 'the remote wrapper changes services or cluster wiring itself'
+! grep -Eq "sh ['\"].*\b(ssh|scp|rsync)\b" "$ep_root/jenkins/Jenkinsfile" || fail 'the Jenkins pipeline reaches a host beside the wrapper'
+pass 'the remote wrapper and the Jenkins pipeline deploy only through the installer'
+
 usage=$(bash "$ep_installer" --help)
 grep -Fq 'only installation entry point' <<<"$usage" && grep -Fq -- '--interactive' <<<"$usage" || fail 'usage does not state the rule or the menu'
 [[ $(bash "$ep_installer" --list | tr '\n' ' ') == 'couchdb rabbitmq haproxy kazoo-apps ecallmgr freeswitch kamailio monster-ui push-bridge all ' ]] || \
