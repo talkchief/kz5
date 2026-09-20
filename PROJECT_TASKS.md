@@ -7,6 +7,39 @@ work postponed; do not generate voices at runtime or during deployment.
 
 ## Immediate operator follow-up — September9
 
+- **Jenkins remote install exercised on a real bare Rocky9 server (owner's test host 10.1.0.41) — six modules installed from scratch; FIVE defects found and fixed on the way, September20:**
+  Jenkins 2.568.3, job `kz5-remote-install`, login by user+password credential, server settings
+  as a Secret file holding no secret (the installer generates cookie and passwords on the host).
+  Builds, none softened: 1-2 refusals/plugin crash (an EMPTY credentials parameter makes the
+  Credentials plugin throw before the pipeline starts -> one required login parameter of either
+  kind, settings credential named by id, `4df5b65`); 3 FAIL (my offline proof used hardlinks
+  across filesystems, `4055621`); **4 green although the wrapper had failed** (output piped into
+  `tee` without pipefail -> `ab0ee98`, guarded); 5-7 dry-runs PASS; **9 FAIL**: the wrapper ran
+  the installer under umask 077, the build's directories were 0700 and `kazoo_apps` could not
+  load a module (restart loop). A hardened root shell does the same, so the INSTALLER was fixed:
+  build under umask 022, repair also reopens directories (`23e2612`); **10 FAIL**: `jiffy.so`
+  from that first build still 0600 -> NIF not loaded -> `{undef,[{jiffy,encode,…}]}`; repair now
+  covers `priv/*.so` (`169381c`; that commit was pushed with a suite whose own clean-up failed,
+  corrected in `5552eeb`); tree moved aside for a true from-scratch run; **11 FAIL** at 51 PASS:
+  `Could not persist eCallMgr SBC discovery` - five seconds after eCallMgr's FIRST start on an
+  EMPTY datastore the installer's write collides with the node's own; no lab had ever installed
+  eCallMgr on an empty datastore. Bounded retry (`692d42a`, suite 8 cases). **12 PASS**
+  (ecallmgr, freeswitch, kamailio), Jenkins `verify-only` of all six PASS, all six services
+  enabled and active, media link up, health `failures=0`.
+  Two wrapper defects found on that server (`e7188b5`): with a password login the work directory
+  (which holds the SSH_ASKPASS helper) was deleted before the last remote command, so the
+  settings clean-up could not log in and four settings files stayed (root-only, no secret in
+  them); and build 11's failure saved no settings, so build 12 "with saved settings" detected
+  addresses itself and put Kamailio on the host's PUBLIC interface (provider-filtered: probed
+  closed from outside, nothing exposed). Clean-up now runs first; an `install` without settings
+  is refused on a server that has none. **14**: Jenkins was restarted twice and the build aborted
+  by the owner while installing; the installation FINISHED on the server regardless (unit exit
+  0, 123 PASS) - the reason the installer runs as a unit there. The aborted wrapper could not
+  clean up, so the unit now removes the settings itself (`b406b67`).
+  OPEN: the corrected server could not be re-verified - all three SSH host keys of 10.1.0.41
+  changed minutes later (different OS installation); not accepted without the owner's word.
+  Pre-built packages per module: designed (`doc/prebuilt_packages_design.md`), NOT implemented.
+
 - **Remote installation through Jenkins — built, proven natively over SSH; credentials import left to the owner, September20:**
   `jenkins/Jenkinsfile` (pick a server, tick the Kazoo modules, dry-run / install / verify-only,
   approval before an install) and `scripts/remote-install-kazoo5.sh`, the only thing that reaches
