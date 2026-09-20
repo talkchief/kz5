@@ -161,9 +161,11 @@ ri_flag=''
 [[ $ri_action != verify-only ]] || ri_flag=--verify-only
 readonly ri_unit="kz5-remote-install-${ri_run}" ri_log="${RI_LOGS}/${ri_run}.log"
 
-# The one thing this wrapper runs on the target.
+# The one thing this wrapper runs on the target. The log is created private first; the
+# installer itself keeps the ordinary umask (under 077 its build was unreadable to the
+# kazoo user: Jenkins build 9).
 remote "systemd-run --quiet --unit ${ri_unit} -p RemainAfterExit=yes -p TimeoutStartSec=5400 -E HOME=/root ${ri_environment} \
-    /usr/bin/bash -c 'umask 077; exec /usr/bin/bash ${RI_REMOTE_ROOT}/scripts/install-kazoo5.sh ${ri_flag} ${ri_components[*]} > ${ri_log} 2>&1'" \
+    /usr/bin/bash -c 'install -m 0600 /dev/null ${ri_log}; exec /usr/bin/bash ${RI_REMOTE_ROOT}/scripts/install-kazoo5.sh ${ri_flag} ${ri_components[*]} >> ${ri_log} 2>&1'" \
     || die 'Could not start the installer on the target'
 log "Installer running on the target as ${ri_unit}; full log there: ${ri_log}"
 

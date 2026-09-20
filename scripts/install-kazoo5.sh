@@ -2866,6 +2866,10 @@ prepare_kazoo_runtime_artifact_permissions() {
     chmod 0644 -- "$atomic_script" || die 'Cannot prepare atomic media verification script permissions'
     # Root builds may inherit umask 077. These are code and public schema/view
     # definitions, not deployment configuration, logs, keys, or credential files.
+    # Directories carry no content. A tree built earlier under umask 077 has them
+    # 0700, which hides every readable beam below from the runtime user.
+    find "$runtime_root/core" "$runtime_root/applications" "$runtime_root/deps" \
+        -name .git -prune -o -type d -exec chmod u+rwx,go+rx -- {} +
     find "$runtime_root/core" "$runtime_root/applications" "$runtime_root/deps" -type f \
         \( -path '*/ebin/*.beam' -o -path '*/ebin/*.app' \
            -o -path '*/priv/couchdb/*.json' -o -path '*/priv/defaults/*.json' \) \
@@ -2922,6 +2926,12 @@ verify_kazoo_current_build() {
 build_kazoo() {
     KAZOO_BUILD_SUCCEEDED_THIS_RUN=false
     KAZOO_BUILD_SNAPSHOT_THIS_RUN=''
+    # What is fetched and compiled here is code, read by the unprivileged kazoo
+    # user; nothing secret is written by this function. A caller's umask 077 (a
+    # hardened root shell, or the first remote wrapper) left every new directory
+    # 0700 and the applications node could not load a single module (bare Rocky 9
+    # server, Jenkins build 9, September 20, 2026).
+    umask 022
     install_kazoo_build_dependencies
     # A new project clone has no ignored core/ or applications/ checkouts yet.
     # Fetch sources before patching or generating files inside those trees.

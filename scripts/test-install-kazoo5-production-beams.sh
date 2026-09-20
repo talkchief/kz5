@@ -58,7 +58,14 @@ done
 install -m 0600 "$script_dir/test-fixtures/beam_build_marker.erl" "$fixture_dir/outside/private.json"
 ln -s "$fixture_dir/outside/private.json" "$fixture_root/core/normal/priv/couchdb/views/linked.json"
 chmod 0600 "$fixture_root/core/normal/ebin/beam_build_marker.beam"
+# The directories of such a build are 0700 as well: readable beams below them were
+# still invisible to the runtime user (bare server, Jenkins build 9, September 20, 2026).
+chmod 0700 "$fixture_root/core/normal" "$fixture_root/core/normal/ebin" "$fixture_root/core/normal/priv" \
+    "$fixture_root/core/normal/priv/couchdb" "$fixture_root/core/normal/priv/couchdb/views"
 prepare_kazoo_runtime_artifact_permissions
+for directory in core/normal core/normal/ebin core/normal/priv core/normal/priv/couchdb core/normal/priv/couchdb/views; do
+    [[ $(stat -c '%a' "$fixture_root/$directory") == 755 ]] || fail "runtime directory ${directory} is not traversable"
+done
 for artifact in core/normal/ebin/normal.app core/normal/ebin/beam_build_marker.beam \
     core/normal/priv/couchdb/views/public.json core/normal/priv/couchdb/schemas/public.json \
     core/normal/priv/couchdb/account.json core/normal/priv/defaults/system.json; do

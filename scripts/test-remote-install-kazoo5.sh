@@ -59,7 +59,9 @@ run -- --env-file "$rt_work/settings.env" ecallmgr freeswitch || { cat "$rt_work
 grep -Fq "RESULT PASS install of ecallmgr freeswitch on 10.0.0.21 at ${rt_sha}" "$rt_work/out" || fail 'result line'
 started=$(grep -c 'systemd-run' "$rt_work/log")
 [[ $started == 1 ]] || fail "the installer must be started exactly once, saw ${started}"
-grep -F 'systemd-run' "$rt_work/log" | grep -Fq "/opt/kz5/scripts/install-kazoo5.sh  ecallmgr freeswitch >" || fail 'the unit does not run the installer with the selected components'
+grep -F 'systemd-run' "$rt_work/log" | grep -Fq "/opt/kz5/scripts/install-kazoo5.sh  ecallmgr freeswitch >>" || fail 'the unit does not run the installer with the selected components'
+! grep -F 'systemd-run' "$rt_work/log" | grep -Fq 'umask' || fail 'the installer must run under the ordinary umask (077 made its build unreadable to the kazoo user)'
+grep -F 'systemd-run' "$rt_work/log" | grep -Fq 'install -m 0600 /dev/null /var/log/kazoo-remote-install/' || fail 'the log is not created private'
 grep -F 'systemd-run' "$rt_work/log" | grep -Fq 'EnvironmentFile=/var/lib/kazoo-remote-install/input-' || fail 'the settings are not handed to the unit'
 grep -Fq "checkout -q --detach ${rt_sha}" "$rt_work/log" || fail 'the exact commit is not checked out'
 grep -Eq 'is-enabled kazoo-ecallmgr.service' "$rt_work/log" && grep -Eq 'is-enabled kazoo-freeswitch.service' "$rt_work/log" || fail 'enabled state not checked per service'
