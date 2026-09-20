@@ -58,7 +58,8 @@ pipeline {
         stage('Approve') {
             when { expression { params.ACTION == 'install' } }
             steps {
-                input message: "Install ${env.KZ5_MODULES} on ${params.TARGET_HOST}? The selected services restart.", ok: 'Install'
+                // A fixed id, so the gate can also be approved through the API: POST .../input/Install/proceedEmpty
+                input id: 'Install', message: "Install ${env.KZ5_MODULES} on ${params.TARGET_HOST}? The selected services restart.", ok: 'Install'
             }
         }
         stage('Run the installer on the server') {
