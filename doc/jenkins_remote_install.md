@@ -59,6 +59,23 @@ is given to systemd as an `EnvironmentFile`, never evaluated by a shell. The Erl
 must be the cluster's (`KAZOO_COOKIE_FILE` content on the existing nodes). On a repeat
 install the settings credential can be left empty: the server keeps its saved settings.
 
+## Credentials in Jenkins
+
+The job reads this repository with the credential id `github-pat`. Credential names are
+generic on purpose, so other projects can reuse them. `scripts/jenkins-import-credentials.py`
+creates them from a root-only key file (ids and kinds are printed, never a value):
+
+```sh
+sudo python3 scripts/jenkins-import-credentials.py --key-file /root/key --dry-run     # what it would create
+sudo python3 scripts/jenkins-import-credentials.py --key-file /root/key --insecure    # --insecure: self-signed Jenkins certificate
+```
+
+`github_pat` becomes `github-pat` (Git credential for any GitHub repository the token covers)
+and `github-pat-text` (secret text for API calls); `<x>_user_<y>` + `<x>_pass_<y>` pairs become
+one "Username with password" credential `<x>-<y>`, which is also the kind the job's
+`SSH_PASSWORD_CREDENTIAL` parameter accepts. A server's own root login is added the same way,
+with any id you like (for example `fs2-root`).
+
 ## Running it
 
 Build with parameters: `TARGET_HOST`, one login credential (password or key), the settings
