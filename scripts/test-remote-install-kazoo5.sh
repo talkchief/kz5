@@ -11,7 +11,7 @@ rt_pass=0
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 pass() { rt_pass=$((rt_pass + 1)); printf 'PASS: %s\n' "$*"; }
 
-git clone -q --local "$rt_root" "$rt_work/repo"
+git clone -q --no-hardlinks "$rt_root" "$rt_work/repo"   # the temp dir may be another filesystem (Jenkins, build 3)
 cp -- "$rt_root/scripts/remote-install-kazoo5.sh" "$rt_work/repo/scripts/remote-install-kazoo5.sh"
 git -C "$rt_work/repo" -c user.name=test -c user.email=test@invalid commit -q -a -m 'wrapper under test' --allow-empty
 rt_script="$rt_work/repo/scripts/remote-install-kazoo5.sh"
